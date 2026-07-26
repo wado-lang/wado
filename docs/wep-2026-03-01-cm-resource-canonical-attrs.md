@@ -227,6 +227,11 @@ an effect or concept with `FutureReadable<T>` + `FutureWritable<T>` as the resou
 
 ### Error Handling: ReturnCode Semantics
 
+The BLOCKED rows below did not hold for streams until
+[Async Canonical Options for `stream.read` / `stream.write`](./wep-2026-07-25-async-stream-canonical.md):
+streams were lowered without the `async` option, so they never received BLOCKED
+and the await path was dead.
+
 All CM stream/future read/write operations return a 32-bit `ReturnCode`:
 
 ```
@@ -669,7 +674,7 @@ ordinary TIR, using the shared `synthesize_lift` / `synthesize_lower` +
 (`Result<(), E>`, `Result<Option<resource>, E>`) was the last operation still
 hand-emitted in `wir_build`; it now routes through `__cm_future_write_<T>` too,
 lowering its value with the generic variant/option/resource memory lowerer and
-awaiting a BLOCKED write via `core:rt`'s `future_await_blocked`.
+awaiting a BLOCKED write via `core:rt`'s `cm_await_blocked`.
 `wir_build` no longer contains any CM canonical emission.
 
 ## Consequences

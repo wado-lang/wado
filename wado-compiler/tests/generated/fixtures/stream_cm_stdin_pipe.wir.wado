@@ -43,7 +43,7 @@ type "functype//stream_cm_stdin_pipe.wado/__cm_export__run" = fn();  // TypeId(1
 
 type "functype//stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>" = fn(i32) -> ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";  // TypeId(15)
 
-type "functype//core:rt/future_await_blocked" = fn(i32) -> i32;  // TypeId(16)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(16)
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(17)
 
@@ -109,7 +109,7 @@ fn "stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<()
     ptr = "mem/realloc"(0, 0, 1, 2);
     status = "wasi/future-read:transmission-cli"(handle, ptr);
     if status == -1 {
-        status = "core:rt/future_await_blocked"(handle);
+        status = "core:rt/cm_await_blocked"(handle);
     }
     result = ref.null none;
     if (status & 15) == 0 {
@@ -135,7 +135,7 @@ fn "stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<()
     return result;
 }
 
-fn "core:rt/future_await_blocked"(handle) {
+fn "core:rt/cm_await_blocked"(handle) {
     let ws: i32;
     let evt_ptr: i32;
     let status: i32;

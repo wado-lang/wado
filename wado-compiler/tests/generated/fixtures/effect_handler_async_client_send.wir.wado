@@ -400,79 +400,77 @@ type "functype//core:rt/cm_lower_string" = fn(ref "core:prelude/string.wado//Str
 
 type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(98)
 
-type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(99)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(99)
 
-type "functype//core:rt/future_await_blocked" = fn(i32) -> i32;  // TypeId(100)
+type "functype//core:rt/cm_stream_write_u8" = fn(i32, ref "core:prelude//List<u8>");  // TypeId(100)
 
-type "functype//core:rt/cm_stream_write_u8" = fn(i32, ref "core:prelude//List<u8>");  // TypeId(101)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(101)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(102)
+type "functype//core:rt/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(102)
 
-type "functype//core:rt/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(103)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(103)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(104)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(104)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(105)
+type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(105)
 
-type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(106)
+type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(106)
 
-type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(107)
+type "functype//core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(107)
 
-type "functype//core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(108)
+type "functype//core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(108)
 
-type "functype//core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(109)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(109)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(110)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(110)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(111)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(111)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(112)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(112)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(113)
+type "functype//core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(113)
 
-type "functype//core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(114)
+type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(114)
 
-type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(115)
+type "functype//effect_handler_async_client_send.wado/MockClient^Client::send" = fn(ref "effect_handler_async_client_send.wado//MockClient", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(115)
 
-type "functype//effect_handler_async_client_send.wado/MockClient^Client::send" = fn(ref "effect_handler_async_client_send.wado//MockClient", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(116)
+type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(116)
 
-type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(117)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(117)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(118)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(118)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(119)
+type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(119)
 
-type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(120)
+type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(120)
 
-type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(121)
+type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(121)
 
-type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(122)
+type "functype//core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(122)
 
-type "functype//core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(123)
+type "functype//effect_handler_async_client_send.wado/__Closure_2::__call" = fn(ref "effect_handler_async_client_send.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(123)
 
-type "functype//effect_handler_async_client_send.wado/__Closure_2::__call" = fn(ref "effect_handler_async_client_send.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(124)
+type "functype//effect_handler_async_client_send.wado/__Closure_3::__call" = fn(ref "effect_handler_async_client_send.wado//__Closure_3", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(124)
 
-type "functype//effect_handler_async_client_send.wado/__Closure_3::__call" = fn(ref "effect_handler_async_client_send.wado//__Closure_3", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(125)
+type "functype//effect_handler_async_client_send.wado/__Closure_4::__call" = fn(ref "effect_handler_async_client_send.wado//__Closure_4", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(125)
 
-type "functype//effect_handler_async_client_send.wado/__Closure_4::__call" = fn(ref "effect_handler_async_client_send.wado//__Closure_4", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(126)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(126)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(127)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(127)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(128)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(128)
 
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(129)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(129)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(130)
+type "functype//wasi/resource-drop:response" = fn(i32);  // TypeId(130)
 
-type "functype//wasi/resource-drop:response" = fn(i32);  // TypeId(131)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(131)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(132)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(132)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(133)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(133)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(134)
-
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(135)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(134)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -2065,7 +2063,7 @@ fn "effect_handler_async_client_send.wado/__cm_future_write_core:prelude/types.w
     }
     __written = "wasi/future-write"(handle, ptr);
     if __written == -1 {
-        __written = "core:rt/future_await_blocked"(handle);
+        __written = "core:rt/cm_await_blocked"(handle);
     }
     drop("mem/realloc"(ptr, 40, 8, 0));
 }
@@ -2405,21 +2403,7 @@ fn "core:rt/cm_lower_list_u8"(data, start, len) {
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
-fn "core:rt/wait_for_blocked"(handle) {
-    let ws: i32;
-    let evt_ptr: i32;
-    let payload: i32;
-    ws = "wasi/waitable-set-new"();
-    "wasi/waitable-join"(handle, ws);
-    evt_ptr = "mem/realloc"(0, 0, 4, 8);
-    drop("wasi/waitable-set-wait"(ws, evt_ptr));
-    payload = builtin::load_i32(evt_ptr + 4);
-    drop("mem/realloc"(evt_ptr, 8, 4, 0));
-    "wasi/waitable-set-drop"(ws);
-    return payload;
-}
-
-fn "core:rt/future_await_blocked"(handle) {
+fn "core:rt/cm_await_blocked"(handle) {
     let ws: i32;
     let evt_ptr: i32;
     let status: i32;
@@ -2453,7 +2437,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
             break_if b322 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
-                result = "core:rt/wait_for_blocked"(handle);
+                result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
             break_if b322 (if (result >> 4) == 0 -> i32 {
