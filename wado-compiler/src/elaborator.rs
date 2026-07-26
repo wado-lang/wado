@@ -1255,6 +1255,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// Name of a type whose identity is the name itself — a primitive, `()`,
+    /// `!` or the raw `Array<T>`.
+    fn builtin_type_name(&self, type_id: tir::TypeId) -> Option<String> {
+        use crate::tir::ResolvedType;
+        let tt = self.tysys.type_table.borrow();
+        match tt.get(tt.peel_refs(type_id)) {
+            ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
+            ResolvedType::Unit => Some(tir::TypeTable::UNIT_TYPE_NAME.to_string()),
+            ResolvedType::Never => Some("!".to_string()),
+            ResolvedType::BuiltinArray(_) => Some(tir::TypeTable::ARRAY_TYPE_NAME.to_string()),
+            _ => None,
+        }
+    }
+
     pub(crate) fn canonical_decl_key(&self, name: &str) -> (ModuleSource, String) {
         super::elaborator::trait_query::canonical_decl_key_with(
             name,
@@ -1266,14 +1280,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Canonical decl identity `(module, name)` of the declared type behind
-    /// `type_id` (refs peeled), or `None` for primitives / tuples / functions
-    /// and other types that carry no declaring module. Unlike a bare
-    /// `type_name`, this keeps two same-named types from different modules
+    /// `type_id` (refs peeled), or `None` for a type parameter, an associated
+    /// type projection and the other shapes that name no declaration. Unlike a
+    /// bare `type_name`, this keeps two same-named types from different modules
     /// (e.g. `core:temporal::Instant` vs `wasi:clocks::Instant`) distinct.
     /// For a generic instance it is the *base* type's identity — type arguments
     /// are dropped, so it cannot tell `Foo<A>` from `Foo<B>`.
     pub(crate) fn type_decl_key(&self, type_id: tir::TypeId) -> Option<(ModuleSource, String)> {
         use crate::tir::ResolvedType;
+        // A builtin's identity is its name, and the name path already knows
+        // which module declares it. Answering here from a second table is how
+        // the two sides came to disagree.
+        if let Some(name) = self.builtin_type_name(type_id) {
+            return Some(self.canonical_decl_key(&name));
+        }
         let tt = self.tysys.type_table.borrow();
         match tt.get(tt.peel_refs(type_id)) {
             ResolvedType::Struct {
