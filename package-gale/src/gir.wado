@@ -603,11 +603,9 @@ pub struct ListLabelOp {
 
 pub struct RepeatOp {
     pub kind: RepeatKind,
-    /// Surface `RepeatElement.non_greedy`. `*?` / `+?` carry it on
-    /// `strategy: NonGreedy` as well, but a non-greedy `??` lowers to
-    /// `strategy: Plain` (its enter/skip decision is the runtime ATN's),
-    /// so the flag is the only thing that distinguishes it from a greedy
-    /// `?` for the op-only walker, which never sees the surface element.
+    /// Surface `RepeatElement.non_greedy`. A `??` lowers to
+    /// `strategy: Plain`, so this is what tells it apart from a greedy `?`
+    /// for the op-only walker, which never sees the surface element.
     pub non_greedy: bool = false,
     /// Inner op (recursive — single-element only). Wado allows
     /// the recursive type-reference; the variant boxes through the

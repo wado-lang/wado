@@ -5146,18 +5146,12 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
 }
 
 /// `?` / `??` under the op-only walker (LR-suffix bodies and the group bodies
-/// inside them). Mirrors the surface-element walker's dispatch
-/// (`gen_op_storable_optional` / `gen_op_transparent_optional`): a non-greedy
-/// `??` asks the runtime ATN, a shape lookahead branches per shape, and every
-/// other strategy reduces to a single entry condition.
-///
-/// `gate` is the walker's caller-FOLLOW yield suffix, appended to whichever
-/// condition the strategy produces.
+/// inside them), mirroring the surface-element walker's dispatch
+/// (`gen_op_storable_optional` / `gen_op_transparent_optional`): a `??` asks the
+/// runtime ATN, a shape lookahead branches per shape, and every other strategy
+/// reduces to the single entry condition `gen_op_optional_entry_cond` builds.
+/// `gate` is the walker's caller-FOLLOW yield suffix.
 fn gen_op_optional(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>, gate: &String) {
-    // A non-greedy `??` lowers to `strategy: Plain` + `mark_needs_atn`: its
-    // enter/skip choice is the simulator's, with full context. The static
-    // first-set check would enter wherever the body *could* start and so
-    // consume the token the continuation needs.
     if r.non_greedy && ctx.needs_atn() {
         w.begin(&`if ${atn_optional_enter_cond(ctx, r)}`);
         gen_op(w, &r.body, ctx, nc);
@@ -5174,12 +5168,7 @@ fn gen_op_optional(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     w.end();
 }
 
-/// Entry condition for a single-condition Optional strategy under the op-only
-/// walker. Without this dispatch the op-only path silently downgraded every
-/// specialised strategy to a one-token first-set check, so a two-token optional
-/// (`( database_name '.' )? table_name`, FIRST(database_name) ==
-/// FIRST(table_name)) was entered on the shared first token and then failed on
-/// the missing `'.'`.
+/// Entry condition for an Optional strategy that reduces to one condition.
 fn gen_op_optional_entry_cond(
     w: &mut CodeWriter,
     r: &RepeatOp,
@@ -5193,7 +5182,6 @@ fn gen_op_optional_entry_cond(
             `${scan_pos} >= 0`;
         },
         Plain => ctx.first_check_str(&r.body_first_set),
-        // `gen_op_optional` routes these away before reaching here.
         OptionalShapeLookahead(_) => panic(
             "gen_op_optional_entry_cond: shape lookahead has one condition per shape, not one for the optional",
         ),
@@ -5204,12 +5192,11 @@ fn gen_op_optional_entry_cond(
 }
 
 /// Shape-lookahead Optional under the op-only walker: one branch per shape,
-/// longest-first, each gated on that shape's own lookahead signature and
-/// emitting only the positions the shape contains. The op-only analogue of
-/// `gen_op_optional_with_shape_lookahead_transparent` — an absent position emits
-/// nothing (this walker appends to the builder rather than building a struct),
-/// and a present position is peeled with `unwrap_optional_op` because the shape
-/// already decided that its nested optional fires.
+/// longest-first, each gated on that shape's own signature and emitting only the
+/// positions the shape contains. The op-only analogue of
+/// `gen_op_optional_with_shape_lookahead_transparent`, whose `unwrap_optional_op`
+/// peel it shares — the shape already decided that a present nested optional
+/// fires.
 fn gen_op_optional_shape_lookahead(
     w: &mut CodeWriter,
     r: &RepeatOp,

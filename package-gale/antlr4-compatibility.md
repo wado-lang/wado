@@ -387,8 +387,9 @@ tree wrong in exactly the cases where entering was viable, and one that always
 enters breaks the cases where it was not (invariant 2 below). Viability is not a
 lookahead property, so a decision the static path cannot separate belongs on the
 simulator (ATN-class prediction, next section) rather than on a tie-break — where
-the grammar can afford it: routing a decision that fires on every token of a hot
-rule is a different trade (see that section's cost note and TODO.md).
+the grammar can afford it. Routing a decision that fires on every token of a hot
+rule is a different trade; the next section says which sites are and are not
+routed, and why.
 
 ### Soundness invariants
 
@@ -465,16 +466,15 @@ relevant sites.
    `tests/grammars/scan_zero_length_rule.g4`.
 9. The two emit walkers decide identically. A construct is emitted either by
    the surface-element walker or, inside an LR suffix, by the op-only walker
-   that reads the lowered op alone. Anything the first walker decides from a
-   surface field the second cannot see must be carried on the op, or the same
-   grammar construct silently gets a weaker decision in a suffix than in a
-   plain rule body. Both known instances rejected valid input: an optional's
-   `RepeatStrategy` degraded to a one-token first-set check (`( d '.' )? t`,
-   fixture `lr_opt_two_token.g4`; the shape-lookahead half is
-   `lr_suffix_opt_shape.g4`), and a non-greedy `??` read as greedy because
-   `non_greedy` lived only on the surface element
-   (`lr_suffix_non_greedy_opt.g4`). Pair any new decision input with an
-   LR-suffix fixture.
+   that reads the lowered op alone. Anything the first decides from a surface
+   field the second cannot see must be carried on the op, or the same construct
+   gets a weaker decision in a suffix than in a plain rule body. All three known
+   instances rejected valid input: an optional's `RepeatStrategy` and its
+   shape-lookahead half both degraded to a one-token first-set check, and a
+   non-greedy `??` was read as greedy because `non_greedy` lived only on the
+   surface element. Fixtures `lr_opt_two_token.g4`, `lr_suffix_opt_shape.g4`,
+   `lr_suffix_non_greedy_opt.g4` — pair any new decision input with one like
+   them.
 
 Termination is a checked property, not only inline conservatism:
 `check_left_recursion` (grammar-check phase) rejects hidden (`a : x? a`, a
@@ -551,17 +551,16 @@ the compiled fast path:**
    `ll_at_end_follow_disjoint.g4` (stays on the tournament),
    `ll_optional_non_greedy_multi.g4`.
 
-Two more sites _would_ belong here on correctness grounds and are deliberately
-left out on cost — the ambiguous decisions of the section above: an ambiguous
-greedy `rule?` (fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?`
-loop no lookahead separates (`ll_non_greedy_plus_loop.g4`). Both were
-implemented, measured, and reverted: a prediction per occurrence costs a full
-closure over the grammar, which took SQLite's DDL-heavy benchmark corpus from
-2.6 ms to 402 ms per parse. They are also coupled — entering `type_name?` is
-only right if `name+?` can then take the second name, so landing one without the
-other turns an accepted input into an error. `TODO.md` records the numbers and
-the affordable route (the runtime FOLLOW gate, which needs the caller's follow
-threaded into the callee, or memoising the prediction).
+Two more sites _would_ belong here on correctness grounds and are left out on
+cost — the ambiguous decisions of the section above: an ambiguous greedy `rule?`
+(fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop no
+lookahead separates (`ll_non_greedy_plus_loop.g4`). A prediction per occurrence
+costs a full closure over the grammar, which took SQLite's DDL-heavy benchmark
+corpus from 2.6 ms to 402 ms per parse; neither gating it behind the ambiguous
+lookahead nor bounding the lookahead recovers that. The two are also coupled —
+entering `type_name?` is only right if `name+?` can then take the second name,
+so landing one alone turns an accepted input into an error. The measurements and
+the levers that would make them affordable are in [`perf.md`](./perf.md).
 
 The simulator's state machine is embedded in the generated parser only
 when a grammar needs it (inspect it with `gale dump --atn`); a grammar
@@ -584,17 +583,8 @@ two enter edges sharing a first lookahead token) fall back to the complete
 simulator rather than guess. The mechanism and the full edge list live with
 the ATN runtime module.
 
-What the simulator costs, measured, is the reason the ambiguity sites above stay
-static: **one prediction is a full closure over the grammar**, so a decision taken
-per occurrence is not affordable at SQLite's scale — ~4–8 ms per prediction on the
-release profile, ~50 of them in a 13 KB DDL script. Two cheaper shapes exist and
-both were tried: gating the prediction behind the ambiguous lookahead only (which
-helps where the overlap is small — 734 ms → 6 ms on plain `CREATE TABLE`s — but
-not where the body's first set is broad, as `name+?` is), and bounding the
-lookahead (which does nothing when the per-call setup dominates, confirmed by a
-6- and a 12-token budget measuring the same). The lever that would work is one
-Gale does not have yet: memoising a decision the way ANTLR4 memoises its
-lookahead DFA.
+Which gaps stay static is a cost decision as much as a correctness one — one
+prediction is a full closure over the grammar; see [`perf.md`](./perf.md).
 
 ## Lexer ATN — recursive non-greedy wildcard rules
 

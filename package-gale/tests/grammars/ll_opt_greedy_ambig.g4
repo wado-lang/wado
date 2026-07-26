@@ -5,9 +5,9 @@
 // parses either as `t=null` (enter the optional) or `c=null` (skip it, let the
 // loop take it). ANTLR4 resolves the ambiguity by alternative order — entering
 // the subrule is alternative 1 — so the optional wins whenever entering leaves
-// a viable parse, which is why `x null` binds NULL to `t`. Gale subtracts the
-// continuation's FIRST from the optional's gate, yielding the shared token to
-// the continuation instead — the divergence the driver test pins as `#[TODO]`.
+// a viable parse, which is why `x null` binds NULL to `t`. Gale yields the
+// shared token to the continuation instead; the driver test pins that
+// divergence as `#[TODO]`.
 grammar LlOptGreedyAmbig;
 
 s : ID t? c* EOF ;

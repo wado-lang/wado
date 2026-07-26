@@ -2,10 +2,9 @@
 //   lr_dangling_else.g4, whose `??` sits in an atom alternative).
 // License: same as the Gale package.
 //
-// A non-greedy `??` inside a left-recursive SUFFIX alternative. The suffix body
-// is emitted by the op-only walker, which reads the lowered `RepeatOp` rather
-// than the surface element, so it must learn the prefer-skip decision from the
-// op. `s` needs the trailing `else ID` for itself, so the `??` has to skip.
+// A non-greedy `??` inside a left-recursive SUFFIX alternative, whose body the
+// op-only walker emits from the lowered op alone — so prefer-skip has to reach
+// it through the op. `s` needs the trailing `else ID` for itself.
 grammar LrSuffixNonGreedyOpt;
 
 s : e 'else' ID EOF ;

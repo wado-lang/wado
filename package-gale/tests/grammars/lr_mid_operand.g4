@@ -6,9 +6,8 @@
 // self-reference as `e[0]` — a full sub-expression — so it climbs the shared
 // `and` delimiter as long as the enclosing alternative can still find its own
 // `and`. Gale stamps the alternative's own precedence there instead, which stops
-// the middle operand at the first operand and re-brackets the tree: the driver
-// test's climbing case is `#[TODO]`, and TODO.md records why the fix (routing the
-// rule through the simulator) is priced out for a hot expression rule.
+// the middle operand at the first operand and re-brackets the tree. The driver
+// test's climbing case is `#[TODO]`; TODO.md records why the fix is priced out.
 grammar LrMidOperand;
 
 s : e EOF ;

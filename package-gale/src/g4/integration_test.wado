@@ -712,8 +712,8 @@ test "parse lr_suffix_opt_shape.g4" {
     assert g.name == "LrSuffixOptShape";
     // s, e
     assert g.parser_rules.len() == 2;
-    // The LR suffix is `e 'in' ( 'a'? 'b' )? 'a'`, with the nested optional
-    // inside the group that makes the shape lookahead the right strategy.
+    // The LR suffix is `e 'in' ( 'a'? 'b' )? 'a'`; the nested optional is what
+    // makes the shape lookahead the right strategy.
     let suffix = &g.parser_rules[1].alternatives[1].elements;
     assert suffix.len() == 4;
     if let Repeat(r) = &suffix[2] {

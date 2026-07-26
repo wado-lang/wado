@@ -3,10 +3,9 @@
 //! alternative can still find its own. Expected trees are the published ANTLR4
 //! jar's (black-box oracle).
 //!
-//! The climbing case is `#[TODO]`: it needs the loop entry to decide per token,
-//! which makes the whole rule ATN-class — measured too expensive for a hot
-//! expression rule (see TODO.md, "Soundness and compatibility divergence"). The
-//! fixture stays so the divergence is pinned rather than described.
+//! The climbing case is `#[TODO]`: it needs the loop entry decided per token,
+//! which makes the whole rule ATN-class — too expensive for a hot expression
+//! rule (TODO.md, "Soundness and compatibility divergence").
 
 use g from "./grammars/lr_mid_operand.g4"
     with {
@@ -29,8 +28,7 @@ test "between's middle operand stops at the enclosing and" {
     assert_tree(&"a between b and c", &"(s (e (e a) between (e b) and (e c)))");
 }
 
-// The divergence is the bracketing, not acceptance — asserted separately so a
-// regression to outright rejection fails instead of staying a pending todo.
+// The divergence is the bracketing, not acceptance (see lr_between).
 test "between with a trailing and parses" {
     assert_parses(&"a between b and c and d");
 }

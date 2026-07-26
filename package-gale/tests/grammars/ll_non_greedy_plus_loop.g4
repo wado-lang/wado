@@ -4,9 +4,8 @@
 // A non-greedy `+?` whose body FIRST equals the continuation's FIRST. The loop
 // cannot be decided by lookahead alone: exiting is correct only when the rest
 // of the input can still match, so `a a` takes one iteration and `a a a` takes
-// two. Gale's static exit condition falls back to the minimum match (one
-// iteration, never looping) and rejects the longer input — the divergence the
-// driver test pins as `#[TODO]`.
+// two. Gale takes the minimum match instead and rejects the longer input; the
+// driver test pins that divergence as `#[TODO]`.
 grammar LlNonGreedyPlusLoop;
 
 s : x+? y EOF ;
