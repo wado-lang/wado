@@ -1931,21 +1931,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::newtype_chain_names`]. Each base is re-canonicalised, since a
     /// newtype's base may be declared in another module.
     fn newtype_chain(&self, type_key: &ImplTargetKey) -> Vec<ImplTargetKey> {
-        match type_key.type_name() {
-            Some(name) => self
-                .newtype_chain_names(name)
+        let Some(name) = type_key.type_name() else {
+            return vec![type_key.clone()];
+        };
+        // The head keeps the caller's key; each base is keyed from the
+        // `TypeId` the chain walk already holds, since a base declared in
+        // another module cannot be recovered from its name alone.
+        let mut chain = vec![type_key.clone()];
+        chain.extend(
+            self.newtype_chain_bases(name)
                 .into_iter()
-                .map(|base| self.impl_target(&base))
-                .collect(),
-            None => vec![type_key.clone()],
-        }
+                .map(|(base_id, base_name)| match base_id {
+                    Some(id) => self.impl_target_of(id, &base_name),
+                    None => self.impl_target(&base_name),
+                }),
+        );
+        chain
     }
 
     /// `struct_name` plus the base names of its newtype chain
     /// (`type Alias = Base` → `Base`, `Flags` → `u32`), so a trait impl on a
     /// base type is reachable through the alias.
     fn newtype_chain_names(&self, struct_name: &str) -> Vec<String> {
-        let mut names = vec![struct_name.to_string()];
+        std::iter::once(struct_name.to_string())
+            .chain(
+                self.newtype_chain_bases(struct_name)
+                    .into_iter()
+                    .map(|(_, name)| name),
+            )
+            .collect()
+    }
+
+    /// The newtype chain's bases, each with the `TypeId` it was reached
+    /// through. `Flags` widens to `u32`, which is a primitive rather than a
+    /// type in the table, so it carries no id.
+    fn newtype_chain_bases(&self, struct_name: &str) -> Vec<(Option<TypeId>, String)> {
+        let mut bases = Vec::new();
         if let Some(newtype_id) = self.lookup_newtype(struct_name) {
             let mut current = newtype_id;
             loop {
@@ -1958,18 +1979,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
                             _ => self.tysys.type_table.borrow().type_name(base_type),
                         };
-                        names.push(base_name);
+                        bases.push((Some(base_type), base_name));
                         current = base_type;
                     }
                     ResolvedType::Flags { .. } => {
-                        names.push("u32".to_string());
+                        bases.push((None, "u32".to_string()));
                         break;
                     }
                     _ => break,
                 }
             }
         }
-        names
+        bases
     }
 
     /// Every trait impl on one of `names_to_check`, plus blanket impls
