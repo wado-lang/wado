@@ -333,6 +333,16 @@ declaration rather than at whichever use site reaches it first.
       considered and rejected: it adds a *second* place that decides a
       builtin's module. Instrumenting the fallback showed the fix was four
       lines of delegation, not ~200 match sites.
+
+      Making `type_decl_key` answer for builtins exposed a latent bug in
+      operator dispatch: it peeled the receiver to its newtype base and
+      keyed the call off that. While a primitive base had no key the peel
+      was masked by a by-name fallback; once it had one, `impl Add for
+      Counter` on `type Counter = i32` routed the call to
+      `core:prelude/primitive` while the body stayed in the newtype's
+      module. Dispatch now keys off the chain link the impl was found on
+      (`Elaborator::impl_target_decl_key`), which is what "the module that
+      owns this impl" always meant.
 - [x] S5e Numbering convergence. A method's own type parameters start past
       the impl's slots, and five places derived where that is. They
       disagreed whenever a concrete argument sat among the free ones.

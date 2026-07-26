@@ -1339,6 +1339,34 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// Decl identity of the link in `type_id`'s newtype chain that `impl_name`
+    /// declares — the head when an impl is written on the newtype itself, a
+    /// base when the newtype inherited it. `None` when no link carries that
+    /// name, leaving the caller to fall back to a by-name lookup.
+    pub(crate) fn impl_target_decl_key(
+        &self,
+        type_id: tir::TypeId,
+        impl_name: &str,
+    ) -> Option<(ModuleSource, String)> {
+        use crate::tir::ResolvedType;
+        let mut current = self.tysys.type_table.borrow().peel_refs(type_id);
+        loop {
+            if let Some(key) = self.type_decl_key(current)
+                && key.1 == impl_name
+            {
+                return Some(key);
+            }
+            current = {
+                let tt = self.tysys.type_table.borrow();
+                match tt.get(current) {
+                    ResolvedType::Newtype { base_type, .. } => *base_type,
+                    ResolvedType::Flags { .. } => tir::TypeTable::U32,
+                    _ => return None,
+                }
+            };
+        }
+    }
+
     /// Resolve AST effect names (strings) to TIR `EffectRefs` with module source information.
     ///
     /// `effect_ids` is a parallel slice with `(AstId, Span)` of each effect-name identifier

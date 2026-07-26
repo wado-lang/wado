@@ -647,7 +647,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // bare-name match would collapse a real conversion into an
                     // identity. Generic instances keep the name compare — a decl
                     // key drops type args, so it cannot tell `Foo<A>` from
-                    // `Foo<B>`; primitives have no decl key and fall back too.
+                    // `Foo<B>`.
                     let arg_is_generic = {
                         let tt = self.tysys.type_table.borrow();
                         matches!(
