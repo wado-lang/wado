@@ -789,13 +789,13 @@ use { Router } from "lib:router" with { git = "https://github.com/user/router.gi
 
 Which items a dependency exposes follows from whether its source is available, not from how it was fetched:
 
-| Dependency type                      | Path for a Wado consumer | Visible items       |
-| ------------------------------------ | ------------------------ | ------------------- |
-| Registry                             | Source (from the artifact's section) | `pub` + `export` |
-| Registry, published `--no-source`    | CM boundary              | `export` items only |
-| Git                                  | Source                   | `pub` + `export`    |
-| Path to directory (with `wado.toml`) | Source                   | `pub` + `export`    |
-| Path to single `.wado` file          | Source                   | `pub` + `export` (implicit `lib`) |
+| Dependency type                      | Path for a Wado consumer             | Visible items                     |
+| ------------------------------------ | ------------------------------------ | --------------------------------- |
+| Registry                             | Source (from the artifact's section) | `pub` + `export`                  |
+| Registry, published `--no-source`    | CM boundary                          | `export` items only               |
+| Git                                  | Source                               | `pub` + `export`                  |
+| Path to directory (with `wado.toml`) | Source                               | `pub` + `export`                  |
+| Path to single `.wado` file          | Source                               | `pub` + `export` (implicit `lib`) |
 
 A non-Wado CM consumer sees `export` items only in every row.
 

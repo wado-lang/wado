@@ -19,12 +19,12 @@ A published package is a source package with a prebuilt CM binary attached, deli
 
 The package's Wado source travels in a custom section named `wado:package`:
 
-| Content            | Purpose                                            |
-| ------------------ | -------------------------------------------------- |
-| Format version     | Consumer compatibility gate                        |
-| Compiler version   | Producing compiler, for the degradation rule below |
-| `wado.toml`        | The package's own dependencies and entry points    |
-| The package's `.wado` sources | Bodies for `pub` items, and everything they reach |
+| Content                       | Purpose                                            |
+| ----------------------------- | -------------------------------------------------- |
+| Format version                | Consumer compatibility gate                        |
+| Compiler version              | Producing compiler, for the degradation rule below |
+| `wado.toml`                   | The package's own dependencies and entry points    |
+| The package's `.wado` sources | Bodies for `pub` items, and everything they reach  |
 
 The section content is deterministic: sorted file order, no timestamps, fixed compression level. Same input, same bytes, same digest — otherwise `integrity` and reproducible builds break.
 
@@ -39,10 +39,10 @@ OCI is the primary registry, and the single-`application/wasm`-layer convention 
 ### Consumer selection is all or nothing
 
 | Consumer | `wado:package` present and supported | Path                                     |
-| -------- | ------------------------------------- | ---------------------------------------- |
-| Wado     | Yes                                   | Source; the compiled component is unused |
-| Wado     | No                                    | CM canonical ABI, `export` items only    |
-| Other CM | —                                     | CM canonical ABI, `export` items only    |
+| -------- | ------------------------------------ | ---------------------------------------- |
+| Wado     | Yes                                  | Source; the compiled component is unused |
+| Wado     | No                                   | CM canonical ABI, `export` items only    |
+| Other CM | —                                    | CM canonical ABI, `export` items only    |
 
 A package is consumed one way or the other, never both. Mixing would compile the same declaration twice into two distinct nominal types — the split identity [Module Loader](./wep-2026-01-24-module-loader.md) §"Canonical module identity" avoids for local paths — and would put two compiler generations inside one package, so a fix present in one half is absent in the other.
 
