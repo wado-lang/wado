@@ -627,7 +627,7 @@ impl ConstFoldVisitor<'_> {
                     // would see at runtime.
                     let binds = self
                         .interpreter
-                        .arm_bindings(&engine.body, scrutinee, arm.pattern);
+                        .arm_bindings(engine.body, scrutinee, arm.pattern);
                     let scope = self.interpreter.enter_arm(&binds);
                     if let Some(g) = arm.guard {
                         changed |= self.visit_operand(engine, g);
