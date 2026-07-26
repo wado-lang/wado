@@ -63,11 +63,22 @@
 //!   edges); a non-constant speculatable scrutinee with every arm
 //!   reducing to the same lattice constant collapses to that constant.
 //!   Modelled patterns: `_`, integer / bool / char literal, integer
-//!   range (signed and unsigned), or-of the above, and `ConstantValue`
-//!   whose inner expression reduces to a primitive `Value`. `Binding`,
-//!   `Tuple`, `Variant`, `Struct`, `Enum`, and string / null literal
-//!   patterns report `Unknown` — they never wrongly commit a match and
-//!   never wrongly drop a later arm.
+//!   range (signed and unsigned), or-of the above, `ConstantValue`
+//!   whose inner expression reduces to a `Value`, and struct /
+//!   exact-arity tuple patterns whose every field pattern is itself
+//!   modelled. `Binding`, tuple-with-rest, `Variant`, `Enum`, and
+//!   string / null literal patterns report `Unknown` — they never
+//!   wrongly commit a match and never wrongly drop a later arm. A
+//!   definite field mismatch still rules an arm out even when a
+//!   sibling field binds.
+//! - Struct / tuple literals: an aggregate whose every field reduces to
+//!   a constant is itself a constant ([`Value::Aggregate`]), and
+//!   `receiver.field` projects a field back out — including out of a
+//!   CTFE-folded call result. Aggregates never leave the engine (the
+//!   value pool models pure scalars), so what reaches the IR is the
+//!   scalars projected out of them. A local carries an aggregate
+//!   constant only when every mention of it merely reads the value; see
+//!   [`Interpreter::record_aggregate_locals`].
 //! - Pure-call inlining: a free `Call` whose args all reduce to
 //!   constants and whose callee was admitted to the [`CalleeMap`]
 //!   (pure, non-async, monomorphic — see [`is_ctfe_eligible`]) and
@@ -124,7 +135,7 @@ use crate::tir::{PrimitiveType, TypeId, TypeTable};
 /// into the same `None`, which makes memoization unsound — a cached
 /// `None` can't say whether a re-attempt would succeed. The lattice
 /// fixes this at the type level.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Lattice {
     /// No information yet. Default for un-bound locals and NIR kinds
     /// the engine doesn't currently understand (e.g. a `Call` whose
@@ -149,8 +160,8 @@ impl Lattice {
     #[must_use]
     pub fn as_const(&self) -> Option<Value> {
         match self {
-            Self::Const(v) => Some(*v),
-            _ => None,
+            Self::Const(v) => Some(v.clone()),
+            Self::Unevaluated | Self::NonConst => None,
         }
     }
 
@@ -372,9 +383,11 @@ pub(crate) trait EditSink {
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind);
     /// Promote `e` to the folded pure scalar `value`, returning whether the edit
     /// was applied (WEP: The Live `ValueGraph`). The engine backend swaps `e`'s
-    /// parent operand to an `Operand::Value`; the scratch CTFE backend is a no-op
-    /// (`false`) — its reads recompute the value through the value lattice, so it
-    /// needs no node write-back.
+    /// parent operand to an `Operand::Value`, and declines an aggregate value —
+    /// the pool models scalars only, so a constant struct stays in skeleton form
+    /// and only the scalars projected out of it are promoted. The scratch CTFE
+    /// backend is a no-op (`false`) — its reads recompute the value through the
+    /// value lattice, so it needs no node write-back.
     fn replace_with_value(&mut self, e: ExprId, value: Value) -> bool;
     /// Make `dst` take `src`'s content (`dst` becomes `src`).
     fn become_expr(&mut self, dst: ExprId, src: ExprId);
@@ -476,6 +489,17 @@ pub struct Interpreter<'a> {
     /// [`enter_function`]: Self::enter_function
     env: IndexMap<u32, Lattice>,
     ref_global_aliases: IndexMap<u32, GlobalKey>,
+    /// Locals of the *current function* whose value no handle can reach: every
+    /// mention only reads the value, and nothing borrows, stores through, or
+    /// mutates them. Only these may bind an aggregate constant —
+    /// niri models whole values, not the heap, so a local another handle could
+    /// write through would go stale. Scalars are unaffected: they carry no
+    /// fields, so no handle can change them in place.
+    ///
+    /// Populated by [`Self::record_aggregate_locals`]; cleared by
+    /// [`Self::enter_function`], so an unpopulated set simply refuses every
+    /// aggregate binding.
+    aggregate_locals: LocalSet,
     /// CTFE scratch-body fold memo: `expr → folded constant`. The scratch
     /// [`BodySink`] cannot promote a fold to an `Operand::Value` (no parent map)
     /// and pure scalars have no literal-node form, so a fold is recorded here and
@@ -547,6 +571,86 @@ fn let_ref_global(body: &Body, stmt: &StmtKind) -> Option<(u32, GlobalKey)> {
     Some((*local_index, (module_source.clone(), name.clone())))
 }
 
+/// The local an lvalue or borrow chain roots at: `x`, `x.f`, `x[i]`, `*x`, and
+/// any nesting of those.
+fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
+    match &body.exprs[op.as_expr()?].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
+            lvalue_root_local(body, *inner)
+        }
+        ExprKind::Unary {
+            op: NirUnaryOp::Deref,
+            expr: inner,
+        } => lvalue_root_local(body, *inner),
+        _ => None,
+    }
+}
+
+/// Locals of `body` that may bind an aggregate constant: every mention only
+/// reads the value — as a field read's receiver or a `match` / `switch`
+/// scrutinee — and no store target, borrow, method receiver, or mutable
+/// argument roots at them. Such a local is unreachable through any other
+/// handle, so its whole value cannot change under the binding.
+///
+/// The scan walks the whole expression arena, orphaned nodes included: a
+/// mention the reachable body no longer contains only costs a fold.
+fn aggregate_safe_locals(body: &Body) -> LocalSet {
+    fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
+        if let Some(index) = lvalue_root_local(body, op) {
+            set.insert(index);
+        }
+    }
+    let mut value_reads: IndexSet<ExprId> = IndexSet::default();
+    let mut local_mentions: Vec<(ExprId, u32)> = Vec::new();
+    let mut disqualified = LocalSet::default();
+    for (e, node) in &body.exprs {
+        match &node.kind {
+            ExprKind::Local { index, .. } => local_mentions.push((e, *index)),
+            ExprKind::FieldAccess { expr, .. }
+            | ExprKind::Match { expr, .. }
+            | ExprKind::Switch {
+                scrutinee: expr, ..
+            } => {
+                if let Some(read) = expr.as_expr() {
+                    value_reads.insert(read);
+                }
+            }
+            ExprKind::Assign { target, .. } => {
+                disqualify_root(body, (*target).into(), &mut disqualified);
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                expr,
+            } => disqualify_root(body, *expr, &mut disqualified),
+            ExprKind::MethodCall { receiver, args, .. } => {
+                disqualify_root(body, *receiver, &mut disqualified);
+                for arg in args.iter().filter(|a| a.is_mut) {
+                    disqualify_root(body, arg.expr, &mut disqualified);
+                }
+            }
+            ExprKind::Call { args, .. } => {
+                for arg in args.iter().filter(|a| a.is_mut) {
+                    disqualify_root(body, arg.expr, &mut disqualified);
+                }
+            }
+            _ => {}
+        }
+    }
+    for (e, index) in &local_mentions {
+        if !value_reads.contains(e) {
+            disqualified.insert(*index);
+        }
+    }
+    let mut safe = LocalSet::default();
+    for (_, index) in local_mentions {
+        if !disqualified.contains(index) {
+            safe.insert(index);
+        }
+    }
+    safe
+}
+
 fn local_binds_to_global_ref(body: &Body, local: u32, key: &GlobalKey) -> bool {
     body.stmts
         .iter()
@@ -560,6 +664,7 @@ impl<'a> Interpreter<'a> {
             type_table,
             env: IndexMap::default(),
             ref_global_aliases: IndexMap::default(),
+            aggregate_locals: LocalSet::default(),
             scratch_folds: IndexMap::default(),
             callees: None,
             globals: None,
@@ -615,8 +720,17 @@ impl<'a> Interpreter<'a> {
         self.global_fields
             .and_then(|m| m.get(key))
             .and_then(|m| m.get(field_name))
-            .copied()
+            .cloned()
             .map_or(Lattice::Unevaluated, Lattice::Const)
+    }
+
+    /// Compute which locals of `body` may hold an aggregate constant: those
+    /// whose every mention only reads the value, and which nothing assigns
+    /// through, borrows, or hands to a call that could mutate them. The driving
+    /// visitor calls this once per function, next to
+    /// [`Self::record_ref_global_aliases`].
+    pub fn record_aggregate_locals(&mut self, body: &Body) {
+        self.aggregate_locals = aggregate_safe_locals(body);
     }
 
     pub fn record_ref_global_aliases(&mut self, body: &Body) {
@@ -645,6 +759,7 @@ impl<'a> Interpreter<'a> {
     pub fn enter_function(&mut self) {
         self.env.clear();
         self.ref_global_aliases.clear();
+        self.aggregate_locals = LocalSet::default();
         self.scratch_folds.clear();
         debug_assert!(
             self.call_stack.is_empty(),
@@ -657,7 +772,18 @@ impl<'a> Interpreter<'a> {
     /// [`Lattice::Const`] for an immutable binding whose RHS reduced,
     /// [`Lattice::NonConst`] for `let mut` or any RHS that could not be
     /// reduced.
+    ///
+    /// An aggregate constant is only recorded for a local
+    /// [`Self::record_aggregate_locals`] proved unreachable through any other
+    /// handle; otherwise it degrades to [`Lattice::NonConst`].
     pub fn bind_local(&mut self, index: u32, lattice: Lattice) {
+        let unbacked_aggregate = matches!(&lattice, Lattice::Const(v) if !v.is_scalar())
+            && !self.aggregate_locals.contains(index);
+        let lattice = if unbacked_aggregate {
+            Lattice::NonConst
+        } else {
+            lattice
+        };
         self.env.insert(index, lattice);
     }
 
@@ -715,41 +841,111 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    /// The global a field read resolves against: a direct `GLOBAL.f`, or a
+    /// local bound to `&GLOBAL` earlier in this body.
+    fn global_receiver_key(&self, body: &Body, inner: Operand) -> Option<GlobalKey> {
+        match inner.as_expr().map(|e| &body.exprs[e].kind)? {
+            ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => Some((module_source.clone(), name.clone())),
+            ExprKind::Local { index, .. } => {
+                let key = self.ref_global_aliases.get(index)?;
+                debug_assert!(
+                    local_binds_to_global_ref(body, *index, key),
+                    "ref_global_aliases[{index}] = {key:?} is stale: the body being folded does \
+                     not bind local {index} to that reference — per-function alias state leaked \
+                     across a body boundary (e.g. a CTFE scratch reduction that did not \
+                     save/clear it)",
+                );
+                Some(key.clone())
+            }
+            _ => None,
+        }
+    }
+
+    /// The lattice of `receiver.field`: the [`GlobalFieldEnv`] entry for a
+    /// global receiver, else the field projected out of a constant aggregate
+    /// receiver (a literal, an env-bound local, or a CTFE-folded call result).
+    ///
+    /// The field env wins where it has an answer — it knows fields no
+    /// initializer shows, such as the length body globalization records for a
+    /// hoisted sequence — and otherwise the receiver's own value decides.
+    fn field_access_lattice(
+        &self,
+        body: &Body,
+        inner: Operand,
+        field_index: u32,
+        field_name: &str,
+    ) -> Lattice {
+        if let Some(key) = self.global_receiver_key(body, inner) {
+            let known = self.global_field(&key, field_name);
+            if !matches!(known, Lattice::Unevaluated) {
+                return known;
+            }
+        }
+        match self.operand_to_lattice_a(body, inner) {
+            Lattice::Const(receiver) => receiver
+                .field(field_index)
+                .cloned()
+                .map_or(Lattice::Unevaluated, Lattice::Const),
+            Lattice::NonConst => Lattice::NonConst,
+            Lattice::Unevaluated => Lattice::Unevaluated,
+        }
+    }
+
+    /// The lattice of a struct / tuple literal: `Const` only when every field
+    /// is itself constant, since a partially-known aggregate is not a value the
+    /// engine can substitute or compare.
+    fn aggregate_lattice(
+        &self,
+        body: &Body,
+        type_id: TypeId,
+        fields: impl Iterator<Item = (u32, Operand)>,
+    ) -> Lattice {
+        let mut values = Vec::new();
+        let mut has_non_const = false;
+        for (field_index, op) in fields {
+            match self.operand_to_lattice_a(body, op) {
+                Lattice::Const(v) => values.push((field_index, v)),
+                Lattice::NonConst => has_non_const = true,
+                Lattice::Unevaluated => return Lattice::Unevaluated,
+            }
+        }
+        if has_non_const {
+            return Lattice::NonConst;
+        }
+        Lattice::Const(Value::aggregate(type_id, values))
+    }
+
     pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
         // A scratch-CTFE fold memoized for `e` (no node form for pure scalars).
         if let Some(v) = self.scratch_folds.get(&e) {
-            return Lattice::Const(*v);
+            return Lattice::Const(v.clone());
         }
         let node = &body.exprs[e];
         match &node.kind {
             ExprKind::Local { index, .. } => {
-                self.env.get(index).copied().unwrap_or(Lattice::Unevaluated)
+                self.env.get(index).cloned().unwrap_or(Lattice::Unevaluated)
             }
             ExprKind::FieldAccess {
                 expr: inner,
+                field_index,
                 field_name,
-                ..
-            } => match inner.as_expr().map(|e| &body.exprs[e].kind) {
-                // A promoted `Operand::Value` inner is no global field read.
-                Some(ExprKind::GlobalVarGet {
-                    module_source,
-                    name,
-                }) => self.global_field(&(module_source.clone(), name.clone()), field_name),
-                Some(ExprKind::Local { index, .. }) => match self.ref_global_aliases.get(index) {
-                    Some(key) => {
-                        debug_assert!(
-                            local_binds_to_global_ref(body, *index, key),
-                            "ref_global_aliases[{index}] = {key:?} is stale: the body being \
-                             folded does not bind local {index} to that reference — per-function \
-                             alias state leaked across a body boundary (e.g. a CTFE scratch \
-                             reduction that did not save/clear it)",
-                        );
-                        self.global_field(key, field_name)
-                    }
-                    None => Lattice::Unevaluated,
-                },
-                _ => Lattice::Unevaluated,
-            },
+            } => self.field_access_lattice(body, *inner, *field_index, field_name),
+            ExprKind::StructLiteral { fields, .. } => self.aggregate_lattice(
+                body,
+                node.type_id,
+                fields.iter().map(|f| (f.field_index, f.value)),
+            ),
+            ExprKind::TupleLiteral { elements } => self.aggregate_lattice(
+                body,
+                node.type_id,
+                elements
+                    .iter()
+                    .enumerate()
+                    .map(|(i, op)| (u32::try_from(i).expect("tuple arity fits u32"), *op)),
+            ),
             ExprKind::GlobalVarGet {
                 module_source,
                 name,
@@ -959,11 +1155,58 @@ impl<'a> Interpreter<'a> {
                     None => PatternMatch::Unknown,
                 }
             }
-            PatKind::Binding { .. }
-            | PatKind::Tuple(_, _)
+            PatKind::Struct { fields, .. } => self.all_fields_match(
+                body,
+                value,
+                fields.iter().map(|f| (f.field_index, f.pattern)),
+            ),
+            // A tuple rest (`(a, ..)`) leaves the trailing sub-patterns without
+            // a fixed element index, so only the exact-arity form is modelled.
+            PatKind::Tuple(pats, has_rest) if !*has_rest => self.all_fields_match(
+                body,
+                value,
+                pats.iter().enumerate().map(|(i, p)| {
+                    (u32::try_from(i).expect("tuple arity fits u32"), *p)
+                }),
+            ),
+            PatKind::Tuple(_, _)
+            | PatKind::Binding { .. }
             | PatKind::Variant { .. }
-            | PatKind::Enum { .. }
-            | PatKind::Struct { .. } => PatternMatch::Unknown,
+            | PatKind::Enum { .. } => PatternMatch::Unknown,
+        }
+    }
+
+    /// Conjunction of the sub-pattern results over an aggregate's fields:
+    /// definitely-no as soon as one field rules the pattern out, definitely-yes
+    /// only when every listed field matches. A field the value does not carry —
+    /// or a sub-pattern the engine does not model, `Binding` included — makes
+    /// the whole pattern `Unknown`, so a match is never committed on a pattern
+    /// whose bindings the rewrite would drop. A value that is not an aggregate
+    /// is `Unknown` rather than vacuously matching a field-less pattern.
+    fn all_fields_match(
+        &self,
+        body: &Body,
+        value: &Value,
+        fields: impl Iterator<Item = (u32, PatId)>,
+    ) -> PatternMatch {
+        if !matches!(value, Value::Aggregate { .. }) {
+            return PatternMatch::Unknown;
+        }
+        let mut any_unknown = false;
+        for (field_index, pat) in fields {
+            let Some(field_value) = value.field(field_index) else {
+                return PatternMatch::Unknown;
+            };
+            match self.pattern_matches_a(body, field_value, pat) {
+                PatternMatch::No => return PatternMatch::No,
+                PatternMatch::Unknown => any_unknown = true,
+                PatternMatch::Yes => {}
+            }
+        }
+        if any_unknown {
+            PatternMatch::Unknown
+        } else {
+            PatternMatch::Yes
         }
     }
 
@@ -1034,7 +1277,7 @@ impl<'a> Interpreter<'a> {
     pub(crate) fn reduce_local_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
         if let Some(value) = self.flow_fold_value_a(sink.body(), e) {
             // Promote the folded scalar to an `Operand::Value` in `e`'s parent.
-            if sink.replace_with_value(e, value) {
+            if sink.replace_with_value(e, value.clone()) {
                 return true;
             }
             // The scratch backend cannot promote (no parent map); memoize the
@@ -1058,7 +1301,9 @@ impl<'a> Interpreter<'a> {
     /// This is the subset of [`reduce_local_a`](Self::reduce_local_a) that
     /// depends only on the node and its (already-folded) children plus the
     /// program-wide [`CalleeMap`]: literal `Binary` / `Unary` / `Cast`
-    /// arithmetic and pure compile-time function evaluation. It deliberately
+    /// arithmetic, projection out of a constant aggregate, and pure
+    /// compile-time function evaluation. Only scalars are returned — an
+    /// aggregate has no operand form. It deliberately
     /// excludes the `env` / `globals` paths — local-bound constants and
     /// immutable-global reads — which require the driving visitor's
     /// per-function dataflow state and so stay with [`crate::optimize`]'s
@@ -1074,7 +1319,14 @@ impl<'a> Interpreter<'a> {
     /// promotes the returned value to an `Operand::Value` via
     /// `Engine::replace_expr_with_value`.
     pub fn const_fold_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
+        self.const_fold_candidate_a(body, e).filter(Value::is_scalar)
+    }
+
+    fn const_fold_candidate_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         if let Lattice::Const(v) = self.try_fold_a(body, e) {
+            return Some(v);
+        }
+        if let Some(v) = self.field_projection_value_a(body, e) {
             return Some(v);
         }
         if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
@@ -1083,13 +1335,52 @@ impl<'a> Interpreter<'a> {
         None
     }
 
+    /// The constant a `receiver.field` node reads, when the receiver is a
+    /// constant aggregate. Discarding the receiver is safe precisely because it
+    /// is constant: a literal aggregate's fields are constants, and a call only
+    /// reduces to one when it is CTFE-eligible (pure), so nothing observable is
+    /// dropped and the read cannot trap on null.
+    ///
+    /// A call receiver is folded here rather than in
+    /// [`Self::field_access_lattice`], which cannot run CTFE from `&self`; that
+    /// is what lets `factory().field` reduce to the field of the constructed
+    /// value.
+    fn field_projection_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
+        let ExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            field_name,
+        } = &body.exprs[e].kind
+        else {
+            return None;
+        };
+        let (inner, field_index) = (*inner, *field_index);
+        if let Some(v) = self
+            .field_access_lattice(body, inner, field_index, field_name)
+            .as_const()
+        {
+            return Some(v);
+        }
+        let receiver = self.try_call_fold_a(body, inner.as_expr()?).as_const()?;
+        receiver.field(field_index).cloned()
+    }
+
     /// The flow-sensitive constant value of `e` — `env`-bound locals, immutable
-    /// globals, literal arithmetic, and pure CTFE — or `None`. The structural
-    /// rewrites (short-circuit / `if` / `match` collapse) are *not* included.
-    /// The sink promotes the result to an `Operand::Value` via
-    /// [`EditSink::replace_with_value`].
+    /// globals, literal arithmetic, aggregate field projection, and pure CTFE —
+    /// or `None`. The structural rewrites (short-circuit / `if` / `match`
+    /// collapse) are *not* included. The sink promotes the result to an
+    /// `Operand::Value` via [`EditSink::replace_with_value`], so the value is
+    /// always a scalar: a constant aggregate keeps its skeleton node and only
+    /// the scalars projected out of it fold.
     pub fn flow_fold_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
+        self.flow_fold_candidate_a(body, e).filter(Value::is_scalar)
+    }
+
+    fn flow_fold_candidate_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         if let Lattice::Const(v) = self.try_fold_a(body, e) {
+            return Some(v);
+        }
+        if let Some(v) = self.field_projection_value_a(body, e) {
             return Some(v);
         }
         // A bare `Local` read bound to a constant in the flow env (the "env-bound
@@ -1176,6 +1467,26 @@ impl<'a> Interpreter<'a> {
                         ch |= self.reduce_in_place_operand_a(body, g);
                     }
                     ch |= self.reduce_in_place_operand_a(body, arm_body);
+                }
+                ch
+            }
+            ExprKind::FieldAccess { expr: inner, .. } => {
+                let inner = *inner;
+                self.reduce_in_place_operand_a(body, inner)
+            }
+            ExprKind::StructLiteral { fields, .. } => {
+                let values: Vec<Operand> = fields.iter().map(|f| f.value).collect();
+                let mut ch = false;
+                for v in values {
+                    ch |= self.reduce_in_place_operand_a(body, v);
+                }
+                ch
+            }
+            ExprKind::TupleLiteral { elements } => {
+                let elements = elements.clone();
+                let mut ch = false;
+                for v in elements {
+                    ch |= self.reduce_in_place_operand_a(body, v);
                 }
                 ch
             }
@@ -1296,10 +1607,10 @@ impl<'a> Interpreter<'a> {
         };
 
         // (2) Bool-arms collapse.
-        if let (Value::Bool(t_b), Value::Bool(e_b)) = (t, ev)
+        if let (Value::Bool(t_b), Value::Bool(e_b)) = (&t, &ev)
             && t_b != e_b
         {
-            if t_b {
+            if *t_b {
                 // `if c { true } else { false }` ≡ `c`. Splice the skeleton
                 // condition in place; a promoted value has no node to clone.
                 let Some(cond_e) = condition.as_expr() else {
@@ -1492,9 +1803,9 @@ impl<'a> Interpreter<'a> {
         // get a fresh map and ids never cross scratch bodies.
         let saved_folds = std::mem::take(&mut self.scratch_folds);
         let saved_aliases = std::mem::take(&mut self.ref_global_aliases);
-        for (i, v) in bound.iter().enumerate() {
+        for (i, v) in bound.into_iter().enumerate() {
             #[allow(clippy::cast_possible_truncation)]
-            self.env.insert(i as u32, Lattice::Const(*v));
+            self.env.insert(i as u32, Lattice::Const(v));
         }
         // Reduce the tail on a scratch copy of the callee's nodes so the shared
         // callee body (held under an immutable `Ref`) is not mutated. Only the
@@ -1531,7 +1842,7 @@ impl<'a> Interpreter<'a> {
         };
         globals
             .get(&(module_source.clone(), name.to_string()))
-            .copied()
+            .cloned()
             .unwrap_or(Lattice::Unevaluated)
     }
 }
@@ -1592,8 +1903,8 @@ fn bool_to_match(b: bool) -> PatternMatch {
 /// returns [`Lattice::Unevaluated`] (the join's identity).
 fn join_all(lats: &[Lattice]) -> Lattice {
     let mut acc = Lattice::Unevaluated;
-    for &l in lats {
-        acc = acc.join(l);
+    for l in lats {
+        acc = acc.join(l.clone());
     }
     acc
 }

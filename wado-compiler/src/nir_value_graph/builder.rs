@@ -655,6 +655,11 @@ impl<'a> Builder<'a> {
             crate::const_eval::Value::Float { value, .. } => self.pool.float(value, result_type),
             crate::const_eval::Value::Bool(b) => self.pool.bool(b),
             crate::const_eval::Value::Char(c) => self.pool.char(c),
+            // The pool models pure scalars; the arithmetic folds feeding this
+            // never produce an aggregate.
+            crate::const_eval::Value::Aggregate { .. } => {
+                panic!("an aggregate constant cannot be interned as a pure value")
+            }
         }
     }
 

@@ -164,6 +164,7 @@ fn fold_function(
     // Local indices are per-function; reset the interpreter env at each boundary.
     visitor.interpreter.enter_function();
     visitor.interpreter.record_ref_global_aliases(body);
+    visitor.interpreter.record_aggregate_locals(body);
     let mut engine = Engine::new(body, buffers, locals);
     let root = engine.body.root;
     visitor.visit_block(&mut engine, root)

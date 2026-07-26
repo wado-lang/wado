@@ -77,7 +77,7 @@ Scalar and dataflow:
 - `drve` — make a function void-returning when its result is dropped at every call site.
 - `store_load_forward` — forward a stored literal to a later unmodified load.
 - `elide_local` — drop a binding that is never read (keeping its value if impure).
-- `const_folding` — partial evaluation: constant arithmetic, compile-time execution, immutable-global reads, and constant-branch collapse.
+- `const_folding` — partial evaluation: constant arithmetic, compile-time execution, immutable-global reads, constant-branch collapse, and constant struct / tuple values (field projection, aggregate arguments and results of a compile-time call, and struct / tuple patterns over a constant scrutinee).
 - `const_branch_prune` — simplify trivial blocks and fold a constant-condition `if` to its taken arm.
 
 Loop and field:

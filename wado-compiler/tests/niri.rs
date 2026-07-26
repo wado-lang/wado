@@ -19,8 +19,8 @@ use wado_compiler::nir::{
     NirUnaryOp, ReturnAbi,
 };
 use wado_compiler::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, Operand, PatId, PatKind,
-    PatNode, StmtId, StmtKind, StmtNode,
+    ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body, ExprId, ExprKind,
+    ExprNode, Operand, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
 use wado_compiler::nir_value_graph::ValueKind;
 use wado_compiler::niri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
@@ -1085,7 +1085,7 @@ fn lattice_join_idempotent_on_equal_consts() {
         value: 7,
         prim: PrimitiveType::I32,
     });
-    assert_eq!(v.join(v), v);
+    assert_eq!(v.clone().join(v.clone()), v);
 }
 
 #[test]
@@ -1112,8 +1112,8 @@ fn lattice_join_unevaluated_is_identity() {
         value: 42,
         prim: PrimitiveType::I64,
     });
-    assert_eq!(Lattice::Unevaluated.join(c), c);
-    assert_eq!(c.join(Lattice::Unevaluated), c);
+    assert_eq!(Lattice::Unevaluated.join(c.clone()), c);
+    assert_eq!(c.clone().join(Lattice::Unevaluated), c);
     assert_eq!(
         Lattice::Unevaluated.join(Lattice::Unevaluated),
         Lattice::Unevaluated
@@ -1123,7 +1123,7 @@ fn lattice_join_unevaluated_is_identity() {
 #[test]
 fn lattice_join_nonconst_is_absorbing() {
     let c = Lattice::Const(Value::Bool(true));
-    assert_eq!(Lattice::NonConst.join(c), Lattice::NonConst);
+    assert_eq!(Lattice::NonConst.join(c.clone()), Lattice::NonConst);
     assert_eq!(c.join(Lattice::NonConst), Lattice::NonConst);
     assert_eq!(
         Lattice::NonConst.join(Lattice::Unevaluated),
@@ -1142,9 +1142,15 @@ fn lattice_join_is_commutative_and_associative() {
         prim: PrimitiveType::I32,
     });
     let c = Lattice::NonConst;
-    assert_eq!(a.join(b), b.join(a));
-    assert_eq!(a.join(b).join(c), a.join(b.join(c)));
-    assert_eq!(b.join(c).join(a), c.join(a).join(b));
+    assert_eq!(a.clone().join(b.clone()), b.clone().join(a.clone()));
+    assert_eq!(
+        a.clone().join(b.clone()).join(c.clone()),
+        a.clone().join(b.clone().join(c.clone())),
+    );
+    assert_eq!(
+        b.clone().join(c.clone()).join(a.clone()),
+        c.join(a).join(b),
+    );
 }
 
 #[test]
@@ -4010,4 +4016,496 @@ fn global_const_bool_folds_via_reduce_local() {
 
     let expr = global_get(module, "ENABLED", TypeTable::BOOL);
     assert_eq!(flow_fold(&mut interp, &expr), Some(Value::Bool(true)));
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Aggregates: struct / tuple values, field projection, aggregate patterns
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn point_type(table: &mut TypeTable) -> TypeId {
+    table.make_struct("Point".to_string(), ModuleSource::default())
+}
+
+fn struct_lit(type_id: TypeId, fields: Vec<(u32, &'static str, Build)>) -> Build {
+    Rc::new(move |b| {
+        let fields = fields
+            .iter()
+            .map(|(field_index, name, value)| ArenaStructField {
+                name: (*name).to_string(),
+                value: value(b),
+                field_index: *field_index,
+            })
+            .collect();
+        Operand::Expr(pe(
+            b,
+            ExprKind::StructLiteral {
+                struct_type: type_id,
+                struct_name: "Point".to_string(),
+                fields,
+            },
+            type_id,
+        ))
+    })
+}
+
+fn tuple_lit(type_id: TypeId, elements: Vec<Build>) -> Build {
+    Rc::new(move |b| {
+        let elements = elements.iter().map(|e| e(b)).collect();
+        Operand::Expr(pe(b, ExprKind::TupleLiteral { elements }, type_id))
+    })
+}
+
+fn field_access(receiver: Build, field_index: u32, name: &'static str, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let expr = receiver(b);
+        Operand::Expr(pe(
+            b,
+            ExprKind::FieldAccess {
+                expr,
+                field_index,
+                field_name: name.to_string(),
+            },
+            type_id,
+        ))
+    })
+}
+
+fn struct_pat(
+    struct_type: TypeId,
+    fields: Vec<(u32, &'static str, PatBuild)>,
+    has_rest: bool,
+) -> PatBuild {
+    Rc::new(move |b| {
+        let fields = fields
+            .iter()
+            .map(|(field_index, name, pattern)| ArenaStructPatternField {
+                field_name: (*name).to_string(),
+                field_index: *field_index,
+                pattern: pattern(b),
+            })
+            .collect();
+        pp(
+            b,
+            PatKind::Struct {
+                struct_type,
+                fields,
+                has_rest,
+            },
+        )
+    })
+}
+
+fn int(value: u64) -> Value {
+    Value::Int {
+        value,
+        prim: PrimitiveType::I32,
+    }
+}
+
+/// `Point { x: 10, y: 32 }`.
+fn point_lit(point: TypeId) -> Build {
+    struct_lit(
+        point,
+        vec![
+            (0, "x", int_lit(10, TypeTable::I32, "10")),
+            (1, "y", int_lit(32, TypeTable::I32, "32")),
+        ],
+    )
+}
+
+fn point_value(point: TypeId) -> Value {
+    Value::aggregate(point, vec![(0, int(10)), (1, int(32))])
+}
+
+#[test]
+fn struct_literal_reduces_to_aggregate() {
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    assert_eq!(
+        reduce_lat(&mut Interpreter::new(&table), &point_lit(point)),
+        Lattice::Const(point_value(point)),
+    );
+}
+
+#[test]
+fn aggregate_equality_ignores_field_order() {
+    // The literal's field order is not part of the value: `Value::aggregate`
+    // canonicalizes to `field_index` order, so two spellings of one struct
+    // compare equal (what the both-arms-equal `if` collapse relies on).
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let reversed = struct_lit(
+        point,
+        vec![
+            (1, "y", int_lit(32, TypeTable::I32, "32")),
+            (0, "x", int_lit(10, TypeTable::I32, "10")),
+        ],
+    );
+    assert_eq!(
+        reduce_lat(&mut Interpreter::new(&table), &reversed),
+        Lattice::Const(point_value(point)),
+    );
+}
+
+#[test]
+fn struct_literal_with_unknown_field_is_unevaluated() {
+    // An unbound local field: the aggregate is not known, and claiming
+    // `NonConst` would overstate what the engine learned.
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let expr = struct_lit(
+        point,
+        vec![
+            (0, "x", int_lit(10, TypeTable::I32, "10")),
+            (1, "y", local_expr(7, TypeTable::I32)),
+        ],
+    );
+    assert_eq!(
+        reduce_lat(&mut Interpreter::new(&table), &expr),
+        Lattice::Unevaluated,
+    );
+}
+
+#[test]
+fn struct_literal_with_non_const_field_is_non_const() {
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(7, Lattice::NonConst);
+    let expr = struct_lit(
+        point,
+        vec![
+            (0, "x", int_lit(10, TypeTable::I32, "10")),
+            (1, "y", local_expr(7, TypeTable::I32)),
+        ],
+    );
+    assert_eq!(reduce_lat(&mut interp, &expr), Lattice::NonConst);
+}
+
+#[test]
+fn field_access_projects_a_struct_literal() {
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let expr = field_access(point_lit(point), 1, "y", TypeTable::I32);
+    assert_eq!(
+        flow_fold(&mut Interpreter::new(&table), &expr),
+        Some(int(32)),
+    );
+}
+
+#[test]
+fn field_access_projects_nested_aggregates() {
+    // `Line { start: Point { x: 10, y: 32 } }.start.x` → 10.
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let line = table.make_struct("Line".to_string(), ModuleSource::default());
+    let expr = field_access(
+        field_access(
+            struct_lit(line, vec![(0, "start", point_lit(point))]),
+            0,
+            "start",
+            point,
+        ),
+        0,
+        "x",
+        TypeTable::I32,
+    );
+    assert_eq!(
+        flow_fold(&mut Interpreter::new(&table), &expr),
+        Some(int(10)),
+    );
+}
+
+#[test]
+fn field_access_on_non_const_receiver_is_non_const() {
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(0, Lattice::NonConst);
+    let expr = field_access(local_expr(0, point), 0, "x", TypeTable::I32);
+    assert_eq!(reduce_lat(&mut interp, &expr), Lattice::NonConst);
+}
+
+#[test]
+fn tuple_literal_projects_by_position() {
+    let mut table = TypeTable::new();
+    let pair = table.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
+    let expr = field_access(
+        tuple_lit(
+            pair,
+            vec![
+                int_lit(10, TypeTable::I32, "10"),
+                int_lit(32, TypeTable::I32, "32"),
+            ],
+        ),
+        1,
+        "1",
+        TypeTable::I32,
+    );
+    assert_eq!(
+        flow_fold(&mut Interpreter::new(&table), &expr),
+        Some(int(32)),
+    );
+}
+
+#[test]
+fn struct_pattern_picks_the_matching_arm() {
+    // match Point { x: 10, y: 32 } { { x: 10, y: 1 } => 1009, { x: 10, y: 32 } => 1013, _ => 1019 }
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let expr = match_expr(
+        point_lit(point),
+        vec![
+            arm(
+                struct_pat(
+                    point,
+                    vec![(0, "x", lit_pat_i128(10)), (1, "y", lit_pat_i128(1))],
+                    false,
+                ),
+                int_lit(1009, TypeTable::I32, "1009"),
+            ),
+            arm(
+                struct_pat(
+                    point,
+                    vec![(0, "x", lit_pat_i128(10)), (1, "y", lit_pat_i128(32))],
+                    false,
+                ),
+                int_lit(1013, TypeTable::I32, "1013"),
+            ),
+            arm(wildcard_pat(), int_lit(1019, TypeTable::I32, "1019")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        reduce_lat(&mut Interpreter::new(&table), &expr),
+        Lattice::Const(int(1013)),
+    );
+}
+
+#[test]
+fn struct_pattern_rest_ignores_unlisted_fields() {
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let expr = match_expr(
+        point_lit(point),
+        vec![
+            arm(
+                struct_pat(point, vec![(0, "x", lit_pat_i128(10))], true),
+                int_lit(1013, TypeTable::I32, "1013"),
+            ),
+            arm(wildcard_pat(), int_lit(1019, TypeTable::I32, "1019")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        reduce_lat(&mut Interpreter::new(&table), &expr),
+        Lattice::Const(int(1013)),
+    );
+}
+
+#[test]
+fn struct_pattern_with_a_binding_field_stays_unknown() {
+    // A `Binding` sub-pattern is not modelled: committing the arm would splice
+    // a body whose binding the rewrite never performs. The later wildcard arm
+    // must not be picked up either, so the match stays unfolded.
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let expr = match_expr(
+        point_lit(point),
+        vec![
+            arm(
+                struct_pat(
+                    point,
+                    vec![(0, "x", lit_pat_i128(10)), (1, "y", binding_pat("y", 3, TypeTable::I32))],
+                    false,
+                ),
+                int_lit(1013, TypeTable::I32, "1013"),
+            ),
+            arm(wildcard_pat(), int_lit(1019, TypeTable::I32, "1019")),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&expr);
+    let table_ref = &table;
+    let mut interp = Interpreter::new(table_ref);
+    assert_eq!(interp.reduce_to_lattice_full_a(&mut body, e), Lattice::NonConst);
+    assert!(
+        matches!(body.exprs[e].kind, ExprKind::Match { .. }),
+        "the match must survive: {:?}",
+        body.exprs[e].kind
+    );
+}
+
+#[test]
+fn struct_pattern_rules_an_arm_out_despite_a_binding() {
+    // A definite field mismatch decides the arm even when a sibling field
+    // binds: dropping an arm that cannot match is always sound.
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let expr = match_expr(
+        point_lit(point),
+        vec![
+            arm(
+                struct_pat(
+                    point,
+                    vec![(0, "x", lit_pat_i128(99)), (1, "y", binding_pat("y", 3, TypeTable::I32))],
+                    false,
+                ),
+                int_lit(1009, TypeTable::I32, "1009"),
+            ),
+            arm(wildcard_pat(), int_lit(1019, TypeTable::I32, "1019")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        reduce_lat(&mut Interpreter::new(&table), &expr),
+        Lattice::Const(int(1019)),
+    );
+}
+
+#[test]
+fn tuple_pattern_picks_the_matching_arm() {
+    let mut table = TypeTable::new();
+    let pair = table.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
+    let expr = match_expr(
+        tuple_lit(
+            pair,
+            vec![
+                int_lit(10, TypeTable::I32, "10"),
+                int_lit(32, TypeTable::I32, "32"),
+            ],
+        ),
+        vec![
+            arm(
+                tuple_pat(vec![lit_pat_i128(10), lit_pat_i128(1)], false),
+                int_lit(1009, TypeTable::I32, "1009"),
+            ),
+            arm(
+                tuple_pat(vec![lit_pat_i128(10), lit_pat_i128(32)], false),
+                int_lit(1013, TypeTable::I32, "1013"),
+            ),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        reduce_lat(&mut Interpreter::new(&table), &expr),
+        Lattice::Const(int(1013)),
+    );
+}
+
+#[test]
+fn tuple_pattern_with_rest_stays_unknown() {
+    // `(10, ..)` leaves the trailing sub-patterns without a fixed element
+    // index, so the engine does not model it.
+    let mut table = TypeTable::new();
+    let pair = table.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
+    let expr = match_expr(
+        tuple_lit(
+            pair,
+            vec![
+                int_lit(10, TypeTable::I32, "10"),
+                int_lit(32, TypeTable::I32, "32"),
+            ],
+        ),
+        vec![
+            arm(
+                tuple_pat(vec![lit_pat_i128(10)], true),
+                int_lit(1013, TypeTable::I32, "1013"),
+            ),
+            arm(wildcard_pat(), int_lit(1019, TypeTable::I32, "1019")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        reduce_lat(&mut Interpreter::new(&table), &expr),
+        Lattice::NonConst,
+    );
+}
+
+#[test]
+fn pure_call_folds_a_struct_argument() {
+    // fn manhattan(p: Point) -> i32 { return p.x + p.y; }
+    // manhattan(Point { x: 10, y: 32 }) → 42
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let body = return_stmt(binary(
+        NirBinaryOp::Add,
+        field_access(local_expr(0, point), 0, "x", TypeTable::I32),
+        field_access(local_expr(0, point), 1, "y", TypeTable::I32),
+        TypeTable::I32,
+    ));
+    let manhattan = make_pure_fn("manhattan", vec![("p", point)], TypeTable::I32, body);
+    let callees = build_callee_map_test(std::slice::from_ref(&manhattan));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    let expr = call_expr(&manhattan, vec![point_lit(point)]);
+    assert_eq!(flow_fold(&mut interp, &expr), Some(int(42)));
+}
+
+#[test]
+fn pure_call_returning_a_struct_projects_at_the_call_site() {
+    // fn origin() -> Point { return Point { x: 10, y: 32 }; }
+    // origin().y → 32
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let origin = make_pure_fn("origin", vec![], point, return_stmt(point_lit(point)));
+    let callees = build_callee_map_test(std::slice::from_ref(&origin));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    let expr = field_access(call_expr(&origin, vec![]), 1, "y", TypeTable::I32);
+    assert_eq!(flow_fold(&mut interp, &expr), Some(int(32)));
+}
+
+#[test]
+fn aggregate_binding_needs_a_read_only_local() {
+    // `record_aggregate_locals` decides whether a local may carry an aggregate
+    // constant. Each phase below mirrors what the driving visitor does per
+    // function: `enter_function`, record, then bind.
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let mut interp = Interpreter::new(&table);
+    let read = field_access(local_expr(0, point), 0, "x", TypeTable::I32);
+
+    // Without a recorded body, no local qualifies: the binding degrades to
+    // `NonConst` — the engine tracks whole values, not the heap.
+    interp.enter_function();
+    interp.bind_local(0, Lattice::Const(point_value(point)));
+    assert_eq!(reduce_lat(&mut interp, &read), Lattice::NonConst);
+
+    // A body whose only mention of local 0 is a field read qualifies it.
+    let (body, _) = into_body(&read);
+    interp.enter_function();
+    interp.record_aggregate_locals(&body);
+    interp.bind_local(0, Lattice::Const(point_value(point)));
+    assert_eq!(reduce_lat(&mut interp, &read), Lattice::Const(int(10)));
+
+    // A body that also borrows the local mutably does not.
+    let borrowed = unary(NirUnaryOp::MutRef, local_expr(0, point), point);
+    let read_then_borrow: Build = Rc::new(move |b| {
+        read(b);
+        borrowed(b)
+    });
+    let (body, _) = into_body(&read_then_borrow);
+    interp.enter_function();
+    interp.record_aggregate_locals(&body);
+    interp.bind_local(0, Lattice::Const(point_value(point)));
+    let reread = field_access(local_expr(0, point), 0, "x", TypeTable::I32);
+    assert_eq!(reduce_lat(&mut interp, &reread), Lattice::NonConst);
+}
+
+#[test]
+fn aggregate_scalar_bindings_are_unaffected_by_the_read_only_rule() {
+    // The aggregate gate must not touch scalars: no body scanned, yet a scalar
+    // binding still folds.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(0, Lattice::Const(int(7)));
+    assert_eq!(
+        reduce_lat(&mut interp, &local_expr(0, TypeTable::I32)),
+        Lattice::Const(int(7)),
+    );
 }

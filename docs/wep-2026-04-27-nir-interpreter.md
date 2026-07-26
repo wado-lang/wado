@@ -253,23 +253,68 @@ scalar / payload-free matching today without committing to a heap-aware
       to a full payload model. Useful for inlining `Option::unwrap` and
       similar "scrutinee constructed locally" idioms.
 
-#### Phase C — payload-aware variant matching (deferred)
+#### Phase C — aggregate values (struct / tuple done; variants deferred)
 
-- [ ] Add `Value::Enum { case_index, type_id }` (or equivalent) and
-      `Value::Variant { tag, payload: Box<Value> }`, opening
-      [`Value`] to a heap-aware shape. This crosses the "primitive
-      only" line currently held through Stages 1-3, so it should be
-      gated on a real consumer (Stage 3 inlining producing residual
-      matches over `Option<i32>`).
-- [ ] Add `Binding` pattern handling: introduce the bound name as a
-      `Const(payload)` entry in a child `env` while reducing the arm
-      body, then unbind on exit. Mirrors how Rust's MIR const-eval
-      handles variant scrutinees.
-- [ ] At this point `value_to_expr_kind` needs a fallible variant
-      that can report "not representable as a primitive literal" when
-      asked to materialize an `Enum` / `Variant` value back into NIR
-      (we don't always have the case_name handy). The all-arms-equal
-      collapse skips those cases.
+- [x] `Value::Aggregate { type_id, fields }` — a struct or tuple whose every
+      field is itself a compile-time value. Fields are keyed by `field_index`
+      (the key `FieldAccess`, `StructLiteral`, and struct patterns all carry,
+      and the one the `ValueGraph` uses) and canonicalized to that order, so
+      structural equality does not depend on literal field order. A NIR
+      aggregate literal always lists every field — the elaborator fills
+      defaults and rejects omissions — so the value is complete and equality
+      is exact. `Value` and `Lattice` are `Clone`, no longer `Copy`.
+- [x] Aggregates never leave the engine. The value pool models pure scalars,
+      so `Engine::replace_expr_with_value` declines an aggregate and
+      `const_fold_value_a` / `flow_fold_value_a` return scalars only: a
+      constant struct keeps its skeleton node and what folds is the scalars
+      projected out of it. This is what keeps extraction and WIR build
+      untouched by aggregate support.
+- [x] Construction from `StructLiteral` / `TupleLiteral` (`Const` only when
+      every field is constant; `NonConst` when a field is known
+      non-constant), and projection through `FieldAccess` — out of a literal,
+      an env-bound local, an immutable global, or a CTFE-folded call result,
+      so a pure factory's field reads fold across the call.
+- [x] Struct patterns and exact-arity tuple patterns, as the conjunction of
+      their field patterns: definite-no as soon as one field rules the arm
+      out (sound even when a sibling field binds), definite-yes only when
+      every listed field matches. `has_rest` ignores unlisted fields. A
+      tuple-with-rest pattern is `Unknown` — the trailing sub-patterns have no
+      fixed element index. A non-aggregate value never vacuously matches a
+      field-less aggregate pattern.
+- [x] `Binding` sub-patterns stay `Unknown`: the rewrite splices an arm body
+      without performing the binding, so committing such an arm would drop
+      it.
+- [ ] Bindings as constants, and the guards over them. This is what a
+      literal-bearing struct pattern actually reaches niri as: the elaborator
+      rewrites `{ x: 10, y: 32 } => …` into
+      `{ x: __lit_1, y: __lit_2 } && ((__lit_1 == 10) && (__lit_2 == 32)) => …`,
+      so the arm carries bindings plus a guard and the engine bails on both.
+      Lifting it means recording each `Binding`'s projected value, evaluating
+      the guard and the arm body with those values in scope, and — for the
+      splice, not for the lattice — materialising the bindings as `let`
+      statements in the spliced block, since the arm body may read them.
+      Scoped bindings need the lattice path to be `&mut self`, which would
+      also let it run CTFE directly and retire the call-receiver special case
+      in `field_projection_value_a`.
+- [x] Aggregate constants bind to a local only when every mention of that
+      local merely reads the value — a field read's receiver or a `match` /
+      `switch` scrutinee — and no store target, borrow, method receiver, or
+      mutable argument roots at it (`aggregate_safe_locals`, recorded per
+      function). niri models whole values, not the heap: a local another
+      handle can write through would go stale. Scalars keep their previous
+      behaviour exactly — they carry no fields, so no handle can change them
+      in place.
+- [x] Unit tests at `wado-compiler/tests/niri.rs` cover construction, field
+      order canonicalization, unknown / non-constant fields, nested and tuple
+      projection, struct and tuple patterns (match, mismatch, rest, binding,
+      mismatch-despite-binding), aggregate call arguments and results, and
+      the read-only-local gate. E2E fixture `niri_struct_call_fold.wado`
+      checks the observable fold: a struct-taking `#[inline(never)]` function
+      called with a struct literal becomes a literal at -O2.
+- [ ] `Value::Enum { case_index, type_id }` / `Value::Variant { tag, payload }`
+      and payload bindings. Gated on Phase B's tag pruning and on a real
+      consumer (Stage 3 inlining producing residual matches over
+      `Option<i32>`).
 
 ### Stage 3 — pure call inlining (in-process)
 
@@ -353,13 +398,17 @@ heap-aware return values stay deferred (call them Stage 3.5+).
       outer loop rebuilds the map (cheap) so newly-monomorphized
       bodies show up.
 - [x] Out of scope for Stage 3:
-  - `MethodCall` (instance methods carry a receiver `Value`; would
-    require modelling struct values).
+  - `MethodCall`. A `&mut self` receiver mutates through the call, and
+    nothing in the CTFE gate rules that out, so folding the tail would
+    drop the mutation. Free `Call`s take and return aggregates by value
+    (Phase C) and need no such check.
   - `IndirectCall` / `CmRawCall` (closure / CM-import calls).
-  - Multi-statement bodies (let-sequences, multi-return).
-  - Heap-aware return values (`String`, `List`, struct literals,
-    variant payloads). The body's lattice naturally stays
-    `Unevaluated` for those, so we just bail.
+  - Multi-statement bodies (let-sequences, multi-return). This is what
+    keeps a callee whose body `lower_patterns` desugared into a
+    statement sequence out of CTFE, aggregate parameters included.
+  - `String` / `List` return values: their `PackedArray` repr never
+    reduces to a `Value`, so the body's lattice stays `Unevaluated` and
+    we bail. Struct and tuple results fold (Phase C).
   - User-facing `const fn` / `#[const_eval]` syntax.
   - Salvaging recursive depth — Stage 5 (wasm-CTFE) covers anything
     Stage 3's recursion guard refuses.
@@ -406,23 +455,26 @@ heap-aware return values stay deferred (call them Stage 3.5+).
 
 ### Stage 6 — aggregate global & field/element projection
 
-Status: planned. Independent of Stages 4-5; builds on Phase C's
-heap-aware [`Value`]. Motivated by
+Status: partly done. Independent of Stages 4-5; builds on Phase C's
+aggregate [`Value`]. Motivated by
 [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md),
 which turns read-only constant aggregates into immutable module-scope
 globals and needs `niri` to see through them so the fold cascades.
 
-- [ ] Extend `GlobalEnv` beyond scalar `Lattice`: record immutable
-      aggregate globals (`StructLiteral` / `TupleLiteral` / `ArrayLiteral`
-      / `VariantConstruct` initializers) as a structural snapshot keyed by
-      `(ModuleSource, name)`.
-- [ ] Fold `FieldAccess(GlobalVarGet(G), f)` and
-      `Index(GlobalVarGet(G), const)` to the field/element constant — the
-      global analog of the local `field_env` projection, sharing the same
-      `value_to_expr_kind` leaf-rewrite.
-- [ ] Generalize the local `field_env` to project nested aggregate fields
-      (today scalar `Value` only), reusing Phase C's heap-aware
-      `Value::{Struct, List, Variant}`.
+- [x] `GlobalEnv` carries aggregates without an extension: an immutable
+      global whose initializer reduces is recorded as its `Lattice`, and
+      Phase C makes a struct / tuple initializer reduce to
+      `Value::Aggregate`.
+- [x] `FieldAccess(GlobalVarGet(G), f)` folds to the field constant. The
+      `GlobalFieldEnv` still wins where it has an entry — it knows fields no
+      initializer shows, such as the length body globalization records for a
+      hoisted sequence — and the receiver's own value decides otherwise.
+- [ ] `ArrayLiteral` elements and `Index(GlobalVarGet(G), const)`. Element
+      projection needs a `Value` shape for sequences, which the
+      `PackedArray` repr of a `List` / `String` does not currently reduce to.
+- [ ] Record an aggregate snapshot for a global whose value is only visible
+      as the inline `GlobalVarSet` body globalization emits (the initializer
+      is a `null` placeholder there, so the `GlobalEnv` path sees nothing).
 - [ ] Loop effect: a globalized constant's field/element reads fold to
       scalars module-wide → `const_global_promotion` / `const_fold` /
       `const_branch_prune` reduce further → the now-unread global is removed
@@ -498,9 +550,10 @@ incurs one codegen.
 
 - User-facing CTFE syntax (`#[const_eval]`, `const fn`). Decide later
   once we see real usage demand.
-- Heap-allocated values (`List`, `String`) in the in-process `Value`
-  type — Stages 1-3 are primitive-only. The wasm backend doesn't need
-  this since it returns whatever wasm returns.
+- Sequence values (`List`, `String`) in the in-process `Value` type: their
+  backing `PackedArray` has no constant form here, so they never reduce.
+  Structs and tuples of constants do (Stage 2.5 Phase C). The wasm backend
+  doesn't need either since it returns whatever wasm returns.
 - Salsa-style demand-driven reanalysis across compiler runs.
 
 ## Open questions
