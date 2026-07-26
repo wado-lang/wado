@@ -1085,11 +1085,10 @@ impl<'a> DceWalker<'a> {
             }
         } else {
             // Free function call.
-            debug_assert!(
-                !func_name.contains("::") || func_name.starts_with("builtin::"),
-                "ExprKind::Call should not have method-style names: {func_name}"
-            );
-
+            // Free function call. `method_info` is the discriminator — a name
+            // is not one: a synthesized helper embeds a type mangle, which
+            // carries `::` for an associated-type projection
+            // (`$value_copy$S::MapSerializer`).
             let callee_module = original_callee_module.clone();
             let callee_id = FunctionId::Free(FreeFunctionName::from_module_source(
                 &callee_module,
