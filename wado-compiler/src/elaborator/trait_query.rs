@@ -118,7 +118,17 @@ pub(crate) fn decl_identity_core(
     import_original_names: &IndexMap<String, String>,
     symbols: &crate::symbol::SymbolTable,
 ) -> Option<(ModuleSource, String)> {
-    if super::is_primitive_type_name(name) {
+    // Primitives and structural types declare nowhere, but their names are
+    // globally unique — there is one `i32` and one `()`. The name *is* the
+    // identity, so both sides agree without consulting any module.
+    if super::is_primitive_type_name(name)
+        || matches!(
+            name,
+            crate::tir::TypeTable::UNIT_TYPE_NAME
+                | crate::tir::TypeTable::TUPLE_TYPE_NAME
+                | crate::tir::TypeTable::ARRAY_TYPE_NAME
+        )
+    {
         return Some((ModuleSource::primitive(), name.to_string()));
     }
     if let Some(src) = imported_sources.get(name) {
