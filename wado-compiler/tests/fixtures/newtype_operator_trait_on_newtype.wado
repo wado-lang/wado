@@ -1,0 +1,46 @@
+// Operator trait impls written on the newtype itself, not on its base.
+// The call must resolve to the newtype's module, not the base's.
+
+use { println, Stdout } from "core:cli";
+
+type Counter = i32;
+
+impl Add for Counter {
+    type Output = Counter;
+    fn add(&self, rhs: &Counter) -> Counter {
+        return (*self as i32 + *rhs as i32 + 1) as Counter;
+    }
+}
+
+impl Neg for Counter {
+    type Output = Counter;
+    fn neg(&self) -> Counter {
+        return (0 - *self as i32) as Counter;
+    }
+}
+
+type Ticks = Counter;
+
+export fn run() with Stdout {
+    let a: Counter = 1 as Counter;
+    let b: Counter = 2 as Counter;
+
+    // `Add` is declared on `Counter`, so the extra +1 must be visible.
+    let sum = a + b;
+    assert (sum as i32) == 4;
+    println(`sum: ${sum as i32}`);
+
+    let neg = -a;
+    assert (neg as i32) == -1;
+    println(`neg: ${neg as i32}`);
+
+    // A newtype over the newtype inherits the impl through the chain.
+    let t1: Ticks = 10 as Ticks;
+    let t2: Ticks = 20 as Ticks;
+    let t3 = t1 + t2;
+    assert (t3 as i32) == 31;
+    println(`ticks: ${t3 as i32}`);
+}
+
+__DATA__
+{"stdout": "sum: 4\nneg: -1\nticks: 31\n"}

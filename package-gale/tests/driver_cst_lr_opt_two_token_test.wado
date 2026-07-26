@@ -1,0 +1,30 @@
+//! A two-token optional inside an LR suffix commits on the second token.
+//! Expected trees are the published ANTLR4 jar's (black-box oracle).
+
+use g from "./grammars/lr_opt_two_token.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_opt_two_token" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "the optional is skipped when the dot is absent" {
+    assert_tree(&"a in t", &"(s (e (e a) in (t t)))");
+}
+
+test "the optional is entered when the dot is present" {
+    assert_tree(&"a in d . t", &"(s (e (e a) in (d d) . (t t)))");
+}
+
+test "the parenthesised branch still wins on its own first token" {
+    assert_tree(&"a in ( x )", &"(s (e (e a) in ( x )))");
+}
+
+test "the suffix repeats" {
+    assert_tree(&"a in t in u", &"(s (e (e (e a) in (t t)) in (t u)))");
+}

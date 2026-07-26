@@ -120,6 +120,21 @@ impl Eq for LexerSlice {
     }
 }
 
+/// The 0-based column of char index `i`: the number of chars since the last
+/// newline. ANTLR4's `getCharPositionInLine()` (over the live match cursor) and
+/// `_tokenStartCharPositionInLine` (over the token's start) are both this.
+/// Scans back to the line start, so the cost is the column, not the offset —
+/// a lexer predicate may call it once per candidate rule per token.
+pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
+    let mut j = if i < chars.len() { i } else { chars.len() };
+    let mut col = 0;
+    while j > 0 && chars[j - 1] != '\n' {
+        col += 1;
+        j -= 1;
+    }
+    return col;
+}
+
 /// Token represents a lexed token with its kind, text, and position.
 /// Leading trivia (whitespace, comments) is attached to each token.
 /// `channel` is the ANTLR4 channel id (0 = default, 1 = HIDDEN; named
@@ -194,6 +209,10 @@ pub struct TokenStream {
     pub triv_ends: List<i32>,
     pub triv_chans: List<i32>,
     pub flags: List<TokenFlags>,
+    /// Text the lexer's executed actions printed, in tokenization order
+    /// (Stage C). Empty unless the lexer was generated with action execution
+    /// on. Defaulted so existing construction sites keep compiling.
+    pub output: String = "",
 }
 
 impl TokenStream {
@@ -335,6 +354,20 @@ impl TokenStream {
     /// Append token `i`'s text to `out` (no allocation).
     pub fn push_token_text(&self, out: &mut String, i: i32) {
         self.push_text(out, self.starts[i], self.ends[i]);
+    }
+
+    /// Append token `i`'s text with whitespace rendered as escapes, matching
+    /// ANTLR4's `Trees.toStringTree` node text (spaces are left alone). Used by
+    /// tree rendering only; `$text` and friends keep the raw text.
+    pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
+        for let mut j = self.starts[i]; j < self.ends[i]; j += 1 {
+            match self.chars[j] {
+                '\n' => out.push_str(&"\\n"),
+                '\r' => out.push_str(&"\\r"),
+                '\t' => out.push_str(&"\\t"),
+                c => out.push(c),
+            }
+        }
     }
 
     /// Append the text of token `i`'s leading trivia, in source order.
@@ -758,7 +791,8 @@ impl CstStore {
     }
 
     /// ANTLR4-style S-expression for the subtree at row `i`: `(name child ...)`,
-    /// tokens as their text; a childless node renders as its bare name, no
+    /// tokens as their text with whitespace escaped (`\n`, `\r`, `\t`, as
+    /// `Trees.toStringTree` does); a childless node renders as its bare name, no
     /// parens (ANTLR4's `Trees.toStringTree`). `rule_names[kind]` names rule
     /// nodes (`K_ERROR` renders `<error>`); `token_names[kind]` names missing
     /// terminals. Real terminals with empty text (e.g. EOF) are omitted;
@@ -802,7 +836,7 @@ fn cst_to_string_tree_impl(
             Tok => {
                 if !toks.is_empty_text(s.a[c]) {
                     out.push_str(&" ");
-                    toks.push_token_text(out, s.a[c]);
+                    toks.push_token_text_escaped(out, s.a[c]);
                 }
                 c += 1;
             },
@@ -812,7 +846,7 @@ fn cst_to_string_tree_impl(
             },
             Skip => {
                 out.push_str(&" <skip ");
-                toks.push_token_text(out, s.a[c]);
+                toks.push_token_text_escaped(out, s.a[c]);
                 out.push_str(&">");
                 c += 1;
             },
@@ -1136,7 +1170,7 @@ fn render_builder_node(
             Tok => {
                 if !toks.is_empty_text(a[c]) {
                     out.push_str(&" ");
-                    toks.push_token_text(out, a[c]);
+                    toks.push_token_text_escaped(out, a[c]);
                 }
                 c += 1;
             },
@@ -1146,7 +1180,7 @@ fn render_builder_node(
             },
             Skip => {
                 out.push_str(&" <skip ");
-                toks.push_token_text(out, a[c]);
+                toks.push_token_text_escaped(out, a[c]);
                 out.push_str(&">");
                 c += 1;
             },
@@ -1217,6 +1251,9 @@ pub fn normalize_tree(s: &String) -> String {
 /// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
 /// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
 /// escaped; backslashes and quotes pass through unchanged.
+///
+/// Whatever the lexer's actions printed precedes the dump, as it does on
+/// ANTLR4's stdout.
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
     let chars = tokens.chars;
     // Char index where each line begins; built once so each token's `line:col`
@@ -1227,7 +1264,8 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             line_starts.push(i + 1);
         }
     }
-    let mut out = String::with_capacity(tokens.len() * 32);
+    let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
+    out.push_str(&tokens.output);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
         // Non-default-channel trivia (`-> channel(HIDDEN)`) is parked in this
@@ -1306,25 +1344,6 @@ fn emit_lexer_token(
     let end_inclusive = end - 1;
     let channel_attr = if channel != 0 { `channel=${channel},` } else { String::from("") };
     out.push_str(&`[@${index},${start}:${end_inclusive}='${text_buf}',<${type_id}>,${channel_attr}${line}:${col}]\n`);
-}
-
-/// Compute (line, column) at a 0-based char index in `chars`, with
-/// 1-based line and 0-based column to match ANTLR4's `Token` getters.
-/// The parser's error path reports at most one position per parse, so the
-/// linear scan is fine; the per-token dump uses `line_col_from_starts`.
-fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
-    let mut line = 1;
-    let mut col = 0;
-    let cap = if pos < chars.len() { pos } else { chars.len() };
-    for let mut i = 0; i < cap; i += 1 {
-        if chars[i] == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-    return [line, col];
 }
 
 /// Compute (line, column) from the precomputed `line_starts` table (char
@@ -2367,6 +2386,7 @@ fn scan_equation(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
 }
 
 fn scan_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_multiplying_expression(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -2404,10 +2424,12 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_multiplying_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_pow_expression(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -2445,10 +2467,12 @@ fn scan_multiplying_expression(tokens: &Array<i32>, pos: i32, follow: &List<List
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_pow_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_signed_atom(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -2467,6 +2491,7 @@ fn scan_pow_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 

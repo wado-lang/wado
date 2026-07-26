@@ -342,3 +342,17 @@ Y : 'y' ;";
     // The retired variant section must NOT appear.
     assert !str_contains(&report, &"follow-variants:"), report;
 }
+
+test "render_dump keeps a lossy repeat-body entry off the common-terminal path" {
+    // Entering `('x' 'y' | 'x' 'z')?` yields one config per body alternative,
+    // all carrying the same grammar alt index, so `sll_dedup_by_alt` keeps
+    // only `'x' 'y'` and the walk claims `'y'` as a terminal every alt shares.
+    // `'x' 'z'` is a valid prefix of both alts, so no such terminal exists.
+    let g = "grammar D;
+a : ('x' 'y' | 'x' 'z')? 'p'
+  | ('x' 'y' | 'x' 'z')? 'q'
+  ;";
+    let report = dump_source(&g);
+
+    assert !str_contains(&report, &"Consume(TK_LIT_Y)"), report;
+}

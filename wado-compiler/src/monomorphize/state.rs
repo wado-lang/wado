@@ -492,9 +492,10 @@ impl Monomorphizer {
             }),
             None => self.newtype_own_name(receiver_type_id, type_table, |own| {
                 let head = crate::name::split_base_name(own);
-                self.functions
-                    .trait_env
-                    .has_inherent_method(&Receiver::Type(head.to_string()), &info.method_name)
+                self.functions.trait_env.has_inherent_method_by_receiver(
+                    &Receiver::Type(head.to_string()),
+                    &info.method_name,
+                )
             }),
         };
         own.as_deref() == Some(info.struct_name.as_str())

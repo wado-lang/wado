@@ -3229,7 +3229,9 @@ impl FunctionRef {
         match generic_name {
             "array_get" | "array_get_ref" | "array_get_mut_ref" | "array_set" | "array_new"
             | "array_len" | "array_copy" | "array_fill" | "array_clone" | "select"
-            | "copy_value" => Some(format!("builtin::{generic_name}")),
+            | "copy_value" | "is_uninitialized" | "black_box" => {
+                Some(format!("builtin::{generic_name}"))
+            }
             _ => None,
         }
     }
@@ -4008,11 +4010,14 @@ pub struct TirTypeParam {
 /// param onto an impl slot. Elaboration and monomorphization both derive it here.
 #[must_use]
 pub fn method_param_offset(impl_type_params: &[TirTypeParam]) -> u32 {
-    impl_type_params
-        .iter()
-        .map(|p| p.index + 1)
-        .max()
-        .unwrap_or(0)
+    method_param_offset_of(impl_type_params.iter().map(|p| p.index))
+}
+
+/// [`method_param_offset`] for callers holding the impl's slot indices
+/// rather than its params.
+#[must_use]
+pub fn method_param_offset_of(impl_slots: impl Iterator<Item = u32>) -> u32 {
+    impl_slots.map(|i| i + 1).max().unwrap_or(0)
 }
 
 /// Information about monomorphization origin for instantiated items
@@ -4082,14 +4087,9 @@ pub struct TirGlobal {
     /// True when this global is lazy-initialized: the Wasm slot starts
     /// `null`, and `__initialize_module` runs the original (non-constant)
     /// initializer to assign the real value before any non-init use.
-    /// Codegen narrows `global.get` results with `ref.as_non_null` for
-    /// these globals, since the read result is guaranteed non-null after
-    /// init.
     ///
-    /// `false` for constant-initialized globals (including
-    /// `Option<&T> = null` whose `null` is itself the runtime value) —
-    /// codegen leaves the read result nullable so a `None` value reads
-    /// back as `ref.null` instead of trapping in `ref.as_non_null`.
+    /// `false` for constant-initialized globals, including
+    /// `Option<&T> = null` whose `null` is itself the runtime value.
     pub lazy_init: bool,
     /// Per-local metadata for the initializer expression. Populated when
     /// the initializer is non-trivial (e.g., `SequenceLiteralBuilder`

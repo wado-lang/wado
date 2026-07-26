@@ -1,0 +1,31 @@
+// Three modules declare their own `Item` and implement the same shared
+// `Tag` trait on it, each returning a distinct value.
+//
+// `impl_index` buckets impls by bare type name, so all three `Item`s land
+// in one bucket and are told apart only by each entry's module. Two
+// separations are pinned here: a call from a module that has no `Item`
+// (the imported `a_tag` / `b_tag` reaching their own), and a call from a
+// module that does (`Item.tag()` below reaching this module's, not
+// whichever the bucket happens to list first).
+
+use { Tag } from "./sub/trait_impl_same_name_trait.wado";
+use { a_tag } from "./sub/trait_impl_same_name_a.wado";
+use { b_tag } from "./sub/trait_impl_same_name_b.wado";
+
+struct Item {
+    v: i32,
+}
+
+impl Tag for Item {
+    fn tag(&self) -> i32 {
+        return 3;
+    }
+}
+
+test "trait impls on same-named types stay separate across modules" {
+    assert a_tag() == 1;
+    assert b_tag() == 2;
+
+    let it = Item { v: 0 };
+    assert it.tag() == 3;
+}

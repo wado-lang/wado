@@ -18,8 +18,8 @@ fn opaque_i(x: i32) -> i32 {
 }
 
 export fn run() with Stdout {
-    let c = opaque_bool(1);
-    let x = opaque_i(7);
+    let c = opaque_bool(builtin::black_box(1));
+    let x = opaque_i(builtin::black_box(7));
 
     // Literal-constant arms (both born as `Operand::Value`).
     let a = if c { 1 } else { 2 };

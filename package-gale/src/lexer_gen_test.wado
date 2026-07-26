@@ -167,6 +167,45 @@ test "gen_lexer: case-colliding rule names emit distinct try fns" {
     assert out.contains("fn try_Id("), out;
 }
 
+fn lexer_source(src: String) -> String {
+    let g = parse_grammar(src);
+    let lits: List<LitToken> = [];
+    let mut w = CodeWriter::new();
+    let atn_class = TreeMap::<String, i32>::new();
+    let fields: List<MemberField> = [];
+    let methods: List<String> = [];
+    let members = MemberDecls { fields, methods };
+    let no_ops: List<SuperOp> = [];
+    gen_lexer(&mut w, &g, &lits, &atn_class, &members, false, &"", &no_ops);
+    return w.to_string();
+}
+
+test "gen_lexer: tail alternation of unequal length uses the longest-match emit" {
+    // ANTLR4's lexer takes the longest arm (`I` matches `ab`, not `a`).
+    let out = lexer_source("lexer grammar L; I : ('a' | 'ab') ; J : . ;");
+    assert out.contains("alts_best_"), out;
+}
+
+test "gen_lexer: tail alternation of equal length keeps the first-match emit" {
+    // Every arm consumes the same fixed count, so longest and first-match
+    // coincide; the cheaper emit stays byte-identical for the common shape.
+    let out = lexer_source("lexer grammar L; WS : (' ' | '\n') ;");
+    assert !out.contains("alts_best_"), out;
+    assert out.contains("alts_ok_"), out;
+}
+
+test "gen_lexer: alternation followed by a suffix keeps the first-match emit" {
+    // A longer arm could strand the suffix, and Gale never backtracks.
+    let out = lexer_source("lexer grammar L; K : ('x' | 'xy') 'yz' ;");
+    assert !out.contains("alts_best_"), out;
+}
+
+test "gen_lexer: tail alternation with a predicate keeps the first-match emit" {
+    // Scanning every arm would change how often the predicate is evaluated.
+    let out = lexer_source("lexer grammar L; options { language = Wado; } I : ('a' | 'ab' { false }?) ;");
+    assert !out.contains("alts_best_"), out;
+}
+
 test "gen_token_constants: more rules numbered after non-more rules (ANTLR4 order)" {
     // ANTLR4's SemanticPipeline.assignLexerTokenTypes assigns token types to
     // non-fragment rules WITHOUT a `more` / `type(...)` command first, in

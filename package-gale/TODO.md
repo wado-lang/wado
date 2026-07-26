@@ -27,7 +27,7 @@ The K-prefix caller-side mask analysis halts at a multi-alternative rule referen
 
 ## Stage B′ — JVM-oracle integration
 
-The Stage B′ pipeline covers 78 tests across `FullContextParsing`, `LeftRecursion`, `ParserErrors`, `ParserExec`, `SemPredEvalParser`, and `Sets`, with the remaining prediction divergences pinned as oracle-todo. The infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md)) is in place; Java is needed only at extract time, not in CI.
+The Stage B′ pipeline covers `FullContextParsing`, `LeftRecursion`, `ParserErrors`, `ParserExec`, `SemPredEvalParser`, and `Sets`, with the remaining prediction divergences pinned as oracle-todo. The infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md)) is in place; Java is needed only at extract time, not in CI.
 
 Remaining:
 
@@ -35,7 +35,7 @@ Remaining:
 
 ## Composite (slave-grammar) descriptors
 
-All 17 `CompositeLexers` / `CompositeParsers` descriptors short-circuit on the presence of imported slave grammars. Two independent blockers:
+Every `CompositeLexers` / `CompositeParsers` descriptor short-circuits on the presence of imported slave grammars. Independent blockers:
 
 - **Importer multi-input plumbing.** A grammar import (`import S;`) must resolve against the sibling slave-grammar files. Kiln already supports multi-input; lift the short-circuit once resolution lands.
 - **Host-side output (Stage C).** Every composite descriptor's expected output is a host-side artefact — action prints, token dumps, or empty — so none survive the Stage B output normalizer. Re-evaluate once Stage C lands.
@@ -44,13 +44,16 @@ All 17 `CompositeLexers` / `CompositeParsers` descriptors short-circuit on the p
 
 Design in [`action.md`](./action.md). Remaining:
 
-- Lexer `print` — an output sink threaded through tokenization onto the token stream.
-- Nested-group / mid-element lexer action placement.
+- Lexer actions under a `Repeat`. The action replay places each action at the cursor it was written at, covering mid-element and nested-group placement, but a `Repeat` matches an unknown number of times and the non-greedy / lookahead-aware emitters restructure the sequence around it. An alt carrying one keeps the flat emit: top-level actions run at the end of the match, anything nested inside warns.
 - The ATN-class lexer path.
-- The rest of the lexer `$`-attribute surface — `$type`, char position in line, member methods reading match position / text.
-- The `language = Java` lexer path (java2wado over lexer bodies).
+- The rest of the lexer `$`-attribute surface — `$type` and member methods reading match position / text. The char-position half is covered: java2wado resolves `getCharPositionInLine()` and `_tokenStartCharPositionInLine`, but only in a Java body; the identity translator still has no `$`-form for either.
+- `@lexer::members` for a `language = Java` grammar. A Java member method takes `&mut self`, but a lexer predicate runs inside `try_<rule>(lx: &Lexer, ...)` — the tournament must not mutate through a losing candidate. Java lexer bodies therefore see no members, and a reference is reported. Wiring them needs a split between members a predicate may read and members only an action may touch.
+- Two same-named rule labels bound to _different_ rules in different alternatives (`x=a | x=b`). Per-alternative resolution disambiguates token-vs-rule, which is all the binding records, so a `.field` read still resolves against the first-declared rule's value channel. `$<label>.text` is unaffected — it reads the call's own span.
 - The SuperClass effect interface for the real-world grammars below. Landed for **predicate-only** lexer bases, including `language = Java`: RustLexer tokenizes and parses end to end through a hand-written `impl RustLexerBase`. See `action.md` ("SuperClass — an effect interface"). Remaining before TypeScript / ANTLRv4 run: action ops (`{this.m();}` — the winner-replay path), the parser side (parser-rule superClass predicates like `{this.NextGT()}?`, currently discarded), and lifecycle hooks (`nextToken` for last-token tracking). Action-op bases stay carved out (byte-identical) until the replay path lands.
 - Make the ANTLR descriptor output corpus codegen-and-compare (parse-only today), unblocking the output acceptance.
+- Extend the Stage C output-compare beyond `Sets` and `SemPredEvalParser`, the categories it runs for today. The remaining ones are a mechanical extractor re-run plus triage of whatever lands in `[stage_c_todo]` / `[stage_c_skip]`.
+- Parser actions on the paths that still warn: a non-transparent group's alternatives (the transparent path inlines its actions with its elements), an LR suffix, and a multi-alt prequel. Each surfaces `UnsupportedAction`, so a grammar that needs one is never silently wrong.
+- The recognizer accessors ANTLR exposes to an action that Gale does not model: `getExpectedTokens()` and `getVocabulary()` (live case: the `ParserErrors/LL1ErrorInfo` descriptor prints the expected set), and `PredictionMode` / `dumpDFA`, which describe ANTLR's simulator rather than the grammar.
 - java2wado numeric promotion: an `i32` token member (`$X.int` / `.type` / `.line` / `.pos` / `.index`) mixed with a wider value-channel field (`returns [long v]` / `[float]` / `[double]`) mismatches Wado's strict widths, since Wado has no implicit widening. Loud compile error, not silent; no corpus grammar hits it. A proper fix threads Java's promotion rules through the translator.
 
 Gale still silently discards action / predicate contents for the real-world grammars whose constructs the parser subset does not yet cover (`ANTLRv4Lexer`, `RustLexer`, `RustParser`, `TypeScriptLexer`, `TypeScriptParser`): they load cleanly, but the generated recognizer behaves as if every predicate were `true` and every action a no-op. That is wrong for:
@@ -81,6 +84,13 @@ Add a failing test before fixing.
 The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that can mis-parse valid input. Several need their own focused PR with full-corpus validation rather than a quick patch (the prediction design notes the static path always has edges).
 
 - [ ] SLL prediction under-approximates and emits incomplete dispatch trees, so valid input is rejected (codegen emits a dispatch with no else-fallback): `+`/`*` repeats collapse to "consumes exactly one token" (`a : X+ Y | X Z` mispredicts on `X X Y`), and the opaque-rule expansion path drops at-end alternatives its template keeps.
+- [ ] A mid-alternative self-reference in an LR alternative keeps the alternative's own precedence, where ANTLR4 uses `expr[0]`: `a NOT BETWEEN 1 AND 2 AND b` brackets as `(a BETWEEN 1 AND 2) AND b` — a wrong tree with no diagnostic. Fixtures pin it: `lr_mid_operand.g4` (LR alternative) and `lr_between.g4` (atom alternative), both `#[TODO]`, plus the `sqlite` oracle case. **The correct fix is known and was measured too expensive to ship** ([`perf.md`](./perf.md) has the numbers): routing the operand through `expr[0]` needs the loop entry decided per token, which makes the rule ATN-class, and that cost lands on every operator of a hot expression rule — on the parse side and again on each of the tournament's repeated scans. Two things would make it affordable: memoising the loop-entry decision per (decision, position, precedence, caller depth), so the repeated scans pay once; and keeping the scan side on the static dispatch, since both readings of the climb-or-yield conflict span the same tokens — the scan only has to agree on the length, and "which operator alternative" is the one question it must answer exactly.
+- [ ] `atn_lr_loop_decision` takes the first precedence-allowed enter edge whose suffix admits the token, so two operator alternatives opening on the same token (`expr NOT? IN …` and `expr NOT? BETWEEN …` on `NOT`) are decided by alternative order rather than by lookahead. No committed grammar is ATN-class at its LR loop today, so nothing hits it — but SQLite acquires the shape the moment the item above lands (`SELECT a NOT BETWEEN 1 AND 2 AND b` was decided as `IN` on the shared `NOT`), so the two must land together. Deciding it needs the enter edges collected rather than short-circuited, then the conflict handed to the complete simulator (~2 tokens).
+- [ ] A greedy `rule?` whose body first-set overlaps the continuation is skipped where ANTLR4 enters it: the gate subtracts the caller's next-sibling FIRST, so `column_def`'s `type_name?` never fires on `a NOT NULL` / `a CONSTRAINT c NOT NULL DEFAULT 1` (a tree difference, and for the second case ANTLR4 reads `NOT NULL` as the type name). ANTLR4 resolves the ambiguity by alternative order — entering wins over exiting — but only among readings that survive, so preferring to enter is right only with a viability check, which is a full prediction. Fixture `ll_opt_greedy_ambig.g4` (`#[TODO]`) plus two `sqlite` oracle cases.
+- [ ] A non-greedy `*?` / `+?` exits on a 1-or-2-token check against the exit set and takes the minimum, so a loop the exit set cannot separate in two tokens stops too early and valid input is **rejected**: `type_name`'s `name+?` stops after one name, so `a UNSIGNED BIG INT` fails to parse. The scan side ignores `non_greedy` entirely (`while peek ∈ first`) — the two sides answer the same question by different rules, which is the scan/parse asymmetry the invariants below exist to prevent; today the over-scan is absorbed because the tournament picks a shorter prefix. Fixture `ll_non_greedy_plus_loop.g4` (`#[TODO]`) plus one `sqlite` oracle case. The correct answer is one prediction per iteration.
+
+  The last two ship together or not at all: entering `type_name?` on `a CONSTRAINT c NOT NULL DEFAULT 1` only parses if `name+?` then stops in the right place, so the optional fix alone turns that case from a wrong tree into a **parse error**. Both were implemented and reverted on measured cost — a prediction per occurrence costs a full closure over the grammar, and neither gating it nor bounding its lookahead brings that down. The numbers, and the two levers that would (memoising the decision, or threading the caller's FOLLOW so the runtime gate answers statically — the same gate the FOLLOW-lockstep items below are about), are in [`perf.md`](./perf.md). The shared principle is in [`antlr4-compatibility.md`](./antlr4-compatibility.md) ("Ambiguity is resolved by entering, not by yielding").
+- [ ] A lexer alternation that is _not_ in tail position still takes the first matching arm, not the one that lets the whole rule match: `I : ('a' | 'ab') 'bc'` rejects `abc`. Tail-position alternations are maximal-munch (a forward longest-match scan, no backtracking); generalising past the tail needs the ATN-class lexer path, since choosing the arm requires knowing whether the suffix can still match.
 - [ ] Scan/parse EOF asymmetry: the parse side matches EOF without advancing, the scan side advances unconditionally — so a scan over-counts by one whenever EOF is the last matched element, which can flip a tournament tie.
 - [ ] Tournament / scan-gate call sites never forward the runtime caller-FOLLOW argument while the corresponding parse calls do — violating the documented scan/parse lockstep invariant on FOLLOW-gated grammars.
 - [ ] A simple-CST group threads the caller's FOLLOW on the scan side but an empty FOLLOW on the parse-op path, and the two code comments contradict each other about which is sound. Decide once, fix the other side, pin with a fixture.
@@ -93,6 +103,10 @@ The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that c
 ### Pipeline and tooling correctness
 
 - [ ] The action stripper ends a `[...]` at the first unescaped `]` (correct for char sets, the corpus case). This loses the depth tracking that handled a rule-argument action whose host type contains `[]` (`r[int[] arr]`): such an action ends early and its remainder leaks into the grammar text. No corpus grammar exercises this, but a context-aware stripper (distinguishing a char set from an arg-action by position) would handle both.
+
+### Deleted-terminal rendering
+
+`to_string_tree` matches ANTLR4's `Trees.toStringTree` everywhere except a deleted terminal: Gale prints `<skip z>` where ANTLR4 prints the bare token (`<missing X>` already matches). The marker is a deliberate extension — it is what makes Gale's own error-recovery fixtures able to tell recovery from a clean parse — so `ParseTrees/ExtraToken` sits in `[stage_b_skip]` rather than being forced to pass. Decide once: either the corpus gets an ANTLR-identical rendering mode, or the marker becomes opt-in and the recovery fixtures read the `Skip` rows structurally.
 
 ### Diagnostics and minor
 

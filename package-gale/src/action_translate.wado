@@ -20,6 +20,10 @@ pub fn vals_struct_name(rule: &ParserRule) -> String {
 /// `p` in a parse / predicate body, `self` in a `@members` method body.
 pub global PARSER_HANDLE: String = "p";
 
+/// The lexer handle in emitted lexer-action calls (`lx.emit(...)`): the
+/// `&mut Lexer` parameter of the generated `apply_<rule>_actions`.
+pub global LEXER_HANDLE: String = "lx";
+
 /// Translate `body` against `rule`'s environment, resolving `$`-refs over the
 /// value channel and leaving surrounding Wado verbatim. `vals_in_scope` is true
 /// when the enclosing rule emits a `vals` local. Errors on the first unsupported
@@ -32,7 +36,7 @@ pub fn translate_wado_action(
     bindings: &List<[bool, String, String]>,
     handle: &String = &PARSER_HANDLE,
 ) -> Result<String, String> {
-    let resolved = resolve_attrs(body, rule, rules)?;
+    let resolved = resolve_attrs(body, rule, rules, bindings)?;
     let body_chars: List<char> = body.chars().collect();
     let mut adjusted: List<ResolvedAttr> = [];
     let mut repls: List<String> = [];
@@ -128,6 +132,28 @@ fn binding_for(bindings: &List<[bool, String, String]>, is_token: bool, base: &S
 /// `$start` / `$stop` substitution.
 pub global RULE_START_TOK_LOCAL: String = "_rule_start_tok";
 
+/// The locals a labeled rule call captures around itself so `$<label>.text` can
+/// read that invocation's own token range. Emitted only where an action reads it
+/// (`action_reads_rule_span`), so every other call site is unchanged.
+pub fn rule_span_lo_local(field: &String) -> String {
+    return `_span_lo_${*field}`;
+}
+
+pub fn rule_span_hi_local(field: &String) -> String {
+    return `_span_hi_${*field}`;
+}
+
+/// Whether `body` reads `$<label>.text` for the rule-call binding `dedup_base`,
+/// the one reference that needs the call's token range captured.
+pub fn action_reads_rule_span(body: &String, dedup_base: &String) -> bool {
+    for let r of &find_attr_refs(body) {
+        if r.member matches { Some("text") } && binding_name(&r.name) == *dedup_base {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// The precedence-threshold parameter a left-recursive rule fn carries; read
 /// by a `$_p` substitution in an LR rule (elsewhere `$_p` is the literal 0).
 global MIN_PREC_LOCAL: String = "min_prec";
@@ -213,8 +239,8 @@ fn action_attr_expr(
                 Result::Ok(`vals.${r.name}`);
             }
         },
-        RuleLabel => rule_member_expr(rules, r, bindings),
-        RuleRef => rule_member_expr(rules, r, bindings),
+        RuleLabel => rule_member_expr(rules, r, bindings, handle),
+        RuleRef => rule_member_expr(rules, r, bindings, handle),
         TokenLabel => token_member_expr(r, bindings, handle),
         TokenRef => token_member_expr(r, bindings, handle),
         _ => Result::Err(`$${r.name}: this attribute form is not yet emitted`),
@@ -276,14 +302,43 @@ pub fn translate_lexer_action(body: &String) -> Result<String, String> {
     return translate_lexer_predicate(body);
 }
 
+/// The match-fn expression for the text matched so far (`chars[start..pos]`),
+/// which is what both `$text` and Java's `getText()` mean in a lexer body.
+pub fn lexer_matched_text_expr() -> String {
+    return "LexerSlice::new(chars, start, pos).to_string()";
+}
+
+/// The match-fn expression for the live match cursor's column within its line
+/// (ANTLR4's `getCharPositionInLine()`).
+pub fn lexer_cursor_column_expr() -> String {
+    return "char_pos_in_line(chars, pos)";
+}
+
+/// The match-fn expression for the column the token started at (ANTLR4's
+/// `_tokenStartCharPositionInLine`).
+pub fn lexer_token_start_column_expr() -> String {
+    return "char_pos_in_line(chars, start)";
+}
+
 /// The match-fn expression a lexer `$`-attribute becomes. `$text` is the slice
-/// matched so far (`chars[start..pos]`); other lexer attributes await their own
-/// resolution.
+/// matched so far; other lexer attributes await their own resolution.
 fn lexer_attr_expr(r: &AttrRef) -> Result<String, String> {
     if r.name == "text" && r.member matches { None } {
-        return Result::Ok("LexerSlice::new(chars, start, pos).to_string()");
+        return Result::Ok(lexer_matched_text_expr());
     }
+    builtin::cold_path();
     return Result::Err(`$${r.name}: this lexer attribute is not yet emitted`);
+}
+
+/// Resolve one whole `$ref` occurrence (delimiters included) in a lexer body,
+/// for a front end that has already isolated the reference (java2wado).
+pub fn resolve_lexer_attr_ref(text: &String) -> Result<String, String> {
+    let refs = find_attr_refs(text);
+    if refs.len() != 1 {
+        builtin::cold_path();
+        return Result::Err(`lexer attribute: '${*text}' is not a single $-reference`);
+    }
+    return lexer_attr_expr(&refs[0]);
 }
 
 /// The local a call site binds a rule / label / token result to, matching
@@ -327,15 +382,24 @@ fn rule_member_expr(
     rules: &List<ParserRule>,
     r: &ResolvedAttr,
     bindings: &List<[bool, String, String]>,
+    handle: &String,
 ) -> Result<String, String> {
     let binding = binding_for(bindings, false, &binding_name(&r.name));
+    // `.text` is the invocation's own span, not a value-channel field.
+    if let Some(m) = &r.member && *m == "text" {
+        return Result::Ok(
+            `${*handle}.text_between(${rule_span_lo_local(&binding)}, ${rule_span_hi_local(&binding)})`,
+        );
+    }
     let target = match find_rule(rules, &r.rule_name) {
         Some(t) => t,
         None => {
+            builtin::cold_path();
             return Result::Err(`$${r.name}: unknown referenced rule '${r.rule_name}'`);
         },
     };
     if !rule_returns_vals(&target) {
+        builtin::cold_path();
         return Result::Err(
             `$${r.name}: rule '${r.rule_name}' does not expose a value channel (needs single-alt + defaultable returns/locals)`,
         );

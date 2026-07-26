@@ -1,0 +1,13 @@
+//! A `$`-reference inside an inlined group resolves against the group's own
+//! elements, not the enclosing alternative's same-named binding.
+
+use t from "./grammars/java_group_binding.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/java_group_binding" },
+    };
+
+test "a group's action reads the group's own binding" {
+    let r = t::parse(&"b c");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics.len()}`;
+    assert r.output == "c\n", `output:\n${r.output}`;
+}

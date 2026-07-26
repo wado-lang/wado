@@ -1129,6 +1129,10 @@ pub(super) struct LocalVar {
 /// Method lookup result including return type, self parameter kind, and parameter types
 #[derive(Debug, Clone)]
 pub(super) struct MethodInfo {
+    /// [`crate::tir::method_param_offset`] as the digest applied it, carried
+    /// so consumers read it instead of re-deriving it. `None` when the lookup
+    /// did not come from a digested impl signature.
+    pub(super) impl_offset: Option<u32>,
     pub(super) return_type: TypeId,
     pub(super) self_kind: ast::SelfKind,
     /// Parameter types (excluding self)

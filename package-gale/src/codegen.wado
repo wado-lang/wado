@@ -20,6 +20,8 @@ use {
     gen_lexer,
     lexer_rule_executes_actions,
     collect_unhandled_lexer_alt_action_ids,
+    lexer_grammar_run_action_ids,
+    lexer_rule_replayable,
 } from "./lexer_gen.wado";
 use {
     gen_parser,
@@ -32,6 +34,7 @@ use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wa
 use {
     should_emit_actions,
     collect_member_method_names,
+    rewrite_lexer_java_bodies,
     translate_attr_types,
     translate_members,
     is_lexer_members,
@@ -173,6 +176,14 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             );
         }
     }
+    if should_emit_actions(grammar) && grammar.action_language matches { Java } {
+        // A Java lexer gets no members (see `collect_lexer_members`), so nothing
+        // resolves against them and a reference is reported.
+        let none: List<String> = [];
+        for let msg of &rewrite_lexer_java_bodies(grammar, &none, &none) {
+            ctx.warn(&"lexer action", DiagnosticKind::UnsupportedAction, *msg);
+        }
+    }
     ctx.precompute_scannability();
     let lowered = lower(grammar, &lit_tokens, &mut ctx);
     // Build the ATN up front when the grammar needs the simulator, so parser
@@ -305,15 +316,26 @@ fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
     if !ctx.emit_actions() {
         return;
     }
+    let run = lexer_grammar_run_action_ids(grammar);
     for let rule of &grammar.lexer_rules {
         let executes = lexer_rule_executes_actions(grammar, rule);
+        let replays = lexer_rule_replayable(rule, &grammar.lexer_rules);
         for let mut ai = 0; ai < rule.body.len(); ai += 1 {
             // Every alt's top-level actions run for an executing rule (the
-            // winning alt is picked at replay); only in-element actions warn.
-            let top_executes = executes;
+            // winning alt is picked at replay); a nested action runs only when
+            // the replay can reach it, so the rest warn.
             let mut ids: List<i32> = [];
-            collect_unhandled_lexer_alt_action_ids(&rule.body[ai], top_executes, &mut ids);
+            collect_unhandled_lexer_alt_action_ids(
+                &rule.body[ai],
+                executes,
+                replays,
+                &grammar.lexer_rules,
+                &mut ids,
+            );
             for let id of &ids {
+                if run.contains(id) {
+                    continue;
+                }
                 ctx.warn(
                     &`lexer action ${*id}`,
                     DiagnosticKind::UnsupportedAction,
@@ -329,8 +351,11 @@ fn members_present(members: &MemberDecls) -> bool {
 }
 
 /// Translate every `@lexer::members` block into `Lexer` fields/methods.
-/// Wado-only: only the `language = Wado` lexer path reads them, so a Java
-/// block would emit dead fields no code references. Lives here rather than in
+/// Wado-only: a Java member method takes `&mut self`, but a lexer predicate runs
+/// inside `try_<rule>(lx: &Lexer, ...)` — the tournament must not mutate through
+/// a losing candidate — so a Java body that reached one would emit a call the
+/// compiler rejects. Java lexer bodies therefore see no members at all and a
+/// reference to one is reported and dropped. Lives here rather than in
 /// `lexer_gen` to keep that module free of a `GenContext` dependency (which
 /// would cycle through `gen_context`'s `LitToken` import).
 fn collect_lexer_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecls {

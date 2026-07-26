@@ -1713,18 +1713,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve the impl's module from the receiver's *actual* type, not its
         // bare name: same-named structs in different modules each have their own
         // operator impls (e.g. auto-derived `Eq`/`Ord`), and a by-name lookup
-        // would route every call to whichever registered first. Peel newtypes to
-        // the base that owns the inherited impl; fall back to the by-name lookup
-        // when the receiver carries no declaring module.
-        let receiver_base = self
-            .tysys
-            .type_table
-            .borrow()
-            .resolve_newtype_base(receiver.type_id);
-        let module_source = self.type_decl_key(receiver_base).map_or_else(
-            || self.find_struct_module_source(&resolved.impl_name),
-            |(module, _)| module,
-        );
+        // would route every call to whichever registered first. `impl_name` is
+        // the newtype-chain link the impl was found on, so key off that link —
+        // peeling to the base instead would send an impl written on the newtype
+        // to the base's module. Fall back to the by-name lookup when the
+        // receiver carries no declaring module.
+        let module_source = self
+            .impl_target_decl_key(receiver.type_id, &resolved.impl_name)
+            .map_or_else(
+                || self.find_struct_module_source(&resolved.impl_name),
+                |(module, _)| module,
+            );
         let function_ref = FunctionRef {
             module_source,
             name: mangled_method_name,

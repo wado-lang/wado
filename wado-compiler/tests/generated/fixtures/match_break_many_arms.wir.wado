@@ -60,7 +60,7 @@ type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32); 
 
 type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(22)
 
-type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(23)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(23)
 
 type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(24)
 
@@ -342,18 +342,19 @@ fn "core:rt/cm_lower_list_u8"(data, start, len) {
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
-fn "core:rt/wait_for_blocked"(handle) {
+fn "core:rt/cm_await_blocked"(handle) {
     let ws: i32;
     let evt_ptr: i32;
-    let payload: i32;
+    let status: i32;
     ws = "wasi/waitable-set-new"();
     "wasi/waitable-join"(handle, ws);
     evt_ptr = "mem/realloc"(0, 0, 4, 8);
     drop("wasi/waitable-set-wait"(ws, evt_ptr));
-    payload = builtin::load_i32(evt_ptr + 4);
+    status = builtin::load_i32(evt_ptr + 4);
     drop("mem/realloc"(evt_ptr, 8, 4, 0));
+    "wasi/waitable-join"(handle, 0);
     "wasi/waitable-set-drop"(ws);
-    return payload;
+    return status;
 }
 
 fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
@@ -365,7 +366,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
             break_if b30 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
-                result = "core:rt/wait_for_blocked"(handle);
+                result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
             break_if b30 (if (result >> 4) == 0 -> i32 {

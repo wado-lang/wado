@@ -23,7 +23,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::ast::{BinaryOp, Expr, ImplBlock, Literal, Type, UnaryOp};
+use crate::ast::{self, BinaryOp, Expr, Literal, Type, UnaryOp};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
@@ -126,12 +126,39 @@ pub(crate) struct TypeSystem {
     /// name → `(declared type, is_mut)`.
     pub(crate) all_globals: Rc<IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>>>,
 
+    /// Program-wide canonical signatures of `impl`-block methods, keyed by
+    /// the method's globally-unique `AstId`. `TraitEnv::impl_headers`
+    /// carries each method's `ast_id`, so a dispatch query goes header →
+    /// signature without ever reaching for the impl AST.
+    pub(crate) all_impl_method_sigs: Rc<IndexMap<crate::ast::AstId, super::sig::MethodSig>>,
+    /// Every module's `interface` / `resource` operation signatures, keyed by
+    /// the declaration's `AstId`. A decl-pass product, so a module's
+    /// operations are readable before its bodies are walked.
+    pub(crate) all_effect_ops: Rc<IndexMap<crate::ast::AstId, Vec<crate::tir::TirEffectOp>>>,
+
     /// Per-module `__DATA__` section contents; modules without one have
     /// no entry.
     pub(crate) data_sections: Rc<IndexMap<ModuleSource, String>>,
 }
 
 impl TypeSystem {
+    /// Canonical signature of the impl method declared at `ast_id`.
+    pub(crate) fn impl_method_sig(
+        &self,
+        ast_id: crate::ast::AstId,
+    ) -> Option<&super::sig::MethodSig> {
+        self.all_impl_method_sigs.get(&ast_id)
+    }
+
+    /// Operation signatures of the `interface` / `resource` declared at
+    /// `ast_id`, in any loaded module.
+    pub(crate) fn effect_ops(
+        &self,
+        ast_id: crate::ast::AstId,
+    ) -> Option<&[crate::tir::TirEffectOp]> {
+        self.all_effect_ops.get(&ast_id).map(Vec::as_slice)
+    }
+
     /// Canonical signature of the free function `name` declared in
     /// `module`.
     pub(crate) fn function_sig(
@@ -215,6 +242,19 @@ impl TypeSystem {
             Some(visible) => visible.contains(name),
             None => self.is_known_type_name(name),
         }
+    }
+
+    /// Whether an impl target's generic argument names a type parameter of
+    /// that impl rather than a concrete type: either the impl declares it, or
+    /// the impl's module knows no type by that name. `String` in
+    /// `impl Tr for Foo<String>` fills an argument position but binds no slot.
+    pub(crate) fn is_impl_target_param(
+        &self,
+        module: &ModuleSource,
+        declared: &[crate::ast::GenericParam],
+        name: &str,
+    ) -> bool {
+        declared.iter().any(|p| p.name == name) || !self.is_known_type_name_in(module, name)
     }
 
     /// Check if an expression is a numeric literal (possibly negated).
@@ -319,14 +359,17 @@ impl TypeSystem {
 /// reify both reach them through `self.tysys`.
 impl TypeSystem {
     /// Build declared type params for an impl block, filtering out known type names.
-    pub(crate) fn build_declared_type_params(&self, impl_block: &ImplBlock) -> IndexSet<String> {
-        let mut declared: IndexSet<String> = impl_block
-            .type_params
+    pub(crate) fn build_declared_type_params(
+        &self,
+        impl_ty: &Type,
+        impl_type_params: &[ast::GenericParam],
+    ) -> IndexSet<String> {
+        let mut declared: IndexSet<String> = impl_type_params
             .iter()
             .map(|p| p.name.clone())
             .filter(|name| !self.is_known_type_name(name))
             .collect();
-        if let Type::Generic(g) = &impl_block.ty {
+        if let Type::Generic(g) = impl_ty {
             for arg in &g.args {
                 if let Type::Named(n) = arg
                     && !self.is_known_type_name(&n.name)

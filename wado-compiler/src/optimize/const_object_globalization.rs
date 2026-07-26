@@ -59,6 +59,11 @@ struct Candidate {
     ty: TypeId,
     module_source: ModuleSource,
     kind: CandidateKind,
+    /// Initializer contains a call, so it can never become a Wasm constant
+    /// and `wir_optimize::const_global` cannot delete the assignment. Such a
+    /// candidate needs the lazy-init guard; a literal one keeps the existing
+    /// unguarded shape so its eager promotion is unchanged.
+    guarded: bool,
 }
 
 enum CandidateKind {
@@ -87,11 +92,28 @@ enum CandidateKind {
 
 pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.clone();
+    // One id serves every instantiation — the hoisted type rides the call node.
+    let is_uninitialized = project.intern_extern(&crate::nir::FunctionRef {
+        module_source: ModuleSource::builtin(),
+        name: "is_uninitialized".to_string(),
+        monomorph_info: None,
+        method_info: None,
+    });
 
     // Phase 1 — analysis (all immutable borrows).
+    let fn_effects =
+        super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
+    let hoistable_pure: Vec<bool> = project
+        .functions
+        .iter()
+        .zip(&fn_effects)
+        .map(|(f, e)| e.is_pure() && crate::niri::is_ctfe_eligible(&f.borrow()))
+        .collect();
     let gate = Gate {
         funcs: &project.functions,
         type_table: &type_table,
+        hoistable_pure: &hoistable_pure,
+        structs: &project.structs,
     };
     let mut candidates: Vec<Candidate> = Vec::new();
     for (fi, f) in project.functions.iter().enumerate() {
@@ -122,6 +144,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             ty,
             module_source,
             kind,
+            guarded,
         } = cand;
         let is_inline_ref = matches!(kind, CandidateKind::InlineRef { .. });
 
@@ -137,14 +160,28 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
                 // replace the binding.
                 rewrite_reads(body, local_index, &module_source, &name, ty);
                 assert!(
-                    replace_let_with_set(body, local_index, &module_source, &name),
+                    replace_let_with_set(
+                        body,
+                        local_index,
+                        &module_source,
+                        &name,
+                        ty,
+                        guarded.then_some(is_uninitialized)
+                    ),
                     "[NIR] const_object_globalization: LetBinding candidate's `let` \
                      (local {local_index}) went missing between collection and mutation"
                 );
                 inline_sibling_lets(body, local_index, &sibling_lets, &module_source, &name);
             }
             CandidateKind::InlineRef { ref_expr } => {
-                hoist_inline_ref(body, ref_expr, &module_source, &name, ty);
+                hoist_inline_ref(
+                    body,
+                    ref_expr,
+                    &module_source,
+                    &name,
+                    ty,
+                    guarded.then_some(is_uninitialized),
+                );
             }
         }
         drop(func);
@@ -202,6 +239,7 @@ fn collect_candidates(
                     local_index: *local_index,
                     sibling_lets,
                 },
+                guarded: stmt_value_contains_call(body, s),
             });
             continue;
         }
@@ -214,14 +252,15 @@ fn collect_candidates(
             let inner = *inner;
             let inner_ty = body.exprs[inner].type_id;
             if gate.is_reference_type(inner_ty)
-                && is_globalizable_const(body, inner, &mut IndexSet::default())
-                && contains_aggregate(body, inner)
+                && is_globalizable_const(body, inner, gate, &mut IndexSet::default())
+                && contains_aggregate(body, inner, gate)
             {
                 out.push(Candidate {
                     func_idx,
                     ty: inner_ty,
                     module_source: module_source.clone(),
                     kind: CandidateKind::InlineRef { ref_expr: id },
+                    guarded: expr_contains_call(body, inner),
                 });
                 continue;
             }
@@ -265,6 +304,7 @@ fn hoist_inline_ref(
     module_source: &ModuleSource,
     name: &str,
     ty: TypeId,
+    guarded: Option<crate::nir::FuncId>,
 ) {
     let ExprKind::Unary {
         expr: Operand::Expr(inner),
@@ -284,10 +324,22 @@ fn hoist_inline_ref(
         type_id: TypeTable::UNIT,
         span,
     });
-    let set_stmt = body.stmts.push(StmtNode {
-        kind: StmtKind::Expr(Operand::Expr(set_expr)),
-        span,
-    });
+    let set_stmt = if let Some(is_uninitialized) = guarded {
+        guard_set_on_uninit(
+            body,
+            set_expr,
+            module_source,
+            name,
+            ty,
+            is_uninitialized,
+            span,
+        )
+    } else {
+        body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Expr(set_expr)),
+            span,
+        })
+    };
     let get_expr = body.exprs.push(ExprNode {
         kind: ExprKind::GlobalVarGet {
             module_source: module_source.clone(),
@@ -357,7 +409,7 @@ fn let_stmt_qualifies(
     };
     let (local_index, value, type_id) = (*local_index, *value, *type_id);
     if !gate.is_reference_type(type_id)
-        || !is_globalizable_const_operand(body, value, &mut siblings.set.clone())
+        || !is_globalizable_const_operand(body, value, gate, &mut siblings.set.clone())
         || !is_readonly_body(body, local_index, gate)
     {
         return None;
@@ -382,12 +434,12 @@ fn let_stmt_qualifies(
             }
         }
     }
-    let has_aggregate = contains_aggregate_operand(body, value)
+    let has_aggregate = contains_aggregate_operand(body, value, gate)
         || used_siblings.iter().any(|l| {
             siblings
                 .defs
                 .get(l)
-                .is_some_and(|&d| contains_aggregate_operand(body, d))
+                .is_some_and(|&d| contains_aggregate_operand(body, d, gate))
         });
     if !has_aggregate {
         return None;
@@ -435,7 +487,7 @@ fn sibling_const_locals(
                 && !mutated.contains(local_index)
                 && !sc.set.contains(local_index)
                 && gate.is_reference_type(*type_id)
-                && is_globalizable_const_operand(body, *value, &mut sc.set.clone())
+                && is_globalizable_const_operand(body, *value, gate, &mut sc.set.clone())
             {
                 sc.set.insert(*local_index);
                 sc.defs.insert(*local_index, *value);
@@ -558,7 +610,12 @@ fn count_reads_of(body: &Body, node: NodeRef, wanted: &IndexSet<u32>) -> IndexMa
     counts
 }
 
-fn is_globalizable_const_operand(body: &Body, op: Operand, bound: &mut IndexSet<u32>) -> bool {
+fn is_globalizable_const_operand(
+    body: &Body,
+    op: Operand,
+    gate: &Gate<'_>,
+    bound: &mut IndexSet<u32>,
+) -> bool {
     match op {
         // A promoted operand is a closed constant only if its value graph node is
         // a constant literal. `promote_pure_values_early` (and the born-as-operands
@@ -568,12 +625,17 @@ fn is_globalizable_const_operand(body: &Body, op: Operand, bound: &mut IndexSet<
         // recursive frame would observe an inner frame's value. Only a genuine
         // constant is safe.
         Operand::Value(v) => crate::nir_value_graph::builder::is_const_value(&body.values, v),
-        Operand::Expr(e) => is_globalizable_const(body, e, bound),
+        Operand::Expr(e) => is_globalizable_const(body, e, gate, bound),
     }
 }
 
 /// Recursively true when `expr` is a closed constant aggregate value.
-fn is_globalizable_const(body: &Body, expr: ExprId, bound: &mut IndexSet<u32>) -> bool {
+fn is_globalizable_const(
+    body: &Body,
+    expr: ExprId,
+    gate: &Gate<'_>,
+    bound: &mut IndexSet<u32>,
+) -> bool {
     match &body.exprs[expr].kind {
         ExprKind::EnumConstruct { .. } => true,
         // A packed `Array<u8>` (a `String` / `List<u8>` literal's `repr`) is a
@@ -588,32 +650,43 @@ fn is_globalizable_const(body: &Body, expr: ExprId, bound: &mut IndexSet<u32>) -
             let field_ops: Vec<Operand> = fields.iter().map(|f| f.value).collect();
             field_ops
                 .iter()
-                .all(|&op| is_globalizable_const_operand(body, op, bound))
+                .all(|&op| is_globalizable_const_operand(body, op, gate, bound))
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             let elements = elements.clone();
             elements
                 .iter()
-                .all(|&e| is_globalizable_const_operand(body, e, bound))
+                .all(|&e| is_globalizable_const_operand(body, e, gate, bound))
         }
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.is_none_or(|p| is_globalizable_const_operand(body, p, bound))
+            payload.is_none_or(|p| is_globalizable_const_operand(body, p, gate, bound))
+        }
+        // A pure call on closed constants is itself a closed constant
+        // expression: same arguments, same result, and collapsing repeats is
+        // unobservable. `FnEffect` (see `mod_ref`) is what establishes that.
+        ExprKind::Call { func_id, args, .. } if gate.is_hoistable_pure(*func_id) => {
+            let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+            arg_ops
+                .iter()
+                .all(|&op| is_globalizable_const_operand(body, op, gate, bound))
         }
         // Transparent value wrappers.
         ExprKind::Unary {
             op: NirUnaryOp::Deref | NirUnaryOp::Ref | NirUnaryOp::Neg,
             expr: inner,
         }
-        | ExprKind::Cast { expr: inner, .. } => is_globalizable_const_operand(body, *inner, bound),
+        | ExprKind::Cast { expr: inner, .. } => {
+            is_globalizable_const_operand(body, *inner, gate, bound)
+        }
         // The builder-temp block an array / list literal leaves.
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-            block_is_const(body, *block, bound)
+            block_is_const(body, *block, gate, bound)
         }
         _ => false,
     }
 }
 
-fn block_is_const(body: &Body, block: BlockId, bound: &mut IndexSet<u32>) -> bool {
+fn block_is_const(body: &Body, block: BlockId, gate: &Gate<'_>, bound: &mut IndexSet<u32>) -> bool {
     let stmts = &body.blocks[block].stmts;
     let Some((last, init)) = stmts.split_last() else {
         return false;
@@ -627,7 +700,7 @@ fn block_is_const(body: &Body, block: BlockId, bound: &mut IndexSet<u32>) -> boo
             return false;
         };
         let (local_index, value) = (*local_index, *value);
-        if !is_globalizable_const_operand(body, value, bound) {
+        if !is_globalizable_const_operand(body, value, gate, bound) {
             return false;
         }
         bound.insert(local_index);
@@ -635,32 +708,45 @@ fn block_is_const(body: &Body, block: BlockId, bound: &mut IndexSet<u32>) -> boo
     match &body.stmts[last].kind {
         StmtKind::Expr(e) => e
             .as_expr()
-            .is_some_and(|e| is_globalizable_const(body, e, bound)),
+            .is_some_and(|e| is_globalizable_const(body, e, gate, bound)),
         _ => false,
     }
 }
 
-fn contains_aggregate_operand(body: &Body, op: Operand) -> bool {
-    op.as_expr().is_some_and(|e| contains_aggregate(body, e))
+fn contains_aggregate_operand(body: &Body, op: Operand, gate: &Gate<'_>) -> bool {
+    op.as_expr()
+        .is_some_and(|e| contains_aggregate(body, e, gate))
 }
 
 /// True when `expr` contains at least one aggregate constructor.
-fn contains_aggregate(body: &Body, expr: ExprId) -> bool {
+///
+/// The gate exists to skip scalars, which are cheaper to rematerialize than to
+/// load from a global. A hoistable pure call returning a reference type builds
+/// a heap object just as a literal constructor does — the constructor is simply
+/// in the callee — so it counts too.
+fn contains_aggregate(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
     match &body.exprs[expr].kind {
+        ExprKind::Call { func_id, .. }
+            if gate.is_hoistable_pure(*func_id)
+                && gate.is_reference_type(body.exprs[expr].type_id)
+                && gate.owns_heap_storage(body.exprs[expr].type_id) =>
+        {
+            true
+        }
         ExprKind::StructLiteral { .. }
         | ExprKind::TupleLiteral { .. }
         | ExprKind::ArrayLiteral { .. }
         | ExprKind::VariantConstruct { .. } => true,
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            contains_aggregate_operand(body, *inner)
+            contains_aggregate_operand(body, *inner, gate)
         }
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             let stmts = body.blocks[*block].stmts.clone();
             stmts.iter().any(|&s| match &body.stmts[s].kind {
-                StmtKind::Let { value, .. } => contains_aggregate_operand(body, *value),
-                StmtKind::Expr(value) => {
-                    value.as_expr().is_some_and(|e| contains_aggregate(body, e))
-                }
+                StmtKind::Let { value, .. } => contains_aggregate_operand(body, *value, gate),
+                StmtKind::Expr(value) => value
+                    .as_expr()
+                    .is_some_and(|e| contains_aggregate(body, e, gate)),
                 _ => false,
             })
         }
@@ -675,6 +761,9 @@ fn contains_aggregate(body: &Body, expr: ExprId) -> bool {
 struct Gate<'a> {
     funcs: &'a [Rc<RefCell<NirFunction>>],
     type_table: &'a Rc<RefCell<TypeTable>>,
+    /// Indexed by `func_id.index()`.
+    hoistable_pure: &'a [bool],
+    structs: &'a [crate::nir::NirStruct],
 }
 
 impl Gate<'_> {
@@ -683,6 +772,76 @@ impl Gate<'_> {
             self.type_table.borrow().get(ty),
             ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never
         )
+    }
+
+    /// Whether a value of `ty` owns heap storage worth building only once.
+    ///
+    /// Hoisting is not free: it costs a global, a guard branch, and an object
+    /// that stays live for the whole program. That only pays when rebuilding
+    /// the value would re-allocate — i.e. when it (transitively) owns a GC
+    /// array, as `String` and `List` do.
+    ///
+    /// A small aggregate of scalars owns nothing: `multi_value_return` already
+    /// lifts such a return into Wasm multi-values and allocates *nothing*, so
+    /// hoisting it is strictly worse. This is the existing "skip scalars"
+    /// rationale one level up — skip whatever the backend can keep in registers.
+    fn owns_heap_storage(&self, ty: TypeId) -> bool {
+        let mut seen = IndexSet::default();
+        self.owns_heap_storage_inner(ty, &mut seen)
+    }
+
+    fn owns_heap_storage_inner(&self, ty: TypeId, seen: &mut IndexSet<TypeId>) -> bool {
+        if !seen.insert(ty) {
+            return false;
+        }
+        let tt = self.type_table.borrow();
+        let inner = match tt.get(ty) {
+            ResolvedType::BuiltinArray(_) => return true,
+            // Nothing to own.
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Function { .. }
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => return false,
+            // Transparent wrappers.
+            ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Newtype {
+                base_type: inner, ..
+            }
+            | ResolvedType::Reactive(inner) => Some(*inner),
+            // Struct / tuple: decided by the fields below. Anything else
+            // (a variant and its payloads, a generic instance) cannot be
+            // walked here, so assume it owns storage — `Option<String>` and
+            // friends live there.
+            _ => None,
+        };
+        if let Some(inner) = inner {
+            drop(tt);
+            return self.owns_heap_storage_inner(inner, seen);
+        }
+        let fields = super::multi_value_return::aggregate_field_info(ty, &tt, self.structs);
+        drop(tt);
+        match fields {
+            Some((field_types, _, _)) => field_types
+                .into_iter()
+                .any(|f| self.owns_heap_storage_inner(f, seen)),
+            None => true,
+        }
+    }
+
+    fn is_hoistable_pure(&self, func_id: crate::nir::FuncId) -> bool {
+        self.hoistable_pure
+            .get(func_id.index())
+            .copied()
+            .unwrap_or(false)
     }
 
     /// `Some(true)` when `func`'s `self` parameter is `&mut self`,
@@ -1003,6 +1162,93 @@ fn inline_sibling_lets(
     );
 }
 
+/// True when `expr` contains a call anywhere — the marker for an initializer
+/// that cannot reduce to a Wasm constant instruction.
+fn expr_contains_call(body: &Body, expr: ExprId) -> bool {
+    let mut stack = vec![NodeRef::Expr(expr)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(id) = node
+            && matches!(
+                body.exprs[id].kind,
+                ExprKind::Call { .. }
+                    | ExprKind::MethodCall { .. }
+                    | ExprKind::IndirectCall { .. }
+                    | ExprKind::CmRawCall { .. }
+            )
+        {
+            return true;
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    false
+}
+
+fn stmt_value_contains_call(body: &Body, stmt: StmtId) -> bool {
+    let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
+        return false;
+    };
+    value.as_expr().is_some_and(|e| expr_contains_call(body, e))
+}
+
+/// Wrap a hoisted `GlobalVarSet` in `if builtin::is_uninitialized(<global>)`.
+///
+/// The unguarded form is correct only because `wir_optimize::const_global`
+/// promotes a Wasm-const-expressible initializer into the global's eager
+/// `init` and deletes the assignment. A call is never const-expressible, so
+/// its assignment survives — and an unguarded one re-runs on every activation,
+/// which is the opposite of hoisting.
+///
+/// The guard also pins the semantics: initialization happens at the first
+/// execution of the expression it replaced, so a callee that traps or diverges
+/// still does so, at the same point. Moving the work to module-init instead
+/// would drag both to instantiation time.
+fn guard_set_on_uninit(
+    body: &mut Body,
+    set: ExprId,
+    module_source: &ModuleSource,
+    name: &str,
+    ty: TypeId,
+    is_uninitialized: crate::nir::FuncId,
+    span: crate::token::Span,
+) -> StmtId {
+    let global_get = body.exprs.push(ExprNode {
+        kind: ExprKind::GlobalVarGet {
+            module_source: module_source.clone(),
+            name: name.to_string(),
+        },
+        type_id: ty,
+        span,
+    });
+    let cond = body.exprs.push(ExprNode {
+        kind: ExprKind::Call {
+            func_id: is_uninitialized,
+            type_args: vec![ty],
+            args: vec![crate::nir_arena::ArenaCallArg {
+                expr: global_get.into(),
+                is_mut: false,
+            }],
+        },
+        type_id: TypeTable::BOOL,
+        span,
+    });
+    let set_stmt = body.stmts.push(StmtNode {
+        kind: StmtKind::Expr(set.into()),
+        span,
+    });
+    let then_block = body.blocks.push(BlockNode {
+        stmts: vec![set_stmt],
+        span,
+    });
+    body.stmts.push(StmtNode {
+        kind: StmtKind::If {
+            condition: cond.into(),
+            then_block,
+            else_block: None,
+        },
+        span,
+    })
+}
+
 /// Replace the `let local_index = value` statement with an inline
 /// `GlobalVarSet(name, value)`, searching the whole body exhaustively —
 /// matching [`collect_candidates`]'s reach, so this always finds whatever it
@@ -1014,6 +1260,8 @@ fn replace_let_with_set(
     local_index: u32,
     module_source: &ModuleSource,
     name: &str,
+    ty: TypeId,
+    guarded: Option<crate::nir::FuncId>,
 ) -> bool {
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
@@ -1036,7 +1284,13 @@ fn replace_let_with_set(
                 type_id: TypeTable::UNIT,
                 span,
             });
-            body.stmts[s].kind = StmtKind::Expr(set.into());
+            if let Some(is_uninitialized) = guarded {
+                let guard =
+                    guard_set_on_uninit(body, set, module_source, name, ty, is_uninitialized, span);
+                body.stmts[s].kind = body.stmts[guard].kind.clone();
+            } else {
+                body.stmts[s].kind = StmtKind::Expr(set.into());
+            }
             return true;
         }
         body.for_each_child(node, |c| stack.push(c));

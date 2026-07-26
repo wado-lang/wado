@@ -1,0 +1,12 @@
+//! An action inside a repeated group runs once per iteration.
+
+use t from "./grammars/java_repeat_action.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/java_repeat_action" },
+    };
+
+test "an action in a repeated group runs per iteration" {
+    let r = t::parse(&"A a B b");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics.len()}`;
+    assert r.output == "A\na\nB\nb\n", `output:\n${r.output}`;
+}

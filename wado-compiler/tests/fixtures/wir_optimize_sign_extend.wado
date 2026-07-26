@@ -6,6 +6,9 @@
 //
 // At O0: `i32_extend8_s(x & 255)`
 // At O2: `i32_extend8_s(x)` (mask elided)
+//
+// `black_box` keeps the arguments off const-folding's radar so the calls
+// survive and the bodies stay in the WIR to be matched.
 
 #[inline(never)]
 fn to_i8(x: i32) -> i8 {
@@ -18,10 +21,10 @@ fn to_i16(x: i32) -> i16 {
 }
 
 test {
-    assert to_i8(300) == 44;
-    assert to_i8(200) == -56;
-    assert to_i16(70000) == 4464;
-    assert to_i16(40000) == -25536;
+    assert to_i8(builtin::black_box(300)) == 44;
+    assert to_i8(builtin::black_box(200)) == -56;
+    assert to_i16(builtin::black_box(70000)) == 4464;
+    assert to_i16(builtin::black_box(40000)) == -25536;
 }
 
 __DATA__

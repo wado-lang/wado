@@ -1,0 +1,12 @@
+// The receiver's type is never named here — only `make` is imported, and
+// `Holder` arrives as its return type.
+//
+// Dispatch has to canonicalise `Holder` to find its impls, and this module's
+// imports cannot help: nothing in them mentions the name. Resolving it to
+// the calling module instead reports `no method 'value' found`.
+
+use { make } from "./sub/unimported_receiver_lib.wado";
+
+test "method resolves on a type the caller never imported" {
+    assert make().value() == 7;
+}

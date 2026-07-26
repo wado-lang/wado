@@ -843,30 +843,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         sig: &super::sem::decls::FunctionSig,
         type_args: &[TypeId],
     ) -> Option<TypeId> {
-        // Real (non-effect, non-fn-bound) type-param slots — these are the
-        // ones substituted positionally by `type_args`.
-        let real_type_param_count = sig.real_type_params.len();
-        if type_args.is_empty() && real_type_param_count != 0 {
+        // Every slot must be pinned: a bare reference to a generic function
+        // is not a value, and a turbofish must name every slot.
+        if type_args.len() != sig.decl.type_params.len() {
             return None;
         }
-        if !type_args.is_empty() && type_args.len() != real_type_param_count {
-            return None;
-        }
-
-        let mut param_types = sig.param_types.clone();
-        let mut return_type = sig.return_type.unwrap_or(TypeTable::UNIT);
-        if !type_args.is_empty() {
-            for p in &mut param_types {
-                *p = self.substitute_type_params(*p, type_args);
-            }
-            return_type = self.substitute_type_params(return_type, type_args);
-        }
-        if param_types.contains(&TypeTable::ERROR) || return_type == TypeTable::ERROR {
+        let inst = sig.decl.instantiate(&self.tysys.type_table, type_args);
+        if inst.param_types.contains(&TypeTable::ERROR) || inst.return_type == TypeTable::ERROR {
             return None;
         }
         Some(self.tysys.type_table.borrow_mut().make_function(
-            param_types,
-            return_type,
+            inst.param_types,
+            inst.return_type,
             sig.effects.clone(),
             Vec::new(),
         ))
@@ -898,7 +886,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNKNOWN;
         };
 
-        let real_type_param_count = sig.real_type_params.len();
+        let real_type_param_count = sig.decl.type_params.len();
 
         // (a) Turbofish on the identifier: `name::<T, ...>`.
         if !ident.type_args.is_empty() {
@@ -1064,7 +1052,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         };
-        let decl_param_count = sig.param_types.len();
+        let decl_param_count = sig.decl.param_types.len();
         if expected_params.len() != decl_param_count {
             return FuncRefInference::ArityMismatch {
                 expected_params: expected_params.len(),
@@ -1073,8 +1061,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let type_param_ids: Vec<TypeId> = sig.type_param_ids.iter().map(|&(_, id)| id).collect();
-        let decl_params = &sig.param_types;
-        let decl_return = sig.return_type.unwrap_or(TypeTable::UNIT);
+        let decl_params = &sig.decl.param_types;
+        let decl_return = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         if type_param_ids.is_empty() {
             return FuncRefInference::NotApplicable;
         }

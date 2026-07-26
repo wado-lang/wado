@@ -120,6 +120,21 @@ impl Eq for LexerSlice {
     }
 }
 
+/// The 0-based column of char index `i`: the number of chars since the last
+/// newline. ANTLR4's `getCharPositionInLine()` (over the live match cursor) and
+/// `_tokenStartCharPositionInLine` (over the token's start) are both this.
+/// Scans back to the line start, so the cost is the column, not the offset —
+/// a lexer predicate may call it once per candidate rule per token.
+pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
+    let mut j = if i < chars.len() { i } else { chars.len() };
+    let mut col = 0;
+    while j > 0 && chars[j - 1] != '\n' {
+        col += 1;
+        j -= 1;
+    }
+    return col;
+}
+
 /// Token represents a lexed token with its kind, text, and position.
 /// Leading trivia (whitespace, comments) is attached to each token.
 /// `channel` is the ANTLR4 channel id (0 = default, 1 = HIDDEN; named
@@ -194,6 +209,10 @@ pub struct TokenStream {
     pub triv_ends: List<i32>,
     pub triv_chans: List<i32>,
     pub flags: List<TokenFlags>,
+    /// Text the lexer's executed actions printed, in tokenization order
+    /// (Stage C). Empty unless the lexer was generated with action execution
+    /// on. Defaulted so existing construction sites keep compiling.
+    pub output: String = "",
 }
 
 impl TokenStream {
@@ -335,6 +354,20 @@ impl TokenStream {
     /// Append token `i`'s text to `out` (no allocation).
     pub fn push_token_text(&self, out: &mut String, i: i32) {
         self.push_text(out, self.starts[i], self.ends[i]);
+    }
+
+    /// Append token `i`'s text with whitespace rendered as escapes, matching
+    /// ANTLR4's `Trees.toStringTree` node text (spaces are left alone). Used by
+    /// tree rendering only; `$text` and friends keep the raw text.
+    pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
+        for let mut j = self.starts[i]; j < self.ends[i]; j += 1 {
+            match self.chars[j] {
+                '\n' => out.push_str(&"\\n"),
+                '\r' => out.push_str(&"\\r"),
+                '\t' => out.push_str(&"\\t"),
+                c => out.push(c),
+            }
+        }
     }
 
     /// Append the text of token `i`'s leading trivia, in source order.
@@ -758,7 +791,8 @@ impl CstStore {
     }
 
     /// ANTLR4-style S-expression for the subtree at row `i`: `(name child ...)`,
-    /// tokens as their text; a childless node renders as its bare name, no
+    /// tokens as their text with whitespace escaped (`\n`, `\r`, `\t`, as
+    /// `Trees.toStringTree` does); a childless node renders as its bare name, no
     /// parens (ANTLR4's `Trees.toStringTree`). `rule_names[kind]` names rule
     /// nodes (`K_ERROR` renders `<error>`); `token_names[kind]` names missing
     /// terminals. Real terminals with empty text (e.g. EOF) are omitted;
@@ -802,7 +836,7 @@ fn cst_to_string_tree_impl(
             Tok => {
                 if !toks.is_empty_text(s.a[c]) {
                     out.push_str(&" ");
-                    toks.push_token_text(out, s.a[c]);
+                    toks.push_token_text_escaped(out, s.a[c]);
                 }
                 c += 1;
             },
@@ -812,7 +846,7 @@ fn cst_to_string_tree_impl(
             },
             Skip => {
                 out.push_str(&" <skip ");
-                toks.push_token_text(out, s.a[c]);
+                toks.push_token_text_escaped(out, s.a[c]);
                 out.push_str(&">");
                 c += 1;
             },
@@ -1136,7 +1170,7 @@ fn render_builder_node(
             Tok => {
                 if !toks.is_empty_text(a[c]) {
                     out.push_str(&" ");
-                    toks.push_token_text(out, a[c]);
+                    toks.push_token_text_escaped(out, a[c]);
                 }
                 c += 1;
             },
@@ -1146,7 +1180,7 @@ fn render_builder_node(
             },
             Skip => {
                 out.push_str(&" <skip ");
-                toks.push_token_text(out, a[c]);
+                toks.push_token_text_escaped(out, a[c]);
                 out.push_str(&">");
                 c += 1;
             },
@@ -1217,6 +1251,9 @@ pub fn normalize_tree(s: &String) -> String {
 /// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
 /// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
 /// escaped; backslashes and quotes pass through unchanged.
+///
+/// Whatever the lexer's actions printed precedes the dump, as it does on
+/// ANTLR4's stdout.
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
     let chars = tokens.chars;
     // Char index where each line begins; built once so each token's `line:col`
@@ -1227,7 +1264,8 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             line_starts.push(i + 1);
         }
     }
-    let mut out = String::with_capacity(tokens.len() * 32);
+    let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
+    out.push_str(&tokens.output);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
         // Non-default-channel trivia (`-> channel(HIDDEN)`) is parked in this
@@ -1308,25 +1346,6 @@ fn emit_lexer_token(
     out.push_str(&`[@${index},${start}:${end_inclusive}='${text_buf}',<${type_id}>,${channel_attr}${line}:${col}]\n`);
 }
 
-/// Compute (line, column) at a 0-based char index in `chars`, with
-/// 1-based line and 0-based column to match ANTLR4's `Token` getters.
-/// The parser's error path reports at most one position per parse, so the
-/// linear scan is fine; the per-token dump uses `line_col_from_starts`.
-fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
-    let mut line = 1;
-    let mut col = 0;
-    let cap = if pos < chars.len() { pos } else { chars.len() };
-    for let mut i = 0; i < cap; i += 1 {
-        if chars[i] == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-    return [line, col];
-}
-
 /// Compute (line, column) from the precomputed `line_starts` table (char
 /// index where each line begins). Binary search for the greatest
 /// `line_starts[j] <= pos`: that line is `j + 1` and the column is the
@@ -1359,6 +1378,11 @@ pub global TK_ERROR: i32 = 3;
 struct Lexer {
     chars: List<char>,
     pos: i32,
+    act_output: String = "",
+    act_type: i32 = -1,
+    act_channel: i32 = -1,
+    act_skip: bool = false,
+    act_more: bool = false,
 }
 
 impl Lexer {
@@ -1373,6 +1397,37 @@ impl Lexer {
     fn slice(&self, start: i32, end: i32) -> LexerSlice with stores[self] {
         return LexerSlice::new(&self.chars, start, end);
     }
+
+    fn emit(&mut self, s: String) {
+        self.act_output.push_str(&s);
+    }
+
+    fn reset_actions(&mut self) {
+        self.act_type = -1;
+        self.act_channel = -1;
+        self.act_skip = false;
+        self.act_more = false;
+    }
+
+    fn set_type(&mut self, t: i32) {
+        self.act_type = t;
+    }
+
+    fn set_channel(&mut self, c: i32) {
+        self.act_channel = c;
+    }
+
+    fn skip(&mut self) {
+        self.act_skip = true;
+    }
+
+    fn more(&mut self) {
+        self.act_more = true;
+    }
+}
+
+fn apply_I_actions(lx: &mut Lexer, start: i32, end: i32) {
+    lx.emit(`I\n`);
 }
 
 fn try_I(chars: &List<char>, start: i32) -> i32 {
@@ -1417,38 +1472,61 @@ pub fn tokenize(input: &String) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
     let mut triv_lo = ts.trivia_mark();
+    let mut more_start: i32 = -1;
     while !lexer.at_end() {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
+        let mut best_act: i32 = -1;
+        let mut best_act_skip = false;
         let first_char = lexer.chars[start];
+        let mut best_more = false;
+        let mut best_channel: i32 = 0;
         if first_char == '\n' || first_char == '\r' || first_char == ' ' {
             end = try_I(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_I; }
+            if end > best_end { best_end = end; best_kind = TK_I; best_more = false; best_channel = 0; best_act = 0; }
             end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
+            if end > best_end { best_end = end; best_kind = TK_WS; best_more = false; best_channel = 0; best_act = -1; }
         } else {
             end = try_I(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_I; }
+            if end > best_end { best_end = end; best_kind = TK_I; best_more = false; best_channel = 0; best_act = 0; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
             triv_lo = ts.trivia_mark();
             lexer.pos = start + 1;
         } else {
-            let tok_start = start;
-            let is_skip = best_kind matches { TK_WS };
-            if is_skip {
+            if best_act >= 0 {
+                lexer.reset_actions();
+                if best_act == 0 {
+                    apply_I_actions(&mut lexer, start, best_end);
+                }
+                if lexer.act_type >= 0 { best_kind = lexer.act_type; }
+                if lexer.act_channel >= 0 { best_channel = lexer.act_channel; }
+                if lexer.act_more { best_more = true; }
+                if lexer.act_skip { best_act_skip = true; }
+            }
+            let tok_start = if more_start >= 0 { more_start } else { start };
+            let is_skip = best_kind matches { TK_WS } || best_act_skip;
+            if best_more {
+                if more_start < 0 { more_start = start; }
+            } else if is_skip {
                 ts.push_trivia(best_kind, tok_start, best_end, 0);
+                more_start = -1;
+            } else if best_channel != 0 {
+                ts.push_trivia(best_kind, tok_start, best_end, best_channel);
+                more_start = -1;
             } else {
                 ts.push_token(best_kind, tok_start, best_end, triv_lo, ts.trivia_mark());
                 triv_lo = ts.trivia_mark();
+                more_start = -1;
             }
             lexer.pos = best_end;
         }
     }
     ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());
+    ts.output = lexer.act_output;
     return ts;
 }
 
@@ -1563,6 +1641,10 @@ impl Parser {
             out.push(self.tokens.chars[i]);
         }
         return out;
+    }
+
+    fn text_between(&self, lo: i32, hi: i32) -> String {
+        return self.tokens.rule_text(lo, hi);
     }
 
     fn rule_text(&self, start_tok: i32) -> String {

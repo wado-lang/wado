@@ -1,0 +1,34 @@
+use g from "./grammars/scan_zero_length_rule.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_scan_zero_length_rule" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "tree: a trailing separator does not open another iteration" {
+    assert_tree(&"a ;", &"(list (stmt (sa a)) ;)");
+}
+
+test "tree: trailing separators after the last statement" {
+    assert_tree(&"a ; ; b ; ;", &"(list (stmt (sa a)) ; ; (stmt (sb b)) ; ;)");
+}
+
+test "tree: separator between two statements still iterates" {
+    assert_tree(&"a ; b", &"(list (stmt (sa a)) ; (stmt (sb b)))");
+}
+
+test "tree: leading and trailing separators" {
+    assert_tree(&"; a ;", &"(list ; (stmt (sa a)) ;)");
+}
+
+test "tree: no separators" {
+    assert_tree(&"a", &"(list (stmt (sa a)))");
+}
+
+test "tree: the optional prefix inside the statement still matches" {
+    assert_tree(&"k a ;", &"(list (stmt k (sa a)) ;)");
+}

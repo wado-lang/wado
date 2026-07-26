@@ -11,11 +11,11 @@ test "monotonic: resolution is positive" {
     assert res > 0;
 }
 
-test "monotonic: wait_for advances clock" {
+test "monotonic: wait_for elapses at least the requested duration" {
     let before = MonotonicClock::now();
     MonotonicClock::wait_for(1_000_000).wait();
-    let after = MonotonicClock::now();
-    assert after >= before;
+    let elapsed = MonotonicClock::now() - before;
+    assert elapsed >= 1_000_000;
 }
 
 test "monotonic: wait_until reaches target" {
