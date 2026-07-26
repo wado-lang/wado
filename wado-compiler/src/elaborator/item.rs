@@ -887,7 +887,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // numbers them by declaration order instead, so `type Item = V`
             // in `impl<V> … for Pair<String, V>` records a slot the
             // receiver's arguments never bind.
-            frame_scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
+            frame_scope
+                .annotate_ctx
+                .trait_ctx
+                .assoc_type_bindings
+                .clear();
             for binding in &impl_block.associated_types {
                 let type_id = frame_scope.resolve_type(&binding.ty);
                 frame_scope
