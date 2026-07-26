@@ -366,6 +366,178 @@ impl<T, F> Member for StructField<T, F> {
     }
 }
 
+// The four member handles format themselves. The derivations below are written
+// over `ReflectStruct`, and a handle is sealed against reflection — its own
+// `Members` would mention `StructField<Self, …>` and grow `Self` without bound —
+// so a handle takes the escape hatch any undrivable type has and writes its own
+// impl. The output matches what a derived struct produces.
+
+// `Option<String>`'s own `Inspect` is synthesized for the variant in
+// `prelude/types.wado`, which is not yet resolvable while this module is
+// elaborated — the derivations above reach field types through a bound, this
+// module reaches a concrete one. Render the two cases directly, matching what
+// the variant derive emits.
+internal fn inspect_wire_override(v: &Option<String>, f: &mut Formatter) {
+    match v {
+        Option::Some(s) => {
+            f.write_str(&"Option::Some(");
+            s.inspect(f);
+            f.write_str(&")");
+        }
+        Option::None => {
+            f.write_str(&"Option::None");
+        }
+    }
+}
+
+impl<T, F> Inspect for StructField<T, F> {
+    fn inspect(&self, f: &mut Formatter) {
+        f.write_str(&"StructField { index: ");
+        self.index.inspect(f);
+        f.write_str(&", field_name: ");
+        self.field_name.inspect(f);
+        f.write_str(&", wire_override: ");
+        inspect_wire_override(&self.wire_override, f);
+        f.write_str(&", has_default: ");
+        self.has_default.inspect(f);
+        f.write_str(&", is_secret: ");
+        self.is_secret.inspect(f);
+        f.write_str(&" }");
+    }
+}
+
+impl<T, F> InspectAlt for StructField<T, F> {
+    fn inspect_alt(&self, f: &mut Formatter) {
+        f.open_brace("StructField {");
+        f.write_newline_indent();
+        f.write_str(&"index: ");
+        self.index.inspect_alt(f);
+        f.write_str(&",");
+        f.write_newline_indent();
+        f.write_str(&"field_name: ");
+        self.field_name.inspect_alt(f);
+        f.write_str(&",");
+        f.write_newline_indent();
+        f.write_str(&"wire_override: ");
+        inspect_wire_override(&self.wire_override, f);
+        f.write_str(&",");
+        f.write_newline_indent();
+        f.write_str(&"has_default: ");
+        self.has_default.inspect_alt(f);
+        f.write_str(&",");
+        f.write_newline_indent();
+        f.write_str(&"is_secret: ");
+        self.is_secret.inspect_alt(f);
+        f.write_str(&",");
+        f.close_brace("}");
+    }
+}
+
+impl<T, P> Inspect for VariantCase<T, P> {
+    fn inspect(&self, f: &mut Formatter) {
+        f.write_str(&"VariantCase { index: ");
+        self.index.inspect(f);
+        f.write_str(&", case_name: ");
+        self.case_name.inspect(f);
+        f.write_str(&", wire_override: ");
+        inspect_wire_override(&self.wire_override, f);
+        f.write_str(&", is_unit: ");
+        self.is_unit.inspect(f);
+        f.write_str(&" }");
+    }
+}
+
+impl<T, P> InspectAlt for VariantCase<T, P> {
+    fn inspect_alt(&self, f: &mut Formatter) {
+        f.open_brace("VariantCase {");
+        f.write_newline_indent();
+        f.write_str(&"index: ");
+        self.index.inspect_alt(f);
+        f.write_str(&",");
+        f.write_newline_indent();
+        f.write_str(&"case_name: ");
+        self.case_name.inspect_alt(f);
+        f.write_str(&",");
+        f.write_newline_indent();
+        f.write_str(&"wire_override: ");
+        inspect_wire_override(&self.wire_override, f);
+        f.write_str(&",");
+        f.write_newline_indent();
+        f.write_str(&"is_unit: ");
+        self.is_unit.inspect_alt(f);
+        f.write_str(&",");
+        f.close_brace("}");
+    }
+}
+
+impl<T: Inspect> Inspect for EnumCase<T> {
+    fn inspect(&self, f: &mut Formatter) {
+        f.write_str(&"EnumCase { discriminant: ");
+        self.discriminant.inspect(f);
+        f.write_str(&", value: ");
+        self.value.inspect(f);
+        f.write_str(&", case_name: ");
+        self.case_name.inspect(f);
+        f.write_str(&", wire_override: ");
+        inspect_wire_override(&self.wire_override, f);
+        f.write_str(&" }");
+    }
+}
+
+impl<T: InspectAlt> InspectAlt for EnumCase<T> {
+    fn inspect_alt(&self, f: &mut Formatter) {
+        f.open_brace("EnumCase {");
+        f.write_newline_indent();
+        f.write_str(&"discriminant: ");
+        self.discriminant.inspect_alt(f);
+        f.write_str(&",");
+        f.write_newline_indent();
+        f.write_str(&"value: ");
+        self.value.inspect_alt(f);
+        f.write_str(&",");
+        f.write_newline_indent();
+        f.write_str(&"case_name: ");
+        self.case_name.inspect_alt(f);
+        f.write_str(&",");
+        f.write_newline_indent();
+        f.write_str(&"wire_override: ");
+        inspect_wire_override(&self.wire_override, f);
+        f.write_str(&",");
+        f.close_brace("}");
+    }
+}
+
+impl<T: Inspect> Inspect for FlagsBit<T> {
+    fn inspect(&self, f: &mut Formatter) {
+        f.write_str(&"FlagsBit { bit: ");
+        self.bit.inspect(f);
+        f.write_str(&", value: ");
+        self.value.inspect(f);
+        f.write_str(&", member_name: ");
+        self.member_name.inspect(f);
+        f.write_str(&" }");
+    }
+}
+
+impl<T: InspectAlt> InspectAlt for FlagsBit<T> {
+    fn inspect_alt(&self, f: &mut Formatter) {
+        f.open_brace("FlagsBit {");
+        f.write_newline_indent();
+        f.write_str(&"bit: ");
+        self.bit.inspect_alt(f);
+        f.write_str(&",");
+        f.write_newline_indent();
+        f.write_str(&"value: ");
+        self.value.inspect_alt(f);
+        f.write_str(&",");
+        f.write_newline_indent();
+        f.write_str(&"member_name: ");
+        self.member_name.inspect_alt(f);
+        f.write_str(&",");
+        f.close_brace("}");
+    }
+}
+
 /// Marker for reference-identity types: those whose value is a Wasm GC
 /// reference. Sealed and compiler-synthesized; user impls are rejected.
 /// See WEP 2026-01-20.
