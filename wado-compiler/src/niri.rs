@@ -116,8 +116,8 @@ use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirFunction, NirLiteralPattern, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind,
-    StmtId, StmtKind, StmtNode,
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
+    PatKind, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::nir_visitor::NirRefVisitor;
