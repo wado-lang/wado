@@ -294,10 +294,26 @@ fn scalarize_pairs(
         let bindings = case_field_bindings(type_id.index(), fields.len(), cases, types)
             .unwrap_or_else(|| unreachable!("planned scalarize pair lost its case bindings"));
 
+        // Only operands whose value can drift between here and the `Return`
+        // need pinning; see `operand_needs_spill`. Locals written by a *later*
+        // operand count too, so the whole `StructNew` contributes.
+        let mut clobbered: IndexSet<String> = IndexSet::default();
+        let mut ignored: IndexSet<String> = IndexSet::default();
+        for operand in &fields {
+            collect_local_io(operand, &mut ignored, &mut clobbered);
+        }
+        for k in (i + 1)..return_idx {
+            collect_local_io(&instrs[k], &mut ignored, &mut clobbered);
+        }
+
         // Fresh temps are keyed by case type: `Ok` and `Err` share the field
         // name `payload_0` but not its type.
         let mut operands: Vec<WirInstr> = Vec::with_capacity(fields.len());
         for (operand, (field_name, field_ty)) in fields.into_iter().zip(bindings) {
+            if !operand_needs_spill(&operand, &clobbered) {
+                operands.push(operand);
+                continue;
+            }
             let temp = format!("__scv_{name}_{}_{field_name}", type_id.index());
             result.push(WirInstr::DeclareLocal {
                 name: temp.clone(),
@@ -327,6 +343,26 @@ fn scalarize_pairs(
         i = return_idx + 1;
     }
     *instrs = result;
+}
+
+/// Whether a `StructNew` operand has to be pinned to its original program
+/// point by a fresh temp, rather than re-evaluated at the `Return`.
+///
+/// A literal always yields the same value, and a bare `local.get` does too
+/// unless something between here and the `Return` — an intervening statement or
+/// a sibling operand — writes that local. Everything else (a call, a heap read,
+/// anything that can trap, and notably the `ref.as_non_null` guarding a
+/// non-null field) is order-sensitive and must be spilled.
+fn operand_needs_spill(operand: &WirInstr, clobbered: &IndexSet<String>) -> bool {
+    match operand {
+        WirInstr::I32Const(_)
+        | WirInstr::I64Const(_)
+        | WirInstr::F32Const(_)
+        | WirInstr::F64Const(_)
+        | WirInstr::RefNull { .. } => false,
+        WirInstr::LocalGet { name, .. } => clobbered.contains(name),
+        _ => true,
+    }
 }
 
 fn scalarize_pairs_in_instr(
@@ -607,6 +643,12 @@ fn collect_local_io(expr: &WirInstr, reads: &mut IndexSet<String>, writes: &mut 
             writes.insert(name.clone());
             collect_local_io(value, reads, writes);
         }
+        // `for_each_child` reaches the bound instruction but not the bind
+        // targets, which are writes just as much as a `LocalSet`'s name.
+        WirInstr::MultiValueLocalBind { instr, locals } => {
+            writes.extend(locals.iter().flatten().cloned());
+            collect_local_io(instr, reads, writes);
+        }
         _ => {
             expr.for_each_child(&mut |child| collect_local_io(child, reads, writes));
         }
@@ -658,14 +700,6 @@ fn elide_return_only_temps_in_body(body: &mut [WirInstr]) {
 /// inside the `Return` is *not* counted as a separate use. Any other
 /// shape of write or read tips `has_other_use = true` so the temp is
 /// rejected.
-/// Whether a `LocalSet` value can start a pair in `mode`.
-fn pairable_value(value: &WirInstr, mode: PairMode) -> bool {
-    match mode {
-        PairMode::Relocate => reads_only_local_state(value),
-        PairMode::Scalarize => matches!(value, WirInstr::StructNew { .. }),
-    }
-}
-
 fn scan_return_temp_stats(
     instrs: &[WirInstr],
     mode: PairMode,
@@ -709,21 +743,9 @@ fn scan_return_temp_stats(
 /// truly large gap is unlikely to be safe to relocate past anyway).
 const RETURN_TEMP_INTERVENING_BUDGET: usize = 32;
 
-/// Return the index of a `Return(LocalGet(name))` reachable from
-/// `start_idx + 1` through intervening stmts that
-///   - don't reference `name`,
-///   - don't write any local that `value` reads, and
-///   - don't read any local that `value` writes.
-///
-/// A trap-capable `value` pairs only with the *adjacent* `Return`
-/// (`start_idx + 1`): relocating a trap past intervening statements would
-/// reorder it across their effects — in particular past a conditional
-/// `return` / `br` exit, on whose path the trap would then be lost
-/// entirely (`t = a / b; if c { return OTHER; } return t;`).
-///
-/// Returns `None` when no such return exists within
-/// [`RETURN_TEMP_INTERVENING_BUDGET`] stmts.
 /// Which Phase-0 rewrite a `LocalSet ... Return(LocalGet)` pair is scanned for.
+/// The mode selects both the pairable-value shape ([`pairable_value`]) and how
+/// much [`find_paired_return`] demands of the intervening statements.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PairMode {
     /// [`elide_return_only_temps`]: the value itself moves to the `Return`, so
@@ -735,6 +757,31 @@ enum PairMode {
     Scalarize,
 }
 
+/// Whether a `LocalSet` value can start a pair in `mode`.
+fn pairable_value(value: &WirInstr, mode: PairMode) -> bool {
+    match mode {
+        PairMode::Relocate => reads_only_local_state(value),
+        PairMode::Scalarize => matches!(value, WirInstr::StructNew { .. }),
+    }
+}
+
+/// Return the index of a `Return(LocalGet(name))` reachable from
+/// `start_idx + 1` through intervening stmts that don't reference `name`.
+///
+/// [`PairMode::Relocate`] additionally requires those stmts to
+///   - not write any local that `value` reads, and
+///   - not read any local that `value` writes,
+///
+/// and pairs a trap-capable `value` only with the *adjacent* `Return`
+/// (`start_idx + 1`): relocating a trap past intervening statements would
+/// reorder it across their effects — in particular past a conditional
+/// `return` / `br` exit, on whose path the trap would then be lost
+/// entirely (`t = a / b; if c { return OTHER; } return t;`).
+///
+/// [`PairMode::Scalarize`] moves no operand, so neither applies.
+///
+/// Returns `None` when no such return exists within
+/// [`RETURN_TEMP_INTERVENING_BUDGET`] stmts.
 fn find_paired_return(
     instrs: &[WirInstr],
     start_idx: usize,
