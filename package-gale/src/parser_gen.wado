@@ -5130,11 +5130,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     };
     let cond = `${ctx.first_check_str(&r.body_first_set)}${gate}`;
     match r.kind {
-        Optional => {
-            w.begin(&`if ${cond}`);
-            gen_op(w, &r.body, ctx, nc);
-            w.end();
-        },
+        Optional => gen_op_optional(w, r, ctx, nc, &gate),
         Star => {
             w.begin(&`while !p.recovering && (${cond})`);
             gen_op(w, &r.body, ctx, nc);
@@ -5149,6 +5145,88 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     }
 }
 
+/// `?` / `??` under the op-only walker (LR-suffix bodies and the group bodies
+/// inside them), mirroring the surface-element walker's dispatch
+/// (`gen_op_storable_optional` / `gen_op_transparent_optional`): a `??` asks the
+/// runtime ATN, a shape lookahead branches per shape, and every other strategy
+/// reduces to the single entry condition `gen_op_optional_entry_cond` builds.
+/// `gate` is the walker's caller-FOLLOW yield suffix.
+fn gen_op_optional(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>, gate: &String) {
+    if r.non_greedy && ctx.needs_atn() {
+        w.begin(&`if ${atn_optional_enter_cond(ctx, r)}`);
+        gen_op(w, &r.body, ctx, nc);
+        w.end();
+        return;
+    }
+    if let OptionalShapeLookahead(s) = &r.strategy {
+        gen_op_optional_shape_lookahead(w, r, s, ctx, nc, gate);
+        return;
+    }
+    let entry = `${gen_op_optional_entry_cond(w, r, ctx, nc)}${*gate}`;
+    w.begin(&`if ${entry}`);
+    gen_op(w, &r.body, ctx, nc);
+    w.end();
+}
+
+/// Entry condition for an Optional strategy that reduces to one condition.
+fn gen_op_optional_entry_cond(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) -> String {
+    return match &r.strategy {
+        OptionalLookahead(s) => gen_lookahead_condition(ctx, &s.sig),
+        OptionalScanGuard => {
+            let scan_pos = gen_scan_guard_with_prefix(w, &r.scan_body, ctx, nc, &"opt_scan_pos", &"opt_scan", false);
+            `${scan_pos} >= 0`;
+        },
+        Plain => ctx.first_check_str(&r.body_first_set),
+        OptionalShapeLookahead(_) => panic(
+            "gen_op_optional_entry_cond: shape lookahead has one condition per shape, not one for the optional",
+        ),
+        NonGreedy(_) => panic(
+            "gen_op_optional_entry_cond: NonGreedy strategy reached the greedy-Optional arm — lower-side bug",
+        ),
+    };
+}
+
+/// Shape-lookahead Optional under the op-only walker: one branch per shape,
+/// longest-first, each gated on that shape's own signature and emitting only the
+/// positions the shape contains. The op-only analogue of
+/// `gen_op_optional_with_shape_lookahead_transparent`, whose `unwrap_optional_op`
+/// peel it shares — the shape already decided that a present nested optional
+/// fires.
+fn gen_op_optional_shape_lookahead(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    s: &OptionalShapeLookaheadStrategy,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+    gate: &String,
+) {
+    let body_ops = if let Group(g) = &r.body {
+        g.alts[0].ops;
+    } else {
+        panic("gen_op_optional_shape_lookahead: shape lookahead is only valid on single-alt Group bodies");
+    };
+    let mut is_first = true;
+    for let entry of &s.shapes {
+        let cond = `${gen_lookahead_condition(ctx, &entry.sig)}${*gate}`;
+        if is_first {
+            w.begin(&`if ${cond}`);
+            is_first = false;
+        } else {
+            w.else_begin(&`else if ${cond}`);
+        }
+        for let idx of &entry.positions {
+            gen_op(w, unwrap_optional_op(&body_ops[*idx]), ctx, nc);
+        }
+    }
+    if !is_first {
+        w.end();
+    }
+}
 
 /// Dispatch a `RepeatOp.body` whose shape is "storable" (a leaf op
 /// or a `Group(SingleAlt | TokenOnly | SimpleCst | General)` op) to

@@ -371,6 +371,26 @@ The static FOLLOW + k-prefix path always has edges — a decidability
 limit, not a tuning gap. Beyond it, the runtime ATN simulator (next
 section) is the only complete answer.
 
+### Ambiguity is resolved by entering, not by yielding
+
+Where two readings of the same token are both possible — an optional's body or
+the continuation, another loop iteration or the exit, a longer climb or a return
+to the caller — ANTLR4 picks the lowest-numbered alternative among the readings
+that leave a viable parse. Entering a subrule, or looping again in a greedy loop,
+is always the lower alternative (a non-greedy loop orders its exit edge first, so
+the same rule makes it prefer exiting). So a greedy decision yields to the
+continuation, and a non-greedy one takes another iteration, only when the
+preferred reading could not have survived.
+
+A static approximation that yields whenever the sets overlap therefore gets the
+tree wrong in exactly the cases where entering was viable, and one that always
+enters breaks the cases where it was not (invariant 2 below). Viability is not a
+lookahead property, so a decision the static path cannot separate belongs on the
+simulator (ATN-class prediction, next section) rather than on a tie-break — where
+the grammar can afford it. Routing a decision that fires on every token of a hot
+rule is a different trade; the next section says which sites are and are not
+routed, and why.
+
 ### Soundness invariants
 
 Invariants any LL-related change must respect. Each was violated once
@@ -444,6 +464,17 @@ relevant sites.
    is on the whole-rule result only, so leniency inside the body — what
    the tournament relies on — is untouched. Fixture
    `tests/grammars/scan_zero_length_rule.g4`.
+9. The two emit walkers decide identically. A construct is emitted either by
+   the surface-element walker or, inside an LR suffix, by the op-only walker
+   that reads the lowered op alone. Anything the first decides from a surface
+   field the second cannot see must be carried on the op, or the same construct
+   gets a weaker decision in a suffix than in a plain rule body. All three known
+   instances rejected valid input: an optional's `RepeatStrategy` and its
+   shape-lookahead half both degraded to a one-token first-set check, and a
+   non-greedy `??` was read as greedy because `non_greedy` lived only on the
+   surface element. Fixtures `lr_opt_two_token.g4`, `lr_suffix_opt_shape.g4`,
+   `lr_suffix_non_greedy_opt.g4` — pair any new decision input with one like
+   them.
 
 Termination is a checked property, not only inline conservatism:
 `check_left_recursion` (grammar-check phase) rejects hidden (`a : x? a`, a
@@ -484,9 +515,22 @@ the compiled fast path:**
 
 1. A **left-recursive rule's loop entry**, where precedence — not a
    distinct lookahead token — decides whether to keep climbing or return
-   to the caller.
+   to the caller. A rule is routed here when an ATOM alternative's operand
+   competes with the loop for a shared delimiter (`'between' expr 'and' expr`
+   against `expr 'and' expr`; fixture `lr_between.g4`). The same shape inside
+   an LR alternative (SQLite's `expr NOT? BETWEEN expr AND expr`) is **not**
+   routed here: it would need the mid-alternative operand at ANTLR4's `expr[0]`
+   and the loop entry deciding per token, which makes the whole rule ATN-class
+   — measured far too expensive for a hot expression rule (TODO.md has the
+   numbers). Fixture `lr_mid_operand.g4` pins that divergence as `#[TODO]`.
 2. A **non-greedy `??`**, whose enter-or-skip choice is taken at runtime;
-   several `??` in one rule decide independently.
+   several `??` in one rule decide independently. Both emit walkers route it
+   here — the surface-element walker from `RepeatElement.non_greedy`, the
+   op-only walker (LR-suffix bodies) from `RepeatOp.non_greedy`; a `??` lowers
+   to `strategy: Plain`, so the flag is what tells the two apart from a greedy
+   `?`. Fixtures: `ll_optional_non_greedy{,_multi}.g4`, plus
+   `lr_dangling_else.g4` (atom alternative) and
+   `lr_suffix_non_greedy_opt.g4` (LR-suffix alternative).
 3. A **context-dependent multi-alt at-end conflict** — one alternative
    ends (returning to the caller) while another continues past the same
    lookahead. A longest-match tournament resolves this unsoundly when its
@@ -507,6 +551,17 @@ the compiled fast path:**
    `ll_at_end_follow_disjoint.g4` (stays on the tournament),
    `ll_optional_non_greedy_multi.g4`.
 
+Two more sites _would_ belong here on correctness grounds and are left out on
+cost — the ambiguous decisions of the section above: an ambiguous greedy `rule?`
+(fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop no
+lookahead separates (`ll_non_greedy_plus_loop.g4`). A prediction per occurrence
+costs a full closure over the grammar, which took SQLite's DDL-heavy benchmark
+corpus from 2.6 ms to 402 ms per parse; neither gating it behind the ambiguous
+lookahead nor bounding the lookahead recovers that. The two are also coupled —
+entering `type_name?` is only right if `name+?` can then take the second name,
+so landing one alone turns an accepted input into an error. The measurements and
+the levers that would make them affordable are in [`perf.md`](./perf.md).
+
 The simulator's state machine is embedded in the generated parser only
 when a grammar needs it (inspect it with `gale dump --atn`); a grammar
 that needs none carries none and is byte-for-byte unaffected.
@@ -521,11 +576,15 @@ either parses as ANTLR4 does or fails loudly; none accept invalid input
 or reject valid input silently. The set-complement `~X`, the `.`-led and
 `~X`-led left-recursive suffixes, and non-greedy `??` inside a
 left-recursive rule are covered by fixtures (`lr_complement_op.g4`,
-`lr_wildcard_postfix.g4`, `ll_optional_non_greedy_multi.g4`); a few
-runtime-precision shapes (a shared delimiter past a nullable
-continuation, two enter edges sharing a first lookahead token) fall back
-to the complete simulator rather than guess. The mechanism and the full
-edge list live with the ATN runtime module.
+`lr_wildcard_postfix.g4`, `lr_dangling_else.g4`,
+`lr_suffix_non_greedy_opt.g4`); a few
+runtime-precision shapes (a shared delimiter past a nullable continuation,
+two enter edges sharing a first lookahead token) fall back to the complete
+simulator rather than guess. The mechanism and the full edge list live with
+the ATN runtime module.
+
+Which gaps stay static is a cost decision as much as a correctness one — one
+prediction is a full closure over the grammar; see [`perf.md`](./perf.md).
 
 ## Lexer ATN — recursive non-greedy wildcard rules
 

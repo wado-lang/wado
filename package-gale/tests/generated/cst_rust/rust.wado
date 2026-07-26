@@ -1255,6 +1255,9 @@ pub fn normalize_tree(s: &String) -> String {
 /// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
 /// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
 /// escaped; backslashes and quotes pass through unchanged.
+///
+/// Whatever the lexer's actions printed precedes the dump, as it does on
+/// ANTLR4's stdout.
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
     let chars = tokens.chars;
     // Char index where each line begins; built once so each token's `line:col`
@@ -1265,8 +1268,6 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             line_starts.push(i + 1);
         }
     }
-    // Lexer action output precedes the dump, as it does on ANTLR4's stdout:
-    // the prints happen while tokenizing, the dump only after.
     let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
     out.push_str(&tokens.output);
     let mut index = 0;
@@ -20191,7 +20192,15 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                         let dot = p.expect(TK_DOT, &EMPTY_SYNC);
                         let path_expr_segment = _parse_path_expr_segment(p, &FOLLOW_MASK_26);
                         let lparen = p.expect(TK_LPAREN, &EMPTY_SYNC);
-                        if _kind_set_50(p.peek_kind()) {
+                        let mut opt_scan_pos: i32 = -1;
+                        opt_scan: {
+                            let tokens = &p.kinds;
+                            let mut pos: i32 = p.pos;
+                            pos = scan_call_params(tokens, pos, &EMPTY_FOLLOW, 0);
+                            if pos < 0 { break opt_scan; }
+                            opt_scan_pos = pos;
+                        }
+                        if opt_scan_pos >= 0 {
                             let call_params = _parse_call_params(p, &EMPTY_FOLLOW);
                         }
                         let rparen = p.expect(TK_RPAREN, &EMPTY_SYNC);
@@ -20248,7 +20257,15 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(7);
                 let lparen = p.expect(TK_LPAREN, &EMPTY_SYNC);
-                if _kind_set_50(p.peek_kind()) {
+                let mut opt_scan_pos_2: i32 = -1;
+                opt_scan_2: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    pos = scan_call_params(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { break opt_scan_2; }
+                    opt_scan_pos_2 = pos;
+                }
+                if opt_scan_pos_2 >= 0 {
                     let call_params = _parse_call_params(p, &EMPTY_FOLLOW);
                 }
                 let rparen = p.expect(TK_RPAREN, &EMPTY_SYNC);
@@ -20518,7 +20535,15 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(23);
                 let dotdot = p.expect(TK_DOTDOT, &EMPTY_SYNC);
-                if _kind_set_50(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
+                let mut opt_scan_pos_3: i32 = -1;
+                opt_scan_3: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    pos = scan_expression(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { break opt_scan_3; }
+                    opt_scan_pos_3 = pos;
+                }
+                if opt_scan_pos_3 >= 0 && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
                     let expression = _parse_expression(p, &EMPTY_FOLLOW, 5);
                 }
                 p.b.finish_node(p.last_end());
