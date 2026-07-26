@@ -2506,8 +2506,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let self_kind = method_sig.self_kind;
             let trait_name = scope.get_type_name_full(&trait_type_for_name);
 
-            // The impl's slots, before the method's own are added: these are
-            // what the receiver's type arguments bind.
             let impl_slots: IndexMap<u32, TypeId> = scope
                 .annotate_ctx
                 .trait_ctx
@@ -2516,13 +2514,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .copied()
                 .collect();
 
-            // Set up method-level type params (e.g., V in deserialize_any<V: Visitor>).
-            // Numbered past the highest impl slot, not past their count: a
-            // concrete argument ahead of a free one (`impl<V> … for
-            // Pair<String, V>`) leaves the indices sparse, and counting would
-            // land the method's first param on the impl's last. The decl pass
-            // numbers them with `method_param_offset`, which is this rule.
-            let impl_offset = impl_slots.keys().map(|i| i + 1).max().unwrap_or(0);
+            let impl_offset =
+                crate::tir::method_param_offset_of(impl_slots.keys().copied());
             for (i, type_param) in method_type_params.iter().enumerate() {
                 let index = impl_offset + i as u32;
                 let type_param_id =

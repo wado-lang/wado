@@ -1105,14 +1105,9 @@ pub(super) struct LocalVar {
 /// Method lookup result including return type, self parameter kind, and parameter types
 #[derive(Debug, Clone)]
 pub(super) struct MethodInfo {
-    /// Slot the method's own type parameters start at, as the decl pass
-    /// numbered them — past the impl's highest slot, with concrete target
-    /// arguments occupying no slot. `None` for lookups that do not come from
-    /// a digested impl signature; those callers derive it themselves.
-    ///
-    /// Carried rather than recomputed because every consumer that counted
-    /// instead (receiver arguments, map length) disagreed with the signature
-    /// whenever a concrete argument sat among the free ones.
+    /// [`crate::tir::method_param_offset`] as the digest applied it, carried
+    /// so consumers read it instead of re-deriving it. `None` when the lookup
+    /// did not come from a digested impl signature.
     pub(super) impl_offset: Option<u32>,
     pub(super) return_type: TypeId,
     pub(super) self_kind: ast::SelfKind,

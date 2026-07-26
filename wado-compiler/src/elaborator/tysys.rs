@@ -246,13 +246,8 @@ impl TypeSystem {
 
     /// Whether an impl target's generic argument names a type parameter of
     /// that impl rather than a concrete type: either the impl declares it, or
-    /// the impl's module knows no type by that name.
-    ///
-    /// The decl pass numbers a method's own type parameters past the impl's
-    /// slots, so dispatch has to agree on which slots those are. `String` in
-    /// `impl Tr for Foo<String>` occupies an argument position but binds
-    /// nothing; counting it hands the method's first parameter a slot the
-    /// receiver's arguments then overwrite.
+    /// the impl's module knows no type by that name. `String` in
+    /// `impl Tr for Foo<String>` fills an argument position but binds no slot.
     pub(crate) fn is_impl_target_param(
         &self,
         module: &ModuleSource,

@@ -508,9 +508,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     ) -> MethodFrame {
         let saved = &self.saved().clone();
         let mut type_param_list = Vec::new();
-        // First, collect type params from impl block's generic type (e.g., impl Box<T>)
-        // Also build impl_type_params for the TirFunction
-        // For ref-type impls (e.g., impl Trait for &Container<T>), unwrap the reference first.
         let mut impl_type_params = Vec::new();
         let impl_type_inner = match impl_type {
             ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
@@ -538,7 +535,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                             .trait_ctx
                             .type_params
                             .insert(name.clone(), (i as u32, type_id));
-                        // Store impl type param info for later monomorphization
                         impl_type_params.push(crate::tir::TirTypeParam {
                             name: name.clone(),
                             is_effect: false,
@@ -699,11 +695,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             }
         }
 
-        // Populate bounds from the impl block's type_params
-        // (inherited from outer self - second-pass sets these up).
-        // The caller sets up bounds BEFORE calling resolve_method, so the saved
-        // self contains the caller's bounds. We start from those and add
-        // method-level bounds on top.
         let saved_bounds = saved.type_param_bounds.clone();
         self.annotate_ctx.trait_ctx.type_param_bounds = saved_bounds;
 
@@ -717,7 +708,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             self.bind_trait_type_params_from_impl(trait_t);
         }
 
-        // Set effect params in self (for resolving effect names in function types)
         let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
         if effect_params.len() > 1 {
             let _ = self.emit(TypeError::InvalidLiteral {
@@ -789,8 +779,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             }
         }
 
-        // Set up Self type for the impl block
-        // This allows `&Self` to resolve correctly in method parameters
         let resolved_self_type = self.resolve_type(impl_type);
         self.annotate_ctx.trait_ctx.self_type = Some(resolved_self_type);
         MethodFrame {
@@ -880,13 +868,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 impl_is_concrete,
                 &impl_block.type_params,
             );
-            // A method signature may name `Self::Item`, so the impl's
-            // associated-type bindings have to be in scope before it
-            // resolves — and resolved in this frame, whose slots the
-            // signature is numbered by. Resolving them one scope out
-            // numbers them by declaration order instead, so `type Item = V`
-            // in `impl<V> … for Pair<String, V>` records a slot the
-            // receiver's arguments never bind.
+            // In this frame, not one scope out: a signature naming
+            // `Self::Item` is numbered by these slots.
             frame_scope
                 .annotate_ctx
                 .trait_ctx
@@ -910,7 +893,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .return_type
                 .as_ref()
                 .map(|t| frame_scope.resolve_type(t));
-            // Slots in index order: the impl's, then the method's own.
             let mut type_params: Vec<(String, TypeId)> = frame
                 .impl_type_params
                 .iter()
@@ -1033,21 +1015,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
-        // Set up type parameters in scope before resolving fields. Use an
-        // inherited scope so that any caller-provided `assoc_type_bindings` or
-        // `self_type` remain visible — only `type_params` are replaced, matching
-        // the original `mem::take(&mut self.annotate_ctx.trait_ctx.type_params)` semantics.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&struct_decl.type_params, 0);
 
-        // Resolve field types (recorded below as `struct_field_types`) and
-        // walk each field default for its side-effect fact recording (the
-        // default's per-`AstId` expression types, which `reify_struct`'s
-        // `reify_expr` reads back). A field default is standalone (no self,
-        // no other fields in scope) and must be pure; the purity check runs
-        // in `effect_check`. The resolved default TIR itself is discarded —
-        // reify re-emits it from the AST + recorded types.
+        // A field default is standalone — no self, no sibling fields in
+        // scope — and must be pure; `effect_check` enforces that.
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
         let mut struct_field_types: Vec<TypeId> = Vec::with_capacity(struct_decl.fields.len());
@@ -1070,7 +1043,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             struct_field_types.push(type_id);
         }
 
-        // Convert AST type params to TIR type params (while type params still in scope)
         let type_params: Vec<crate::tir::TirTypeParam> = struct_decl
             .type_params
             .iter()
@@ -1088,8 +1060,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         drop(scope);
 
-        // Record the projected type params (defaults resolved with the scope
-        // alive, above) for reify to read back instead of re-resolving them.
         self.sem
             .types
             .decl_type_params
@@ -1104,10 +1074,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .struct_field_types
             .insert(struct_decl.id, struct_field_types);
 
-        // Stage 7-B: reify (`reify_struct`) emits the `TirStruct` from the
-        // recorded `struct_field_types` / `decl_type_params` + the AST.
-        // The combined walk's struct TIR is discarded, so a minimal shell
-        // is enough here.
         TirStruct {
             name: struct_decl.name.clone(),
             module_source: self.current_module_source.clone(),
@@ -1288,8 +1254,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     pub(super) fn resolve_effect_decl(&mut self, decl: &ast::InterfaceDecl) -> TirEffect {
         let operations = self.declared_effect_ops(decl.id);
-        // Record the resolved op signatures for reify to read back (single
-        // source of truth = this path) instead of re-resolving them.
         self.sem
             .types
             .effect_ops
@@ -1304,8 +1268,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     pub(super) fn resolve_resource_decl(&mut self, decl: &ast::ResourceDecl) -> TirResource {
         let operations = self.declared_effect_ops(decl.id);
-        // Record the resolved op signatures for reify to read back (single
-        // source of truth = this path) instead of re-resolving them.
         self.sem
             .types
             .effect_ops
@@ -1324,7 +1286,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// re-emitting the initializer from the AST + recorded per-`AstId`
     /// expression types, so the combined walk builds no TIR here.
     pub(super) fn resolve_global(&mut self, global_decl: &GlobalDecl) {
-        // Resolve the type
         let ty = self.resolve_type(&global_decl.ty);
 
         // Global initialization has no locals; the context only carries the
@@ -1336,11 +1297,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             global_name(&self.current_module_source, &global_decl.name),
         );
 
-        // Resolve the initializer expression with expected type for type
-        // inference. Its per-`AstId` expression types are recorded for reify.
         let initializer_type = self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
 
-        // Type check: initializer type must match declared type.
         self.typecheck(initializer_type, ty, global_decl.initializer.span());
     }
 
@@ -1349,15 +1307,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         variant_decl: &ast::VariantDecl,
     ) -> TirVariantDecl {
-        // Set up type parameters in scope before resolving field types. Use an
-        // inherited scope so any caller-provided `assoc_type_bindings`/`self_type`
-        // stay visible — only `type_params` are replaced, matching the original
-        // `mem::take(&mut self.annotate_ctx.trait_ctx.type_params)` semantics.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&variant_decl.type_params, 0);
 
-        // Convert AST type params to TIR type params (while type params still in scope)
         let type_params: Vec<crate::tir::TirTypeParam> = variant_decl
             .type_params
             .iter()
@@ -1375,8 +1328,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         drop(scope);
 
-        // Record the projected type params (defaults resolved with the scope
-        // alive, above) for reify to read back instead of re-resolving them.
         self.sem
             .types
             .decl_type_params
@@ -1391,10 +1342,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.logger,
         );
 
-        // Stage 7-B: reify (`reify_variant_decl`) emits the `TirVariantDecl`
-        // from `tysys.all_variant_cases` (payloads) + the recorded
-        // `decl_type_params` + the AST. The combined walk's variant TIR is
-        // discarded, so a minimal shell is enough here.
         TirVariantDecl {
             name: variant_decl.name.clone(),
             module_source: self.current_module_source.clone(),
@@ -1555,16 +1502,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Resolve a function
     pub(super) fn resolve_function(&mut self, func: &Function) -> Option<TirFunction> {
-        // Set up type parameters in scope before resolving types. Use an
-        // inherited scope so any caller-provided `assoc_type_bindings`/`self_type`
-        // stay visible — only `type_params` and `type_param_bounds` are replaced,
-        // matching the original `mem::take` semantics for those two fields.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-        // Local item declarations (`Stmt::Item`) are scoped to a single
-        // function: clear the previous function's leftovers so sibling
-        // functions never see each other's local items.
         scope.sem.decls.clear_fn_local_items();
 
         // Set effect params in scope before `register_generic_params`. Eager
@@ -1618,8 +1558,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declared_return_type
         };
 
-        // Update the function_return_types with the resolved return type
-        // (This replaces the potentially incorrect type from static resolution)
         scope
             .sem
             .decls
@@ -1660,9 +1598,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span: param.span,
                 });
             }
-            // Walk the default for its side-effect fact recording (its
-            // per-`AstId` expression types, which reify reads back); the
-            // resolved TIR is discarded — reify re-emits it from the AST.
+                // Walked for the recorded expression types only; reify
+                // re-emits the default from the AST.
             if let Some(default_ast) = &param.default {
                 if func.is_export {
                     let _ = scope.emit(TypeError::DefaultInExportFn {
@@ -1703,11 +1640,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // Validate stores declarations
         scope.validate_stores(&func.stores, &params, func.span);
 
-        // Walk the body for its side-effect fact recording; the resolved
-        // `TirBlock` is discarded (reify re-emits it from the AST + facts).
         if let Some(b) = func.body.as_ref() {
             scope.resolve_block(b, &mut ctx, None);
         }
@@ -1747,7 +1681,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
 
-        // Resolve effects while effect params are still in scope
         let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
 
         // Stash the resolved `Vec<EffectRef>` for reify (Stage 5): reify
@@ -1771,10 +1704,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         drop(scope);
 
-        // Record the resolved signature for reify to read back (single source
-        // of truth = this path): param types in declaration order, the
-        // (post-async-erasure) return type, and the projected TIR type params
-        // (defaults resolved with the type-param scope alive, above).
+        // The return type recorded here is post-async-erasure.
         let sig_key = func.id;
         self.sem
             .types
@@ -1783,10 +1713,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.types.fn_return_types.insert(sig_key, return_type);
         self.sem.types.decl_type_params.insert(sig_key, type_params);
 
-        // Stage 7-B: reify (`reify_function`) emits the `TirFunction` from
-        // the recorded signature facts + the AST. The combined walk's copy
-        // is discarded, so a minimal shell with the right name + span is
-        // all `resolve_module` needs.
         Some(placeholder_function(func.name.clone(), func.span))
     }
 
@@ -1807,25 +1733,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let function_name =
             crate::name::test_function_name(&meta, test_index, test_decl.name.as_deref());
 
-        // Create function context - tests have no parameters and return unit
         let return_type = TypeTable::UNIT;
         let mut ctx = FunctionContext::new(return_type, function_name.clone());
 
-        // Local item declarations (`Stmt::Item`) are scoped to a single
-        // test body: clear the previous one's leftovers (mirrors
-        // `resolve_function`/`resolve_method`; a `test` block does not go
-        // through either).
         self.sem.decls.clear_fn_local_items();
 
-        // Walk the test body for its side-effect fact recording (its
-        // per-`AstId` expression types, recorded under the `function_name`
-        // context so `#function` literals match what reify emits); the
-        // resolved `TirBlock` is discarded.
+        // Recorded under `function_name` so `#function` literals match
+        // what reify emits.
         self.resolve_block(&test_decl.body, &mut ctx, None);
 
-        // Stage 7-B: reify (`reify_test_decl`) emits both the `TirFunction`
-        // and the `TirTest` from the AST + recorded facts. The combined
-        // walk's copies are discarded, so minimal shells are enough.
         let tir_test = TirTest {
             name: test_decl.name.clone(),
             function_name: function_name.clone(),
@@ -1918,15 +1834,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_declared_params: &[ast::GenericParam],
         recorded_sig: Option<&MethodSig>,
     ) -> Option<TirFunction> {
-        // Use an inherited scope so the caller's `assoc_type_bindings` (set up
-        // for the surrounding impl block) remain visible — `Self::Output` etc.
-        // must still resolve while we're inside this method body. Type params
-        // and bounds get rebuilt below to match the original `mem::take`
-        // behavior.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
-        // Local item declarations (`Stmt::Item`) are scoped to a single
-        // function/method: clear the previous one's leftovers.
         scope.sem.decls.clear_fn_local_items();
 
         // Bare base trait name (e.g. `"Stream"` for an `impl Stream<u8>`).
@@ -1949,11 +1858,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_type_params = frame.impl_type_params;
         let type_param_list = frame.method_type_params;
 
-        // Record the impl-type-param scheme for reify to read back instead of
-        // recomputing it (single source of truth = this original path). Keyed
-        // by the method's globally-unique `AstId`; per-impl `ModuleSemantics`
-        // snapshots disambiguate the same default body synthesised across
-        // several impls.
+        // Keyed by the method's globally-unique `AstId`; per-impl
+        // `ModuleSemantics` snapshots disambiguate one trait default body
+        // synthesised into several impls.
         let method_key = func.id;
         scope
             .sem
@@ -1976,8 +1883,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .unwrap_or(TypeTable::UNIT),
         };
 
-        // Update the function_return_types with the resolved return type
-        // (This replaces the potentially incorrect type from static resolution)
         let mangled_name = MethodName::format_local(struct_name, trait_name, &func.name);
         scope
             .sem
@@ -1985,7 +1890,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .function_return_types
             .insert(mangled_name.clone(), return_type);
 
-        // Display name for #function: StructName::method_name
         let display_name = MethodName::format_local(struct_name, None, &func.name);
 
         // Stage 5 / mangled-name slice: publish the mangled + display
@@ -2008,15 +1912,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `impl Fields for CountingFields` method is a one-shot handler
         // body just like `impl Counter for BaseCounter`.
         //
-        // Decl indices are keyed by the base trait name, so for generic
-        // resources (`impl Stream<u8> for MockCM`) the bare-name form
-        // (`Stream`) is what the lookup needs — `trait_name` itself is the
-        // full mangled form (`Stream<u8>`) and would miss the index.
         if let Some(name) = base_trait_name.as_deref() {
-            // `trait_type` was referenced by bare name in the surrounding
-            // `impl <Trait> for <Type>` block; canonicalise it against the
-            // current module's import context so two modules with same-
-            // named effects / resources don't get a false negative here.
             let canonical_key = scope.canonical_decl_key(name);
             let effect_decl = scope
                 .tysys
@@ -2114,11 +2010,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // Validate stores declarations
         scope.validate_stores(&func.stores, &params, func.span);
 
-        // Walk the body for its side-effect fact recording; the resolved
-        // `TirBlock` is discarded (reify re-emits it from the AST + facts).
         if let Some(b) = func.body.as_ref() {
             scope.resolve_block(b, &mut ctx, None);
         }
@@ -2167,7 +2060,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect()
         };
 
-        // Resolve effects while effect params are still in scope
         let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
 
         // Stash the resolved `Vec<EffectRef>` for reify (Stage 5): reify

@@ -710,11 +710,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // The digest's own numbering wins where the lookup supplied one: the
-        // derivations above count receiver arguments, which overshoots
-        // whenever a concrete argument occupies a target slot
-        // (`impl<T> Sink for Box2<T, i32>` numbers the method's params from
-        // 1, not 2).
+        // The digest's numbering wins: the derivations above count receiver
+        // arguments, which overshoots when one of them is concrete.
         if let Some(offset) = sig_impl_offset {
             impl_offset = offset;
         }
