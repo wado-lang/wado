@@ -43,7 +43,7 @@
 use crate::compiler_trace;
 use crate::hashmap::IndexSet;
 use crate::wir::{
-    WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId, WirVariantRepr,
+    WirFuncType, WirFunction, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId, WirVariantRepr,
     WirVariantType,
 };
 
@@ -94,6 +94,9 @@ pub(super) fn sroa_variant_returns(module: &mut WirPackage) {
     // bug in the elision peephole shouldn't affect exported entry points.
     elide_return_only_temps(module, &pinned);
 
+    // Phase 0b: split what Phase 0a declined to relocate.
+    scalarize_return_only_temps(module, &pinned);
+
     // Phase 1: identify candidate functions.
     let candidates = find_sroa_candidates(module, &pinned);
     compiler_trace!("sroa_variant_return", "candidates = {}", candidates.len());
@@ -110,6 +113,264 @@ pub(super) fn sroa_variant_returns(module: &mut WirPackage) {
 
     // Phase 3: rewrite confirmed functions and their call sites.
     apply_sroa(module, &confirmed);
+}
+
+/// Phase 0b: pin a return-only temp's `StructNew` operands in per-field temps
+/// and move the bare construction to the `Return`, restoring the
+/// `Return(StructNew)` shape [`find_sroa_candidates`] accepts.
+///
+/// ```text
+/// __hfs_call_N = struct.new Err { discriminant: 1, payload_0: eof(..) };
+/// self.pos = __hfs_pos_X;
+/// return __hfs_call_N;
+///
+/// // becomes
+/// __scv_… = 1; __scv_… = eof(..);
+/// self.pos = __hfs_pos_X;
+/// return struct.new Err { discriminant: __scv_…, payload_0: __scv_… };
+/// ```
+///
+/// Soundness: unlike [`elide_return_only_temps`], nothing observable moves.
+/// Operands stay at their original program point, preserving evaluation order
+/// and trap position; only the `struct.new` — allocation-only, state-free and
+/// trap-free — is deferred. The intervening statements must still not reference
+/// the temp, which [`find_paired_return`] checks.
+fn scalarize_return_only_temps(module: &mut WirPackage, pinned: &IndexSet<u32>) {
+    // Planned up front: `scalarize_case_types` borrows the module immutably.
+    let case_types: Vec<Option<IndexSet<u32>>> = module
+        .functions
+        .iter()
+        .enumerate()
+        .map(|(i, func)| {
+            let func_id_index = module.defined_func_base + u32::try_from(i).unwrap();
+            scalarize_case_types(module, func, func_id_index, pinned)
+        })
+        .collect();
+
+    for (i, cases) in case_types.into_iter().enumerate() {
+        let Some(cases) = cases else {
+            continue;
+        };
+        let Some(mut body) = module.functions[i].body.take() else {
+            continue;
+        };
+        scalarize_body(&mut body, &cases, &module.types);
+        module.functions[i].body = Some(body);
+    }
+}
+
+/// The variant case-struct type indices `func` may return, or `None` when the
+/// function can't benefit (pinned, bodyless, or not returning a laid-out
+/// variant). Restricting to these keeps Phase 0b from minting temps for a
+/// `StructNew` no later phase would decompose.
+fn scalarize_case_types(
+    module: &WirPackage,
+    func: &WirFunction,
+    func_id_index: u32,
+    pinned: &IndexSet<u32>,
+) -> Option<IndexSet<u32>> {
+    if pinned.contains(&func_id_index) || func.body.is_none() {
+        return None;
+    }
+    let WirTypeDef::Func(func_type) = module.types.get(func.type_id.index() as usize)? else {
+        return None;
+    };
+    if func_type.results.len() != 1 {
+        return None;
+    }
+    let WirType::Ref { type_id, .. } = &func_type.results[0] else {
+        return None;
+    };
+    let variant_type_idx = type_id.index();
+    let WirTypeDef::Variant(variant_type) = module.types.get(variant_type_idx as usize)? else {
+        return None;
+    };
+    let layout = compute_variant_layout(module, variant_type_idx, variant_type)?;
+    Some(layout.valid_case_type_indices)
+}
+
+fn scalarize_body(body: &mut Vec<WirInstr>, cases: &IndexSet<u32>, types: &[WirTypeDef]) {
+    let mut stats: crate::hashmap::IndexMap<String, ReturnTempStats> =
+        crate::hashmap::IndexMap::default();
+    scan_return_temp_stats(body, PairMode::Scalarize, &mut stats);
+
+    let valid: IndexSet<String> = stats
+        .iter()
+        .filter(|(_, s)| {
+            !s.has_other_use && s.paired_writes == s.total_writes && s.total_writes > 0
+        })
+        .map(|(name, _)| name.clone())
+        .collect();
+    if valid.is_empty() {
+        return;
+    }
+    scalarize_pairs(body, &valid, cases, types);
+}
+
+/// The `(name, type)` list a case struct's `StructNew` operands bind to, or
+/// `None` when `type_idx` isn't one of `cases` or its arity disagrees.
+fn case_field_bindings(
+    type_idx: u32,
+    operand_count: usize,
+    cases: &IndexSet<u32>,
+    types: &[WirTypeDef],
+) -> Option<Vec<(String, WirType)>> {
+    if !cases.contains(&type_idx) {
+        return None;
+    }
+    let WirTypeDef::Struct(case_ty) = types.get(type_idx as usize)? else {
+        return None;
+    };
+    if case_ty.fields.len() != operand_count {
+        return None;
+    }
+    Some(
+        case_ty
+            .fields
+            .iter()
+            .map(|f| (f.name.clone(), f.ty.clone()))
+            .collect(),
+    )
+}
+
+fn scalarize_pairs(
+    instrs: &mut Vec<WirInstr>,
+    valid: &IndexSet<String>,
+    cases: &IndexSet<u32>,
+    types: &[WirTypeDef],
+) {
+    // Planned against the original indices, which the rebuild below shifts.
+    let mut pairs: crate::hashmap::IndexMap<usize, usize> = crate::hashmap::IndexMap::default();
+    let mut i = 0;
+    while i < instrs.len() {
+        if let WirInstr::LocalSet { name, value } = &instrs[i]
+            && valid.contains(name.as_str())
+            && let WirInstr::StructNew { type_id, fields } = value.as_ref()
+            && case_field_bindings(type_id.index(), fields.len(), cases, types).is_some()
+            && let Some(j) = find_paired_return(instrs, i, name, value, PairMode::Scalarize)
+        {
+            pairs.insert(i, j);
+            i = j + 1;
+            continue;
+        }
+        i += 1;
+    }
+    if pairs.is_empty() {
+        for instr in instrs.iter_mut() {
+            scalarize_pairs_in_instr(instr, valid, cases, types);
+        }
+        return;
+    }
+
+    let mut result: Vec<WirInstr> = Vec::with_capacity(instrs.len() + pairs.len() * 2);
+    let mut i = 0;
+    while i < instrs.len() {
+        let Some(&return_idx) = pairs.get(&i) else {
+            let mut instr = std::mem::replace(&mut instrs[i], WirInstr::Nop);
+            scalarize_pairs_in_instr(&mut instr, valid, cases, types);
+            result.push(instr);
+            i += 1;
+            continue;
+        };
+
+        let WirInstr::LocalSet { name, value } = std::mem::replace(&mut instrs[i], WirInstr::Nop)
+        else {
+            unreachable!("planned scalarize pair is not a LocalSet")
+        };
+        let WirInstr::StructNew { type_id, fields } = *value else {
+            unreachable!("planned scalarize pair value is not a StructNew")
+        };
+        let bindings = case_field_bindings(type_id.index(), fields.len(), cases, types)
+            .unwrap_or_else(|| unreachable!("planned scalarize pair lost its case bindings"));
+
+        // Every field contributes: a *later* operand's write clobbers an
+        // earlier one's `local.get` just as an intervening statement does.
+        let mut clobbered: IndexSet<String> = IndexSet::default();
+        let mut reads: IndexSet<String> = IndexSet::default();
+        for operand in &fields {
+            collect_local_io(operand, &mut reads, &mut clobbered);
+        }
+        for k in (i + 1)..return_idx {
+            collect_local_io(&instrs[k], &mut reads, &mut clobbered);
+        }
+
+        // Keyed by case type: `Ok` and `Err` share `payload_0` but not its type.
+        let mut operands: Vec<WirInstr> = Vec::with_capacity(fields.len());
+        for (operand, (field_name, field_ty)) in fields.into_iter().zip(bindings) {
+            if !operand_needs_spill(&operand, &clobbered) {
+                operands.push(operand);
+                continue;
+            }
+            let temp = format!("__scv_{name}_{}_{field_name}", type_id.index());
+            result.push(WirInstr::DeclareLocal {
+                name: temp.clone(),
+                ty: field_ty.clone(),
+            });
+            result.push(WirInstr::LocalSet {
+                name: temp.clone(),
+                value: Box::new(operand),
+            });
+            operands.push(WirInstr::LocalGet {
+                name: temp,
+                result_ty: field_ty,
+            });
+        }
+
+        for k in (i + 1)..return_idx {
+            let mut instr = std::mem::replace(&mut instrs[k], WirInstr::Nop);
+            scalarize_pairs_in_instr(&mut instr, valid, cases, types);
+            result.push(instr);
+        }
+        result.push(WirInstr::Return {
+            value: Some(Box::new(WirInstr::StructNew {
+                type_id,
+                fields: operands,
+            })),
+        });
+        i = return_idx + 1;
+    }
+    *instrs = result;
+}
+
+/// Whether an operand must be pinned in a temp rather than re-evaluated at the
+/// `Return`. A literal is invariant, and a bare `local.get` is too unless
+/// `clobbered` holds its local. Everything else — a call, a heap read, anything
+/// that can trap, notably the `ref.as_non_null` guarding a non-null field — is
+/// order-sensitive.
+fn operand_needs_spill(operand: &WirInstr, clobbered: &IndexSet<String>) -> bool {
+    match operand {
+        WirInstr::I32Const(_)
+        | WirInstr::I64Const(_)
+        | WirInstr::F32Const(_)
+        | WirInstr::F64Const(_)
+        | WirInstr::RefNull { .. } => false,
+        WirInstr::LocalGet { name, .. } => clobbered.contains(name),
+        _ => true,
+    }
+}
+
+fn scalarize_pairs_in_instr(
+    instr: &mut WirInstr,
+    valid: &IndexSet<String>,
+    cases: &IndexSet<u32>,
+    types: &[WirTypeDef],
+) {
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            scalarize_pairs(body, valid, cases, types);
+        }
+        WirInstr::If {
+            then_body,
+            else_body,
+            ..
+        } => {
+            scalarize_pairs(then_body, valid, cases, types);
+            if let Some(eb) = else_body {
+                scalarize_pairs(eb, valid, cases, types);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Information about a variant-return SROA candidate function.
@@ -366,6 +627,11 @@ fn collect_local_io(expr: &WirInstr, reads: &mut IndexSet<String>, writes: &mut 
             writes.insert(name.clone());
             collect_local_io(value, reads, writes);
         }
+        // `for_each_child` reaches the bound instruction but not the targets.
+        WirInstr::MultiValueLocalBind { instr, locals } => {
+            writes.extend(locals.iter().flatten().cloned());
+            collect_local_io(instr, reads, writes);
+        }
         _ => {
             expr.for_each_child(&mut |child| collect_local_io(child, reads, writes));
         }
@@ -391,7 +657,7 @@ fn elide_return_only_temps(module: &mut WirPackage, pinned: &IndexSet<u32>) {
 fn elide_return_only_temps_in_body(body: &mut [WirInstr]) {
     let mut stats: crate::hashmap::IndexMap<String, ReturnTempStats> =
         crate::hashmap::IndexMap::default();
-    scan_return_temp_stats(body, &mut stats);
+    scan_return_temp_stats(body, PairMode::Relocate, &mut stats);
 
     let valid: IndexSet<String> = stats
         .iter()
@@ -419,13 +685,14 @@ fn elide_return_only_temps_in_body(body: &mut [WirInstr]) {
 /// rejected.
 fn scan_return_temp_stats(
     instrs: &[WirInstr],
+    mode: PairMode,
     stats: &mut crate::hashmap::IndexMap<String, ReturnTempStats>,
 ) {
     let mut i = 0;
     while i < instrs.len() {
         if let WirInstr::LocalSet { name, value } = &instrs[i]
-            && reads_only_local_state(value)
-            && let Some(return_idx) = find_paired_return(instrs, i, name, value)
+            && pairable_value(value, mode)
+            && let Some(return_idx) = find_paired_return(instrs, i, name, value, mode)
         {
             let entry = stats.entry(name.clone()).or_default();
             entry.total_writes += 1;
@@ -435,18 +702,18 @@ fn scan_return_temp_stats(
             // and not counted here. Any other use of `name` inside `value`
             // (unusual but possible — e.g. `__hfs_call = f(__hfs_call)`) is a
             // disqualifier.
-            scan_return_temp_uses_in_expr(value, Some(name.as_str()), stats);
+            scan_return_temp_uses_in_expr(value, Some(name.as_str()), mode, stats);
             // The intervening stmts (i+1 .. return_idx) were already
             // disjointness-checked by `find_paired_return`. Still walk them
             // for the surrounding scan: a LocalGet of *another* temp in those
             // stmts must still count as an "other read" for that other temp.
             for j in (i + 1)..return_idx {
-                scan_return_temp_uses_in_instr(&instrs[j], stats);
+                scan_return_temp_uses_in_instr(&instrs[j], mode, stats);
             }
             i = return_idx + 1;
             continue;
         }
-        scan_return_temp_uses_in_instr(&instrs[i], stats);
+        scan_return_temp_uses_in_instr(&instrs[i], mode, stats);
         i += 1;
     }
 }
@@ -459,17 +726,40 @@ fn scan_return_temp_stats(
 /// truly large gap is unlikely to be safe to relocate past anyway).
 const RETURN_TEMP_INTERVENING_BUDGET: usize = 32;
 
+/// Which Phase-0 rewrite a `LocalSet ... Return(LocalGet)` pair is scanned for.
+/// Selects both the pairable-value shape ([`pairable_value`]) and what
+/// [`find_paired_return`] demands of the intervening statements.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PairMode {
+    /// [`elide_return_only_temps`]: the value itself moves to the `Return`, so
+    /// it must survive being reordered past the intervening statements.
+    Relocate,
+    /// [`scalarize_return_only_temps`]: only the `StructNew` moves, so the
+    /// reorder constraints do not apply.
+    Scalarize,
+}
+
+/// Whether a `LocalSet` value can start a pair in `mode`.
+fn pairable_value(value: &WirInstr, mode: PairMode) -> bool {
+    match mode {
+        PairMode::Relocate => reads_only_local_state(value),
+        PairMode::Scalarize => matches!(value, WirInstr::StructNew { .. }),
+    }
+}
+
 /// Return the index of a `Return(LocalGet(name))` reachable from
-/// `start_idx + 1` through intervening stmts that
-///   - don't reference `name`,
-///   - don't write any local that `value` reads, and
-///   - don't read any local that `value` writes.
+/// `start_idx + 1` through intervening stmts that don't reference `name`.
 ///
-/// A trap-capable `value` pairs only with the *adjacent* `Return`
+/// [`PairMode::Relocate`] additionally requires those stmts to
+///   - not write any local that `value` reads, and
+///   - not read any local that `value` writes,
+///
+/// and pairs a trap-capable `value` only with the *adjacent* `Return`
 /// (`start_idx + 1`): relocating a trap past intervening statements would
 /// reorder it across their effects — in particular past a conditional
 /// `return` / `br` exit, on whose path the trap would then be lost
 /// entirely (`t = a / b; if c { return OTHER; } return t;`).
+/// [`PairMode::Scalarize`] moves no operand, so neither applies.
 ///
 /// Returns `None` when no such return exists within
 /// [`RETURN_TEMP_INTERVENING_BUDGET`] stmts.
@@ -478,11 +768,14 @@ fn find_paired_return(
     start_idx: usize,
     name: &str,
     value: &WirInstr,
+    mode: PairMode,
 ) -> Option<usize> {
     let mut x_reads: IndexSet<String> = IndexSet::default();
     let mut x_writes: IndexSet<String> = IndexSet::default();
-    collect_local_io(value, &mut x_reads, &mut x_writes);
-    let value_may_trap = relocated_value_may_trap(value);
+    if mode == PairMode::Relocate {
+        collect_local_io(value, &mut x_reads, &mut x_writes);
+    }
+    let value_may_trap = mode == PairMode::Relocate && relocated_value_may_trap(value);
 
     let end = (start_idx + 1 + RETURN_TEMP_INTERVENING_BUDGET).min(instrs.len());
     for j in (start_idx + 1)..end {
@@ -521,11 +814,12 @@ fn find_paired_return(
 /// via [`scan_return_temp_stats`].
 fn scan_return_temp_uses_in_instr(
     instr: &WirInstr,
+    mode: PairMode,
     stats: &mut crate::hashmap::IndexMap<String, ReturnTempStats>,
 ) {
     match instr {
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-            scan_return_temp_stats(body, stats);
+            scan_return_temp_stats(body, mode, stats);
         }
         WirInstr::If {
             condition,
@@ -533,14 +827,14 @@ fn scan_return_temp_uses_in_instr(
             else_body,
             ..
         } => {
-            scan_return_temp_uses_in_expr(condition, None, stats);
-            scan_return_temp_stats(then_body, stats);
+            scan_return_temp_uses_in_expr(condition, None, mode, stats);
+            scan_return_temp_stats(then_body, mode, stats);
             if let Some(eb) = else_body {
-                scan_return_temp_stats(eb, stats);
+                scan_return_temp_stats(eb, mode, stats);
             }
         }
         WirInstr::Seq(body) => {
-            scan_return_temp_stats(body, stats);
+            scan_return_temp_stats(body, mode, stats);
         }
         WirInstr::LocalSet { name, value } => {
             // Unpaired LocalSet (the pair branch would have handled it).
@@ -548,7 +842,7 @@ fn scan_return_temp_uses_in_instr(
             let entry = stats.entry(name.clone()).or_default();
             entry.total_writes += 1;
             entry.has_other_use = true;
-            scan_return_temp_uses_in_expr(value, None, stats);
+            scan_return_temp_uses_in_expr(value, None, mode, stats);
         }
         WirInstr::LocalTee { name, value } => {
             // LocalTee both writes and leaves the value on the stack, so the
@@ -556,15 +850,16 @@ fn scan_return_temp_uses_in_instr(
             let entry = stats.entry(name.clone()).or_default();
             entry.total_writes += 1;
             entry.has_other_use = true;
-            scan_return_temp_uses_in_expr(value, None, stats);
+            scan_return_temp_uses_in_expr(value, None, mode, stats);
         }
-        other => scan_return_temp_uses_in_expr(other, None, stats),
+        other => scan_return_temp_uses_in_expr(other, None, mode, stats),
     }
 }
 
 fn scan_return_temp_uses_in_expr(
     expr: &WirInstr,
     skip_name: Option<&str>,
+    mode: PairMode,
     stats: &mut crate::hashmap::IndexMap<String, ReturnTempStats>,
 ) {
     if let WirInstr::LocalGet { name, .. } = expr {
@@ -578,7 +873,7 @@ fn scan_return_temp_uses_in_expr(
         expr,
         WirInstr::Block { .. } | WirInstr::Loop { .. } | WirInstr::If { .. } | WirInstr::Seq(_)
     ) {
-        scan_return_temp_uses_in_instr(expr, stats);
+        scan_return_temp_uses_in_instr(expr, mode, stats);
         return;
     }
     if let WirInstr::LocalSet { name, value } | WirInstr::LocalTee { name, value } = expr {
@@ -587,7 +882,7 @@ fn scan_return_temp_uses_in_expr(
         let entry = stats.entry(name.clone()).or_default();
         entry.total_writes += 1;
         entry.has_other_use = true;
-        scan_return_temp_uses_in_expr(value, None, stats);
+        scan_return_temp_uses_in_expr(value, None, mode, stats);
         return;
     }
     if let WirInstr::Return { value: Some(rv) } = expr {
@@ -597,10 +892,10 @@ fn scan_return_temp_uses_in_expr(
             stats.entry(name.clone()).or_default().has_other_use = true;
             return;
         }
-        scan_return_temp_uses_in_expr(rv, None, stats);
+        scan_return_temp_uses_in_expr(rv, None, mode, stats);
         return;
     }
-    expr.for_each_child(&mut |child| scan_return_temp_uses_in_expr(child, None, stats));
+    expr.for_each_child(&mut |child| scan_return_temp_uses_in_expr(child, None, mode, stats));
 }
 
 /// Rewrite every paired `LocalSet(name, X); [intervening]; Return(LocalGet(name))`
@@ -617,7 +912,9 @@ fn rewrite_return_temp_pairs(instrs: &mut [WirInstr], valid: &IndexSet<String>) 
             && reads_only_local_state(value)
         {
             let name_owned = name.clone();
-            if let Some(return_idx) = find_paired_return(instrs, i, &name_owned, value) {
+            if let Some(return_idx) =
+                find_paired_return(instrs, i, &name_owned, value, PairMode::Relocate)
+            {
                 let WirInstr::LocalSet { value, .. } =
                     std::mem::replace(&mut instrs[i], WirInstr::Nop)
                 else {
