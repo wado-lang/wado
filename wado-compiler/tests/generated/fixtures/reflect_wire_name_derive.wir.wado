@@ -247,6 +247,7 @@ global global:core:serde::__const_obj_14: ref null "core:prelude/string.wado//St
 global global:core:serde::__const_obj_16: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(95), used: 1 };
 global global:core:prelude/format.wado::__const_obj_18: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
 global global:core:prelude/format.wado::__const_obj_19: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
+global mut global:reflect_wire_name_derive.wado::__const_obj_32: ref null "tuple//[core:prelude/traits.wado/StructField<reflect_wire_name_derive.wado/Account,i32>, core:prelude/traits.wado/StructField<reflect_wire_name_derive.wado/Account,core:prelude/string.wado/String>, core:prelude/traits.wado/StructField<reflect_wire_name_derive.wado/Account,i32>]" = ref.null none;
 
 fn "reflect_wire_name_derive.wado/__test_0_generic_derivation_resolves_wire_names_through_a_type_param"() {
     let __v0: ref "core:prelude/string.wado//String";
@@ -1281,7 +1282,6 @@ fn "reflect_wire_name_derive.wado/reflect_wire_name_derive.wado/Account^WireRow:
     let out: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let __tuple_3: ref "tuple//[core:prelude/traits.wado/StructField<reflect_wire_name_derive.wado/Account,i32>, core:prelude/traits.wado/StructField<reflect_wire_name_derive.wado/Account,core:prelude/string.wado/String>, core:prelude/traits.wado/StructField<reflect_wire_name_derive.wado/Account,i32>]";
     let f_7: ref "core:prelude/traits.wado//StructField<reflect_wire_name_derive.wado/Account,i32>";
     let f_8: ref "core:prelude/traits.wado//StructField<reflect_wire_name_derive.wado/Account,core:prelude/string.wado/String>";
     let __local_9: ref "core:prelude/string.wado//String";
@@ -1304,8 +1304,10 @@ fn "reflect_wire_name_derive.wado/reflect_wire_name_derive.wado/Account^WireRow:
     let v_104: ref "core:prelude/string.wado//String";
     let v_109: ref "core:prelude/string.wado//String";
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    __tuple_3 = "reflect_wire_name_derive.wado/Account^ReflectStruct::members"();
-    f_7 = __tuple_3.0;
+    if ref.is_null(global:reflect_wire_name_derive.wado::__const_obj_32) {
+        global:reflect_wire_name_derive.wado::__const_obj_32 = "reflect_wire_name_derive.wado/Account^ReflectStruct::members"();
+    }
+    f_7 = global:reflect_wire_name_derive.wado::__const_obj_32.0;
     __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     "core:prelude/string.wado/String::push_str"(__local_4, out);
     "core:prelude/string.wado/String::push_str"(__local_4, let __match_scrut_0: ref null "core:prelude/string.wado//String"; __match_scrut_0 = f_7.wire_override; (if ref.is_null(__match_scrut_0) == 0 -> ref "core:prelude/string.wado//String" {
@@ -1327,7 +1329,7 @@ fn "reflect_wire_name_derive.wado/reflect_wire_name_derive.wado/Account^WireRow:
     start_36 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1);
     builtin::array_set_u8(__local_4.repr, start_36, 59);
     out = __local_4;
-    f_8 = __tuple_3.1;
+    f_8 = global:reflect_wire_name_derive.wado::__const_obj_32.1;
     __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     "core:prelude/string.wado/String::push_str"(__local_9, out);
     "core:prelude/string.wado/String::push_str"(__local_9, let __match_scrut_2: ref null "core:prelude/string.wado//String"; __match_scrut_2 = f_8.wire_override; (if ref.is_null(__match_scrut_2) == 0 -> ref "core:prelude/string.wado//String" {
@@ -1347,7 +1349,7 @@ fn "reflect_wire_name_derive.wado/reflect_wire_name_derive.wado/Account^WireRow:
     start_61 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_9, 1);
     builtin::array_set_u8(__local_9.repr, start_61, 59);
     out = __local_9;
-    f_11 = __tuple_3.2;
+    f_11 = global:reflect_wire_name_derive.wado::__const_obj_32.2;
     __local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     "core:prelude/string.wado/String::push_str"(__local_12, out);
     "core:prelude/string.wado/String::push_str"(__local_12, let __match_scrut_4: ref null "core:prelude/string.wado//String"; __match_scrut_4 = f_11.wire_override; (if ref.is_null(__match_scrut_4) == 0 -> ref "core:prelude/string.wado//String" {
@@ -1378,17 +1380,17 @@ fn "core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<
     let v_8: ref "core:prelude/string.wado//StrCharIter";
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
     __iter_2 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,char>" { inner: ref.as_non_null(v_8 = iter.inner; struct.new "core:prelude/string.wado//StrCharIter" { repr: v_8.repr, used: v_8.used, byte_index: v_8.byte_index }), f: iter.f };
-    b153: block {
-        l154: loop {
+    b154: block {
+        l155: loop {
             let __sroa___match_4_discriminant: i32;
             let __sroa___match_4_payload_0: char;
             multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>^Iterator::next"(__iter_2);
             if __sroa___match_4_discriminant == 0 {
                 "core:prelude/string.wado/String::push"(s, __sroa___match_4_payload_0);
             } else {
-                break b153;
+                break b154;
             }
-            continue l154;
+            continue l155;
         };
     };
     return s;

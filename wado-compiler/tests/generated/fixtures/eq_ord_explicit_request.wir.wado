@@ -185,7 +185,8 @@ global global:core:prelude/traits.wado::__const_obj_86: ref null "core:prelude/s
 global global:core:prelude/traits.wado::__const_obj_88: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32, 46, 46), used: 4 };
 global global:core:prelude/traits.wado::__const_obj_89: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 };
 global global:core:prelude/traits.wado::__const_obj_90: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 32), used: 3 };
-global global:core:prelude/traits.wado::__const_obj_94: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80, 111, 105, 110, 116), used: 5 };
+global mut global:core:prelude/traits.wado::__const_obj_94: ref null "tuple//[core:prelude/traits.wado/StructField<eq_ord_explicit_request.wado/Point,i32>, core:prelude/traits.wado/StructField<eq_ord_explicit_request.wado/Point,i32>]" = ref.null none;
+global global:core:prelude/traits.wado::__const_obj_95: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80, 111, 105, 110, 116), used: 5 };
 
 fn "eq_ord_explicit_request.wado/__test_0_explicit_eq_marker_works_like_auto_derive"() {
     let a: ref "eq_ord_explicit_request.wado//Point";
@@ -764,7 +765,6 @@ fn "eq_ord_explicit_request.wado/Pair<i32>^Inspect::inspect"(self, f) {
 fn "core:prelude/traits.wado/eq_ord_explicit_request.wado/Point^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<eq_ord_explicit_request.wado/Point,i32>, core:prelude/traits.wado/StructField<eq_ord_explicit_request.wado/Point,i32>]";
     let field_6: ref "core:prelude/traits.wado//StructField<eq_ord_explicit_request.wado/Point,i32>";
     let field_7: ref "core:prelude/traits.wado//StructField<eq_ord_explicit_request.wado/Point,i32>";
     let s_9: ref "core:prelude/string.wado//String";
@@ -779,12 +779,14 @@ fn "core:prelude/traits.wado/eq_ord_explicit_request.wado/Point^Inspect::inspect
     let s_45: ref "core:prelude/string.wado//String";
     let s_47: ref "core:prelude/string.wado//String";
     let s_49: ref "core:prelude/string.wado//String";
-    s_9 = global:core:prelude/traits.wado::__const_obj_94;
+    s_9 = global:core:prelude/traits.wado::__const_obj_95;
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "eq_ord_explicit_request.wado/Point^ReflectStruct::members"();
-    field_6 = __tuple_4.0;
+    if ref.is_null(global:core:prelude/traits.wado::__const_obj_94) {
+        global:core:prelude/traits.wado::__const_obj_94 = "eq_ord_explicit_request.wado/Point^ReflectStruct::members"();
+    }
+    field_6 = global:core:prelude/traits.wado::__const_obj_94.0;
     if field_6.is_secret {
         has_secret = 1;
     } else {
@@ -802,7 +804,7 @@ fn "core:prelude/traits.wado/eq_ord_explicit_request.wado/Point^Inspect::inspect
             unreachable;
         })), f);
     }
-    field_7 = __tuple_4.1;
+    field_7 = global:core:prelude/traits.wado::__const_obj_94.1;
     if field_7.is_secret {
         has_secret = 1;
     } else {

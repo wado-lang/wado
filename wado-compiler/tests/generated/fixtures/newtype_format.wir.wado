@@ -269,7 +269,8 @@ global global:core:prelude/traits.wado::__const_obj_90: ref null "core:prelude/s
 global global:core:prelude/traits.wado::__const_obj_91: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 };
 global global:core:prelude/traits.wado::__const_obj_92: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 32), used: 3 };
 global global:core:prelude/traits.wado::__const_obj_93: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
-global global:core:prelude/traits.wado::__const_obj_96: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(70, 109, 116, 80, 111, 105, 110, 116), used: 8 };
+global mut global:core:prelude/traits.wado::__const_obj_96: ref null "tuple//[core:prelude/traits.wado/StructField<newtype_format.wado/FmtPoint,i32>, core:prelude/traits.wado/StructField<newtype_format.wado/FmtPoint,i32>]" = ref.null none;
+global global:core:prelude/traits.wado::__const_obj_97: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(70, 109, 116, 80, 111, 105, 110, 116), used: 8 };
 
 fn "newtype_format.wado/__test_0_display_drops_the_inspect_cast"() {
     let __cond_2: bool;
@@ -2185,7 +2186,6 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
 fn "core:prelude/traits.wado/newtype_format.wado/FmtPoint^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<newtype_format.wado/FmtPoint,i32>, core:prelude/traits.wado/StructField<newtype_format.wado/FmtPoint,i32>]";
     let field_6: ref "core:prelude/traits.wado//StructField<newtype_format.wado/FmtPoint,i32>";
     let field_7: ref "core:prelude/traits.wado//StructField<newtype_format.wado/FmtPoint,i32>";
     let s_9: ref "core:prelude/string.wado//String";
@@ -2200,12 +2200,14 @@ fn "core:prelude/traits.wado/newtype_format.wado/FmtPoint^Inspect::inspect"(self
     let s_45: ref "core:prelude/string.wado//String";
     let s_47: ref "core:prelude/string.wado//String";
     let s_49: ref "core:prelude/string.wado//String";
-    s_9 = global:core:prelude/traits.wado::__const_obj_96;
+    s_9 = global:core:prelude/traits.wado::__const_obj_97;
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "newtype_format.wado/FmtPoint^ReflectStruct::members"();
-    field_6 = __tuple_4.0;
+    if ref.is_null(global:core:prelude/traits.wado::__const_obj_96) {
+        global:core:prelude/traits.wado::__const_obj_96 = "newtype_format.wado/FmtPoint^ReflectStruct::members"();
+    }
+    field_6 = global:core:prelude/traits.wado::__const_obj_96.0;
     if field_6.is_secret {
         has_secret = 1;
     } else {
@@ -2223,7 +2225,7 @@ fn "core:prelude/traits.wado/newtype_format.wado/FmtPoint^Inspect::inspect"(self
             unreachable;
         })), f);
     }
-    field_7 = __tuple_4.1;
+    field_7 = global:core:prelude/traits.wado::__const_obj_96.1;
     if field_7.is_secret {
         has_secret = 1;
     } else {

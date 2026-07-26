@@ -175,6 +175,8 @@ global global:reflect_struct_derive_field_types.wado::__const_obj_5: ref null "r
 global global:reflect_struct_derive_field_types.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 46, 119, 101, 105, 103, 104, 116, 40, 41, 58, 32), used: 12 };
 global global:reflect_struct_derive_field_types.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 112, 46, 119, 101, 105, 103, 104, 116, 40, 41, 32, 61, 61, 32, 55, 10), used: 28 };
 global global:reflect_struct_derive_field_types.wado::__const_obj_11: ref null "reflect_struct_derive_field_types.wado//Point" = struct.new "reflect_struct_derive_field_types.wado//Point" { x: 3, y: 4 };
+global mut global:reflect_struct_derive_field_types.wado::__const_obj_12: ref null "tuple//[core:prelude/traits.wado/StructField<reflect_struct_derive_field_types.wado/Mixed,i32>, core:prelude/traits.wado/StructField<reflect_struct_derive_field_types.wado/Mixed,bool>]" = ref.null none;
+global mut global:reflect_struct_derive_field_types.wado::__const_obj_13: ref null "tuple//[core:prelude/traits.wado/StructField<reflect_struct_derive_field_types.wado/Point,i32>, core:prelude/traits.wado/StructField<reflect_struct_derive_field_types.wado/Point,i32>]" = ref.null none;
 
 fn "reflect_struct_derive_field_types.wado/__test_0_field_value_member_walk_sums_field_weights"() {
     let __v0_1: i32;
@@ -574,19 +576,20 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 
 fn "reflect_struct_derive_field_types.wado/reflect_struct_derive_field_types.wado/Mixed^Weight::weight"(self) {
     let total: i32;
-    let __tuple_2: ref "tuple//[core:prelude/traits.wado/StructField<reflect_struct_derive_field_types.wado/Mixed,i32>, core:prelude/traits.wado/StructField<reflect_struct_derive_field_types.wado/Mixed,bool>]";
     let f_4: ref "core:prelude/traits.wado//StructField<reflect_struct_derive_field_types.wado/Mixed,i32>";
     let f_5: ref "core:prelude/traits.wado//StructField<reflect_struct_derive_field_types.wado/Mixed,bool>";
     let __sroa_self_value: bool;
     total = 0;
-    __tuple_2 = "reflect_struct_derive_field_types.wado/Mixed^ReflectStruct::members"();
-    f_4 = __tuple_2.0;
+    if ref.is_null(global:reflect_struct_derive_field_types.wado::__const_obj_12) {
+        global:reflect_struct_derive_field_types.wado::__const_obj_12 = "reflect_struct_derive_field_types.wado/Mixed^ReflectStruct::members"();
+    }
+    f_4 = global:reflect_struct_derive_field_types.wado::__const_obj_12.0;
     total = 0 + let __match_scrut_0: i32; __match_scrut_0 = f_4.index; (if @likely(__match_scrut_0 == 0) -> i32 {
         self.a;
     } else {
         unreachable;
     });
-    f_5 = __tuple_2.1;
+    f_5 = global:reflect_struct_derive_field_types.wado::__const_obj_12.1;
     return local.tee total(total + __inline_bool_Weight__weight_3: block -> i32 {
         let __match_scrut_1: i32;
         __match_scrut_1 = f_5.index;
@@ -604,12 +607,13 @@ fn "reflect_struct_derive_field_types.wado/reflect_struct_derive_field_types.wad
 
 fn "reflect_struct_derive_field_types.wado/reflect_struct_derive_field_types.wado/Point^Weight::weight"(self) {
     let total: i32;
-    let __tuple_2: ref "tuple//[core:prelude/traits.wado/StructField<reflect_struct_derive_field_types.wado/Point,i32>, core:prelude/traits.wado/StructField<reflect_struct_derive_field_types.wado/Point,i32>]";
     let f_4: ref "core:prelude/traits.wado//StructField<reflect_struct_derive_field_types.wado/Point,i32>";
     let f_5: ref "core:prelude/traits.wado//StructField<reflect_struct_derive_field_types.wado/Point,i32>";
     total = 0;
-    __tuple_2 = "reflect_struct_derive_field_types.wado/Point^ReflectStruct::members"();
-    f_4 = __tuple_2.0;
+    if ref.is_null(global:reflect_struct_derive_field_types.wado::__const_obj_13) {
+        global:reflect_struct_derive_field_types.wado::__const_obj_13 = "reflect_struct_derive_field_types.wado/Point^ReflectStruct::members"();
+    }
+    f_4 = global:reflect_struct_derive_field_types.wado::__const_obj_13.0;
     total = 0 + let __match_scrut_0: i32; __match_scrut_0 = f_4.index; (if __match_scrut_0 == 0 -> i32 {
         self.x;
     } else if @likely(__match_scrut_0 == 1) -> i32 {
@@ -617,7 +621,7 @@ fn "reflect_struct_derive_field_types.wado/reflect_struct_derive_field_types.wad
     } else {
         unreachable;
     });
-    f_5 = __tuple_2.1;
+    f_5 = global:reflect_struct_derive_field_types.wado::__const_obj_13.1;
     return local.tee total(total + let __match_scrut_1: i32; __match_scrut_1 = f_5.index; (if __match_scrut_1 == 0 -> i32 {
         self.x;
     } else if @likely(__match_scrut_1 == 1) -> i32 {

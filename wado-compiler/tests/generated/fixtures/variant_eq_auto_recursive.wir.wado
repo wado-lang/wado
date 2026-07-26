@@ -187,7 +187,8 @@ global global:core:prelude/traits.wado::__const_obj_19: ref null "core:prelude/s
 global global:core:prelude/traits.wado::__const_obj_20: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 };
 global global:core:prelude/traits.wado::__const_obj_21: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 32), used: 3 };
 global global:core:prelude/traits.wado::__const_obj_22: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
-global global:core:prelude/traits.wado::__const_obj_25: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 114, 97, 110, 99, 104, 68, 97, 116, 97), used: 10 };
+global mut global:core:prelude/traits.wado::__const_obj_25: ref null "tuple//[core:prelude/traits.wado/StructField<variant_eq_auto_recursive.wado/BranchData,variant_eq_auto_recursive.wado/Node>, core:prelude/traits.wado/StructField<variant_eq_auto_recursive.wado/BranchData,variant_eq_auto_recursive.wado/Node>]" = ref.null none;
+global global:core:prelude/traits.wado::__const_obj_26: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 114, 97, 110, 99, 104, 68, 97, 116, 97), used: 10 };
 
 fn "variant_eq_auto_recursive.wado/__test_0_recursive_variant_eq"() {
     let a: ref "variant_eq_auto_recursive.wado//Node";
@@ -716,7 +717,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/traits.wado/variant_eq_auto_recursive.wado/BranchData^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<variant_eq_auto_recursive.wado/BranchData,variant_eq_auto_recursive.wado/Node>, core:prelude/traits.wado/StructField<variant_eq_auto_recursive.wado/BranchData,variant_eq_auto_recursive.wado/Node>]";
     let field_6: ref "core:prelude/traits.wado//StructField<variant_eq_auto_recursive.wado/BranchData,variant_eq_auto_recursive.wado/Node>";
     let field_7: ref "core:prelude/traits.wado//StructField<variant_eq_auto_recursive.wado/BranchData,variant_eq_auto_recursive.wado/Node>";
     let s_9: ref "core:prelude/string.wado//String";
@@ -729,12 +729,14 @@ fn "core:prelude/traits.wado/variant_eq_auto_recursive.wado/BranchData^Inspect::
     let s_37: ref "core:prelude/string.wado//String";
     let s_39: ref "core:prelude/string.wado//String";
     let s_41: ref "core:prelude/string.wado//String";
-    s_9 = global:core:prelude/traits.wado::__const_obj_25;
+    s_9 = global:core:prelude/traits.wado::__const_obj_26;
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "variant_eq_auto_recursive.wado/BranchData^ReflectStruct::members"();
-    field_6 = __tuple_4.0;
+    if ref.is_null(global:core:prelude/traits.wado::__const_obj_25) {
+        global:core:prelude/traits.wado::__const_obj_25 = "variant_eq_auto_recursive.wado/BranchData^ReflectStruct::members"();
+    }
+    field_6 = global:core:prelude/traits.wado::__const_obj_25.0;
     if field_6.is_secret {
         has_secret = 1;
     } else {
@@ -752,7 +754,7 @@ fn "core:prelude/traits.wado/variant_eq_auto_recursive.wado/BranchData^Inspect::
             unreachable;
         })) }, f);
     }
-    field_7 = __tuple_4.1;
+    field_7 = global:core:prelude/traits.wado::__const_obj_25.1;
     if field_7.is_secret {
         has_secret = 1;
     } else {

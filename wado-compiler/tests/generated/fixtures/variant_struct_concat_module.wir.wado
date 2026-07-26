@@ -88,6 +88,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:variant_struct_concat_module.wado::__modules_initialized: bool = 0;
+global mut global:variant_struct_concat_module.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "variant_struct_concat_module.wado/format_str"(s, opts) {
     let pad: ref "core:prelude/string.wado//String";
@@ -103,7 +104,6 @@ fn "variant_struct_concat_module.wado/format_str"(s, opts) {
 
 fn "variant_struct_concat_module.wado/run"() with Stdout {
     let opts: ref "variant_struct_concat_module.wado//Opts";
-    let s: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/string.wado//String";
     let start_6: i32;
     let start_15: i32;
@@ -113,9 +113,11 @@ fn "variant_struct_concat_module.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:variant_struct_concat_module.wado::__modules_initialized = 1;
     };
-    opts = struct.new "variant_struct_concat_module.wado//Opts" { align: struct.new "variant_struct_concat_module.wado//Align" { 1 }, width: 0 };
-    s = "variant_struct_concat_module.wado/format_str"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, opts);
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; start_6 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_6, 91); "core:prelude/string.wado/String::push_str"(__local_2, s); start_15 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_15, 93); __local_2);
+    if ref.is_null(global:variant_struct_concat_module.wado::__const_obj_0) {
+        opts = struct.new "variant_struct_concat_module.wado//Opts" { align: struct.new "variant_struct_concat_module.wado//Align" { 1 }, width: 0 };
+        global:variant_struct_concat_module.wado::__const_obj_0 = "variant_struct_concat_module.wado/format_str"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, opts);
+    }
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; start_6 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_6, 91); "core:prelude/string.wado/String::push_str"(__local_2, global:variant_struct_concat_module.wado::__const_obj_0); start_15 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_15, 93); __local_2);
 }
 
 fn "variant_struct_concat_module.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -179,12 +181,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b3: block {
-        l4: loop {
-            break_if b3 i >= len;
+    b4: block {
+        l5: loop {
+            break_if b4 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l4;
+            continue l5;
         };
     };
 }
@@ -214,20 +216,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b5: block {
-        l6: loop {
-            break_if b5 offset >= count;
+    b6: block {
+        l7: loop {
+            break_if b6 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/wait_for_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b5 (if (result >> 4) == 0 -> i32 {
+            break_if b6 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l6;
+            continue l7;
         };
     };
 }

@@ -244,7 +244,8 @@ global global:core:prelude/traits.wado::__const_obj_60: ref null "core:prelude/s
 global global:core:prelude/traits.wado::__const_obj_61: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 };
 global global:core:prelude/traits.wado::__const_obj_62: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 32), used: 3 };
 global global:core:prelude/traits.wado::__const_obj_63: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
-global global:core:prelude/traits.wado::__const_obj_66: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(86, 101, 99, 50), used: 4 };
+global mut global:core:prelude/traits.wado::__const_obj_66: ref null "tuple//[core:prelude/traits.wado/StructField<newtype_operator_trait.wado/Vec2,f64>, core:prelude/traits.wado/StructField<newtype_operator_trait.wado/Vec2,f64>]" = ref.null none;
+global global:core:prelude/traits.wado::__const_obj_67: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(86, 101, 99, 50), used: 4 };
 
 fn "newtype_operator_trait.wado/run"() with Stdout {
     let p1: ref "newtype_operator_trait.wado//Vec2";
@@ -1890,7 +1891,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/traits.wado/newtype_operator_trait.wado/Vec2^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<newtype_operator_trait.wado/Vec2,f64>, core:prelude/traits.wado/StructField<newtype_operator_trait.wado/Vec2,f64>]";
     let field_6: ref "core:prelude/traits.wado//StructField<newtype_operator_trait.wado/Vec2,f64>";
     let field_7: ref "core:prelude/traits.wado//StructField<newtype_operator_trait.wado/Vec2,f64>";
     let s_9: ref "core:prelude/string.wado//String";
@@ -1903,12 +1903,14 @@ fn "core:prelude/traits.wado/newtype_operator_trait.wado/Vec2^Inspect::inspect"(
     let s_41: ref "core:prelude/string.wado//String";
     let s_43: ref "core:prelude/string.wado//String";
     let s_45: ref "core:prelude/string.wado//String";
-    s_9 = global:core:prelude/traits.wado::__const_obj_66;
+    s_9 = global:core:prelude/traits.wado::__const_obj_67;
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "newtype_operator_trait.wado/Vec2^ReflectStruct::members"();
-    field_6 = __tuple_4.0;
+    if ref.is_null(global:core:prelude/traits.wado::__const_obj_66) {
+        global:core:prelude/traits.wado::__const_obj_66 = "newtype_operator_trait.wado/Vec2^ReflectStruct::members"();
+    }
+    field_6 = global:core:prelude/traits.wado::__const_obj_66.0;
     if field_6.is_secret {
         has_secret = 1;
     } else {
@@ -1926,7 +1928,7 @@ fn "core:prelude/traits.wado/newtype_operator_trait.wado/Vec2^Inspect::inspect"(
             unreachable;
         }), f);
     }
-    field_7 = __tuple_4.1;
+    field_7 = global:core:prelude/traits.wado::__const_obj_66.1;
     if field_7.is_secret {
         has_secret = 1;
     } else {

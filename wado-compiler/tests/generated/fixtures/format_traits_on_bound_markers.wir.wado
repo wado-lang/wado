@@ -201,7 +201,8 @@ global global:core:prelude/traits.wado::__const_obj_36: ref null "core:prelude/s
 global global:core:prelude/traits.wado::__const_obj_37: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 32, 46, 46, 32, 125), used: 7 };
 global global:core:prelude/traits.wado::__const_obj_39: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32, 46, 46), used: 4 };
 global global:core:prelude/traits.wado::__const_obj_42: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
-global global:core:prelude/traits.wado::__const_obj_45: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80, 111, 105, 110, 116), used: 5 };
+global mut global:core:prelude/traits.wado::__const_obj_45: ref null "tuple//[core:prelude/traits.wado/StructField<format_traits_on_bound_markers.wado/Point,i32>, core:prelude/traits.wado/StructField<format_traits_on_bound_markers.wado/Point,i32>]" = ref.null none;
+global global:core:prelude/traits.wado::__const_obj_46: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80, 111, 105, 110, 116), used: 5 };
 
 fn "format_traits_on_bound_markers.wado/__test_0_inspect_markers_validate_and_debug_formatting_works"() {
     let __cond: bool;
@@ -934,7 +935,6 @@ fn "core:prelude/traits.wado/format_traits_on_bound_markers.wado/Custom^Inspect:
 fn "core:prelude/traits.wado/format_traits_on_bound_markers.wado/Point^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<format_traits_on_bound_markers.wado/Point,i32>, core:prelude/traits.wado/StructField<format_traits_on_bound_markers.wado/Point,i32>]";
     let field_6: ref "core:prelude/traits.wado//StructField<format_traits_on_bound_markers.wado/Point,i32>";
     let field_7: ref "core:prelude/traits.wado//StructField<format_traits_on_bound_markers.wado/Point,i32>";
     let s_9: ref "core:prelude/string.wado//String";
@@ -949,12 +949,14 @@ fn "core:prelude/traits.wado/format_traits_on_bound_markers.wado/Point^Inspect::
     let s_45: ref "core:prelude/string.wado//String";
     let s_47: ref "core:prelude/string.wado//String";
     let s_49: ref "core:prelude/string.wado//String";
-    s_9 = global:core:prelude/traits.wado::__const_obj_45;
+    s_9 = global:core:prelude/traits.wado::__const_obj_46;
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "format_traits_on_bound_markers.wado/Point^ReflectStruct::members"();
-    field_6 = __tuple_4.0;
+    if ref.is_null(global:core:prelude/traits.wado::__const_obj_45) {
+        global:core:prelude/traits.wado::__const_obj_45 = "format_traits_on_bound_markers.wado/Point^ReflectStruct::members"();
+    }
+    field_6 = global:core:prelude/traits.wado::__const_obj_45.0;
     if field_6.is_secret {
         has_secret = 1;
     } else {
@@ -972,7 +974,7 @@ fn "core:prelude/traits.wado/format_traits_on_bound_markers.wado/Point^Inspect::
             unreachable;
         })), f);
     }
-    field_7 = __tuple_4.1;
+    field_7 = global:core:prelude/traits.wado::__const_obj_45.1;
     if field_7.is_secret {
         has_secret = 1;
     } else {
