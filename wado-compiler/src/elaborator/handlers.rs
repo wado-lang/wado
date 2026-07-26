@@ -28,7 +28,6 @@
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::Receiver;
 use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -388,7 +387,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .impl_index
-            .get(&Receiver::Type(type_name.to_string()))
+            .get(&self.impl_target(type_name))
         {
             for key in entries {
                 if let Some(trait_type) = self

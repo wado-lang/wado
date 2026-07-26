@@ -1,5 +1,6 @@
 //! Method lookup, operator resolution, and indexing trait dispatch.
 
+use super::trait_env::ImplTargetKey;
 use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -7,7 +8,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::{self, AstId, BinaryOp, Expr, Item, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, Receiver, RefKind};
+use crate::name::{LocalMethodName, MethodName, RefKind};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
 };
@@ -188,7 +189,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Collect trait impl block references for a given type name.
     /// Returns lightweight `ImplBlockRef` values instead of cloning impl block data.
-    fn collect_trait_impl_refs(&self, type_key: &Receiver) -> Vec<ImplBlockRef> {
+    fn collect_trait_impl_refs(&self, type_key: &ImplTargetKey) -> Vec<ImplBlockRef> {
         let mut refs = Vec::new();
         if let Some(entries) = self.tysys.trait_env.impl_index.get(type_key) {
             for entry in entries {
@@ -207,7 +208,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Collect trait impl block references for multiple type names.
-    fn collect_trait_impl_refs_multi(&self, type_keys: &[Receiver]) -> Vec<ImplBlockRef> {
+    fn collect_trait_impl_refs_multi(&self, type_keys: &[ImplTargetKey]) -> Vec<ImplBlockRef> {
         let mut refs = Vec::new();
         for key in type_keys {
             if let Some(entries) = self.tysys.trait_env.impl_index.get(key) {
@@ -248,7 +249,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) -> Option<R>,
     ) -> Option<R> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
-        let impl_refs = self.collect_trait_impl_refs(&Receiver::Type(struct_name.to_string()));
+        let impl_refs = self.collect_trait_impl_refs(&self.impl_target(struct_name));
         for impl_ref in &impl_refs {
             let header = impl_header(&trait_env, impl_ref);
             let trait_name = self.get_type_name(header.trait_type.as_ref().unwrap());
@@ -618,7 +619,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let entries: Vec<(ModuleSource, AstId)> = self
                 .tysys
                 .trait_env
-                .inherent_impl_keys(&Receiver::Type(struct_name.clone()));
+                .inherent_impl_keys(&self.impl_target(&struct_name));
             for (impl_module, item_id) in &entries {
                 let Some(Item::Impl(impl_block)) =
                     self.loaded_modules[impl_module].item_by_id(*item_id)
@@ -823,7 +824,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let entries: Vec<(ModuleSource, AstId)> = self
                 .tysys
                 .trait_env
-                .inherent_impl_keys(&Receiver::Type(struct_name.clone()));
+                .inherent_impl_keys(&self.impl_target(&struct_name));
             for (search_module_source, item_id) in &entries {
                 let Some(Item::Impl(impl_block)) =
                     self.loaded_modules[search_module_source].item_by_id(*item_id)
@@ -1631,7 +1632,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .all_impl_index
-            .get(&Receiver::Type(struct_name.to_string()))?;
+            .get(&self.impl_target(struct_name))?;
         for key in candidates {
             if let Some(m) = only_module
                 && &key.0 != m
@@ -1671,7 +1672,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .all_impl_index
-            .get(&Receiver::Type(struct_name.to_string()))
+            .get(&self.impl_target(struct_name))
         else {
             return false;
         };
@@ -1900,7 +1901,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// resolving associated types like `type Item = T`.
     pub(super) fn find_trait_method_for_type(
         &mut self,
-        type_key: &Receiver,
+        type_key: &ImplTargetKey,
         method_name: &str,
         struct_module: &ModuleSource,
         receiver_type_args: Option<&[TypeId]>,
@@ -1925,17 +1926,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The typed receiver chain: `type_key` plus the newtype/flags base heads
-    /// reachable from it. A `Receiver::Ref` head has no newtype base, so it is
-    /// returned as a singleton; a `Receiver::Type` head walks its newtype chain
-    /// via [`Self::newtype_chain_names`] and wraps each base as `Receiver::Type`.
-    fn newtype_chain(&self, type_key: &Receiver) -> Vec<Receiver> {
-        match type_key {
-            Receiver::Type(name) => self
+    /// reachable from it. A reference head has no newtype base, so it is
+    /// returned as a singleton; a named head walks its newtype chain via
+    /// [`Self::newtype_chain_names`]. Each base is re-canonicalised, since a
+    /// newtype's base may be declared in another module.
+    fn newtype_chain(&self, type_key: &ImplTargetKey) -> Vec<ImplTargetKey> {
+        match type_key.type_name() {
+            Some(name) => self
                 .newtype_chain_names(name)
                 .into_iter()
-                .map(Receiver::Type)
+                .map(|base| self.impl_target(&base))
                 .collect(),
-            other => vec![other.clone()],
+            None => vec![type_key.clone()],
         }
     }
 
@@ -1974,7 +1976,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (`impl<T: Bound> Trait for T`) whose bound the receiver satisfies.
     fn trait_method_candidates(
         &mut self,
-        names_to_check: &[Receiver],
+        names_to_check: &[ImplTargetKey],
         receiver_type_id: Option<TypeId>,
     ) -> Vec<ImplBlockRef> {
         // Collect lightweight impl block references (avoiding deep clones).
@@ -2011,11 +2013,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return true;
                 }
-                names_to_check.iter().any(|name| {
+                names_to_check.iter().any(|target| {
                     self.tysys.find_trait_impl_for_type(
                         &self.annotate_ctx,
                         &type_lookup,
-                        name,
+                        &target.receiver(),
                         bound_trait_name,
                     )
                 })
@@ -2032,7 +2034,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn candidate_matches_receiver(
         &mut self,
         impl_ref: &ImplBlockRef,
-        names_to_check: &[Receiver],
+        names_to_check: &[ImplTargetKey],
         receiver_type_id: Option<TypeId>,
     ) -> Option<(String, bool)> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
@@ -2042,7 +2044,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Accept if the type matches by name, or if it's a blanket impl type parameter.
         let is_blanket_type_param =
             matches!(&header.ty, Type::Named(named) if !self.tysys.is_known_type_name(&named.name));
-        if !names_to_check.contains(&impl_key) && !is_blanket_type_param {
+        // Head comparison: the chain's targets are canonical, while this key
+        // comes straight off the impl's own AST.
+        if !names_to_check
+            .iter()
+            .any(|target| target.receiver() == impl_key)
+            && !is_blanket_type_param
+        {
             return None;
         }
         if !self.ref_impl_targets_receiver(&header.ty, receiver_type_id) {
@@ -2207,7 +2215,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// signatures are walked here.
     fn find_trait_method_for_type_inner(
         &mut self,
-        type_key: &Receiver,
+        type_key: &ImplTargetKey,
         method_name: &str,
         _struct_module: &ModuleSource,
         receiver_type_args: Option<&[TypeId]>,
@@ -2246,7 +2254,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the same view of "does this type have `.eq` / `.cmp`?" that
         // operator dispatch gets via `find_eq_trait_impl` / `find_ord_trait_impl`.
         if let Some(recv_id) = receiver_type_id {
-            return self.try_auto_derived_method_match(&type_key.head_key(), method_name, recv_id);
+            return self.try_auto_derived_method_match(
+                &type_key.receiver().head_key(),
+                method_name,
+                recv_id,
+            );
         }
         None
     }
@@ -3429,7 +3441,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Vec::new()
             };
 
-        let impl_refs = self.collect_trait_impl_refs(&Receiver::Type(struct_name));
+        let impl_refs = self.collect_trait_impl_refs(&self.impl_target(&struct_name));
 
         let trait_env = Arc::clone(&self.tysys.trait_env);
         for impl_ref in &impl_refs {
@@ -3552,7 +3564,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if method_info.is_none()
             && let Some(trait_match) = self.find_trait_method_for_type(
-                &Receiver::Type(output_struct_name.clone()),
+                &self.impl_target(&output_struct_name),
                 &method_call.method,
                 &output_module_source,
                 output_type_args.as_deref(),
