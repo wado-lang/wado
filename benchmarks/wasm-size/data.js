@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785080283790,
+  "lastUpdate": 1785108355991,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44145,6 +44145,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f1763fa7e1747ac309aa3dc41b653155d860a9a3"
         },
         "date": 1785080282979,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8225,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273073,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "61d666ff5c0d811be4cc2e09ac4afd9574a560a1",
+          "message": "Merge pull request #1696 from wado-lang/claude/elaborator-god-object-datakc\n\nrefactor(elaborator): resolve declaration signatures once and read them everywhere",
+          "timestamp": "2026-07-27T08:15:32+09:00",
+          "tree_id": "9910f302579c41619767037799d7ab7bf6e4cc4c",
+          "url": "https://github.com/wado-lang/wado/commit/61d666ff5c0d811be4cc2e09ac4afd9574a560a1"
+        },
+        "date": 1785108355459,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
