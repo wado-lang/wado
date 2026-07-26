@@ -112,18 +112,22 @@ struct TraitPair {
     target_trait: String,
     /// e.g. `"fmt"` or `"fmt_alt"`.
     target_method: String,
-    /// Trait the fallback delegates to (`"Inspect"` or `"InspectAlt"`).
+    /// Trait the fallback delegates to (`"Display"`).
     delegate_trait: String,
-    /// Method on the delegate trait (`"inspect"` or `"inspect_alt"`).
+    /// Method on the delegate trait (`"fmt"`).
     delegate_method: String,
 }
 
 impl TraitPair {
     fn display_alt(names: &TraitsStdlibNames) -> Self {
-        // `DisplayAlt` delegates to `Display` (which in turn delegates to
-        // `Inspect`), not to `InspectAlt`: the alternate *display* of a value
-        // defaults to its plain display, mirroring Rust's `{:#}` vs `{:#?}`.
-        // Pretty-printing stays on the inspect side via `InspectAlt`.
+        // `DisplayAlt` delegates to `Display`, not to `InspectAlt`: the
+        // alternate *display* of a value defaults to its plain display,
+        // mirroring Rust's `{:#}` vs `{:#?}`. Pretty-printing stays on the
+        // inspect side via `InspectAlt`.
+        //
+        // `Display` itself has no fallback — a type without an `impl Display`
+        // is a `${x}` error directing the author to `${x:?}`, so nothing here
+        // delegates to `Inspect`.
         Self {
             target_trait: names.display_alt.clone(),
             target_method: names.display_alt_method.clone(),
@@ -2694,7 +2698,7 @@ impl SynthesisCtx<'_, '_, '_> {
     ///
     /// - The AST-layer check is module-agnostic. A user-written
     ///   `impl Display for String` in `core:prelude/format` must suppress
-    ///   `synthesize_traits`'s Display-delegates-to-Inspect fallback even
+    ///   `synthesize_traits`'s DisplayAlt-delegates-to-Display fallback even
     ///   when this pass is currently synthesising `core:prelude/string`
     ///   (String's defining module). Restricting the check to
     ///   `self.module` would silently shadow the user's impl with the
@@ -3348,39 +3352,12 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         ctx.record_impl(name, &inspect_name);
     }
 
-    // Non-generic structs derive Inspect via the `impl<T: ReflectStruct<FieldTypes =
-    // [..F]>, ..F: Inspect> Inspect for T` blanket in `core:prelude/traits`
-    // (WEP 2026-06-13 item 5); the monomorphizer routes each `Struct^Inspect`
-    // call to it, so synthesis emits nothing for non-generic structs here.
-
-    let generic_struct_infos = collect_generic_struct_visible_fields(module);
-    for (name, type_params, fields, has_secret, sspan) in &generic_struct_infos {
-        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
-            continue;
-        }
-        let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let struct_type =
-            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
-        let ref_type = tt.make_ref(struct_type);
-        generated.push(Rc::new(RefCell::new(generate_struct_inspect_fn(
-            name,
-            type_params,
-            fields,
-            *has_secret,
-            ref_type,
-            fmt_type,
-            string_type,
-            ref_string_type,
-            ctx.trait_env,
-            &module_source,
-            &mut tt,
-            *sspan,
-            &inspect_name,
-            &inspect_method,
-            &formatter_name,
-        ))));
-        ctx.record_impl(name, &inspect_name);
-    }
+    // Structs — generic and plain alike — derive Inspect via the
+    // `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for T`
+    // blanket in `core:prelude/traits`; the monomorphizer routes each
+    // `Struct^Inspect` call to it, so synthesis emits nothing for a struct here.
+    // The member handles are sealed against reflection and carry their own
+    // impls in the prelude.
 
     let variant_infos = collect_variant_cases(module);
     for (name, cases, vspan) in &variant_infos {
@@ -3828,131 +3805,6 @@ fn generate_enum_display_fn(
         inspect_locals(ref_enum_type, fmt_type),
     )
 }
-
-/// Generate `StructName^Inspect::inspect(&self, &mut Formatter)`.
-///
-/// Body:
-/// ```text
-/// f.write_str("StructName { ");
-/// f.write_str("field1: "); self.field1.inspect(f);
-/// f.write_str(", field2: "); self.field2.inspect(f);
-/// f.write_str(" }");
-/// ```
-///
-/// Pass an empty `impl_type_params` slice for non-generic structs.
-fn generate_struct_inspect_fn(
-    struct_name: &str,
-    impl_type_params: &[TirTypeParam],
-    fields: &[(String, TypeId, u32)],
-    has_secret: bool,
-    ref_struct_type: TypeId,
-    fmt_type: TypeId,
-    string_type: TypeId,
-    ref_string_type: TypeId,
-    trait_env: &TraitEnv,
-    module_source: &ModuleSource,
-    tt: &mut TypeTable,
-    span: Span,
-    inspect_trait: &str,
-    inspect_method: &str,
-    formatter_name: &str,
-) -> TirFunction {
-    let method_info = trait_method_info(struct_name, inspect_trait, inspect_method);
-    let qualified_name = method_info.to_mangled_name();
-
-    let stmts = build_struct_inspect_body(
-        struct_name,
-        fields,
-        has_secret,
-        ref_struct_type,
-        fmt_type,
-        string_type,
-        ref_string_type,
-        trait_env,
-        module_source,
-        tt,
-        span,
-        inspect_trait,
-        inspect_method,
-        formatter_name,
-    );
-    let body = TirBlock::new(stmts, span);
-
-    make_trait_method(
-        qualified_name,
-        method_info,
-        impl_type_params.to_vec(),
-        inspect_params(ref_struct_type, fmt_type, span),
-        TypeTable::UNIT,
-        body,
-        inspect_locals(ref_struct_type, fmt_type),
-        span,
-    )
-}
-
-/// Build the body statements for a struct `Inspect::inspect`: writes the type name,
-/// each visible field via `inspect`, plus a trailing `, ..` when secret fields are present.
-fn build_struct_inspect_body(
-    struct_name: &str,
-    fields: &[(String, TypeId, u32)],
-    has_secret: bool,
-    ref_struct_type: TypeId,
-    fmt_type: TypeId,
-    string_type: TypeId,
-    ref_string_type: TypeId,
-    trait_env: &TraitEnv,
-    module_source: &ModuleSource,
-    tt: &mut TypeTable,
-    span: Span,
-    inspect_trait: &str,
-    inspect_method: &str,
-    formatter_name: &str,
-) -> Vec<TirStmt> {
-    let fmt = || local_expr(1, "f", fmt_type, span);
-    let write =
-        |s: String| write_str_stmt(s, fmt(), string_type, ref_string_type, span, formatter_name);
-    let mut stmts = Vec::new();
-
-    if fields.is_empty() {
-        let suffix = if has_secret { " { .. }" } else { " {}" };
-        stmts.push(write(format!("{struct_name}{suffix}")));
-        return stmts;
-    }
-
-    stmts.push(write(format!("{struct_name} {{ ")));
-    for (i, (field_name, field_type, field_index)) in fields.iter().enumerate() {
-        if i > 0 {
-            stmts.push(write(", ".to_string()));
-        }
-        stmts.push(write(format!("{field_name}: ")));
-        let field_access = field_access_local(
-            0,
-            "self",
-            ref_struct_type,
-            *field_index,
-            field_name,
-            *field_type,
-            span,
-        );
-        stmts.push(inspect_call(
-            field_access,
-            *field_type,
-            fmt(),
-            trait_env,
-            module_source,
-            tt,
-            span,
-            inspect_trait,
-            inspect_method,
-        ));
-    }
-    if has_secret {
-        stmts.push(write(", ..".to_string()));
-    }
-    stmts.push(write(" }".to_string()));
-    stmts
-}
-
 /// Generate `VariantName^Inspect::inspect(&self, &mut Formatter)`.
 ///
 /// Body: TIR `Match` over `*self` with one arm per case. Each arm writes
