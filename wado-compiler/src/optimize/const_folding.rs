@@ -622,9 +622,8 @@ impl ConstFoldVisitor<'_> {
             ExprShape::Match(scrutinee, arms) => {
                 let mut changed = self.visit_operand(engine, scrutinee);
                 for arm in &arms {
-                    // Under a constant scrutinee the arm's pattern bindings are
-                    // known, so its guard and body reduce under the values they
-                    // would see at runtime.
+                    // Under a constant scrutinee the arm's guard and body reduce
+                    // under the bindings its pattern makes.
                     let binds = self
                         .interpreter
                         .arm_bindings(engine.body, scrutinee, arm.pattern);

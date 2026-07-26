@@ -4365,8 +4365,7 @@ fn an_arm_body_reduces_under_its_pattern_bindings() {
 #[test]
 fn a_binding_the_arm_body_reads_blocks_the_splice() {
     // Splicing the arm would strip the pattern binding, leaving the body's
-    // `y` read dangling. The scratch backend cannot promote that read into the
-    // operand slot, so the read survives and blocks the splice.
+    // `y` read dangling. A read the backend cannot promote blocks the splice.
     let mut table = TypeTable::new();
     let point = point_type(&mut table);
     let expr = match_expr(

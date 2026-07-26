@@ -789,14 +789,10 @@ impl<'a> Interpreter<'a> {
     }
 
     /// The locals a match arm's pattern binds, with the values they take under
-    /// a constant `scrutinee`. Empty unless the pattern definitely matches —
-    /// an undecided pattern binds nothing knowable.
-    ///
-    /// The walker installs these around the arm's guard and body
-    /// ([`Self::enter_arm`]) so both reduce under the values the arm would see
-    /// at runtime. This is what folds a struct pattern with literal fields: the
-    /// elaborator moves those literals into the guard
-    /// (`{ x: 10 }` → `{ x: __lit_1 } && __lit_1 == 10`).
+    /// a constant `scrutinee`. Empty unless the pattern definitely matches — an
+    /// undecided pattern binds nothing knowable. The walker installs these
+    /// ([`Self::enter_arm`]) around the arm's guard and body so both reduce
+    /// under the values the arm would see at runtime.
     #[must_use]
     pub fn arm_bindings(&self, body: &Body, scrutinee: Operand, pattern: PatId) -> PatBindings {
         let Lattice::Const(value) = self.operand_to_lattice_a(body, scrutinee) else {
@@ -1094,8 +1090,8 @@ impl<'a> Interpreter<'a> {
             let mut candidates = Vec::<Lattice>::new();
             let mut yes_found = false;
             for arm in arms {
-                // A guard the read-only path cannot evaluate — it has no place
-                // to install the pattern's bindings — leaves the arm undecided.
+                // Guards are decided by the rewrite path, which can scope the
+                // pattern's bindings; here they leave the arm undecided.
                 let pm = if arm.guard.is_some() {
                     PatternMatch::Unknown
                 } else {
@@ -1742,10 +1738,9 @@ impl<'a> Interpreter<'a> {
                     PatternMatch::Unknown => return false,
                     PatternMatch::Yes => {}
                 }
-                // The walker reduced each guard under this arm's bindings
-                // ([`Interpreter::arm_bindings`]), so a decided one is already a
-                // constant here. An undecided guard leaves every later arm
-                // unreachable for the engine: this one may still be taken.
+                // The walker reduced the guard under this arm's bindings, so a
+                // decided one is a constant by now. An undecided one may still
+                // be taken, leaving every later arm unreachable.
                 match guard {
                     None => {}
                     Some(g) => match self

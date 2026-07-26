@@ -282,27 +282,20 @@ scalar / payload-free matching today without committing to a heap-aware
       tuple-with-rest pattern is `Unknown` — the trailing sub-patterns have no
       fixed element index. A non-aggregate value never vacuously matches a
       field-less aggregate pattern.
-- [x] `Binding` sub-patterns match whatever the field holds, recording the
-      projected value. This is what a literal-bearing struct pattern actually
-      reaches niri as: the elaborator rewrites `{ x: 10, y: 32 } => …` into
-      `{ x: __lit_1, y: __lit_2 } && ((__lit_1 == 10) && (__lit_2 == 32)) => …`,
-      moving the literals into the arm guard.
-- [x] Arm-scoped bindings, installed by the walker rather than read back by the
-      rewrite: `Interpreter::arm_bindings` yields what the arm's pattern binds
-      under the constant scrutinee, and `enter_arm` / `leave_arm` bracket the
-      walk of that arm's guard and body. Both then reduce bottom-up under the
-      values the arm would see at runtime — the same discipline the walker
-      already follows for `let` bindings, and the reason the rewrite can read a
-      decided guard as a plain folded constant. A true guard decides the arm, a
-      false one skips it, an undecided one stops the rewrite: a later arm is
-      only reachable once every earlier arm is ruled out.
-- [x] Splicing an arm drops its pattern, so an arm whose body still reads a
-      binding is left alone. Reducing the body under the bindings usually
-      folds those reads away first, `{ x, y } => x + y` included; the check is
-      the backstop for a read that does not fold.
-- [ ] Guards in the lattice path, which needs it to be `&mut self` to scope the
-      bindings. That would also let it run CTFE directly and retire the
-      call-receiver special case in `field_projection_value_a`.
+- [x] `Binding` sub-patterns match whatever the field holds. A pattern with
+      literal fields reaches niri as bindings plus a guard — the elaborator
+      moves the literals there — so bindings and guards are one feature, not
+      two.
+- [x] An arm's guard and body are evaluated with that arm's bindings in scope.
+      A true guard decides the arm, a false one skips it, an undecided one
+      stops the rewrite: a later arm is only reachable once every earlier arm
+      is ruled out.
+- [x] An arm whose body still reads a binding is left alone — splicing it
+      would drop the pattern that binds. Bindings being in scope while the body
+      reduces usually folds such a read away first, `{ x, y } => x + y`
+      included.
+- [ ] Decide guards in the read-only lattice path too; today only the rewrite
+      path can scope bindings.
 - [x] Aggregate constants bind to a local only when every mention of that
       local merely reads the value — a field read's receiver or a `match` /
       `switch` scrutinee — and no store target, borrow, method receiver, or
