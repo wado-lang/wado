@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785031117781,
+  "lastUpdate": 1785053431407,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44033,6 +44033,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 272281,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4c398ce480cbe5e4eddc1d8aa917f44a7d60b563",
+          "message": "Merge pull request #1692 from wado-lang/claude/package-gale-todo-tests-qziera\n\nfeat(gale): execute language=Java lexer bodies, place actions at their cursor",
+          "timestamp": "2026-07-26T17:00:09+09:00",
+          "tree_id": "9e8156a970e0b12fda6ed4b89465d1342dc807b8",
+          "url": "https://github.com/wado-lang/wado/commit/4c398ce480cbe5e4eddc1d8aa917f44a7d60b563"
+        },
+        "date": 1785053430792,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8225,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272323,
             "unit": "bytes"
           }
         ]
