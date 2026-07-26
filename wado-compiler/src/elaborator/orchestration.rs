@@ -921,6 +921,80 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
+        // An `impl` method whose parameter count differs from the trait's is
+        // never rejected downstream: the call is built to the trait's arity and
+        // only fails Wasm validation. Compare the two here, where every trait
+        // declaration and every impl is in hand.
+        //
+        // The impl names its trait in its own module's scope, and resolving that
+        // through imports needs machinery this pre-pass does not have. Take the
+        // declaration the impl's own module provides, else the only one bearing
+        // the name; a name several modules declare is left alone rather than
+        // matched against the wrong trait.
+        let mut trait_decls: IndexMap<(&ModuleSource, &str), &ast::TraitDecl> = IndexMap::default();
+        let mut decls_named: IndexMap<&str, usize> = IndexMap::default();
+        for (module_source, module) in modules {
+            for item in &module.items {
+                if let Item::Trait(t) = item {
+                    trait_decls.insert((module_source, t.name.as_str()), t);
+                    *decls_named.entry(t.name.as_str()).or_insert(0) += 1;
+                }
+            }
+        }
+        for (module_source, module) in modules {
+            if !super::trait_env::is_user_local(module_source) {
+                continue;
+            }
+            for item in &module.items {
+                let Item::Impl(impl_block) = item else {
+                    continue;
+                };
+                let Some(trait_type) = &impl_block.trait_type else {
+                    continue;
+                };
+                let trait_name = super::trait_env::get_type_name_static(trait_type);
+                let decl = trait_decls
+                    .get(&(module_source, trait_name.as_str()))
+                    .or_else(|| {
+                        (decls_named.get(trait_name.as_str()) == Some(&1))
+                            .then(|| {
+                                trait_decls
+                                    .iter()
+                                    .find(|((_, n), _)| *n == trait_name.as_str())
+                                    .map(|(_, d)| d)
+                            })
+                            .flatten()
+                    });
+                let Some(decl) = decl else {
+                    continue;
+                };
+                for method in &impl_block.methods {
+                    let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
+                        continue;
+                    };
+                    let arity = |f: &ast::Function| {
+                        f.params
+                            .iter()
+                            .filter(|p| p.self_kind == ast::SelfKind::None)
+                            .count()
+                    };
+                    let (expected, found) = (arity(declared), arity(method));
+                    if expected != found {
+                        let _ = logger.error_in(
+                            module_source,
+                            TypeError::TraitMethodArityMismatch {
+                                trait_name: trait_name.clone(),
+                                method_name: method.name.clone(),
+                                expected,
+                                found,
+                                span: method.name_span,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
         // Pre-pass: register generic associated type defs from ALL modules before any module
         // is resolved. This ensures that when resolving module X, it can look up associated
         // types from module Y's impl blocks even if Y hasn't been processed yet in the main
