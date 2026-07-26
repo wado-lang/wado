@@ -1251,6 +1251,9 @@ pub fn normalize_tree(s: &String) -> String {
 /// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
 /// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
 /// escaped; backslashes and quotes pass through unchanged.
+///
+/// Whatever the lexer's actions printed precedes the dump, as it does on
+/// ANTLR4's stdout.
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
     let chars = tokens.chars;
     // Char index where each line begins; built once so each token's `line:col`
@@ -1261,8 +1264,6 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             line_starts.push(i + 1);
         }
     }
-    // Lexer action output precedes the dump, as it does on ANTLR4's stdout:
-    // the prints happen while tokenizing, the dump only after.
     let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
     out.push_str(&tokens.output);
     let mut index = 0;
@@ -3169,7 +3170,40 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         } else if _atn_alt == 2 {
             p.b.start_node_at(_cp, RK_EXPR, _start);
             let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
-            if _kind_set_0(p.peek_kind()) {
+            let mut opt_scan_pos: i32 = -1;
+            opt_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                sg_2_done: {
+                    sg_2: {
+                        SCAN_STACK.push(47);
+                        pos = scan_expr(tokens, pos, 0);
+                        SCAN_STACK.pop();
+                        if pos < 0 { break sg_2; }
+                        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
+                            let sp = pos;
+                            sg_3_done: {
+                                sg_3: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_3; }
+                                    pos += 1;
+                                    SCAN_STACK.push(56);
+                                    pos = scan_expr(tokens, pos, 0);
+                                    SCAN_STACK.pop();
+                                    if pos < 0 { break sg_3; }
+                                    break sg_3_done;
+                                }
+                                pos = -1;
+                            }
+                            if pos < 0 { pos = sp; break; }
+                            if pos == sp { break; }
+                        }
+                        break sg_2_done;
+                    }
+                    break opt_scan;
+                }
+                opt_scan_pos = pos;
+            }
+            if opt_scan_pos >= 0 {
                 p.atn_ret_pending = 47;
                 let expr = _parse_expr(p, 0);
                 while !p.recovering && (p.peek_kind() == TK_LIT_COMMA) {
