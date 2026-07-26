@@ -767,6 +767,12 @@ impl TraitEnv {
                             module_source.clone(),
                         );
                     }
+                    Item::BuiltinTypeDecl(d) => {
+                        type_decl_index.insert(
+                            (module_source.clone(), d.name.clone()),
+                            module_source.clone(),
+                        );
+                    }
                     Item::TupleTypeDecl(_) => {
                         type_decl_index.insert(
                             (
