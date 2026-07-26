@@ -1,0 +1,59 @@
+// A `Result`-returning function whose in-loop `return Err(...)` wraps a call.
+//
+// NIR's field_scalarize (HFS) hoists the loop-carried `self.pos` into a local,
+// so every in-loop `return` becomes
+// `__hfs_call = struct.new Err {..}; self.pos = __hfs_pos; return __hfs_call`.
+// Phase 0a of variant-return SROA can't relocate that value past the write-back
+// (it contains a call, and `ref.as_non_null(call)` reads as trap-capable), so
+// the single cold return used to keep `scan` boxed on every path — including
+// the hot `Ok`. Phase 0b splits the `StructNew` into per-field temps instead,
+// restoring the `Return(StructNew)` shape SROA accepts.
+
+struct Fail {
+    at: i32,
+}
+
+#[inline("never")]
+fn fail_at(pos: i32) -> Fail {
+    return Fail { at: pos };
+}
+
+struct Cursor {
+    data: String,
+    pos: i32,
+}
+
+impl Cursor {
+    #[inline("never")]
+    fn scan(&mut self) -> Result<i32, Fail> {
+        loop {
+            if self.pos >= self.data.len() {
+                return Result::Err(fail_at(self.pos));
+            }
+            let b = self.data.get_byte_unchecked(self.pos) as i32;
+            self.pos += 1;
+            if b == ';' as i32 {
+                return Result::Ok(self.pos);
+            }
+        }
+    }
+}
+
+export fn run() {
+    let mut ok = Cursor { data: "ab;cd", pos: 0 };
+    assert ok.scan() matches { Ok(n) && n == 3 };
+
+    let mut bad = Cursor { data: "abcd", pos: 0 };
+    assert bad.scan() matches { Err(f) && f.at == 4 };
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "Cursor::scan\" = fn(ref \"opt_sroa_variant_return_hfs_call.wado//Cursor\") -> [i32, i32, ref null \"opt_sroa_variant_return_hfs_call.wado//Fail\"]"
+    ],
+    "wir_not_expect:O2": [
+        "return struct.new \"core:prelude/types.wado//Result<i32,opt_sroa_variant_return_hfs_call.wado/Fail>"
+    ]
+}
