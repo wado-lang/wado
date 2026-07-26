@@ -1083,6 +1083,18 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
+    /// Declaring module of a struct-like type (struct / resource / variant /
+    /// enum / builtin) by name, when the name picks out exactly one. Several
+    /// modules declaring the name leaves it unresolved rather than guessing:
+    /// a wrong module is worse than the caller's existing fallback.
+    pub(crate) fn find_struct_like_decl_key(&self, name: &str) -> Option<DeclKey> {
+        let modules = self.struct_like_decl_modules.get(name)?;
+        match modules.as_slice() {
+            [only] => Some((only.clone(), name.to_string())),
+            _ => None,
+        }
+    }
+
     pub(crate) fn impl_module_for(
         &self,
         type_name: &str,

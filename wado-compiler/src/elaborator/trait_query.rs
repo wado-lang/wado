@@ -148,6 +148,12 @@ pub(crate) fn canonical_decl_key_with(
     if let Some(key) = trait_env.find_static_method_decl_key(name) {
         return key;
     }
+    // A struct-like type the caller never imported — e.g. an iterator handed
+    // back by a method, named nowhere in this module's `use` declarations.
+    // Without this the fallback below would claim it for the current module.
+    if let Some(key) = trait_env.find_struct_like_decl_key(name) {
+        return key;
+    }
     (current_module_source.clone(), name.to_string())
 }
 
