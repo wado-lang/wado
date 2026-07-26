@@ -22,6 +22,11 @@ Filename: `docs/wep-YYYY-MM-DD-{feature-name}.md`
 
 It may include TODOs on WIP.
 
+A WEP is a living standard: it states the design as it stands now. When a design
+changes, rewrite the affected sections. Do not append an update log, keep
+superseded alternatives, or leave a checklist of what already landed — the git
+history is the SSoT for how the design got here.
+
 ### Index of WEPs
 
 - [Target WASI P3 Only](./wep-2026-01-11-wasi-p3-only.md)
