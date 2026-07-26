@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785067115696,
+  "lastUpdate": 1785080283790,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44121,6 +44121,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 272323,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f1763fa7e1747ac309aa3dc41b653155d860a9a3",
+          "message": "Merge pull request #1697 from wado-lang/claude/sqlite-todo-analysis-3j0lrt\n\nfix(gale): decide optionals in the op-only walker as the surface walker does",
+          "timestamp": "2026-07-27T00:26:47+09:00",
+          "tree_id": "b22d05f87998fb8b2d7cd2dff676ffbf92d09d93",
+          "url": "https://github.com/wado-lang/wado/commit/f1763fa7e1747ac309aa3dc41b653155d860a9a3"
+        },
+        "date": 1785080282979,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8225,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273073,
             "unit": "bytes"
           }
         ]
