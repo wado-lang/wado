@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785053431407,
+  "lastUpdate": 1785067115696,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44057,6 +44057,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4c398ce480cbe5e4eddc1d8aa917f44a7d60b563"
         },
         "date": 1785053430792,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8225,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272323,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e36264778928ae14db6cb95eeb847ef32033ce22",
+          "message": "Merge pull request #1694 from wado-lang/claude/benchmark-json-twitter-deser-si9add\n\nperf: widen variant-return SROA and skip JSON whitespace branchlessly",
+          "timestamp": "2026-07-26T20:48:11+09:00",
+          "tree_id": "ab7f44ea16e266191139560700263323b26d47bd",
+          "url": "https://github.com/wado-lang/wado/commit/e36264778928ae14db6cb95eeb847ef32033ce22"
+        },
+        "date": 1785067115279,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
