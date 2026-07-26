@@ -1671,24 +1671,23 @@ pub(super) fn impl_target_key(
     scope: Option<&ModuleImportScope>,
     symbols: &SymbolTable,
 ) -> ImplTargetKey {
-    match name::RefKind::from_ast(ty) {
-        Some(kind) => ImplTargetKey::Ref(kind),
-        None => {
-            let written = get_type_name_static(ty);
-            let empty_sources: IndexMap<String, ModuleSource> = IndexMap::default();
-            let empty_names: IndexMap<String, String> = IndexMap::default();
-            let key = super::trait_query::decl_identity_core(
-                &written,
-                module_source,
-                scope.map_or(&empty_sources, |s| &s.sources),
-                &empty_sources,
-                scope.map_or(&empty_names, |s| &s.original_names),
-                symbols,
-            );
-            match key {
-                Some(key) => ImplTargetKey::Decl(key),
-                None => ImplTargetKey::TypeParam(module_source.clone(), written),
-            }
+    if let Some(kind) = name::RefKind::from_ast(ty) {
+        ImplTargetKey::Ref(kind)
+    } else {
+        let written = get_type_name_static(ty);
+        let empty_sources: IndexMap<String, ModuleSource> = IndexMap::default();
+        let empty_names: IndexMap<String, String> = IndexMap::default();
+        let key = super::trait_query::decl_identity_core(
+            &written,
+            module_source,
+            scope.map_or(&empty_sources, |s| &s.sources),
+            &empty_sources,
+            scope.map_or(&empty_names, |s| &s.original_names),
+            symbols,
+        );
+        match key {
+            Some(key) => ImplTargetKey::Decl(key),
+            None => ImplTargetKey::TypeParam(module_source.clone(), written),
         }
     }
 }

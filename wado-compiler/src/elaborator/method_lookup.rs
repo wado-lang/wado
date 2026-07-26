@@ -2514,8 +2514,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .copied()
                 .collect();
 
-            let impl_offset =
-                crate::tir::method_param_offset_of(impl_slots.keys().copied());
+            let impl_offset = crate::tir::method_param_offset_of(impl_slots.keys().copied());
             for (i, type_param) in method_type_params.iter().enumerate() {
                 let index = impl_offset + i as u32;
                 let type_param_id =

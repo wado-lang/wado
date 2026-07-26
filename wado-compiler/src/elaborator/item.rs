@@ -555,9 +555,11 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             };
             let name = &named.name;
             if self.annotate_ctx.trait_ctx.type_params.contains_key(name)
-                || !self
-                    .tysys
-                    .is_impl_target_param(&self.current_module_source, impl_declared_params, name)
+                || !self.tysys.is_impl_target_param(
+                    &self.current_module_source,
+                    impl_declared_params,
+                    name,
+                )
             {
                 continue;
             }
@@ -1599,8 +1601,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span: param.span,
                 });
             }
-                // Walked for the recorded expression types only; reify
-                // re-emits the default from the AST.
+            // Walked for the recorded expression types only; reify
+            // re-emits the default from the AST.
             if let Some(default_ast) = &param.default {
                 if func.is_export {
                     let _ = scope.emit(TypeError::DefaultInExportFn {
@@ -1867,7 +1869,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .sem
             .types
             .method_impl_type_params
-            .insert(method_key, impl_type_params.clone());
+            .insert(method_key, impl_type_params);
 
         // A method the impl block declares has its canonical signature from
         // the decl pass, resolved in this same frame; reading it back is what
@@ -1943,16 +1945,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .filter(|op| op.is_async)
                     .map(|op| op.cm_name.is_some())
             });
-            if let Some(cm_backed) = async_op {
-                if is_resource_effect || !cm_backed {
-                    let _ = scope
-                        .logger
-                        .error(TypeError::AsyncUserEffectHandlerUnsupported {
-                            interface_name: name.to_string(),
-                            op_name: func.name.clone(),
-                            span: func.span,
-                        });
-                }
+            if let Some(cm_backed) = async_op
+                && (is_resource_effect || !cm_backed)
+            {
+                let _ = scope
+                    .logger
+                    .error(TypeError::AsyncUserEffectHandlerUnsupported {
+                        interface_name: name.to_string(),
+                        op_name: func.name.clone(),
+                        span: func.span,
+                    });
             }
         }
 
