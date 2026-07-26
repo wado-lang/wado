@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785029052777,
+  "lastUpdate": 1785031117781,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43969,6 +43969,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7d42a28e16660577180e6c4da0f36b83e7516747"
         },
         "date": 1785029052313,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8225,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272281,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "72a2ee989b708e85f2f3baf8b62652fc295cb5ff",
+          "message": "Merge pull request #1689 from wado-lang/claude/benchmark-json-twitter-analysis-g5zmcz\n\nperf(optimizer): globalize a pure call on constants",
+          "timestamp": "2026-07-26T10:49:24+09:00",
+          "tree_id": "b87f64bc7f26b2e7f272cc00bd7b2bb0feabd103",
+          "url": "https://github.com/wado-lang/wado/commit/72a2ee989b708e85f2f3baf8b62652fc295cb5ff"
+        },
+        "date": 1785031117404,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
