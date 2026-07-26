@@ -820,6 +820,21 @@ impl<'a> Interpreter<'a> {
         scope
     }
 
+    /// The guard's value with `binds` in scope. The walker already reduced the
+    /// guard there, so this is a read; scoping it again keeps the read from
+    /// resolving a binding's index against whatever holds it outside the arm.
+    fn guard_under_bindings(
+        &mut self,
+        body: &Body,
+        guard: Operand,
+        binds: &PatBindings,
+    ) -> Option<bool> {
+        let scope = self.enter_arm(binds);
+        let value = self.operand_to_lattice_a(body, guard).as_const();
+        self.leave_arm(scope);
+        value.and_then(|v| v.as_bool())
+    }
+
     pub fn leave_arm(&mut self, scope: ArmScope) {
         for (index, previous) in scope.0 {
             match previous {
@@ -1173,6 +1188,12 @@ impl<'a> Interpreter<'a> {
                     let mut alt_binds = PatBindings::new();
                     match self.pattern_matches_a(body, value, *alt, &mut alt_binds) {
                         PatternMatch::Yes => {
+                            // Alternatives are tried in order at run time, so an
+                            // undecided earlier one may be the one that matches
+                            // — and it would bind from its own positions.
+                            if any_unknown && !alt_binds.is_empty() {
+                                return PatternMatch::Unknown;
+                            }
                             binds.append(&mut alt_binds);
                             return PatternMatch::Yes;
                         }
@@ -1366,11 +1387,11 @@ impl<'a> Interpreter<'a> {
     /// program-wide [`CalleeMap`]: literal `Binary` / `Unary` / `Cast`
     /// arithmetic, projection out of a constant aggregate, and pure
     /// compile-time function evaluation. Only scalars are returned — an
-    /// aggregate has no operand form. It deliberately
-    /// excludes the `env` / `globals` paths — local-bound constants and
-    /// immutable-global reads — which require the driving visitor's
-    /// per-function dataflow state and so stay with [`crate::optimize`]'s
-    /// flow-sensitive const-fold walker.
+    /// aggregate has no operand form. Local-bound constants and
+    /// immutable-global reads stay with [`crate::optimize`]'s flow-sensitive
+    /// const-fold walker, which owns the per-function dataflow state — an
+    /// interpreter driving this must keep its `env` empty, since a projection's
+    /// receiver resolves through it.
     ///
     /// Because the interpreter's `env` is empty here, `try_fold_a` and
     /// `try_call_fold_a` only succeed when every operand / argument is already
@@ -1738,16 +1759,12 @@ impl<'a> Interpreter<'a> {
                     PatternMatch::Unknown => return false,
                     PatternMatch::Yes => {}
                 }
-                // The walker reduced the guard under this arm's bindings, so a
-                // decided one is a constant by now. An undecided one may still
-                // be taken, leaving every later arm unreachable.
+                // A guard reads the arm's bindings, so it is only meaningful
+                // with them in scope. An undecided one may still be taken,
+                // leaving every later arm unreachable.
                 match guard {
                     None => {}
-                    Some(g) => match self
-                        .operand_to_lattice_a(sink.body(), *g)
-                        .as_const()
-                        .and_then(|v| v.as_bool())
-                    {
+                    Some(g) => match self.guard_under_bindings(sink.body(), *g, &binds) {
                         Some(true) => {}
                         Some(false) => continue,
                         None => return false,
@@ -1887,6 +1904,9 @@ impl<'a> Interpreter<'a> {
         // get a fresh map and ids never cross scratch bodies.
         let saved_folds = std::mem::take(&mut self.scratch_folds);
         let saved_aliases = std::mem::take(&mut self.ref_global_aliases);
+        // Local indices are per-function, so the caller's read-only-local set
+        // says nothing about the callee's.
+        let saved_aggregates = std::mem::take(&mut self.aggregate_locals);
         for (i, v) in bound.into_iter().enumerate() {
             #[allow(clippy::cast_possible_truncation)]
             self.env.insert(i as u32, Lattice::Const(v));
@@ -1902,6 +1922,7 @@ impl<'a> Interpreter<'a> {
         self.env = saved_env;
         self.scratch_folds = saved_folds;
         self.ref_global_aliases = saved_aliases;
+        self.aggregate_locals = saved_aggregates;
         self.call_stack.pop();
         match result {
             c @ Lattice::Const(_) => c,

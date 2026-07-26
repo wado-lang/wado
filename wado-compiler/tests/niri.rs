@@ -4448,6 +4448,30 @@ fn a_guard_over_pattern_bindings_decides_the_arm() {
 }
 
 #[test]
+fn a_guard_does_not_read_a_binding_index_from_outside_the_arm() {
+    // Local slots are reused, so index 1 can hold an unrelated constant outside
+    // the arm. The guard must be decided under the arm's own bindings: `x` is
+    // 10 there, and `10 == 99` is false however index 1 reads elsewhere.
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let expr = match_expr(
+        point_lit(point),
+        vec![
+            arm_with_guard(
+                point_binding_pat(point),
+                eq_lit(1, 99, "99"),
+                int_lit(1013, TypeTable::I32, "1013"),
+            ),
+            arm(wildcard_pat(), int_lit(1019, TypeTable::I32, "1019")),
+        ],
+        TypeTable::I32,
+    );
+    let mut interp = Interpreter::new(&table);
+    interp.bind_local(1, Lattice::Const(int(99)));
+    assert_eq!(reduce_lat(&mut interp, &expr), Lattice::Const(int(1019)));
+}
+
+#[test]
 fn a_false_guard_falls_through_to_the_next_arm() {
     let mut table = TypeTable::new();
     let point = point_type(&mut table);
