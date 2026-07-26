@@ -403,6 +403,24 @@ declaration rather than at whichever use site reaches it first.
       of them removable is the canonical key, not the index's coverage.
 - [ ] S5b-6 `MethodInfo` becomes `instantiate(sig, receiver_args)`
       throughout.
+
+**Where the easy conversions stop.** Every `loaded_modules` read still
+standing was probed and each is gated behind one of two structural changes,
+not behind more of the same work:
+
+- *Bare-name keying.* `impl_index` / `all_impl_index` bucket by bare type
+  name, so `find_impl_assoc_types`, the trait-static lookup, and
+  `handlers.rs`'s handler discovery cannot drop their current-module scans
+  without changing which module wins. Gated on re-keying those indexes.
+- *Inference input, not signatures.* `StaticMethodSig` and the trait-method
+  resolution in `trait_query` consume type-param bounds, effect flags and
+  associated-type declarations to drive inference and build projections. A
+  signature digest does not answer those questions; absorbing them means
+  deciding whether bound metadata belongs in a digest at all.
+
+So the next step is a decision about those two, not another conversion
+pass. Both guard fixtures (`static_method_same_name_priority`,
+`trait_impl_same_name_priority`) are in place for the first.
 - [ ] S5c Impl associated-type bindings and trait-reference type
       arguments as `TypeId` facts on the impl entry, plus
       `is_synthesize_request`. Deletes
