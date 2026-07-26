@@ -309,9 +309,7 @@ pub fn gen_lexer(
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
     let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);
-    // Java bodies (superClass `this.m()` calls, and whole action / predicate
-    // bodies) are rewritten to Wado before codegen, so the identity path emits
-    // them regardless of the source language.
+    // A superClass base is wired independently of the action language.
     let ea = lexer_grammar_executes_actions(grammar) || !sc_name.is_empty();
     let act_rule_names = executed_action_rule_names(grammar);
     let has_actions = !act_rule_names.is_empty();
@@ -418,9 +416,8 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
 
 fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool) {
     w.blank();
-    // The action-print sink. Appends in tokenization order; `tokenize` hands
-    // the buffer to the token stream, which is where consumers read it.
-    // Not reset per token — the stream is the whole run's output.
+    // Deliberately outside `reset_actions`: the sink is the whole run's output,
+    // not one token's.
     let mut fe = FnSpec::new("emit");
     fe.set_receiver(&"&mut self");
     fe.add_param(&"s", &"String");
@@ -580,12 +577,11 @@ pub fn lexer_try_fn_name(name: &String) -> String {
     return `try_${*name}`;
 }
 
-/// Whether some lexer rule reaches `rule` through a generated `try_` call, as
-/// opposed to inlining it. A non-fragment rule and a recursive fragment are
-/// always called; a plain fragment is inlined, and the inline path carries the
-/// caller's tail position with it. A called rule's match fn is entered from a
-/// non-tail position — the caller still has a suffix to consume — so its body
-/// alternation must not take the maximal-munch emit.
+/// Whether some lexer rule reaches `rule` through a generated `try_` call rather
+/// than inlining it — a non-fragment rule or a recursive fragment. Such a fn is
+/// entered with the caller's suffix still to consume, so its body alternation
+/// must not take the maximal-munch emit. An inlined fragment is safe: the inline
+/// path carries the caller's tail position with it.
 fn lexer_rule_is_called(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
     if rule.is_fragment && !fragment_is_recursive(rule, all_rules) {
         return false;
@@ -671,9 +667,6 @@ fn gen_lexer_match_fn(
         return;
     }
     w.line(&"let mut pos = start;");
-    // The tokenizer enters this fn at a token boundary, so the rule's own body
-    // is in tail position — unless another rule calls it, in which case that
-    // caller's suffix follows and the maximal-munch emit would strand it.
     let tail = !lexer_rule_is_called(rule, all_rules);
     if rule.body.len() == 1 {
         // gen_lexer_alt_seq places the alt's predicates; a false one returns -1
@@ -716,11 +709,9 @@ fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, befo
 }
 
 /// Whether codegen runs `{ ... }` action bodies for this grammar's lexer at
-/// all. The winner-replay path is wired for both the modeless and the
-/// `mode`-dispatch tournaments. A `language = Java` lexer qualifies because
-/// codegen stages its bodies into Wado before emit (`rewrite_lexer_java_bodies`);
-/// a `superClass` grammar is carved out there, so it keeps the identity path it
-/// already had.
+/// all. A `language = Java` lexer qualifies because codegen stages its bodies
+/// into Wado before emit (`rewrite_lexer_java_bodies`), which carves out a
+/// `superClass` grammar.
 pub fn lexer_grammar_executes_actions(grammar: &Grammar) -> bool {
     return grammar.action_language matches { Wado } || action_language_is_emittable(grammar);
 }
@@ -737,12 +728,10 @@ pub fn lexer_rule_executes_actions(grammar: &Grammar, rule: &LexerRule) -> bool 
 }
 
 /// Whether the action replay can interleave `alt`'s actions with its match, so
-/// each one runs at the cursor it was written at. A `Group` is fine — the replay
-/// re-selects the arm that won and runs only that arm's actions. A `Repeat` is
-/// not: it matches an unknown number of times, and the non-greedy /
-/// lookahead-aware emitters restructure the whole remaining sequence, so an alt
-/// carrying one keeps the flat emit (its top-level actions still run, at the end
-/// of the match, and anything nested inside stays unhandled and warned).
+/// each runs at the cursor it was written at. A `Group` is fine — the replay
+/// re-selects the arm that won. A `Repeat` is not: it matches an unknown number
+/// of times, and the non-greedy / lookahead-aware emitters restructure the
+/// sequence around it, so an alt carrying one keeps the flat emit.
 pub fn lexer_alt_replayable(alt: &LexerAlternative, all_rules: &List<LexerRule>) -> bool {
     for let e of &alt.elements {
         if !lexer_element_replayable(e, all_rules) {
@@ -765,8 +754,6 @@ fn lexer_element_replayable(elem: &LexerElement, all_rules: &List<LexerRule>) ->
             }
             true;
         },
-        // A fragment is inlined, so its shape is part of this alt's; a rule
-        // call is opaque and cannot carry actions into the replay.
         RuleRef(name) => match find_fragment(all_rules, &name) {
             Some(f) => {
                 if fragment_is_recursive(f, all_rules) {
@@ -884,17 +871,14 @@ fn gen_mode_constants(w: &mut CodeWriter, mode_names: &List<String>) {
     w.blank();
 }
 
-/// Emit the replay fn per executing rule: `apply_<rule>_actions(lx, start, pos)`,
+/// Emit the replay fn per executing rule: `apply_<rule>_actions(lx, start, end)`,
 /// called post-tournament for the winner only, so a losing candidate's actions
-/// never run. Bodies are identity-translated (`$text` over `chars`/`start`/`pos`,
-/// `lx.*` verbatim).
+/// never run. Bodies are identity-translated.
 ///
-/// A replayable rule (see `lexer_rule_replayable`) re-runs its own match with
-/// the actions dropped in at the cursor each was written at, so a mid-element
-/// body reads exactly the text matched so far and a `Group` runs only the arm
-/// that won. A rule whose shape the replay cannot follow keeps the flat emit:
-/// every alternative's top-level actions, at the end of the match, selected by
-/// a match-only `winning_alt_<rule>(chars, start) -> i32` helper.
+/// A replayable rule (`lexer_rule_replayable`) re-runs its own match with the
+/// actions dropped in at their cursors. One the replay cannot follow keeps the
+/// flat emit: every alternative's top-level actions at the end of the match,
+/// selected by a match-only `winning_alt_<rule>` helper.
 fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar, has_members: bool) {
     for let rule of &grammar.lexer_rules {
         let mut ids: List<i32> = [];
@@ -932,12 +916,9 @@ fn gen_lexer_apply_replay_body(
     has_members: bool,
 ) {
     w.line(&"let chars = &lx.chars;");
-    // Shadow the match-end parameter: from here `pos` is where the replay has
-    // reached, which is what an action body's matched-text reads.
     w.line(&"let mut pos = start;");
-    // Only a multi-alt body needs predicates here, and only to re-select the arm
-    // the match took (`gen_lexer_alts_replay`); a single-alt body has nothing to
-    // select, so its predicates are not re-evaluated.
+    // `ea` here only re-selects the arm the match took; a single-alt body has
+    // nothing to select, so it never re-evaluates a predicate.
     let tail = !lexer_rule_is_called(rule, all_rules);
     if rule.body.len() == 1 {
         gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return", ci, false, has_members, tail, true);
@@ -950,8 +931,6 @@ fn gen_lexer_apply_flat_body(w: &mut CodeWriter, rule: &LexerRule, ci: bool, has
     if apply_body_reads_chars(rule, has_members) {
         w.line(&"let chars = &lx.chars;");
     }
-    // The flat emit runs every action at the match end, which is what an action
-    // body's cursor reads there.
     if apply_body_reads_cursor(rule) {
         w.line(&"let pos = end;");
     }
@@ -999,8 +978,6 @@ fn apply_body_reads_chars(rule: &LexerRule, has_members: bool) -> bool {
     }
     for let alt of &rule.body {
         for let a of &alt.actions {
-            // `$text` is the un-staged identity form; `chars` covers a body
-            // already staged into Wado (java2wado emits the slice expression).
             if a.kind matches { Action } && (a.source.text.contains("$text") || a.source.text.contains("chars")) {
                 return true;
             }
@@ -1035,11 +1012,9 @@ fn gen_lexer_alt_action_stmts(w: &mut CodeWriter, alt: &LexerAlternative) {
 
 /// Emit `winning_alt_<rule>(chars, start) -> i32`: a match-only re-scan that
 /// returns the index of the alternative `gen_lexer_alts` picked from `start`, or
-/// -1. Each alt sits in its own labeled block and a failed match `break`s to the
-/// next; the selection mirrors `gen_lexer_alts` exactly — first-match normally,
-/// longest-match when the rule body takes the maximal-munch emit — so the
-/// replayed actions belong to the alternative that actually matched. No side
-/// effects: actions are run by the caller for the returned alt.
+/// -1. The selection mirrors `gen_lexer_alts` exactly, so the actions the caller
+/// then replays belong to the alternative that actually matched. No side
+/// effects — the caller runs the actions.
 fn gen_lexer_winning_alt_fn(
     w: &mut CodeWriter,
     rule: &LexerRule,
@@ -1310,10 +1285,9 @@ fn gen_lexer_alts_replay(
         } else {
             w.else_begin(&`else if sel_alt_${id} == ${i}`);
         }
-        // `ea = false`: the selection pass above already evaluated this arm's
-        // predicates. Re-evaluating them here would run a state-dependent one
-        // twice and, on a differing verdict, silently drop the winner's actions
-        // while the tournament still emits the token.
+        // `ea = false`: the selection pass already evaluated this arm. Running a
+        // state-dependent predicate twice could reject here what it accepted
+        // there, dropping the winner's actions while the token still commits.
         gen_lexer_alt_seq(w, &alts[i], all_rules, fail_action, ci, false, hm, longest, true);
     }
     w.end();
@@ -3361,8 +3335,6 @@ fn gen_tokenize_fn(
     // using `emit_token_commit`.
     w.line(&"ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());");
     if has_actions {
-        // Hand the action-print sink to the stream, so a consumer that only
-        // holds the tokens still sees what the lexer printed.
         w.line(&"ts.output = lexer.act_output;");
     }
     w.line(&"return ts;");

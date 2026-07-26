@@ -3765,9 +3765,6 @@ fn gen_alt_elements(
             // inserts a missing terminal against (a recovery-only edit; on valid
             // input the leaf matches and `sync` is never read).
             let sync = ctx.first_of_elements_from(elements, i + 1);
-            // A labeled rule call whose `$<label>.text` an action reads brackets
-            // itself with its own token range, so the read is that invocation's
-            // span rather than everything matched so far.
             let span_field = rule_call_span_field(op, actions, ctx);
             if let Some(f) = &span_field {
                 w.line(&`${rule_span_lo_local(f)} = p.pos;`);
@@ -4366,9 +4363,8 @@ fn gen_elements_with_non_greedy(
     actions: &List<AltAction> = &NO_ACTIONS,
 ) {
     assert ops.len() == elements.len(), "gen_elements_with_non_greedy: ops / elements length mismatch";
-    // An inlined body has its own `$`-scope: its labels bind to its own ops, not
-    // the enclosing alternative's. Saved and restored so a nested group does not
-    // leave the outer scope pointing at its bindings.
+    // An inlined body's labels bind to its own ops. Restored on the way out so a
+    // nested group does not leave the outer scope pointing at its bindings.
     let outer_bindings = *ctx.alt_bindings();
     if ctx.emit_actions() && !actions.is_empty() {
         ctx.set_alt_bindings(collect_alt_bindings(ops));
@@ -5792,9 +5788,8 @@ fn gen_op_group(
                 // Transparent groups inline their inner alt; walk
                 // `g_op.alts[0].ops` directly via the op-driven
                 // element walker rather than constructing a CST
-                // wrapper. The alternative's own actions are inlined
-                // with it — inside a Repeat that means once per
-                // iteration, which is where the grammar wrote them.
+                // wrapper. Its actions are inlined with it, so inside a
+                // Repeat they run once per iteration.
                 let body = &g_op.alts[0];
                 let alt = &g_elem.alternatives[0];
                 gen_elements_with_non_greedy(

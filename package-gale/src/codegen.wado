@@ -176,12 +176,9 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             );
         }
     }
-    // Stage the Java lexer bodies into Wado before codegen, so `lexer_gen`'s
-    // identity translator emits them (the superClass rewrite above stages the
-    // same way). Only for a grammar whose actions we emit at all.
     if should_emit_actions(grammar) && grammar.action_language matches { Java } {
-        // No members are emitted for a Java lexer (see `collect_lexer_members`),
-        // so nothing resolves against them and a reference is reported.
+        // A Java lexer gets no members (see `collect_lexer_members`), so nothing
+        // resolves against them and a reference is reported.
         let none: List<String> = [];
         for let msg of &rewrite_lexer_java_bodies(grammar, &none, &none) {
             ctx.warn(&"lexer action", DiagnosticKind::UnsupportedAction, *msg);
@@ -319,9 +316,6 @@ fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
     if !ctx.emit_actions() {
         return;
     }
-    // A fragment's actions run through the rules that inline it, so an id this
-    // rule's own entry cannot reach may still be run elsewhere. Ask the whole
-    // grammar before warning.
     let run = lexer_grammar_run_action_ids(grammar);
     for let rule of &grammar.lexer_rules {
         let executes = lexer_rule_executes_actions(grammar, rule);

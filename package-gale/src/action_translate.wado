@@ -385,10 +385,7 @@ fn rule_member_expr(
     handle: &String,
 ) -> Result<String, String> {
     let binding = binding_for(bindings, false, &binding_name(&r.name));
-    // `.text` is the invocation's own matched span, not a value-channel field:
-    // the call site captures the token range it consumed (see
-    // `rule_span_lo_local`), so a second labeled call in the same alternative
-    // reports its own text.
+    // `.text` is the invocation's own span, not a value-channel field.
     if let Some(m) = &r.member && *m == "text" {
         return Result::Ok(
             `${*handle}.text_between(${rule_span_lo_local(&binding)}, ${rule_span_hi_local(&binding)})`,

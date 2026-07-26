@@ -980,10 +980,8 @@ fn strip_lexer_dfa_dump(raw: &String) -> String {
                 i += 1;
                 continue;
             }
-            // A transition on a literal newline splits the row over exactly two
-            // physical lines, the second carrying the `->`. Require that, so a
-            // line that merely looks like a row start (an action print such as
-            // `s1=5`) does not swallow the rest of the output.
+            // Require the `->` on the very next line, so an action print that
+            // merely looks like a row start does not swallow the rest.
             if i + 1 < lines.len() && lines[i + 1].contains("->") {
                 i += 2;
                 continue;
@@ -2527,10 +2525,8 @@ test "classify_tokens: clean token dump returns Clean(normalised)" {
 }
 
 test "classify_tokens: action-print prefix is part of the expectation" {
-    // LexerExec descriptors with `{<writeln(...)>}` actions emit action output
-    // BEFORE the token dump; the lexer executes those bodies and
-    // `to_lexer_string` renders the sink ahead of the dump, so the prefix stays
-    // in the expectation rather than routing the test to `#[TODO]`.
+    // The lexer executes those bodies and `to_lexer_string` renders the sink
+    // ahead of the dump, so the prefix belongs in the expectation.
     let raw = "stuff0:\nstuff1: a\n[@0,0:0='a',<1>,1:0]\n";
     let result = classify_output_for_tokens(&raw);
     assert result matches { Some(s) && s == "stuff0:\nstuff1: a\n[@0,0:0='a',<1>,1:0]\n" };
@@ -2555,9 +2551,8 @@ test "classify_tokens: leading garbage before the token dump is kept" {
 }
 
 test "classify_tokens: showDFA dump is dropped, leaving a clean token dump" {
-    // `SemPredEvalLexer` descriptors with `showDFA` append ANTLR's internal DFA
-    // state table after the token rows. Gale has no such table, so it must not
-    // sit in the expectation — the token rows alone are the claim (d) target.
+    // Gale has no DFA table, so a `showDFA` descriptor's rows must not sit in
+    // the expectation — the token rows alone are the claim (d) target.
     let raw = "[@0,0:3='enum',<1>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\ns0-' '->:s3=>3\n:s1=>2-'n'->:s2=>2\n";
     let result = classify_output_for_tokens(&raw);
     assert result matches { Some(s) && s == "[@0,0:3='enum',<1>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n" };
