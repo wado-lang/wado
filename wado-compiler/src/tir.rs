@@ -1981,9 +1981,6 @@ impl TypeTable {
         Some(self.substitute_type_params(def_type_id, &subst))
     }
 
-    /// Whether a generic definition of `assoc_name` is registered for
-    /// `base_name` — i.e. the generic type carries a synthesized impl binding
-    /// that associated type.
     /// Whether a declaration named `name` with these member types can be
     /// reflected. The single eligibility predicate: the bound check and reflect
     /// synthesis both read it, so synthesis covers exactly what the bound
@@ -2001,6 +1998,9 @@ impl TypeTable {
                 .any(|ty| self.contains_assoc_type_projection(ty))
     }
 
+    /// Whether a generic definition of `assoc_name` is registered for
+    /// `base_name` — i.e. the generic type carries a synthesized impl binding
+    /// that associated type.
     pub fn has_generic_assoc_type_def(&self, base_name: &str, assoc_name: &str) -> bool {
         self.generic_assoc_type_defs
             .contains_key(&(base_name.to_string(), assoc_name.to_string()))

@@ -1084,7 +1084,6 @@ impl<'a> DceWalker<'a> {
                     .insert((resource_name.to_string(), method_name.to_string()));
             }
         } else {
-            // Free function call.
             // Free function call. `method_info` is the discriminator — a name
             // is not one: a synthesized helper embeds a type mangle, which
             // carries `::` for an associated-type projection
