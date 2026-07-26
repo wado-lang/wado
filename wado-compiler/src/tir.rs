@@ -2041,27 +2041,24 @@ impl TypeTable {
         Some(self.substitute_type_params(def_type_id, &subst))
     }
 
-    /// Whether the declaration behind `type_id`, having these member types, can
-    /// be reflected. The single eligibility predicate: the bound check and
-    /// reflect synthesis both read it, so synthesis covers exactly what the
-    /// bound accepts without a demand channel between them.
+    /// Whether the declaration behind `type_id` can be reflected. The single
+    /// eligibility predicate: the bound check and reflect synthesis both read
+    /// it, so synthesis covers exactly what the bound accepts without a demand
+    /// channel between them.
     ///
-    /// Two exclusions, both load-bearing. A member handle is sealed — its own
-    /// `Members` would mention `StructField<Self, …>` and grow `Self` without
-    /// bound. A member typed by an associated-type projection (an iterator
-    /// adapter's `fn mut(I::Item) -> U`) is not determined by substituting the
-    /// declaration's own parameters, so its members cannot be named.
-    pub fn is_reflect_eligible(
-        &self,
-        type_id: TypeId,
-        members: impl Iterator<Item = TypeId>,
-    ) -> bool {
+    /// One exclusion. A member handle is sealed — its own `Members` would
+    /// mention `StructField<Self, …>` and grow `Self` without bound.
+    ///
+    /// A member's own type never disqualifies its owner. An associated-type
+    /// projection reads like an exception — an iterator adapter's
+    /// `fn mut(I::Item) -> U` is not a substitution of the declaration's
+    /// parameters — but the synthesized impl carries the declaration's bounds,
+    /// so `I::Item` is as nameable there as it is on the declaration, and the
+    /// instantiation resolves it like any other projection.
+    pub fn is_reflect_eligible(&self, type_id: TypeId) -> bool {
         !self
             .decl_of_type(type_id)
             .is_some_and(|decl| self.is_sealed_reflect_member(decl))
-            && !members
-                .into_iter()
-                .any(|ty| self.contains_assoc_type_projection(ty))
     }
 
     /// Whether a generic definition of `assoc_name` is registered for the

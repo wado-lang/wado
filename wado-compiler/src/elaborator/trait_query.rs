@@ -641,10 +641,8 @@ impl TypeSystem {
 
     /// Whether a declaration can be reflected, via the shared eligibility
     /// predicate reflect synthesis reads.
-    fn is_reflect_eligible(&self, type_id: TypeId, members: impl Iterator<Item = TypeId>) -> bool {
-        self.type_table
-            .borrow()
-            .is_reflect_eligible(type_id, members)
+    fn is_reflect_eligible(&self, type_id: TypeId) -> bool {
+        self.type_table.borrow().is_reflect_eligible(type_id)
     }
 
     pub(super) fn classify_on_bound_trait(
@@ -1061,18 +1059,20 @@ impl TypeSystem {
                 Some(OnBoundTrait::ReflectStruct),
             ) => scope
                 .struct_fields_in(name, module_source)
-                .filter(|info| self.has_visible_fields(scope, info))
-                .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect()),
-            (ResolvedType::Variant { name, .. }, Some(OnBoundTrait::ReflectVariant)) => scope
-                .variant_case(name)
-                .map(|info| info.cases.iter().map(|c| c.payload).collect()),
+                .is_some_and(|info| self.has_visible_fields(scope, info)),
+            (
+                ResolvedType::Variant {
+                    name,
+                    module_source,
+                    ..
+                },
+                Some(OnBoundTrait::ReflectVariant),
+            ) => scope.variant_case_in(name, module_source).is_some(),
             (ResolvedType::Enum { .. }, Some(OnBoundTrait::ReflectEnum))
-            | (ResolvedType::Flags { .. }, Some(OnBoundTrait::ReflectFlags)) => Some(Vec::new()),
-            _ => None,
+            | (ResolvedType::Flags { .. }, Some(OnBoundTrait::ReflectFlags)) => true,
+            _ => false,
         };
-        if let Some(members) = plain_reflect_subject
-            && self.is_reflect_eligible(type_id, members.into_iter())
-        {
+        if plain_reflect_subject && self.is_reflect_eligible(type_id) {
             return true;
         }
 
@@ -1086,20 +1086,16 @@ impl TypeSystem {
             ..
         } = &resolved
             && match on_bound {
-                Some(OnBoundTrait::ReflectStruct) => scope
-                    .struct_fields_in(name, module_source)
-                    .is_some_and(|info| {
-                        self.has_visible_fields(scope, info)
-                            && self.is_reflect_eligible(
-                                type_id,
-                                info.fields.iter().map(|(_, ty, _)| *ty),
-                            )
-                    }),
-                Some(OnBoundTrait::ReflectVariant) => scope
-                    .variant_case_in(name, module_source)
-                    .is_some_and(|info| {
-                        self.is_reflect_eligible(type_id, info.cases.iter().map(|c| c.payload))
-                    }),
+                Some(OnBoundTrait::ReflectStruct) => {
+                    scope
+                        .struct_fields_in(name, module_source)
+                        .is_some_and(|info| self.has_visible_fields(scope, info))
+                        && self.is_reflect_eligible(type_id)
+                }
+                Some(OnBoundTrait::ReflectVariant) => {
+                    scope.variant_case_in(name, module_source).is_some()
+                        && self.is_reflect_eligible(type_id)
+                }
                 _ => false,
             }
         {

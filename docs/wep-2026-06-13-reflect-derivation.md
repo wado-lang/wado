@@ -177,12 +177,14 @@ per instantiation needs an identity that separates `Pair<String>` from
 `Pair<i32>`. That is a distinct fact (the instance's type arguments), not a
 different spelling of `type_name`, and waits for a consumer.
 
-Two rules bound what is reflectable, and both are load-bearing:
+Two rules bound what is reflectable:
 
-- A type whose member types are not determined by substitution alone is not
-  reflectable. An iterator adapter's `pub f: fn mut(I::Item) -> U` needs the
-  bound's impl to resolve `I::Item`, which per-instantiation substitution does
-  not consult, so the member cannot be named.
+- A member's own type never disqualifies its owner. An associated-type
+  projection reads like an exception — an iterator adapter's
+  `pub f: fn mut(I::Item) -> U` is not a substitution of the declaration's
+  parameters — but the synthesized impl carries the declaration's bounds, so
+  `I::Item` is as nameable there as on the declaration and the instantiation
+  resolves it like any other projection.
 - A type whose members are not all visible at the use site is not reflectable
   there (see [Visibility](#visibility)). This is what leaves `TreeMap`'s
   hand-written `Inspect` as the only candidate: a generic instance's mangled

@@ -487,9 +487,7 @@ fn generate_struct_reflect_impls(
         let tt = module.type_table.borrow();
         let eligible = tt
             .find_decl_type_by_name(&target.name, &module_source)
-            .is_some_and(|type_id| {
-                tt.is_reflect_eligible(type_id, target.fields.iter().map(|f| f.type_id))
-            });
+            .is_some_and(|type_id| tt.is_reflect_eligible(type_id));
         drop(tt);
         if !eligible {
             continue;
@@ -1236,9 +1234,7 @@ fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarg
         .filter(|v| {
             let tt = module.type_table.borrow();
             tt.find_decl_type_by_name(&v.name, &v.module_source)
-                .is_some_and(|type_id| {
-                    tt.is_reflect_eligible(type_id, v.cases.iter().map(|c| c.payload))
-                })
+                .is_some_and(|type_id| tt.is_reflect_eligible(type_id))
         })
         .map(|v| ReflectVariantTarget {
             name: v.name.clone(),

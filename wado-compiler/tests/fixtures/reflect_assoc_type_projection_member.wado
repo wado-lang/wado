@@ -1,0 +1,41 @@
+trait Src {
+    type Item;
+    fn get(&self) -> Self::Item;
+}
+
+struct Ints { n: i32 }
+
+impl Src for Ints {
+    type Item = i32;
+    fn get(&self) -> Self::Item {
+        return self.n;
+    }
+}
+
+struct Adapt<I: Src, U> {
+    pub inner: I,
+    pub seen: U,
+}
+
+struct Proj<I: Src> {
+    pub inner: I,
+    pub last: I::Item,
+}
+
+struct FnProj<I: Src, U> {
+    pub inner: I,
+    pub f: fn mut(I::Item) -> U,
+}
+
+test "a generic struct with an fn-typed projection member is reflectable" {
+    let m = FnProj { inner: Ints { n: 1 }, f: |x: i32| { return ; } };
+    assert m.inner.get() == 1;
+}
+
+test "a generic struct with a projection member inspects" {
+    let p = Proj { inner: Ints { n: 1 }, last: 7 };
+    assert `${p:?}` == "Proj { inner: Ints { n: 1 }, last: 7 }";
+}
+
+__DATA__
+{"test": {}}
