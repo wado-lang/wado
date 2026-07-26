@@ -337,6 +337,20 @@ impl TokenStream {
         self.push_text(out, self.starts[i], self.ends[i]);
     }
 
+    /// Append token `i`'s text with whitespace rendered as escapes, matching
+    /// ANTLR4's `Trees.toStringTree` node text (spaces are left alone). Used by
+    /// tree rendering only; `$text` and friends keep the raw text.
+    pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
+        for let mut j = self.starts[i]; j < self.ends[i]; j += 1 {
+            match self.chars[j] {
+                '\n' => out.push_str(&"\\n"),
+                '\r' => out.push_str(&"\\r"),
+                '\t' => out.push_str(&"\\t"),
+                c => out.push(c),
+            }
+        }
+    }
+
     /// Append the text of token `i`'s leading trivia, in source order.
     pub fn push_leading_trivia_text(&self, out: &mut String, i: i32) {
         for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
@@ -758,7 +772,8 @@ impl CstStore {
     }
 
     /// ANTLR4-style S-expression for the subtree at row `i`: `(name child ...)`,
-    /// tokens as their text; a childless node renders as its bare name, no
+    /// tokens as their text with whitespace escaped (`\n`, `\r`, `\t`, as
+    /// `Trees.toStringTree` does); a childless node renders as its bare name, no
     /// parens (ANTLR4's `Trees.toStringTree`). `rule_names[kind]` names rule
     /// nodes (`K_ERROR` renders `<error>`); `token_names[kind]` names missing
     /// terminals. Real terminals with empty text (e.g. EOF) are omitted;
@@ -802,7 +817,7 @@ fn cst_to_string_tree_impl(
             Tok => {
                 if !toks.is_empty_text(s.a[c]) {
                     out.push_str(&" ");
-                    toks.push_token_text(out, s.a[c]);
+                    toks.push_token_text_escaped(out, s.a[c]);
                 }
                 c += 1;
             },
@@ -812,7 +827,7 @@ fn cst_to_string_tree_impl(
             },
             Skip => {
                 out.push_str(&" <skip ");
-                toks.push_token_text(out, s.a[c]);
+                toks.push_token_text_escaped(out, s.a[c]);
                 out.push_str(&">");
                 c += 1;
             },
@@ -1136,7 +1151,7 @@ fn render_builder_node(
             Tok => {
                 if !toks.is_empty_text(a[c]) {
                     out.push_str(&" ");
-                    toks.push_token_text(out, a[c]);
+                    toks.push_token_text_escaped(out, a[c]);
                 }
                 c += 1;
             },
@@ -1146,7 +1161,7 @@ fn render_builder_node(
             },
             Skip => {
                 out.push_str(&" <skip ");
-                toks.push_token_text(out, a[c]);
+                toks.push_token_text_escaped(out, a[c]);
                 out.push_str(&">");
                 c += 1;
             },
@@ -1376,7 +1391,7 @@ impl Lexer {
 fn try_C(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
-    let mut alts_ok_0 = false;
+    let mut alts_best_0 = -1;
     alts_0_0: {
         pos = alts_saved_0;
         let alts_saved_1 = pos;
@@ -1396,19 +1411,18 @@ fn try_C(chars: &List<char>, start: i32) -> i32 {
             }
         }
         if !alts_ok_1 { break alts_0_0; }
-        alts_ok_0 = true;
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    if !alts_ok_0 {
-        alts_0_1: {
-            pos = alts_saved_0;
-            if pos >= chars.len() || chars[pos] != '3' { break alts_0_1; }
-            pos += 1;
-            if pos >= chars.len() || chars[pos] != '4' { break alts_0_1; }
-            pos += 1;
-            alts_ok_0 = true;
-        }
+    alts_0_1: {
+        pos = alts_saved_0;
+        if pos >= chars.len() || chars[pos] != '3' { break alts_0_1; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != '4' { break alts_0_1; }
+        pos += 1;
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    if !alts_ok_0 { return -1; }
+    if alts_best_0 < 0 { return -1; }
+    pos = alts_best_0;
     return pos;
 }
 

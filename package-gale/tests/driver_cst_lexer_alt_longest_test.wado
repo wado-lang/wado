@@ -1,0 +1,37 @@
+//! A lexer alternation in tail position must yield the longest matching
+//! alternative (ANTLR4 maximal munch), while one followed by a suffix keeps
+//! first-match so the suffix can still be consumed.
+
+use g from "./grammars/lexer_alt_longest.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_alt_longest" },
+    };
+use { TK_EOF } from "./grammars/lexer_alt_longest.g4";
+
+fn dump(input: &String) -> String {
+    return g::to_lexer_string(&g::tokenize(input), TK_EOF);
+}
+
+test "tail alternation takes the longest alternative" {
+    let actual = dump(&"ab");
+    let expected = "[@0,0:1='ab',<1>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n";
+    assert actual == expected, `actual:\n${actual}\nexpected:\n${expected}`;
+}
+
+test "tail alternation with more than two arms takes the longest" {
+    let actual = dump(&"nop");
+    let expected = "[@0,0:2='nop',<4>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n";
+    assert actual == expected, `actual:\n${actual}\nexpected:\n${expected}`;
+}
+
+test "nested tail alternation takes the longest alternative" {
+    let actual = dump(&"mab");
+    let expected = "[@0,0:2='mab',<3>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n";
+    assert actual == expected, `actual:\n${actual}\nexpected:\n${expected}`;
+}
+
+test "alternation followed by a suffix keeps first-match" {
+    let actual = dump(&"xyz");
+    let expected = "[@0,0:2='xyz',<2>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n";
+    assert actual == expected, `actual:\n${actual}\nexpected:\n${expected}`;
+}

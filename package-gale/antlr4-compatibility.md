@@ -124,7 +124,11 @@ Test sources covering Stage A:
    - `_tokens_test.wado` — claim (d): assert `t::to_lexer_string(...)`
      matches the descriptor's `[output]`. Eligibility: `[type]` is
      `Lexer`, non-empty `[input]` and `[output]`, output contains at
-     least one `[@…]` token-dump row. When the `[output]` also carries
+     least one `[@…]` token-dump row. ANTLR's `showDFA` state table
+     (`s0-'a'->:s4=>2`) is dropped from the expectation first — it
+     describes ANTLR's simulator, not the token stream, so keeping it
+     would make those descriptors permanently unmatchable and hide the
+     token-level gap underneath. When the `[output]` also carries
      action-print prefix lines (`<writeln(...)>` echoes from `{ ... }`
      action bodies), the test is emitted and auto-`#[TODO]`-marked.
 

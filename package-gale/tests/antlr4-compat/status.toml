@@ -66,18 +66,33 @@
 # today — the input parses to Ok regardless of where the parser binds
 # the `else`. The wrong-binding behaviour is a tree-shape concern,
 # tracked under [stage_b_oracle_todo] below.
+#
+# The SemPredEvalLexer entries below are showDFA descriptors: the
+# extractor drops ANTLR's DFA dump from the expected (it describes
+# ANTLR's simulator, not the token stream), leaving a plain token dump
+# that diverges for one reason only — the lexer predicate is dropped.
+# They flip together when java2wado covers lexer bodies.
+"SemPredEvalLexer/IDvsEnum" = "lexer semantic predicates are dropped on the Java action path, so the predicate-disabled ENUM still wins the tournament and enum lexes as ENUM instead of ID"
+"SemPredEvalLexer/IDnotEnum" = "lexer semantic predicates are dropped on the Java action path — same root cause as IDvsEnum"
+"SemPredEvalLexer/EnumNotID" = "lexer semantic predicates are dropped on the Java action path, so ENUM wins for every lowercase run instead of only for enum"
+"SemPredEvalLexer/DisableRule" = "lexer semantic predicates are dropped on the Java action path, so E1 wins over E2 instead of being disabled"
 
 [stage_a_skip]
 
 [stage_b_todo]
 "LeftRecursion/SemPredFailOption" = "Stage B parse-tree shape diverges because action bodies are skipped (the predicate guard is dropped) — Stage C territory"
-"SemPredEvalParser/PredFromAltTestedInLoopBack_1" = "Stage B test parse fails with Result::Err — semantic predicate enforcement is Stage C"
-"SemPredEvalParser/PredFromAltTestedInLoopBack_2" = "Stage B test parse fails with Result::Err — semantic predicate enforcement is Stage C"
-"ParseTrees/ExtraToken" = "sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (single-token deletion / insertion). Gale does not yet implement error recovery, so `parse()` returns `Err` on the bad token and the sub-tree navigation never runs. Gap: implement ANTLR4-style error recovery in the generated parser. (Stage C-independent)"
-"ParseTrees/NoViableAlt" = "sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (NoViableAlternativeException fallback). Same error-recovery gap as `ParseTrees/ExtraToken`."
-"ParseTrees/Sync" = "sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (synchronisation set fallback). Same error-recovery gap as `ParseTrees/ExtraToken`."
+"SemPredEvalParser/PredFromAltTestedInLoopBack_1" = "the loop-back predicate is dropped, so the parser takes the exit alternative one NL early and inserts a missing NL — semantic predicate enforcement is Stage C"
+"ParseTrees/NoViableAlt" = "sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (NoViableAlternativeException fallback). Gale ends the rule at the last good token and renders a bare `a`, dropping the tokens ANTLR4 keeps under the node."
+"ParseTrees/Sync" = "sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (synchronisation set fallback). Gale stops at `(a x)` instead of consuming to the synchronisation point, so the trailing tokens never land under the node."
 
 [stage_b_skip]
+# Gale's recovery decision already matches ANTLR4 here (single-token
+# deletion of `z`, in the same position under `a`); the trees differ
+# only in how a deleted terminal renders — Gale keeps its `<skip z>`
+# marker (README, resilient-parser marker table) where ANTLR4 prints
+# the bare token. Nothing to fix without dropping a deliberate,
+# documented Gale extension; see TODO.md ("Deleted-terminal rendering").
+"ParseTrees/ExtraToken" = "recovery matches ANTLR4; only Gale's deliberate `<skip z>` marker differs from ANTLR4's bare token rendering"
 
 # Stage B′ — JVM-oracle-derived expected trees. Entries here are read
 # by `scripts/extract_antlr4_descriptors.wado` (manifest emission) and
@@ -154,12 +169,16 @@
 # These execute action bodies but do not yet match; each names the gap.
 [stage_c_todo]
 "Sets/CharSetLiteral" = "action nested in a repeat group (`(A {print})+`) is not executed yet, so result.output is empty; action-in-repeat execution is a follow-up."
-"Sets/UnicodeEscapedSMPRangeSetMismatch" = "the printed `$text` includes the actual SMP code points Gale matched, while the descriptor [output] elides them; non-ASCII action-print divergence, same family as the Unicode oracle-encoding skips."
 "SemPredEvalParser/ToLeftWithVaryingPredicate" = "member-state-dependent predicate (`i` mutated across iterations) is evaluated with different timing than ANTLR, so the printed values differ."
 "FullContextParsing/AmbiguityNoLoop" = "full-context prediction reaches the action at a different point than ANTLR, so the printed output diverges."
 "FullContextParsing/LoopsSimulateTailRecursion" = "full-context prediction reaches the action at a different point than ANTLR, so the printed output diverges."
 "ParseTrees/ExtraTokensAndAltLabels" = "error-recovery path prints differently from ANTLR; flips with error-recovery output alignment."
 "ParserErrors/LL1ErrorInfo" = "error-recovery path prints differently from ANTLR; flips with error-recovery output alignment."
-"ParserExec/BuildParseTree_FALSE" = "action-print output does not yet match ANTLR (action executed on a not-yet-supported code path or evaluated with different timing)."
 "ParserExec/LabelAliasingAcrossLabeledAlternatives" = "action-print output does not yet match ANTLR (action executed on a not-yet-supported code path or evaluated with different timing)."
 "LeftRecursion/MultipleAlternativesWithCommonLabel_4" = "common alt label across LR alternatives with a return value the print reads; label-to-vals wiring incomplete for this shape."
+
+# Stage C — descriptors whose [output] is not a property of the grammar,
+# so no amount of Stage C work can make Gale reproduce it.
+[stage_c_skip]
+"ParserExec/BuildParseTree_FALSE" = "expected output is `r` only because the ANTLR4 test harness sets buildParseTree=false before running; the grammar prints $ctx.toStringTree() and Gale always builds the tree, so the divergence is a host-option artefact, not a grammar-level gap"
+"Sets/UnicodeEscapedSMPRangeSetMismatch" = "oracle: TestRig drops the non-ASCII code points from [output] (`ad`) while Gale prints what it actually matched (`a...d`); pinning to the oracle would strictly worsen Gale. Same root cause as the Unicode entries in [stage_b_oracle_skip]."

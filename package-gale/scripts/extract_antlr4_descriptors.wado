@@ -940,7 +940,45 @@ variant TokensTarget {
     StageCBlocked(String),
 }
 
-fn classify_output_for_tokens(raw: &String) -> Option<TokensTarget> {
+/// Whether `line` is a row of ANTLR4's lexer DFA dump (`s0-' '->:s5=>3`,
+/// `:s1=>2-'n'->:s2=>2`), which `showDFA` descriptors append after the token
+/// rows. It describes ANTLR's own simulator rather than the token stream, so it
+/// is not part of what a Gale-generated lexer can ever produce.
+fn is_lexer_dfa_dump_line(line: &String) -> bool {
+    let t = line.trim();
+    if !t.contains("->") {
+        return false;
+    }
+    let cs: List<char> = t.chars().collect();
+    let mut i = 0;
+    if i < cs.len() && cs[i] == ':' {
+        i += 1;
+    }
+    if i >= cs.len() || cs[i] != 's' {
+        return false;
+    }
+    i += 1;
+    return i < cs.len() && cs[i] matches { '0'..='9' };
+}
+
+/// Drop the `showDFA` DFA dump from a descriptor `[output]` so claim (d)
+/// compares only the token stream. Without this every `showDFA` descriptor is
+/// permanently unmatchable and its real token-level gap stays hidden behind an
+/// unreachable expectation.
+fn strip_lexer_dfa_dump(raw: &String) -> String {
+    let mut out = String::with_capacity(raw.len());
+    for let line of raw.lines() {
+        if is_lexer_dfa_dump_line(&line) {
+            continue;
+        }
+        out.push_str(&line);
+        out.push('\n');
+    }
+    return out;
+}
+
+fn classify_output_for_tokens(input: &String) -> Option<TokensTarget> {
+    let raw = &strip_lexer_dfa_dump(input);
     let mut seen_token_line = false;
     let mut has_action_prefix = false;
     for let line of raw.lines() {
@@ -2543,6 +2581,27 @@ test "classify_tokens: leading garbage before token dump is Stage C blocked" {
     let raw = "abc\n[@0,0:0='a',<1>,1:0]\n";
     let result = classify_output_for_tokens(&raw);
     assert result matches { Some(TokensTarget::StageCBlocked(_)) };
+}
+
+test "classify_tokens: showDFA dump is dropped, leaving a clean token dump" {
+    // `SemPredEvalLexer` descriptors with `showDFA` append ANTLR's internal DFA
+    // state table after the token rows. Gale has no such table, so it must not
+    // sit in the expectation — the token rows alone are the claim (d) target.
+    let raw = "[@0,0:3='enum',<1>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\ns0-' '->:s3=>3\n:s1=>2-'n'->:s2=>2\n";
+    let result = classify_output_for_tokens(&raw);
+    assert result matches { Some(TokensTarget::Clean(_)) };
+    if let Some(TokensTarget::Clean(s)) = result {
+        assert s == "[@0,0:3='enum',<1>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n", `unexpected: '${s}'`;
+    }
+}
+
+test "is_lexer_dfa_dump_line: only DFA rows, not action prints or token rows" {
+    assert is_lexer_dfa_dump_line(&"s0-' '->:s5=>3");
+    assert is_lexer_dfa_dump_line(&":s1=>2-'n'->:s2=>2");
+    assert !is_lexer_dfa_dump_line(&"[@0,0:0='a',<1>,1:0]");
+    // Action prints that merely contain an arrow, or start with `s`.
+    assert !is_lexer_dfa_dump_line(&"stuff0: a->b");
+    assert !is_lexer_dfa_dump_line(&"s0 without an arrow");
 }
 
 test "stage_a_err_category_eligible: only ParserErrors and LexerErrors" {
