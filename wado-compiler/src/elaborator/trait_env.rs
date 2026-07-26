@@ -232,20 +232,28 @@ pub(crate) type DeclKey = (ModuleSource, String);
 pub(crate) enum ImplTargetKey {
     Decl(DeclKey),
     Ref(name::RefKind),
+    /// A blanket impl's bare type parameter (`impl<T> Display for T`). It
+    /// names no declaration, so it gets no `DeclKey`: a lookup starts from a
+    /// type and can never reach this variant, which is what keeps a blanket
+    /// impl out of the bucket of a type that happens to share the parameter's
+    /// name. The module is the impl's own — the parameter is scoped to it.
+    TypeParam(ModuleSource, String),
 }
 
 impl ImplTargetKey {
     /// The receiver head, for consumers that still reason in bare names.
     pub(crate) fn receiver(&self) -> name::Receiver {
         match self {
-            ImplTargetKey::Decl((_, name)) => name::Receiver::Type(name.clone()),
+            ImplTargetKey::Decl((_, name)) | ImplTargetKey::TypeParam(_, name) => {
+                name::Receiver::Type(name.clone())
+            }
             ImplTargetKey::Ref(kind) => name::Receiver::Ref(*kind),
         }
     }
 
     pub(crate) fn type_name(&self) -> Option<&str> {
         match self {
-            ImplTargetKey::Decl((_, name)) => Some(name),
+            ImplTargetKey::Decl((_, name)) | ImplTargetKey::TypeParam(_, name) => Some(name),
             ImplTargetKey::Ref(_) => None,
         }
     }
@@ -1648,9 +1656,11 @@ pub(super) fn impl_target_key(
                 scope.map_or(&empty_sources, |s| &s.sources),
                 scope.map_or(&empty_names, |s| &s.original_names),
                 symbols,
-            )
-            .unwrap_or_else(|| (module_source.clone(), written));
-            ImplTargetKey::Decl(key)
+            );
+            match key {
+                Some(key) => ImplTargetKey::Decl(key),
+                None => ImplTargetKey::TypeParam(module_source.clone(), written),
+            }
         }
     }
 }
