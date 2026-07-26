@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785022413486,
+  "lastUpdate": 1785024830945,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43881,6 +43881,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/64a5477020fe1d95e36b44ae36d7a718260e0aff"
         },
         "date": 1785022412720,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8225,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276373,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0e8ea2db6490ca6813d71acd4f40631a6cdd4518",
+          "message": "Merge pull request #1688 from wado-lang/claude/wasi-clocks-wait-for-ymr1n4\n\nchore(allocator): remove the OOM trap test",
+          "timestamp": "2026-07-26T09:03:41+09:00",
+          "tree_id": "a91ce5865f32e5ba8271c45934d81cc54dca4c83",
+          "url": "https://github.com/wado-lang/wado/commit/0e8ea2db6490ca6813d71acd4f40631a6cdd4518"
+        },
+        "date": 1785024830434,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
