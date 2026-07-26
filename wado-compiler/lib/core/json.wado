@@ -863,10 +863,7 @@ impl JsonDeserializer {
     }
 
     pub fn skip_whitespace(&mut self) {
-        let ws_set = (1 as u64 << b' ' as u64)
-            | (1 as u64 << b'\t' as u64)
-            | (1 as u64 << b'\n' as u64)
-            | (1 as u64 << b'\r' as u64);
+        let ws_set = 1 as u64 << b' ' as u64 | 1 as u64 << b'\t' as u64 | 1 as u64 << b'\n' as u64 | 1 as u64 << b'\r' as u64;
         while self.pos < self.input.len() {
             let b = self.input.get_unchecked(self.pos) as u64;
             // `b < 64` is load-bearing: Wasm masks a shift count mod 64.
