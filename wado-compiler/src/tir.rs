@@ -3860,11 +3860,14 @@ pub struct TirTypeParam {
 /// param onto an impl slot. Elaboration and monomorphization both derive it here.
 #[must_use]
 pub fn method_param_offset(impl_type_params: &[TirTypeParam]) -> u32 {
-    impl_type_params
-        .iter()
-        .map(|p| p.index + 1)
-        .max()
-        .unwrap_or(0)
+    method_param_offset_of(impl_type_params.iter().map(|p| p.index))
+}
+
+/// [`method_param_offset`] for callers holding the impl's slot indices
+/// rather than its params.
+#[must_use]
+pub fn method_param_offset_of(impl_slots: impl Iterator<Item = u32>) -> u32 {
+    impl_slots.map(|i| i + 1).max().unwrap_or(0)
 }
 
 /// Information about monomorphization origin for instantiated items

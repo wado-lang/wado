@@ -19,6 +19,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 
+use super::super::sig::{DeclSig, MethodSig};
 use super::super::types::{EnumInfo, FlagsInfo, GenericNewtypeInfo, StructFieldInfo, VariantInfo};
 
 /// A function's canonical signature, resolved once by its module's decl
@@ -27,23 +28,18 @@ use super::super::types::{EnumInfo, FlagsInfo, GenericNewtypeInfo, StructFieldIn
 /// they never re-resolve the signature AST.
 #[derive(Clone)]
 pub(crate) struct FunctionSig {
+    /// The canonical frame: the positional slots, the parameter types, and
+    /// the return type. Instantiated at a use site through
+    /// [`DeclSig::instantiate`].
+    pub(crate) decl: DeclSig,
     /// Registered `(name, TypeId)` pairs, in registration order — real
     /// params as `TypeParam` slots, fn-bound params as their realised
     /// function type. Effect params are excluded; empty iff the function
-    /// declares only effect params (or none).
+    /// declares only effect params (or none). A superset of
+    /// `decl.type_params`, which holds only the slot-consuming subset.
     pub(crate) type_param_ids: Vec<(String, TypeId)>,
-    /// The real (non-effect, non-fn-bound) subset of `type_param_ids`:
-    /// the positional slots substituted by explicit or inferred type args.
-    pub(crate) real_type_params: Vec<(String, TypeId)>,
-    /// Parameter types in declaration order.
-    pub(crate) param_types: Vec<TypeId>,
-    pub(crate) param_names: Vec<String>,
-    pub(crate) param_is_mut: Vec<bool>,
-    /// Default-value expressions — irreducibly AST, re-resolved per call
-    /// site under the callee's scope (WEP 2026-04-11).
-    pub(crate) param_defaults: Vec<Option<ast::Expr>>,
-    /// Declared return type; `None` when the declaration has none.
-    pub(crate) return_type: Option<TypeId>,
+    /// The declared parameters, in order, parallel to `decl.param_types`.
+    pub(crate) params: Vec<super::super::sig::Param>,
     /// Declared `with` effects, resolved in the declaring perspective
     /// (effect parameters stay symbolic as `EffectRef::Param`).
     pub(crate) effects: Vec<crate::tir::EffectRef>,
@@ -57,6 +53,8 @@ impl ModuleDecls {
         self.associated_constants
             .clone_from(&other.associated_constants);
         self.effect_op_sigs.clone_from(&other.effect_op_sigs);
+        self.effect_ops.clone_from(&other.effect_ops);
+        self.impl_method_sigs.clone_from(&other.impl_method_sigs);
         self.function_sigs = std::rc::Rc::clone(&other.function_sigs);
         self.current_module_globals
             .clone_from(&other.current_module_globals);
@@ -93,6 +91,19 @@ pub(crate) struct ModuleDecls {
     /// This module's own interface / resource operation signatures, keyed
     /// `(decl name, op name)`, resolved once in the declaring perspective.
     pub(crate) effect_op_sigs: IndexMap<(String, String), (Vec<TypeId>, Option<TypeId>)>,
+    /// Canonical signatures of the methods in this module's `impl` blocks,
+    /// keyed by the method's globally-unique `AstId`. Resolved once in the
+    /// impl's frame — impl type params in their positional slots, the
+    /// method's own after them, `Self` bound to the impl target — so a use
+    /// site instantiates instead of re-resolving the method AST.
+    pub(crate) impl_method_sigs: IndexMap<crate::ast::AstId, MethodSig>,
+    /// Resolved operation signatures of this module's `interface` and
+    /// `resource` declarations, keyed by the declaration's `AstId`.
+    ///
+    /// Resolved in the declaration's own frame — type params registered and
+    /// `Self` constructed — which is why the body pass reads these back
+    /// instead of resolving the same methods a second time.
+    pub(crate) effect_ops: IndexMap<crate::ast::AstId, Vec<crate::tir::TirEffectOp>>,
 
     /// Names of generic structs declared in this module (used to decide
     /// whether a struct reference needs generic-instance handling).

@@ -5384,25 +5384,38 @@ impl Parser {
         attrs: Vec<Attribute>,
     ) -> ParseResult<Item> {
         let start_span = self.peek().span;
-        // peek past `type` to see if next token is `[` (tuple type decl)
-        if self.peek_nth(1).kind == TokenKind::LBracket {
-            let id = self.alloc_ast_id();
-            self.expect(&TokenKind::Type)?;
-            // Parse `[..T]` as a type (will be a Tuple containing TypePackSpread)
-            let _ty = self.parse_type()?;
-            let end_span = self.expect(&TokenKind::Semicolon)?.span;
-            return Ok(Item::TupleTypeDecl(TupleTypeDecl {
-                id,
-                visibility,
-                attrs,
-                span: start_span.merge(&end_span),
-            }));
-        }
-        // `type Name<...>` is shared by the newtype form (`= T;`) and the
-        // named definition-less builtin form (`;`); parse the head, then
-        // branch on whether an `=` follows.
         let id = self.alloc_ast_id();
         self.expect(&TokenKind::Type)?;
+
+        // A name may bind generic parameters, with bounds the type grammar
+        // cannot express, so it is read directly. Every other head — `()`,
+        // `!`, `[..T]` — is an ordinary type.
+        if self.peek_kind().as_ident_name().is_none() {
+            let ty = self.parse_type()?;
+            let end_span = self.expect(&TokenKind::Semicolon)?.span;
+            let span = start_span.merge(&end_span);
+            return match ty {
+                Type::Tuple(_) => Ok(Item::TupleTypeDecl(TupleTypeDecl {
+                    id,
+                    visibility,
+                    attrs,
+                    span,
+                })),
+                Type::Named(head) => Ok(Item::BuiltinTypeDecl(BuiltinTypeDecl {
+                    id,
+                    name: head.name,
+                    name_span: head.span,
+                    visibility,
+                    type_params: Vec::new(),
+                    attrs,
+                    span,
+                })),
+                other => Err(self.error_at_span(other.span(), "this type cannot be declared")),
+            };
+        }
+
+        // `type Name<...>` is shared by the newtype form (`= T;`) and the
+        // named definition-less builtin form (`;`).
         let (name, name_span) = self.consume_ident_with_span()?;
         let type_params = self.parse_generic_params()?;
         if self.check(&TokenKind::Semicolon) {
@@ -7633,6 +7646,27 @@ line 2
             panic!("expected newtype");
         };
         assert_eq!(slice(source, &n.name_span), "Meters");
+    }
+
+    #[test]
+    fn definition_less_type_decl_accepts_any_type_head() {
+        for (source, expected) in [
+            ("internal type i32;", "i32"),
+            ("internal type ();", "()"),
+            ("internal type !;", "!"),
+        ] {
+            let module = parse(source).unwrap_or_else(|e| panic!("{source}: {e:?}"));
+            let Item::BuiltinTypeDecl(d) = &module.items[0] else {
+                panic!("{source}: expected a builtin type decl");
+            };
+            assert_eq!(d.name, expected);
+        }
+    }
+
+    #[test]
+    fn tuple_family_decl_still_parses() {
+        let module = parse("internal type [..T];").unwrap();
+        assert!(matches!(&module.items[0], Item::TupleTypeDecl(_)));
     }
 
     #[test]

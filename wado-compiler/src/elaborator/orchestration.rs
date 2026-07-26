@@ -1251,6 +1251,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             all_effect_op_sigs: Rc::new(IndexMap::default()),
             all_function_sigs: Rc::new(IndexMap::default()),
             all_globals: Rc::new(IndexMap::default()),
+            all_impl_method_sigs: Rc::new(IndexMap::default()),
+            all_effect_ops: Rc::new(IndexMap::default()),
             data_sections: Rc::new(
                 modules
                     .iter()
@@ -1479,6 +1481,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             > = IndexMap::default();
             let mut all_globals: IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>> =
                 IndexMap::default();
+            let mut all_impl_method_sigs: IndexMap<crate::ast::AstId, super::sig::MethodSig> =
+                IndexMap::default();
+            let mut all_effect_ops: IndexMap<crate::ast::AstId, Vec<crate::tir::TirEffectOp>> =
+                IndexMap::default();
             for module_source in &sorted_sources {
                 let Some(sem) = state.module_semantics.get(module_source) else {
                     continue;
@@ -1487,16 +1493,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     all_consts.insert(key.clone(), value.clone());
                 }
                 all_ops.insert(module_source.clone(), sem.decls.effect_op_sigs.clone());
+                for (ast_id, sig) in &sem.decls.impl_method_sigs {
+                    all_impl_method_sigs.insert(*ast_id, sig.clone());
+                }
+                for (ast_id, ops) in &sem.decls.effect_ops {
+                    all_effect_ops.insert(*ast_id, ops.clone());
+                }
                 all_fn_sigs.insert(module_source.clone(), Rc::clone(&sem.decls.function_sigs));
                 all_globals.insert(
                     module_source.clone(),
                     sem.decls.current_module_globals.clone(),
                 );
             }
+            state.tysys.all_effect_ops = Rc::new(all_effect_ops);
             state.tysys.all_associated_constants = Rc::new(all_consts);
             state.tysys.all_effect_op_sigs = Rc::new(all_ops);
             state.tysys.all_function_sigs = Rc::new(all_fn_sigs);
             state.tysys.all_globals = Rc::new(all_globals);
+            state.tysys.all_impl_method_sigs = Rc::new(all_impl_method_sigs);
         }
 
         // Phase 1b — `annotate_bodies`: run the body walk over every user

@@ -223,7 +223,55 @@ pub(crate) type DeclKey = (ModuleSource, String);
 /// AstId)` payload plus the elaborator's per-call type-id comparison, so
 /// two `struct Widget` declarations in different modules share one bucket
 /// without ambiguity.
-pub(super) type TraitImplIndex = IndexMap<name::Receiver, Vec<(ModuleSource, AstId)>>;
+/// Identity of an impl's target type. A named type keys by its *declaring*
+/// module and canonical name, so two modules' same-named structs — and one
+/// type reached under an alias — are the same key exactly when they are the
+/// same type. A `&T` / `&mut T` target is universal and declares nothing, so
+/// it keys by reference kind alone.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub(crate) enum ImplTargetKey {
+    Decl(DeclKey),
+    Ref(name::RefKind),
+    /// A blanket impl's bare type parameter (`impl<T> Display for T`). It
+    /// names no declaration, so it gets no `DeclKey`: a lookup starts from a
+    /// type and can never reach this variant, which is what keeps a blanket
+    /// impl out of the bucket of a type that happens to share the parameter's
+    /// name. The module is the impl's own — the parameter is scoped to it.
+    TypeParam(ModuleSource, String),
+}
+
+impl ImplTargetKey {
+    /// The receiver head, for consumers that still reason in bare names.
+    pub(crate) fn receiver(&self) -> name::Receiver {
+        match self {
+            ImplTargetKey::Decl((_, name)) | ImplTargetKey::TypeParam(_, name) => {
+                name::Receiver::Type(name.clone())
+            }
+            ImplTargetKey::Ref(kind) => name::Receiver::Ref(*kind),
+        }
+    }
+
+    pub(crate) fn type_name(&self) -> Option<&str> {
+        match self {
+            ImplTargetKey::Decl((_, name)) | ImplTargetKey::TypeParam(_, name) => Some(name),
+            ImplTargetKey::Ref(_) => None,
+        }
+    }
+}
+
+pub(super) type TraitImplIndex = IndexMap<ImplTargetKey, Vec<(ModuleSource, AstId)>>;
+
+type ReceiverImplIndex = IndexMap<name::Receiver, Vec<(ModuleSource, AstId)>>;
+
+fn index_by_receiver(index: &TraitImplIndex) -> ReceiverImplIndex {
+    let mut out: ReceiverImplIndex = IndexMap::default();
+    for (key, entries) in index {
+        out.entry(key.receiver())
+            .or_default()
+            .extend(entries.iter().cloned());
+    }
+    out
+}
 
 /// Digested header of an `impl` block, pre-extracted at [`TraitEnv::build`]
 /// time so trait/method queries read its trait name, target type, methods,
@@ -234,7 +282,12 @@ pub(super) type TraitImplIndex = IndexMap<name::Receiver, Vec<(ModuleSource, Ast
 pub(super) struct ImplHeader {
     /// Trait name for `impl Trait for Type` blocks (via `get_type_name_static`
     /// on the trait reference); `None` for inherent `impl Type { … }` blocks.
+    /// The memoised head name of [`Self::trait_type`], so the index filters
+    /// that only ask "is this a trait impl?" need no allocation.
     pub(super) trait_name: Option<String>,
+    /// The full trait reference (`Index<K>` in `impl Index<K> for Map`), for
+    /// consumers that need its generic arguments rather than its head name.
+    pub(super) trait_type: Option<Type>,
     /// The impl target type (`impl_block.ty`).
     pub(super) ty: Type,
     /// The impl block's type parameters.
@@ -246,6 +299,9 @@ pub(super) struct ImplHeader {
     /// The block's `type X = …;` associated-type bindings, cloned so
     /// associated-type resolution reads them without the impl-block AST.
     pub(super) associated_types: Vec<ast::AssociatedTypeBinding>,
+    /// `impl Trait for Type;` — a body-less derivation request rather than a
+    /// real impl (WEP 2026-06-25 trait derivation).
+    pub(super) is_synthesize_request: bool,
 }
 
 /// Digested signature of a single method inside an [`ImplHeader`]. Holds the
@@ -254,6 +310,9 @@ pub(super) struct ImplHeader {
 #[derive(Clone, Debug)]
 pub(super) struct ImplMethodHeader {
     pub(super) name: String,
+    /// The method's own `AstId` — the key into the canonical-signature
+    /// digest, so a header lookup reaches the signature without the AST.
+    pub(super) ast_id: AstId,
     pub(super) type_params: Vec<ast::GenericParam>,
     /// Whether the method has a body. Always true for impl methods; for trait
     /// declarations it distinguishes default methods from bare signatures,
@@ -369,7 +428,20 @@ pub(super) type ResourceDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 /// impl block itself (an `AstId`); `method_index` stays a bare position
 /// into that block's own, TraitEnv-owned `ImplHeader::methods` — not a
 /// window into the mutable `module.items` a reload could reorder.
-pub(super) type StaticMethodIndex = IndexMap<DeclKey, Vec<(String, ModuleSource, AstId, usize)>>;
+/// A static (receiver-less) method reachable by name on a type.
+#[derive(Clone, Debug)]
+pub(super) struct StaticMethodEntry {
+    pub(super) name: String,
+    /// The module defining the impl — a static method's signature names types
+    /// that module imports, not the caller's.
+    pub(super) module: ModuleSource,
+    /// The impl block, for its [`ImplHeader`].
+    pub(super) impl_id: AstId,
+    /// The method itself: the key into the signature digest.
+    pub(super) method_id: AstId,
+}
+
+pub(super) type StaticMethodIndex = IndexMap<DeclKey, Vec<StaticMethodEntry>>;
 
 /// Pre-built index of static methods from resource declarations.
 /// Key: canonical receiver [`DeclKey`] → `[(method_name, ModuleSource,
@@ -416,6 +488,13 @@ pub struct TraitEnv {
     /// `ModuleSource`. The inherent subset is the `trait_name.is_none()` filter
     /// ([`Self::inherent_impl_keys`]).
     pub(super) all_impl_index: TraitImplIndex,
+    /// `impl_index` and `all_impl_index` re-keyed by the target's bare head,
+    /// for callers that hold a name without the import context to canonicalise
+    /// it. Built once with the indexes it mirrors: derived per query it is a
+    /// scan of every impl target, and bound checking during method lookup runs
+    /// on that path.
+    by_receiver: ReceiverImplIndex,
+    all_by_receiver: ReceiverImplIndex,
     /// Trait name → trait declaration location.
     pub(super) decl_index: TraitDeclIndex,
     /// Effect name → effect declaration location.
@@ -707,6 +786,12 @@ impl TraitEnv {
                             module_source.clone(),
                         );
                     }
+                    Item::BuiltinTypeDecl(d) => {
+                        type_decl_index.insert(
+                            (module_source.clone(), d.name.clone()),
+                            module_source.clone(),
+                        );
+                    }
                     Item::TupleTypeDecl(_) => {
                         type_decl_index.insert(
                             (
@@ -812,6 +897,7 @@ impl TraitEnv {
                                 .iter()
                                 .map(|m| ImplMethodHeader {
                                     name: m.name.clone(),
+                                    ast_id: m.id,
                                     type_params: m.type_params.clone(),
                                     has_body: m.body.is_some(),
                                 })
@@ -824,11 +910,17 @@ impl TraitEnv {
                     continue;
                 };
                 let type_name = get_type_name_static(&impl_block.ty);
-                let type_key = receiver_key(&impl_block.ty);
+                let type_key = impl_target_key(
+                    &impl_block.ty,
+                    module_source,
+                    module_import_scopes.get(module_source),
+                    symbols,
+                );
                 impl_headers.insert(
                     (module_source.clone(), impl_block.id),
                     ImplHeader {
                         trait_name: impl_block.trait_type.as_ref().map(get_type_name_static),
+                        trait_type: impl_block.trait_type.clone(),
                         ty: impl_block.ty.clone(),
                         type_params: impl_block.type_params.clone(),
                         methods: impl_block
@@ -836,11 +928,13 @@ impl TraitEnv {
                             .iter()
                             .map(|m| ImplMethodHeader {
                                 name: m.name.clone(),
+                                ast_id: m.id,
                                 type_params: m.type_params.clone(),
                                 has_body: m.body.is_some(),
                             })
                             .collect(),
                         associated_types: impl_block.associated_types.clone(),
+                        is_synthesize_request: impl_block.is_synthesize_request,
                     },
                 );
                 // Joins `all_impl_index` before the trait/inherent split, so its
@@ -908,7 +1002,7 @@ impl TraitEnv {
                     // inherent statics. `f64::from_bits` and friends in
                     // `core:prelude/int128.wado` flow through this path.
                     let recv_key = canonical_key(module_source, &type_name);
-                    for (method_idx, method) in impl_block.methods.iter().enumerate() {
+                    for method in &impl_block.methods {
                         let has_self = method
                             .params
                             .iter()
@@ -917,19 +1011,19 @@ impl TraitEnv {
                             static_method_index
                                 .entry(recv_key.clone())
                                 .or_default()
-                                .push((
-                                    method.name.clone(),
-                                    module_source.clone(),
-                                    impl_block.id,
-                                    method_idx,
-                                ));
+                                .push(StaticMethodEntry {
+                                    name: method.name.clone(),
+                                    module: module_source.clone(),
+                                    impl_id: impl_block.id,
+                                    method_id: method.id,
+                                });
                         }
                     }
                 } else {
                     // Inherent impl: already in `all_impl_index`; here only its
                     // static methods need the dedicated index.
                     let recv_key = canonical_key(module_source, &type_name);
-                    for (method_idx, method) in impl_block.methods.iter().enumerate() {
+                    for method in &impl_block.methods {
                         let has_self = method
                             .params
                             .iter()
@@ -938,12 +1032,12 @@ impl TraitEnv {
                             static_method_index
                                 .entry(recv_key.clone())
                                 .or_default()
-                                .push((
-                                    method.name.clone(),
-                                    module_source.clone(),
-                                    impl_block.id,
-                                    method_idx,
-                                ));
+                                .push(StaticMethodEntry {
+                                    name: method.name.clone(),
+                                    module: module_source.clone(),
+                                    impl_id: impl_block.id,
+                                    method_id: method.id,
+                                });
                         }
                     }
                 }
@@ -954,6 +1048,8 @@ impl TraitEnv {
 
         (
             Arc::new(Self {
+                by_receiver: index_by_receiver(&impl_index),
+                all_by_receiver: index_by_receiver(&all_impl_index),
                 impl_index,
                 all_impl_index,
                 decl_index,
@@ -1006,7 +1102,7 @@ impl TraitEnv {
     /// instance-method lookup, which must not treat trait impls as inherent.
     pub(super) fn inherent_impl_keys(
         &self,
-        type_key: &name::Receiver,
+        type_key: &ImplTargetKey,
     ) -> Vec<(ModuleSource, AstId)> {
         self.all_impl_index
             .get(type_key)
@@ -1023,15 +1119,16 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
-    /// Whether `type_name` has an inherent impl declaring `method_name`.
-    pub(crate) fn has_inherent_method(&self, type_key: &name::Receiver, method_name: &str) -> bool {
-        self.all_impl_index.get(type_key).is_some_and(|keys| {
-            keys.iter().any(|key| {
-                self.impl_headers.get(key).is_some_and(|h| {
-                    h.trait_name.is_none() && h.methods.iter().any(|m| m.name == method_name)
-                })
-            })
-        })
+    /// Declaring module of a struct-like type (struct / resource / variant /
+    /// enum / builtin) by name, when the name picks out exactly one. Several
+    /// modules declaring the name leaves it unresolved rather than guessing:
+    /// a wrong module is worse than the caller's existing fallback.
+    pub(crate) fn find_struct_like_decl_key(&self, name: &str) -> Option<DeclKey> {
+        let modules = self.struct_like_decl_modules.get(name)?;
+        match modules.as_slice() {
+            [only] => Some((only.clone(), name.to_string())),
+            _ => None,
+        }
     }
 
     pub(crate) fn impl_module_for(
@@ -1049,29 +1146,67 @@ impl TraitEnv {
         pick_module_union(ast, syn, type_module)
     }
 
-    pub(crate) fn has_methodful_impl(
+    /// Every impl entry whose target *head* matches `receiver`, across all
+    /// declaring modules. The keyed lookups are exact; this is the widened
+    /// form for callers that cannot canonicalise — monomorphize and synthesis
+    /// run after elaboration and hold a type's name without its import
+    /// context. Prefer a keyed lookup wherever a module is known.
+    pub(crate) fn entries_by_receiver<'a>(
+        &'a self,
+        receiver: &'a name::Receiver,
+    ) -> impl Iterator<Item = &'a (ModuleSource, AstId)> + 'a {
+        self.by_receiver
+            .get(receiver)
+            .into_iter()
+            .flat_map(|entries| entries.iter())
+    }
+
+    /// Collected form of [`Self::entries_by_receiver`], for callers that need
+    /// to iterate the widened match more than once.
+    pub(crate) fn entries_by_receiver_vec(
         &self,
-        type_key: &name::Receiver,
+        receiver: &name::Receiver,
+    ) -> Vec<(ModuleSource, AstId)> {
+        self.entries_by_receiver(receiver).cloned().collect()
+    }
+
+    /// Receiver-matched form of [`Self::has_any_methodful_impl`].
+    pub(crate) fn has_any_methodful_impl_by_receiver(
+        &self,
+        receiver: &name::Receiver,
+        trait_name: &str,
+    ) -> bool {
+        self.entries_by_receiver(receiver)
+            .any(|entry| self.methodful_header_matches(entry, trait_name))
+    }
+
+    /// Receiver-matched form of [`Self::has_methodful_impl`].
+    pub(crate) fn has_methodful_impl_by_receiver(
+        &self,
+        receiver: &name::Receiver,
         trait_name: &str,
         module_source: &ModuleSource,
     ) -> bool {
-        self.impl_index.get(type_key).is_some_and(|entries| {
-            entries.iter().any(|entry| {
-                entry.0 == *module_source && self.methodful_header_matches(entry, trait_name)
-            })
+        self.entries_by_receiver(receiver).any(|entry| {
+            entry.0 == *module_source && self.methodful_header_matches(entry, trait_name)
         })
     }
 
-    pub(crate) fn has_any_methodful_impl(
+    /// Receiver-matched form of [`Self::has_inherent_method`].
+    pub(crate) fn has_inherent_method_by_receiver(
         &self,
-        type_key: &name::Receiver,
-        trait_name: &str,
+        receiver: &name::Receiver,
+        method_name: &str,
     ) -> bool {
-        self.impl_index.get(type_key).is_some_and(|entries| {
-            entries
-                .iter()
-                .any(|entry| self.methodful_header_matches(entry, trait_name))
-        })
+        self.all_by_receiver
+            .get(receiver)
+            .into_iter()
+            .flat_map(|entries| entries.iter())
+            .any(|key| {
+                self.impl_headers.get(key).is_some_and(|h| {
+                    h.trait_name.is_none() && h.methods.iter().any(|m| m.name == method_name)
+                })
+            })
     }
 
     fn methodful_header_matches(&self, entry: &(ModuleSource, AstId), trait_name: &str) -> bool {
@@ -1527,6 +1662,36 @@ fn check_all_orphan_rules(
 /// a `"&"` string); everything else keys as `Receiver::Type` over the canonical
 /// [`get_type_name_static`] head, so the key domain matches the old string keys
 /// exactly apart from the ref shape being typed.
+/// Canonical [`ImplTargetKey`] for an impl target written in `module_source`.
+/// The declaring module and original name come from that module's import
+/// scope, so `impl T for Alias` keys the same as `impl T for Original`.
+pub(super) fn impl_target_key(
+    ty: &ast::Type,
+    module_source: &ModuleSource,
+    scope: Option<&ModuleImportScope>,
+    symbols: &SymbolTable,
+) -> ImplTargetKey {
+    if let Some(kind) = name::RefKind::from_ast(ty) {
+        ImplTargetKey::Ref(kind)
+    } else {
+        let written = get_type_name_static(ty);
+        let empty_sources: IndexMap<String, ModuleSource> = IndexMap::default();
+        let empty_names: IndexMap<String, String> = IndexMap::default();
+        let key = super::trait_query::decl_identity_core(
+            &written,
+            module_source,
+            scope.map_or(&empty_sources, |s| &s.sources),
+            &empty_sources,
+            scope.map_or(&empty_names, |s| &s.original_names),
+            symbols,
+        );
+        match key {
+            Some(key) => ImplTargetKey::Decl(key),
+            None => ImplTargetKey::TypeParam(module_source.clone(), written),
+        }
+    }
+}
+
 pub(super) fn receiver_key(ty: &ast::Type) -> name::Receiver {
     match name::RefKind::from_ast(ty) {
         Some(kind) => name::Receiver::Ref(kind),

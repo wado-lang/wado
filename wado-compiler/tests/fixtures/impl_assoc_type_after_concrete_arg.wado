@@ -1,0 +1,33 @@
+// An associated type bound by an impl whose target has a concrete
+// argument ahead of the free one.
+//
+// The impl block's bindings are numbered by declaration order of
+// `impl<...>`, each method by position in the target's generic
+// arguments. With `Pair<String, V>` the two disagree and the recorded
+// signature mixes them.
+
+trait Boxy {
+    type Item;
+    fn first(&self) -> Self::Item;
+}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<V: Display> Boxy for Pair<String, V> {
+    type Item = V;
+
+    fn first(&self) -> Self::Item {
+        return self.b;
+    }
+}
+
+test "an associated type resolves past a concrete target argument" {
+    let p = Pair { a: "k", b: 42 };
+    assert p.first() == 42;
+}
+
+__DATA__
+{"test": {}}

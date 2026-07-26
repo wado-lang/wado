@@ -647,7 +647,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // bare-name match would collapse a real conversion into an
                     // identity. Generic instances keep the name compare — a decl
                     // key drops type args, so it cannot tell `Foo<A>` from
-                    // `Foo<B>`; primitives have no decl key and fall back too.
+                    // `Foo<B>`.
                     let arg_is_generic = {
                         let tt = self.tysys.type_table.borrow();
                         matches!(
@@ -1459,7 +1459,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if !callee_module.is_entry_point()
             && let Some(sig) = self.tysys.function_sig(callee_module, func_name)
-            && let Some(return_type) = sig.return_type
+            && let Some(return_type) = sig.decl.return_type
         {
             return return_type;
         }
@@ -1531,7 +1531,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if prefix == "builtin"
                 && let Some(sig) = self.tysys.function_sig(&ModuleSource::builtin(), suffix)
             {
-                return sig.param_types.clone();
+                return sig.decl.param_types.clone();
             }
 
             if let Some((params, _)) = self.resolve_effect_op_signature(prefix, suffix) {
@@ -1541,7 +1541,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if let Some(sig) = self.tysys.function_sig(&self.current_module_source, name) {
-            return sig.param_types.clone();
+            return sig.decl.param_types.clone();
         }
 
         // Imported functions: the canonical signature resolved in the
@@ -1551,7 +1551,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let src = symbol.module_source().clone();
             let sym_name = symbol.name.clone();
             if let Some(sig) = self.tysys.function_sig(&src, &sym_name) {
-                return sig.param_types.clone();
+                return sig.decl.param_types.clone();
             }
         }
 
@@ -1561,7 +1561,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && fallback != self.current_module_source
             && let Some(sig) = self.tysys.function_sig(&fallback, name)
         {
-            return sig.param_types.clone();
+            return sig.decl.param_types.clone();
         }
 
         Vec::new()
@@ -1657,11 +1657,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .function_sig(&self.current_module_source, &ident.name)
         {
             return (
-                sig.param_names
-                    .iter()
-                    .cloned()
-                    .zip(sig.param_defaults.iter().cloned())
-                    .collect(),
+                crate::elaborator::sig::Param::named_defaults(&sig.params),
                 Some(self.current_module_source.clone()),
             );
         }
@@ -1673,11 +1669,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let name = symbol.name.clone();
             if let Some(sig) = self.tysys.function_sig(&src, &name) {
                 return (
-                    sig.param_names
-                        .iter()
-                        .cloned()
-                        .zip(sig.param_defaults.iter().cloned())
-                        .collect(),
+                    crate::elaborator::sig::Param::named_defaults(&sig.params),
                     Some(src),
                 );
             }
@@ -1701,7 +1693,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .function_sig(&self.current_module_source, &ident.name)
         {
-            return sig.param_is_mut.clone();
+            return crate::elaborator::sig::Param::is_mut_flags(&sig.params);
         }
 
         // Imported function
@@ -1712,7 +1704,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             if let Some(sig) = self.tysys.function_sig(&src, &name) {
-                return sig.param_is_mut.clone();
+                return crate::elaborator::sig::Param::is_mut_flags(&sig.params);
             }
         }
 
@@ -2353,8 +2345,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         Some((
             sig.type_param_ids.clone(),
-            sig.param_types.clone(),
-            sig.return_type,
+            sig.decl.param_types.clone(),
+            sig.decl.return_type,
         ))
     }
 
@@ -2542,7 +2534,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .function_sig(&self.current_module_source, &ident.name)
             {
-                Some(sig) => sig.param_types.clone(),
+                Some(sig) => sig.decl.param_types.clone(),
                 None => return Vec::new(),
             }
         } else if let Some(symbol) = self
@@ -2552,7 +2544,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             match self.tysys.function_sig(&src, &name) {
-                Some(sig) => sig.param_types.clone(),
+                Some(sig) => sig.decl.param_types.clone(),
                 None => return Vec::new(),
             }
         } else {

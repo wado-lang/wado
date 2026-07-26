@@ -1,0 +1,16 @@
+// The operator impl is written on an imported newtype, so the call must
+// resolve to the newtype's module — reaching it through a local alias too.
+
+use { Counter } from "./sub/newtype_operator_trait_on_newtype_counter.wado";
+
+type Ticks = Counter;
+
+test "operator impl on an imported newtype" {
+    let a: Counter = 1 as Counter;
+    let b: Counter = 2 as Counter;
+    assert ((a + b) as i32) == 4;
+
+    let t1: Ticks = 10 as Ticks;
+    let t2: Ticks = 20 as Ticks;
+    assert ((t1 + t2) as i32) == 31;
+}

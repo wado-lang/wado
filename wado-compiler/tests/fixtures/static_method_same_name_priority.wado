@@ -1,0 +1,25 @@
+// Three modules declare a `Widget` with a static `make()`. Each call site
+// must reach its own module's `Widget`, never another module's.
+//
+// Pins the priority rule that dispatch's current-module scan branches
+// encode, so a later change that routes these lookups entirely through the
+// canonical-key indexes has to preserve it rather than discover it.
+
+use { a_make } from "./sub/static_same_name_a.wado";
+use { b_make } from "./sub/static_same_name_b.wado";
+
+struct Widget {
+    v: i32,
+}
+
+impl Widget {
+    fn make() -> i32 {
+        return 3;
+    }
+}
+
+test "static method resolves to the calling module's same-named type" {
+    assert a_make() == 1;
+    assert b_make() == 2;
+    assert Widget::make() == 3;
+}

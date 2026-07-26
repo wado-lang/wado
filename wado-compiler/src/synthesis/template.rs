@@ -1002,9 +1002,10 @@ fn peel_transparent_newtype(type_id: TypeId, trait_name: &str, ctx: &TemplateCtx
             match tt.get(tid) {
                 ResolvedType::Newtype {
                     name, base_type, ..
-                } if !ctx
-                    .trait_env
-                    .has_any_methodful_impl(&Receiver::Type(name.clone()), trait_name) =>
+                } if !ctx.trait_env.has_any_methodful_impl_by_receiver(
+                    &Receiver::Type(name.clone()),
+                    trait_name,
+                ) =>
                 {
                     *base_type
                 }
@@ -1241,7 +1242,7 @@ pub(crate) fn blanket_dispatch_for(
         Some(kind) => Receiver::Ref(kind),
         None => Receiver::Type(base_struct_name.to_string()),
     };
-    if trait_env.has_any_methodful_impl(&type_key, trait_name) {
+    if trait_env.has_any_methodful_impl_by_receiver(&type_key, trait_name) {
         return None;
     }
     let type_module = type_module_hint_tt(type_id, tt);

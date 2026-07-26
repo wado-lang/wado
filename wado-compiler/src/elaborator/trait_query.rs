@@ -100,19 +100,42 @@ pub(super) fn canonical_assoc_const_key(
 /// default-method synthesis (it has no `Elaborator` instance but does carry
 /// the same `imports` / `symbols` / `trait_env` / `current_module_source`
 /// references).
-pub(crate) fn canonical_decl_key_with(
+/// The part of [`canonical_decl_key_with`] that needs nothing but a name, a
+/// vantage module, that module's imported type sources, and the symbol table.
+///
+/// Split out so `TraitEnv::build` can key its impl indexes by the same
+/// identity the elaborator will later look them up with. Two implementations
+/// of "which type is this name?" is how the indexes came to disagree with
+/// their callers — a primitive keyed to whichever module wrote the `impl`,
+/// while lookups asked for `primitive()`.
+///
+/// Returns `None` when the name resolves through none of these; the caller
+/// decides what a still-unresolved name means.
+pub(crate) fn decl_identity_core(
     name: &str,
-    current_module_source: &ModuleSource,
-    imports: &super::sem::ModuleImports,
+    vantage: &ModuleSource,
+    imported_sources: &IndexMap<String, ModuleSource>,
+    imported_effect_sources: &IndexMap<String, ModuleSource>,
+    import_original_names: &IndexMap<String, String>,
     symbols: &crate::symbol::SymbolTable,
-    trait_env: &super::trait_env::TraitEnv,
-) -> (ModuleSource, String) {
+) -> Option<(ModuleSource, String)> {
+    // Types with one instance per name, so the name determines the type and
+    // both sides agree without resolving anything. The module is where each
+    // is declared: `[..T]` and `Array<T>` are real `internal type`
+    // declarations, and answering `primitive()` for them contradicts the
+    // declaration index, which knows better. Primitives and `()` have no
+    // declaration to point at yet.
     if super::is_primitive_type_name(name) {
-        return (ModuleSource::primitive(), name.to_string());
+        return Some((ModuleSource::primitive(), name.to_string()));
     }
-    if let Some(src) = imports.imported_type_sources.get(name) {
-        let original = imports
-            .import_original_names
+    if name == crate::tir::TypeTable::TUPLE_TYPE_NAME {
+        return Some((ModuleSource::types(), name.to_string()));
+    }
+    if name == crate::tir::TypeTable::ARRAY_TYPE_NAME {
+        return Some((ModuleSource::array(), name.to_string()));
+    }
+    if let Some(src) = imported_sources.get(name) {
+        let original = import_original_names
             .get(name)
             .cloned()
             .unwrap_or_else(|| name.to_string());
@@ -120,24 +143,46 @@ pub(crate) fn canonical_decl_key_with(
             .lookup_in_module(src, &original)
             .map(|sym| sym.module_source().clone())
             .unwrap_or_else(|| src.clone());
-        return (canonical, original);
+        return Some((canonical, original));
     }
-    if let Some(src) = imports.effect_sources.get(name) {
+    // An effect import ranks with the type imports above, not below the
+    // lookups: `symbols.lookup` falls back to the prelude, so a demoted
+    // effect import loses its own declaring module to any prelude symbol
+    // that happens to share the name.
+    if let Some(src) = imported_effect_sources.get(name) {
         let canonical = symbols
             .lookup_in_module(src, name)
             .map(|sym| sym.module_source().clone())
             .unwrap_or_else(|| src.clone());
-        return (canonical, name.to_string());
+        return Some((canonical, name.to_string()));
     }
-    // A name defined in the current module resolves to it, ahead of the global
-    // decl-index fallbacks below (which are by-name and can pick a same-named
-    // declaration in another module). Without this a locally defined
-    // `trait Visitor` lost to `core:serde::Visitor` (issue #1298).
-    if symbols.is_defined_in_module(current_module_source, name) {
-        return (current_module_source.clone(), name.to_string());
+    // A name defined in the vantage module resolves to it, ahead of any
+    // by-name fallback that could pick a same-named declaration elsewhere.
+    if symbols.is_defined_in_module(vantage, name) {
+        return Some((vantage.clone(), name.to_string()));
     }
-    if let Some(sym) = symbols.lookup(current_module_source, name) {
-        return (sym.module_source().clone(), name.to_string());
+    if let Some(sym) = symbols.lookup(vantage, name) {
+        return Some((sym.module_source().clone(), name.to_string()));
+    }
+    None
+}
+
+pub(crate) fn canonical_decl_key_with(
+    name: &str,
+    current_module_source: &ModuleSource,
+    imports: &super::sem::ModuleImports,
+    symbols: &crate::symbol::SymbolTable,
+    trait_env: &super::trait_env::TraitEnv,
+) -> (ModuleSource, String) {
+    if let Some(key) = decl_identity_core(
+        name,
+        current_module_source,
+        &imports.imported_type_sources,
+        &imports.effect_sources,
+        &imports.import_original_names,
+        symbols,
+    ) {
+        return key;
     }
     if let Some(key) = trait_env.find_trait_decl_key(name) {
         return key;
@@ -146,6 +191,12 @@ pub(crate) fn canonical_decl_key_with(
         return key;
     }
     if let Some(key) = trait_env.find_static_method_decl_key(name) {
+        return key;
+    }
+    // A struct-like type the caller never imported — e.g. an iterator handed
+    // back by a method, named nowhere in this module's `use` declarations.
+    // Without this the fallback below would claim it for the current module.
+    if let Some(key) = trait_env.find_struct_like_decl_key(name) {
         return key;
     }
     (current_module_source.clone(), name.to_string())
@@ -1201,7 +1252,8 @@ impl TypeSystem {
         type_key: &Receiver,
         trait_name: &str,
     ) -> bool {
-        self.trait_env.has_any_methodful_impl(type_key, trait_name)
+        self.trait_env
+            .has_any_methodful_impl_by_receiver(type_key, trait_name)
             || self.blanket_trait_impl_applies(ctx, scope, type_key, trait_name)
     }
 
@@ -1216,10 +1268,10 @@ impl TypeSystem {
         type_args: Option<&[TypeId]>,
     ) -> bool {
         let trait_env = self.trait_env.clone();
-        if let Some(entries) = trait_env.impl_index.get(type_key) {
-            for entry in entries {
-                let (module_src, _) = entry;
-                let Some(header) = trait_env.impl_headers.get(entry) else {
+        {
+            for entry in trait_env.entries_by_receiver_vec(type_key) {
+                let (module_src, _) = &entry;
+                let Some(header) = trait_env.impl_headers.get(&entry) else {
                     continue;
                 };
                 let Some(impl_trait_name) = &header.trait_name else {
@@ -1578,6 +1630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return Some((
                     trait_name.clone(),
                     MethodInfo {
+                        impl_offset: None,
                         return_type,
                         self_kind,
                         param_types,
@@ -1828,9 +1881,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_env = self.tysys.trait_env.clone();
         let impl_infos: Vec<ImplInfo> = {
             let mut result = vec![];
-            if let Some(entries) = trait_env.impl_index.get(&Receiver::Type(type_name)) {
+            {
+                let entries = trait_env.entries_by_receiver_vec(&Receiver::Type(type_name));
                 for entry in entries {
-                    let Some(header) = trait_env.impl_headers.get(entry) else {
+                    let Some(header) = trait_env.impl_headers.get(&entry) else {
                         continue;
                     };
                     if header.trait_name.as_deref() == Some(trait_name)
@@ -2134,6 +2188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .intern(ResolvedType::Ref(base_type_id));
         let method_info = MethodInfo {
+            impl_offset: None,
             return_type,
             self_kind: ast::SelfKind::Ref,
             param_types: vec![ref_self_ty],

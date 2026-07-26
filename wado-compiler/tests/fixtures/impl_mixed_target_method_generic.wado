@@ -1,0 +1,27 @@
+// The same numbering split with a partly-concrete target: the impl binds
+// `T` and the target also carries a concrete `i32`. The decl pass skips
+// concrete args when numbering, dispatch counts them, so the method's
+// `U` collides with the impl's own argument.
+
+struct Box2<A, B> {
+    a: A,
+    b: B,
+}
+
+trait Sink {
+    fn emit<U: Display>(&self, v: U) -> String;
+}
+
+impl<T: Display> Sink for Box2<T, i32> {
+    fn emit<U: Display>(&self, v: U) -> String {
+        return `${v}`;
+    }
+}
+
+test "a method generic survives a concrete argument ahead of a free one" {
+    let b = Box2 { a: "x", b: 1 };
+    assert b.emit("hello") == "hello";
+}
+
+__DATA__
+{"test": {}}
