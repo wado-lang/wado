@@ -1128,19 +1128,6 @@ impl TraitEnv {
             .map(|b| b.param.clone())
     }
 
-    /// The traits whose blanket impl is bounded on `bound_name` — the set of
-    /// derivations a type satisfying that bound would be claimed by.
-    pub(crate) fn traits_blanket_bounded_on(&self, bound_name: &str) -> Vec<&str> {
-        self.blanket_impls
-            .iter()
-            .filter(|(_, impls)| {
-                impls
-                    .iter()
-                    .any(|b| b.bounds.iter().any(|bound| bound == bound_name))
-            })
-            .map(|(trait_name, _)| trait_name.as_str())
-            .collect()
-    }
 
     /// The bound trait names on the value blanket's receiver param (`Bound` in
     /// `impl<I: Bound> Trait for I`). A call may only dispatch through the

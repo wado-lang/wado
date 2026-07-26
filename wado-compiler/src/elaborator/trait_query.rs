@@ -617,21 +617,30 @@ impl TypeSystem {
         }
     }
 
-    /// Coherence Rule 1 (WEP 2026-03-14 §5) for a generic base: a type that
-    /// writes its own impl of a trait derived over `reflect_trait` keeps it,
-    /// rather than being claimed by the derivation.
-    ///
-    /// Only generic bases need this. A plain type's own impl already wins,
-    /// because impl selection keys on its name; a generic instance's mangled
-    /// name (`TreeMap<String, i32>`) does not match the impl written for its
-    /// base, so without this the blanket takes types like `TreeMap` that have
-    /// hand-written `Inspect`.
-    fn has_own_impl_of_a_reflect_derivation(&self, base_name: &str, reflect_trait: &str) -> bool {
-        let receiver = Receiver::Type(base_name.to_string());
-        self.trait_env
-            .traits_blanket_bounded_on(reflect_trait)
+    /// The field types a reflection written at `scope`'s module can enumerate
+    /// (WEP 2026-06-13, Visibility). `None` when the struct declares fields but
+    /// exposes none there: its shape is unobservable, so it does not satisfy the
+    /// bound. A struct that declares no field at all is genuinely memberless and
+    /// yields an empty list.
+    fn visible_field_types(
+        &self,
+        scope: &TypeLookup,
+        info: &super::types::StructFieldInfo,
+    ) -> Option<Vec<TypeId>> {
+        if &info.module_source == scope.current_module_source {
+            return Some(info.fields.iter().map(|(_, ty, _)| *ty).collect());
+        }
+        let same_package = info.module_source.same_package(scope.current_module_source);
+        let visible: Vec<TypeId> = info
+            .fields
             .iter()
-            .any(|derived| self.trait_env.has_any_methodful_impl(&receiver, derived))
+            .filter(|(_, _, vis)| vis.reachable_from(same_package))
+            .map(|(_, ty, _)| *ty)
+            .collect();
+        if visible.is_empty() && !info.fields.is_empty() {
+            return None;
+        }
+        Some(visible)
     }
 
     /// Whether a declaration can be reflected, via the shared eligibility
@@ -1047,7 +1056,7 @@ impl TypeSystem {
         let plain_reflect_subject = match (&resolved, on_bound) {
             (ResolvedType::Struct { name, .. }, Some(OnBoundTrait::ReflectStruct)) => scope
                 .struct_fields(name)
-                .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect()),
+                .and_then(|info| self.visible_field_types(scope, info)),
             (ResolvedType::Variant { name, .. }, Some(OnBoundTrait::ReflectVariant)) => scope
                 .variant_case(name)
                 .map(|info| info.cases.iter().map(|c| c.payload).collect()),
@@ -1070,13 +1079,11 @@ impl TypeSystem {
             module_source,
             ..
         } = &resolved
-            && !self.has_own_impl_of_a_reflect_derivation(name, trait_name)
             && match on_bound {
-                Some(OnBoundTrait::ReflectStruct) => {
-                    scope.struct_fields(name).is_some_and(|info| {
-                        self.is_reflect_eligible(type_id, info.fields.iter().map(|(_, ty, _)| *ty))
-                    })
-                }
+                Some(OnBoundTrait::ReflectStruct) => scope
+                    .struct_fields(name)
+                    .and_then(|info| self.visible_field_types(scope, info))
+                    .is_some_and(|tys| self.is_reflect_eligible(type_id, tys.into_iter())),
                 Some(OnBoundTrait::ReflectVariant) => scope.variant_case(name).is_some_and(|info| {
                     self.is_reflect_eligible(type_id, info.cases.iter().map(|c| c.payload))
                 }),

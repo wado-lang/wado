@@ -133,6 +133,20 @@ a handle's own `Members` would mention `StructField<Self, …>`, growing `Self`
 without bound. They are not reflectable, by the same seal that rejects a user
 `impl`.
 
+## Visibility
+
+A type's reflected members are the ones visible where the reflection is written.
+A derived impl is synthesized at the declaration, so it sees every member and
+derivation is unaffected; a `T: Reflect*` bound elsewhere sees only the members
+that are public there.
+
+A type that declares members but exposes none at the use site does not satisfy
+the bound. Reflecting it as memberless would silently derive `{}` instead of
+reporting that its shape is unobservable there — a type that declares no members
+at all is genuinely memberless and still satisfies. This is what keeps an abstraction like `TreeMap` out
+of a downstream `T: ReflectStruct` without naming it: its fields are private, so
+nothing outside its module can enumerate them.
+
 ## Generic types
 
 A generic type reflects through one generic impl over `S<T, …>`, not through a
