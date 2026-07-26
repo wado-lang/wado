@@ -390,10 +390,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .impl_index
             .get(&Receiver::Type(type_name.to_string()))
         {
-            for (module_src, item_id) in entries {
-                let module = &self.loaded_modules[module_src];
-                if let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
-                    && let Some(trait_type) = &impl_block.trait_type
+            for key in entries {
+                if let Some(trait_type) = self
+                    .tysys
+                    .trait_env
+                    .impl_headers
+                    .get(key)
+                    .and_then(|header| header.trait_type.as_ref())
                 {
                     trait_types.push(trait_type.clone());
                 }
