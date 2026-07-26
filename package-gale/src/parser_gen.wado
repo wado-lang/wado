@@ -5190,28 +5190,23 @@ fn gen_op_dispatch_element(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    if op_is_leaf(op) {
-        gen_op_leaf(w, op, ctx, name_counts);
-        return;
+    match op {
+        Token(_) => gen_op_leaf(w, op, ctx, name_counts),
+        Literal(_) => gen_op_leaf(w, op, ctx, name_counts),
+        RuleCall(_) => gen_op_leaf(w, op, ctx, name_counts),
+        Wildcard(_) => gen_op_leaf(w, op, ctx, name_counts),
+        Excluded(_) => gen_op_leaf(w, op, ctx, name_counts),
+        Repeat(rep_op) => {
+            let rep = if let Repeat(r) = elem {
+                r;
+            } else {
+                panic("gen_op_dispatch_element: Repeat op mapped to non-Repeat element");
+            };
+            gen_op_repeat(w, rep, rep_op, ctx, name_counts);
+        },
+        Group(g_op) => gen_op_group(w, g_op, elem, ctx, name_counts),
+        ListLabel(ll) => gen_op_list_label(w, ll, elem, ctx, name_counts),
     }
-    if let Repeat(rep_op) = op {
-        let rep = if let Repeat(r) = elem {
-            r;
-        } else {
-            panic("gen_op_dispatch_element: Repeat op mapped to non-Repeat element");
-        };
-        gen_op_repeat(w, rep, rep_op, ctx, name_counts);
-        return;
-    }
-    if let Group(g_op) = op {
-        gen_op_group(w, g_op, elem, ctx, name_counts);
-        return;
-    }
-    if let ListLabel(ll) = op {
-        gen_op_list_label(w, ll, elem, ctx, name_counts);
-        return;
-    }
-    panic("gen_op_dispatch_element: unreachable op shape — every Op variant is handled");
 }
 
 /// Op-driven `unwrap_optional` analogue. Peels through an Optional
@@ -5889,94 +5884,81 @@ fn gen_op_excluded_call(e: &ExcludedOp) -> String {
 }
 
 fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
-    if let TokenRef(t) = elem {
-        let const_name = `TK_${t.name}`;
-        let field_name = dedup_name(&t.field_name, name_counts);
-        w.line(&`let ${field_name} = p.expect(${const_name}, &EMPTY_SYNC);`);
-        return;
-    }
-    if let Literal(l) = elem {
-        let const_name = literal_const_name(&l.text);
-        let field_name = dedup_name(&literal_field_name(&l.text), name_counts);
-        w.line(&`let ${field_name} = p.expect(${const_name}, &EMPTY_SYNC);`);
-        return;
-    }
-    if let RuleRef(r) = elem {
-        let field_name = dedup_name(&r.field_name, name_counts);
+    match elem {
+        TokenRef(t) => {
+            let field_name = dedup_name(&t.field_name, name_counts);
+            w.line(&`let ${field_name} = p.expect(TK_${t.name}, &EMPTY_SYNC);`);
+        },
+        Literal(l) => {
+            let const_name = literal_const_name(&l.text);
+            let field_name = dedup_name(&literal_field_name(&l.text), name_counts);
+            w.line(&`let ${field_name} = p.expect(${const_name}, &EMPTY_SYNC);`);
+        },
         // Per-call-site FOLLOW args are baked on `RuleCallOp.follow_arg`
-        // by lower and consumed by the op-driven walkers; the surface
-        // `gen_element` arm only fires for legacy paths (Label inner /
-        // LR-suffix fallback / Consume node) where the call needs no
-        // follow argument and so passes the defaulted `&EMPTY_FOLLOW`.
-        // Prefix LR alts' trailing self-ref is reached via `gen_op_leaf`
-        // on `RuleCallOp.min_prec_arg`, so `gen_element` never threads
-        // precedence here either.
-        gen_atn_ret_pending(w, ctx, r.atn_call_site);
-        w.line(&`let ${field_name} = _parse_${r.snake_name}(p);`);
-        return;
-    }
-    if let Wildcard(_) = elem {
-        let field_name = dedup_name(&"wildcard", name_counts);
-        w.line(&`let ${field_name} = p.any();`);
-        return;
-    }
-    if let Not(ne) = elem {
-        let field_name = dedup_name(&not_element_field_name(&ne.element), name_counts);
-        let check = not_match_call(&ne.element);
-        w.line(&`let ${field_name} = ${check};`);
-        return;
-    }
-    if let Repeat(_) = elem {
+        // by lower and consumed by the op-driven walkers; this surface arm
+        // only fires for legacy paths (Label inner / LR-suffix fallback /
+        // Consume node) where the call needs no follow argument and so
+        // passes the defaulted `&EMPTY_FOLLOW`. Prefix LR alts' trailing
+        // self-ref is reached via `gen_op_leaf` on `RuleCallOp.min_prec_arg`,
+        // so precedence is never threaded here either.
+        RuleRef(r) => {
+            let field_name = dedup_name(&r.field_name, name_counts);
+            gen_atn_ret_pending(w, ctx, r.atn_call_site);
+            w.line(&`let ${field_name} = _parse_${r.snake_name}(p);`);
+        },
+        Wildcard(_) => {
+            let field_name = dedup_name(&"wildcard", name_counts);
+            w.line(&`let ${field_name} = p.any();`);
+        },
+        Not(ne) => {
+            let field_name = dedup_name(&not_element_field_name(&ne.element), name_counts);
+            let check = not_match_call(&ne.element);
+            w.line(&`let ${field_name} = ${check};`);
+        },
+        // After the Phase 2-G op-driven migration, only token-only groups
+        // reach this surface walker — every other Group classification
+        // (SimpleCst, SingleAlt, General) is handled by op-driven walkers
+        // before `gen_element` is invoked.
+        Group(g) => {
+            assert is_token_only_group(&g.alternatives), "gen_element: only token-only groups reach the surface walker; other classifications must be handled op-driven before gen_element is invoked";
+            gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
+        },
+        Label(lab) => {
+            if lab.list {
+                // Bare list label: allocate the array, parse the inner element
+                // once, and push. Repeats wrap this via gen_repeat below.
+                let inner_info = element_field_info(&lab.element);
+                let lab_name = dedup_name(&lab.field_name, name_counts);
+                w.line(&`let mut ${lab_name}: List<${inner_info.1}> = [];`);
+                let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
+                gen_element(w, &lab.element, ctx, name_counts);
+                w.line(&`${lab_name}.push(${predicted_inner});`);
+            } else {
+                // Scalar label `name = element`: parse the inner element with
+                // the shared `name_counts` so its emitted binding dedups
+                // against the outer alt's scope (otherwise `a=e ... b=e` would
+                // emit two top-level `let e = _parse_e(p);` and the second
+                // would fail compilation with "cannot redeclare e"). Then
+                // re-bind under the label name so the struct initializer
+                // resolves. Peek the dedup'd inner name before calling
+                // `gen_element`, which performs the actual increment.
+                let lab_name = dedup_name(&lab.field_name, name_counts);
+                let inner_info = element_field_info(&lab.element);
+                let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
+                gen_element(w, &lab.element, ctx, name_counts);
+                w.line(&`let ${lab_name} = ${predicted_inner};`);
+            }
+        },
         // Every op-driven Repeat dispatch flows through
         // `gen_op_repeat_with_follow_override` against the lowered
-        // `RepeatOp` directly. The remaining surface `gen_element`
-        // callers (Label / scan-side fallbacks) never see a Repeat
-        // here because lower replaces them with op-driven walkers
-        // before this point. Probe with a panic so a future
-        // regression is surfaced.
-        panic(
+        // `RepeatOp` directly. The remaining surface callers (Label /
+        // scan-side fallbacks) never see a Repeat here because lower
+        // replaces them with op-driven walkers before this point. Probe
+        // with a panic so a future regression is surfaced.
+        Repeat(_) => panic(
             "gen_element: Repeat element reached the retired surface walker — route through op-driven `gen_op_repeat_with_follow_override`",
-        );
+        ),
     }
-    if let Group(g) = elem {
-        // After the Phase 2-G op-driven migration, only token-only
-        // groups reach this surface walker — every other Group
-        // classification (SimpleCst, SingleAlt, General) is handled
-        // by op-driven walkers before `gen_element` is invoked.
-        assert is_token_only_group(&g.alternatives), "gen_element: only token-only groups reach the surface walker; other classifications must be handled op-driven before gen_element is invoked";
-        gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
-        return;
-    }
-    if let Label(lab) = elem {
-        if lab.list {
-            // Bare list label: allocate the array, parse the inner element
-            // once, and push. Repeats wrap this via gen_repeat below.
-            let inner_info = element_field_info(&lab.element);
-            let lab_name = dedup_name(&lab.field_name, name_counts);
-            w.line(&`let mut ${lab_name}: List<${inner_info.1}> = [];`);
-            let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
-            gen_element(w, &lab.element, ctx, name_counts);
-            w.line(&`${lab_name}.push(${predicted_inner});`);
-            return;
-        }
-        // Scalar label `name = element`: parse the inner element with the
-        // shared `name_counts` so its emitted binding dedups against the
-        // outer alt's scope (otherwise `a=e ... b=e` would emit two
-        // top-level `let e = _parse_e(p);` and the second would fail
-        // compilation with "cannot redeclare e"). Then re-bind under the
-        // label name so the struct initializer resolves.
-        //
-        // We need to know the dedup'd inner name to write the alias; peek
-        // the dedup result before calling `gen_element`, which performs
-        // the actual increment with the same base name.
-        let lab_name = dedup_name(&lab.field_name, name_counts);
-        let inner_info = element_field_info(&lab.element);
-        let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
-        gen_element(w, &lab.element, ctx, name_counts);
-        w.line(&`let ${lab_name} = ${predicted_inner};`);
-        return;
-    }
-    panic("gen_element: unhandled Element shape — every variant is handled");
 }
 
 /// Op-driven top-level Repeat dispatcher. Walkers reach this with
@@ -6724,15 +6706,16 @@ fn gen_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -> St
 }
 
 fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
-    if let Repeat(rep) = elem {
-        if let Optional = rep.kind {
-            return &rep.element;
-        }
-    }
-    if let Label(lab) = elem {
-        return unwrap_optional(&lab.element);
-    }
-    return elem;
+    return match elem {
+        Repeat(rep) => if rep.kind matches { Optional } { &rep.element } else { elem },
+        Label(lab) => unwrap_optional(&lab.element),
+        Group(_) => elem,
+        TokenRef(_) => elem,
+        Literal(_) => elem,
+        RuleRef(_) => elem,
+        Wildcard(_) => elem,
+        Not(_) => elem,
+    };
 }
 
 /// Emit an inline scan guard for an optional's inner element.
@@ -6790,17 +6773,15 @@ fn gen_scan_guard_with_prefix(
 
 /// literal that coerces to `List<i32>` at the call site.
 fn not_match_call(inner: &Element) -> String {
-    if let TokenRef(t) = inner {
-        let const_name = `TK_${t.name}`;
-        return `p.expect_not([${const_name}])`;
-    }
-    if let Literal(l) = inner {
-        let const_name = literal_const_name(&l.text);
-        return `p.expect_not([${const_name}])`;
-    }
-    if let Group(g) = inner {
-        let mut kinds: List<String> = [];
-        if collect_not_set_tokens(&g.alternatives, &mut kinds) {
+    let unsupported = "not_match_call: unsupported inner element for parser-side ~";
+    return match inner {
+        TokenRef(t) => `p.expect_not([TK_${t.name}])`,
+        Literal(l) => `p.expect_not([${literal_const_name(&l.text)}])`,
+        Group(g) => {
+            let mut kinds: List<String> = [];
+            if !collect_not_set_tokens(&g.alternatives, &mut kinds) {
+                panic(unsupported);
+            }
             let mut list = String::with_capacity(32);
             for let mut i = 0; i < kinds.len(); i += 1 {
                 if i > 0 {
@@ -6808,10 +6789,14 @@ fn not_match_call(inner: &Element) -> String {
                 }
                 list.push_str(&kinds[i]);
             }
-            return `p.expect_not([${list}])`;
-        }
-    }
-    panic("not_match_call: unsupported inner element for parser-side ~");
+            `p.expect_not([${list}])`;
+        },
+        RuleRef(_) => panic(unsupported),
+        Label(_) => panic(unsupported),
+        Repeat(_) => panic(unsupported),
+        Wildcard(_) => panic(unsupported),
+        Not(_) => panic(unsupported),
+    };
 }
 
 /// Collect terminal token constants from a `~ ( ... )` group's alternatives.
@@ -7637,127 +7622,188 @@ fn gen_prediction_code_inner(
     skip: i32,
     rule_display: &String,
 ) {
-    if let Leaf(idx) = node {
-        // Consume advanced `p.pos` past `skip` shared tokens without building a
-        // node; rewind so `_alt_<idx>` re-parses the alt from its start.
-        if skip > 0 {
-            w.line(&`p.pos -= ${skip};`);
-        }
-        w.line(&`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`);
-        return;
-    }
-    if let Consume(c) = node {
-        // Shared-prefix terminal: advance past it (the chosen `_alt_<idx>`
-        // re-parses it) and descend to the disambiguating dispatch. It must
-        // match every alt below (the group need not contain alt 0; regression:
-        // ll_consume_group.g4); on a mismatch leave `p.pos`/`skip` so the Leaf
-        // rewinds exactly what was advanced.
-        let mut node_alts: List<i32> = [];
-        prediction_collect_all_indices(&c.child, &mut node_alts);
-        let mut elem_matches = !node_alts.is_empty();
-        for let a of &node_alts {
-            if skip >= alts[*a].elements.len() || !elements_match(&c.element, &alts[*a].elements[skip]) {
-                elem_matches = false;
-                break;
+    match node {
+        Leaf(idx) => {
+            // Consume advanced `p.pos` past `skip` shared tokens without building a
+            // node; rewind so `_alt_<idx>` re-parses the alt from its start.
+            if skip > 0 {
+                w.line(&`p.pos -= ${skip};`);
             }
-        }
-        if elem_matches {
-            w.line(&"p.pos += 1;");
-            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip + 1, rule_display);
-        } else {
-            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip, rule_display);
-        }
-        return;
-    }
-    if let Ambiguous(a) = node {
-        // Sort by element count for proper ordering (single RuleRef first, etc.)
-        let mut sorted_indices = a.alts.sorted();
-        sort_group_by_element_count(&mut sorted_indices, alts);
-        if skip == 0 {
-            if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts, ctx) {
-                gen_predicate_gated_dispatch(w, &a.alts, alts, fn_name, ctx, rule_display);
-                return;
-            }
-            let amb_rule = ctx.current_rule_index();
-            let route_via_atn = ambiguous_node_routes_via_atn(a, rule_display, ctx);
-            if route_via_atn {
-                let dec = ctx.atn_rule_body_decision(amb_rule);
-                let disabled_arg = emit_atn_disabled_seed(w, &a.alts, alts, ctx);
-                w.line(
-                    &`let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${dec}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0${disabled_arg});`,
-                );
-                // A seed can exclude every alt (`_atn_alt == -1`), which the
-                // index dispatch would otherwise route to its last alt.
-                if !disabled_arg.is_empty() {
-                    w.begin(&"if _atn_alt < 0");
-                    w.line(&`p.no_viable("no viable alternative", p.peek_span(), []);`);
-                    emit_no_viable_return(w, ctx);
-                    w.end();
-                }
-                emit_index_pick_dispatch(w, &"_atn_alt", &sorted_indices, fn_name, rule_display, ctx);
-                return;
-            }
-            // Check if any alternatives have scan functions available.
-            // If ALL non-last alternatives have scans, we run a longest-match
-            // scan tournament: scan each, parse the winner. If some have
-            // scans and some don't, use a hybrid approach.
-            let mut all_have_scans = true;
-            for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
-                let idx = sorted_indices[i];
-                if !alt_has_scan(&alts[idx].elements, ctx) {
-                    all_have_scans = false;
+            w.line(&`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`);
+        },
+        Consume(c) => {
+            // Shared-prefix terminal: advance past it (the chosen `_alt_<idx>`
+            // re-parses it) and descend to the disambiguating dispatch. It must
+            // match every alt below (the group need not contain alt 0; regression:
+            // ll_consume_group.g4); on a mismatch leave `p.pos`/`skip` so the Leaf
+            // rewinds exactly what was advanced.
+            let mut node_alts: List<i32> = [];
+            prediction_collect_all_indices(&c.child, &mut node_alts);
+            let mut elem_matches = !node_alts.is_empty();
+            for let a of &node_alts {
+                if skip >= alts[*a].elements.len() || !elements_match(&c.element, &alts[*a].elements[skip]) {
+                    elem_matches = false;
                     break;
                 }
             }
-
-            if all_have_scans && sorted_indices.len() >= 2 {
-                // All non-last alternatives have scan functions.
-                // Check if ALL scans are full (cover entire alternative) —
-                // including the last alt, which we need to scan for
-                // longest-match dispatch.
-                let mut all_full = true;
-                for let mut i = 0; i < sorted_indices.len(); i += 1 {
+            if elem_matches {
+                w.line(&"p.pos += 1;");
+                gen_prediction_code_inner(
+                    w,
+                    &c.child,
+                    fn_name,
+                    alts,
+                    lowered_rule,
+                    type_name,
+                    ctx,
+                    skip + 1,
+                    rule_display,
+                );
+            } else {
+                gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip, rule_display);
+            }
+        },
+        Ambiguous(a) => {
+            // Sort by element count for proper ordering (single RuleRef first, etc.)
+            let mut sorted_indices = a.alts.sorted();
+            sort_group_by_element_count(&mut sorted_indices, alts);
+            if skip == 0 {
+                if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts, ctx) {
+                    gen_predicate_gated_dispatch(w, &a.alts, alts, fn_name, ctx, rule_display);
+                    return;
+                }
+                let amb_rule = ctx.current_rule_index();
+                let route_via_atn = ambiguous_node_routes_via_atn(a, rule_display, ctx);
+                if route_via_atn {
+                    let dec = ctx.atn_rule_body_decision(amb_rule);
+                    let disabled_arg = emit_atn_disabled_seed(w, &a.alts, alts, ctx);
+                    w.line(
+                        &`let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${dec}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0${disabled_arg});`,
+                    );
+                    // A seed can exclude every alt (`_atn_alt == -1`), which the
+                    // index dispatch would otherwise route to its last alt.
+                    if !disabled_arg.is_empty() {
+                        w.begin(&"if _atn_alt < 0");
+                        w.line(&`p.no_viable("no viable alternative", p.peek_span(), []);`);
+                        emit_no_viable_return(w, ctx);
+                        w.end();
+                    }
+                    emit_index_pick_dispatch(w, &"_atn_alt", &sorted_indices, fn_name, rule_display, ctx);
+                    return;
+                }
+                // Check if any alternatives have scan functions available.
+                // If ALL non-last alternatives have scans, we run a longest-match
+                // scan tournament: scan each, parse the winner. If some have
+                // scans and some don't, use a hybrid approach.
+                let mut all_have_scans = true;
+                for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
                     let idx = sorted_indices[i];
-                    if !alt_has_scan(&alts[idx].elements, ctx) || !alt_scan_is_full(&alts[idx].elements, ctx) {
-                        all_full = false;
+                    if !alt_has_scan(&alts[idx].elements, ctx) {
+                        all_have_scans = false;
                         break;
                     }
                 }
 
-                if all_full {
-                    // All scans cover entire alternatives — scan success
-                    // guarantees parse success. Use longest-match first-win
-                    // (ANTLR4-compatible): scan each alt, pick the one
-                    // advancing pos the furthest; ties go to the first alt
-                    // in grammar order.
-                    w.line(&"let _sd_tokens = &p.kinds;");
-                    w.line(&"let _sd_pos = p.pos;");
+                if all_have_scans && sorted_indices.len() >= 2 {
+                    // All non-last alternatives have scan functions.
+                    // Check if ALL scans are full (cover entire alternative) —
+                    // including the last alt, which we need to scan for
+                    // longest-match dispatch.
+                    let mut all_full = true;
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
-                        w.line(&`let _sd_p_${idx} = ${*fn_name}_scan_${idx}(_sd_tokens, _sd_pos);`);
-                    }
-                    if ctx.is_trace() {
-                        let rlit = str_lit(*rule_display);
-                        for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                            let idx = sorted_indices[i];
-                            w.line(&`trace_scan_alt(p, &${rlit}, ${idx}, _sd_p_${idx});`);
+                        if !alt_has_scan(&alts[idx].elements, ctx) || !alt_scan_is_full(&alts[idx].elements, ctx) {
+                            all_full = false;
+                            break;
                         }
                     }
-                    w.line(&"let mut _sd_best_i: i32 = -1;");
-                    w.line(&"let mut _sd_best_p: i32 = -1;");
-                    // Iterate in ascending alt-index order so a scan-length
-                    // tie resolves to the first grammar alternative (ANTLR4's
-                    // ambiguity resolution), not to the sort's front-runner.
-                    let best_i = "_sd_best_i";
-                    let best_p = "_sd_best_p";
-                    for let idx of sorted_indices.sorted() {
-                        let end_expr = `_sd_p_${idx}`;
-                        emit_argmax_update(w, &best_p, &best_i, &end_expr, idx);
+
+                    if all_full {
+                        // All scans cover entire alternatives — scan success
+                        // guarantees parse success. Use longest-match first-win
+                        // (ANTLR4-compatible): scan each alt, pick the one
+                        // advancing pos the furthest; ties go to the first alt
+                        // in grammar order.
+                        w.line(&"let _sd_tokens = &p.kinds;");
+                        w.line(&"let _sd_pos = p.pos;");
+                        for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                            let idx = sorted_indices[i];
+                            w.line(&`let _sd_p_${idx} = ${*fn_name}_scan_${idx}(_sd_tokens, _sd_pos);`);
+                        }
+                        if ctx.is_trace() {
+                            let rlit = str_lit(*rule_display);
+                            for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                                let idx = sorted_indices[i];
+                                w.line(&`trace_scan_alt(p, &${rlit}, ${idx}, _sd_p_${idx});`);
+                            }
+                        }
+                        w.line(&"let mut _sd_best_i: i32 = -1;");
+                        w.line(&"let mut _sd_best_p: i32 = -1;");
+                        // Iterate in ascending alt-index order so a scan-length
+                        // tie resolves to the first grammar alternative (ANTLR4's
+                        // ambiguity resolution), not to the sort's front-runner.
+                        let best_i = "_sd_best_i";
+                        let best_p = "_sd_best_p";
+                        for let idx of sorted_indices.sorted() {
+                            let end_expr = `_sd_p_${idx}`;
+                            emit_argmax_update(w, &best_p, &best_i, &end_expr, idx);
+                        }
+                        emit_index_pick_dispatch(w, &"_sd_best_i", &sorted_indices, fn_name, rule_display, ctx);
+                    } else {
+                        // Some scans are partial — scan success is a hint,
+                        // not a guarantee. Use save/restore with scan guards.
+                        emit_spec_alt_preamble(w);
+                        for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                            let idx = sorted_indices[i];
+                            let is_last = i == sorted_indices.len() - 1;
+                            if is_last {
+                                if ctx.is_trace() {
+                                    w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
+                                }
+                                w.line(
+                                    &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`,
+                                );
+                            } else {
+                                let has_scan = alt_has_scan(&alts[idx].elements, ctx);
+                                let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
+                                if is_full {
+                                    // Full scan: success guarantees parse success.
+                                    w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos) >= 0`);
+                                    if ctx.is_trace() {
+                                        w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
+                                    }
+                                    w.line(
+                                        &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(
+                                            ctx,
+                                        )});`,
+                                    );
+                                    w.end();
+                                } else if has_scan {
+                                    // Partial scan: try parse, fall through on failure.
+                                    w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos) >= 0`);
+                                    emit_spec_alt_try(
+                                        w,
+                                        &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
+                                        idx,
+                                        ctx,
+                                        rule_display,
+                                    );
+                                    w.end();
+                                } else {
+                                    // No scan: save-and-rewind speculative parse.
+                                    emit_spec_alt_try(
+                                        w,
+                                        &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
+                                        idx,
+                                        ctx,
+                                        rule_display,
+                                    );
+                                }
+                            }
+                        }
                     }
-                    emit_index_pick_dispatch(w, &"_sd_best_i", &sorted_indices, fn_name, rule_display, ctx);
                 } else {
-                    // Some scans are partial — scan success is a hint,
-                    // not a guarantee. Use save/restore with scan guards.
+                    // Fallback: save-and-rewind speculative parse pattern.
                     emit_spec_alt_preamble(w);
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
@@ -7770,94 +7816,46 @@ fn gen_prediction_code_inner(
                                 &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`,
                             );
                         } else {
-                            let has_scan = alt_has_scan(&alts[idx].elements, ctx);
-                            let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
-                            if is_full {
-                                // Full scan: success guarantees parse success.
-                                w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos) >= 0`);
-                                if ctx.is_trace() {
-                                    w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
-                                }
-                                w.line(
-                                    &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`,
-                                );
-                                w.end();
-                            } else if has_scan {
-                                // Partial scan: try parse, fall through on failure.
-                                w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos) >= 0`);
-                                emit_spec_alt_try(
-                                    w,
-                                    &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
-                                    idx,
-                                    ctx,
-                                    rule_display,
-                                );
-                                w.end();
-                            } else {
-                                // No scan: save-and-rewind speculative parse.
-                                emit_spec_alt_try(
-                                    w,
-                                    &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
-                                    idx,
-                                    ctx,
-                                    rule_display,
-                                );
-                            }
+                            emit_spec_alt_try(
+                                w,
+                                &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
+                                idx,
+                                ctx,
+                                rule_display,
+                            );
                         }
                     }
                 }
             } else {
-                // Fallback: save-and-rewind speculative parse pattern.
-                emit_spec_alt_preamble(w);
-                for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                    let idx = sorted_indices[i];
-                    let is_last = i == sorted_indices.len() - 1;
-                    if is_last {
-                        if ctx.is_trace() {
-                            w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
-                        }
-                        w.line(&`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`);
-                    } else {
-                        emit_spec_alt_try(
-                            w,
-                            &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
-                            idx,
-                            ctx,
-                            rule_display,
-                        );
-                    }
+                // Prefix already consumed — should not happen.
+                // Consume nodes that lead to Ambiguous are stripped at build time.
+                panic("unreachable: Consume leading to Ambiguous should have been stripped");
+            }
+        },
+        Dispatch(d) => {
+            let check_var = if d.depth == 0 { "p.peek_kind()" } else { `p.peek_at(${d.depth})` };
+            for let mut i = 0; i < d.branches.len(); i += 1 {
+                let branch = &d.branches[i];
+                let cond = ctx.kind_check_str(&branch.tokens, &check_var);
+                if i == 0 {
+                    w.begin(&`if ${cond}`);
+                } else {
+                    w.else_begin(&`else if ${cond}`);
                 }
+                gen_prediction_code_inner(
+                    w,
+                    &branch.child,
+                    fn_name,
+                    alts,
+                    lowered_rule,
+                    type_name,
+                    ctx,
+                    skip,
+                    rule_display,
+                );
             }
-        } else {
-            // Prefix already consumed — should not happen.
-            // Consume nodes that lead to Ambiguous are stripped at build time.
-            panic("unreachable: Consume leading to Ambiguous should have been stripped");
-        }
-        return;
-    }
-    if let Dispatch(d) = node {
-        let check_var = if d.depth == 0 { "p.peek_kind()" } else { `p.peek_at(${d.depth})` };
-        for let mut i = 0; i < d.branches.len(); i += 1 {
-            let branch = &d.branches[i];
-            let cond = ctx.kind_check_str(&branch.tokens, &check_var);
-            if i == 0 {
-                w.begin(&`if ${cond}`);
-            } else {
-                w.else_begin(&`else if ${cond}`);
-            }
-            gen_prediction_code_inner(
-                w,
-                &branch.child,
-                fn_name,
-                alts,
-                lowered_rule,
-                type_name,
-                ctx,
-                skip,
-                rule_display,
-            );
-        }
-        w.end();
+            w.end();
+        },
     }
 }
 
@@ -7866,17 +7864,16 @@ fn gen_prediction_code_inner(
 /// Unwraps Labels to compare inner elements.
 fn elements_match(consumed: &Element, expected: &Element) -> bool {
     let exp = unwrap_label(expected);
-    if let TokenRef(a) = consumed {
-        if let TokenRef(b) = exp {
-            return a.name == b.name;
-        }
-    }
-    if let Literal(a) = consumed {
-        if let Literal(b) = exp {
-            return a.text == b.text;
-        }
-    }
-    return false;
+    return match consumed {
+        TokenRef(a) => *exp matches { TokenRef(b) && b.name == a.name },
+        Literal(a) => *exp matches { Literal(b) && b.text == a.text },
+        RuleRef(_) => false,
+        Group(_) => false,
+        Repeat(_) => false,
+        Label(_) => false,
+        Wildcard(_) => false,
+        Not(_) => false,
+    };
 }
 
 /// Collect the alt indices whose per-alt `_scan_<n>` helper the dispatch

@@ -606,13 +606,9 @@ fn group_is_lenient_scan(g: &GroupElement) -> bool {
         if alt.elements.len() != 1 {
             return true;
         }
-        if let TokenRef(_) = alt.elements[0] {
-            continue;
+        if !alt.elements[0] matches { TokenRef(_) | Literal(_) } {
+            return true;
         }
-        if let Literal(_) = alt.elements[0] {
-            continue;
-        }
-        return true;
     }
     return false;
 }
@@ -1572,49 +1568,43 @@ fn empty_alt_group_as_optional(g: &GroupElement) -> Option<Element> {
 }
 
 fn normalize_element(elem: &mut Element) {
-    if let RuleRef(r) = elem {
-        if r.snake_name.is_empty() {
-            r.snake_name = to_snake_case(&r.name);
-        }
-        if r.field_name.is_empty() {
-            r.field_name = escape_ident(&r.snake_name);
-        }
-        return;
-    }
-    if let TokenRef(t) = elem {
-        if t.lower_name.is_empty() {
-            t.lower_name = to_lower(&t.name);
-        }
-        if t.field_name.is_empty() {
-            t.field_name = escape_ident(&t.lower_name);
-        }
-        return;
-    }
-    if let Label(lab) = elem {
-        if lab.snake_name.is_empty() {
-            lab.snake_name = to_snake_case(&lab.name);
-        }
-        if lab.field_name.is_empty() {
-            lab.field_name = escape_ident(&lab.snake_name);
-        }
-        normalize_element(&mut lab.element);
-        return;
-    }
-    if let Repeat(rep) = elem {
-        normalize_element(&mut rep.element);
-        return;
-    }
-    if let Group(g) = elem {
-        for let mut ai = 0; ai < g.alternatives.len(); ai += 1 {
-            let alt = &mut g.alternatives[ai];
-            for let mut ei = 0; ei < alt.elements.len(); ei += 1 {
-                normalize_element(&mut alt.elements[ei]);
+    match elem {
+        RuleRef(r) => {
+            if r.snake_name.is_empty() {
+                r.snake_name = to_snake_case(&r.name);
             }
-        }
-        return;
-    }
-    if let Not(n) = elem {
-        normalize_element(&mut n.element);
-        return;
+            if r.field_name.is_empty() {
+                r.field_name = escape_ident(&r.snake_name);
+            }
+        },
+        TokenRef(t) => {
+            if t.lower_name.is_empty() {
+                t.lower_name = to_lower(&t.name);
+            }
+            if t.field_name.is_empty() {
+                t.field_name = escape_ident(&t.lower_name);
+            }
+        },
+        Label(lab) => {
+            if lab.snake_name.is_empty() {
+                lab.snake_name = to_snake_case(&lab.name);
+            }
+            if lab.field_name.is_empty() {
+                lab.field_name = escape_ident(&lab.snake_name);
+            }
+            normalize_element(&mut lab.element);
+        },
+        Repeat(rep) => normalize_element(&mut rep.element),
+        Group(g) => {
+            for let mut ai = 0; ai < g.alternatives.len(); ai += 1 {
+                let alt = &mut g.alternatives[ai];
+                for let mut ei = 0; ei < alt.elements.len(); ei += 1 {
+                    normalize_element(&mut alt.elements[ei]);
+                }
+            }
+        },
+        Not(n) => normalize_element(&mut n.element),
+        Literal(_) => (),
+        Wildcard(_) => (),
     }
 }

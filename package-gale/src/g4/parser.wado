@@ -95,52 +95,47 @@ fn is_lexer_rule_name(name: &String) -> bool {
 }
 
 fn is_valid_not_set_element(elem: &Element) -> bool {
-    if let TokenRef(_) = elem {
-        return true;
-    }
-    if let Literal(_) = elem {
-        return true;
-    }
-    if let Group(g) = elem {
-        for let alt of &g.alternatives {
-            if alt.elements.len() != 1 {
-                return false;
+    return match elem {
+        TokenRef(_) => true,
+        Literal(_) => true,
+        Group(g) => {
+            let mut ok = true;
+            for let alt of &g.alternatives {
+                if alt.elements.len() != 1 || !alt.elements[0] matches { TokenRef(_) | Literal(_) } {
+                    ok = false;
+                    break;
+                }
             }
-            if let TokenRef(_) = alt.elements[0] {
-                continue;
-            }
-            if let Literal(_) = alt.elements[0] {
-                continue;
-            }
-            return false;
-        }
-        return true;
-    }
-    return false;
+            ok;
+        },
+        RuleRef(_) => false,
+        Label(_) => false,
+        Repeat(_) => false,
+        Wildcard(_) => false,
+        Not(_) => false,
+    };
 }
 
 fn is_valid_lexer_not_element(elem: &LexerElement) -> bool {
-    if let Literal(s) = elem {
-        return s.chars().count() == 1;
-    }
-    if let CharRange(_) = elem {
-        return true;
-    }
-    if let CharClass(_) = elem {
-        return true;
-    }
-    if let Group(alts) = elem {
-        for let alt of alts {
-            if alt.elements.len() != 1 {
-                return false;
+    return match elem {
+        Literal(s) => s.chars().count() == 1,
+        CharRange(_) => true,
+        CharClass(_) => true,
+        Group(alts) => {
+            let mut ok = true;
+            for let alt of alts {
+                if alt.elements.len() != 1 || !is_valid_lexer_not_element(&alt.elements[0]) {
+                    ok = false;
+                    break;
+                }
             }
-            if !is_valid_lexer_not_element(&alt.elements[0]) {
-                return false;
-            }
-        }
-        return true;
-    }
-    return false;
+            ok;
+        },
+        AnyChar => false,
+        RuleRef(_) => false,
+        Repeat(_) => false,
+        Not(_) => false,
+    };
 }
 
 impl G4Parser {

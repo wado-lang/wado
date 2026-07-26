@@ -126,13 +126,16 @@ use {
 /// computing a mask there interns a dead `FOLLOW_MASK` and perturbs mask
 /// ids.
 fn element_consumes_follow_arg(elem: &Element) -> bool {
-    if let RuleRef(_) = elem {
-        return true;
-    }
-    if let Label(lab) = elem {
-        return element_consumes_follow_arg(&lab.element);
-    }
-    return false;
+    return match elem {
+        RuleRef(_) => true,
+        Label(lab) => element_consumes_follow_arg(&lab.element),
+        TokenRef(_) => false,
+        Literal(_) => false,
+        Group(_) => false,
+        Repeat(_) => false,
+        Wildcard(_) => false,
+        Not(_) => false,
+    };
 }
 
 /// Compute the runtime FOLLOW argument a `RuleRef` call at index `i`
@@ -838,15 +841,16 @@ fn rebind_scan_self_ref_min_prec(se: ScanElement, rule_snake: &String, prec: i32
 }
 
 fn find_self_ref_rule_call(op: &Op, rule_name: &String) -> Option<&RuleCallOp> with stores[op] {
-    if let RuleCall(rc) = op {
-        if rc.target_name == *rule_name {
-            return Option::Some(rc);
-        }
-    }
-    if let ListLabel(ll) = op {
-        return find_self_ref_rule_call(&ll.inner, rule_name);
-    }
-    return null;
+    return match op {
+        RuleCall(rc) => if rc.target_name == *rule_name { Option::Some(rc) } else { null },
+        ListLabel(ll) => find_self_ref_rule_call(&ll.inner, rule_name),
+        Token(_) => null,
+        Literal(_) => null,
+        Wildcard(_) => null,
+        Excluded(_) => null,
+        Repeat(_) => null,
+        Group(_) => null,
+    };
 }
 
 /// Returns true iff `op` contains an `Op::RuleCall` targeting
@@ -1227,17 +1231,16 @@ fn compute_self_ref_prec_from_ops(
     let mut prec = conflict_min;
     if k + 1 < ops.len() {
         let next_op = &ops[k + 1];
-        let mut next_is_lr_op = false;
-        if let Token(t) = next_op {
-            if first_contains(lr_suffix_first_tokens, &t.kind) {
-                next_is_lr_op = true;
-            }
-        }
-        if let Literal(l) = next_op {
-            if first_contains(lr_suffix_first_tokens, &l.kind) {
-                next_is_lr_op = true;
-            }
-        }
+        let next_is_lr_op = match next_op {
+            Token(t) => first_contains(lr_suffix_first_tokens, &t.kind),
+            Literal(l) => first_contains(lr_suffix_first_tokens, &l.kind),
+            RuleCall(_) => false,
+            Wildcard(_) => false,
+            Excluded(_) => false,
+            Repeat(_) => false,
+            Group(_) => false,
+            ListLabel(_) => false,
+        };
         if !next_is_lr_op {
             prec = 0;
         }
@@ -2147,47 +2150,51 @@ fn alt_has_variable_repeat(alt: &Alternative) -> bool {
 }
 
 fn surface_is_optional_repeat(elem: &Element) -> bool {
-    if let Repeat(rep) = elem {
-        if let Optional = rep.kind {
-            return true;
-        }
-    }
-    if let Label(lab) = elem {
-        return surface_is_optional_repeat(&lab.element);
-    }
-    return false;
+    return match elem {
+        Repeat(rep) => rep.kind matches { Optional },
+        Label(lab) => surface_is_optional_repeat(&lab.element),
+        Group(_) => false,
+        TokenRef(_) => false,
+        Literal(_) => false,
+        RuleRef(_) => false,
+        Wildcard(_) => false,
+        Not(_) => false,
+    };
 }
 
 /// True when `elem` contains a variable-length repeat (`Star` / `Plus`),
 /// even nested in an optional or group. Shape-lookahead can't model these.
 fn surface_contains_variable_repeat(elem: &Element) -> bool {
-    if let Repeat(rep) = elem {
-        let self_is_variable = match rep.kind {
-            Star => true,
-            Plus => true,
-            Optional => false,
-        };
-        if self_is_variable {
-            return true;
-        }
+    return match elem {
         // A Star/Plus nested in an `Optional` (`( a (',' a)* )?`) defeats
         // shape enumeration too, so recurse through the optional's inner.
-        return surface_contains_variable_repeat(&rep.element);
-    }
-    if let Group(g) = elem {
-        for let alt of &g.alternatives {
-            for let inner of &alt.elements {
-                if surface_contains_variable_repeat(inner) {
-                    return true;
+        Repeat(rep) => if rep.kind matches { Star | Plus } {
+            true;
+        } else {
+            surface_contains_variable_repeat(&rep.element);
+        },
+        Group(g) => {
+            let mut found = false;
+            for let alt of &g.alternatives {
+                for let inner of &alt.elements {
+                    if surface_contains_variable_repeat(inner) {
+                        found = true;
+                        break;
+                    }
+                }
+                if found {
+                    break;
                 }
             }
-        }
-        return false;
-    }
-    if let Label(lab) = elem {
-        return surface_contains_variable_repeat(&lab.element);
-    }
-    return false;
+            found;
+        },
+        Label(lab) => surface_contains_variable_repeat(&lab.element),
+        TokenRef(_) => false,
+        Literal(_) => false,
+        RuleRef(_) => false,
+        Wildcard(_) => false,
+        Not(_) => false,
+    };
 }
 
 /// Lower an Optional Group with nested optionals to
@@ -2258,15 +2265,16 @@ fn lower_scan_shape_body(shape: &List<i32>, elements: &List<Element>, ctx: &mut 
 }
 
 fn surface_unwrap_optional(elem: &Element) -> &Element with stores[elem] {
-    if let Repeat(rep) = elem {
-        if let Optional = rep.kind {
-            return &rep.element;
-        }
-    }
-    if let Label(lab) = elem {
-        return surface_unwrap_optional(&lab.element);
-    }
-    return elem;
+    return match elem {
+        Repeat(rep) => if rep.kind matches { Optional } { &rep.element } else { elem },
+        Label(lab) => surface_unwrap_optional(&lab.element),
+        Group(_) => elem,
+        TokenRef(_) => elem,
+        Literal(_) => elem,
+        RuleRef(_) => elem,
+        Wildcard(_) => elem,
+        Not(_) => elem,
+    };
 }
 
 /// Enumerate 2^n shape combinations of optional sub-elements in an
@@ -3386,16 +3394,16 @@ fn compute_caller_follow_second(elements: &List<Element>, start: i32, ctx: &mut 
 /// into `RepeatOp.body_has_field` without forcing emit to keep the
 /// surface predicate alive.
 fn element_has_field(elem: &Element) -> bool {
-    if let TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) = elem {
-        return true;
-    }
-    if let Label(lab) = elem {
-        return element_has_field(&lab.element);
-    }
-    if let Group(g) = elem {
-        return is_storable_group(&g.alternatives);
-    }
-    return false;
+    return match elem {
+        TokenRef(_) => true,
+        Literal(_) => true,
+        RuleRef(_) => true,
+        Wildcard(_) => true,
+        Not(_) => true,
+        Label(lab) => element_has_field(&lab.element),
+        Group(g) => is_storable_group(&g.alternatives),
+        Repeat(_) => false,
+    };
 }
 
 /// Pick the specialised `Optional` strategy lower bakes into a Repeat's
@@ -3625,13 +3633,7 @@ fn compute_non_greedy_strategy(inner: &Element, outer_follow: &List<String>, ctx
     // their continue condition as "while not in follow". The strategy
     // payload just carries `outer_follow` as `exit_first`; emit
     // generates the appropriate "loop until follow appears" check.
-    if let Wildcard(_) = inner {
-        return RepeatStrategy::NonGreedy(NonGreedyStrategy {
-            exit_first: *outer_follow,
-            exit_second: [],
-        });
-    }
-    if let Not(_) = inner {
+    if *inner matches { Wildcard(_) | Not(_) } {
         return RepeatStrategy::NonGreedy(NonGreedyStrategy {
             exit_first: *outer_follow,
             exit_second: [],
