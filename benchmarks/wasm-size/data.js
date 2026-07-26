@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785024830945,
+  "lastUpdate": 1785029052777,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43945,6 +43945,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 276373,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7d42a28e16660577180e6c4da0f36b83e7516747",
+          "message": "Merge pull request #1691 from wado-lang/claude/package-gale-sqlite-tests-4mxpvj\n\nfix(gale): four scan/prediction soundness bugs, surfaced by an expanded SQLite oracle",
+          "timestamp": "2026-07-26T10:13:44+09:00",
+          "tree_id": "e99f2faa72926c7a9bd6b3a8732bc5ae4e0b290c",
+          "url": "https://github.com/wado-lang/wado/commit/7d42a28e16660577180e6c4da0f36b83e7516747"
+        },
+        "date": 1785029052313,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8225,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272281,
             "unit": "bytes"
           }
         ]
