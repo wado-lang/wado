@@ -115,6 +115,7 @@ pub(crate) fn decl_identity_core(
     name: &str,
     vantage: &ModuleSource,
     imported_sources: &IndexMap<String, ModuleSource>,
+    imported_effect_sources: &IndexMap<String, ModuleSource>,
     import_original_names: &IndexMap<String, String>,
     symbols: &crate::symbol::SymbolTable,
 ) -> Option<(ModuleSource, String)> {
@@ -144,6 +145,17 @@ pub(crate) fn decl_identity_core(
             .unwrap_or_else(|| src.clone());
         return Some((canonical, original));
     }
+    // An effect import ranks with the type imports above, not below the
+    // lookups: `symbols.lookup` falls back to the prelude, so a demoted
+    // effect import loses its own declaring module to any prelude symbol
+    // that happens to share the name.
+    if let Some(src) = imported_effect_sources.get(name) {
+        let canonical = symbols
+            .lookup_in_module(src, name)
+            .map(|sym| sym.module_source().clone())
+            .unwrap_or_else(|| src.clone());
+        return Some((canonical, name.to_string()));
+    }
     // A name defined in the vantage module resolves to it, ahead of any
     // by-name fallback that could pick a same-named declaration elsewhere.
     if symbols.is_defined_in_module(vantage, name) {
@@ -166,17 +178,11 @@ pub(crate) fn canonical_decl_key_with(
         name,
         current_module_source,
         &imports.imported_type_sources,
+        &imports.effect_sources,
         &imports.import_original_names,
         symbols,
     ) {
         return key;
-    }
-    if let Some(src) = imports.effect_sources.get(name) {
-        let canonical = symbols
-            .lookup_in_module(src, name)
-            .map(|sym| sym.module_source().clone())
-            .unwrap_or_else(|| src.clone());
-        return (canonical, name.to_string());
     }
     if let Some(key) = trait_env.find_trait_decl_key(name) {
         return key;
@@ -1624,6 +1630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return Some((
                     trait_name.clone(),
                     MethodInfo {
+                        impl_offset: None,
                         return_type,
                         self_kind,
                         param_types,
@@ -2181,6 +2188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .intern(ResolvedType::Ref(base_type_id));
         let method_info = MethodInfo {
+            impl_offset: None,
             return_type,
             self_kind: ast::SelfKind::Ref,
             param_types: vec![ref_self_ty],

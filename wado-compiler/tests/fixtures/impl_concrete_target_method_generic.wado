@@ -1,0 +1,29 @@
+// A generic method on a trait impl whose target is fully concrete.
+//
+// The decl pass registers no impl type params for a concrete target, so
+// the method's own `U` takes slot 0. Dispatch counts the target's
+// concrete argument into the same numbering, so slot 0 maps to that
+// argument and `U` is substituted away.
+
+struct Foo<T> {
+    v: T,
+}
+
+trait Tr {
+    fn pick<U>(&self, x: U) -> U;
+}
+
+impl Tr for Foo<String> {
+    fn pick<U>(&self, x: U) -> U {
+        return x;
+    }
+}
+
+test "a method generic outlives a concrete impl target" {
+    let f = Foo { v: "a" };
+    let r: i32 = f.pick(7);
+    assert r == 7;
+}
+
+__DATA__
+{"test": {}}

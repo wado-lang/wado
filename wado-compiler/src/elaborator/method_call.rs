@@ -392,6 +392,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // does not exist.
         let method_found = method_info.is_some();
         let MethodInfo {
+            impl_offset: sig_impl_offset,
             mut return_type,
             self_kind,
             param_types,
@@ -417,6 +418,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             // Default to Unknown type for error recovery
             MethodInfo {
+                impl_offset: None,
                 return_type: TypeTable::UNKNOWN,
                 self_kind: ast::SelfKind::Ref,
                 param_types: vec![],
@@ -706,6 +708,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 _ => {}
             }
+        }
+
+        // The digest's own numbering wins where the lookup supplied one: the
+        // derivations above count receiver arguments, which overshoots
+        // whenever a concrete argument occupies a target slot
+        // (`impl<T> Sink for Box2<T, i32>` numbers the method's params from
+        // 1, not 2).
+        if let Some(offset) = sig_impl_offset {
+            impl_offset = offset;
         }
 
         // Inference runs when the turbofish is omitted entirely or carries an

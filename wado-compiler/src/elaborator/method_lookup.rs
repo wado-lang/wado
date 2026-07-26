@@ -459,6 +459,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let elems = type_args;
                     if method_name == "len" {
                         return Some(MethodInfo {
+                            impl_offset: None,
                             return_type: TypeTable::I32,
                             self_kind: ast::SelfKind::Ref,
                             param_types: vec![],
@@ -499,6 +500,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         let return_type = self.tysys.type_table.borrow_mut().make_tuple(transposed);
                         return Some(MethodInfo {
+                            impl_offset: None,
                             return_type,
                             self_kind: ast::SelfKind::Ref,
                             param_types: vec![],
@@ -799,6 +801,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 drop(scope);
                 return Some(MethodInfo {
+                    impl_offset: None,
                     return_type,
                     self_kind,
                     param_types,
@@ -926,6 +929,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 search_module_source,
                             );
                             return Some(MethodInfo {
+                                impl_offset: None,
                                 return_type,
                                 self_kind,
                                 param_types,
@@ -1086,6 +1090,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
             return Some(MethodInfo {
+                impl_offset: None,
                 return_type,
                 self_kind,
                 param_types,
@@ -2305,37 +2310,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let header = impl_header(&trait_env, impl_ref);
         // Track variadic type pack spreads: (pack_name, param_index)
         let mut variadic_pack_entry: Option<(String, u32)> = None;
-        let type_param_entries: Vec<(String, u32)> = if let Type::Generic(generic) = &header.ty {
+        let impl_home = self.impl_block_module_source(impl_ref);
+        let target_params = |generic: &ast::GenericType| -> Vec<(String, u32)> {
             generic
                 .args
                 .iter()
                 .enumerate()
-                .filter_map(|(i, arg)| {
-                    if let Type::Named(named) = arg {
+                .filter_map(|(i, arg)| match arg {
+                    Type::Named(named)
+                        if self.tysys.is_impl_target_param(
+                            &impl_home,
+                            &header.type_params,
+                            &named.name,
+                        ) =>
+                    {
                         Some((named.name.clone(), i as u32))
-                    } else {
-                        None
                     }
+                    _ => None,
                 })
                 .collect()
+        };
+        let type_param_entries: Vec<(String, u32)> = if let Type::Generic(generic) = &header.ty {
+            target_params(generic)
         } else if let Type::Reference(boxed) | Type::MutReference(boxed) = &header.ty {
             if let Type::Named(inner) = boxed.as_ref() {
                 // impl<T: Bound> Trait for &T / &mut T: T is at position 0
                 vec![(inner.name.clone(), 0u32)]
             } else if let Type::Generic(generic) = boxed.as_ref() {
                 // impl<T> Trait for &Container<T>: extract type params from generic args
-                generic
-                    .args
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, arg)| {
-                        if let Type::Named(named) = arg {
-                            Some((named.name.clone(), i as u32))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
+                target_params(generic)
             } else {
                 Vec::new()
             }
@@ -2377,7 +2380,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|b| (b.name.clone(), b.ty.clone()))
             .collect();
-        let impl_module_source = self.impl_block_module_source(impl_ref);
+        let impl_module_source = impl_home.clone();
         // A concrete generic instantiation trait impl (`impl Tag for
         // List<u8>`) yields a per-instantiation concrete method, called
         // directly (no monomorphization), living in the impl's module.
@@ -2503,8 +2506,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let self_kind = method_sig.self_kind;
             let trait_name = scope.get_type_name_full(&trait_type_for_name);
 
-            // Set up method-level type params (e.g., V in deserialize_any<V: Visitor>)
-            let impl_offset = scope.annotate_ctx.trait_ctx.type_params.len() as u32;
+            // The impl's slots, before the method's own are added: these are
+            // what the receiver's type arguments bind.
+            let impl_slots: IndexMap<u32, TypeId> = scope
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .values()
+                .copied()
+                .collect();
+
+            // Set up method-level type params (e.g., V in deserialize_any<V: Visitor>).
+            // Numbered past the highest impl slot, not past their count: a
+            // concrete argument ahead of a free one (`impl<V> … for
+            // Pair<String, V>`) leaves the indices sparse, and counting would
+            // land the method's first param on the impl's last. The decl pass
+            // numbers them with `method_param_offset`, which is this rule.
+            let impl_offset = impl_slots.keys().map(|i| i + 1).max().unwrap_or(0);
             for (i, type_param) in method_type_params.iter().enumerate() {
                 let index = impl_offset + i as u32;
                 let type_param_id =
@@ -2540,13 +2558,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // it to the impl target, so instantiating with the receiver's
             // arguments yields the concrete receiver — what re-resolving the
             // signature under `with_self_type_if_known` used to produce.
-            let impl_slots: IndexMap<u32, TypeId> = scope
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .values()
-                .copied()
-                .collect();
             let instantiated = method_sig
                 .decl
                 .instantiate_slots(&scope.tysys.type_table, &impl_slots);
@@ -2600,6 +2611,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             found_traits.push(TraitMethodMatch {
                 trait_name,
                 method_info: MethodInfo {
+                    impl_offset: Some(impl_offset),
                     return_type,
                     self_kind,
                     param_types,
@@ -2725,6 +2737,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         found_traits.push(TraitMethodMatch {
                             trait_name: trait_name_str.clone(),
                             method_info: MethodInfo {
+                                impl_offset: None,
                                 return_type,
                                 self_kind,
                                 param_types,
@@ -3598,6 +3611,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let MethodInfo {
+            impl_offset: _,
             return_type,
             self_kind,
             param_types,

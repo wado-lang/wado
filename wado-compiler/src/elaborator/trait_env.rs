@@ -261,6 +261,18 @@ impl ImplTargetKey {
 
 pub(super) type TraitImplIndex = IndexMap<ImplTargetKey, Vec<(ModuleSource, AstId)>>;
 
+type ReceiverImplIndex = IndexMap<name::Receiver, Vec<(ModuleSource, AstId)>>;
+
+fn index_by_receiver(index: &TraitImplIndex) -> ReceiverImplIndex {
+    let mut out: ReceiverImplIndex = IndexMap::default();
+    for (key, entries) in index {
+        out.entry(key.receiver())
+            .or_default()
+            .extend(entries.iter().cloned());
+    }
+    out
+}
+
 /// Digested header of an `impl` block, pre-extracted at [`TraitEnv::build`]
 /// time so trait/method queries read its trait name, target type, methods,
 /// and type parameters without re-fetching the impl block from
@@ -476,6 +488,13 @@ pub struct TraitEnv {
     /// `ModuleSource`. The inherent subset is the `trait_name.is_none()` filter
     /// ([`Self::inherent_impl_keys`]).
     pub(super) all_impl_index: TraitImplIndex,
+    /// `impl_index` and `all_impl_index` re-keyed by the target's bare head,
+    /// for callers that hold a name without the import context to canonicalise
+    /// it. Built once with the indexes it mirrors: derived per query it is a
+    /// scan of every impl target, and bound checking during method lookup runs
+    /// on that path.
+    by_receiver: ReceiverImplIndex,
+    all_by_receiver: ReceiverImplIndex,
     /// Trait name → trait declaration location.
     pub(super) decl_index: TraitDeclIndex,
     /// Effect name → effect declaration location.
@@ -1029,6 +1048,8 @@ impl TraitEnv {
 
         (
             Arc::new(Self {
+                by_receiver: index_by_receiver(&impl_index),
+                all_by_receiver: index_by_receiver(&all_impl_index),
                 impl_index,
                 all_impl_index,
                 decl_index,
@@ -1134,10 +1155,10 @@ impl TraitEnv {
         &'a self,
         receiver: &'a name::Receiver,
     ) -> impl Iterator<Item = &'a (ModuleSource, AstId)> + 'a {
-        self.impl_index
-            .iter()
-            .filter(move |(key, _)| key.receiver() == *receiver)
-            .flat_map(|(_, entries)| entries.iter())
+        self.by_receiver
+            .get(receiver)
+            .into_iter()
+            .flat_map(|entries| entries.iter())
     }
 
     /// Collected form of [`Self::entries_by_receiver`], for callers that need
@@ -1177,10 +1198,10 @@ impl TraitEnv {
         receiver: &name::Receiver,
         method_name: &str,
     ) -> bool {
-        self.all_impl_index
-            .iter()
-            .filter(|(key, _)| key.receiver() == *receiver)
-            .flat_map(|(_, entries)| entries.iter())
+        self.all_by_receiver
+            .get(receiver)
+            .into_iter()
+            .flat_map(|entries| entries.iter())
             .any(|key| {
                 self.impl_headers.get(key).is_some_and(|h| {
                     h.trait_name.is_none() && h.methods.iter().any(|m| m.name == method_name)
@@ -1660,6 +1681,7 @@ pub(super) fn impl_target_key(
                 &written,
                 module_source,
                 scope.map_or(&empty_sources, |s| &s.sources),
+                &empty_sources,
                 scope.map_or(&empty_names, |s| &s.original_names),
                 symbols,
             );

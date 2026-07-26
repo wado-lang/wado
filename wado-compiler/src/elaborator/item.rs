@@ -862,17 +862,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         block.annotate_ctx.trait_ctx.type_param_bounds.clear();
         block.register_impl_block_params(impl_block);
 
-        // A method signature may name `Self::Item`, so the block's
-        // associated-type bindings have to be in scope before it resolves.
         block.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
-        for binding in &impl_block.associated_types {
-            let type_id = block.resolve_type(&binding.ty);
-            block
-                .annotate_ctx
-                .trait_ctx
-                .assoc_type_bindings
-                .insert(binding.name.clone(), type_id);
-        }
 
         let impl_is_concrete = block.impl_is_concrete_instantiation(
             &impl_block.ty,
@@ -890,6 +880,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 impl_is_concrete,
                 &impl_block.type_params,
             );
+            // A method signature may name `Self::Item`, so the impl's
+            // associated-type bindings have to be in scope before it
+            // resolves — and resolved in this frame, whose slots the
+            // signature is numbered by. Resolving them one scope out
+            // numbers them by declaration order instead, so `type Item = V`
+            // in `impl<V> … for Pair<String, V>` records a slot the
+            // receiver's arguments never bind.
+            frame_scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
+            for binding in &impl_block.associated_types {
+                let type_id = frame_scope.resolve_type(&binding.ty);
+                frame_scope
+                    .annotate_ctx
+                    .trait_ctx
+                    .assoc_type_bindings
+                    .insert(binding.name.clone(), type_id);
+            }
+
             let param_types: Vec<TypeId> = method
                 .params
                 .iter()

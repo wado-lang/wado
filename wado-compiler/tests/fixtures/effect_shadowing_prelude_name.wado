@@ -1,0 +1,22 @@
+// An imported effect whose name is also a prelude symbol (the `Display`
+// trait). The explicit import names the declaring module; resolving the
+// name through the prelude fallback instead points the effect at
+// `core:prelude/traits.wado`, which declares no such effect.
+
+use { Display, shout } from "./sub/effect_shadowing_prelude_name_lib.wado";
+
+test "an imported effect outranks a same-named prelude symbol" {
+    let mut seen = "";
+    handle {
+        shout("hi");
+    } with Display {
+        fn emit(msg: String) {
+            seen = msg;
+            resume;
+        }
+    }
+    assert seen == "hi";
+}
+
+__DATA__
+{"test": {}}
