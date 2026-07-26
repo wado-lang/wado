@@ -969,7 +969,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let base_target = match matched_ref_kind {
             Some(kind) => ImplTargetKey::Ref(kind),
-            None => self.impl_target(&base_struct_name),
+            None => self.impl_target_of(base_type_id, &base_struct_name),
         };
         let param_is_mut = self.lookup_method_param_is_mut(&base_target, method_name);
         let mut method_info =

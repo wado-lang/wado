@@ -1237,6 +1237,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         trait_env::ImplTargetKey::Decl(self.canonical_decl_key(type_name))
     }
 
+    /// Impl-target key for a receiver whose `TypeId` is known. The type
+    /// already carries its declaring module, so this asks it rather than
+    /// re-resolving the name from the caller's vantage — which cannot
+    /// separate two modules' same-named types when the caller imports
+    /// neither, and reaches the receiver only through a return type.
+    pub(crate) fn impl_target_of(
+        &self,
+        type_id: tir::TypeId,
+        fallback_name: &str,
+    ) -> trait_env::ImplTargetKey {
+        match self.type_decl_key(type_id) {
+            Some(key) => trait_env::ImplTargetKey::Decl(key),
+            None => self.impl_target(fallback_name),
+        }
+    }
+
     pub(crate) fn canonical_decl_key(&self, name: &str) -> (ModuleSource, String) {
         super::elaborator::trait_query::canonical_decl_key_with(
             name,
