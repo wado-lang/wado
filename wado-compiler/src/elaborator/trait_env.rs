@@ -232,6 +232,11 @@ pub(super) type TraitImplIndex = IndexMap<name::Receiver, Vec<(ModuleSource, Ast
 /// [`TraitEnv::impl_headers`].
 #[derive(Clone, Debug)]
 pub(super) struct ImplHeader {
+    /// Module declaring the impl's *target type* — not the module holding
+    /// the impl, which the index entry already carries. The two differ for
+    /// an impl written outside its type's module, and only this one
+    /// separates two modules' same-named types inside a bare-name bucket.
+    pub(super) type_decl_module: ModuleSource,
     /// Trait name for `impl Trait for Type` blocks (via `get_type_name_static`
     /// on the trait reference); `None` for inherent `impl Type { … }` blocks.
     /// The memoised head name of [`Self::trait_type`], so the index filters
@@ -853,6 +858,11 @@ impl TraitEnv {
                 impl_headers.insert(
                     (module_source.clone(), impl_block.id),
                     ImplHeader {
+                        type_decl_module: module_import_scopes
+                            .get(module_source)
+                            .and_then(|scope| scope.sources.get(&type_name))
+                            .cloned()
+                            .unwrap_or_else(|| module_source.clone()),
                         trait_name: impl_block.trait_type.as_ref().map(get_type_name_static),
                         trait_type: impl_block.trait_type.clone(),
                         ty: impl_block.ty.clone(),

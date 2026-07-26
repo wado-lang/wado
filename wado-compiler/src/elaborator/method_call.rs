@@ -2227,38 +2227,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         trait_name: &str,
     ) -> Vec<ast::AssociatedTypeBinding> {
-        let scan = |items: &[Item]| -> Option<Vec<ast::AssociatedTypeBinding>> {
-            for item in items {
-                if let Item::Impl(impl_block) = item
-                    && let Some(trait_type) = &impl_block.trait_type
-                    && Self::get_type_name_static(trait_type) == trait_name
-                    && Self::get_type_name_static(&impl_block.ty) == struct_name
-                {
-                    return Some(impl_block.associated_types.clone());
-                }
-            }
-            None
-        };
-        if let Some(found) = scan(self.current_module_items) {
-            return found;
-        }
-        if let Some(entries) = self
-            .tysys
+        // The bucket is keyed by bare type name, so two modules' same-named
+        // structs share it. Narrowing by the *type's* declaring module is
+        // what separates them — scanning the current module first only
+        // happened to do that when the type was local.
+        let (type_module, _) = self.canonical_decl_key(struct_name);
+        self.tysys
             .trait_env
             .impl_index
             .get(&Receiver::Type(struct_name.to_string()))
-        {
-            for (module_source, item_id) in entries {
-                if let Some(module) = self.loaded_modules.get(module_source)
-                    && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
-                    && let Some(trait_type) = &impl_block.trait_type
-                    && Self::get_type_name_static(trait_type) == trait_name
-                {
-                    return impl_block.associated_types.clone();
-                }
-            }
-        }
-        Vec::new()
+            .into_iter()
+            .flatten()
+            .filter_map(|key| self.tysys.trait_env.impl_headers.get(key))
+            .find(|header| {
+                header.type_decl_module == type_module
+                    && header.trait_name.as_deref() == Some(trait_name)
+            })
+            .map(|header| header.associated_types.clone())
+            .unwrap_or_default()
     }
 
     /// Look up static method parameter types for coercion.
