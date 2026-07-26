@@ -434,12 +434,10 @@ pub fn synthesize_reflect(project: &mut Package) {
         .compiler_items()
         .trait_name(CompilerItem::ReflectStruct)
         .to_string();
-    let requested: IndexSet<(String, ModuleSource, String)> = first_module
-        .type_table
-        .borrow()
-        .bound_driven_synth_requests(|trait_name| trait_name == reflect_trait_name)
-        .into_iter()
-        .collect();
+    // Reflection is not demand-driven: `TypeTable::is_reflect_eligible` decides
+    // coverage, and the bound check reads the same predicate, so there is
+    // nothing to request.
+    let requested: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
 
     let mut pending: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
     for module in project.tir_modules.values_mut() {
@@ -1189,7 +1187,7 @@ fn generate_variant_reflect_impls(
         return;
     }
 
-    let targets = collect_reflect_variant_targets(module, ctx, variant_trait_name);
+    let targets = collect_reflect_variant_targets(module);
     if targets.is_empty() {
         return;
     }
@@ -1227,16 +1225,17 @@ struct ReflectVariantTarget {
 }
 
 /// Select the variants in `module` that need a synthesized `ReflectVariant`
-/// impl: those actually requested by a bound, generic or not.
-fn collect_reflect_variant_targets(
-    module: &TirModule,
-    ctx: &SynthesisCtx<'_, '_, '_>,
-    variant_trait_name: &str,
-) -> Vec<ReflectVariantTarget> {
+/// impl: every eligible declaration, generic or not.
+fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarget> {
     module
         .variants
         .iter()
-        .filter(|v| ctx.should_synthesize(&v.name, variant_trait_name))
+        .filter(|v| {
+            module
+                .type_table
+                .borrow()
+                .is_reflect_eligible(&v.name, v.cases.iter().map(|c| c.payload))
+        })
         .map(|v| ReflectVariantTarget {
             name: v.name.clone(),
             type_params: v.type_params.clone(),
@@ -1880,7 +1879,6 @@ fn generate_enum_reflect_impls(
         .enums
         .iter()
         .filter(|e| e.type_params.is_empty())
-        .filter(|e| ctx.should_synthesize(&e.name, enum_trait_name))
         .map(|e| ReflectEnumTarget {
             name: e.name.clone(),
             cases: e
@@ -2291,7 +2289,6 @@ fn generate_flags_reflect_impls(
     let targets: Vec<ReflectFlagsTarget> = module
         .flags
         .iter()
-        .filter(|f| ctx.should_synthesize(&f.name, flags_trait_name))
         .filter_map(|f| {
             let flags_type = module
                 .type_table

@@ -1039,60 +1039,26 @@ impl TypeSystem {
             return true;
         }
 
-        // `ReflectStruct` is synthesized for every struct: eligibility is "is a
-        // struct", not a field-recursive check.
-        if let ResolvedType::Struct {
-            name,
-            module_source,
-            ..
-        } = &resolved
-            && on_bound == Some(OnBoundTrait::ReflectStruct)
+        // A plain declaration satisfies its kind's reflection bound when the
+        // shared eligibility predicate accepts it — the same predicate reflect
+        // synthesis reads, so the two cannot disagree and nothing needs to be
+        // recorded for synthesis to find later.
+        let plain_reflect_subject = match (&resolved, on_bound) {
+            (ResolvedType::Struct { name, .. }, Some(OnBoundTrait::ReflectStruct)) => scope
+                .struct_fields(name)
+                .map(|info| (name, info.fields.iter().map(|(_, ty, _)| *ty).collect())),
+            (ResolvedType::Variant { name, .. }, Some(OnBoundTrait::ReflectVariant)) => scope
+                .variant_case(name)
+                .map(|info| (name, info.cases.iter().map(|c| c.payload).collect())),
+            (ResolvedType::Enum { name, .. }, Some(OnBoundTrait::ReflectEnum))
+            | (ResolvedType::Flags { name, .. }, Some(OnBoundTrait::ReflectFlags)) => {
+                Some((name, Vec::new()))
+            }
+            _ => None,
+        };
+        if let Some((name, members)) = plain_reflect_subject
+            && self.is_reflect_eligible(name, members.into_iter())
         {
-            self.type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(name, module_source, trait_name);
-            return true;
-        }
-
-        // `ReflectVariant` likewise: every variant is eligible.
-        if let ResolvedType::Variant {
-            name,
-            module_source,
-            ..
-        } = &resolved
-            && on_bound == Some(OnBoundTrait::ReflectVariant)
-        {
-            self.type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(name, module_source, trait_name);
-            return true;
-        }
-
-        // `ReflectEnum` likewise: every enum is eligible.
-        if let ResolvedType::Enum {
-            name,
-            module_source,
-            ..
-        } = &resolved
-            && on_bound == Some(OnBoundTrait::ReflectEnum)
-        {
-            self.type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(name, module_source, trait_name);
-            return true;
-        }
-
-        // `ReflectFlags` likewise: every flags type is eligible.
-        if let ResolvedType::Flags {
-            name,
-            module_source,
-            ..
-        } = &resolved
-            && on_bound == Some(OnBoundTrait::ReflectFlags)
-        {
-            self.type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(name, module_source, trait_name);
             return true;
         }
 

@@ -85,6 +85,9 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
 /// `ReflectVariant`-derived generic variant. A generic variant keeps a single
 /// declaration, so the instantiations are the `GenericInstance` types naming it.
 fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<TirFunction>>>) {
+    // The subject's mangle is the bridge's identity, so a type interned more
+    // than once collapses onto one helper rather than minting a duplicate.
+    let mut seen_subjects: crate::hashmap::IndexSet<String> = crate::hashmap::IndexSet::default();
     let instances: Vec<(TypeId, String, ModuleSource, Vec<TypeId>)> = {
         let tt = flat.type_table.borrow();
         tt.iter_type_ids()
@@ -97,7 +100,18 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
                 else {
                     return None;
                 };
-                tt.has_generic_assoc_type_def(name, REFLECT_MEMBERS_ASSOC)
+                // A bridge is minted per *concrete* instantiation. An
+                // unsubstituted parameter or projection prints as itself
+                // (`Option<V>`, `Option<I::Item>`), so instances from different
+                // callers would collide on one name.
+                let concrete = !type_args.iter().any(|&arg| {
+                    tt.contains_type_param(arg) || tt.contains_assoc_type_projection(arg)
+                });
+                if !concrete || !tt.has_generic_assoc_type_def(name, REFLECT_MEMBERS_ASSOC) {
+                    return None;
+                }
+                seen_subjects
+                    .insert(tt.mangle_type_arg_for_generic(id))
                     .then(|| (id, name.clone(), module_source.clone(), type_args.clone()))
             })
             .collect()

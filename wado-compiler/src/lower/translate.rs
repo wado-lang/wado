@@ -117,7 +117,8 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         // FuncId (a miscompile). The check is O(1); keep it always-on.
         assert!(
             prev.is_none(),
-            "duplicate canonical function key: function_id must be unique"
+            "duplicate canonical function key: function_id must be unique: {:?}",
+            tir_function_key(&func_rc.borrow())
         );
     }
     let base_len = functions.len();
