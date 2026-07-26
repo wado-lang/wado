@@ -2575,8 +2575,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_param_bounds
                     .shift_remove(&type_param.name);
             }
-            let param_is_mut = method_sig.param_is_mut.clone();
-            let param_names = method_sig.param_names.clone();
+            let param_is_mut = crate::elaborator::sig::Param::is_mut_flags(&method_sig.params);
+            let param_names = crate::elaborator::sig::Param::names(&method_sig.params);
             // Parameter defaults live on the trait declaration only (WEP
             // 2026-04-11). Pull them from the trait's method, keyed by
             // parameter name, instead of the impl's re-specified params.

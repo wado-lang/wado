@@ -2375,13 +2375,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(&static_key)
             .and_then(|methods| methods.iter().find(|e| e.name == method_name))
             .and_then(|e| self.tysys.impl_method_sig(e.method_id))
-            .map(|sig| {
-                sig.param_names
-                    .iter()
-                    .cloned()
-                    .zip(sig.param_defaults.iter().cloned())
-                    .collect()
-            });
+            .map(|sig| crate::elaborator::sig::Param::named_defaults(&sig.params));
         if let Some(defaults) = indexed {
             return defaults;
         }

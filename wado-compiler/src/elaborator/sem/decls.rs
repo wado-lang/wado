@@ -38,11 +38,8 @@ pub(crate) struct FunctionSig {
     /// declares only effect params (or none). A superset of
     /// `decl.type_params`, which holds only the slot-consuming subset.
     pub(crate) type_param_ids: Vec<(String, TypeId)>,
-    pub(crate) param_names: Vec<String>,
-    pub(crate) param_is_mut: Vec<bool>,
-    /// Default-value expressions — irreducibly AST, re-resolved per call
-    /// site under the callee's scope (WEP 2026-04-11).
-    pub(crate) param_defaults: Vec<Option<ast::Expr>>,
+    /// The declared parameters, in order, parallel to `decl.param_types`.
+    pub(crate) params: Vec<super::super::sig::Param>,
     /// Declared `with` effects, resolved in the declaring perspective
     /// (effect parameters stay symbolic as `EffectRef::Param`).
     pub(crate) effects: Vec<crate::tir::EffectRef>,

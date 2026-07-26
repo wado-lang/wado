@@ -923,23 +923,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return_type,
                     },
                     self_kind,
-                    param_names: method
+                    params: method
                         .params
                         .iter()
                         .filter(|p| p.self_kind == ast::SelfKind::None)
-                        .map(|p| p.name.clone())
-                        .collect(),
-                    param_is_mut: method
-                        .params
-                        .iter()
-                        .filter(|p| p.self_kind == ast::SelfKind::None)
-                        .map(|p| p.is_mut)
-                        .collect(),
-                    param_defaults: method
-                        .params
-                        .iter()
-                        .filter(|p| p.self_kind == ast::SelfKind::None)
-                        .map(|p| p.default.clone())
+                        .map(|p| super::sig::Param {
+                            name: p.name.clone(),
+                            is_mut: p.is_mut,
+                            default: p.default.clone(),
+                        })
                         .collect(),
                 },
             );
@@ -1467,9 +1459,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return_type,
             },
             type_param_ids,
-            param_names: func.params.iter().map(|p| p.name.clone()).collect(),
-            param_is_mut: func.params.iter().map(|p| p.is_mut).collect(),
-            param_defaults: func.params.iter().map(|p| p.default.clone()).collect(),
+            params: func
+                .params
+                .iter()
+                .map(|p| super::sig::Param {
+                    name: p.name.clone(),
+                    is_mut: p.is_mut,
+                    default: p.default.clone(),
+                })
+                .collect(),
             effects,
         }
     }

@@ -1657,11 +1657,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .function_sig(&self.current_module_source, &ident.name)
         {
             return (
-                sig.param_names
-                    .iter()
-                    .cloned()
-                    .zip(sig.param_defaults.iter().cloned())
-                    .collect(),
+                crate::elaborator::sig::Param::named_defaults(&sig.params),
                 Some(self.current_module_source.clone()),
             );
         }
@@ -1673,11 +1669,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let name = symbol.name.clone();
             if let Some(sig) = self.tysys.function_sig(&src, &name) {
                 return (
-                    sig.param_names
-                        .iter()
-                        .cloned()
-                        .zip(sig.param_defaults.iter().cloned())
-                        .collect(),
+                    crate::elaborator::sig::Param::named_defaults(&sig.params),
                     Some(src),
                 );
             }
@@ -1701,7 +1693,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .function_sig(&self.current_module_source, &ident.name)
         {
-            return sig.param_is_mut.clone();
+            return crate::elaborator::sig::Param::is_mut_flags(&sig.params);
         }
 
         // Imported function
@@ -1712,7 +1704,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             if let Some(sig) = self.tysys.function_sig(&src, &name) {
-                return sig.param_is_mut.clone();
+                return crate::elaborator::sig::Param::is_mut_flags(&sig.params);
             }
         }
 

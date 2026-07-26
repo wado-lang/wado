@@ -33,17 +33,39 @@ pub(crate) struct DeclSig {
 pub(crate) struct MethodSig {
     pub(crate) decl: DeclSig,
     pub(crate) self_kind: crate::ast::SelfKind,
-    /// Names, mutability and default expressions of the non-receiver
-    /// parameters, in order. `decl.param_types` includes the receiver at
-    /// index 0 when there is one, so these are offset by
+    /// The non-receiver parameters, in order. `decl.param_types` includes
+    /// the receiver at index 0 when there is one, so these are offset by
     /// [`Self::first_value_param`].
-    ///
-    /// They live in one record because callers pair them positionally with
-    /// each other and with the parameter types; kept apart, the ordering was
-    /// a coincidence of matching filters in separate lookups.
-    pub(crate) param_names: Vec<String>,
-    pub(crate) param_is_mut: Vec<bool>,
-    pub(crate) param_defaults: Vec<Option<crate::ast::Expr>>,
+    pub(crate) params: Vec<Param>,
+}
+
+/// What a declaration says about one parameter beyond its type. One record
+/// per parameter rather than a vector per attribute: callers read them
+/// together, and parallel vectors can disagree in length or order.
+#[derive(Clone, Debug)]
+pub(crate) struct Param {
+    pub(crate) name: String,
+    pub(crate) is_mut: bool,
+    /// Irreducibly AST — re-resolved per call site under the callee's scope
+    /// (WEP 2026-04-11).
+    pub(crate) default: Option<crate::ast::Expr>,
+}
+
+impl Param {
+    pub(crate) fn names(params: &[Self]) -> Vec<String> {
+        params.iter().map(|p| p.name.clone()).collect()
+    }
+
+    pub(crate) fn is_mut_flags(params: &[Self]) -> Vec<bool> {
+        params.iter().map(|p| p.is_mut).collect()
+    }
+
+    pub(crate) fn named_defaults(params: &[Self]) -> Vec<(String, Option<crate::ast::Expr>)> {
+        params
+            .iter()
+            .map(|p| (p.name.clone(), p.default.clone()))
+            .collect()
+    }
 }
 
 impl MethodSig {
