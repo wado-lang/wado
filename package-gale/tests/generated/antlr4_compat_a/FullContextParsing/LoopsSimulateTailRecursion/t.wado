@@ -2824,6 +2824,10 @@ impl Parser {
         return out;
     }
 
+    fn text_between(&self, lo: i32, hi: i32) -> String {
+        return self.tokens.rule_text(lo, hi);
+    }
+
     fn rule_text(&self, start_tok: i32) -> String {
         return self.tokens.rule_text(start_tok, self.pos - 1);
     }
@@ -3223,8 +3227,13 @@ fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 
 fn _parse_expr_or_assign__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
+    let _span_lo_expr = p.pos;
     p.atn_ret_pending = 25;
     let expr = _parse_expr(p, follow);
+    let _span_hi_expr = p.pos - 1;
+    if !p.speculating {
+        p.emit(`pass: ${p.text_between(_span_lo_expr, _span_hi_expr)}\n`);
+    }
     return;
 }
 

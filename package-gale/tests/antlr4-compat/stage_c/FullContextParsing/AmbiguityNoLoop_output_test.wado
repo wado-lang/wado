@@ -15,7 +15,7 @@ use t from "../../grammars/FullContextParsing/AmbiguityNoLoop.g4"
         },
     };
 
-// triage: full-context prediction reaches the action at a different point than ANTLR, so the printed output diverges.
+// triage: the grammar is ambiguous and its `@init` asks for LL_EXACT_AMBIG_DETECTION; Gale commits to an alternative without reporting the ambiguity, so the action on the reported alt never runs.
 #[TODO]
 test "stage_c_output: FullContextParsing/AmbiguityNoLoop" {
     let input = "a@";

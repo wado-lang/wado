@@ -1599,6 +1599,10 @@ impl Parser {
         return out;
     }
 
+    fn text_between(&self, lo: i32, hi: i32) -> String {
+        return self.tokens.rule_text(lo, hi);
+    }
+
     fn rule_text(&self, start_tok: i32) -> String {
         return self.tokens.rule_text(start_tok, self.pos - 1);
     }
@@ -1933,12 +1937,20 @@ fn _parse_a__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_X {
         p.b.set_alt(0);
+        let _span_lo_label = p.pos;
         let label = _parse_subrule(p);
+        let _span_hi_label = p.pos - 1;
+        if !p.speculating {
+            p.emit(`${p.text_between(_span_lo_label, _span_hi_label)}\n`);
+        }
         return;
     }
     if kind == TK_LIT_Y {
         p.b.set_alt(1);
         let label = p.expect(TK_LIT_Y, &EMPTY_SYNC);
+        if !p.speculating {
+            p.emit(`${p.token_text(label)}\n`);
+        }
         return;
     }
     p.no_viable(

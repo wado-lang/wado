@@ -36,7 +36,7 @@ pub fn translate_wado_action(
     bindings: &List<[bool, String, String]>,
     handle: &String = &PARSER_HANDLE,
 ) -> Result<String, String> {
-    let resolved = resolve_attrs(body, rule, rules)?;
+    let resolved = resolve_attrs(body, rule, rules, bindings)?;
     let body_chars: List<char> = body.chars().collect();
     let mut adjusted: List<ResolvedAttr> = [];
     let mut repls: List<String> = [];
@@ -132,6 +132,28 @@ fn binding_for(bindings: &List<[bool, String, String]>, is_token: bool, base: &S
 /// `$start` / `$stop` substitution.
 pub global RULE_START_TOK_LOCAL: String = "_rule_start_tok";
 
+/// The locals a labeled rule call captures around itself so `$<label>.text` can
+/// read that invocation's own token range. Emitted only where an action reads it
+/// (`action_reads_rule_span`), so every other call site is unchanged.
+pub fn rule_span_lo_local(field: &String) -> String {
+    return `_span_lo_${*field}`;
+}
+
+pub fn rule_span_hi_local(field: &String) -> String {
+    return `_span_hi_${*field}`;
+}
+
+/// Whether `body` reads `$<label>.text` for the rule-call binding `dedup_base`,
+/// the one reference that needs the call's token range captured.
+pub fn action_reads_rule_span(body: &String, dedup_base: &String) -> bool {
+    for let r of &find_attr_refs(body) {
+        if r.member matches { Some("text") } && binding_name(&r.name) == *dedup_base {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// The precedence-threshold parameter a left-recursive rule fn carries; read
 /// by a `$_p` substitution in an LR rule (elsewhere `$_p` is the literal 0).
 global MIN_PREC_LOCAL: String = "min_prec";
@@ -217,8 +239,8 @@ fn action_attr_expr(
                 Result::Ok(`vals.${r.name}`);
             }
         },
-        RuleLabel => rule_member_expr(rules, r, bindings),
-        RuleRef => rule_member_expr(rules, r, bindings),
+        RuleLabel => rule_member_expr(rules, r, bindings, handle),
+        RuleRef => rule_member_expr(rules, r, bindings, handle),
         TokenLabel => token_member_expr(r, bindings, handle),
         TokenRef => token_member_expr(r, bindings, handle),
         _ => Result::Err(`$${r.name}: this attribute form is not yet emitted`),
@@ -358,8 +380,20 @@ fn rule_member_expr(
     rules: &List<ParserRule>,
     r: &ResolvedAttr,
     bindings: &List<[bool, String, String]>,
+    handle: &String,
 ) -> Result<String, String> {
     let binding = binding_for(bindings, false, &binding_name(&r.name));
+    // `.text` is the invocation's own matched span, not a value-channel field:
+    // the call site captures the token range it consumed (see
+    // `rule_span_lo_local`), so a second labeled call in the same alternative
+    // reports its own text.
+    if let Some(m) = &r.member {
+        if *m == "text" {
+            return Result::Ok(
+                `${*handle}.text_between(${rule_span_lo_local(&binding)}, ${rule_span_hi_local(&binding)})`,
+            );
+        }
+    }
     let target = match find_rule(rules, &r.rule_name) {
         Some(t) => t,
         None => {

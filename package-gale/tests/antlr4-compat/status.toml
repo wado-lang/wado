@@ -163,13 +163,9 @@
 # Stage C — action-print output-compare (result.output vs descriptor [output]).
 # These execute action bodies but do not yet match; each names the gap.
 [stage_c_todo]
-"Sets/CharSetLiteral" = "action nested in a repeat group (`(A {print})+`) is not executed yet, so result.output is empty; action-in-repeat execution is a follow-up."
-"SemPredEvalParser/ToLeftWithVaryingPredicate" = "member-state-dependent predicate (`i` mutated across iterations) is evaluated with different timing than ANTLR, so the printed values differ."
-"FullContextParsing/AmbiguityNoLoop" = "full-context prediction reaches the action at a different point than ANTLR, so the printed output diverges."
-"FullContextParsing/LoopsSimulateTailRecursion" = "full-context prediction reaches the action at a different point than ANTLR, so the printed output diverges."
+"FullContextParsing/AmbiguityNoLoop" = "the grammar is ambiguous and its `@init` asks for LL_EXACT_AMBIG_DETECTION; Gale commits to an alternative without reporting the ambiguity, so the action on the reported alt never runs."
 "ParseTrees/ExtraTokensAndAltLabels" = "error-recovery path prints differently from ANTLR; flips with error-recovery output alignment."
-"ParserErrors/LL1ErrorInfo" = "error-recovery path prints differently from ANTLR; flips with error-recovery output alignment."
-"ParserExec/LabelAliasingAcrossLabeledAlternatives" = "action-print output does not yet match ANTLR (action executed on a not-yet-supported code path or evaluated with different timing)."
+"ParserErrors/LL1ErrorInfo" = "the `@init` prints `getExpectedTokens().toString(getVocabulary())`; neither the expected-token set nor the vocabulary is in the recognizer API java2wado maps, so the body is reported and dropped."
 "LeftRecursion/MultipleAlternativesWithCommonLabel_4" = "common alt label across LR alternatives with a return value the print reads; label-to-vals wiring incomplete for this shape."
 
 # Stage C — descriptors whose [output] is not a property of the grammar,

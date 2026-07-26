@@ -1,0 +1,23 @@
+//! `$<label>.text` for a labeled rule reference reads that invocation's own
+//! token span, so a second labeled call in the same alternative reports its own
+//! text rather than everything matched so far.
+
+use t from "./grammars/java_rule_label_text.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/java_rule_label_text" },
+    };
+
+test "a labeled rule reference reports its own span" {
+    // Two calls in the same alternative: each reports the two tokens it matched
+    // ("xz"), not the whole alternative ("xzxz"). Skipped whitespace is not in
+    // the token stream, so it is absent from the text, as in ANTLR4.
+    let r = t::parse(&"x z x z");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics.len()}`;
+    assert r.output == "xz\nxz\n", `output:\n${r.output}`;
+}
+
+test "a labeled token reference still reports the token text" {
+    let r = t::parse(&"y");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics.len()}`;
+    assert r.output == "y\n", `output:\n${r.output}`;
+}
