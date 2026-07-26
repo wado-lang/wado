@@ -881,6 +881,7 @@ impl TraitEnv {
                     &impl_block.ty,
                     module_source,
                     module_import_scopes.get(module_source),
+                    symbols,
                 );
                 impl_headers.insert(
                     (module_source.clone(), impl_block.id),
@@ -1633,20 +1634,23 @@ pub(super) fn impl_target_key(
     ty: &ast::Type,
     module_source: &ModuleSource,
     scope: Option<&ModuleImportScope>,
+    symbols: &SymbolTable,
 ) -> ImplTargetKey {
     match name::RefKind::from_ast(ty) {
         Some(kind) => ImplTargetKey::Ref(kind),
         None => {
             let written = get_type_name_static(ty);
-            let module = scope
-                .and_then(|s| s.sources.get(&written))
-                .cloned()
-                .unwrap_or_else(|| module_source.clone());
-            let name = scope
-                .and_then(|s| s.original_names.get(&written))
-                .cloned()
-                .unwrap_or(written);
-            ImplTargetKey::Decl((module, name))
+            let empty_sources: IndexMap<String, ModuleSource> = IndexMap::default();
+            let empty_names: IndexMap<String, String> = IndexMap::default();
+            let key = super::trait_query::decl_identity_core(
+                &written,
+                module_source,
+                scope.map_or(&empty_sources, |s| &s.sources),
+                scope.map_or(&empty_names, |s| &s.original_names),
+                symbols,
+            )
+            .unwrap_or_else(|| (module_source.clone(), written));
+            ImplTargetKey::Decl(key)
         }
     }
 }

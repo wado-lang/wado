@@ -100,19 +100,29 @@ pub(super) fn canonical_assoc_const_key(
 /// default-method synthesis (it has no `Elaborator` instance but does carry
 /// the same `imports` / `symbols` / `trait_env` / `current_module_source`
 /// references).
-pub(crate) fn canonical_decl_key_with(
+/// The part of [`canonical_decl_key_with`] that needs nothing but a name, a
+/// vantage module, that module's imported type sources, and the symbol table.
+///
+/// Split out so `TraitEnv::build` can key its impl indexes by the same
+/// identity the elaborator will later look them up with. Two implementations
+/// of "which type is this name?" is how the indexes came to disagree with
+/// their callers — a primitive keyed to whichever module wrote the `impl`,
+/// while lookups asked for `primitive()`.
+///
+/// Returns `None` when the name resolves through none of these; the caller
+/// decides what a still-unresolved name means.
+pub(crate) fn decl_identity_core(
     name: &str,
-    current_module_source: &ModuleSource,
-    imports: &super::sem::ModuleImports,
+    vantage: &ModuleSource,
+    imported_sources: &IndexMap<String, ModuleSource>,
+    import_original_names: &IndexMap<String, String>,
     symbols: &crate::symbol::SymbolTable,
-    trait_env: &super::trait_env::TraitEnv,
-) -> (ModuleSource, String) {
+) -> Option<(ModuleSource, String)> {
     if super::is_primitive_type_name(name) {
-        return (ModuleSource::primitive(), name.to_string());
+        return Some((ModuleSource::primitive(), name.to_string()));
     }
-    if let Some(src) = imports.imported_type_sources.get(name) {
-        let original = imports
-            .import_original_names
+    if let Some(src) = imported_sources.get(name) {
+        let original = import_original_names
             .get(name)
             .cloned()
             .unwrap_or_else(|| name.to_string());
@@ -120,7 +130,34 @@ pub(crate) fn canonical_decl_key_with(
             .lookup_in_module(src, &original)
             .map(|sym| sym.module_source().clone())
             .unwrap_or_else(|| src.clone());
-        return (canonical, original);
+        return Some((canonical, original));
+    }
+    // A name defined in the vantage module resolves to it, ahead of any
+    // by-name fallback that could pick a same-named declaration elsewhere.
+    if symbols.is_defined_in_module(vantage, name) {
+        return Some((vantage.clone(), name.to_string()));
+    }
+    if let Some(sym) = symbols.lookup(vantage, name) {
+        return Some((sym.module_source().clone(), name.to_string()));
+    }
+    None
+}
+
+pub(crate) fn canonical_decl_key_with(
+    name: &str,
+    current_module_source: &ModuleSource,
+    imports: &super::sem::ModuleImports,
+    symbols: &crate::symbol::SymbolTable,
+    trait_env: &super::trait_env::TraitEnv,
+) -> (ModuleSource, String) {
+    if let Some(key) = decl_identity_core(
+        name,
+        current_module_source,
+        &imports.imported_type_sources,
+        &imports.import_original_names,
+        symbols,
+    ) {
+        return key;
     }
     if let Some(src) = imports.effect_sources.get(name) {
         let canonical = symbols
@@ -128,16 +165,6 @@ pub(crate) fn canonical_decl_key_with(
             .map(|sym| sym.module_source().clone())
             .unwrap_or_else(|| src.clone());
         return (canonical, name.to_string());
-    }
-    // A name defined in the current module resolves to it, ahead of the global
-    // decl-index fallbacks below (which are by-name and can pick a same-named
-    // declaration in another module). Without this a locally defined
-    // `trait Visitor` lost to `core:serde::Visitor` (issue #1298).
-    if symbols.is_defined_in_module(current_module_source, name) {
-        return (current_module_source.clone(), name.to_string());
-    }
-    if let Some(sym) = symbols.lookup(current_module_source, name) {
-        return (sym.module_source().clone(), name.to_string());
     }
     if let Some(key) = trait_env.find_trait_decl_key(name) {
         return key;
