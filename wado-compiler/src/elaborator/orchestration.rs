@@ -3461,11 +3461,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         _ => continue,
                     };
 
-                    type_table.borrow_mut().register_generic_assoc_type_def(
-                        struct_name.clone(),
-                        binding.name.clone(),
-                        type_param_id,
-                    );
+                    let base_decl = type_table.borrow().decl_by_name(&struct_name, module_source);
+                    if let Some(base_decl) = base_decl {
+                        type_table.borrow_mut().register_generic_assoc_type_def(
+                            base_decl,
+                            binding.name.clone(),
+                            type_param_id,
+                        );
+                    }
                 }
             }
         }

@@ -1408,6 +1408,19 @@ impl CompilerItems {
         (module.clone(), name.to_string())
     }
 
+    /// Owned `(module, name)` for a struct item, or `None` when the item has
+    /// not been registered yet — for callers that run before the declaring
+    /// stdlib module is elaborated.
+    pub fn struct_owned_opt(&self, item: CompilerItem) -> Option<(ModuleSource, String)> {
+        match self.get(item)? {
+            Resolved::Struct {
+                module_source,
+                name,
+            } => Some((module_source.clone(), name.clone())),
+            _ => None,
+        }
+    }
+
     /// Module + variant name of a [`CompilerItemKind::Variant`] item
     /// (`Option`, `Result`).
     pub fn require_variant(&self, item: CompilerItem) -> (&ModuleSource, &str) {
@@ -1547,24 +1560,6 @@ impl CompilerItems {
     /// Name-only convenience for a [`CompilerItemKind::Variant`] item.
     pub fn variant_name(&self, item: CompilerItem) -> &str {
         self.require_variant(item).1
-    }
-
-    /// Whether `name` is one of the four reflection member handles.
-    ///
-    /// They are generic structs whose own `Members` would mention
-    /// `StructField<Self, …>`, growing `Self` without bound, so they are not
-    /// reflectable. This is the seal that keeps reflection terminating, and both
-    /// the bound check and reflect synthesis read it — synthesis covers every
-    /// declaration except these, so nothing has to be demanded first.
-    pub fn is_sealed_reflect_member(&self, name: &str) -> bool {
-        [
-            CompilerItem::ReflectStructField,
-            CompilerItem::ReflectVariantCase,
-            CompilerItem::ReflectEnumCase,
-            CompilerItem::ReflectFlagsBit,
-        ]
-        .iter()
-        .any(|item| self.struct_name(*item) == name)
     }
 
     /// Name-only convenience for a [`CompilerItemKind::Enum`] item.

@@ -1207,12 +1207,36 @@ fn type_is_reflect(type_id: TypeId, tt: &TypeTable, allow_pre_reflect_struct: bo
     // A generic instance's projection lives on its base declaration and is
     // substituted per instantiation, which may not have happened yet. The
     // definition's presence is the fact — the substitution is mechanical.
-    if let ResolvedType::GenericInstance { name, .. } = tt.get(type_id)
-        && tt.has_generic_assoc_type_def(name, crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC)
+    if matches!(tt.get(type_id), ResolvedType::GenericInstance { .. })
+        && tt.has_generic_assoc_type_def(
+            type_id,
+            crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
+        )
     {
         return true;
     }
-    allow_pre_reflect_struct && matches!(tt.get(type_id), ResolvedType::Struct { .. })
+    allow_pre_reflect_struct && is_unsealed_declared_struct(type_id, tt)
+}
+
+/// Whether `type_id` is spelled from a struct declaration that reflection will
+/// cover — the stand-in the pre-reflect window accepts. A `GenericInstance`
+/// counts: `Pair<i32>` is a struct because `Pair` is, and the impl synthesized
+/// for `Pair` reaches the instance by substitution. The seal is subtracted
+/// because a member handle is the one struct reflection never covers.
+fn is_unsealed_declared_struct(type_id: TypeId, tt: &TypeTable) -> bool {
+    let declared = match tt.get(type_id) {
+        ResolvedType::Struct { .. } => true,
+        ResolvedType::GenericInstance {
+            name,
+            module_source,
+            ..
+        } => tt.find_struct_by_name(name, module_source).is_some(),
+        _ => false,
+    };
+    declared
+        && !tt
+            .decl_of_type(type_id)
+            .is_some_and(|decl| tt.is_sealed_reflect_member(decl))
 }
 
 /// The module of a struct-like `type_id`, used as the disambiguation hint for

@@ -65,14 +65,26 @@ impl Monomorphizer {
         // that projections like `I::Item` (where `I` is later substituted with
         // this monomorphized struct, which carries no type args) can still be
         // resolved by `resolve_assoc_type`.
-        type_table.register_monomorphized_assoc_types(concrete_type_id, &key.name, &substitution);
+        let base_decl = type_table
+            .find_decl_type_by_name(&key.name, &key.module_source)
+            .and_then(|base| type_table.symbol_of_type(base).copied());
+        if let Some(base_decl) = base_decl {
+            type_table.register_mono_type(base_decl, concrete_type_id);
+            type_table.register_monomorphized_assoc_types(
+                concrete_type_id,
+                base_decl,
+                &substitution,
+            );
+        }
 
         // Register them on the `GenericInstance` spelling too: a reflect
         // projection (`FieldTypes` / `Members`) is read off receivers that are
         // still spelled as instances at the call sites this pass has not yet
         // substituted, and those readers hold the table immutably.
-        for id in instance_ids {
-            type_table.register_monomorphized_assoc_types(id, &key.name, &substitution);
+        if let Some(base_decl) = base_decl {
+            for id in instance_ids {
+                type_table.register_monomorphized_assoc_types(id, base_decl, &substitution);
+            }
         }
 
         // Substitute types in fields (now self-references can be resolved)

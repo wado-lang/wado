@@ -46,7 +46,8 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
             .enumerate()
             .filter_map(|(i, s)| {
                 let base = &s.monomorph_info.as_ref()?.generic_name;
-                tt.has_generic_assoc_type_def(base, REFLECT_MEMBERS_ASSOC)
+                let base_decl = tt.decl_by_name(base, &s.module_source)?;
+                tt.has_generic_assoc_type_def_for_decl(base_decl, REFLECT_MEMBERS_ASSOC)
                     .then(|| (i, base.clone()))
             })
             .collect()
@@ -107,7 +108,7 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
                 let concrete = !type_args.iter().any(|&arg| {
                     tt.contains_type_param(arg) || tt.contains_assoc_type_projection(arg)
                 });
-                if !concrete || !tt.has_generic_assoc_type_def(name, REFLECT_MEMBERS_ASSOC) {
+                if !concrete || !tt.has_generic_assoc_type_def(id, REFLECT_MEMBERS_ASSOC) {
                     return None;
                 }
                 seen_subjects

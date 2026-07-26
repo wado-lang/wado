@@ -484,11 +484,14 @@ fn generate_struct_reflect_impls(
         // Every eligible declaration is reflected, generic or not — the same
         // predicate the bound check reads, so no demand channel is needed
         // between them.
-        if !module
-            .type_table
-            .borrow()
-            .is_reflect_eligible(&target.name, target.fields.iter().map(|f| f.type_id))
-        {
+        let tt = module.type_table.borrow();
+        let eligible = tt
+            .find_decl_type_by_name(&target.name, &module_source)
+            .is_some_and(|type_id| {
+                tt.is_reflect_eligible(type_id, target.fields.iter().map(|f| f.type_id))
+            });
+        drop(tt);
+        if !eligible {
             continue;
         }
         let methods = generate_struct_reflect_methods(
@@ -612,7 +615,6 @@ fn generate_struct_reflect_methods(
         let members_tuple_type = tt.make_tuple(member_types.clone());
         register_reflect_assoc_types(
             &mut tt,
-            name,
             struct_type,
             is_generic,
             &[
@@ -669,21 +671,22 @@ fn generate_struct_reflect_methods(
 /// Record a reflect kind's associated tuple types for `self_type`.
 ///
 /// A non-generic type resolves them directly by its `TypeId`. A generic one
-/// registers them as generic definitions keyed by the base name, so
+/// registers them as generic definitions keyed by the declaring `AstId`, so
 /// `resolve_generic_assoc_type_mono` substitutes the instance's type args and
 /// `register_monomorphized_assoc_types` re-keys the result onto each
 /// monomorphized struct.
 fn register_reflect_assoc_types(
     tt: &mut TypeTable,
-    base_name: &str,
     self_type: TypeId,
     is_generic: bool,
     assocs: &[(&str, TypeId)],
 ) {
+    let base_decl = tt.decl_of_type(self_type);
     for (assoc_name, resolved) in assocs {
         if is_generic {
+            let Some(base_decl) = base_decl else { continue };
             tt.register_generic_assoc_type_def(
-                base_name.to_string(),
+                base_decl,
                 (*assoc_name).to_string(),
                 *resolved,
             );
@@ -1235,10 +1238,11 @@ fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarg
         .variants
         .iter()
         .filter(|v| {
-            module
-                .type_table
-                .borrow()
-                .is_reflect_eligible(&v.name, v.cases.iter().map(|c| c.payload))
+            let tt = module.type_table.borrow();
+            tt.find_decl_type_by_name(&v.name, &v.module_source)
+                .is_some_and(|type_id| {
+                    tt.is_reflect_eligible(type_id, v.cases.iter().map(|c| c.payload))
+                })
         })
         .map(|v| ReflectVariantTarget {
             name: v.name.clone(),
@@ -1356,7 +1360,6 @@ fn generate_variant_reflect_methods(
             tt.make_tuple(target.cases.iter().map(|(_, _, p, _)| *p).collect());
         register_reflect_assoc_types(
             &mut tt,
-            &target.name,
             variant_type,
             is_generic,
             &[

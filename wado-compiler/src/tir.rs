@@ -622,7 +622,7 @@ pub struct TypeTable {
     /// `GenericInstance`'s `type_args`. Populated when processing generic impl blocks
     /// (e.g., `impl Iterator for ListIter<T> { type Item = T; }`).
     /// Used by the monomorphizer to resolve associated types for `GenericInstance` types.
-    generic_assoc_type_defs: IndexMap<(String, String), TypeId>,
+    generic_assoc_type_defs: IndexMap<(crate::ast::AstId, String), TypeId>,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
@@ -963,6 +963,65 @@ impl TypeTable {
     /// declaring [`AstId`](crate::ast::AstId).
     pub fn symbol_of_type(&self, type_id: TypeId) -> Option<&crate::ast::AstId> {
         self.symbol_by_type.get(type_id)
+    }
+
+    /// The declaring [`AstId`](crate::ast::AstId) behind `type_id` in whatever
+    /// form it currently has: a plain declaration, a monomorphization, or a
+    /// `GenericInstance` still carrying its type args.
+    ///
+    /// This is the identity to key a declaration-scoped registry by. A
+    /// `GenericInstance` shares its base declaration's `AstId`, so `Node<i32>`
+    /// and `Node<String>` answer with the one `Node` they were both spelled
+    /// from, while a `Node` in another module answers with a different id.
+    pub fn decl_of_type(&self, type_id: TypeId) -> Option<crate::ast::AstId> {
+        if let Some(key) = self.symbol_by_type.get(type_id) {
+            return Some(*key);
+        }
+        let ResolvedType::GenericInstance {
+            name,
+            module_source,
+            ..
+        } = self.get(type_id)
+        else {
+            return None;
+        };
+        let base = self.find_decl_type_by_name(name, module_source)?;
+        self.symbol_by_type.get(base).copied()
+    }
+
+    /// The declaring [`AstId`](crate::ast::AstId) of the type named `name` in
+    /// `module_source`.
+    pub fn decl_by_name(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<crate::ast::AstId> {
+        let type_id = self.find_decl_type_by_name(name, module_source)?;
+        self.symbol_by_type.get(type_id).copied()
+    }
+
+    /// Whether `decl` is one of the four reflection member handles.
+    ///
+    /// They are generic structs whose own `Members` would mention
+    /// `StructField<Self, …>`, growing `Self` without bound, so they are not
+    /// reflectable. This is the seal that keeps reflection terminating, and both
+    /// the bound check and reflect synthesis read it — synthesis covers every
+    /// declaration except these, so nothing has to be demanded first.
+    ///
+    /// Matched by declaration, not by name: a user type spelled `StructField`
+    /// is a different declaration and stays reflectable.
+    pub fn is_sealed_reflect_member(&self, decl: crate::ast::AstId) -> bool {
+        use crate::compiler_item::CompilerItem;
+        [
+            CompilerItem::ReflectStructField,
+            CompilerItem::ReflectVariantCase,
+            CompilerItem::ReflectEnumCase,
+            CompilerItem::ReflectFlagsBit,
+        ]
+        .into_iter()
+        .filter_map(|item| self.compiler_items().struct_owned_opt(item))
+        .filter_map(|(module_source, name)| self.find_struct_by_name(&name, &module_source))
+        .any(|sealed| self.symbol_by_type.get(sealed) == Some(&decl))
     }
 
     /// Find the `TypeId` of a user-declared type (struct, enum, variant, flags,
@@ -1852,15 +1911,19 @@ impl TypeTable {
 
     /// Register a generic associated type definition.
     /// E.g., for `impl Iterator for ListIter<T> { type Item = T; }`,
-    /// register `("ListIter", "Item") → TypeParam(0, "T")`.
+    /// register `(ListIter's `AstId`, "Item") → TypeParam(0, "T")`.
+    ///
+    /// Keyed by the declaring [`AstId`](crate::ast::AstId): two modules may
+    /// each declare a `Node<T>`, and their definitions must not overwrite one
+    /// another.
     pub fn register_generic_assoc_type_def(
         &mut self,
-        base_struct_name: String,
+        base_decl: crate::ast::AstId,
         assoc_name: String,
         type_param_id: TypeId,
     ) {
         self.generic_assoc_type_defs
-            .insert((base_struct_name, assoc_name), type_param_id);
+            .insert((base_decl, assoc_name), type_param_id);
     }
 
     /// Register associated-type resolutions for a freshly monomorphized struct.
@@ -1871,19 +1934,19 @@ impl TypeTable {
     /// `Foo<…>::Item` can no longer be resolved through
     /// [`Self::resolve_generic_assoc_type`] (that path only handles
     /// `GenericInstance`). We therefore eagerly resolve each associated-type
-    /// definition registered for `base_name` against the instantiation
+    /// definition registered for `base_decl` against the instantiation
     /// `substitution` and record the result keyed by `concrete_id`, so later
     /// [`Self::resolve_assoc_type`] lookups succeed.
     pub fn register_monomorphized_assoc_types(
         &mut self,
         concrete_id: TypeId,
-        base_name: &str,
+        base_decl: crate::ast::AstId,
         substitution: &IndexMap<u32, TypeId>,
     ) {
         let defs: Vec<(String, TypeId)> = self
             .generic_assoc_type_defs
             .iter()
-            .filter(|((name, _), _)| name == base_name)
+            .filter(|((decl, _), _)| *decl == base_decl)
             .map(|((_, assoc_name), &def_id)| (assoc_name.clone(), def_id))
             .collect();
         for (assoc_name, def_id) in defs {
@@ -1902,15 +1965,13 @@ impl TypeTable {
         concrete_id: TypeId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let (base_name, type_args) = match self.get(concrete_id).clone() {
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => (name, type_args),
+        let type_args = match self.get(concrete_id).clone() {
+            ResolvedType::GenericInstance { type_args, .. } => type_args,
             _ => return None,
         };
         let def_type_id = *self
             .generic_assoc_type_defs
-            .get(&(base_name, assoc_name.to_string()))?;
+            .get(&(self.decl_of_type(concrete_id)?, assoc_name.to_string()))?;
         match self.get(def_type_id).clone() {
             ResolvedType::TypeParam { index, .. } => type_args.get(index as usize).copied(),
             ResolvedType::AssocTypeProjection {
@@ -1964,15 +2025,13 @@ impl TypeTable {
         concrete_id: TypeId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let (base_name, type_args) = match self.get(concrete_id).clone() {
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => (name, type_args),
+        let type_args = match self.get(concrete_id).clone() {
+            ResolvedType::GenericInstance { type_args, .. } => type_args,
             _ => return None,
         };
         let def_type_id = *self
             .generic_assoc_type_defs
-            .get(&(base_name, assoc_name.to_string()))?;
+            .get(&(self.decl_of_type(concrete_id)?, assoc_name.to_string()))?;
         let subst: IndexMap<u32, TypeId> = type_args
             .iter()
             .enumerate()
@@ -1981,29 +2040,46 @@ impl TypeTable {
         Some(self.substitute_type_params(def_type_id, &subst))
     }
 
-    /// Whether a declaration named `name` with these member types can be
-    /// reflected. The single eligibility predicate: the bound check and reflect
-    /// synthesis both read it, so synthesis covers exactly what the bound
-    /// accepts without a demand channel between them.
+    /// Whether the declaration behind `type_id`, having these member types, can
+    /// be reflected. The single eligibility predicate: the bound check and
+    /// reflect synthesis both read it, so synthesis covers exactly what the
+    /// bound accepts without a demand channel between them.
     ///
     /// Two exclusions, both load-bearing. A member handle is sealed — its own
     /// `Members` would mention `StructField<Self, …>` and grow `Self` without
     /// bound. A member typed by an associated-type projection (an iterator
     /// adapter's `fn mut(I::Item) -> U`) is not determined by substituting the
     /// declaration's own parameters, so its members cannot be named.
-    pub fn is_reflect_eligible(&self, name: &str, members: impl Iterator<Item = TypeId>) -> bool {
-        !self.compiler_items().is_sealed_reflect_member(name)
+    pub fn is_reflect_eligible(
+        &self,
+        type_id: TypeId,
+        members: impl Iterator<Item = TypeId>,
+    ) -> bool {
+        !self
+            .decl_of_type(type_id)
+            .is_some_and(|decl| self.is_sealed_reflect_member(decl))
             && !members
                 .into_iter()
                 .any(|ty| self.contains_assoc_type_projection(ty))
     }
 
-    /// Whether a generic definition of `assoc_name` is registered for
-    /// `base_name` — i.e. the generic type carries a synthesized impl binding
-    /// that associated type.
-    pub fn has_generic_assoc_type_def(&self, base_name: &str, assoc_name: &str) -> bool {
+    /// Whether a generic definition of `assoc_name` is registered for the
+    /// declaration behind `type_id` — i.e. the generic type carries a
+    /// synthesized impl binding that associated type.
+    pub fn has_generic_assoc_type_def(&self, type_id: TypeId, assoc_name: &str) -> bool {
+        self.decl_of_type(type_id)
+            .is_some_and(|decl| self.has_generic_assoc_type_def_for_decl(decl, assoc_name))
+    }
+
+    /// [`Self::has_generic_assoc_type_def`] for a caller that already holds the
+    /// declaring [`AstId`](crate::ast::AstId).
+    pub fn has_generic_assoc_type_def_for_decl(
+        &self,
+        decl: crate::ast::AstId,
+        assoc_name: &str,
+    ) -> bool {
         self.generic_assoc_type_defs
-            .contains_key(&(base_name.to_string(), assoc_name.to_string()))
+            .contains_key(&(decl, assoc_name.to_string()))
     }
 
     /// Resolve an associated type for whatever form the subject currently has.

@@ -549,7 +549,7 @@ impl TypeSystem {
             .borrow_mut()
             .push((type_id, trait_name.to_string()));
 
-        let result = self.type_implements_trait_inner(ctx, scope, &resolved, trait_name);
+        let result = self.type_implements_trait_inner(ctx, scope, type_id, &resolved, trait_name);
 
         ctx.trait_check_stack.borrow_mut().pop();
 
@@ -636,8 +636,8 @@ impl TypeSystem {
 
     /// Whether a declaration can be reflected, via the shared eligibility
     /// predicate reflect synthesis reads.
-    fn is_reflect_eligible(&self, name: &str, members: impl Iterator<Item = TypeId>) -> bool {
-        self.type_table.borrow().is_reflect_eligible(name, members)
+    fn is_reflect_eligible(&self, type_id: TypeId, members: impl Iterator<Item = TypeId>) -> bool {
+        self.type_table.borrow().is_reflect_eligible(type_id, members)
     }
 
     pub(super) fn classify_on_bound_trait(
@@ -924,6 +924,7 @@ impl TypeSystem {
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
+        type_id: TypeId,
         resolved: &ResolvedType,
         trait_name: &str,
     ) -> bool {
@@ -1046,18 +1047,16 @@ impl TypeSystem {
         let plain_reflect_subject = match (&resolved, on_bound) {
             (ResolvedType::Struct { name, .. }, Some(OnBoundTrait::ReflectStruct)) => scope
                 .struct_fields(name)
-                .map(|info| (name, info.fields.iter().map(|(_, ty, _)| *ty).collect())),
+                .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect()),
             (ResolvedType::Variant { name, .. }, Some(OnBoundTrait::ReflectVariant)) => scope
                 .variant_case(name)
-                .map(|info| (name, info.cases.iter().map(|c| c.payload).collect())),
-            (ResolvedType::Enum { name, .. }, Some(OnBoundTrait::ReflectEnum))
-            | (ResolvedType::Flags { name, .. }, Some(OnBoundTrait::ReflectFlags)) => {
-                Some((name, Vec::new()))
-            }
+                .map(|info| info.cases.iter().map(|c| c.payload).collect()),
+            (ResolvedType::Enum { .. }, Some(OnBoundTrait::ReflectEnum))
+            | (ResolvedType::Flags { .. }, Some(OnBoundTrait::ReflectFlags)) => Some(Vec::new()),
             _ => None,
         };
-        if let Some((name, members)) = plain_reflect_subject
-            && self.is_reflect_eligible(name, members.into_iter())
+        if let Some(members) = plain_reflect_subject
+            && self.is_reflect_eligible(type_id, members.into_iter())
         {
             return true;
         }
@@ -1075,11 +1074,11 @@ impl TypeSystem {
             && match on_bound {
                 Some(OnBoundTrait::ReflectStruct) => {
                     scope.struct_fields(name).is_some_and(|info| {
-                        self.is_reflect_eligible(name, info.fields.iter().map(|(_, ty, _)| *ty))
+                        self.is_reflect_eligible(type_id, info.fields.iter().map(|(_, ty, _)| *ty))
                     })
                 }
                 Some(OnBoundTrait::ReflectVariant) => scope.variant_case(name).is_some_and(|info| {
-                    self.is_reflect_eligible(name, info.cases.iter().map(|c| c.payload))
+                    self.is_reflect_eligible(type_id, info.cases.iter().map(|c| c.payload))
                 }),
                 _ => false,
             }
