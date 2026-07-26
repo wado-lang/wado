@@ -131,16 +131,36 @@ WS : ' ' -> skip ;
     assert !src.contains("best_act"), "predicates need no best_act";
 }
 
-test "a language=Java lexer grammar emits its @lexer::members fields" {
-    // java2wado stages Java lexer bodies into Wado before codegen, so the
-    // members they read are real `Lexer` fields, not dead declarations.
-    let src = gen_source(&"lexer grammar L;
+test "a language=Java lexer grammar emits no @lexer::members fields" {
+    // A Java member method takes `&mut self`, but a lexer predicate runs inside
+    // `try_<rule>(lx: &Lexer, ...)`. Emitting the members would let a body reach
+    // one and produce a call the compiler rejects, so Java lexer bodies see no
+    // members and a reference is reported and dropped.
+    let src = &"lexer grammar L;
 @members { int nest = 0; }
 A : 'a' { nest = nest + 1; } ;
 WS : ' ' -> skip ;
+";
+    assert !gen_source(src).contains("nest: i32"), "Java lexer members must not be emitted";
+    assert unsupported_count(src) == 1, "a body reaching a Java lexer member must be reported";
+}
+
+test "a lexer predicate that prints is reported, not wired to the sink" {
+    // A predicate is evaluated for every candidate rule, losers included, so
+    // printing from one would emit output the tournament discards.
+    assert unsupported_count(&"lexer grammar L;
+A : 'a'+ { System.out.println(\"x\") }? ;
+WS : ' ' -> skip ;
+") == 1, "a printing lexer predicate must surface UnsupportedAction";
+}
+
+test "a Java lexer body can declare and read its own local" {
+    let src = gen_source(&"lexer grammar L;
+A : 'a'+ { int n = 1; System.out.println(\"n=\" + n); } ;
+WS : ' ' -> skip ;
 ");
-    assert src.contains("nest: i32"), "Java lexer members are emitted";
-    assert src.contains("lx.nest"), "a Java lexer body reads the member through the lexer handle";
+    assert src.contains("let mut n: i32 = 1;"), "the local is emitted";
+    assert src.contains("lx.emit(`n=${n}"), "a later statement reads it";
 }
 
 test "a language=Java lexer body prints through the lexer output sink" {
@@ -150,7 +170,7 @@ WS : ' ' -> skip ;
 ");
     assert src.contains("fn emit"), "the lexer output sink is emitted";
     assert src.contains("lx.emit("), "System.out.println becomes a sink write";
-    assert src.contains("ts.output = lexer.output;"), "the sink is threaded onto the token stream";
+    assert src.contains("ts.output = lexer.act_output;"), "the sink is threaded onto the token stream";
 }
 
 test "an unmodelled ANTLR lexer field is a loud diagnostic, not broken code" {
@@ -218,4 +238,21 @@ B : 'b' ;
 WS : ' ' -> skip ;
 ");
     assert src.contains("fn winning_alt_A"), "non-replayable multi-alt rule gets a winning_alt helper";
+}
+
+test "an action inside an inlined fragment runs, and is not warned as unhandled" {
+    // The replay walks into a non-recursive fragment, so the fragment's action
+    // runs even though the referencing rule carries none of its own. The
+    // run-set and the warn-set must agree about that.
+    let src = &"lexer grammar L;
+options { language = Wado; }
+A : F 'z' ;
+fragment F : 'a' { lx.set_type(TK_B) } ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 0, "an inlined fragment's action is not unhandled";
+    let out = gen_source(src);
+    assert out.contains("fn apply_A_actions"), "the referencing rule gets a replay fn";
+    assert out.contains("lx.set_type(TK_B);"), "the fragment's action is emitted";
 }

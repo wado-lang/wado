@@ -40,6 +40,16 @@ pub struct JEnv {
     /// an ANTLR recognizer field Gale does not model — and the latter must be a
     /// loud error, not verbatim text that fails to compile downstream.
     pub fields: List<String> = [],
+    /// Whether this body can write to the recognizer's output sink. False in a
+    /// lexer predicate: it is evaluated for every candidate rule during the
+    /// tournament, including the losers, so printing from one would be wrong
+    /// even if the sink were reachable from the match fn. Defaulted true so the
+    /// parser-side construction sites are unchanged.
+    pub sink: bool = true,
+    /// Names declared as locals by the body itself (`int n = 1;`), so a later
+    /// statement can read them. Collected up front because the emitter walks
+    /// statements without carrying a scope.
+    pub locals: List<String> = [],
 }
 
 /// Translate a lexer `{ ... }` action body. The lexer has no enclosing parser
@@ -52,17 +62,33 @@ pub fn translate_java_lexer_stmts(body: &String, env: &JEnv) -> Result<String, S
     let bindings: List<[bool, String, String]> = [];
     let tokens = tokenize_java(body)?;
     let stmts = parse_java_stmts(&tokens)?;
-    return emit_java_stmts(&rule, &rules, &stmts, false, &bindings, env);
+    let mut scoped = *env;
+    scoped.locals = declared_local_names(&stmts);
+    return emit_java_stmts(&rule, &rules, &stmts, false, &bindings, &scoped);
+}
+
+/// The names a statement list declares as locals. `emit_local` emits them as
+/// real Wado locals, so a later statement naming one is resolvable.
+fn declared_local_names(stmts: &List<JStmt>) -> List<String> {
+    let mut out: List<String> = [];
+    for let st of stmts {
+        if let Local(l) = st {
+            out.push(l.name);
+        }
+    }
+    return out;
 }
 
 /// Translate a lexer `{ ... }?` predicate body to a Wado boolean expression.
 pub fn translate_java_lexer_expr(body: &String, env: &JEnv) -> Result<String, String> {
+    let mut env = *env;
+    env.sink = false;
     let rule = lexer_body_rule();
     let rules: List<ParserRule> = [];
     let bindings: List<[bool, String, String]> = [];
     let tokens = tokenize_java(body)?;
     let expr = parse_java_expr(&tokens)?;
-    return emit_expr(&rule, &rules, &expr, false, &bindings, env);
+    return emit_expr(&rule, &rules, &expr, false, &bindings, &env);
 }
 
 fn lexer_body_rule() -> ParserRule {
@@ -187,6 +213,9 @@ fn emit_print(
         tmpl.push_str(&"\\n");
     }
     tmpl.push('`');
+    if !env.sink {
+        return Result::Err("java2wado: a lexer predicate cannot print — it runs for losing candidates too");
+    }
     return Result::Ok(`${env.this_bind}.emit(${tmpl})`);
 }
 
@@ -416,6 +445,11 @@ fn emit_member_call(
 fn lexer_name_expr(env: &JEnv, name: &String) -> Result<String, String> {
     if *name == "_tokenStartCharPositionInLine" {
         return Result::Ok(lexer_token_start_column_expr());
+    }
+    for let l of &env.locals {
+        if *l == *name {
+            return Result::Ok(*name);
+        }
     }
     let snake = to_snake_case(name);
     for let f of &env.fields {

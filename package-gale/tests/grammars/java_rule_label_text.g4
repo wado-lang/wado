@@ -9,8 +9,14 @@ grammar JavaRuleLabelText;
 
 start : a* EOF ;
 
-a : label=sub {System.out.println($label.text);} tail=sub {System.out.println($tail.text);}
-  | label='y' {System.out.println($label.text);}
+// `myLabel` is deliberately not snake_case: the per-alternative label-kind
+// disambiguation keys on the binding name codegen derives, so a label that is
+// already snake_case would not exercise it.
+a : myLabel=sub {System.out.println($myLabel.text);} tail=sub {System.out.println($tail.text);}
+  | myLabel='y' {System.out.println($myLabel.text);}
+  // Inside a group, and repeated: the capture must be declared in whatever
+  // scope the call lives in, not only at an alternative's top level.
+  | 'g' (inner=sub {System.out.println($inner.text);})+
   ;
 
 sub : 'x' 'z' ;

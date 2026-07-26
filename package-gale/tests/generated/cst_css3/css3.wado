@@ -16316,7 +16316,7 @@ fn try_PseudoNot(chars: &List<char>, start: i32) -> i32 {
 fn try_Number(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_880 = pos;
-    let mut alts_best_880 = -1;
+    let mut alts_ok_880 = false;
     alts_880_0: {
         pos = alts_saved_880;
         if pos >= chars.len() { break alts_880_0; }
@@ -16333,41 +16333,42 @@ fn try_Number(chars: &List<char>, start: i32) -> i32 {
             pos = rep_saved_881;
             break;
         }
-        if pos > alts_best_880 { alts_best_880 = pos; }
+        alts_ok_880 = true;
     }
-    alts_880_1: {
-        pos = alts_saved_880;
-        loop {
-            let rep_saved_882 = pos;
-            rep_882: {
-                if pos >= chars.len() { break rep_882; }
-                if !((chars[pos] matches { '0'..='9' })) { break rep_882; }
-                pos += 1;
-                continue;
+    if !alts_ok_880 {
+        alts_880_1: {
+            pos = alts_saved_880;
+            loop {
+                let rep_saved_882 = pos;
+                rep_882: {
+                    if pos >= chars.len() { break rep_882; }
+                    if !((chars[pos] matches { '0'..='9' })) { break rep_882; }
+                    pos += 1;
+                    continue;
+                }
+                pos = rep_saved_882;
+                break;
             }
-            pos = rep_saved_882;
-            break;
-        }
-        if pos >= chars.len() || chars[pos] != '.' { break alts_880_1; }
-        pos += 1;
-        if pos >= chars.len() { break alts_880_1; }
-        if !((chars[pos] matches { '0'..='9' })) { break alts_880_1; }
-        pos += 1;
-        loop {
-            let rep_saved_883 = pos;
-            rep_883: {
-                if pos >= chars.len() { break rep_883; }
-                if !((chars[pos] matches { '0'..='9' })) { break rep_883; }
-                pos += 1;
-                continue;
+            if pos >= chars.len() || chars[pos] != '.' { break alts_880_1; }
+            pos += 1;
+            if pos >= chars.len() { break alts_880_1; }
+            if !((chars[pos] matches { '0'..='9' })) { break alts_880_1; }
+            pos += 1;
+            loop {
+                let rep_saved_883 = pos;
+                rep_883: {
+                    if pos >= chars.len() { break rep_883; }
+                    if !((chars[pos] matches { '0'..='9' })) { break rep_883; }
+                    pos += 1;
+                    continue;
+                }
+                pos = rep_saved_883;
+                break;
             }
-            pos = rep_saved_883;
-            break;
+            alts_ok_880 = true;
         }
-        if pos > alts_best_880 { alts_best_880 = pos; }
     }
-    if alts_best_880 < 0 { return -1; }
-    pos = alts_best_880;
+    if !alts_ok_880 { return -1; }
     return pos;
 }
 

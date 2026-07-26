@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["tests/antlr4-compat/grammars/Sets/UnicodeEscapedSMPRangeSetMismatch.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/lexer_alt_longest_ref.g4"])]
 
 //! Core lexing vocabulary shared by every generated parser and by Gale's
 //! own front end: source spans, lazy token-text slices, tokens, and the
@@ -120,6 +120,21 @@ impl Eq for LexerSlice {
     }
 }
 
+/// The 0-based column of char index `i`: the number of chars since the last
+/// newline. ANTLR4's `getCharPositionInLine()` (over the live match cursor) and
+/// `_tokenStartCharPositionInLine` (over the token's start) are both this.
+/// Scans back to the line start, so the cost is the column, not the offset —
+/// a lexer predicate may call it once per candidate rule per token.
+pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
+    let mut j = if i < chars.len() { i } else { chars.len() };
+    let mut col = 0;
+    while j > 0 && chars[j - 1] != '\n' {
+        col += 1;
+        j -= 1;
+    }
+    return col;
+}
+
 /// Token represents a lexed token with its kind, text, and position.
 /// Leading trivia (whitespace, comments) is attached to each token.
 /// `channel` is the ANTLR4 channel id (0 = default, 1 = HIDDEN; named
@@ -194,6 +209,10 @@ pub struct TokenStream {
     pub triv_ends: List<i32>,
     pub triv_chans: List<i32>,
     pub flags: List<TokenFlags>,
+    /// Text the lexer's executed actions printed, in tokenization order
+    /// (Stage C). Empty unless the lexer was generated with action execution
+    /// on. Defaulted so existing construction sites keep compiling.
+    pub output: String = "",
 }
 
 impl TokenStream {
@@ -1151,7 +1170,7 @@ fn render_builder_node(
             Tok => {
                 if !toks.is_empty_text(a[c]) {
                     out.push_str(&" ");
-                    toks.push_token_text(out, a[c]);
+                    toks.push_token_text_escaped(out, a[c]);
                 }
                 c += 1;
             },
@@ -1161,7 +1180,7 @@ fn render_builder_node(
             },
             Skip => {
                 out.push_str(&" <skip ");
-                toks.push_token_text(out, a[c]);
+                toks.push_token_text_escaped(out, a[c]);
                 out.push_str(&">");
                 c += 1;
             },
@@ -1242,7 +1261,10 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             line_starts.push(i + 1);
         }
     }
-    let mut out = String::with_capacity(tokens.len() * 32);
+    // Lexer action output precedes the dump, as it does on ANTLR4's stdout:
+    // the prints happen while tokenizing, the dump only after.
+    let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
+    out.push_str(&tokens.output);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
         // Non-default-channel trivia (`-> channel(HIDDEN)`) is parked in this
@@ -1323,25 +1345,6 @@ fn emit_lexer_token(
     out.push_str(&`[@${index},${start}:${end_inclusive}='${text_buf}',<${type_id}>,${channel_attr}${line}:${col}]\n`);
 }
 
-/// Compute (line, column) at a 0-based char index in `chars`, with
-/// 1-based line and 0-based column to match ANTLR4's `Token` getters.
-/// The parser's error path reports at most one position per parse, so the
-/// linear scan is fine; the per-token dump uses `line_col_from_starts`.
-fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
-    let mut line = 1;
-    let mut col = 0;
-    let cap = if pos < chars.len() { pos } else { chars.len() };
-    for let mut i = 0; i < cap; i += 1 {
-        if chars[i] == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-    return [line, col];
-}
-
 /// Compute (line, column) from the precomputed `line_starts` table (char
 /// index where each line begins). Binary search for the greatest
 /// `line_starts[j] <= pos`: that line is `j + 1` and the column is the
@@ -1360,15 +1363,18 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     return [lo + 1, pos - line_starts[lo]];
 }
 pub enum TokenKind {
-    LETTERS,
+    X,
+    Y,
+    J,
     Eof,
     Error,
 }
 
-pub global TK_LETTERS: i32 = 0;
-pub global TK_EOF: i32 = 1;
-pub global TK_ERROR: i32 = 2;
-pub global TK_LIT_D: i32 = 3;
+pub global TK_X: i32 = 0;
+pub global TK_Y: i32 = 1;
+pub global TK_J: i32 = 2;
+pub global TK_EOF: i32 = 3;
+pub global TK_ERROR: i32 = 4;
 
 struct Lexer {
     chars: List<char>,
@@ -1389,7 +1395,7 @@ impl Lexer {
     }
 }
 
-fn try_LETTERS(chars: &List<char>, start: i32) -> i32 {
+fn try_X(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
     let mut alts_ok_0 = false;
@@ -1402,7 +1408,9 @@ fn try_LETTERS(chars: &List<char>, start: i32) -> i32 {
     if !alts_ok_0 {
         alts_0_1: {
             pos = alts_saved_0;
-            if pos >= chars.len() || !(chars[pos] matches { '😀'..='🥃' }) { break alts_0_1; }
+            if pos >= chars.len() || chars[pos] != 'a' { break alts_0_1; }
+            pos += 1;
+            if pos >= chars.len() || chars[pos] != 'b' { break alts_0_1; }
             pos += 1;
             alts_ok_0 = true;
         }
@@ -1411,10 +1419,22 @@ fn try_LETTERS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_d(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != 'd' { return -1; }
-    return pos + 1;
+fn try_Y(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    pos = try_X(chars, pos);
+    if pos < 0 { return -1; }
+    if pos >= chars.len() || chars[pos] != 'b' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_J(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() { return -1; }
+    pos += 1;
+    return pos;
 }
 
 pub fn tokenize(input: &String) -> TokenStream {
@@ -1428,17 +1448,15 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == 'a' {
-            end = try_LETTERS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LETTERS; }
-        } else if first_char == 'd' {
-            end = try_lit_d(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_D; }
-        } else if '😀' <= first_char <= '🥃' {
-            end = try_LETTERS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LETTERS; }
+            end = try_X(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_X; }
+            end = try_Y(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Y; }
         } else {
-            end = try_LETTERS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LETTERS; }
+            end = try_Y(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Y; }
+            end = try_J(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_J; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1462,17 +1480,17 @@ pub fn tokenize(input: &String) -> TokenStream {
 
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
-        TK_LETTERS => "LETTERS",
+        TK_X => "X",
+        TK_Y => "Y",
+        TK_J => "J",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_D => "TK_LIT_D",
         _ => "Unknown",
     };
 }
 
-pub global RK_A: NodeKind = 0;
 
-global RULE_NAMES: List<String> = ["a"];
+global RULE_NAMES: List<String> = [];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1502,92 +1520,12 @@ struct Parser {
     max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
-    output: String,
 }
 
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], output: "" };
-    }
-
-    fn emit(&mut self, s: String) {
-        self.output.push_str(&s);
-    }
-
-    fn token_text(&self, i: i32) -> String {
-        return self.tokens.token_text(i);
-    }
-
-    fn token_kind(&self, i: i32) -> i32 {
-        return self.tokens.kind_at(i);
-    }
-
-    fn token_int(&self, i: i32) -> i32 {
-        let sp = self.tokens.span_at(i);
-        let mut acc: i32 = 0;
-        let mut neg = false;
-        let mut j = sp.start;
-        if j < sp.end && self.tokens.chars[j] == '-' {
-            neg = true;
-            j += 1;
-        }
-        while j < sp.end {
-            let c = self.tokens.chars[j];
-            if c >= '0' && c <= '9' {
-                acc = acc * 10 + (c as i32 - '0' as i32);
-            }
-            j += 1;
-        }
-        return if neg { -acc } else { acc };
-    }
-
-    fn token_line(&self, i: i32) -> i32 {
-        return line_col(self.tokens.chars, self.tokens.span_at(i).start).0;
-    }
-
-    fn token_col(&self, i: i32) -> i32 {
-        return line_col(self.tokens.chars, self.tokens.span_at(i).start).1;
-    }
-
-    fn token_start(&self, i: i32) -> i32 {
-        return self.tokens.starts[i];
-    }
-
-    fn la(&self, k: i32) -> i32 {
-        return self.peek_at(k - 1);
-    }
-
-    fn lt(&self, k: i32) -> i32 {
-        let idx = self.pos + k - 1;
-        if idx >= self.kinds.len() { return self.kinds.len() - 1; }
-        if idx < 0 { return 0; }
-        return idx;
-    }
-
-    fn text_span(&self, start: i32, end: i32) -> String {
-        let mut out = String::new();
-        let hi = if end < self.tokens.chars.len() { end } else { self.tokens.chars.len() };
-        for let mut i = start; i < hi; i += 1 {
-            out.push(self.tokens.chars[i]);
-        }
-        return out;
-    }
-
-    fn rule_text(&self, start_tok: i32) -> String {
-        return self.tokens.rule_text(start_tok, self.pos - 1);
-    }
-
-    fn input_text(&self) -> String {
-        return self.text_span(0, self.tokens.chars.len());
-    }
-
-    fn rule_string_tree(&self) -> String {
-        return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
-    }
-
-    fn rule_string_tree_final(&self) -> String {
-        return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1810,99 +1748,17 @@ impl Parser {
     }
 }
 
-fn scan_a(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = pos;
-    while pos < tokens.len() && tokens[pos] == TK_LETTERS {
-        let sp = pos;
-        if pos >= tokens.len() || tokens[pos] != TK_LETTERS { pos = -1; } else { pos += 1; }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_D { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn _parse_a__inner(p: &mut Parser) -> () {
-    let start = p.peek_start();
-    loop {
-        if p.recovering { break; }
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos] != TK_LETTERS { break rep_scan; }
-            pos += 1;
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
-        }
-        if rep_scan_pos < 0 { break; }
-        let letters = p.expect(TK_LETTERS, &EMPTY_SYNC);
-    }
-    let lit_d = p.expect(TK_LIT_D, &EMPTY_SYNC);
-    if !p.speculating {
-        p.emit(`${p.input_text()}\n`);
-    }
-    return;
-}
-
-fn _parse_a(p: &mut Parser) -> () {
-    if p.recovering { return; }
-    let _start = p.peek_start();
-    p.b.start_node(RK_A, _start);
-    _parse_a__inner(p);
-    p.b.finish_node(p.last_end());
-    if p.recovering {
-        p.push_rule_stack("a");
-    }
-}
-
-fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
-    assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    p.max_errors = max_errors;
-    entry(&mut p);
-    if p.recovering && p.diagnostics.len() < max_errors {
-        if let Some(e) = &p.pending {
-            let lc = line_col(p.tokens.chars, e.span.start);
-            let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);
-            d.rule_stack = e.rule_stack;
-            p.diagnostics.push(d);
-        }
-    }
-    return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.output };
-}
-
-pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return parse_a(input, max_errors);
-}
-
-pub fn parse_a(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));
-}
-
-fn _ctx_token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(4);
-    for let mut k = 0; k < 4; k += 1 {
-        v.push(token_kind_name(k));
-    }
-    return v;
-}
-
-global CTX_TOKEN_NAMES: List<String> = _ctx_token_names();
-
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(4);
-    for let mut k = 0; k < 4; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(5);
+    for let mut k = 0; k < 5; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(4);
-    for let mut k = 0; k < 4; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(5);
+    for let mut k = 0; k < 5; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
@@ -1918,6 +1774,4 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
     }
     return String::new();
 }
-
-global EMPTY_SYNC: List<i32> = [];
 

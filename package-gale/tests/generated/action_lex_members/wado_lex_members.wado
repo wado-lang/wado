@@ -1455,7 +1455,7 @@ struct Lexer {
     chars: List<char>,
     pos: i32,
     count: i32 = 0,
-    output: String = "",
+    act_output: String = "",
     act_type: i32 = -1,
     act_channel: i32 = -1,
     act_skip: bool = false,
@@ -1476,7 +1476,7 @@ impl Lexer {
     }
 
     fn emit(&mut self, s: String) {
-        self.output.push_str(&s);
+        self.act_output.push_str(&s);
     }
 
     fn reset_actions(&mut self) {
@@ -1594,7 +1594,7 @@ pub fn tokenize(input: &String) -> TokenStream {
         }
     }
     ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());
-    ts.output = lexer.output;
+    ts.output = lexer.act_output;
     return ts;
 }
 

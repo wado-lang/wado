@@ -10,6 +10,7 @@
 
 use { ParserRule, Element, Alternative, AttrDecl } from "./ir.wado";
 use { AttrRef, find_attr_refs } from "./attr_scan.wado";
+use { to_snake_case, escape_ident } from "./ident.wado";
 
 /// What a `$name` reference resolves to. Determines how the substitution
 /// engine rewrites it (value-channel field, context-API call, ...).
@@ -141,6 +142,10 @@ global NO_BINDINGS: List<[bool, String, String]> = [];
 /// alternative resolves as the first one declared. Falls back to first-match
 /// when the alternative binds nothing by that name.
 fn label_named(env: &AttrEnv, name: &String, bindings: &List<[bool, String, String]>) -> Option<LabelInfo> {
+    // A binding's key is the label name as codegen derived it, so compare on
+    // that form — a label that is not already snake_case (`myLabel`) would
+    // otherwise never match and every alternative would resolve as the first.
+    let key = escape_ident(&to_snake_case(name));
     let mut first: Option<LabelInfo> = null;
     for let lab of &env.labels {
         if lab.name != *name {
@@ -150,7 +155,7 @@ fn label_named(env: &AttrEnv, name: &String, bindings: &List<[bool, String, Stri
             first = Option::Some(*lab);
         }
         for let b of bindings {
-            if b.1 == *name && b.0 == lab.is_token {
+            if b.1 == key && b.0 == lab.is_token {
                 return Option::Some(*lab);
             }
         }

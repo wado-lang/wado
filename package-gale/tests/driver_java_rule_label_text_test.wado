@@ -21,3 +21,9 @@ test "a labeled token reference still reports the token text" {
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics.len()}`;
     assert r.output == "y\n", `output:\n${r.output}`;
 }
+
+test "a labeled rule call inside a repeated group captures its own span" {
+    let r = t::parse(&"g x z x z");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics.len()}`;
+    assert r.output == "xz\nxz\n", `output:\n${r.output}`;
+}

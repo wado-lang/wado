@@ -361,7 +361,7 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
         s.add_field_default(&mf.name, &mf.ty, &mf.init);
     }
     if has_actions {
-        s.add_field_default(&"output", &"String", &"\"\"");
+        s.add_field_default(&"act_output", &"String", &"\"\"");
         s.add_field_default(&"act_type", &"i32", &"-1");
         s.add_field_default(&"act_channel", &"i32", &"-1");
         s.add_field_default(&"act_skip", &"bool", &"false");
@@ -425,7 +425,7 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool) {
     fe.set_receiver(&"&mut self");
     fe.add_param(&"s", &"String");
     fe.emit_begin(w);
-    w.line(&"self.output.push_str(&s);");
+    w.line(&"self.act_output.push_str(&s);");
     w.end();
     w.blank();
 
@@ -580,6 +580,52 @@ pub fn lexer_try_fn_name(name: &String) -> String {
     return `try_${*name}`;
 }
 
+/// Whether some lexer rule reaches `rule` through a generated `try_` call, as
+/// opposed to inlining it. A non-fragment rule and a recursive fragment are
+/// always called; a plain fragment is inlined, and the inline path carries the
+/// caller's tail position with it. A called rule's match fn is entered from a
+/// non-tail position — the caller still has a suffix to consume — so its body
+/// alternation must not take the maximal-munch emit.
+fn lexer_rule_is_called(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
+    if rule.is_fragment && !fragment_is_recursive(rule, all_rules) {
+        return false;
+    }
+    for let other of all_rules {
+        for let alt of &other.body {
+            if lexer_alt_refs_rule(alt, &rule.name) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn lexer_alt_refs_rule(alt: &LexerAlternative, name: &String) -> bool {
+    for let e of &alt.elements {
+        if lexer_elem_refs_rule(e, name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn lexer_elem_refs_rule(elem: &LexerElement, name: &String) -> bool {
+    return match *elem {
+        RuleRef(n) => n == *name,
+        Group(alts) => {
+            for let a of alts {
+                if lexer_alt_refs_rule(&a, name) {
+                    return true;
+                }
+            }
+            false;
+        },
+        Repeat(rep) => lexer_elem_refs_rule(&rep.element, name),
+        Not(n) => lexer_elem_refs_rule(&n.element, name),
+        _ => false,
+    };
+}
+
 fn gen_lexer_match_fn(
     w: &mut CodeWriter,
     rule: &LexerRule,
@@ -625,13 +671,17 @@ fn gen_lexer_match_fn(
         return;
     }
     w.line(&"let mut pos = start;");
+    // The tokenizer enters this fn at a token boundary, so the rule's own body
+    // is in tail position — unless another rule calls it, in which case that
+    // caller's suffix follows and the maximal-munch emit would strand it.
+    let tail = !lexer_rule_is_called(rule, all_rules);
     if rule.body.len() == 1 {
         // gen_lexer_alt_seq places the alt's predicates; a false one returns -1
         // so the tokenizer tries the next rule.
-        gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return -1", ci, ea, hm, true, false);
+        gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return -1", ci, ea, hm, tail, false);
         w.line(&"return pos;");
     } else {
-        gen_lexer_alts(w, &rule.body, all_rules, &"return -1", ci, ea, hm, true, false);
+        gen_lexer_alts(w, &rule.body, all_rules, &"return -1", ci, ea, hm, tail, false);
         w.line(&"return pos;");
     }
     w.end();
@@ -754,13 +804,14 @@ fn lexer_rule_executed_action_ids(grammar: &Grammar, rule: &LexerRule, out: &mut
     }
     let replays = lexer_rule_replayable(rule, &grammar.lexer_rules);
     for let alt of &rule.body {
-        collect_lexer_run_action_ids(alt, replays, out);
+        collect_lexer_run_action_ids(alt, replays, &grammar.lexer_rules, out);
     }
 }
 
 /// The action ids that run for `alt`: its own top-level actions, and — under a
-/// replay — those of every `Group` arm below it.
-fn collect_lexer_run_action_ids(alt: &LexerAlternative, replays: bool, out: &mut List<i32>) {
+/// replay — those of everything the emit inlines below it (a `Group`'s arms and
+/// a non-recursive fragment's body, both of which the replay walks into).
+fn collect_lexer_run_action_ids(alt: &LexerAlternative, replays: bool, all_rules: &List<LexerRule>, out: &mut List<i32>) {
     for let a of &alt.actions {
         if a.kind matches { Action } {
             out.push(a.source.action_id);
@@ -770,12 +821,40 @@ fn collect_lexer_run_action_ids(alt: &LexerAlternative, replays: bool, out: &mut
         return;
     }
     for let e of &alt.elements {
-        if let Group(alts) = e {
-            for let inner of &alts {
-                collect_lexer_run_action_ids(inner, true, out);
-            }
+        for let inner of &inlined_alts_of(e, all_rules) {
+            collect_lexer_run_action_ids(inner, true, all_rules, out);
         }
     }
+}
+
+/// The alternatives `elem` inlines into its enclosing sequence: a `Group`'s
+/// arms, or a non-recursive fragment's body. A `Repeat` / `Not` / rule call
+/// keeps its contents to itself as far as action placement is concerned.
+fn inlined_alts_of(elem: &LexerElement, all_rules: &List<LexerRule>) -> List<LexerAlternative> {
+    return match *elem {
+        Group(alts) => alts,
+        RuleRef(name) => match find_fragment(all_rules, &name) {
+            Some(f) => {
+                if fragment_is_recursive(f, all_rules) {
+                    return [];
+                }
+                f.body;
+            },
+            None => [],
+        },
+        _ => [],
+    };
+}
+
+/// Every action id codegen runs anywhere in the grammar's lexer. A fragment's
+/// actions run through the rules that inline it, not through the fragment's own
+/// entry, so the warn pass has to ask the whole grammar rather than one rule.
+pub fn lexer_grammar_run_action_ids(grammar: &Grammar) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let rule of &grammar.lexer_rules {
+        lexer_rule_executed_action_ids(grammar, rule, &mut out);
+    }
+    return out;
 }
 
 /// Names of the lexer rules whose top-level actions codegen runs, in grammar
@@ -856,10 +935,14 @@ fn gen_lexer_apply_replay_body(
     // Shadow the match-end parameter: from here `pos` is where the replay has
     // reached, which is what an action body's matched-text reads.
     w.line(&"let mut pos = start;");
+    // Only a multi-alt body needs predicates here, and only to re-select the arm
+    // the match took (`gen_lexer_alts_replay`); a single-alt body has nothing to
+    // select, so its predicates are not re-evaluated.
+    let tail = !lexer_rule_is_called(rule, all_rules);
     if rule.body.len() == 1 {
-        gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return", ci, true, has_members, true, true);
+        gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return", ci, false, has_members, tail, true);
     } else {
-        gen_lexer_alts(w, &rule.body, all_rules, &"return", ci, true, has_members, true, true);
+        gen_lexer_alts(w, &rule.body, all_rules, &"return", ci, true, has_members, tail, true);
     }
 }
 
@@ -977,7 +1060,7 @@ fn gen_lexer_winning_alt_fn(
         w.line(&"let chars = &lx.chars;");
     }
     w.line(&"let mut pos = start;");
-    let longest = lexer_alts_prefer_longest(&rule.body, all_rules);
+    let longest = lexer_rule_body_prefers_longest(rule, all_rules);
     if longest {
         w.line(&"let mut best_end = -1;");
         w.line(&"let mut best_alt = -1;");
@@ -1064,6 +1147,7 @@ pub fn collect_unhandled_lexer_alt_action_ids(
     alt: &LexerAlternative,
     executes: bool,
     replays: bool,
+    all_rules: &List<LexerRule>,
     out: &mut List<i32>,
 ) {
     if !executes {
@@ -1071,13 +1155,12 @@ pub fn collect_unhandled_lexer_alt_action_ids(
         return;
     }
     for let e of &alt.elements {
-        if let Group(alts) = e {
-            if replays {
-                for let inner of &alts {
-                    collect_unhandled_lexer_alt_action_ids(inner, true, true, out);
-                }
-                continue;
+        let inlined = inlined_alts_of(e, all_rules);
+        if replays && !inlined.is_empty() {
+            for let inner of &inlined {
+                collect_unhandled_lexer_alt_action_ids(inner, true, true, all_rules, out);
             }
+            continue;
         }
         push_all_lexer_element_action_ids(e, out);
     }
@@ -1227,25 +1310,34 @@ fn gen_lexer_alts_replay(
         } else {
             w.else_begin(&`else if sel_alt_${id} == ${i}`);
         }
-        gen_lexer_alt_seq(w, &alts[i], all_rules, fail_action, ci, ea, hm, longest, true);
+        // `ea = false`: the selection pass above already evaluated this arm's
+        // predicates. Re-evaluating them here would run a state-dependent one
+        // twice and, on a differing verdict, silently drop the winner's actions
+        // while the tournament still emits the token.
+        gen_lexer_alt_seq(w, &alts[i], all_rules, fail_action, ci, false, hm, longest, true);
     }
     w.end();
+}
+
+/// Whether a rule's own body alternation takes the maximal-munch emit. Every
+/// site that has to agree on that decision — the match fn and the winning-alt
+/// helper — reads it here.
+fn lexer_rule_body_prefers_longest(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
+    return !lexer_rule_is_called(rule, all_rules) && lexer_alts_prefer_longest(&rule.body, all_rules);
 }
 
 /// Whether a tail-position alternation needs the maximal-munch emit. It does not
 /// when every alternative consumes the same fixed number of chars (longest and
 /// first-match coincide, so the cheaper emit stays byte-identical), nor when any
-/// alternative carries a predicate (scanning every arm would change how often a
-/// predicate is evaluated).
+/// alternative carries a predicate anywhere below it (scanning every arm would
+/// change how often a predicate is evaluated).
 fn lexer_alts_prefer_longest(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> bool {
     if alts.len() < 2 {
         return false;
     }
     for let alt of alts {
-        for let a of &alt.actions {
-            if a.kind matches { Predicate } {
-                return false;
-            }
+        if lexer_alt_has_predicate_below(alt, all_rules) {
+            return false;
         }
     }
     let mut common = -1;
@@ -1262,6 +1354,55 @@ fn lexer_alts_prefer_longest(alts: &List<LexerAlternative>, all_rules: &List<Lex
         }
     }
     return false;
+}
+
+/// Whether `alt` carries a semantic predicate at its own level or anywhere the
+/// emit inlines below it (a group's arms, a non-recursive fragment's body). A
+/// nested predicate constrains the emit exactly as a top-level one does, so both
+/// must disable the maximal-munch scan.
+fn lexer_alt_has_predicate_below(alt: &LexerAlternative, all_rules: &List<LexerRule>) -> bool {
+    for let a of &alt.actions {
+        if a.kind matches { Predicate } {
+            return true;
+        }
+    }
+    for let e of &alt.elements {
+        if lexer_elem_has_predicate_below(e, all_rules) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn lexer_elem_has_predicate_below(elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
+    return match *elem {
+        Group(alts) => {
+            for let a of alts {
+                if lexer_alt_has_predicate_below(&a, all_rules) {
+                    return true;
+                }
+            }
+            false;
+        },
+        Repeat(rep) => lexer_elem_has_predicate_below(&rep.element, all_rules),
+        Not(n) => lexer_elem_has_predicate_below(&n.element, all_rules),
+        RuleRef(name) => match find_fragment(all_rules, &name) {
+            // A recursive fragment is a call, so its predicates stay inside it.
+            Some(f) => {
+                if fragment_is_recursive(f, all_rules) {
+                    return false;
+                }
+                for let a of &f.body {
+                    if lexer_alt_has_predicate_below(a, all_rules) {
+                        return true;
+                    }
+                }
+                false;
+            },
+            None => false,
+        },
+        _ => false,
+    };
 }
 
 /// The exact number of chars an alternative consumes, or null when it is not a
@@ -3222,7 +3363,7 @@ fn gen_tokenize_fn(
     if has_actions {
         // Hand the action-print sink to the stream, so a consumer that only
         // holds the tokens still sees what the lexer printed.
-        w.line(&"ts.output = lexer.output;");
+        w.line(&"ts.output = lexer.act_output;");
     }
     w.line(&"return ts;");
     w.end();  // fn

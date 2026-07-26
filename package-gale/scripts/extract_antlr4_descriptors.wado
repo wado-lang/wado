@@ -968,19 +968,30 @@ fn is_lexer_dfa_row_start(line: &String) -> bool {
 /// (`s0-'\n'->:s2=>3`) spans two physical lines. A row therefore ends at the
 /// line carrying its `->`, not necessarily at the line it started on.
 fn strip_lexer_dfa_dump(raw: &String) -> String {
-    let mut out = String::with_capacity(raw.len());
-    let mut in_row = false;
+    let mut lines: List<String> = [];
     for let line of raw.lines() {
-        if in_row {
-            in_row = !line.contains("->");
-            continue;
+        lines.push(line);
+    }
+    let mut out = String::with_capacity(raw.len());
+    let mut i = 0;
+    while i < lines.len() {
+        if is_lexer_dfa_row_start(&lines[i]) {
+            if lines[i].contains("->") {
+                i += 1;
+                continue;
+            }
+            // A transition on a literal newline splits the row over exactly two
+            // physical lines, the second carrying the `->`. Require that, so a
+            // line that merely looks like a row start (an action print such as
+            // `s1=5`) does not swallow the rest of the output.
+            if i + 1 < lines.len() && lines[i + 1].contains("->") {
+                i += 2;
+                continue;
+            }
         }
-        if is_lexer_dfa_row_start(&line) {
-            in_row = !line.contains("->");
-            continue;
-        }
-        out.push_str(&line);
+        out.push_str(&lines[i]);
         out.push('\n');
+        i += 1;
     }
     return out;
 }
@@ -2581,6 +2592,14 @@ test "is_lexer_dfa_row_start: only DFA rows, not action prints or token rows" {
     assert !is_lexer_dfa_row_start(&"stuff0: a->b");
     assert !is_lexer_dfa_row_start(&"s0 without a transition");
     assert !is_lexer_dfa_row_start(&"sad-story");
+}
+
+test "strip_lexer_dfa_dump: a row-shaped action print keeps the token dump" {
+    // `s1=5` looks like a row start but never reaches a `->`; treating it as one
+    // would swallow every following line, silently auto-skipping the descriptor.
+    let raw = "s1=5\n[@0,0:0='a',<1>,1:0]\n";
+    let out = strip_lexer_dfa_dump(&raw);
+    assert out == raw, `unexpected: '${out}'`;
 }
 
 test "strip_lexer_dfa_dump: a row whose transition char is a newline" {

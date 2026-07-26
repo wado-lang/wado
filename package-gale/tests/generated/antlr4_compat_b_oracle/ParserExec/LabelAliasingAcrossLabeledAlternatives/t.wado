@@ -1937,9 +1937,11 @@ fn _parse_a__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_X {
         p.b.set_alt(0);
-        let _span_lo_label = p.pos;
+        let mut _span_lo_label = 0;
+        let mut _span_hi_label = -1;
+        _span_lo_label = p.pos;
         let label = _parse_subrule(p);
-        let _span_hi_label = p.pos - 1;
+        _span_hi_label = p.pos - 1;
         if !p.speculating {
             p.emit(`${p.text_between(_span_lo_label, _span_hi_label)}\n`);
         }

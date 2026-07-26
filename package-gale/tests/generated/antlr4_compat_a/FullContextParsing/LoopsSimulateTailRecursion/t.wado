@@ -3227,10 +3227,12 @@ fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 
 fn _parse_expr_or_assign__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let _span_lo_expr = p.pos;
+    let mut _span_lo_expr = 0;
+    let mut _span_hi_expr = -1;
+    _span_lo_expr = p.pos;
     p.atn_ret_pending = 25;
     let expr = _parse_expr(p, follow);
-    let _span_hi_expr = p.pos - 1;
+    _span_hi_expr = p.pos - 1;
     if !p.speculating {
         p.emit(`pass: ${p.text_between(_span_lo_expr, _span_hi_expr)}\n`);
     }
