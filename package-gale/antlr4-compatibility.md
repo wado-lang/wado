@@ -463,6 +463,18 @@ relevant sites.
    is on the whole-rule result only, so leniency inside the body — what
    the tournament relies on — is untouched. Fixture
    `tests/grammars/scan_zero_length_rule.g4`.
+9. The two emit walkers decide identically. A construct is emitted either by
+   the surface-element walker or, inside an LR suffix, by the op-only walker
+   that reads the lowered op alone. Anything the first walker decides from a
+   surface field the second cannot see must be carried on the op, or the same
+   grammar construct silently gets a weaker decision in a suffix than in a
+   plain rule body. Both known instances rejected valid input: an optional's
+   `RepeatStrategy` degraded to a one-token first-set check (`( d '.' )? t`,
+   fixture `lr_opt_two_token.g4`; the shape-lookahead half is
+   `lr_suffix_opt_shape.g4`), and a non-greedy `??` read as greedy because
+   `non_greedy` lived only on the surface element
+   (`lr_suffix_non_greedy_opt.g4`). Pair any new decision input with an
+   LR-suffix fixture.
 
 Termination is a checked property, not only inline conservatism:
 `check_left_recursion` (grammar-check phase) rejects hidden (`a : x? a`, a
@@ -512,7 +524,13 @@ the compiled fast path:**
    — measured far too expensive for a hot expression rule (TODO.md has the
    numbers). Fixture `lr_mid_operand.g4` pins that divergence as `#[TODO]`.
 2. A **non-greedy `??`**, whose enter-or-skip choice is taken at runtime;
-   several `??` in one rule decide independently.
+   several `??` in one rule decide independently. Both emit walkers route it
+   here — the surface-element walker from `RepeatElement.non_greedy`, the
+   op-only walker (LR-suffix bodies) from `RepeatOp.non_greedy`; a `??` lowers
+   to `strategy: Plain`, so the flag is what tells the two apart from a greedy
+   `?`. Fixtures: `ll_optional_non_greedy{,_multi}.g4`, plus
+   `lr_dangling_else.g4` (atom alternative) and
+   `lr_suffix_non_greedy_opt.g4` (LR-suffix alternative).
 3. A **context-dependent multi-alt at-end conflict** — one alternative
    ends (returning to the caller) while another continues past the same
    lookahead. A longest-match tournament resolves this unsoundly when its
@@ -559,7 +577,8 @@ either parses as ANTLR4 does or fails loudly; none accept invalid input
 or reject valid input silently. The set-complement `~X`, the `.`-led and
 `~X`-led left-recursive suffixes, and non-greedy `??` inside a
 left-recursive rule are covered by fixtures (`lr_complement_op.g4`,
-`lr_wildcard_postfix.g4`, `ll_optional_non_greedy_multi.g4`); a few
+`lr_wildcard_postfix.g4`, `lr_dangling_else.g4`,
+`lr_suffix_non_greedy_opt.g4`); a few
 runtime-precision shapes (a shared delimiter past a nullable continuation,
 two enter edges sharing a first lookahead token) fall back to the complete
 simulator rather than guess. The mechanism and the full edge list live with

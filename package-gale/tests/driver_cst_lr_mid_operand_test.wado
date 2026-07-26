@@ -20,8 +20,19 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
+fn assert_parses(input: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+}
+
 test "between's middle operand stops at the enclosing and" {
     assert_tree(&"a between b and c", &"(s (e (e a) between (e b) and (e c)))");
+}
+
+// The divergence is the bracketing, not acceptance — asserted separately so a
+// regression to outright rejection fails instead of staying a pending todo.
+test "between with a trailing and parses" {
+    assert_parses(&"a between b and c and d");
 }
 
 #[TODO]

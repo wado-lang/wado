@@ -15,13 +15,24 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
+fn assert_parses(input: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `parse failed for ${*input}: ${g::to_string_tree(&result)}`;
+}
+
 // The canonical case: between's mandatory `'and'` must survive the binary
-// `and`-loop. ANTLR4 also lets the middle operand take the first `and`, because a
-// second one is left for between itself; Gale yields it instead and brackets the
-// tree differently, so this one is `#[TODO]` — the same mid-operand divergence
-// `lr_mid_operand.g4` pins for an LR alternative.
-#[TODO]
+// `and`-loop. The tree it should get is `#[TODO]` — ANTLR4 lets the middle
+// operand take the first `and`, because a second one is left for between itself,
+// while Gale yields it and brackets differently (the mid-operand divergence
+// `lr_mid_operand.g4` pins for an LR alternative). Accepting the input at all is
+// not `#[TODO]`: keeping that assertion separate is what makes a regression from
+// "wrong tree" to "rejected" a failure rather than a still-pending todo.
 test "between with trailing and parses" {
+    assert_parses(&"between X1 and X2 and X3 ;");
+}
+
+#[TODO]
+test "between with trailing and brackets the middle operand as ANTLR4 does" {
     assert_tree(&"between X1 and X2 and X3 ;", &"(stat (expr between (expr (expr X1) and (expr X2)) and (expr X3)) ;)");
 }
 

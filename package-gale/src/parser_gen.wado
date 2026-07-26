@@ -5130,12 +5130,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     };
     let cond = `${ctx.first_check_str(&r.body_first_set)}${gate}`;
     match r.kind {
-        Optional => {
-            let entry = `${gen_op_optional_entry_cond(w, r, ctx, nc)}${gate}`;
-            w.begin(&`if ${entry}`);
-            gen_op(w, &r.body, ctx, nc);
-            w.end();
-        },
+        Optional => gen_op_optional(w, r, ctx, nc, &gate),
         Star => {
             w.begin(&`while !p.recovering && (${cond})`);
             gen_op(w, &r.body, ctx, nc);
@@ -5150,17 +5145,41 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     }
 }
 
-/// Entry condition for a greedy Optional under the op-only walker (LR-suffix
-/// bodies and the group bodies inside them). The surface-element walker picks the
-/// same strategies in `gen_op_storable_optional`; without this dispatch the
-/// op-only path silently downgraded every specialised strategy to a one-token
-/// first-set check, so a two-token optional (`( database_name '.' )? table_name`,
-/// FIRST(database_name) == FIRST(table_name)) was entered on the shared first
-/// token and then failed on the missing `'.'`.
+/// `?` / `??` under the op-only walker (LR-suffix bodies and the group bodies
+/// inside them). Mirrors the surface-element walker's dispatch
+/// (`gen_op_storable_optional` / `gen_op_transparent_optional`): a non-greedy
+/// `??` asks the runtime ATN, a shape lookahead branches per shape, and every
+/// other strategy reduces to a single entry condition.
 ///
-/// `OptionalShapeLookahead` keeps the first-set check: its per-shape dispatch
-/// needs the surface element list, and the nested Optionals inside the body carry
-/// their own guards under this walker.
+/// `gate` is the walker's caller-FOLLOW yield suffix, appended to whichever
+/// condition the strategy produces.
+fn gen_op_optional(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>, gate: &String) {
+    // A non-greedy `??` lowers to `strategy: Plain` + `mark_needs_atn`: its
+    // enter/skip choice is the simulator's, with full context. The static
+    // first-set check would enter wherever the body *could* start and so
+    // consume the token the continuation needs.
+    if r.non_greedy && ctx.needs_atn() {
+        w.begin(&`if ${atn_optional_enter_cond(ctx, r)}`);
+        gen_op(w, &r.body, ctx, nc);
+        w.end();
+        return;
+    }
+    if let OptionalShapeLookahead(s) = &r.strategy {
+        gen_op_optional_shape_lookahead(w, r, s, ctx, nc, gate);
+        return;
+    }
+    let entry = `${gen_op_optional_entry_cond(w, r, ctx, nc)}${*gate}`;
+    w.begin(&`if ${entry}`);
+    gen_op(w, &r.body, ctx, nc);
+    w.end();
+}
+
+/// Entry condition for a single-condition Optional strategy under the op-only
+/// walker. Without this dispatch the op-only path silently downgraded every
+/// specialised strategy to a one-token first-set check, so a two-token optional
+/// (`( database_name '.' )? table_name`, FIRST(database_name) ==
+/// FIRST(table_name)) was entered on the shared first token and then failed on
+/// the missing `'.'`.
 fn gen_op_optional_entry_cond(
     w: &mut CodeWriter,
     r: &RepeatOp,
@@ -5173,11 +5192,53 @@ fn gen_op_optional_entry_cond(
             let scan_pos = gen_scan_guard_with_prefix(w, &r.scan_body, ctx, nc, &"opt_scan_pos", &"opt_scan", false);
             `${scan_pos} >= 0`;
         },
-        OptionalShapeLookahead(_) | Plain => ctx.first_check_str(&r.body_first_set),
+        Plain => ctx.first_check_str(&r.body_first_set),
+        // `gen_op_optional` routes these away before reaching here.
+        OptionalShapeLookahead(_) => panic(
+            "gen_op_optional_entry_cond: shape lookahead has one condition per shape, not one for the optional",
+        ),
         NonGreedy(_) => panic(
             "gen_op_optional_entry_cond: NonGreedy strategy reached the greedy-Optional arm — lower-side bug",
         ),
     };
+}
+
+/// Shape-lookahead Optional under the op-only walker: one branch per shape,
+/// longest-first, each gated on that shape's own lookahead signature and
+/// emitting only the positions the shape contains. The op-only analogue of
+/// `gen_op_optional_with_shape_lookahead_transparent` — an absent position emits
+/// nothing (this walker appends to the builder rather than building a struct),
+/// and a present position is peeled with `unwrap_optional_op` because the shape
+/// already decided that its nested optional fires.
+fn gen_op_optional_shape_lookahead(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    s: &OptionalShapeLookaheadStrategy,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+    gate: &String,
+) {
+    let body_ops = if let Group(g) = &r.body {
+        g.alts[0].ops;
+    } else {
+        panic("gen_op_optional_shape_lookahead: shape lookahead is only valid on single-alt Group bodies");
+    };
+    let mut is_first = true;
+    for let entry of &s.shapes {
+        let cond = `${gen_lookahead_condition(ctx, &entry.sig)}${*gate}`;
+        if is_first {
+            w.begin(&`if ${cond}`);
+            is_first = false;
+        } else {
+            w.else_begin(&`else if ${cond}`);
+        }
+        for let idx of &entry.positions {
+            gen_op(w, unwrap_optional_op(&body_ops[*idx]), ctx, nc);
+        }
+    }
+    if !is_first {
+        w.end();
+    }
 }
 
 /// Dispatch a `RepeatOp.body` whose shape is "storable" (a leaf op

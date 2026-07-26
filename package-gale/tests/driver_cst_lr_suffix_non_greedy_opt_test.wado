@@ -1,0 +1,34 @@
+//! A non-greedy `??` inside a left-recursive SUFFIX alternative prefers
+//! skipping, so the trailing `else` is left for the caller — and still enters
+//! when a second `else` covers the caller. The LR-suffix twin of
+//! `driver_cst_lr_dangling_else_test.wado`, whose `??` sits in an atom
+//! alternative and so is emitted by the surface-element walker. Expected trees
+//! are the published ANTLR4 jar's (black-box oracle).
+
+use g from "./grammars/lr_suffix_non_greedy_opt.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_suffix_non_greedy_opt" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "no suffix: the else belongs to the caller" {
+    assert_tree(&"a else c", &"(s (e a) else c)");
+}
+
+test "the suffix's ?? skips so the caller gets its else" {
+    assert_tree(&"a if b else c", &"(s (e (e a) if (e b)) else c)");
+}
+
+test "the suffix's ?? enters when a second else covers the caller" {
+    assert_tree(&"a if b else c else d", &"(s (e (e a) if (e b) else (e c)) else d)");
+}
+
+test "a climbing suffix leaves the else for the caller" {
+    assert_tree(&"a if b if c else d", &"(s (e (e a) if (e (e b) if (e c))) else d)");
+}

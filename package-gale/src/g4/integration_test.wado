@@ -689,3 +689,43 @@ test "parse lr_opt_two_token.g4" {
     assert g.parser_rules[1].name == "e";
     assert g.parser_rules[1].alternatives.len() == 2;
 }
+
+test "parse lr_suffix_non_greedy_opt.g4" {
+    let input = #include_str("../../tests/grammars/lr_suffix_non_greedy_opt.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "LrSuffixNonGreedyOpt";
+    // s, e
+    assert g.parser_rules.len() == 2;
+    // The LR suffix ends in `('else' e)??`.
+    let suffix = &g.parser_rules[1].alternatives[1].elements;
+    if let Repeat(r) = &suffix[suffix.len() - 1] {
+        assert r.kind matches { Optional };
+        assert r.non_greedy;
+    } else {
+        panic("the suffix's last element should be a non-greedy Repeat");
+    }
+}
+
+test "parse lr_suffix_opt_shape.g4" {
+    let input = #include_str("../../tests/grammars/lr_suffix_opt_shape.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "LrSuffixOptShape";
+    // s, e
+    assert g.parser_rules.len() == 2;
+    // The LR suffix is `e 'in' ( 'a'? 'b' )? 'a'`, with the nested optional
+    // inside the group that makes the shape lookahead the right strategy.
+    let suffix = &g.parser_rules[1].alternatives[1].elements;
+    assert suffix.len() == 4;
+    if let Repeat(r) = &suffix[2] {
+        assert r.kind matches { Optional };
+        assert !r.non_greedy;
+        if let Group(gr) = &r.element {
+            assert gr.alternatives.len() == 1;
+            assert gr.alternatives[0].elements.len() == 2;
+        } else {
+            panic("the optional's body should be a group");
+        }
+    } else {
+        panic("the suffix's third element should be an Optional Repeat");
+    }
+}

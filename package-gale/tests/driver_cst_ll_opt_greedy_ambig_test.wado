@@ -20,6 +20,19 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
+fn assert_parses(input: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+}
+
+// The divergence is which node the shared token lands under, not acceptance —
+// asserted separately so a regression to outright rejection fails instead of
+// staying a pending todo.
+test "the ambiguous inputs parse" {
+    assert_parses(&"x null");
+    assert_parses(&"x null null");
+}
+
 #[TODO]
 test "ambiguous optional takes the shared token" {
     assert_tree(&"x null", &"(s x (t null))");
