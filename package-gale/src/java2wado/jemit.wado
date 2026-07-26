@@ -214,6 +214,7 @@ fn emit_print(
     }
     tmpl.push('`');
     if !env.sink {
+        builtin::cold_path();
         return Result::Err("java2wado: a lexer predicate cannot print — it runs for losing candidates too");
     }
     return Result::Ok(`${env.this_bind}.emit(${tmpl})`);
@@ -457,6 +458,7 @@ fn lexer_name_expr(env: &JEnv, name: &String) -> Result<String, String> {
             return Result::Ok(`${env.this_bind}.${snake}`);
         }
     }
+    builtin::cold_path();
     return Result::Err(`java2wado: unsupported lexer name '${*name}': not a @members field`);
 }
 

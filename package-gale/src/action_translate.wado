@@ -326,6 +326,7 @@ fn lexer_attr_expr(r: &AttrRef) -> Result<String, String> {
     if r.name == "text" && r.member matches { None } {
         return Result::Ok(lexer_matched_text_expr());
     }
+    builtin::cold_path();
     return Result::Err(`$${r.name}: this lexer attribute is not yet emitted`);
 }
 
@@ -334,6 +335,7 @@ fn lexer_attr_expr(r: &AttrRef) -> Result<String, String> {
 pub fn resolve_lexer_attr_ref(text: &String) -> Result<String, String> {
     let refs = find_attr_refs(text);
     if refs.len() != 1 {
+        builtin::cold_path();
         return Result::Err(`lexer attribute: '${*text}' is not a single $-reference`);
     }
     return lexer_attr_expr(&refs[0]);
@@ -387,20 +389,20 @@ fn rule_member_expr(
     // the call site captures the token range it consumed (see
     // `rule_span_lo_local`), so a second labeled call in the same alternative
     // reports its own text.
-    if let Some(m) = &r.member {
-        if *m == "text" {
-            return Result::Ok(
-                `${*handle}.text_between(${rule_span_lo_local(&binding)}, ${rule_span_hi_local(&binding)})`,
-            );
-        }
+    if let Some(m) = &r.member && *m == "text" {
+        return Result::Ok(
+            `${*handle}.text_between(${rule_span_lo_local(&binding)}, ${rule_span_hi_local(&binding)})`,
+        );
     }
     let target = match find_rule(rules, &r.rule_name) {
         Some(t) => t,
         None => {
+            builtin::cold_path();
             return Result::Err(`$${r.name}: unknown referenced rule '${r.rule_name}'`);
         },
     };
     if !rule_returns_vals(&target) {
+        builtin::cold_path();
         return Result::Err(
             `$${r.name}: rule '${r.rule_name}' does not expose a value channel (needs single-alt + defaultable returns/locals)`,
         );
