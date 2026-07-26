@@ -1309,7 +1309,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 name,
                 module_source,
                 ..
-            } => Some((module_source.clone(), name.clone())),
+            } => Some((
+                module_source.clone(),
+                crate::name::split_base_name(name).to_string(),
+            )),
             _ => None,
         }
     }
