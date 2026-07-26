@@ -869,8 +869,7 @@ impl JsonDeserializer {
             | (1 as u64 << b'\r' as u64);
         while self.pos < self.input.len() {
             let b = self.input.get_unchecked(self.pos) as u64;
-            // Wasm masks a shift count mod 64, so bytes >= 64 would alias onto
-            // a set bit without the range test.
+            // `b < 64` is load-bearing: Wasm masks a shift count mod 64.
             let is_ws = (b < 64) as i32 & (ws_set >> b & 1) as i32;
             if is_ws == 0 {
                 return;

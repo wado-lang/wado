@@ -94,12 +94,7 @@ pub(super) fn sroa_variant_returns(module: &mut WirPackage) {
     // bug in the elision peephole shouldn't affect exported entry points.
     elide_return_only_temps(module, &pinned);
 
-    // Phase 0b: whatever Phase 0a declined — a `StructNew` whose operands are
-    // calls, or one reached through a `ref.as_non_null` the trap analysis can't
-    // clear — is split into per-field temps instead. `read_json_string`'s
-    // escape loop is the motivating case: HFS wraps every in-loop
-    // `return Err(DeserializeError::eof(...))` in a `__hfs_call_N` temp, and a
-    // single such return kept the whole function boxed.
+    // Phase 0b: split what Phase 0a declined to relocate.
     scalarize_return_only_temps(module, &pinned);
 
     // Phase 1: identify candidate functions.
@@ -120,34 +115,29 @@ pub(super) fn sroa_variant_returns(module: &mut WirPackage) {
     apply_sroa(module, &confirmed);
 }
 
-/// Phase 0b: split a return-only temp's `StructNew` into per-field temps.
+/// Phase 0b: pin a return-only temp's `StructNew` operands in per-field temps
+/// and move the bare construction to the `Return`, restoring the
+/// `Return(StructNew)` shape [`find_sroa_candidates`] accepts.
 ///
 /// ```text
-/// __hfs_call_N = struct.new Result::Err { discriminant: 1, payload_0: eof(..) };
+/// __hfs_call_N = struct.new Err { discriminant: 1, payload_0: eof(..) };
 /// self.pos = __hfs_pos_X;
 /// return __hfs_call_N;
-/// ```
 ///
-/// becomes
-///
-/// ```text
-/// __scv_… = 1; __scv_… = eof(..);          // operands stay at this point
+/// // becomes
+/// __scv_… = 1; __scv_… = eof(..);
 /// self.pos = __hfs_pos_X;
-/// return struct.new Result::Err { discriminant: __scv_…, payload_0: __scv_… };
+/// return struct.new Err { discriminant: __scv_…, payload_0: __scv_… };
 /// ```
 ///
-/// which is the `Return(StructNew)` shape [`find_sroa_candidates`] accepts, so
-/// `apply_sroa` decomposes it and the allocation never happens.
-///
-/// Soundness: unlike [`elide_return_only_temps`], nothing observable moves. The
-/// operands are evaluated at their original program point (into fresh temps
-/// nothing else touches), so evaluation order and trap position are preserved;
-/// only the `struct.new` itself — allocation-only, reading no state and unable
-/// to trap — is deferred to the `Return`. The intervening statements must still
-/// not reference the temp, which [`find_paired_return`] checks.
+/// Soundness: unlike [`elide_return_only_temps`], nothing observable moves.
+/// Operands stay at their original program point, preserving evaluation order
+/// and trap position; only the `struct.new` — allocation-only, state-free and
+/// trap-free — is deferred. The intervening statements must still not reference
+/// the temp, which [`find_paired_return`] checks.
 fn scalarize_return_only_temps(module: &mut WirPackage, pinned: &IndexSet<u32>) {
-    // Read-only planning pass: the case-struct types each function may return.
-    let plans: Vec<Option<IndexSet<u32>>> = module
+    // Planned up front: `scalarize_case_types` borrows the module immutably.
+    let case_types: Vec<Option<IndexSet<u32>>> = module
         .functions
         .iter()
         .enumerate()
@@ -157,7 +147,7 @@ fn scalarize_return_only_temps(module: &mut WirPackage, pinned: &IndexSet<u32>) 
         })
         .collect();
 
-    for (i, cases) in plans.into_iter().enumerate() {
+    for (i, cases) in case_types.into_iter().enumerate() {
         let Some(cases) = cases else {
             continue;
         };
@@ -172,7 +162,7 @@ fn scalarize_return_only_temps(module: &mut WirPackage, pinned: &IndexSet<u32>) 
 /// The variant case-struct type indices `func` may return, or `None` when the
 /// function can't benefit (pinned, bodyless, or not returning a laid-out
 /// variant). Restricting to these keeps Phase 0b from minting temps for a
-/// `StructNew` that no later phase would decompose.
+/// `StructNew` no later phase would decompose.
 fn scalarize_case_types(
     module: &WirPackage,
     func: &WirFunction,
@@ -249,8 +239,7 @@ fn scalarize_pairs(
     cases: &IndexSet<u32>,
     types: &[WirTypeDef],
 ) {
-    // Plan against the original statement list — `find_paired_return` indexes
-    // into it, and the rebuild below shifts positions.
+    // Planned against the original indices, which the rebuild below shifts.
     let mut pairs: crate::hashmap::IndexMap<usize, usize> = crate::hashmap::IndexMap::default();
     let mut i = 0;
     while i < instrs.len() {
@@ -294,20 +283,18 @@ fn scalarize_pairs(
         let bindings = case_field_bindings(type_id.index(), fields.len(), cases, types)
             .unwrap_or_else(|| unreachable!("planned scalarize pair lost its case bindings"));
 
-        // Only operands whose value can drift between here and the `Return`
-        // need pinning; see `operand_needs_spill`. Locals written by a *later*
-        // operand count too, so the whole `StructNew` contributes.
+        // Every field contributes: a *later* operand's write clobbers an
+        // earlier one's `local.get` just as an intervening statement does.
         let mut clobbered: IndexSet<String> = IndexSet::default();
-        let mut ignored: IndexSet<String> = IndexSet::default();
+        let mut reads: IndexSet<String> = IndexSet::default();
         for operand in &fields {
-            collect_local_io(operand, &mut ignored, &mut clobbered);
+            collect_local_io(operand, &mut reads, &mut clobbered);
         }
         for k in (i + 1)..return_idx {
-            collect_local_io(&instrs[k], &mut ignored, &mut clobbered);
+            collect_local_io(&instrs[k], &mut reads, &mut clobbered);
         }
 
-        // Fresh temps are keyed by case type: `Ok` and `Err` share the field
-        // name `payload_0` but not its type.
+        // Keyed by case type: `Ok` and `Err` share `payload_0` but not its type.
         let mut operands: Vec<WirInstr> = Vec::with_capacity(fields.len());
         for (operand, (field_name, field_ty)) in fields.into_iter().zip(bindings) {
             if !operand_needs_spill(&operand, &clobbered) {
@@ -345,14 +332,11 @@ fn scalarize_pairs(
     *instrs = result;
 }
 
-/// Whether a `StructNew` operand has to be pinned to its original program
-/// point by a fresh temp, rather than re-evaluated at the `Return`.
-///
-/// A literal always yields the same value, and a bare `local.get` does too
-/// unless something between here and the `Return` — an intervening statement or
-/// a sibling operand — writes that local. Everything else (a call, a heap read,
-/// anything that can trap, and notably the `ref.as_non_null` guarding a
-/// non-null field) is order-sensitive and must be spilled.
+/// Whether an operand must be pinned in a temp rather than re-evaluated at the
+/// `Return`. A literal is invariant, and a bare `local.get` is too unless
+/// `clobbered` holds its local. Everything else — a call, a heap read, anything
+/// that can trap, notably the `ref.as_non_null` guarding a non-null field — is
+/// order-sensitive.
 fn operand_needs_spill(operand: &WirInstr, clobbered: &IndexSet<String>) -> bool {
     match operand {
         WirInstr::I32Const(_)
@@ -643,8 +627,7 @@ fn collect_local_io(expr: &WirInstr, reads: &mut IndexSet<String>, writes: &mut 
             writes.insert(name.clone());
             collect_local_io(value, reads, writes);
         }
-        // `for_each_child` reaches the bound instruction but not the bind
-        // targets, which are writes just as much as a `LocalSet`'s name.
+        // `for_each_child` reaches the bound instruction but not the targets.
         WirInstr::MultiValueLocalBind { instr, locals } => {
             writes.extend(locals.iter().flatten().cloned());
             collect_local_io(instr, reads, writes);
@@ -744,16 +727,15 @@ fn scan_return_temp_stats(
 const RETURN_TEMP_INTERVENING_BUDGET: usize = 32;
 
 /// Which Phase-0 rewrite a `LocalSet ... Return(LocalGet)` pair is scanned for.
-/// The mode selects both the pairable-value shape ([`pairable_value`]) and how
-/// much [`find_paired_return`] demands of the intervening statements.
+/// Selects both the pairable-value shape ([`pairable_value`]) and what
+/// [`find_paired_return`] demands of the intervening statements.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PairMode {
     /// [`elide_return_only_temps`]: the value itself moves to the `Return`, so
     /// it must survive being reordered past the intervening statements.
     Relocate,
-    /// [`scalarize_return_only_temps`]: the value's operands stay put in fresh
-    /// per-field temps and only the (allocation-only, state-free) `StructNew`
-    /// moves, so the reorder constraints do not apply.
+    /// [`scalarize_return_only_temps`]: only the `StructNew` moves, so the
+    /// reorder constraints do not apply.
     Scalarize,
 }
 
@@ -777,7 +759,6 @@ fn pairable_value(value: &WirInstr, mode: PairMode) -> bool {
 /// reorder it across their effects — in particular past a conditional
 /// `return` / `br` exit, on whose path the trap would then be lost
 /// entirely (`t = a / b; if c { return OTHER; } return t;`).
-///
 /// [`PairMode::Scalarize`] moves no operand, so neither applies.
 ///
 /// Returns `None` when no such return exists within

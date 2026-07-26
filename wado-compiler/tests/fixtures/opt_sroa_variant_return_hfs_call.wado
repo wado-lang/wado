@@ -1,13 +1,11 @@
-// A `Result`-returning function whose in-loop `return Err(...)` wraps a call.
+// Test: a cold `return Err(<call>)` inside a loop must not keep the whole
+// function's `Result` boxed.
 //
-// NIR's field_scalarize (HFS) hoists the loop-carried `self.pos` into a local,
-// so every in-loop `return` becomes
-// `__hfs_call = struct.new Err {..}; self.pos = __hfs_pos; return __hfs_call`.
-// Phase 0a of variant-return SROA can't relocate that value past the write-back
-// (it contains a call, and `ref.as_non_null(call)` reads as trap-capable), so
-// the single cold return used to keep `scan` boxed on every path — including
-// the hot `Ok`. Phase 0b splits the `StructNew` into per-field temps instead,
-// restoring the `Return(StructNew)` shape SROA accepts.
+// field_scalarize hoists the loop-carried `self.pos`, so every in-loop return
+// becomes `__hfs_call = struct.new Err {..}; self.pos = __hfs_pos; return
+// __hfs_call`. Variant-return SROA can't relocate that value past the
+// write-back — it calls, and `ref.as_non_null(call)` reads as trap-capable —
+// so `scan` stayed boxed on every path, including the hot `Ok`.
 
 struct Fail {
     at: i32,
