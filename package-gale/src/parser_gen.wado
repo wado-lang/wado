@@ -112,6 +112,9 @@ use {
     rule_uses_rule_span,
     rule_threads_args,
     RULE_START_TOK_LOCAL,
+    rule_span_lo_local,
+    rule_span_hi_local,
+    action_reads_rule_span,
 } from "./action_translate.wado";
 use { translate_action, translate_predicate, translate_members, is_parser_members } from "./java2wado.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
@@ -572,6 +575,11 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.line(&"assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;");
     w.line(&"let tokens = tokenize(input);");
     w.line(&"let mut p = Parser::new(tokens);");
+    if ctx.emit_actions() {
+        // Lexer prints happen before any parser print, as they do on ANTLR4's
+        // stdout: seed the sink with what tokenizing produced.
+        w.line(&"p.output = p.tokens.output;");
+    }
     w.line(&"p.max_errors = max_errors;");
     w.line(&"entry(&mut p);");
     // The parser is infallible: a failure leaves `p.recovering` set and the
@@ -973,6 +981,17 @@ fn gen_parser_struct(
         // appear; this differs from a raw source-span slice (`text_span`). The
         // range is the rule's first token (`start_tok`) through the last
         // consumed token (`self.pos - 1`).
+        // `$<label>.text` — the text of one labeled rule call's own token range.
+        let mut ftb = FnSpec::new("text_between");
+        ftb.set_receiver(&"&self");
+        ftb.add_param(&"lo", &"i32");
+        ftb.add_param(&"hi", &"i32");
+        ftb.set_return_type(&"String");
+        ftb.emit_begin(w);
+        w.line(&"return self.tokens.rule_text(lo, hi);");
+        w.end();
+        w.blank();
+
         let mut frt = FnSpec::new("rule_text");
         frt.set_receiver(&"&self");
         frt.add_param(&"start_tok", &"i32");
@@ -3723,6 +3742,7 @@ fn gen_alt_elements(
     assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies are emitted by gen_lr_fn";
     if ctx.emit_actions() {
         ctx.set_alt_bindings(collect_alt_bindings(ops));
+        gen_rule_span_decls(w, ops, actions, ctx);
     }
     let mut name_counts: List<[String, i32]> = [];
     // The emitter walks the surface elements + lowered ops in parallel: the
@@ -3745,7 +3765,14 @@ fn gen_alt_elements(
             // inserts a missing terminal against (a recovery-only edit; on valid
             // input the leaf matches and `sync` is never read).
             let sync = ctx.first_of_elements_from(elements, i + 1);
+            let span_field = rule_call_span_field(op, actions, ctx);
+            if let Some(f) = &span_field {
+                w.line(&`${rule_span_lo_local(f)} = p.pos;`);
+            }
             gen_op_leaf(w, op, ctx, &mut name_counts, &sync);
+            if let Some(f) = &span_field {
+                w.line(&`${rule_span_hi_local(f)} = p.pos - 1;`);
+            }
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
@@ -3755,6 +3782,42 @@ fn gen_alt_elements(
         }
     }
     gen_alt_actions_at(w, actions, elements.len(), ctx);
+}
+
+/// The binding field of a `RuleCall` op whose matched text one of `actions`
+/// reads through `$<label>.text`, or null. Gates the token-range capture so a
+/// grammar that never reads a rule label's text stays byte-identical. Predicate
+/// bodies count: they resolve `$`-references through the same path.
+fn rule_call_span_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
+    if !ctx.emit_actions() {
+        return null;
+    }
+    let rc = match op {
+        RuleCall(r) => *r,
+        _ => {
+            return null;
+        },
+    };
+    for let a of actions {
+        if action_reads_rule_span(&a.source.text, &rc.dedup_base) {
+            return Option::Some(rc.field);
+        }
+    }
+    return null;
+}
+
+/// Declare the token-range locals for every labeled rule call in this scope
+/// whose text an action reads, before any of them is assigned. Declaring up
+/// front rather than at the call keeps the read in scope wherever the action
+/// sits — including before the call, where the label is not bound yet and the
+/// empty range yields empty text (ANTLR's `$label` is null there).
+fn gen_rule_span_decls(w: &mut CodeWriter, ops: &List<Op>, actions: &List<AltAction>, ctx: &GenContext) {
+    for let op of ops {
+        if let Some(f) = rule_call_span_field(op, actions, ctx) {
+            w.line(&`let mut ${rule_span_lo_local(&f)} = 0;`);
+            w.line(&`let mut ${rule_span_hi_local(&f)} = -1;`);
+        }
+    }
 }
 
 /// Emit every retained action / predicate whose position is `before` (it
@@ -4297,9 +4360,18 @@ fn gen_elements_with_non_greedy(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     outer_follow: &List<String>,
+    actions: &List<AltAction> = &NO_ACTIONS,
 ) {
     assert ops.len() == elements.len(), "gen_elements_with_non_greedy: ops / elements length mismatch";
+    // An inlined body's labels bind to its own ops. Restored on the way out so a
+    // nested group does not leave the outer scope pointing at its bindings.
+    let outer_bindings = *ctx.alt_bindings();
+    if ctx.emit_actions() && !actions.is_empty() {
+        ctx.set_alt_bindings(collect_alt_bindings(ops));
+        gen_rule_span_decls(w, ops, actions, ctx);
+    }
     for let mut i = 0; i < elements.len(); i += 1 {
+        gen_alt_actions_at(w, actions, i, ctx);
         let elem = &elements[i];
         let op = &ops[i];
         if let Repeat(rep) = peel_scalar_label(elem) {
@@ -4316,7 +4388,14 @@ fn gen_elements_with_non_greedy(
             // only deleted-or-unwound (recovery quality is uniform with the
             // top-level sequence).
             let sync = ctx.first_of_elements_from(elements, i + 1);
+            let span_field = rule_call_span_field(op, actions, ctx);
+            if let Some(f) = &span_field {
+                w.line(&`${rule_span_lo_local(f)} = p.pos;`);
+            }
             gen_op_leaf(w, op, ctx, name_counts, &sync);
+            if let Some(f) = &span_field {
+                w.line(&`${rule_span_hi_local(f)} = p.pos - 1;`);
+            }
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
         } else if let Group(g_op) = op {
@@ -4325,7 +4404,15 @@ fn gen_elements_with_non_greedy(
             panic("gen_elements_with_non_greedy: unreachable op shape — every Op variant is handled");
         }
     }
+    gen_alt_actions_at(w, actions, elements.len(), ctx);
+    if ctx.emit_actions() && !actions.is_empty() {
+        ctx.set_alt_bindings(outer_bindings);
+    }
 }
+
+/// No actions — the default for an inner body whose caller has none to place
+/// (a group whose alternative carries no retained `{ ... }`).
+global NO_ACTIONS: List<AltAction> = [];
 
 /// Compute the `follow` to pass to `gen_op_repeat_with_follow_override`
 /// when this Repeat is reached from the *inner* walker
@@ -5701,10 +5788,19 @@ fn gen_op_group(
                 // Transparent groups inline their inner alt; walk
                 // `g_op.alts[0].ops` directly via the op-driven
                 // element walker rather than constructing a CST
-                // wrapper.
+                // wrapper. Its actions are inlined with it, so inside a
+                // Repeat they run once per iteration.
                 let body = &g_op.alts[0];
                 let alt = &g_elem.alternatives[0];
-                gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, &([] as List<String>));
+                gen_elements_with_non_greedy(
+                    w,
+                    &alt.elements,
+                    &body.ops,
+                    ctx,
+                    name_counts,
+                    &([] as List<String>),
+                    &alt.actions,
+                );
             },
         };
     } else {

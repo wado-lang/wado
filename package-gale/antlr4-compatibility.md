@@ -124,9 +124,14 @@ Test sources covering Stage A:
    - `_tokens_test.wado` — claim (d): assert `t::to_lexer_string(...)`
      matches the descriptor's `[output]`. Eligibility: `[type]` is
      `Lexer`, non-empty `[input]` and `[output]`, output contains at
-     least one `[@…]` token-dump row. When the `[output]` also carries
-     action-print prefix lines (`<writeln(...)>` echoes from `{ ... }`
-     action bodies), the test is emitted and auto-`#[TODO]`-marked.
+     least one `[@…]` token-dump row. ANTLR's `showDFA` state table
+     (`s0-'a'->:s4=>2`) is dropped first: it describes ANTLR's
+     simulator, not the token stream, so keeping it would hide the
+     token-level gap underneath an unmatchable expectation. Action-print
+     prefix lines stay — the lexer executes those bodies and
+     `to_lexer_string` renders the sink ahead of the dump. No
+     auto-`#[TODO]` here; every divergence is an explicit
+     `[stage_a_todo]` entry.
 
    The variants are **mutually exclusive** on `[type]` +
    `[errors]`, so at most one variant per descriptor is emitted. A

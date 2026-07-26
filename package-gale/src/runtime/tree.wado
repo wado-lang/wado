@@ -201,7 +201,8 @@ impl CstStore {
     }
 
     /// ANTLR4-style S-expression for the subtree at row `i`: `(name child ...)`,
-    /// tokens as their text; a childless node renders as its bare name, no
+    /// tokens as their text with whitespace escaped (`\n`, `\r`, `\t`, as
+    /// `Trees.toStringTree` does); a childless node renders as its bare name, no
     /// parens (ANTLR4's `Trees.toStringTree`). `rule_names[kind]` names rule
     /// nodes (`K_ERROR` renders `<error>`); `token_names[kind]` names missing
     /// terminals. Real terminals with empty text (e.g. EOF) are omitted;
@@ -245,7 +246,7 @@ fn cst_to_string_tree_impl(
             Tok => {
                 if !toks.is_empty_text(s.a[c]) {
                     out.push_str(&" ");
-                    toks.push_token_text(out, s.a[c]);
+                    toks.push_token_text_escaped(out, s.a[c]);
                 }
                 c += 1;
             },
@@ -255,7 +256,7 @@ fn cst_to_string_tree_impl(
             },
             Skip => {
                 out.push_str(&" <skip ");
-                toks.push_token_text(out, s.a[c]);
+                toks.push_token_text_escaped(out, s.a[c]);
                 out.push_str(&">");
                 c += 1;
             },
@@ -579,7 +580,7 @@ fn render_builder_node(
             Tok => {
                 if !toks.is_empty_text(a[c]) {
                     out.push_str(&" ");
-                    toks.push_token_text(out, a[c]);
+                    toks.push_token_text_escaped(out, a[c]);
                 }
                 c += 1;
             },
@@ -589,7 +590,7 @@ fn render_builder_node(
             },
             Skip => {
                 out.push_str(&" <skip ");
-                toks.push_token_text(out, a[c]);
+                toks.push_token_text_escaped(out, a[c]);
                 out.push_str(&">");
                 c += 1;
             },

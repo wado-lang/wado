@@ -16,20 +16,11 @@ use t from "../../grammars/SemPredEvalLexer/DisableRule.g4"
     };
 use { TK_EOF } from "../../grammars/SemPredEvalLexer/DisableRule.g4";
 
-// triage: Stage C: descriptor [output] is prefixed by action-print text (<writeln(...)> echoes inside { ... } action bodies); claim (d) actual lacks the prefix.
-#[TODO]
 test "stage_a_tokens: SemPredEvalLexer/DisableRule" {
     let input = "enum abc";
     let expected = "[@0,0:3='enum',<2>,1:0]
 [@1,5:7='abc',<3>,1:5]
 [@2,8:7='<EOF>',<-1>,1:8]
-s0-' '->:s5=>4
-s0-'a'->:s6=>3
-s0-'e'->:s1=>3
-:s1=>3-'n'->:s2=>3
-:s2=>3-'u'->:s3=>3
-:s6=>3-'b'->:s6=>3
-:s6=>3-'c'->:s6=>3
 ";
     let tokens = t::tokenize(&input);
     let actual = t::to_lexer_string(&tokens, TK_EOF);

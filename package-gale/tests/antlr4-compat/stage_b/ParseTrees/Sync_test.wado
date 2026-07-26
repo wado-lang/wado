@@ -16,7 +16,7 @@ use t from "../../grammars/ParseTrees/Sync.g4"
     };
 use { normalize_tree } from "../../grammars/ParseTrees/Sync.g4";
 
-// triage: sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (synchronisation set fallback). Same error-recovery gap as `ParseTrees/ExtraToken`.
+// triage: sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (synchronisation set fallback). Gale stops at `(a x)` instead of consuming to the synchronisation point, so the trailing tokens never land under the node.
 #[TODO]
 test "stage_b_sub: ParseTrees/Sync" {
     let input = "xzyy!";

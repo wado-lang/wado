@@ -127,10 +127,11 @@ Actions print through `p.emit`, appended to a buffer on the parse result and mir
 
 ## Lexer semantics
 
-- Element actions run when the rule wins the longest match, in element order, with the cursor state they were passed; they never run for losing candidates.
+- Element actions run when the rule wins the longest match, in element order, with the cursor state they were passed; they never run for losing candidates. The winner-replay re-runs the rule's own match to place them, re-selecting each alternation match-only first so a losing arm stays silent.
 - Predicates evaluate mid-match, position-sensitively, in both the single-pass emitter and the ATN-class lexer path; a false predicate rejects the candidate.
 - Lexer commands stay typed IR (`-> skip`, etc.); set-type / set-channel from actions compose with them, action last-wins.
-- The lexer is a single context (mirroring the parser): it carries the input, member state, and the action-effect latches, so actions and predicates reach everything through one handle.
+- The lexer is a single context (mirroring the parser): it carries the input, member state, the action-effect latches, and the print sink, so actions and predicates reach everything through one handle.
+- Print output belongs to the whole tokenization, not to one token: the sink accumulates across the run and `tokenize` hands it to the token stream. `parse` seeds the parser's sink from it, so lexer prints precede parser prints as they do on ANTLR4's stdout.
 
 ## Acceptance
 
@@ -145,10 +146,10 @@ Actions print through `p.emit`, appended to a buffer on the parse result and mir
 Design phases, tracked at the capability level (see `TODO.md` for the working task list):
 
 - IR retention — done, byte-identical.
-- Attribute resolution, value channel, and Wado (identity-translator) actions, including `@init` / `@after`, print-style actions, and the parser runtime-context API — largely done; the general `$ctx` typed-child access remains.
+- Attribute resolution, value channel, and Wado (identity-translator) actions, including `@init` / `@after`, print-style actions, and the parser runtime-context API — largely done. `$<label>.text` reads a labeled rule call's own token range, and a label resolves per alternative rather than rule-wide. The general `$ctx` typed-child access and the expected-token / vocabulary accessors remain.
 - Predicates in prediction (static dispatch, scan tournament, ATN exclusion; parser and single-pass lexer) — largely done; the ATN-class lexer path and the remaining lexer `$`-attribute surface remain.
-- java2wado for the corpus parser subset plus members translation — done.
-- Lexer actions (winner-replay: set-type / channel / skip / more / mode ops, single- and multi-alt) — done; nested / mid-element placement, a lexer print sink, and the ATN-class lexer path remain.
+- java2wado for the corpus parser subset plus members translation — done, lexer bodies included: codegen stages every Java lexer action / predicate into Wado before emit, so the lexer emitters stay language-agnostic (the same staging the superClass call rewrite uses).
+- Lexer actions (winner-replay: set-type / channel / skip / more / mode ops, single- and multi-alt), the lexer print sink, and action placement (mid-element and nested-group, via a match replay that drops each action at its cursor) — done; actions under a `Repeat` and the ATN-class lexer path remain.
 - SuperClass effect interface — done for predicate-only lexer bases (RustLexer runs, tokenize and parse, through a hand-written handler); action-op bases, parser-rule superClass predicates, and lifecycle-override hooks remain.
 
 ## Open questions
