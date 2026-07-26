@@ -1,0 +1,29 @@
+// Verify niri's aggregate CTFE across a `match`: a constant struct scrutinee
+// picks its arm at compile time. The elaborator moves a pattern's literal
+// fields into the arm guard (`{ x: 10, y: 32 }` becomes bindings plus
+// `__lit_1 == 10 && __lit_2 == 32`), so folding this needs the engine to bind
+// the pattern's locals and evaluate the guard under them.
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() with Stdout {
+    let p = Point { x: 10, y: 32 };
+    let n = match p {
+        { x: 10, y: 1 } => 1009,
+        { x: 10, y: 32 } => 1013,
+        _ => 1019,
+    };
+    println(`${n}`);
+}
+
+__DATA__
+{
+    "stdout": "1013\n",
+    "wir_expect:O2": ["1013"],
+    "wir_not_expect:O2": ["1009", "1019"]
+}

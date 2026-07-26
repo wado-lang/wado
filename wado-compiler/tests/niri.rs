@@ -4301,10 +4301,9 @@ fn struct_pattern_rest_ignores_unlisted_fields() {
 }
 
 #[test]
-fn struct_pattern_with_a_binding_field_stays_unknown() {
-    // A `Binding` sub-pattern is not modelled: committing the arm would splice
-    // a body whose binding the rewrite never performs. The later wildcard arm
-    // must not be picked up either, so the match stays unfolded.
+fn struct_pattern_with_a_binding_field_takes_the_arm() {
+    // A `Binding` sub-pattern matches whatever the field holds. The arm body
+    // ignores the binding, so committing the arm loses nothing.
     let mut table = TypeTable::new();
     let point = point_type(&mut table);
     let expr = match_expr(
@@ -4325,13 +4324,240 @@ fn struct_pattern_with_a_binding_field_stays_unknown() {
         ],
         TypeTable::I32,
     );
-    let (mut body, e) = into_body_expr(&expr);
-    let table_ref = &table;
-    let mut interp = Interpreter::new(table_ref);
     assert_eq!(
-        interp.reduce_to_lattice_full_a(&mut body, e),
-        Lattice::NonConst
+        reduce_lat(&mut Interpreter::new(&table), &expr),
+        Lattice::Const(int(1013)),
     );
+}
+
+#[test]
+fn an_arm_body_reduces_under_its_pattern_bindings() {
+    // `match Point { x: 10, y: 32 } { { x: a, y: b } => a + b }` → 42: the walk
+    // of the arm body sees the bindings the pattern would make at runtime.
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let expr = match_expr(
+        point_lit(point),
+        vec![arm(
+            struct_pat(
+                point,
+                vec![
+                    (0, "x", binding_pat("a", 1, TypeTable::I32)),
+                    (1, "y", binding_pat("b", 2, TypeTable::I32)),
+                ],
+                false,
+            ),
+            binary(
+                NirBinaryOp::Add,
+                local_expr(1, TypeTable::I32),
+                local_expr(2, TypeTable::I32),
+                TypeTable::I32,
+            ),
+        )],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        reduce_lat(&mut Interpreter::new(&table), &expr),
+        Lattice::Const(int(42)),
+    );
+}
+
+#[test]
+fn a_binding_the_arm_body_reads_blocks_the_splice() {
+    // Splicing the arm would strip the pattern binding, leaving the body's
+    // `y` read dangling. The scratch backend cannot promote that read into the
+    // operand slot, so the read survives and blocks the splice.
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let expr = match_expr(
+        point_lit(point),
+        vec![
+            arm(
+                struct_pat(
+                    point,
+                    vec![
+                        (0, "x", lit_pat_i128(10)),
+                        (1, "y", binding_pat("y", 3, TypeTable::I32)),
+                    ],
+                    false,
+                ),
+                local_expr(3, TypeTable::I32),
+            ),
+            arm(wildcard_pat(), int_lit(1019, TypeTable::I32, "1019")),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&expr);
+    let mut interp = Interpreter::new(&table);
+    interp.reduce_to_lattice_full_a(&mut body, e);
+    assert!(
+        matches!(body.exprs[e].kind, ExprKind::Match { .. }),
+        "the match must survive: {:?}",
+        body.exprs[e].kind
+    );
+}
+
+/// `{ x: __lit_1, y: __lit_2 }` — the shape the elaborator lowers a struct
+/// pattern with literal fields to, its literals moved into the arm guard.
+fn point_binding_pat(point: TypeId) -> PatBuild {
+    struct_pat(
+        point,
+        vec![
+            (0, "x", binding_pat("__lit_1", 1, TypeTable::I32)),
+            (1, "y", binding_pat("__lit_2", 2, TypeTable::I32)),
+        ],
+        false,
+    )
+}
+
+fn eq_lit(local: u32, value: u64, repr: &'static str) -> Build {
+    binary(
+        NirBinaryOp::Eq,
+        local_expr(local, TypeTable::I32),
+        int_lit(value, TypeTable::I32, repr),
+        TypeTable::BOOL,
+    )
+}
+
+#[test]
+fn a_guard_over_pattern_bindings_decides_the_arm() {
+    // `match Point { x: 10, y: 32 } { { x: __lit_1, y: __lit_2 }
+    //      && __lit_1 == 10 && __lit_2 == 32 => 1013, _ => 1019 }`.
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let expr = match_expr(
+        point_lit(point),
+        vec![
+            arm_with_guard(
+                point_binding_pat(point),
+                binary(
+                    NirBinaryOp::And,
+                    eq_lit(1, 10, "10"),
+                    eq_lit(2, 32, "32"),
+                    TypeTable::BOOL,
+                ),
+                int_lit(1013, TypeTable::I32, "1013"),
+            ),
+            arm(wildcard_pat(), int_lit(1019, TypeTable::I32, "1019")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        reduce_lat(&mut Interpreter::new(&table), &expr),
+        Lattice::Const(int(1013)),
+    );
+}
+
+#[test]
+fn a_false_guard_falls_through_to_the_next_arm() {
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let expr = match_expr(
+        point_lit(point),
+        vec![
+            arm_with_guard(
+                point_binding_pat(point),
+                eq_lit(1, 99, "99"),
+                int_lit(1013, TypeTable::I32, "1013"),
+            ),
+            arm(wildcard_pat(), int_lit(1019, TypeTable::I32, "1019")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        reduce_lat(&mut Interpreter::new(&table), &expr),
+        Lattice::Const(int(1019)),
+    );
+}
+
+#[test]
+fn an_unknown_guard_leaves_the_match_alone() {
+    // The guard reads a local the engine knows nothing about, so no later arm
+    // can be committed either.
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let expr = match_expr(
+        point_lit(point),
+        vec![
+            arm_with_guard(
+                point_binding_pat(point),
+                binary(
+                    NirBinaryOp::Eq,
+                    local_expr(7, TypeTable::I32),
+                    int_lit(10, TypeTable::I32, "10"),
+                    TypeTable::BOOL,
+                ),
+                int_lit(1013, TypeTable::I32, "1013"),
+            ),
+            arm(wildcard_pat(), int_lit(1019, TypeTable::I32, "1019")),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&expr);
+    let mut interp = Interpreter::new(&table);
+    interp.reduce_to_lattice_full_a(&mut body, e);
+    assert!(
+        matches!(body.exprs[e].kind, ExprKind::Match { .. }),
+        "the match must survive: {:?}",
+        body.exprs[e].kind
+    );
+}
+
+#[test]
+fn a_guard_over_tuple_bindings_decides_the_arm() {
+    let mut table = TypeTable::new();
+    let pair = table.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
+    let expr = match_expr(
+        tuple_lit(
+            pair,
+            vec![
+                int_lit(10, TypeTable::I32, "10"),
+                int_lit(32, TypeTable::I32, "32"),
+            ],
+        ),
+        vec![
+            arm_with_guard(
+                tuple_pat(
+                    vec![
+                        binding_pat("__lit_1", 1, TypeTable::I32),
+                        binding_pat("__lit_2", 2, TypeTable::I32),
+                    ],
+                    false,
+                ),
+                eq_lit(2, 32, "32"),
+                int_lit(1013, TypeTable::I32, "1013"),
+            ),
+            arm(wildcard_pat(), int_lit(1019, TypeTable::I32, "1019")),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        reduce_lat(&mut Interpreter::new(&table), &expr),
+        Lattice::Const(int(1013)),
+    );
+}
+
+#[test]
+fn a_guard_the_engine_cannot_evaluate_blocks_a_later_arm() {
+    // The first arm's guard is unknown; the wildcard arm below it must not be
+    // committed, even though its pattern always matches.
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let expr = match_expr(
+        point_lit(point),
+        vec![
+            arm_with_guard(
+                wildcard_pat(),
+                local_expr(7, TypeTable::BOOL),
+                int_lit(1013, TypeTable::I32, "1013"),
+            ),
+            arm(wildcard_pat(), int_lit(1019, TypeTable::I32, "1019")),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&expr);
+    let mut interp = Interpreter::new(&table);
+    interp.reduce_to_lattice_full_a(&mut body, e);
     assert!(
         matches!(body.exprs[e].kind, ExprKind::Match { .. }),
         "the match must survive: {:?}",

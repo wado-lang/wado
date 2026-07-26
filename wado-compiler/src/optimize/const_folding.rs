@@ -622,10 +622,18 @@ impl ConstFoldVisitor<'_> {
             ExprShape::Match(scrutinee, arms) => {
                 let mut changed = self.visit_operand(engine, scrutinee);
                 for arm in &arms {
+                    // Under a constant scrutinee the arm's pattern bindings are
+                    // known, so its guard and body reduce under the values they
+                    // would see at runtime.
+                    let binds = self
+                        .interpreter
+                        .arm_bindings(&engine.body, scrutinee, arm.pattern);
+                    let scope = self.interpreter.enter_arm(&binds);
                     if let Some(g) = arm.guard {
                         changed |= self.visit_operand(engine, g);
                     }
                     changed |= self.visit_operand(engine, arm.body);
+                    self.interpreter.leave_arm(scope);
                 }
                 changed |= self.reduce_local(engine, e);
                 changed

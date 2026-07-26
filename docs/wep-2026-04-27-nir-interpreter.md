@@ -199,7 +199,8 @@ scalar / payload-free matching today without committing to a heap-aware
       expression reduces to a primitive `Value`. `Binding`, `Tuple`,
       `Variant`, `Enum`, `Struct`, and string / null literal patterns
       report `Unknown` so they never wrongly commit a match (`Yes`)
-      and never wrongly drop a later arm (`No`).
+      and never wrongly drop a later arm (`No`). Phase C lifts this for
+      `Binding`, `Struct`, and exact-arity `Tuple`.
 - [x] `rewrite_match_expr` — two rewrites:
       1. **Const scrutinee**: replace the `Match` with
       `Block { stmts: [Expr(arm.body)] }` for the first definite-`Yes`
@@ -232,8 +233,8 @@ scalar / payload-free matching today without committing to a heap-aware
       patterns (inclusive / exclusive bounds, signed / unsigned mix,
       char codepoint ordering), or-patterns (match / no-match / mixed),
       `ConstantValue` (definite Yes / No / Unknown), guard handling
-      (no-fold under const scrut, no-pickup of later arm), unmodelled
-      patterns (Tuple → Unknown → Match left intact),
+      (an undecided guard blocks the arm and every arm below it),
+      unmodelled patterns (Tuple → Unknown → Match left intact),
       Unevaluated-arm regression under non-constant scrutinee,
       env-resolved local scrutinee, first-match wins on overlap, and
       visitor-driven `reduce_local` rewrites. Single e2e fixture
@@ -281,21 +282,27 @@ scalar / payload-free matching today without committing to a heap-aware
       tuple-with-rest pattern is `Unknown` — the trailing sub-patterns have no
       fixed element index. A non-aggregate value never vacuously matches a
       field-less aggregate pattern.
-- [x] `Binding` sub-patterns stay `Unknown`: the rewrite splices an arm body
-      without performing the binding, so committing such an arm would drop
-      it.
-- [ ] Bindings as constants, and the guards over them. This is what a
-      literal-bearing struct pattern actually reaches niri as: the elaborator
-      rewrites `{ x: 10, y: 32 } => …` into
+- [x] `Binding` sub-patterns match whatever the field holds, recording the
+      projected value. This is what a literal-bearing struct pattern actually
+      reaches niri as: the elaborator rewrites `{ x: 10, y: 32 } => …` into
       `{ x: __lit_1, y: __lit_2 } && ((__lit_1 == 10) && (__lit_2 == 32)) => …`,
-      so the arm carries bindings plus a guard and the engine bails on both.
-      Lifting it means recording each `Binding`'s projected value, evaluating
-      the guard and the arm body with those values in scope, and — for the
-      splice, not for the lattice — materialising the bindings as `let`
-      statements in the spliced block, since the arm body may read them.
-      Scoped bindings need the lattice path to be `&mut self`, which would
-      also let it run CTFE directly and retire the call-receiver special case
-      in `field_projection_value_a`.
+      moving the literals into the arm guard.
+- [x] Arm-scoped bindings, installed by the walker rather than read back by the
+      rewrite: `Interpreter::arm_bindings` yields what the arm's pattern binds
+      under the constant scrutinee, and `enter_arm` / `leave_arm` bracket the
+      walk of that arm's guard and body. Both then reduce bottom-up under the
+      values the arm would see at runtime — the same discipline the walker
+      already follows for `let` bindings, and the reason the rewrite can read a
+      decided guard as a plain folded constant. A true guard decides the arm, a
+      false one skips it, an undecided one stops the rewrite: a later arm is
+      only reachable once every earlier arm is ruled out.
+- [x] Splicing an arm drops its pattern, so an arm whose body still reads a
+      binding is left alone. Reducing the body under the bindings usually
+      folds those reads away first, `{ x, y } => x + y` included; the check is
+      the backstop for a read that does not fold.
+- [ ] Guards in the lattice path, which needs it to be `&mut self` to scope the
+      bindings. That would also let it run CTFE directly and retire the
+      call-receiver special case in `field_projection_value_a`.
 - [x] Aggregate constants bind to a local only when every mention of that
       local merely reads the value — a field read's receiver or a `match` /
       `switch` scrutinee — and no store target, borrow, method receiver, or

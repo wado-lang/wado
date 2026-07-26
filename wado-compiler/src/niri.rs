@@ -116,10 +116,11 @@ use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirFunction, NirLiteralPattern, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, Operand, PatId, PatKind, StmtId,
-    StmtKind, StmtNode,
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind,
+    StmtId, StmtKind, StmtNode,
 };
 use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
 /// Three-state lattice over compile-time evaluation results.
@@ -787,6 +788,51 @@ impl<'a> Interpreter<'a> {
         self.env.insert(index, lattice);
     }
 
+    /// The locals a match arm's pattern binds, with the values they take under
+    /// a constant `scrutinee`. Empty unless the pattern definitely matches —
+    /// an undecided pattern binds nothing knowable.
+    ///
+    /// The walker installs these around the arm's guard and body
+    /// ([`Self::enter_arm`]) so both reduce under the values the arm would see
+    /// at runtime. This is what folds a struct pattern with literal fields: the
+    /// elaborator moves those literals into the guard
+    /// (`{ x: 10 }` → `{ x: __lit_1 } && __lit_1 == 10`).
+    #[must_use]
+    pub fn arm_bindings(&self, body: &Body, scrutinee: Operand, pattern: PatId) -> PatBindings {
+        let Lattice::Const(value) = self.operand_to_lattice_a(body, scrutinee) else {
+            return PatBindings::new();
+        };
+        let mut binds = PatBindings::new();
+        match self.pattern_matches_a(body, &value, pattern, &mut binds) {
+            PatternMatch::Yes => binds,
+            PatternMatch::No | PatternMatch::Unknown => PatBindings::new(),
+        }
+    }
+
+    /// Install `binds` for the walk of one match arm. Pass the returned scope
+    /// to [`Self::leave_arm`] to put the environment back.
+    pub fn enter_arm(&mut self, binds: &PatBindings) -> ArmScope {
+        let scope = ArmScope(
+            binds
+                .iter()
+                .map(|(index, _)| (*index, self.env.get(index).cloned()))
+                .collect(),
+        );
+        for (index, value) in binds {
+            self.bind_local(*index, Lattice::Const(value.clone()));
+        }
+        scope
+    }
+
+    pub fn leave_arm(&mut self, scope: ArmScope) {
+        for (index, previous) in scope.0 {
+            match previous {
+                Some(lattice) => self.env.insert(index, lattice),
+                None => self.env.swap_remove(&index),
+            };
+        }
+    }
+
     /// Mark a local as definitely non-constant from this point on. The
     /// driving visitor calls this when it sees an `x = expr` assignment.
     /// Conservative — we don't track flow-sensitive new values, just
@@ -1048,10 +1094,12 @@ impl<'a> Interpreter<'a> {
             let mut candidates = Vec::<Lattice>::new();
             let mut yes_found = false;
             for arm in arms {
+                // A guard the read-only path cannot evaluate — it has no place
+                // to install the pattern's bindings — leaves the arm undecided.
                 let pm = if arm.guard.is_some() {
                     PatternMatch::Unknown
                 } else {
-                    self.pattern_matches_a(body, &scrut_v, arm.pattern)
+                    self.pattern_matches_a(body, &scrut_v, arm.pattern, &mut PatBindings::new())
                 };
                 let body_lat =
                     arm_lattice_for_feasible_join(self.operand_to_lattice_a(body, arm.body));
@@ -1086,9 +1134,23 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn pattern_matches_a(&self, body: &Body, value: &Value, pat: PatId) -> PatternMatch {
+    /// Whether `value` matches `pat`, recording into `binds` the locals the
+    /// pattern binds and the sub-values they take. `binds` is only meaningful
+    /// on [`PatternMatch::Yes`]; a rejected alternative may have left entries
+    /// behind.
+    fn pattern_matches_a(
+        &self,
+        body: &Body,
+        value: &Value,
+        pat: PatId,
+        binds: &mut PatBindings,
+    ) -> PatternMatch {
         match &body.pats[pat].kind {
             PatKind::Wildcard => PatternMatch::Yes,
+            PatKind::Binding { local_index, .. } => {
+                binds.push((*local_index, value.clone()));
+                PatternMatch::Yes
+            }
             PatKind::Literal(lit) => match (lit, value) {
                 (NirLiteralPattern::I128(p), Value::Int { value: v, prim }) => {
                     bool_to_match(int_value_matches_i128(*v, *prim, *p))
@@ -1112,8 +1174,12 @@ impl<'a> Interpreter<'a> {
             PatKind::Or(alts) => {
                 let mut any_unknown = false;
                 for alt in alts {
-                    match self.pattern_matches_a(body, value, *alt) {
-                        PatternMatch::Yes => return PatternMatch::Yes,
+                    let mut alt_binds = PatBindings::new();
+                    match self.pattern_matches_a(body, value, *alt, &mut alt_binds) {
+                        PatternMatch::Yes => {
+                            binds.append(&mut alt_binds);
+                            return PatternMatch::Yes;
+                        }
                         PatternMatch::No => {}
                         PatternMatch::Unknown => any_unknown = true,
                     }
@@ -1159,6 +1225,7 @@ impl<'a> Interpreter<'a> {
                 body,
                 value,
                 fields.iter().map(|f| (f.field_index, f.pattern)),
+                binds,
             ),
             // A tuple rest (`(a, ..)`) leaves the trailing sub-patterns without
             // a fixed element index, so only the exact-arity form is modelled.
@@ -1168,26 +1235,26 @@ impl<'a> Interpreter<'a> {
                 pats.iter()
                     .enumerate()
                     .map(|(i, p)| (u32::try_from(i).expect("tuple arity fits u32"), *p)),
+                binds,
             ),
-            PatKind::Tuple(_, _)
-            | PatKind::Binding { .. }
-            | PatKind::Variant { .. }
-            | PatKind::Enum { .. } => PatternMatch::Unknown,
+            PatKind::Tuple(_, _) | PatKind::Variant { .. } | PatKind::Enum { .. } => {
+                PatternMatch::Unknown
+            }
         }
     }
 
     /// Conjunction of the sub-pattern results over an aggregate's fields:
     /// definitely-no as soon as one field rules the pattern out, definitely-yes
     /// only when every listed field matches. A field the value does not carry —
-    /// or a sub-pattern the engine does not model, `Binding` included — makes
-    /// the whole pattern `Unknown`, so a match is never committed on a pattern
-    /// whose bindings the rewrite would drop. A value that is not an aggregate
-    /// is `Unknown` rather than vacuously matching a field-less pattern.
+    /// or a sub-pattern the engine does not model — makes the whole pattern
+    /// `Unknown`. A value that is not an aggregate is `Unknown` rather than
+    /// vacuously matching a field-less pattern.
     fn all_fields_match(
         &self,
         body: &Body,
         value: &Value,
         fields: impl Iterator<Item = (u32, PatId)>,
+        binds: &mut PatBindings,
     ) -> PatternMatch {
         if !matches!(value, Value::Aggregate { .. }) {
             return PatternMatch::Unknown;
@@ -1197,7 +1264,7 @@ impl<'a> Interpreter<'a> {
             let Some(field_value) = value.field(field_index) else {
                 return PatternMatch::Unknown;
             };
-            match self.pattern_matches_a(body, field_value, pat) {
+            match self.pattern_matches_a(body, field_value, pat, binds) {
                 PatternMatch::No => return PatternMatch::No,
                 PatternMatch::Unknown => any_unknown = true,
                 PatternMatch::Yes => {}
@@ -1460,14 +1527,17 @@ impl<'a> Interpreter<'a> {
                 arms,
             } => {
                 let scrutinee = *scrutinee;
-                let arm_data: Vec<(Option<Operand>, Operand)> =
-                    arms.iter().map(|a| (a.guard, a.body)).collect();
+                let arm_data: Vec<(Option<Operand>, PatId, Operand)> =
+                    arms.iter().map(|a| (a.guard, a.pattern, a.body)).collect();
                 let mut ch = self.reduce_in_place_operand_a(body, scrutinee);
-                for (guard, arm_body) in arm_data {
+                for (guard, pattern, arm_body) in arm_data {
+                    let binds = self.arm_bindings(body, scrutinee, pattern);
+                    let scope = self.enter_arm(&binds);
                     if let Some(g) = guard {
                         ch |= self.reduce_in_place_operand_a(body, g);
                     }
                     ch |= self.reduce_in_place_operand_a(body, arm_body);
+                    self.leave_arm(scope);
                 }
                 ch
             }
@@ -1664,24 +1734,42 @@ impl<'a> Interpreter<'a> {
 
         // Rule 1: const scrutinee → splice the chosen arm.
         if let Lattice::Const(scrut_v) = self.operand_to_lattice_a(sink.body(), scrutinee) {
-            let mut chosen: Option<usize> = None;
+            let mut chosen: Option<(usize, PatBindings)> = None;
             for (i, (guard, pat, _, _)) in arms_data.iter().enumerate() {
-                if guard.is_some() {
-                    return false;
-                }
-                match self.pattern_matches_a(sink.body(), &scrut_v, *pat) {
-                    PatternMatch::Yes => {
-                        chosen = Some(i);
-                        break;
-                    }
-                    PatternMatch::No => {}
+                let mut binds = PatBindings::new();
+                match self.pattern_matches_a(sink.body(), &scrut_v, *pat, &mut binds) {
+                    PatternMatch::No => continue,
                     PatternMatch::Unknown => return false,
+                    PatternMatch::Yes => {}
                 }
+                // The walker reduced each guard under this arm's bindings
+                // ([`Interpreter::arm_bindings`]), so a decided one is already a
+                // constant here. An undecided guard leaves every later arm
+                // unreachable for the engine: this one may still be taken.
+                match guard {
+                    None => {}
+                    Some(g) => match self
+                        .operand_to_lattice_a(sink.body(), *g)
+                        .as_const()
+                        .and_then(|v| v.as_bool())
+                    {
+                        Some(true) => {}
+                        Some(false) => continue,
+                        None => return false,
+                    },
+                }
+                chosen = Some((i, binds));
+                break;
             }
-            let Some(idx) = chosen else {
+            let Some((idx, binds)) = chosen else {
                 return false;
             };
             let (body_op, arm_span) = (arms_data[idx].2, arms_data[idx].3);
+            // Splicing the arm strips its pattern, so a binding the body still
+            // reads would be left dangling.
+            if operand_reads_any_local(sink.body(), body_op, &binds) {
+                return false;
+            }
             // The chosen arm's value becomes `e`'s value, wrapped in a block. A
             // promoted constant arm flows straight into the `Operand` statement
             // slot — no node materialization (WEP: The Live ValueGraph).
@@ -1848,6 +1936,34 @@ impl<'a> Interpreter<'a> {
     }
 }
 
+/// Whether the subtree under `op` reads any of the locals `binds` binds.
+fn operand_reads_any_local(body: &Body, op: Operand, binds: &PatBindings) -> bool {
+    struct Reads<'a> {
+        binds: &'a PatBindings,
+        found: bool,
+    }
+    impl NirRefVisitor for Reads<'_> {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Expr(e) = node
+                && let ExprKind::Local { index, .. } = &body.exprs[e].kind
+                && self.binds.iter().any(|(bound, _)| bound == index)
+            {
+                self.found = true;
+            }
+            self.walk_node(body, node);
+        }
+    }
+    let Some(expr) = op.as_expr() else {
+        return false;
+    };
+    let mut visitor = Reads {
+        binds,
+        found: false,
+    };
+    visitor.visit_node(body, NodeRef::Expr(expr));
+    visitor.found
+}
+
 /// The tail expression of a body whose root block is a single statement —
 /// `Return { Some(e) }` or `Expr(e)`. `None` for any other shape, which the
 /// caller treats as "do not fold this call".
@@ -1891,6 +2007,14 @@ enum PatternMatch {
     No,
     Unknown,
 }
+
+/// The locals a matched pattern binds, paired with the scrutinee sub-values
+/// they take.
+pub type PatBindings = Vec<(u32, Value)>;
+
+/// The environment entries [`Interpreter::enter_arm`] displaced, restored by
+/// [`Interpreter::leave_arm`].
+pub struct ArmScope(Vec<(u32, Option<Lattice>)>);
 
 fn bool_to_match(b: bool) -> PatternMatch {
     if b {
