@@ -124,7 +124,7 @@ pub(crate) fn decl_identity_core(
     // declarations, and answering `primitive()` for them contradicts the
     // declaration index, which knows better. Primitives and `()` have no
     // declaration to point at yet.
-    if super::is_primitive_type_name(name) || name == crate::tir::TypeTable::UNIT_TYPE_NAME {
+    if super::is_primitive_type_name(name) {
         return Some((ModuleSource::primitive(), name.to_string()));
     }
     if name == crate::tir::TypeTable::TUPLE_TYPE_NAME {

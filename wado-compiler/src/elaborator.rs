@@ -70,12 +70,11 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
     index
 }
 
-/// `true` if `name` denotes a built-in primitive Wado type. Primitives
-/// have inherent impl blocks in `core:prelude/primitive` but no
-/// `Symbol` entry to canonicalise through, so both
-/// [`Elaborator::canonical_decl_key`] and `TraitEnv::build` consult this
-/// predicate to map a bare primitive reference to its canonical
-/// declaring module.
+/// `true` if `name` denotes a built-in type resolved by name alone. Must
+/// list exactly what `resolve_named_type` answers before consulting any
+/// declaration: a name treated as builtin there but not here reaches
+/// [`Elaborator::canonical_decl_key`] and `TraitEnv::build` by different
+/// routes, and they key it to different modules.
 pub(crate) fn is_primitive_type_name(name: &str) -> bool {
     matches!(
         name,
@@ -88,8 +87,11 @@ pub(crate) fn is_primitive_type_name(name: &str) -> bool {
             | "u64"
             | "f32"
             | "f64"
+            | "v128"
             | "bool"
             | "char"
+            | "()"
+            | "!"
     )
 }
 pub use types::TypeError;
