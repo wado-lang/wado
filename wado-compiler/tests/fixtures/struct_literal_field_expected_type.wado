@@ -1,0 +1,33 @@
+variant W<T> { N, Y(T) }
+
+struct Plain { v: Option<i32> }
+
+struct Boxed<T> { v: Option<T> }
+
+struct Paired<T> { v: Option<T>, k: T }
+
+struct Wrapped<T> { v: W<T> }
+
+test "a payload-less case as a field of a plain struct" {
+    let s = Plain { v: Option::None };
+    assert s.v matches { Option::None };
+}
+
+test "a payload-less case as a field of an annotated generic struct" {
+    let s: Boxed<i32> = Boxed { v: Option::None };
+    assert s.v matches { Option::None };
+}
+
+test "a payload-less case as a field inferred from a sibling field" {
+    let s = Paired { v: Option::None, k: 1 };
+    assert s.v matches { Option::None };
+    assert s.k == 1;
+}
+
+test "a payload-less case of a user variant as a generic field" {
+    let s: Wrapped<i32> = Wrapped { v: W::N };
+    assert s.v matches { W::N };
+}
+
+__DATA__
+{"test": {}}

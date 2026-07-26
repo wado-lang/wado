@@ -3260,50 +3260,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .enumerate()
             .map(|(provided_idx, field)| {
-                // Find expected field type for literal coercion
-                // We use expected type for numeric literals (including negated ones)
-                // and null literals to avoid interfering with tuple-to-array coercion
-                // for generic struct fields
-                let is_numeric_literal = self.tysys.is_numeric_literal(&field.value);
-
-                let is_null_literal = matches!(
-                    &field.value,
-                    ast::Expr::Literal(lit) if matches!(&lit.value, ast::Literal::Null)
-                );
-
-                let is_anonymous_struct_literal = matches!(
-                    &field.value,
-                    ast::Expr::StructLiteral(s) if s.name.is_none()
-                );
-
                 let is_tuple_literal = matches!(&field.value, ast::Expr::TupleLiteral(_));
 
-                let is_bytes_literal = matches!(
-                    &field.value,
-                    ast::Expr::Literal(lit)
-                        if matches!(&lit.value, ast::Literal::Bytes(_) | ast::Literal::IncludeBytes(_))
-                );
-
-                // Generic call expressions (e.g. `List::filled(n, 0)` inside
-                // a struct literal field) need the expected field type so the
-                // call's type-parameter inference can back-infer from it. Without
-                // this, the call falls back to literal defaults.
-                let is_call = matches!(&field.value, ast::Expr::Call(_));
-
-                let expected_field_type = if is_numeric_literal
-                    || is_null_literal
-                    || is_anonymous_struct_literal
-                    || is_tuple_literal
-                    || is_bytes_literal
-                    || is_call
-                {
-                    struct_field_types
-                        .iter()
-                        .find(|(name, _)| name == &field.name)
-                        .map(|(_, type_id)| *type_id)
-                } else {
-                    None
-                };
+                let expected_field_type = struct_field_types
+                    .iter()
+                    .find(|(name, _)| name == &field.name)
+                    .map(|(_, type_id)| *type_id);
 
                 // For tuple literals in generic struct fields where the field type
                 // contains type params (e.g., List<T>), skip providing the expected
