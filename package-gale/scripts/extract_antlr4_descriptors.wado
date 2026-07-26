@@ -933,16 +933,14 @@ fn stage_a_err_category_eligible(category: &String) -> bool {
 /// `[stage_a_todo]` decision, not something this classifier can know — it never
 /// sees Gale's actual output.
 
-/// Whether `line` is a row of ANTLR4's lexer DFA dump (`s0-' '->:s5=>3`,
+/// Whether `line` opens a row of ANTLR4's lexer DFA dump (`s0-' '->:s5=>3`,
 /// `:s1=>2-'n'->:s2=>2`), which `showDFA` descriptors append after the token
-/// rows. It describes ANTLR's own simulator rather than the token stream, so it
-/// is not part of what a Gale-generated lexer can ever produce.
-fn is_lexer_dfa_dump_line(line: &String) -> bool {
-    let t = line.trim();
-    if !t.contains("->") {
-        return false;
-    }
-    let cs: List<char> = t.chars().collect();
+/// rows. A row opens with a state id — an optional `:`, `s`, digits — followed
+/// immediately by its transition (`-`) or accept (`=>`) marker. It describes
+/// ANTLR's own simulator rather than the token stream, so it is not part of what
+/// a Gale-generated lexer can ever produce.
+fn is_lexer_dfa_row_start(line: &String) -> bool {
+    let cs: List<char> = line.trim().chars().collect();
     let mut i = 0;
     if i < cs.len() && cs[i] == ':' {
         i += 1;
@@ -951,17 +949,34 @@ fn is_lexer_dfa_dump_line(line: &String) -> bool {
         return false;
     }
     i += 1;
-    return i < cs.len() && cs[i] matches { '0'..='9' };
+    let digits_at = i;
+    while i < cs.len() && cs[i] matches { '0'..='9' } {
+        i += 1;
+    }
+    if i == digits_at || i >= cs.len() {
+        return false;
+    }
+    return cs[i] == '-' || cs[i] == '=';
 }
 
 /// Drop the `showDFA` DFA dump from a descriptor `[output]` so claim (d)
 /// compares only the token stream. Without this every `showDFA` descriptor is
 /// permanently unmatchable and its real token-level gap stays hidden behind an
 /// unreachable expectation.
+///
+/// A row's transition char is quoted verbatim, so a transition on a newline
+/// (`s0-'\n'->:s2=>3`) spans two physical lines. A row therefore ends at the
+/// line carrying its `->`, not necessarily at the line it started on.
 fn strip_lexer_dfa_dump(raw: &String) -> String {
     let mut out = String::with_capacity(raw.len());
+    let mut in_row = false;
     for let line of raw.lines() {
-        if is_lexer_dfa_dump_line(&line) {
+        if in_row {
+            in_row = !line.contains("->");
+            continue;
+        }
+        if is_lexer_dfa_row_start(&line) {
+            in_row = !line.contains("->");
             continue;
         }
         out.push_str(&line);
@@ -2558,13 +2573,22 @@ test "classify_tokens: showDFA dump is dropped, leaving a clean token dump" {
     }
 }
 
-test "is_lexer_dfa_dump_line: only DFA rows, not action prints or token rows" {
-    assert is_lexer_dfa_dump_line(&"s0-' '->:s5=>3");
-    assert is_lexer_dfa_dump_line(&":s1=>2-'n'->:s2=>2");
-    assert !is_lexer_dfa_dump_line(&"[@0,0:0='a',<1>,1:0]");
+test "is_lexer_dfa_row_start: only DFA rows, not action prints or token rows" {
+    assert is_lexer_dfa_row_start(&"s0-' '->:s5=>3");
+    assert is_lexer_dfa_row_start(&":s1=>2-'n'->:s2=>2");
+    assert !is_lexer_dfa_row_start(&"[@0,0:0='a',<1>,1:0]");
     // Action prints that merely contain an arrow, or start with `s`.
-    assert !is_lexer_dfa_dump_line(&"stuff0: a->b");
-    assert !is_lexer_dfa_dump_line(&"s0 without an arrow");
+    assert !is_lexer_dfa_row_start(&"stuff0: a->b");
+    assert !is_lexer_dfa_row_start(&"s0 without a transition");
+    assert !is_lexer_dfa_row_start(&"sad-story");
+}
+
+test "strip_lexer_dfa_dump: a row whose transition char is a newline" {
+    // `NL : '\n'` gives ANTLR a transition on a literal newline, so the row
+    // spans two physical lines and only the second carries the `->`.
+    let raw = "[@0,0:0='a',<1>,1:0]\ns0-'\n'->:s2=>3\n";
+    let out = strip_lexer_dfa_dump(&raw);
+    assert out == "[@0,0:0='a',<1>,1:0]\n", `unexpected: '${out}'`;
 }
 
 test "stage_a_err_category_eligible: only ParserErrors and LexerErrors" {

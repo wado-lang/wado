@@ -1,0 +1,32 @@
+//! Lexer action placement: an action runs at its position in the match with the
+//! cursor it was written at, and only inside the alternative that won.
+
+use t from "./grammars/java_lex_action_pos.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/java_lex_action_pos" },
+    };
+use { TK_EOF } from "./grammars/java_lex_action_pos.g4";
+
+test "mid-element actions see the text matched so far" {
+    let actual = t::to_lexer_string(&t::tokenize(&"ab"), TK_EOF);
+    let expected = "a0:
+a1:a
+a2:ab
+end:ab
+[@0,0:1='ab',<1>,1:0]
+[@1,2:1='<EOF>',<-1>,1:2]
+";
+    assert actual == expected, `actual:\n${actual}\nexpected:\n${expected}`;
+}
+
+test "a losing group alternative runs no actions" {
+    // `a` alone can only match the first arm, so that arm's action runs once —
+    // and the second arm, tried and failed, stays silent.
+    let actual = t::to_lexer_string(&t::tokenize(&"a"), TK_EOF);
+    let expected = "lose:
+end:a
+[@0,0:0='a',<1>,1:0]
+[@1,1:0='<EOF>',<-1>,1:1]
+";
+    assert actual == expected, `actual:\n${actual}\nexpected:\n${expected}`;
+}

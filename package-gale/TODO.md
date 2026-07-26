@@ -44,9 +44,9 @@ Every `CompositeLexers` / `CompositeParsers` descriptor short-circuits on the pr
 
 Design in [`action.md`](./action.md). Remaining:
 
-- Nested-group / mid-element lexer action placement (live case: the `LexerExec/ActionPlacement` descriptor).
+- Lexer actions under a `Repeat`. The action replay re-runs a rule's match and drops each action at the cursor it was written at, which covers mid-element and nested-group placement; a `Repeat` is excluded because it matches an unknown number of times and the non-greedy / lookahead-aware emitters restructure the sequence around it. An alt carrying one keeps the flat emit, so its top-level actions still run (at the end of the match) and anything nested inside warns.
 - The ATN-class lexer path.
-- The rest of the lexer `$`-attribute surface — `$type`, char position in line, member methods reading match position / text. Two descriptors wait on the char-position half: `SemPredEvalLexer/Indent` (`_tokenStartCharPositionInLine`) and `SemPredEvalLexer/LexerInputPositionSensitivePredicates` (`getCharPositionInLine()`).
+- The rest of the lexer `$`-attribute surface — `$type` and member methods reading match position / text. The char-position half is covered: java2wado resolves `getCharPositionInLine()` and `_tokenStartCharPositionInLine`, but only in a Java body; the identity translator still has no `$`-form for either.
 - Java locals in a lexer body: java2wado emits `let mut x = ...` but a lexer body's bare name only resolves against `@members` fields, so a body that declares and then reads a local is reported and dropped. No corpus grammar declares one.
 - The SuperClass effect interface for the real-world grammars below. Landed for **predicate-only** lexer bases, including `language = Java`: RustLexer tokenizes and parses end to end through a hand-written `impl RustLexerBase`. See `action.md` ("SuperClass — an effect interface"). Remaining before TypeScript / ANTLRv4 run: action ops (`{this.m();}` — the winner-replay path), the parser side (parser-rule superClass predicates like `{this.NextGT()}?`, currently discarded), and lifecycle hooks (`nextToken` for last-token tracking). Action-op bases stay carved out (byte-identical) until the replay path lands.
 - Make the ANTLR descriptor output corpus codegen-and-compare (parse-only today), unblocking the output acceptance.

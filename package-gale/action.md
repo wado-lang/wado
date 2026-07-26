@@ -127,7 +127,7 @@ Actions print through `p.emit`, appended to a buffer on the parse result and mir
 
 ## Lexer semantics
 
-- Element actions run when the rule wins the longest match, in element order, with the cursor state they were passed; they never run for losing candidates.
+- Element actions run when the rule wins the longest match, in element order, with the cursor state they were passed; they never run for losing candidates. The winner-replay re-runs the rule's own match to place them, re-selecting each alternation match-only first so a losing arm stays silent.
 - Predicates evaluate mid-match, position-sensitively, in both the single-pass emitter and the ATN-class lexer path; a false predicate rejects the candidate.
 - Lexer commands stay typed IR (`-> skip`, etc.); set-type / set-channel from actions compose with them, action last-wins.
 - The lexer is a single context (mirroring the parser): it carries the input, member state, the action-effect latches, and the print sink, so actions and predicates reach everything through one handle.
@@ -149,7 +149,7 @@ Design phases, tracked at the capability level (see `TODO.md` for the working ta
 - Attribute resolution, value channel, and Wado (identity-translator) actions, including `@init` / `@after`, print-style actions, and the parser runtime-context API — largely done; the general `$ctx` typed-child access remains.
 - Predicates in prediction (static dispatch, scan tournament, ATN exclusion; parser and single-pass lexer) — largely done; the ATN-class lexer path and the remaining lexer `$`-attribute surface remain.
 - java2wado for the corpus parser subset plus members translation — done, lexer bodies included: codegen stages every Java lexer action / predicate into Wado before emit, so the lexer emitters stay language-agnostic (the same staging the superClass call rewrite uses).
-- Lexer actions (winner-replay: set-type / channel / skip / more / mode ops, single- and multi-alt) and the lexer print sink — done; nested / mid-element placement and the ATN-class lexer path remain.
+- Lexer actions (winner-replay: set-type / channel / skip / more / mode ops, single- and multi-alt), the lexer print sink, and action placement (mid-element and nested-group, via a match replay that drops each action at its cursor) — done; actions under a `Repeat` and the ATN-class lexer path remain.
 - SuperClass effect interface — done for predicate-only lexer bases (RustLexer runs, tokenize and parse, through a hand-written handler); action-op bases, parser-rule superClass predicates, and lifecycle-override hooks remain.
 
 ## Open questions

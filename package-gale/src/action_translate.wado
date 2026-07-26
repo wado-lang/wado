@@ -286,6 +286,18 @@ pub fn lexer_matched_text_expr() -> String {
     return "LexerSlice::new(chars, start, pos).to_string()";
 }
 
+/// The match-fn expression for the live match cursor's column within its line
+/// (ANTLR4's `getCharPositionInLine()`).
+pub fn lexer_cursor_column_expr() -> String {
+    return "char_pos_in_line(chars, pos)";
+}
+
+/// The match-fn expression for the column the token started at (ANTLR4's
+/// `_tokenStartCharPositionInLine`).
+pub fn lexer_token_start_column_expr() -> String {
+    return "char_pos_in_line(chars, start)";
+}
+
 /// The match-fn expression a lexer `$`-attribute becomes. `$text` is the slice
 /// matched so far; other lexer attributes await their own resolution.
 fn lexer_attr_expr(r: &AttrRef) -> Result<String, String> {

@@ -20,6 +20,7 @@ use {
     gen_lexer,
     lexer_rule_executes_actions,
     collect_unhandled_lexer_alt_action_ids,
+    lexer_rule_replayable,
 } from "./lexer_gen.wado";
 use {
     gen_parser,
@@ -323,12 +324,13 @@ fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
     }
     for let rule of &grammar.lexer_rules {
         let executes = lexer_rule_executes_actions(grammar, rule);
+        let replays = lexer_rule_replayable(rule, &grammar.lexer_rules);
         for let mut ai = 0; ai < rule.body.len(); ai += 1 {
             // Every alt's top-level actions run for an executing rule (the
-            // winning alt is picked at replay); only in-element actions warn.
-            let top_executes = executes;
+            // winning alt is picked at replay); a nested action runs only when
+            // the replay can reach it, so the rest warn.
             let mut ids: List<i32> = [];
-            collect_unhandled_lexer_alt_action_ids(&rule.body[ai], top_executes, &mut ids);
+            collect_unhandled_lexer_alt_action_ids(&rule.body[ai], executes, replays, &mut ids);
             for let id of &ids {
                 ctx.warn(
                     &`lexer action ${*id}`,

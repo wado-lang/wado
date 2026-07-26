@@ -154,25 +154,41 @@ WS : ' ' -> skip ;
 }
 
 test "an unmodelled ANTLR lexer field is a loud diagnostic, not broken code" {
-    // `_tokenStartCharPositionInLine` is a recognizer field Gale does not model.
-    // Passing it through verbatim would emit Wado referencing nothing, so the
-    // body must be dropped and reported instead.
+    // `_hitEOF` is a recognizer field Gale does not model. Passing it through
+    // verbatim would emit Wado referencing nothing, so the body must be dropped
+    // and reported instead.
     let src = &"lexer grammar L;
-INDENT : [ \t]+ { _tokenStartCharPositionInLine == 0 }? ;
+A : 'a'+ { _hitEOF }? ;
 NL : '\n' ;
 ";
     assert unsupported_count(src) == 1, "an unmodelled lexer field must surface UnsupportedAction";
-    assert !gen_source(src).contains("_tokenStartCharPositionInLine"), "the untranslatable body must not be emitted";
+    assert !gen_source(src).contains("_hitEOF"), "the untranslatable body must not be emitted";
 }
 
-test "a nested-group lexer action warns loudly (not yet executed)" {
-    // The action sits inside a `( ... )` group, not at the rule's top level.
-    assert unsupported_count(&"lexer grammar L;
+test "a nested-group lexer action runs in the arm that won" {
+    // The action sits inside a `( ... )` group. The replay re-selects the arm
+    // the match took, then runs that arm's actions in place — so it executes,
+    // and nothing warns.
+    let src = &"lexer grammar L;
 options { language = Wado; }
 A : ('a' { lx.set_type(TK_B) } | 'c') ;
 B : 'b' ;
 WS : ' ' -> skip ;
-") == 1, "a nested-group action must surface UnsupportedAction";
+";
+    assert unsupported_count(src) == 0, "a nested-group action no longer warns";
+    let out = gen_source(src);
+    assert out.contains("lx.set_type(TK_B);"), "the nested action is emitted";
+    // Selection before replay is what keeps the losing arm silent.
+    assert out.contains("sel_alt_"), "the replay selects the winning arm first";
+}
+
+test "a lexer action under a Repeat still warns (the replay cannot place it)" {
+    assert unsupported_count(&"lexer grammar L;
+options { language = Wado; }
+A : ('a' { lx.set_type(TK_B) })+ ;
+B : 'b' ;
+WS : ' ' -> skip ;
+") == 1, "an action under a repeat must surface UnsupportedAction";
 }
 
 test "a multi-alt lexer rule runs each alt's top-level action (no warn)" {
@@ -182,7 +198,6 @@ A : 'a' { lx.set_type(TK_X) } | 'c' { lx.set_type(TK_Y) } ;
 B : 'b' ;
 WS : ' ' -> skip ;
 ");
-    assert src.contains("fn winning_alt_A"), "multi-alt rule gets a winning_alt helper";
     assert src.contains("lx.set_type(TK_X);"), "alt 0 action emitted";
     assert src.contains("lx.set_type(TK_Y);"), "alt 1 action emitted";
     assert unsupported_count(&"lexer grammar L;
@@ -191,4 +206,16 @@ A : 'a' { lx.set_type(TK_X) } | 'c' { lx.set_type(TK_Y) } ;
 B : 'b' ;
 WS : ' ' -> skip ;
 ") == 0, "multi-alt top-level actions must not warn";
+}
+
+test "a rule the replay cannot follow keeps the winning_alt helper" {
+    // The `Repeat` rules out the replay, so alt selection falls back to the
+    // match-only helper and the actions run flat, at the end of the match.
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+A : 'a'+ { lx.set_type(TK_X) } | 'c' { lx.set_type(TK_Y) } ;
+B : 'b' ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("fn winning_alt_A"), "non-replayable multi-alt rule gets a winning_alt helper";
 }

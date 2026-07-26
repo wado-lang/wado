@@ -7,6 +7,8 @@
 use { ParserRule, Alternative, GrammarOption, Visibility } from "../ir.wado";
 use {
     lexer_matched_text_expr,
+    lexer_cursor_column_expr,
+    lexer_token_start_column_expr,
     resolve_lexer_attr_ref,
     resolve_attr_ref,
     rule_binding_for,
@@ -307,6 +309,8 @@ fn emit_call(
                 } else {
                     Result::Ok(`${env.this_bind}.rule_text(${RULE_START_TOK_LOCAL})`);
                 }
+            } else if env.lexer && *n == "getCharPositionInLine" {
+                Result::Ok(lexer_cursor_column_expr());
             } else if method_declared(env, n) {
                 Result::Ok(`${env.this_bind}.${to_snake_case(n)}(${args_w})`);
             } else {
@@ -410,6 +414,9 @@ fn emit_member_call(
 /// (`_tokenStartCharPositionInLine`, `_input`, ...) — a loud error, because
 /// passing it through verbatim emits Wado that references nothing.
 fn lexer_name_expr(env: &JEnv, name: &String) -> Result<String, String> {
+    if *name == "_tokenStartCharPositionInLine" {
+        return Result::Ok(lexer_token_start_column_expr());
+    }
     let snake = to_snake_case(name);
     for let f of &env.fields {
         if *f == snake {

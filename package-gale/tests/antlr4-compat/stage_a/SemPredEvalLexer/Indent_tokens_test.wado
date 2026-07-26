@@ -16,8 +16,6 @@ use t from "../../grammars/SemPredEvalLexer/Indent.g4"
     };
 use { TK_EOF } from "../../grammars/SemPredEvalLexer/Indent.g4";
 
-// triage: the predicate reads `_tokenStartCharPositionInLine`, an ANTLR recognizer field Gale does not model; java2wado reports it and the body is dropped
-#[TODO]
 test "stage_a_tokens: SemPredEvalLexer/Indent" {
     let input = "abc
   def  
@@ -30,8 +28,6 @@ test "stage_a_tokens: SemPredEvalLexer/Indent" {
 [@4,9:10='  ',<4>,2:5]
 [@5,11:11='\\n',<3>,2:7]
 [@6,12:11='<EOF>',<-1>,3:0]
-s0-'
-'->:s2=>3
 ";
     let tokens = t::tokenize(&input);
     let actual = t::to_lexer_string(&tokens, TK_EOF);

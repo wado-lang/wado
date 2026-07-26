@@ -120,6 +120,21 @@ impl Eq for LexerSlice {
     }
 }
 
+/// The 0-based column of char index `i`: the number of chars since the last
+/// newline. ANTLR4's `getCharPositionInLine()` (over the live match cursor) and
+/// `_tokenStartCharPositionInLine` (over the token's start) are both this.
+/// Scans back to the line start, so the cost is the column, not the offset —
+/// a lexer predicate may call it once per candidate rule per token.
+pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
+    let mut j = if i < chars.len() { i } else { chars.len() };
+    let mut col = 0;
+    while j > 0 && chars[j - 1] != '\n' {
+        col += 1;
+        j -= 1;
+    }
+    return col;
+}
+
 /// Token represents a lexed token with its kind, text, and position.
 /// Leading trivia (whitespace, comments) is attached to each token.
 /// `channel` is the ANTLR4 channel id (0 = default, 1 = HIDDEN; named
@@ -1330,25 +1345,6 @@ fn emit_lexer_token(
     out.push_str(&`[@${index},${start}:${end_inclusive}='${text_buf}',<${type_id}>,${channel_attr}${line}:${col}]\n`);
 }
 
-/// Compute (line, column) at a 0-based char index in `chars`, with
-/// 1-based line and 0-based column to match ANTLR4's `Token` getters.
-/// The parser's error path reports at most one position per parse, so the
-/// linear scan is fine; the per-token dump uses `line_col_from_starts`.
-fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
-    let mut line = 1;
-    let mut col = 0;
-    let cap = if pos < chars.len() { pos } else { chars.len() };
-    for let mut i = 0; i < cap; i += 1 {
-        if chars[i] == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-    return [line, col];
-}
-
 /// Compute (line, column) from the precomputed `line_starts` table (char
 /// index where each line begins). Binary search for the greatest
 /// `line_starts[j] <= pos`: that line is `j + 1` and the column is the
@@ -1431,53 +1427,82 @@ impl Lexer {
     }
 }
 
-fn apply_I_actions(lx: &mut Lexer, start: i32, pos: i32) {
+fn apply_I_actions(lx: &mut Lexer, start: i32, end: i32) {
     let chars = &lx.chars;
+    let mut pos = start;
+    let sel_saved_0 = pos;
+    let mut sel_alt_0 = -1;
+    let mut sel_best_0 = -1;
+    sel_0_0: {
+        pos = sel_saved_0;
+        if pos >= chars.len() || chars[pos] != 'a' { break sel_0_0; }
+        pos += 1;
+        if pos > sel_best_0 { sel_best_0 = pos; sel_alt_0 = 0; }
+    }
+    sel_0_1: {
+        pos = sel_saved_0;
+        if pos >= chars.len() || chars[pos] != 'a' { break sel_0_1; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != 'b' { break sel_0_1; }
+        pos += 1;
+        if pos > sel_best_0 { sel_best_0 = pos; sel_alt_0 = 1; }
+    }
+    if sel_alt_0 < 0 { return; }
+    pos = sel_saved_0;
+    if sel_alt_0 == 0 {
+        if pos >= chars.len() || chars[pos] != 'a' { return; }
+        pos += 1;
+    } else if sel_alt_0 == 1 {
+        if pos >= chars.len() || chars[pos] != 'a' { return; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != 'b' { return; }
+        pos += 1;
+    }
     lx.emit(`${LexerSlice::new(chars, start, pos).to_string()}\n`);
 }
 
 fn try_I(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_0 = pos;
-    let mut alts_best_0 = -1;
-    alts_0_0: {
-        pos = alts_saved_0;
-        if pos >= chars.len() || chars[pos] != 'a' { break alts_0_0; }
+    let alts_saved_1 = pos;
+    let mut alts_best_1 = -1;
+    alts_1_0: {
+        pos = alts_saved_1;
+        if pos >= chars.len() || chars[pos] != 'a' { break alts_1_0; }
         pos += 1;
-        if pos > alts_best_0 { alts_best_0 = pos; }
+        if pos > alts_best_1 { alts_best_1 = pos; }
     }
-    alts_0_1: {
-        pos = alts_saved_0;
-        if pos >= chars.len() || chars[pos] != 'a' { break alts_0_1; }
+    alts_1_1: {
+        pos = alts_saved_1;
+        if pos >= chars.len() || chars[pos] != 'a' { break alts_1_1; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] != 'b' { break alts_0_1; }
+        if pos >= chars.len() || chars[pos] != 'b' { break alts_1_1; }
         pos += 1;
-        if pos > alts_best_0 { alts_best_0 = pos; }
+        if pos > alts_best_1 { alts_best_1 = pos; }
     }
-    if alts_best_0 < 0 { return -1; }
-    pos = alts_best_0;
+    if alts_best_1 < 0 { return -1; }
+    pos = alts_best_1;
     return pos;
 }
 
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_1 = pos;
-    let mut alts_ok_1 = false;
-    alts_1_0: {
-        pos = alts_saved_1;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_1_0; }
+    let alts_saved_2 = pos;
+    let mut alts_ok_2 = false;
+    alts_2_0: {
+        pos = alts_saved_2;
+        if pos >= chars.len() || chars[pos] != ' ' { break alts_2_0; }
         pos += 1;
-        alts_ok_1 = true;
+        alts_ok_2 = true;
     }
-    if !alts_ok_1 {
-        alts_1_1: {
-            pos = alts_saved_1;
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_1_1; }
+    if !alts_ok_2 {
+        alts_2_1: {
+            pos = alts_saved_2;
+            if pos >= chars.len() || chars[pos] != '\n' { break alts_2_1; }
             pos += 1;
-            alts_ok_1 = true;
+            alts_ok_2 = true;
         }
     }
-    if !alts_ok_1 { return -1; }
+    if !alts_ok_2 { return -1; }
     return pos;
 }
 
