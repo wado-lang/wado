@@ -314,11 +314,7 @@ pub fn count_element_groups(elem: &Element) -> i32 {
             count_element_groups(&rep.element);
         },
         Label(lab) => count_element_groups(&lab.element),
-        TokenRef(_) => 0,
-        Literal(_) => 0,
-        RuleRef(_) => 0,
-        Wildcard(_) => 0,
-        Not(_) => 0,
+        TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => 0,
     };
 }
 
@@ -359,8 +355,7 @@ fn element_type_base_name(elem: &Element) -> String {
         let inner = element_base_name(&rep.element);
         return match rep.kind {
             Optional => `${inner}_opt`,
-            Star => `${inner}_list`,
-            Plus => `${inner}_list`,
+            Star | Plus => `${inner}_list`,
         };
     }
     return element_base_name(elem);

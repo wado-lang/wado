@@ -1494,9 +1494,7 @@ fn scan_body_can_match_empty(elements: &List<ScanElement>) -> bool {
 
 fn scan_element_can_match_empty(se: &ScanElement) -> bool {
     return match se {
-        Token(_) => false,
-        Wildcard => false,
-        Excluded(_) => false,
+        Token(_) | Wildcard | Excluded(_) => false,
         // Only the snake name reaches scan IR, so the callee's nullability is
         // out of reach here; assume it can be empty and let the body's other
         // elements decide.
@@ -4386,9 +4384,7 @@ fn inner_walker_follow_for_repeat(
 fn op_is_leaf(op: &Op) -> bool {
     return match op {
         Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => true,
-        Repeat(_) => false,
-        Group(_) => false,
-        ListLabel(_) => false,
+        Repeat(_) | Group(_) | ListLabel(_) => false,
     };
 }
 
@@ -5191,11 +5187,7 @@ fn gen_op_dispatch_element(
     name_counts: &mut List<[String, i32]>,
 ) {
     match op {
-        Token(_) => gen_op_leaf(w, op, ctx, name_counts),
-        Literal(_) => gen_op_leaf(w, op, ctx, name_counts),
-        RuleCall(_) => gen_op_leaf(w, op, ctx, name_counts),
-        Wildcard(_) => gen_op_leaf(w, op, ctx, name_counts),
-        Excluded(_) => gen_op_leaf(w, op, ctx, name_counts),
+        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => gen_op_leaf(w, op, ctx, name_counts),
         Repeat(rep_op) => {
             let rep = if let Repeat(r) = elem {
                 r;
@@ -6709,12 +6701,7 @@ fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
     return match elem {
         Repeat(rep) => if rep.kind matches { Optional } { &rep.element } else { elem },
         Label(lab) => unwrap_optional(&lab.element),
-        Group(_) => elem,
-        TokenRef(_) => elem,
-        Literal(_) => elem,
-        RuleRef(_) => elem,
-        Wildcard(_) => elem,
-        Not(_) => elem,
+        Group(_) | TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => elem,
     };
 }
 
@@ -6791,11 +6778,7 @@ fn not_match_call(inner: &Element) -> String {
             }
             `p.expect_not([${list}])`;
         },
-        RuleRef(_) => panic(unsupported),
-        Label(_) => panic(unsupported),
-        Repeat(_) => panic(unsupported),
-        Wildcard(_) => panic(unsupported),
-        Not(_) => panic(unsupported),
+        RuleRef(_) | Label(_) | Repeat(_) | Wildcard(_) | Not(_) => panic(unsupported),
     };
 }
 
@@ -7867,12 +7850,7 @@ fn elements_match(consumed: &Element, expected: &Element) -> bool {
     return match consumed {
         TokenRef(a) => *exp matches { TokenRef(b) && b.name == a.name },
         Literal(a) => *exp matches { Literal(b) && b.text == a.text },
-        RuleRef(_) => false,
-        Group(_) => false,
-        Repeat(_) => false,
-        Label(_) => false,
-        Wildcard(_) => false,
-        Not(_) => false,
+        RuleRef(_) | Group(_) | Repeat(_) | Label(_) | Wildcard(_) | Not(_) => false,
     };
 }
 

@@ -1070,9 +1070,7 @@ fn gen_lexer_alt_seq(
 fn lexer_element_can_replay(elem: &LexerElement, single_char: bool) -> bool {
     return match *elem {
         Literal(text) => !single_char || text.chars().count() == 1,
-        CharRange(_) => true,
-        CharClass(_) => true,
-        AnyChar => true,
+        CharRange(_) | CharClass(_) | AnyChar => true,
         Not(not_inner) => lexer_element_can_replay(&not_inner.element, single_char),
         // `~('b')` parses as `Not(Group([Alt([Literal("b")])]))`,
         // `~('b' | ' ')` as `Not(Group([Alt(['b']), Alt([' '])]))`.
@@ -1525,11 +1523,7 @@ fn try_extract_keyword_char(elem: &LexerElement, all_rules: &List<LexerRule>, ru
                 null;
             }
         },
-        CharRange(_) => null,
-        AnyChar => null,
-        Group(_) => null,
-        Repeat(_) => null,
-        Not(_) => null,
+        CharRange(_) | AnyChar | Group(_) | Repeat(_) | Not(_) => null,
     };
 }
 

@@ -421,12 +421,7 @@ fn repeat_entry_alts(rep: &RepeatElement, ctx: &mut GenContext) -> Option<List<A
             }
         },
         Group(g) => if all_alts_are_single_token(&g.alternatives) { null } else { Option::Some(g.alternatives) },
-        TokenRef(_) => null,
-        Literal(_) => null,
-        Label(_) => null,
-        Wildcard(_) => null,
-        Not(_) => null,
-        Repeat(_) => null,
+        TokenRef(_) | Literal(_) | Label(_) | Wildcard(_) | Not(_) | Repeat(_) => null,
     };
 }
 
@@ -597,8 +592,7 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
             let unwrapped = SllConfig { ..*c, elements: replace_element_at(&c.elements, c.pos, &lab.element) };
             sll_advance(&unwrapped, token, ctx, inline_depth);
         },
-        Wildcard(_) => [],
-        Not(_) => [],
+        Wildcard(_) | Not(_) => [],
     };
 }
 
@@ -961,12 +955,7 @@ fn sll_find_common_terminal(configs: &List<SllConfig>) -> Option<Element> {
                 }
             }
         },
-        RuleRef(_) => shared = false,
-        Group(_) => shared = false,
-        Repeat(_) => shared = false,
-        Label(_) => shared = false,
-        Wildcard(_) => shared = false,
-        Not(_) => shared = false,
+        RuleRef(_) | Group(_) | Repeat(_) | Label(_) | Wildcard(_) | Not(_) => shared = false,
     }
     if !shared {
         return null;

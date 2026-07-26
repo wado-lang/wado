@@ -96,8 +96,7 @@ fn is_lexer_rule_name(name: &String) -> bool {
 
 fn is_valid_not_set_element(elem: &Element) -> bool {
     return match elem {
-        TokenRef(_) => true,
-        Literal(_) => true,
+        TokenRef(_) | Literal(_) => true,
         Group(g) => {
             let mut ok = true;
             for let alt of &g.alternatives {
@@ -108,19 +107,14 @@ fn is_valid_not_set_element(elem: &Element) -> bool {
             }
             ok;
         },
-        RuleRef(_) => false,
-        Label(_) => false,
-        Repeat(_) => false,
-        Wildcard(_) => false,
-        Not(_) => false,
+        RuleRef(_) | Label(_) | Repeat(_) | Wildcard(_) | Not(_) => false,
     };
 }
 
 fn is_valid_lexer_not_element(elem: &LexerElement) -> bool {
     return match elem {
         Literal(s) => s.chars().count() == 1,
-        CharRange(_) => true,
-        CharClass(_) => true,
+        CharRange(_) | CharClass(_) => true,
         Group(alts) => {
             let mut ok = true;
             for let alt of alts {
@@ -131,10 +125,7 @@ fn is_valid_lexer_not_element(elem: &LexerElement) -> bool {
             }
             ok;
         },
-        AnyChar => false,
-        RuleRef(_) => false,
-        Repeat(_) => false,
-        Not(_) => false,
+        AnyChar | RuleRef(_) | Repeat(_) | Not(_) => false,
     };
 }
 
@@ -1440,11 +1431,8 @@ fn action_language_from_options(options: &List<GrammarOption>) -> ActionLanguage
     for let opt of options {
         if opt.name == "language" {
             let name = match &opt.value {
-                Ident(v) => Option::<String>::Some(*v),
-                Str(v) => Option::<String>::Some(*v),
-                Qualified(_) => null,
-                Int(_) => null,
-                Action(_) => null,
+                Ident(v) | Str(v) => Option::<String>::Some(*v),
+                Qualified(_) | Int(_) | Action(_) => null,
             };
             if let Some(v) = name {
                 if v.eq_ignore_ascii_case("java") {

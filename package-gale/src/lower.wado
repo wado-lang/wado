@@ -129,12 +129,7 @@ fn element_consumes_follow_arg(elem: &Element) -> bool {
     return match elem {
         RuleRef(_) => true,
         Label(lab) => element_consumes_follow_arg(&lab.element),
-        TokenRef(_) => false,
-        Literal(_) => false,
-        Group(_) => false,
-        Repeat(_) => false,
-        Wildcard(_) => false,
-        Not(_) => false,
+        TokenRef(_) | Literal(_) | Group(_) | Repeat(_) | Wildcard(_) | Not(_) => false,
     };
 }
 
@@ -286,9 +281,7 @@ fn scan_element_contains_self_ref(se: &ScanElement, rule_snake: &String) -> bool
             }
             found;
         },
-        Token(_) => false,
-        Wildcard => false,
-        Excluded(_) => false,
+        Token(_) | Wildcard | Excluded(_) => false,
     };
 }
 
@@ -844,12 +837,7 @@ fn find_self_ref_rule_call(op: &Op, rule_name: &String) -> Option<&RuleCallOp> w
     return match op {
         RuleCall(rc) => if rc.target_name == *rule_name { Option::Some(rc) } else { null },
         ListLabel(ll) => find_self_ref_rule_call(&ll.inner, rule_name),
-        Token(_) => null,
-        Literal(_) => null,
-        Wildcard(_) => null,
-        Excluded(_) => null,
-        Repeat(_) => null,
-        Group(_) => null,
+        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) | Repeat(_) | Group(_) => null,
     };
 }
 
@@ -874,10 +862,7 @@ fn op_subtree_contains_self_ref(op: &Op, rule_name: &String) -> bool {
             }
             false;
         },
-        Token(_) => false,
-        Literal(_) => false,
-        Wildcard(_) => false,
-        Excluded(_) => false,
+        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) => false,
     };
 }
 
@@ -908,9 +893,7 @@ fn op_first_has_lr(op: &Op, lr_first: &List<String>) -> bool {
     return match *op {
         Token(t) => first_contains(lr_first, &t.kind),
         Literal(l) => first_contains(lr_first, &l.kind),
-        RuleCall(_) => true,
-        Wildcard(_) => true,
-        Excluded(_) => true,
+        RuleCall(_) | Wildcard(_) | Excluded(_) => true,
         Repeat(r) => op_first_has_lr(&r.body, lr_first),
         Group(g) => {
             for let alt of &g.alts {
@@ -927,11 +910,7 @@ fn op_first_has_lr(op: &Op, lr_first: &List<String>) -> bool {
 /// True iff `op` can match the empty string.
 fn op_nullable(op: &Op) -> bool {
     return match *op {
-        Token(_) => false,
-        Literal(_) => false,
-        RuleCall(_) => false,
-        Wildcard(_) => false,
-        Excluded(_) => false,
+        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => false,
         Repeat(r) => match r.kind {
             RepeatKind::Star => true,
             RepeatKind::Optional => true,
@@ -1050,9 +1029,7 @@ fn stamp_op_follow(
 fn scan_first_has_lr(se: &ScanElement, lr_first: &List<String>) -> bool {
     return match *se {
         Token(t) => first_contains(lr_first, &t.kind),
-        RuleCall(_) => true,
-        Wildcard => true,
-        Excluded(_) => true,
+        RuleCall(_) | Wildcard | Excluded(_) => true,
         Repeat(r) => scan_first_has_lr(&r.body, lr_first),
         Group(g) => {
             for let alt of &g.alts {
@@ -1077,10 +1054,7 @@ fn scan_first_has_lr(se: &ScanElement, lr_first: &List<String>) -> bool {
 /// True iff `se` can match the empty string. Scan-side mirror of `op_nullable`.
 fn scan_nullable(se: &ScanElement) -> bool {
     return match *se {
-        Token(_) => false,
-        RuleCall(_) => false,
-        Wildcard => false,
-        Excluded(_) => false,
+        Token(_) | RuleCall(_) | Wildcard | Excluded(_) => false,
         Repeat(r) => match r.kind {
             RepeatKind::Star => true,
             RepeatKind::Optional => true,
@@ -1234,12 +1208,7 @@ fn compute_self_ref_prec_from_ops(
         let next_is_lr_op = match next_op {
             Token(t) => first_contains(lr_suffix_first_tokens, &t.kind),
             Literal(l) => first_contains(lr_suffix_first_tokens, &l.kind),
-            RuleCall(_) => false,
-            Wildcard(_) => false,
-            Excluded(_) => false,
-            Repeat(_) => false,
-            Group(_) => false,
-            ListLabel(_) => false,
+            RuleCall(_) | Wildcard(_) | Excluded(_) | Repeat(_) | Group(_) | ListLabel(_) => false,
         };
         if !next_is_lr_op {
             prec = 0;
@@ -1778,12 +1747,7 @@ pub fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
     return match *elem {
         RuleRef(r) => r.name == *rule_name,
         Label(lab) => element_is_self_ref(&lab.element, rule_name),
-        TokenRef(_) => false,
-        Literal(_) => false,
-        Group(_) => false,
-        Repeat(_) => false,
-        Wildcard(_) => false,
-        Not(_) => false,
+        TokenRef(_) | Literal(_) | Group(_) | Repeat(_) | Wildcard(_) | Not(_) => false,
     };
 }
 
@@ -2153,12 +2117,7 @@ fn surface_is_optional_repeat(elem: &Element) -> bool {
     return match elem {
         Repeat(rep) => rep.kind matches { Optional },
         Label(lab) => surface_is_optional_repeat(&lab.element),
-        Group(_) => false,
-        TokenRef(_) => false,
-        Literal(_) => false,
-        RuleRef(_) => false,
-        Wildcard(_) => false,
-        Not(_) => false,
+        Group(_) | TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => false,
     };
 }
 
@@ -2189,11 +2148,7 @@ fn surface_contains_variable_repeat(elem: &Element) -> bool {
             found;
         },
         Label(lab) => surface_contains_variable_repeat(&lab.element),
-        TokenRef(_) => false,
-        Literal(_) => false,
-        RuleRef(_) => false,
-        Wildcard(_) => false,
-        Not(_) => false,
+        TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => false,
     };
 }
 
@@ -2268,12 +2223,7 @@ fn surface_unwrap_optional(elem: &Element) -> &Element with stores[elem] {
     return match elem {
         Repeat(rep) => if rep.kind matches { Optional } { &rep.element } else { elem },
         Label(lab) => surface_unwrap_optional(&lab.element),
-        Group(_) => elem,
-        TokenRef(_) => elem,
-        Literal(_) => elem,
-        RuleRef(_) => elem,
-        Wildcard(_) => elem,
-        Not(_) => elem,
+        Group(_) | TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => elem,
     };
 }
 
@@ -3395,11 +3345,7 @@ fn compute_caller_follow_second(elements: &List<Element>, start: i32, ctx: &mut 
 /// surface predicate alive.
 fn element_has_field(elem: &Element) -> bool {
     return match elem {
-        TokenRef(_) => true,
-        Literal(_) => true,
-        RuleRef(_) => true,
-        Wildcard(_) => true,
-        Not(_) => true,
+        TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => true,
         Label(lab) => element_has_field(&lab.element),
         Group(g) => is_storable_group(&g.alternatives),
         Repeat(_) => false,
@@ -3602,14 +3548,8 @@ fn pick_greedy_strategy(specialised: Option<RepeatStrategy>) -> RepeatStrategy {
 /// * RuleRef inners that are unscannable (same reason).
 fn try_optional_scan_guard(inner: &Element, ctx: &mut GenContext) -> Option<RepeatStrategy> {
     let needs_guard = match *inner {
-        Group(_) => true,
-        RuleRef(_) => true,
-        TokenRef(_) => false,
-        Literal(_) => false,
-        Wildcard(_) => false,
-        Not(_) => false,
-        Label(_) => false,
-        Repeat(_) => false,
+        Group(_) | RuleRef(_) => true,
+        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) | Label(_) | Repeat(_) => false,
     };
     if !needs_guard {
         return null;
