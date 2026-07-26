@@ -1230,13 +1230,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// When the canonicalised name had an alias (`use { Foo as Bar }`),
     /// the returned key uses the *original* declaration name, so the index
     /// (whose key is `(decl_module, decl_name)`) matches.
-    /// Canonical impl-target key for a type named at a use site, for the
-    /// impl indexes. Goes through [`Self::canonical_decl_key`], so an alias
-    /// and its original resolve to the same key.
-    pub(crate) fn impl_target(&self, type_name: &str) -> trait_env::ImplTargetKey {
-        trait_env::ImplTargetKey::Decl(self.canonical_decl_key(type_name))
-    }
-
     pub(crate) fn canonical_decl_key(&self, name: &str) -> (ModuleSource, String) {
         super::elaborator::trait_query::canonical_decl_key_with(
             name,

@@ -1207,8 +1207,7 @@ impl TypeSystem {
         type_key: &Receiver,
         trait_name: &str,
     ) -> bool {
-        self.trait_env
-            .has_any_methodful_impl_by_receiver(type_key, trait_name)
+        self.trait_env.has_any_methodful_impl(type_key, trait_name)
             || self.blanket_trait_impl_applies(ctx, scope, type_key, trait_name)
     }
 
@@ -1223,10 +1222,10 @@ impl TypeSystem {
         type_args: Option<&[TypeId]>,
     ) -> bool {
         let trait_env = self.trait_env.clone();
-        {
-            for entry in trait_env.entries_by_receiver_vec(type_key) {
-                let (module_src, _) = &entry;
-                let Some(header) = trait_env.impl_headers.get(&entry) else {
+        if let Some(entries) = trait_env.impl_index.get(type_key) {
+            for entry in entries {
+                let (module_src, _) = entry;
+                let Some(header) = trait_env.impl_headers.get(entry) else {
                     continue;
                 };
                 let Some(impl_trait_name) = &header.trait_name else {
@@ -1835,10 +1834,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_env = self.tysys.trait_env.clone();
         let impl_infos: Vec<ImplInfo> = {
             let mut result = vec![];
-            {
-                let entries = trait_env.entries_by_receiver_vec(&Receiver::Type(type_name));
+            if let Some(entries) = trait_env.impl_index.get(&Receiver::Type(type_name)) {
                 for entry in entries {
-                    let Some(header) = trait_env.impl_headers.get(&entry) else {
+                    let Some(header) = trait_env.impl_headers.get(entry) else {
                         continue;
                     };
                     if header.trait_name.as_deref() == Some(trait_name)

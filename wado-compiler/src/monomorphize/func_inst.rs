@@ -1460,7 +1460,7 @@ impl Monomorphizer {
         if self
             .functions
             .trait_env
-            .has_any_methodful_impl_by_receiver(&Receiver::Type(newtype_name), trait_name)
+            .has_any_methodful_impl(&Receiver::Type(newtype_name), trait_name)
         {
             return tid;
         }

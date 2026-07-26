@@ -2663,11 +2663,9 @@ impl SynthesisCtx<'_, '_, '_> {
         let real = match scope {
             ImplScope::CurrentModule => {
                 self.trait_env
-                    .has_methodful_impl_by_receiver(&type_key, trait_name, &self.module)
+                    .has_methodful_impl(&type_key, trait_name, &self.module)
             }
-            ImplScope::AnyModule => self
-                .trait_env
-                .has_any_methodful_impl_by_receiver(&type_key, trait_name),
+            ImplScope::AnyModule => self.trait_env.has_any_methodful_impl(&type_key, trait_name),
         };
         real || self.pending_has(type_name, trait_name)
     }
