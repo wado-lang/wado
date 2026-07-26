@@ -257,19 +257,16 @@ scalar / payload-free matching today without committing to a heap-aware
 #### Phase C — aggregate values (struct / tuple done; variants and sequences deferred)
 
 - [x] `Value::Aggregate { type_id, fields }` — a struct or tuple whose every
-      field is itself a compile-time value. Fields are keyed by `field_index`
-      (the key `FieldAccess`, `StructLiteral`, and struct patterns all carry,
-      and the one the `ValueGraph` uses) and canonicalized to that order, so
-      structural equality does not depend on literal field order. A NIR
-      aggregate literal always lists every field — the elaborator fills
-      defaults and rejects omissions — so the value is complete and equality
-      is exact. `Value` and `Lattice` are `Clone`, no longer `Copy`.
+      field is itself a compile-time value. A struct and a tuple are the same
+      thing here: fields are keyed by `field_index`, which every reader
+      already carries, and canonicalized to that order, so structural
+      equality does not depend on literal field order. A NIR aggregate
+      literal always lists every field — the elaborator fills defaults and
+      rejects omissions — so the value is complete and equality is exact.
 - [x] Aggregates never leave the engine. The value pool models pure scalars,
-      so `Engine::replace_expr_with_value` declines an aggregate and
-      `const_fold_value_a` / `flow_fold_value_a` return scalars only: a
-      constant struct keeps its skeleton node and what folds is the scalars
-      projected out of it. This is what keeps extraction and WIR build
-      untouched by aggregate support.
+      so a constant struct keeps its skeleton node and what folds is the
+      scalars projected out of it. That is what keeps extraction and WIR
+      build untouched by aggregate support.
 - [x] Construction from `StructLiteral` / `TupleLiteral` (`Const` only when
       every field is constant; `NonConst` when a field is known
       non-constant), and projection through `FieldAccess` — out of a literal,
@@ -299,18 +296,10 @@ scalar / payload-free matching today without committing to a heap-aware
 - [x] Aggregate constants bind to a local only when every mention of that
       local merely reads the value — a field read's receiver or a `match` /
       `switch` scrutinee — and no store target, borrow, method receiver, or
-      mutable argument roots at it (`aggregate_safe_locals`, recorded per
-      function). niri models whole values, not the heap: a local another
-      handle can write through would go stale. Scalars keep their previous
-      behaviour exactly — they carry no fields, so no handle can change them
-      in place.
-- [x] Unit tests at `wado-compiler/tests/niri.rs` cover construction, field
-      order canonicalization, unknown / non-constant fields, nested and tuple
-      projection, struct and tuple patterns (match, mismatch, rest, binding,
-      mismatch-despite-binding), aggregate call arguments and results, and
-      the read-only-local gate. E2E fixture `niri_struct_call_fold.wado`
-      checks the observable fold: a struct-taking `#[inline(never)]` function
-      called with a struct literal becomes a literal at -O2.
+      mutable argument roots at it. niri models whole values, not the heap: a
+      local another handle can write through would go stale. Scalars keep
+      their previous behaviour exactly — they carry no fields, so no handle
+      can change them in place.
 - [ ] `Value::Enum { case_index, type_id }` / `Value::Variant { tag, payload }`
       and payload bindings. Gated on Phase B's tag pruning and on a real
       consumer (Stage 3 inlining producing residual matches over
