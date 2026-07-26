@@ -1,0 +1,64 @@
+// Regression: an or-pattern or a range nested inside a struct / tuple pattern.
+// The or-pattern panicked the refutable-extraction lowering ("unsupported
+// nested pattern"), and a nested range was dropped from it altogether — no
+// condition was emitted, so the arm matched whatever the field held.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    x: i32,
+    y: i32,
+}
+
+fn or_in_struct(p: P) -> i32 {
+    return match p {
+        { x: 1 | 2, y } => y,
+        _ => -1,
+    };
+}
+
+fn or_in_tuple(pair: [i32, i32]) -> i32 {
+    return match pair {
+        [1 | 3, v] => v,
+        _ => -1,
+    };
+}
+
+fn inclusive_range_in_struct(p: P) -> i32 {
+    return match p {
+        { x: 10..=20, y } => y,
+        _ => -1,
+    };
+}
+
+fn exclusive_range_in_tuple(pair: [i32, i32]) -> i32 {
+    return match pair {
+        [10..<20, v] => v,
+        _ => -1,
+    };
+}
+
+fn char_range_in_tuple(pair: [char, i32]) -> i32 {
+    return match pair {
+        ['a'..='f', v] => v,
+        _ => -1,
+    };
+}
+
+export fn run() with Stdout {
+    println(`${or_in_struct(P { x: 2, y: 7 })}`);
+    println(`${or_in_struct(P { x: 5, y: 7 })}`);
+    println(`${or_in_tuple([3, 9])}`);
+    println(`${or_in_tuple([4, 9])}`);
+    println(`${inclusive_range_in_struct(P { x: 20, y: 8 })}`);
+    println(`${inclusive_range_in_struct(P { x: 21, y: 8 })}`);
+    println(`${exclusive_range_in_tuple([19, 5])}`);
+    println(`${exclusive_range_in_tuple([20, 5])}`);
+    println(`${char_range_in_tuple(['c', 6])}`);
+    println(`${char_range_in_tuple(['z', 6])}`);
+}
+
+__DATA__
+{
+    "stdout": "7\n-1\n9\n-1\n8\n-1\n5\n-1\n6\n-1\n"
+}
