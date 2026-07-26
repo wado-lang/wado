@@ -28,6 +28,10 @@ enum ScalarReflectKind {
 /// substituted.
 struct ReflectSubject {
     base_name: String,
+    /// The declaring module, carried from the resolved subject. Re-deriving it
+    /// from `base_name` picks whichever same-named declaration a name lookup
+    /// reaches first, so `P2<i32>` would reflect `p1`'s `Pair`.
+    module_source: crate::module_source::ModuleSource,
     type_args: Vec<TypeId>,
     member_types: Vec<TypeId>,
 }
@@ -119,11 +123,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let ReflectSubject {
             base_name: self_name,
+            module_source,
             type_args,
             member_types: field_types,
         } = subject;
 
-        let (reflect_trait_name, members_method, wire_name_policy_method, module_source) = {
+        let (reflect_trait_name, members_method, wire_name_policy_method) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -136,7 +141,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 items
                     .method_name(crate::compiler_item::CompilerItem::ReflectStructWireNamePolicy)
                     .to_string(),
-                self.find_struct_module_source(&self_name),
             )
         };
 
@@ -373,21 +377,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// in declaration order with those args substituted. `None` when `T` is not
     /// a struct (the only reflectable kind).
     fn reflect_struct_subject(&self, self_ty: TypeId) -> Option<ReflectSubject> {
-        let (base_name, type_args) = match self.tysys.type_table.borrow().get(self_ty).clone() {
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => (name, type_args),
-            _ => (
-                self.tysys.type_table.borrow().type_name(self_ty),
-                Vec::new(),
-            ),
-        };
-        let info = self.type_lookup().struct_fields(&base_name)?;
+        let (base_name, module_source, type_args) =
+            match self.tysys.type_table.borrow().get(self_ty).clone() {
+                ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    type_args,
+                } => (name, module_source, type_args),
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    ..
+                } => (name, module_source, Vec::new()),
+                _ => {
+                    let name = self.tysys.type_table.borrow().type_name(self_ty);
+                    let module_source = self.find_struct_module_source(&name);
+                    (name, module_source, Vec::new())
+                }
+            };
+        let info = self
+            .type_lookup()
+            .struct_fields_in(&base_name, &module_source)?;
         let declared: Vec<TypeId> = info.fields.iter().map(|(_, ty, _)| *ty).collect();
         let param_ids = info.type_param_type_ids.clone();
         Some(ReflectSubject {
             member_types: self.substitute_declared_params(&declared, &param_ids, &type_args),
             base_name,
+            module_source,
             type_args,
         })
     }
@@ -397,19 +413,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// payloads in declaration order with those args substituted. `None` when
     /// `T` is not a variant.
     fn reflect_variant_subject(&self, self_ty: TypeId) -> Option<ReflectSubject> {
-        let (base_name, type_args) = match self.tysys.type_table.borrow().get(self_ty).clone() {
-            ResolvedType::Variant { name, .. } => (name, Vec::new()),
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => (name, type_args),
-            _ => return None,
-        };
-        let info = self.lookup_variant_case(&base_name)?;
+        let (base_name, module_source, type_args) =
+            match self.tysys.type_table.borrow().get(self_ty).clone() {
+                ResolvedType::Variant {
+                    name,
+                    module_source,
+                    ..
+                } => (name, module_source, Vec::new()),
+                ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    type_args,
+                } => (name, module_source, type_args),
+                _ => return None,
+            };
+        let info = self
+            .type_lookup()
+            .variant_case_in(&base_name, &module_source)?;
         let declared: Vec<TypeId> = info.cases.iter().map(|c| c.payload).collect();
         let param_ids = info.type_param_type_ids.clone();
         Some(ReflectSubject {
             member_types: self.substitute_declared_params(&declared, &param_ids, &type_args),
             base_name,
+            module_source,
             type_args,
         })
     }
@@ -581,11 +607,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let ReflectSubject {
             base_name: self_name,
+            module_source,
             type_args,
             member_types: payloads,
         } = subject;
 
-        let (trait_name, discriminant_method, cases_method, wire_name_policy_method, module_source) = {
+        let (trait_name, discriminant_method, cases_method, wire_name_policy_method) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -599,7 +626,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 items
                     .method_name(CompilerItem::ReflectVariantWireNamePolicy)
                     .to_string(),
-                self.find_struct_module_source(&self_name),
             )
         };
 

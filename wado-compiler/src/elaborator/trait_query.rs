@@ -617,10 +617,14 @@ impl TypeSystem {
         }
     }
 
-    /// Whether a reflection written at `scope`'s module can enumerate any of
-    /// `info`'s fields (WEP 2026-06-13, Visibility). False only when the struct
-    /// declares fields but exposes none there, leaving its shape unobservable;
-    /// a struct that declares no field at all is genuinely memberless.
+    /// Whether a reflection written at `scope`'s module can enumerate `info`'s
+    /// fields (WEP 2026-06-13, Visibility).
+    ///
+    /// Every field must be reachable, not merely one. A declaration carries a
+    /// single synthesized impl whose `members()` is fixed, so it cannot hand a
+    /// shortened list to a caller that may see less — admitting the struct on
+    /// one public field would enumerate the private ones alongside it. The
+    /// shape is observable as a whole or not at all.
     ///
     /// Visibility decides only this. Eligibility itself is a property of the
     /// declaration, so [`Self::is_reflect_eligible`] always sees every field —
@@ -632,7 +636,7 @@ impl TypeSystem {
         let same_package = info.module_source.same_package(scope.current_module_source);
         info.fields
             .iter()
-            .any(|(_, _, vis)| vis.reachable_from(same_package))
+            .all(|(_, _, vis)| vis.reachable_from(same_package))
     }
 
     /// Whether a declaration can be reflected, via the shared eligibility

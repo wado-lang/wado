@@ -3186,12 +3186,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or(struct_name);
 
         // Get expected field types using (name, module_source) lookup.
+        //
+        // An annotation naming this struct's instantiation pins the declared
+        // parameters, so substitute them: `let c: P<u32> = P { left: 8, … }`
+        // must expect `u32` for `left`, not the bare `T` a literal cannot be
+        // typed by — it would settle on the default `i32` and then mismatch.
+        let expected_args =
+            expected_type.and_then(|ty| match self.tysys.type_table.borrow().get(ty) {
+                ResolvedType::GenericInstance {
+                    name, type_args, ..
+                } if *name == struct_name => Some(type_args.clone()),
+                _ => None,
+            });
         let struct_field_types: Vec<(String, TypeId)> = self
             .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .map(|info| {
-                info.fields
+                let params = info.type_param_type_ids.clone();
+                let fields: Vec<(String, TypeId)> = info
+                    .fields
                     .iter()
                     .map(|(name, type_id, _)| (name.clone(), *type_id))
+                    .collect();
+                let Some(args) = expected_args.filter(|a| a.len() == params.len()) else {
+                    return fields;
+                };
+                let mut tt = self.tysys.type_table.borrow_mut();
+                let substitution: crate::hashmap::IndexMap<u32, TypeId> = params
+                    .iter()
+                    .zip(args.iter())
+                    .filter_map(|(param, arg)| match tt.get(*param) {
+                        ResolvedType::TypeParam { index, .. }
+                        | ResolvedType::TypePack { index, .. } => Some((*index, *arg)),
+                        _ => None,
+                    })
+                    .collect();
+                fields
+                    .into_iter()
+                    .map(|(name, type_id)| {
+                        (name, tt.substitute_type_params(type_id, &substitution))
+                    })
                     .collect()
             })
             .unwrap_or_default();

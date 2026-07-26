@@ -135,15 +135,23 @@ without bound. They are not reflectable, by the same seal that rejects a user
 
 ## Visibility
 
-A type's reflected members are the ones visible where the reflection is written.
-A derived impl is synthesized at the declaration, so it sees every member and
-derivation is unaffected; a `T: Reflect*` bound elsewhere sees only the members
-that are public there.
+A type satisfies a `T: Reflect*` bound only where every one of its members is
+visible. A declaration carries a single synthesized impl, so `members()` is
+fixed and cannot be shortened for a caller that sees less; admitting a type on
+one public member would enumerate its private ones alongside it. The shape is
+observable as a whole or not at all. A type declaring no member is genuinely
+memberless and always satisfies.
 
-A type that declares members but exposes none at the use site does not satisfy
-the bound. Reflecting it as memberless would silently derive `{}` instead of
-reporting that its shape is unobservable there — a type that declares no members
-at all is genuinely memberless and still satisfies. This is what keeps an abstraction like `TreeMap` out
+This gates reflection written *about* a type, not the impls derived *for* it. A
+derived impl is synthesized at the declaration, where every member is visible,
+so `${v:?}` and serde keep rendering a foreign type in full — that is the
+declaring module's own choice of representation, the same as deriving it by
+hand. What visibility withholds is a third party enumerating a shape its owner
+did not expose.
+
+This is what keeps an abstraction like `TreeMap` out of a downstream
+`T: ReflectStruct` without naming it: its fields are private, so nothing outside
+its module can enumerate them. This is what keeps an abstraction like `TreeMap` out
 of a downstream `T: ReflectStruct` without naming it: its fields are private, so
 nothing outside its module can enumerate them.
 
@@ -175,12 +183,11 @@ Two rules bound what is reflectable, and both are load-bearing:
   reflectable. An iterator adapter's `pub f: fn mut(I::Item) -> U` needs the
   bound's impl to resolve `I::Item`, which per-instantiation substitution does
   not consult, so the member cannot be named.
-- A type whose members are all hidden at the use site is not reflectable there
-  (see [Visibility](#visibility)). This is what leaves `TreeMap`'s hand-written
-  `Inspect` as the only candidate: a generic instance's mangled name
-  (`TreeMap<String, i32>`) does not match the impl written for `TreeMap`, so
-  the derivation would otherwise take it — but its fields are private, so
-  nothing outside its module can enumerate them.
+- A type whose members are not all visible at the use site is not reflectable
+  there (see [Visibility](#visibility)). This is what leaves `TreeMap`'s
+  hand-written `Inspect` as the only candidate: a generic instance's mangled
+  name (`TreeMap<String, i32>`) does not match the impl written for `TreeMap`,
+  so the derivation would otherwise take it.
 
 One further consequence follows from a generic type's members being generic
 structs themselves:

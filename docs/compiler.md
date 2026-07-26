@@ -17,7 +17,7 @@ Source (.wado)
   → Effect Check → Stores Check
   → Effect Dispatch (post-check: WithHandler / Resume desugaring)
   → Link (Package → FlatPackage)
-  → Monomorphize → Reflect Bridges → Erase Newtypes & Flags
+  → Monomorphize → Erase Newtypes & Flags → Reflect Bridges
   → Lower
   → Optimize
   → WIR Build → WIR Optimize → Codegen
@@ -38,6 +38,7 @@ The driver is `compile_after_load` in `src/lib.rs`.
 | Effect Dispatch (post) | TIR             | `synthesis/effect_dispatch.rs`                   |
 | Link                   | `FlatPackage`   | `link.rs`                                        |
 | Monomorphize           | `FlatPackage`   | `monomorphize/`                                  |
+| Erase Newtypes & Flags | `FlatPackage`   | `tir.rs`                                         |
 | Reflect Bridges (post) | `FlatPackage`   | `synthesis/reflect_bridge.rs`                    |
 | Lower                  | `NirPackage`    | `lower/`                                         |
 | Optimize               | `NirPackage`    | `optimize/`                                      |

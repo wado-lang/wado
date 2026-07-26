@@ -1839,7 +1839,8 @@ fn variant_tag_body(ref_variant_type: TypeId, variant_type: TypeId, span: Span) 
 }
 
 /// The `discriminant` of one instantiated generic variant, as a free function
-/// under the name lowering builds from the instance (`V<A>^ReflectVariant::…`).
+/// under the tag-helper name lowering builds from the instance
+/// (`$variant_tag$<mangle>`).
 ///
 /// It cannot be a method: the method-name machinery rejects type arguments in a
 /// base struct name, the same reason the value bridges are free functions.

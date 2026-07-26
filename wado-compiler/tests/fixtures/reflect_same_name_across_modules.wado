@@ -1,0 +1,29 @@
+use { Pair, Solo as SoloA, Case as CaseA } from "./sub/reflect_collide_a.wado";
+use { Pair as P2, Solo, Case } from "./sub/reflect_collide_b.wado";
+
+test "a generic struct reflects the declaration it was named from" {
+    let mut s = "";
+    for let f of ReflectStruct::<P2<i32>>::members() {
+        s = `${s}${f.name()};`;
+    }
+    assert s == "b;c;";
+}
+
+test "a plain struct reflects the declaration it was named from" {
+    let mut s = "";
+    for let f of ReflectStruct::<Solo>::members() {
+        s = `${s}${f.name()};`;
+    }
+    assert s == "z;w;";
+}
+
+test "a variant reflects the declaration it was named from" {
+    let mut s = "";
+    for let c of ReflectVariant::<Case>::members() {
+        s = `${s}${c.name()};`;
+    }
+    assert s == "Y;Z;";
+}
+
+__DATA__
+{"test": {}}
