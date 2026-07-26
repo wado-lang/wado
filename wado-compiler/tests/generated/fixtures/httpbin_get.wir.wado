@@ -1136,7 +1136,8 @@ global global:core:prelude/traits.wado::__const_obj_291: ref null "core:prelude/
 global global:core:prelude/traits.wado::__const_obj_292: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 };
 global global:core:prelude/traits.wado::__const_obj_293: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 32), used: 3 };
 global global:core:prelude/traits.wado::__const_obj_294: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
-global global:core:prelude/traits.wado::__const_obj_297: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83, 101, 114, 105, 97, 108, 105, 122, 101, 69, 114, 114, 111, 114), used: 14 };
+global mut global:core:prelude/traits.wado::__const_obj_297: ref null "tuple//[core:prelude/traits.wado/StructField<core:serde/SerializeError,core:serde/SerializeErrorKind>, core:prelude/traits.wado/StructField<core:serde/SerializeError,core:prelude/string.wado/String>]" = ref.null none;
+global global:core:prelude/traits.wado::__const_obj_298: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83, 101, 114, 105, 97, 108, 105, 122, 101, 69, 114, 114, 111, 114), used: 14 };
 
 fn "httpbin_get.wado/handle"(request) {
     let p: ref "core:prelude/string.wado//String";
@@ -6804,7 +6805,6 @@ fn "core:prelude/slice.wado/ArrayRefIter<core:value/Value>^Iterator::next"(self)
 fn "core:prelude/traits.wado/core:serde/SerializeError^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<core:serde/SerializeError,core:serde/SerializeErrorKind>, core:prelude/traits.wado/StructField<core:serde/SerializeError,core:prelude/string.wado/String>]";
     let field_6: ref "core:prelude/traits.wado//StructField<core:serde/SerializeError,core:serde/SerializeErrorKind>";
     let field_7: ref "core:prelude/traits.wado//StructField<core:serde/SerializeError,core:prelude/string.wado/String>";
     let s_9: ref "core:prelude/string.wado//String";
@@ -6817,12 +6817,14 @@ fn "core:prelude/traits.wado/core:serde/SerializeError^Inspect::inspect"(self, f
     let s_37: ref "core:prelude/string.wado//String";
     let s_39: ref "core:prelude/string.wado//String";
     let s_41: ref "core:prelude/string.wado//String";
-    s_9 = global:core:prelude/traits.wado::__const_obj_297;
+    s_9 = global:core:prelude/traits.wado::__const_obj_298;
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "core:serde/SerializeError^ReflectStruct::members"();
-    field_6 = __tuple_4.0;
+    if ref.is_null(global:core:prelude/traits.wado::__const_obj_297) {
+        global:core:prelude/traits.wado::__const_obj_297 = "core:serde/SerializeError^ReflectStruct::members"();
+    }
+    field_6 = global:core:prelude/traits.wado::__const_obj_297.0;
     if field_6.is_secret {
         has_secret = 1;
     } else {
@@ -6838,7 +6840,7 @@ fn "core:prelude/traits.wado/core:serde/SerializeError^Inspect::inspect"(self, f
             unreachable;
         }) }, f);
     }
-    field_7 = __tuple_4.1;
+    field_7 = global:core:prelude/traits.wado::__const_obj_297.1;
     if field_7.is_secret {
         has_secret = 1;
     } else {

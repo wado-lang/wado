@@ -918,6 +918,20 @@ fn lookup(self, key: String) -> i32 {
 }
 ```
 
+### Optimization Barrier
+
+`builtin::black_box(value)` returns `value` unchanged but never as a
+compile-time constant, so a computation reading it is not folded away. It emits
+no instruction. Use it to keep a test or benchmark measuring the work it names:
+
+```wado
+test "sign extension folds the redundant mask" {
+    assert to_i8(builtin::black_box(300)) == 44;
+}
+```
+
+Without it, `to_i8(300)` folds to `44` and the test no longer reaches `to_i8`.
+
 ## Memory Model
 
 ### Core Principles

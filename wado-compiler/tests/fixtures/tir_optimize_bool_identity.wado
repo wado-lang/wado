@@ -1,6 +1,9 @@
 // Test: boolean identity folding eliminates redundant short-circuit operators.
 //
 // `false || x` folds to `x`, `true && x` folds to `x`.
+//
+// `black_box` keeps the arguments off const-folding's radar so the calls
+// survive and the folded bodies stay in the WIR.
 
 use { println, Stdout } from "core:cli";
 
@@ -15,10 +18,10 @@ fn test_and_identity(x: bool) -> bool {
 }
 
 export fn run() with Stdout {
-    println(`${test_or_identity(true)}`);
-    println(`${test_or_identity(false)}`);
-    println(`${test_and_identity(true)}`);
-    println(`${test_and_identity(false)}`);
+    println(`${test_or_identity(builtin::black_box(true))}`);
+    println(`${test_or_identity(builtin::black_box(false))}`);
+    println(`${test_and_identity(builtin::black_box(true))}`);
+    println(`${test_and_identity(builtin::black_box(false))}`);
 }
 
 __DATA__

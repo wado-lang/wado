@@ -3805,11 +3805,13 @@ fn ctfe_eligibility_rejects_async() {
 }
 
 #[test]
-fn ctfe_eligibility_rejects_inline_never() {
+fn ctfe_eligibility_accepts_inline_never() {
+    // `#[inline(never)]` constrains where the body is emitted, not whether the
+    // result is knowable at compile time.
     let body = return_stmt(int_lit(1, TypeTable::I32, "1"));
     let mut f = make_pure_fn("f", vec![], TypeTable::I32, body);
     f.inline_hint = InlineHint::Never;
-    assert!(!is_ctfe_eligible(&f));
+    assert!(is_ctfe_eligible(&f));
 }
 
 #[test]

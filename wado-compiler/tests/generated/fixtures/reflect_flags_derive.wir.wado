@@ -172,6 +172,7 @@ global global:reflect_flags_derive.wado::__const_obj_10: ref null "core:prelude/
 global global:core:prelude/format.wado::__const_obj_14: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
 global global:core:prelude/format.wado::__const_obj_15: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
 global global:reflect_flags_derive.wado::__const_obj_16: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global mut global:reflect_flags_derive.wado::__const_obj_19: ref null "tuple//[core:prelude/traits.wado/FlagsBit<reflect_flags_derive.wado/Perms>, core:prelude/traits.wado/FlagsBit<reflect_flags_derive.wado/Perms>, core:prelude/traits.wado/FlagsBit<reflect_flags_derive.wado/Perms>]" = ref.null none;
 
 fn "reflect_flags_derive.wado/__test_1_from_raw_derives_through_the_bound"() {
     let p: u32;
@@ -858,7 +859,6 @@ fn "reflect_flags_derive.wado/reflect_flags_derive.wado/Perms^BitNames::bit_name
     let out: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
-    let __tuple_2: ref "tuple//[core:prelude/traits.wado/FlagsBit<reflect_flags_derive.wado/Perms>, core:prelude/traits.wado/FlagsBit<reflect_flags_derive.wado/Perms>, core:prelude/traits.wado/FlagsBit<reflect_flags_derive.wado/Perms>]";
     let b_6: ref "core:prelude/traits.wado//FlagsBit<reflect_flags_derive.wado/Perms>";
     let b_7: ref "core:prelude/traits.wado//FlagsBit<reflect_flags_derive.wado/Perms>";
     let __local_8: ref "core:prelude/string.wado//String";
@@ -870,8 +870,10 @@ fn "reflect_flags_derive.wado/reflect_flags_derive.wado/Perms^BitNames::bit_name
     let start_32: i32;
     let start_46: i32;
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    __tuple_2 = "reflect_flags_derive.wado/Perms^ReflectFlags::members"();
-    b_6 = __tuple_2.0;
+    if ref.is_null(global:reflect_flags_derive.wado::__const_obj_19) {
+        global:reflect_flags_derive.wado::__const_obj_19 = "reflect_flags_derive.wado/Perms^ReflectFlags::members"();
+    }
+    b_6 = global:reflect_flags_derive.wado::__const_obj_19.0;
     if (builtin::i64_extend_i32_u(self.value) & b_6.bit) != 0_i64 {
         if "core:prelude/string.wado/String^Eq::eq"(out, global:reflect_flags_derive.wado::__const_obj_16) == 0 {
             __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
@@ -885,7 +887,7 @@ fn "reflect_flags_derive.wado/reflect_flags_derive.wado/Perms^BitNames::bit_name
         "core:prelude/string.wado/String::push_str"(__local_4, b_6.member_name);
         out = __local_4;
     }
-    b_7 = __tuple_2.1;
+    b_7 = global:reflect_flags_derive.wado::__const_obj_19.1;
     if (builtin::i64_extend_i32_u(self.value) & b_7.bit) != 0_i64 {
         if "core:prelude/string.wado/String^Eq::eq"(out, global:reflect_flags_derive.wado::__const_obj_16) == 0 {
             __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
@@ -899,7 +901,7 @@ fn "reflect_flags_derive.wado/reflect_flags_derive.wado/Perms^BitNames::bit_name
         "core:prelude/string.wado/String::push_str"(__local_9, b_7.member_name);
         out = __local_9;
     }
-    b_10 = __tuple_2.2;
+    b_10 = global:reflect_flags_derive.wado::__const_obj_19.2;
     if (builtin::i64_extend_i32_u(self.value) & b_10.bit) != 0_i64 {
         if "core:prelude/string.wado/String^Eq::eq"(out, global:reflect_flags_derive.wado::__const_obj_16) == 0 {
             __local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };

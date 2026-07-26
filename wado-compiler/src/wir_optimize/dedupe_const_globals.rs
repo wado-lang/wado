@@ -20,11 +20,10 @@
 //!   `ref.eq` is absent from ordinary programs (it needs an explicit
 //!   `&a == &b`), the pass simply **bails entirely if the module contains any
 //!   `ref.eq`**. Conservative and cheap.
-//! - **Slot metadata.** Codegen reads `lazy_init` / nullability *by name*
-//!   (`is_lazy_init_global` decides whether a `global.get` is narrowed with
-//!   `ref.as_non_null`), so two globals are merged only when their `lazy_init`,
-//!   `is`-nullable type, and `wado_mutable` all match — folded into the group
-//!   key alongside the structural `(ty, init)`.
+//! - **Slot metadata.** Slot nullability decides whether codegen narrows a
+//!   `global.get` with `ref.as_non_null`, so two globals are merged only when
+//!   their `lazy_init`, `is`-nullable type, and `wado_mutable` all match —
+//!   folded into the group key alongside the structural `(ty, init)`.
 //! - **Exports.** An exported global is never merged away (its export names it).
 //!
 //! ## Removal

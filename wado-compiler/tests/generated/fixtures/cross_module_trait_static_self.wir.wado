@@ -146,7 +146,8 @@ global global:core:prelude/traits.wado::__const_obj_8: ref null "core:prelude/st
 global global:core:prelude/traits.wado::__const_obj_9: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 };
 global global:core:prelude/traits.wado::__const_obj_10: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 32), used: 3 };
 global global:core:prelude/traits.wado::__const_obj_11: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
-global global:core:prelude/traits.wado::__const_obj_14: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80, 111, 105, 110, 116), used: 5 };
+global mut global:core:prelude/traits.wado::__const_obj_14: ref null "tuple//[core:prelude/traits.wado/StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>, core:prelude/traits.wado/StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>]" = ref.null none;
+global global:core:prelude/traits.wado::__const_obj_15: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80, 111, 105, 110, 116), used: 5 };
 
 fn "cross_module_trait_static_self.wado/__test_0_cross_module_trait_associated_fn_returning_self"() {
     let __local_12: ref "core:prelude/string.wado//String";
@@ -533,7 +534,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/traits.wado/./sub/cross_module_trait_static_self_lib.wado/Point^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>, core:prelude/traits.wado/StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>]";
     let field_6: ref "core:prelude/traits.wado//StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>";
     let field_7: ref "core:prelude/traits.wado//StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>";
     let s_9: ref "core:prelude/string.wado//String";
@@ -548,12 +548,14 @@ fn "core:prelude/traits.wado/./sub/cross_module_trait_static_self_lib.wado/Point
     let s_45: ref "core:prelude/string.wado//String";
     let s_47: ref "core:prelude/string.wado//String";
     let s_49: ref "core:prelude/string.wado//String";
-    s_9 = global:core:prelude/traits.wado::__const_obj_14;
+    s_9 = global:core:prelude/traits.wado::__const_obj_15;
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "./sub/cross_module_trait_static_self_lib.wado/Point^ReflectStruct::members"();
-    field_6 = __tuple_4.0;
+    if ref.is_null(global:core:prelude/traits.wado::__const_obj_14) {
+        global:core:prelude/traits.wado::__const_obj_14 = "./sub/cross_module_trait_static_self_lib.wado/Point^ReflectStruct::members"();
+    }
+    field_6 = global:core:prelude/traits.wado::__const_obj_14.0;
     if field_6.is_secret {
         has_secret = 1;
     } else {
@@ -571,7 +573,7 @@ fn "core:prelude/traits.wado/./sub/cross_module_trait_static_self_lib.wado/Point
             unreachable;
         })), f);
     }
-    field_7 = __tuple_4.1;
+    field_7 = global:core:prelude/traits.wado::__const_obj_14.1;
     if field_7.is_secret {
         has_secret = 1;
     } else {

@@ -66,7 +66,7 @@ use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtId, StmtKind,
+    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 
 /// Read / write flags for a single state channel (e.g., GC heap or
@@ -739,6 +739,204 @@ pub(super) fn can_move_past(expr_mr: &ModRef, int_mr: &ModRef, candidate: u32) -
         return false;
     }
     true
+}
+
+// ---------------------------------------------------------------------------
+// Per-callee summaries
+// ---------------------------------------------------------------------------
+
+/// What a function does to machine state its caller can observe, resolved
+/// transitively across the call graph.
+///
+/// The per-expression [`ModRef`] above stops at a call boundary (`calls =
+/// true`, "callees may touch any global / heap / memory state we cannot
+/// see"). This is the callee-side refinement that module doc promises.
+///
+/// Only three channels are modelled, because only three survive a call whose
+/// arguments are freshly constructed at the call site:
+///
+/// - **globals** and **linear memory** are process-wide mutable state, so
+///   reading them makes a result depend on more than the arguments, and
+///   writing them is observable by everyone.
+/// - **I/O** (component-model calls) is observable by definition.
+///
+/// The **GC heap is deliberately absent**. A callee that mutates heap objects
+/// is still deterministic from its caller's point of view as long as the
+/// objects are ones it allocated itself or received as arguments — and a
+/// reference cannot outlive the call into caller-visible state, because
+/// `stores` (checked by the client) is what would let it escape.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(super) struct FnEffect {
+    /// Reads process-wide mutable state (a global, or linear memory), so two
+    /// calls with equal arguments may disagree.
+    pub reads_mutable_state: bool,
+    /// Writes a global or linear memory.
+    pub writes_state: bool,
+    /// Does component-model I/O, or contains something the analysis cannot
+    /// see through (an indirect call, a bodyless non-builtin).
+    pub opaque: bool,
+}
+
+impl FnEffect {
+    /// Deterministic and observation-free: equal arguments give equal
+    /// results, and collapsing repeated calls into one is unobservable.
+    ///
+    /// Says nothing about termination or trapping — a caller that changes
+    /// *when* the call runs must reason about those separately.
+    pub fn is_pure(&self) -> bool {
+        !self.reads_mutable_state && !self.writes_state && !self.opaque
+    }
+
+    fn opaque() -> Self {
+        Self {
+            reads_mutable_state: true,
+            writes_state: true,
+            opaque: true,
+        }
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.reads_mutable_state |= other.reads_mutable_state;
+        self.writes_state |= other.writes_state;
+        self.opaque |= other.opaque;
+    }
+}
+
+/// Linear-memory primitives. Every other non-canonical builtin is arithmetic,
+/// a lane / bit operation, or a GC-array access — none of which touch a
+/// channel that survives the call boundary.
+///
+/// Wado spells a linear-memory address as a plain `i32`, so these carry no
+/// `&mut` to give them away: the list is the ground truth.
+fn memory_builtin_effect(name: &str) -> Option<FnEffect> {
+    let reads = matches!(
+        name,
+        "i32_load"
+            | "i64_load"
+            | "f32_load"
+            | "f64_load"
+            | "i32_load8_u"
+            | "i32_load8_s"
+            | "i32_load16_u"
+            | "i32_load16_s"
+            | "v128_load"
+            | "memory_size"
+    );
+    let writes = matches!(
+        name,
+        "i32_store"
+            | "i64_store"
+            | "f32_store"
+            | "f64_store"
+            | "i32_store8"
+            | "i32_store16"
+            | "v128_store"
+            | "memory_fill"
+            | "memory_grow"
+            | "realloc"
+    );
+    (reads || writes).then_some(FnEffect {
+        reads_mutable_state: reads || writes,
+        writes_state: writes,
+        opaque: false,
+    })
+}
+
+/// Leaf summary for a bodyless function.
+///
+/// A builtin carrying a `canonical_name` is a component-model operation
+/// (streams, futures, waitables, tasks, threads) — I/O, hence opaque. The rest
+/// are Wasm instructions: opaque only when they touch linear memory.
+/// Anything bodyless that is not a builtin at all (an extern declaration) is
+/// opaque, since there is no body to inspect.
+fn leaf_effect(
+    f: &crate::nir::NirFunction,
+    registry: &crate::builtin_registry::BuiltinRegistry,
+) -> FnEffect {
+    let fref = crate::nir::FunctionRef::from_resolved(f, f.module_source.clone());
+    let Some(qualified) = fref
+        .builtin_name()
+        .or_else(|| fref.monomorphized_builtin_name())
+    else {
+        return FnEffect::opaque();
+    };
+    let bare = qualified.strip_prefix("builtin::").unwrap_or(&qualified);
+    if registry
+        .get(bare)
+        .is_some_and(|info| info.canonical_name.is_some())
+    {
+        return FnEffect::opaque();
+    }
+    memory_builtin_effect(bare).unwrap_or_default()
+}
+
+/// Resolve [`FnEffect`] for every function, indexed by `func_id.index()`.
+///
+/// Least fixpoint from "pure until a reason appears": a function starts at its
+/// own body's contribution, then absorbs each callee's summary until stable.
+/// A cycle of mutually recursive functions that never touch a channel stays
+/// pure, which is what makes ordinary recursive helpers usable.
+pub(super) fn compute_fn_effects(
+    funcs: &[std::rc::Rc<std::cell::RefCell<crate::nir::NirFunction>>],
+    registry: &crate::builtin_registry::BuiltinRegistry,
+) -> Vec<FnEffect> {
+    use cranelift_entity::EntityRef;
+
+    let mut effects = vec![FnEffect::default(); funcs.len()];
+    let mut callees: Vec<IndexSet<usize>> = vec![IndexSet::default(); funcs.len()];
+
+    for (i, f) in funcs.iter().enumerate() {
+        let f = f.borrow();
+        let Some(body) = &f.body else {
+            effects[i] = leaf_effect(&f, registry);
+            continue;
+        };
+        let mut own = FnEffect::default();
+        let mut stack = vec![NodeRef::Block(body.root)];
+        while let Some(node) = stack.pop() {
+            if let NodeRef::Expr(id) = node {
+                match &body.exprs[id].kind {
+                    ExprKind::GlobalVarGet { .. } => own.reads_mutable_state = true,
+                    ExprKind::GlobalVarSet { .. } => own.writes_state = true,
+                    ExprKind::CmRawCall { .. } | ExprKind::IndirectCall { .. } => {
+                        own.opaque = true;
+                    }
+                    ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => {
+                        callees[i].insert(func_id.index());
+                    }
+                    _ => {}
+                }
+            }
+            body.for_each_child(node, |c| stack.push(c));
+        }
+        // A declared effect or a `stores` clause is a caller-visible promise in
+        // its own right; treat either as opaque rather than re-deriving it.
+        if !f.effects.is_empty() || !f.stores.is_empty() || f.is_async {
+            own.opaque = true;
+        }
+        effects[i] = own;
+    }
+
+    loop {
+        let mut changed = false;
+        for i in 0..effects.len() {
+            let merged = callees[i]
+                .iter()
+                .filter_map(|&c| effects.get(c).copied())
+                .fold(effects[i], |mut acc, e| {
+                    acc.merge(e);
+                    acc
+                });
+            if merged != effects[i] {
+                effects[i] = merged;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    effects
 }
 
 #[cfg(test)]

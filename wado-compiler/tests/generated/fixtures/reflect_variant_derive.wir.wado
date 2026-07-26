@@ -276,10 +276,12 @@ global global:reflect_variant_derive.wado::__const_obj_52: ref null "core:prelud
 global global:reflect_variant_derive.wado::__const_obj_56: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 99, 32, 109, 97, 116, 99, 104, 101, 115, 32, 123, 32, 67, 105, 114, 99, 108, 101, 40, 114, 41, 32, 38, 38, 32, 114, 32, 61, 61, 32, 50, 46, 53, 32, 125, 10), used: 48 };
 global global:core:prelude/format.wado::__const_obj_60: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
 global global:core:prelude/format.wado::__const_obj_61: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
-global global:reflect_variant_derive.wado::__const_obj_62: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-global global:reflect_variant_derive.wado::__const_obj_63: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 110, 105, 116), used: 4 };
-global global:reflect_variant_derive.wado::__const_obj_65: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 51, 50), used: 3 };
-global global:reflect_variant_derive.wado::__const_obj_67: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 54, 52), used: 3 };
+global mut global:reflect_variant_derive.wado::__const_obj_62: ref null "tuple//[core:prelude/traits.wado/VariantCase<reflect_variant_derive.wado/Shape,f64>, core:prelude/traits.wado/VariantCase<reflect_variant_derive.wado/Shape,i32>, core:prelude/traits.wado/VariantCase<reflect_variant_derive.wado/Shape,()>]" = ref.null none;
+global global:reflect_variant_derive.wado::__const_obj_63: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:reflect_variant_derive.wado::__const_obj_64: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 110, 105, 116), used: 4 };
+global global:reflect_variant_derive.wado::__const_obj_66: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 51, 50), used: 3 };
+global global:reflect_variant_derive.wado::__const_obj_68: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 54, 52), used: 3 };
+global mut global:reflect_variant_derive.wado::__const_obj_69: ref null "tuple//[core:prelude/traits.wado/VariantCase<reflect_variant_derive.wado/Shape,f64>, core:prelude/traits.wado/VariantCase<reflect_variant_derive.wado/Shape,i32>, core:prelude/traits.wado/VariantCase<reflect_variant_derive.wado/Shape,()>]" = ref.null none;
 
 fn "reflect_variant_derive.wado/__test_0_blanket_derivation_dispatches_on_the_live_case"() {
     let __v0_0: ref "core:prelude/string.wado//String";
@@ -1971,7 +1973,6 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
 
 fn "reflect_variant_derive.wado/reflect_variant_derive.wado/Shape^Rebuild::rebuild"(self) {
     let out: ref null "reflect_variant_derive.wado//Shape";
-    let __tuple_2: ref "tuple//[core:prelude/traits.wado/VariantCase<reflect_variant_derive.wado/Shape,f64>, core:prelude/traits.wado/VariantCase<reflect_variant_derive.wado/Shape,i32>, core:prelude/traits.wado/VariantCase<reflect_variant_derive.wado/Shape,()>]";
     let c_4: ref "core:prelude/traits.wado//VariantCase<reflect_variant_derive.wado/Shape,f64>";
     let c_5: ref "core:prelude/traits.wado//VariantCase<reflect_variant_derive.wado/Shape,i32>";
     let c_6: ref "core:prelude/traits.wado//VariantCase<reflect_variant_derive.wado/Shape,()>";
@@ -1985,8 +1986,10 @@ fn "reflect_variant_derive.wado/reflect_variant_derive.wado/Shape^Rebuild::rebui
     let index_34: i32;
     let index_39: i32;
     out = ref.null none;
-    __tuple_2 = "reflect_variant_derive.wado/Shape^ReflectVariant::members"();
-    c_4 = __tuple_2.0;
+    if ref.is_null(global:reflect_variant_derive.wado::__const_obj_62) {
+        global:reflect_variant_derive.wado::__const_obj_62 = "reflect_variant_derive.wado/Shape^ReflectVariant::members"();
+    }
+    c_4 = global:reflect_variant_derive.wado::__const_obj_62.0;
     if self.value.discriminant == c_4.index {
         out = ref.as_non_null(v_10 = self.value; index_29 = c_4.index; if @unlikely(v_10.discriminant != index_29) {
             unreachable;
@@ -2000,7 +2003,7 @@ fn "reflect_variant_derive.wado/reflect_variant_derive.wado/Shape^Rebuild::rebui
             unreachable;
         }));
     }
-    c_5 = __tuple_2.1;
+    c_5 = global:reflect_variant_derive.wado::__const_obj_62.1;
     if self.value.discriminant == c_5.index {
         out = ref.as_non_null(v_16 = self.value; index_34 = c_5.index; if @unlikely(v_16.discriminant != index_34) {
             unreachable;
@@ -2014,7 +2017,7 @@ fn "reflect_variant_derive.wado/reflect_variant_derive.wado/Shape^Rebuild::rebui
             unreachable;
         }));
     }
-    c_6 = __tuple_2.2;
+    c_6 = global:reflect_variant_derive.wado::__const_obj_62.2;
     if self.value.discriminant == c_6.index {
         out = ref.as_non_null(v_22 = self.value; index_39 = c_6.index; if @unlikely(v_22.discriminant != index_39) {
             unreachable;
@@ -2052,7 +2055,7 @@ fn "reflect_variant_derive.wado/reflect_variant_derive.wado/Shape^OneOf::oneof"(
     let start_27: i32;
     let start_38: i32;
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    if "core:prelude/string.wado/String^Eq::eq"(out, global:reflect_variant_derive.wado::__const_obj_62) == 0 {
+    if "core:prelude/string.wado/String^Eq::eq"(out, global:reflect_variant_derive.wado::__const_obj_63) == 0 {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_3, out);
         start_16 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_3, 1);
@@ -2061,9 +2064,9 @@ fn "reflect_variant_derive.wado/reflect_variant_derive.wado/Shape^OneOf::oneof"(
     }
     __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
     "core:prelude/string.wado/String::push_str"(__local_4, out);
-    "core:prelude/string.wado/String::push_str"(__local_4, global:reflect_variant_derive.wado::__const_obj_67);
+    "core:prelude/string.wado/String::push_str"(__local_4, global:reflect_variant_derive.wado::__const_obj_68);
     out = __local_4;
-    if "core:prelude/string.wado/String^Eq::eq"(out, global:reflect_variant_derive.wado::__const_obj_62) == 0 {
+    if "core:prelude/string.wado/String^Eq::eq"(out, global:reflect_variant_derive.wado::__const_obj_63) == 0 {
         __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_8, out);
         start_27 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_8, 1);
@@ -2072,9 +2075,9 @@ fn "reflect_variant_derive.wado/reflect_variant_derive.wado/Shape^OneOf::oneof"(
     }
     __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
     "core:prelude/string.wado/String::push_str"(__local_9, out);
-    "core:prelude/string.wado/String::push_str"(__local_9, global:reflect_variant_derive.wado::__const_obj_65);
+    "core:prelude/string.wado/String::push_str"(__local_9, global:reflect_variant_derive.wado::__const_obj_66);
     out = __local_9;
-    if "core:prelude/string.wado/String^Eq::eq"(out, global:reflect_variant_derive.wado::__const_obj_62) == 0 {
+    if "core:prelude/string.wado/String^Eq::eq"(out, global:reflect_variant_derive.wado::__const_obj_63) == 0 {
         __local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_11, out);
         start_38 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_11, 1);
@@ -2083,7 +2086,7 @@ fn "reflect_variant_derive.wado/reflect_variant_derive.wado/Shape^OneOf::oneof"(
     }
     __local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
     "core:prelude/string.wado/String::push_str"(__local_12, out);
-    "core:prelude/string.wado/String::push_str"(__local_12, global:reflect_variant_derive.wado::__const_obj_63);
+    "core:prelude/string.wado/String::push_str"(__local_12, global:reflect_variant_derive.wado::__const_obj_64);
     out = __local_12;
     return out;
 }
@@ -2091,7 +2094,6 @@ fn "reflect_variant_derive.wado/reflect_variant_derive.wado/Shape^OneOf::oneof"(
 fn "reflect_variant_derive.wado/reflect_variant_derive.wado/Shape^Tag::tag"(self) {
     let out: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/string.wado//String";
-    let __tuple_2: ref "tuple//[core:prelude/traits.wado/VariantCase<reflect_variant_derive.wado/Shape,f64>, core:prelude/traits.wado/VariantCase<reflect_variant_derive.wado/Shape,i32>, core:prelude/traits.wado/VariantCase<reflect_variant_derive.wado/Shape,()>]";
     let c_5: ref "core:prelude/traits.wado//VariantCase<reflect_variant_derive.wado/Shape,f64>";
     let c_6: ref "core:prelude/traits.wado//VariantCase<reflect_variant_derive.wado/Shape,i32>";
     let __local_7: ref "core:prelude/string.wado//String";
@@ -2110,8 +2112,10 @@ fn "reflect_variant_derive.wado/reflect_variant_derive.wado/Shape^Tag::tag"(self
     let index_88: i32;
     let index_91: i32;
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    __tuple_2 = "reflect_variant_derive.wado/Shape^ReflectVariant::members"();
-    c_5 = __tuple_2.0;
+    if ref.is_null(global:reflect_variant_derive.wado::__const_obj_69) {
+        global:reflect_variant_derive.wado::__const_obj_69 = "reflect_variant_derive.wado/Shape^ReflectVariant::members"();
+    }
+    c_5 = global:reflect_variant_derive.wado::__const_obj_69.0;
     if self.value.discriminant == c_5.index {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_3, c_5.case_name);
@@ -2128,7 +2132,7 @@ fn "reflect_variant_derive.wado/reflect_variant_derive.wado/Shape^Tag::tag"(self
         builtin::array_set_u8(__local_3.repr, start_27, 41);
         out = __local_3;
     }
-    c_6 = __tuple_2.1;
+    c_6 = global:reflect_variant_derive.wado::__const_obj_69.1;
     if self.value.discriminant == c_6.index {
         __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_7, c_6.case_name);
@@ -2145,7 +2149,7 @@ fn "reflect_variant_derive.wado/reflect_variant_derive.wado/Shape^Tag::tag"(self
         builtin::array_set_u8(__local_7.repr, start_51, 41);
         out = __local_7;
     }
-    c_8 = __tuple_2.2;
+    c_8 = global:reflect_variant_derive.wado::__const_obj_69.2;
     if self.value.discriminant == c_8.index {
         __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_9, c_8.case_name);
