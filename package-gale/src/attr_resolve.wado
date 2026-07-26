@@ -10,6 +10,7 @@
 
 use { ParserRule, Element, Alternative, AttrDecl } from "./ir.wado";
 use { AttrRef, find_attr_refs } from "./attr_scan.wado";
+use { to_snake_case, escape_ident } from "./ident.wado";
 
 /// What a `$name` reference resolves to. Determines how the substitution
 /// engine rewrites it (value-channel field, context-API call, ...).
@@ -73,24 +74,32 @@ pub struct AttrEnv {
 /// `rules` is the parser-rule table, used to validate a rule member against
 /// the referenced rule's `returns` fields. Returns the resolved list, or an
 /// error message naming the first unresolvable reference / member.
-pub fn resolve_attrs(body: &String, rule: &ParserRule, rules: &List<ParserRule>) -> Result<List<ResolvedAttr>, String> {
+pub fn resolve_attrs(
+    body: &String,
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    bindings: &List<[bool, String, String]> = &NO_BINDINGS,
+) -> Result<List<ResolvedAttr>, String> {
     let env = build_attr_env(rule);
     let refs = find_attr_refs(body);
     let mut out: List<ResolvedAttr> = [];
     for let r of &refs {
-        let resolved = resolve_one(r, &env, rules)?;
+        let resolved = resolve_one(r, &env, rules, bindings)?;
         out.push(resolved);
     }
     return Result::Ok(out);
 }
 
-fn resolve_one(r: &AttrRef, env: &AttrEnv, rules: &List<ParserRule>) -> Result<ResolvedAttr, String> {
-    for let lab of &env.labels {
-        if lab.name == r.name {
-            let target = label_target(lab);
-            check_member(r, &target, &lab.ref_name, rules)?;
-            return ok_attr(r, target, &lab.ref_name);
-        }
+fn resolve_one(
+    r: &AttrRef,
+    env: &AttrEnv,
+    rules: &List<ParserRule>,
+    bindings: &List<[bool, String, String]>,
+) -> Result<ResolvedAttr, String> {
+    if let Some(lab) = label_named(env, &r.name, bindings) {
+        let target = label_target(&lab);
+        check_member(r, &target, &lab.ref_name, rules)?;
+        return ok_attr(r, target, &lab.ref_name);
     }
     if contains(&env.attrs, &r.name) {
         check_member(r, &AttrTarget::RuleAttr, &"", rules)?;
@@ -113,15 +122,45 @@ fn resolve_one(r: &AttrRef, env: &AttrEnv, rules: &List<ParserRule>) -> Result<R
     // declared attribute or label.
     let alias = alias_target(env, &r.name);
     if alias != r.name {
-        for let lab of &env.labels {
-            if lab.name == alias {
-                let target = label_target(lab);
-                check_member(r, &target, &lab.ref_name, rules)?;
-                return ok_attr_named(r, &alias, target, &lab.ref_name);
+        if let Some(lab) = label_named(env, &alias, bindings) {
+            let target = label_target(&lab);
+            check_member(r, &target, &lab.ref_name, rules)?;
+            return ok_attr_named(r, &alias, target, &lab.ref_name);
+        }
+    }
+    builtin::cold_path();
+    return Result::Err(`unresolved attribute reference '$${r.name}'`);
+}
+
+/// Empty binding list — the default when a caller resolves outside an
+/// alternative (validation passes, tests).
+global NO_BINDINGS: List<[bool, String, String]> = [];
+
+/// The label named `name`. A label name may be bound in more than one
+/// alternative and to a different kind in each (`x=sub` in one, `x='y'` in
+/// another); the environment is rule-wide, so pick the one whose kind matches
+/// what the *enclosing alternative* actually bound. Without that, every
+/// alternative resolves as the first one declared. Falls back to first-match
+/// when the alternative binds nothing by that name.
+fn label_named(env: &AttrEnv, name: &String, bindings: &List<[bool, String, String]>) -> Option<LabelInfo> {
+    // Compare on the name codegen derived, not the surface one: `myLabel` would
+    // otherwise never match a binding and every alternative would take `first`.
+    let key = escape_ident(&to_snake_case(name));
+    let mut first: Option<LabelInfo> = null;
+    for let lab of &env.labels {
+        if lab.name != *name {
+            continue;
+        }
+        if first matches { None } {
+            first = Option::Some(*lab);
+        }
+        for let b of bindings {
+            if b.1 == key && b.0 == lab.is_token {
+                return Option::Some(*lab);
             }
         }
     }
-    return Result::Err(`unresolved attribute reference '$${r.name}'`);
+    return first;
 }
 
 fn label_target(lab: &LabelInfo) -> AttrTarget {

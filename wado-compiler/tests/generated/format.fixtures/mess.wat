@@ -46,13 +46,17 @@
                     (i32.const 1))))))
           (else
             (local.get 4))))
-      (drop
-        (memory.grow
-          (i32.div_s
-            (i32.add
-              (local.get 5)
-              (i32.const 65535))
-            (i32.const 65536))))
+      (if ;; label = @1
+        (i32.lt_s
+          (memory.grow
+            (i32.div_s
+              (i32.add
+                (local.get 5)
+                (i32.const 65535))
+              (i32.const 65536)))
+          (i32.const 0))
+        (then
+          (unreachable)))
     )
     (func $realloc (;1;) (type 1) (param i32 i32 i32 i32) (result i32)
       (local i32 i32)

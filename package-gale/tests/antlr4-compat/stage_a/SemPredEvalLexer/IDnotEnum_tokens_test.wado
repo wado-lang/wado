@@ -16,15 +16,12 @@ use t from "../../grammars/SemPredEvalLexer/IDnotEnum.g4"
     };
 use { TK_EOF } from "../../grammars/SemPredEvalLexer/IDnotEnum.g4";
 
-// triage: Stage C: descriptor [output] is prefixed by action-print text (<writeln(...)> echoes inside { ... } action bodies); claim (d) actual lacks the prefix.
-#[TODO]
 test "stage_a_tokens: SemPredEvalLexer/IDnotEnum" {
     let input = "enum abc enum";
     let expected = "[@0,0:3='enum',<2>,1:0]
 [@1,5:7='abc',<2>,1:5]
 [@2,9:12='enum',<2>,1:9]
 [@3,13:12='<EOF>',<-1>,1:13]
-s0-' '->:s2=>3
 ";
     let tokens = t::tokenize(&input);
     let actual = t::to_lexer_string(&tokens, TK_EOF);

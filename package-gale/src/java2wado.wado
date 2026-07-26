@@ -12,14 +12,23 @@ use {
     LexerRule,
     LexerAlternative,
     LexerElement,
+    LexerRepeatElement,
+    LexerNotElement,
+    AltAction,
     Alternative,
     Element,
     NamedAction,
     GrammarKind,
 } from "./ir.wado";
 use { map_java_type } from "./java2wado/jemit.wado";
-use { translate_wado_action, PARSER_HANDLE } from "./action_translate.wado";
-use { translate_java_expr, translate_java_stmts, JEnv } from "./java2wado/jemit.wado";
+use { translate_wado_action, LEXER_HANDLE, PARSER_HANDLE } from "./action_translate.wado";
+use {
+    translate_java_expr,
+    translate_java_stmts,
+    translate_java_lexer_expr,
+    translate_java_lexer_stmts,
+    JEnv,
+} from "./java2wado/jemit.wado";
 use { translate_java_members, java_member_method_names, MemberDecls } from "./java2wado/jmembers.wado";
 use { translate_wado_members } from "./wado_members.wado";
 
@@ -66,6 +75,97 @@ pub fn translate_predicate(
         },
         Other(name) => Result::Err(`unsupported action language '${*name}' for predicate '${*body}'`),
     };
+}
+
+/// Rewrite every `language = Java` lexer action / predicate body in place into
+/// its Wado form, so `lexer_gen`'s identity translator emits it unchanged — the
+/// same staging the superClass call rewrite uses, which keeps the emitters free
+/// of an action-language parameter. A body outside the java2wado subset is
+/// dropped (so codegen never emits Java text) and reported, never silently kept.
+pub fn rewrite_lexer_java_bodies(
+    grammar: &mut Grammar,
+    member_methods: &List<String>,
+    member_fields: &List<String>,
+) -> List<String> {
+    let mut errors: List<String> = [];
+    let env = lexer_env(&grammar.name, member_methods, member_fields);
+    for let rule of &mut grammar.lexer_rules {
+        for let alt of &mut rule.body {
+            rewrite_lexer_java_alt(alt, &env, &mut errors);
+        }
+    }
+    return errors;
+}
+
+fn rewrite_lexer_java_alt(alt: &mut LexerAlternative, env: &JEnv, errors: &mut List<String>) {
+    let mut kept: List<AltAction> = [];
+    for let a of &alt.actions {
+        let translated = if a.kind matches { Predicate } {
+            translate_java_lexer_expr(&a.source.text, env);
+        } else {
+            translate_java_lexer_stmts(&a.source.text, env);
+        };
+        match translated {
+            Ok(text) => {
+                let mut kept_action = *a;
+                kept_action.source.text = text;
+                kept.push(kept_action);
+            },
+            Err(msg) => {
+                errors.push(`{ ${a.source.text} }: ${msg}`);
+            },
+        }
+    }
+    alt.actions = kept;
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        alt.elements[i] = rewrite_lexer_java_elem(&alt.elements[i], env, errors);
+    }
+}
+
+fn rewrite_lexer_java_elem(elem: &LexerElement, env: &JEnv, errors: &mut List<String>) -> LexerElement {
+    return match elem {
+        Group(alts) => {
+            let mut new_alts: List<LexerAlternative> = [];
+            for let alt of alts {
+                let mut a = *alt;
+                rewrite_lexer_java_alt(&mut a, env, errors);
+                new_alts.push(a);
+            }
+            LexerElement::Group(new_alts);
+        },
+        Repeat(rep) => LexerElement::Repeat(LexerRepeatElement {
+            kind: rep.kind,
+            element: rewrite_lexer_java_elem(&rep.element, env, errors),
+            non_greedy: rep.non_greedy,
+        }),
+        Not(nn) => LexerElement::Not(LexerNotElement { element: rewrite_lexer_java_elem(&nn.element, env, errors) }),
+        _ => *elem,
+    };
+}
+
+fn lexer_env(grammar_name: &String, member_methods: &List<String>, member_fields: &List<String>) -> JEnv {
+    return JEnv {
+        this_bind: LEXER_HANDLE,
+        grammar: *grammar_name,
+        methods: *member_methods,
+        lexer: true,
+        fields: *member_fields,
+    };
+}
+
+/// The snake_cased method names the grammar's `@lexer::members` blocks declare,
+/// so a lexer action / predicate can resolve `this.m()` and bare `m()` calls.
+pub fn collect_lexer_member_method_names(grammar: &Grammar) -> List<String> {
+    let mut names: List<String> = [];
+    for let act of &grammar.named_actions {
+        if !is_lexer_members(act, &grammar.kind) {
+            continue;
+        }
+        for let n of &java_member_method_names(&act.body.text) {
+            names.push(*n);
+        }
+    }
+    return names;
 }
 
 pub fn translate_members(lang: &ActionLanguage, body: &String, grammar_name: &String) -> Result<MemberDecls, String> {

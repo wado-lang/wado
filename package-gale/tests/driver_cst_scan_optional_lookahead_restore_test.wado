@@ -1,0 +1,44 @@
+use g from "./grammars/scan_optional_lookahead_restore.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_scan_optional_lookahead_restore" },
+    };
+use { normalize_tree } from "./grammars/scan_optional_lookahead_restore.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    let actual = g::to_string_tree(&result);
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    ${*input}\nexpected: ${norm}\nactual:   ${actual}`;
+}
+
+test "tree: optional-lookahead body failure rewinds the scan position" {
+    assert_tree(&"f ( ( ( ( 1 ) ) ) )", &"
+        (s (stmt (item (name f) ( (inner ( (inner ( (inner ( (inner 1) )) )) )) ))))
+    ");
+}
+
+test "tree: rewind still lets the outer tournament pick the longer alt" {
+    assert_tree(&"f ( ( ( ( 1 ) ) ) ) z", &"
+        (s (stmt (item (name f) ( (inner ( (inner ( (inner ( (inner 1) )) )) )) )) z))
+    ");
+}
+
+test "tree: the body that reaches the input wins over the shorter static prefix" {
+    assert_tree(&"f ( ( ( ( x ) ) ) )", &"
+        (s (stmt (item (name f) (alias ( (alias ( (alias ( (alias ( (alias x) )) )) )) )))))
+    ");
+}
+
+test "tree: bare optional shape, then the trailing group" {
+    assert_tree(&"f x idx g", &"(s (stmt (item (name f) (alias x) idx (name g))))");
+}
+
+test "tree: 'as' optional shape, then the trailing group" {
+    assert_tree(&"f as ( x ) idx g", &"
+        (s (stmt (item (name f) as (alias ( (alias x) )) idx (name g))))
+    ");
+}
+
+test "tree: skipped optional, trailing group still matches" {
+    assert_tree(&"f no idx", &"(s (stmt (item (name f) no idx)))");
+}

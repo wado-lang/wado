@@ -101,7 +101,7 @@ type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  //
 
 type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(30)
 
-type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(31)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(31)
 
 type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(32)
 
@@ -180,7 +180,8 @@ global global:core:prelude/traits.wado::__const_obj_14: ref null "core:prelude/s
 global global:core:prelude/traits.wado::__const_obj_15: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 32), used: 3 };
 global global:core:prelude/traits.wado::__const_obj_16: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
 global global:core:prelude/traits.wado::__const_obj_17: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(40, 41), used: 2 };
-global global:core:prelude/traits.wado::__const_obj_23: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(87, 105, 116, 104, 85, 110, 105, 116), used: 8 };
+global mut global:core:prelude/traits.wado::__const_obj_23: ref null "tuple//[core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,i32>, core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,()>, core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,i32>]" = ref.null none;
+global global:core:prelude/traits.wado::__const_obj_24: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(87, 105, 116, 104, 85, 110, 105, 116), used: 8 };
 
 fn "inspect_struct_unit_field.wado/__test_0_inspect_a_struct_that_has_a_unit_field"() {
     let __cond: bool;
@@ -435,18 +436,19 @@ fn "core:rt/cm_lower_list_u8"(data, start, len) {
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
-fn "core:rt/wait_for_blocked"(handle) {
+fn "core:rt/cm_await_blocked"(handle) {
     let ws: i32;
     let evt_ptr: i32;
-    let payload: i32;
+    let status: i32;
     ws = "wasi/waitable-set-new"();
     "wasi/waitable-join"(handle, ws);
     evt_ptr = "mem/realloc"(0, 0, 4, 8);
     drop("wasi/waitable-set-wait"(ws, evt_ptr));
-    payload = builtin::load_i32(evt_ptr + 4);
+    status = builtin::load_i32(evt_ptr + 4);
     drop("mem/realloc"(evt_ptr, 8, 4, 0));
+    "wasi/waitable-join"(handle, 0);
     "wasi/waitable-set-drop"(ws);
-    return payload;
+    return status;
 }
 
 fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
@@ -458,7 +460,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
             break_if b28 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
-                result = "core:rt/wait_for_blocked"(handle);
+                result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
             break_if b28 (if (result >> 4) == 0 -> i32 {
@@ -833,7 +835,6 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
 fn "core:prelude/traits.wado/inspect_struct_unit_field.wado/WithUnit^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,i32>, core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,()>, core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,i32>]";
     let field_6: ref "core:prelude/traits.wado//StructField<inspect_struct_unit_field.wado/WithUnit,i32>";
     let field_7: ref "core:prelude/traits.wado//StructField<inspect_struct_unit_field.wado/WithUnit,()>";
     let field_8: ref "core:prelude/traits.wado//StructField<inspect_struct_unit_field.wado/WithUnit,i32>";
@@ -853,12 +854,14 @@ fn "core:prelude/traits.wado/inspect_struct_unit_field.wado/WithUnit^Inspect::in
     let s_62: ref "core:prelude/string.wado//String";
     let s_64: ref "core:prelude/string.wado//String";
     let s_66: ref "core:prelude/string.wado//String";
-    s_10 = global:core:prelude/traits.wado::__const_obj_23;
+    s_10 = global:core:prelude/traits.wado::__const_obj_24;
     "core:prelude/string.wado/String::push_str"(f.buf, s_10);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "inspect_struct_unit_field.wado/WithUnit^ReflectStruct::members"();
-    field_6 = __tuple_4.0;
+    if ref.is_null(global:core:prelude/traits.wado::__const_obj_23) {
+        global:core:prelude/traits.wado::__const_obj_23 = "inspect_struct_unit_field.wado/WithUnit^ReflectStruct::members"();
+    }
+    field_6 = global:core:prelude/traits.wado::__const_obj_23.0;
     if field_6.is_secret {
         has_secret = 1;
     } else {
@@ -876,7 +879,7 @@ fn "core:prelude/traits.wado/inspect_struct_unit_field.wado/WithUnit^Inspect::in
             unreachable;
         })), f);
     }
-    field_7 = __tuple_4.1;
+    field_7 = global:core:prelude/traits.wado::__const_obj_23.1;
     if field_7.is_secret {
         has_secret = 1;
     } else {
@@ -900,7 +903,7 @@ fn "core:prelude/traits.wado/inspect_struct_unit_field.wado/WithUnit^Inspect::in
         s_42 = global:core:prelude/traits.wado::__const_obj_17;
         "core:prelude/string.wado/String::push_str"(f.buf, s_42);
     }
-    field_8 = __tuple_4.2;
+    field_8 = global:core:prelude/traits.wado::__const_obj_23.2;
     if field_8.is_secret {
         has_secret = 1;
     } else {

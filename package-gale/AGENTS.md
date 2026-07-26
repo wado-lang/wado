@@ -67,7 +67,7 @@ wado test package-gale/**/*.wado               # all package tests
 wado test package-gale/src/codegen_test.wado   # one file
 ```
 
-Three test layers, all driven by `.g4` in `tests/grammars/` plus the descriptor corpus:
+Test layers, all driven by `.g4` in `tests/grammars/` plus the descriptor corpus:
 
 1. g4 parse tests (`src/g4/integration_test.wado`) — real `.g4` files parse into `Grammar` IR.
 2. Driver tests (`tests/driver_*_test.wado`) — invoke the generator at compile time via `use ... with { generator: ... }`, parse input, and assert `to_string_tree()` output (EOF omitted; `normalize_tree()` lets you write indented expected trees).

@@ -736,8 +736,7 @@ impl GenContext {
             // for alternatives starting with them — such alternatives must either
             // be in a single-alt rule, used as a fallback, or be distinguished
             // from their siblings by later elements.
-            Wildcard(_) => [],
-            Not(_) => [],
+            Wildcard(_) | Not(_) => [],
         };
     }
 
@@ -1012,10 +1011,7 @@ impl GenContext {
 
     fn element_is_nullable_deep_at(&mut self, elem: &Element, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
         return match elem {
-            TokenRef(_) => false,
-            Literal(_) => false,
-            Wildcard(_) => false,
-            Not(_) => false,
+            TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => false,
             RuleRef(r) => self.rule_is_nullable_at(&r.name, visiting, min_cycle),
             Label(lab) => self.element_is_nullable_deep_at(&lab.element, visiting, min_cycle),
             Repeat(rep) => match rep.kind {
@@ -1107,14 +1103,10 @@ impl GenContext {
     /// Used to keep `alt_position_first_sets` element-to-input-position aligned.
     pub fn element_is_single_token(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
         return match elem {
-            TokenRef(_) => true,
-            Literal(_) => true,
-            Wildcard(_) => true,
-            Not(_) => true,
+            TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => true,
             RuleRef(r) => self.rule_is_single_token(&r.name, visiting),
             Label(lab) => self.element_is_single_token(&lab.element, visiting),
-            Group(_) => false,
-            Repeat(_) => false,
+            Group(_) | Repeat(_) => false,
         };
     }
 
@@ -1808,25 +1800,23 @@ fn scan_element_for_single_alt_groups(elem: &Element, rule_name: &String, map: &
         }
         return;
     }
-    if let Repeat(rep) = elem {
-        scan_element_for_single_alt_groups(&rep.element, rule_name, map);
-        return;
-    }
-    if let Label(lab) = elem {
-        scan_element_for_single_alt_groups(&lab.element, rule_name, map);
+    match elem {
+        Repeat(rep) => scan_element_for_single_alt_groups(&rep.element, rule_name, map),
+        Label(lab) => scan_element_for_single_alt_groups(&lab.element, rule_name, map),
+        Group(_) | TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => (),
     }
 }
 
 fn extract_group_alts_for_scan(elem: &Element) -> Option<&List<Alternative>> with stores[elem] {
-    if let Group(g) = elem {
-        return Option::Some(&g.alternatives);
-    }
-    if let Repeat(rep) = elem {
-        if let Group(g) = &rep.element {
-            return Option::Some(&g.alternatives);
-        }
-    }
-    return null;
+    return match elem {
+        Group(g) => Option::Some(&g.alternatives),
+        Repeat(rep) => if let Group(g) = &rep.element {
+            Option::Some(&g.alternatives);
+        } else {
+            null;
+        },
+        TokenRef(_) | Literal(_) | RuleRef(_) | Label(_) | Wildcard(_) | Not(_) => null,
+    };
 }
 
 pub fn is_nullable(elem: &Element) -> bool {

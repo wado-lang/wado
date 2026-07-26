@@ -112,6 +112,9 @@ use {
     rule_uses_rule_span,
     rule_threads_args,
     RULE_START_TOK_LOCAL,
+    rule_span_lo_local,
+    rule_span_hi_local,
+    action_reads_rule_span,
 } from "./action_translate.wado";
 use { translate_action, translate_predicate, translate_members, is_parser_members } from "./java2wado.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
@@ -572,6 +575,11 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.line(&"assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;");
     w.line(&"let tokens = tokenize(input);");
     w.line(&"let mut p = Parser::new(tokens);");
+    if ctx.emit_actions() {
+        // Lexer prints happen before any parser print, as they do on ANTLR4's
+        // stdout: seed the sink with what tokenizing produced.
+        w.line(&"p.output = p.tokens.output;");
+    }
     w.line(&"p.max_errors = max_errors;");
     w.line(&"entry(&mut p);");
     // The parser is infallible: a failure leaves `p.recovering` set and the
@@ -973,6 +981,17 @@ fn gen_parser_struct(
         // appear; this differs from a raw source-span slice (`text_span`). The
         // range is the rule's first token (`start_tok`) through the last
         // consumed token (`self.pos - 1`).
+        // `$<label>.text` — the text of one labeled rule call's own token range.
+        let mut ftb = FnSpec::new("text_between");
+        ftb.set_receiver(&"&self");
+        ftb.add_param(&"lo", &"i32");
+        ftb.add_param(&"hi", &"i32");
+        ftb.set_return_type(&"String");
+        ftb.emit_begin(w);
+        w.line(&"return self.tokens.rule_text(lo, hi);");
+        w.end();
+        w.blank();
+
         let mut frt = FnSpec::new("rule_text");
         frt.set_receiver(&"&self");
         frt.add_param(&"start_tok", &"i32");
@@ -1479,6 +1498,49 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule,
 /// Body emitter for a rule's scan function. Left-recursive rules
 /// dispatch to `gen_scan_lr_functions`; every other shape emits a
 /// single `scan_<rule>` body below.
+/// Whether this scan body can run to its end at the position it started —
+/// the only shape where the non-nullable post-condition can fire. A body
+/// holding any element that must consume never reaches it, so emitting the
+/// check there would be dead code in every generated scan.
+fn scan_body_can_match_empty(elements: &List<ScanElement>) -> bool {
+    for let e of elements {
+        if !scan_element_can_match_empty(e) {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn scan_element_can_match_empty(se: &ScanElement) -> bool {
+    return match se {
+        Token(_) | Wildcard | Excluded(_) => false,
+        // Only the snake name reaches scan IR, so the callee's nullability is
+        // out of reach here; assume it can be empty and let the body's other
+        // elements decide.
+        RuleCall(_) => true,
+        Repeat(re) => if let Plus = re.kind {
+            scan_element_can_match_empty(&re.body);
+        } else {
+            true;
+        },
+        Group(ge) => {
+            if ge.lenient {
+                true;
+            } else {
+                let mut any = false;
+                for let alt of &ge.alts {
+                    if scan_body_can_match_empty(&alt.elements) {
+                        any = true;
+                        break;
+                    }
+                }
+                any;
+            }
+        },
+        OptionalLookahead(_) => true,
+    };
+}
+
 fn gen_scan_function_named(
     w: &mut CodeWriter,
     rule: &ParserRule,
@@ -1546,8 +1608,24 @@ fn gen_scan_function_named(
                 "gen_scan_function_named: single-alt rule but lowered_rule is not Simple — lower_rule invariant violated",
             );
         };
+        // A rule that cannot derive the empty string must not report a
+        // zero-token match. Its body's mandatory group scans `lenient` by
+        // default, so a gate miss rewinds to the entry position and the rule
+        // would return "matched, consumed nothing" — which a caller's repeat
+        // gate reads as a viable iteration (SQLite's `( ';'+ sql_stmt )*`
+        // entering on a trailing `';'`). Leniency inside the body is kept:
+        // only the whole-rule result is checked.
+        let mut nullable_visiting: List<String> = [];
+        let non_nullable = !ctx.rule_is_nullable(&rule.name, &mut nullable_visiting)
+            && scan_body_can_match_empty(&scan_body.elements);
+        if non_nullable {
+            w.line(&"let scan_start = pos;");
+        }
         w.line(&"let mut pos = pos;");
         gen_scan_op_elements(w, &scan_body.elements, 0, scan_body.elements.len(), ctx, &"return -1;");
+        if non_nullable {
+            w.line(&"if pos == scan_start { return -1; }");
+        }
         w.line(&"return pos;");
     } else if all_alts_are_single_token(&rule.alternatives) {
         // Compact form: every alt matches exactly one fixed token, so the
@@ -2681,13 +2759,23 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         } else {
             w.else_begin(&`else if ${cond}`);
         }
+        // A failed optional means "skip", so the position rewinds: leaving a
+        // callee's `-1` in `pos` mis-scans the elements after it and traps
+        // their `pos < tokens.len()` guard.
         let gc = ctx.next_scan_group();
-        let shape_label = `sol_${gc}`;
-        let fail = `break ${shape_label};`;
-        w.begin(&`${shape_label}:`);
+        let body = `sol_${gc}`;
+        let done = `sol_${gc}_done`;
+        let save_var = `sol_${gc}_save`;
+        let fail = `break ${body};`;
+        w.line(&`let ${save_var} = pos;`);
+        w.begin(&`${done}:`);
+        w.begin(&`${body}:`);
         for let elem_se of &ole.bodies[si].elements {
             gen_scan_op_element(w, elem_se, ctx, &fail);
         }
+        w.line(&`break ${done};`);
+        w.end();
+        w.line(&`pos = ${save_var};`);
         w.end();
     }
     if !is_first {
@@ -3654,6 +3742,7 @@ fn gen_alt_elements(
     assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies are emitted by gen_lr_fn";
     if ctx.emit_actions() {
         ctx.set_alt_bindings(collect_alt_bindings(ops));
+        gen_rule_span_decls(w, ops, actions, ctx);
     }
     let mut name_counts: List<[String, i32]> = [];
     // The emitter walks the surface elements + lowered ops in parallel: the
@@ -3676,7 +3765,14 @@ fn gen_alt_elements(
             // inserts a missing terminal against (a recovery-only edit; on valid
             // input the leaf matches and `sync` is never read).
             let sync = ctx.first_of_elements_from(elements, i + 1);
+            let span_field = rule_call_span_field(op, actions, ctx);
+            if let Some(f) = &span_field {
+                w.line(&`${rule_span_lo_local(f)} = p.pos;`);
+            }
             gen_op_leaf(w, op, ctx, &mut name_counts, &sync);
+            if let Some(f) = &span_field {
+                w.line(&`${rule_span_hi_local(f)} = p.pos - 1;`);
+            }
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
@@ -3686,6 +3782,42 @@ fn gen_alt_elements(
         }
     }
     gen_alt_actions_at(w, actions, elements.len(), ctx);
+}
+
+/// The binding field of a `RuleCall` op whose matched text one of `actions`
+/// reads through `$<label>.text`, or null. Gates the token-range capture so a
+/// grammar that never reads a rule label's text stays byte-identical. Predicate
+/// bodies count: they resolve `$`-references through the same path.
+fn rule_call_span_field(op: &Op, actions: &List<AltAction>, ctx: &GenContext) -> Option<String> {
+    if !ctx.emit_actions() {
+        return null;
+    }
+    let rc = match op {
+        RuleCall(r) => *r,
+        _ => {
+            return null;
+        },
+    };
+    for let a of actions {
+        if action_reads_rule_span(&a.source.text, &rc.dedup_base) {
+            return Option::Some(rc.field);
+        }
+    }
+    return null;
+}
+
+/// Declare the token-range locals for every labeled rule call in this scope
+/// whose text an action reads, before any of them is assigned. Declaring up
+/// front rather than at the call keeps the read in scope wherever the action
+/// sits — including before the call, where the label is not bound yet and the
+/// empty range yields empty text (ANTLR's `$label` is null there).
+fn gen_rule_span_decls(w: &mut CodeWriter, ops: &List<Op>, actions: &List<AltAction>, ctx: &GenContext) {
+    for let op of ops {
+        if let Some(f) = rule_call_span_field(op, actions, ctx) {
+            w.line(&`let mut ${rule_span_lo_local(&f)} = 0;`);
+            w.line(&`let mut ${rule_span_hi_local(&f)} = -1;`);
+        }
+    }
 }
 
 /// Emit every retained action / predicate whose position is `before` (it
@@ -4228,9 +4360,18 @@ fn gen_elements_with_non_greedy(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     outer_follow: &List<String>,
+    actions: &List<AltAction> = &NO_ACTIONS,
 ) {
     assert ops.len() == elements.len(), "gen_elements_with_non_greedy: ops / elements length mismatch";
+    // An inlined body's labels bind to its own ops. Restored on the way out so a
+    // nested group does not leave the outer scope pointing at its bindings.
+    let outer_bindings = *ctx.alt_bindings();
+    if ctx.emit_actions() && !actions.is_empty() {
+        ctx.set_alt_bindings(collect_alt_bindings(ops));
+        gen_rule_span_decls(w, ops, actions, ctx);
+    }
     for let mut i = 0; i < elements.len(); i += 1 {
+        gen_alt_actions_at(w, actions, i, ctx);
         let elem = &elements[i];
         let op = &ops[i];
         if let Repeat(rep) = peel_scalar_label(elem) {
@@ -4247,7 +4388,14 @@ fn gen_elements_with_non_greedy(
             // only deleted-or-unwound (recovery quality is uniform with the
             // top-level sequence).
             let sync = ctx.first_of_elements_from(elements, i + 1);
+            let span_field = rule_call_span_field(op, actions, ctx);
+            if let Some(f) = &span_field {
+                w.line(&`${rule_span_lo_local(f)} = p.pos;`);
+            }
             gen_op_leaf(w, op, ctx, name_counts, &sync);
+            if let Some(f) = &span_field {
+                w.line(&`${rule_span_hi_local(f)} = p.pos - 1;`);
+            }
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
         } else if let Group(g_op) = op {
@@ -4256,7 +4404,15 @@ fn gen_elements_with_non_greedy(
             panic("gen_elements_with_non_greedy: unreachable op shape — every Op variant is handled");
         }
     }
+    gen_alt_actions_at(w, actions, elements.len(), ctx);
+    if ctx.emit_actions() && !actions.is_empty() {
+        ctx.set_alt_bindings(outer_bindings);
+    }
 }
+
+/// No actions — the default for an inner body whose caller has none to place
+/// (a group whose alternative carries no retained `{ ... }`).
+global NO_ACTIONS: List<AltAction> = [];
 
 /// Compute the `follow` to pass to `gen_op_repeat_with_follow_override`
 /// when this Repeat is reached from the *inner* walker
@@ -4315,9 +4471,7 @@ fn inner_walker_follow_for_repeat(
 fn op_is_leaf(op: &Op) -> bool {
     return match op {
         Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => true,
-        Repeat(_) => false,
-        Group(_) => false,
-        ListLabel(_) => false,
+        Repeat(_) | Group(_) | ListLabel(_) => false,
     };
 }
 
@@ -4976,11 +5130,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     };
     let cond = `${ctx.first_check_str(&r.body_first_set)}${gate}`;
     match r.kind {
-        Optional => {
-            w.begin(&`if ${cond}`);
-            gen_op(w, &r.body, ctx, nc);
-            w.end();
-        },
+        Optional => gen_op_optional(w, r, ctx, nc, &gate),
         Star => {
             w.begin(&`while !p.recovering && (${cond})`);
             gen_op(w, &r.body, ctx, nc);
@@ -4995,6 +5145,88 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     }
 }
 
+/// `?` / `??` under the op-only walker (LR-suffix bodies and the group bodies
+/// inside them), mirroring the surface-element walker's dispatch
+/// (`gen_op_storable_optional` / `gen_op_transparent_optional`): a `??` asks the
+/// runtime ATN, a shape lookahead branches per shape, and every other strategy
+/// reduces to the single entry condition `gen_op_optional_entry_cond` builds.
+/// `gate` is the walker's caller-FOLLOW yield suffix.
+fn gen_op_optional(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>, gate: &String) {
+    if r.non_greedy && ctx.needs_atn() {
+        w.begin(&`if ${atn_optional_enter_cond(ctx, r)}`);
+        gen_op(w, &r.body, ctx, nc);
+        w.end();
+        return;
+    }
+    if let OptionalShapeLookahead(s) = &r.strategy {
+        gen_op_optional_shape_lookahead(w, r, s, ctx, nc, gate);
+        return;
+    }
+    let entry = `${gen_op_optional_entry_cond(w, r, ctx, nc)}${*gate}`;
+    w.begin(&`if ${entry}`);
+    gen_op(w, &r.body, ctx, nc);
+    w.end();
+}
+
+/// Entry condition for an Optional strategy that reduces to one condition.
+fn gen_op_optional_entry_cond(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) -> String {
+    return match &r.strategy {
+        OptionalLookahead(s) => gen_lookahead_condition(ctx, &s.sig),
+        OptionalScanGuard => {
+            let scan_pos = gen_scan_guard_with_prefix(w, &r.scan_body, ctx, nc, &"opt_scan_pos", &"opt_scan", false);
+            `${scan_pos} >= 0`;
+        },
+        Plain => ctx.first_check_str(&r.body_first_set),
+        OptionalShapeLookahead(_) => panic(
+            "gen_op_optional_entry_cond: shape lookahead has one condition per shape, not one for the optional",
+        ),
+        NonGreedy(_) => panic(
+            "gen_op_optional_entry_cond: NonGreedy strategy reached the greedy-Optional arm — lower-side bug",
+        ),
+    };
+}
+
+/// Shape-lookahead Optional under the op-only walker: one branch per shape,
+/// longest-first, each gated on that shape's own signature and emitting only the
+/// positions the shape contains. The op-only analogue of
+/// `gen_op_optional_with_shape_lookahead_transparent`, whose `unwrap_optional_op`
+/// peel it shares — the shape already decided that a present nested optional
+/// fires.
+fn gen_op_optional_shape_lookahead(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    s: &OptionalShapeLookaheadStrategy,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+    gate: &String,
+) {
+    let body_ops = if let Group(g) = &r.body {
+        g.alts[0].ops;
+    } else {
+        panic("gen_op_optional_shape_lookahead: shape lookahead is only valid on single-alt Group bodies");
+    };
+    let mut is_first = true;
+    for let entry of &s.shapes {
+        let cond = `${gen_lookahead_condition(ctx, &entry.sig)}${*gate}`;
+        if is_first {
+            w.begin(&`if ${cond}`);
+            is_first = false;
+        } else {
+            w.else_begin(&`else if ${cond}`);
+        }
+        for let idx of &entry.positions {
+            gen_op(w, unwrap_optional_op(&body_ops[*idx]), ctx, nc);
+        }
+    }
+    if !is_first {
+        w.end();
+    }
+}
 
 /// Dispatch a `RepeatOp.body` whose shape is "storable" (a leaf op
 /// or a `Group(SingleAlt | TokenOnly | SimpleCst | General)` op) to
@@ -5119,28 +5351,19 @@ fn gen_op_dispatch_element(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    if op_is_leaf(op) {
-        gen_op_leaf(w, op, ctx, name_counts);
-        return;
+    match op {
+        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => gen_op_leaf(w, op, ctx, name_counts),
+        Repeat(rep_op) => {
+            let rep = if let Repeat(r) = elem {
+                r;
+            } else {
+                panic("gen_op_dispatch_element: Repeat op mapped to non-Repeat element");
+            };
+            gen_op_repeat(w, rep, rep_op, ctx, name_counts);
+        },
+        Group(g_op) => gen_op_group(w, g_op, elem, ctx, name_counts),
+        ListLabel(ll) => gen_op_list_label(w, ll, elem, ctx, name_counts),
     }
-    if let Repeat(rep_op) = op {
-        let rep = if let Repeat(r) = elem {
-            r;
-        } else {
-            panic("gen_op_dispatch_element: Repeat op mapped to non-Repeat element");
-        };
-        gen_op_repeat(w, rep, rep_op, ctx, name_counts);
-        return;
-    }
-    if let Group(g_op) = op {
-        gen_op_group(w, g_op, elem, ctx, name_counts);
-        return;
-    }
-    if let ListLabel(ll) = op {
-        gen_op_list_label(w, ll, elem, ctx, name_counts);
-        return;
-    }
-    panic("gen_op_dispatch_element: unreachable op shape — every Op variant is handled");
 }
 
 /// Op-driven `unwrap_optional` analogue. Peels through an Optional
@@ -5643,10 +5866,19 @@ fn gen_op_group(
                 // Transparent groups inline their inner alt; walk
                 // `g_op.alts[0].ops` directly via the op-driven
                 // element walker rather than constructing a CST
-                // wrapper.
+                // wrapper. Its actions are inlined with it, so inside a
+                // Repeat they run once per iteration.
                 let body = &g_op.alts[0];
                 let alt = &g_elem.alternatives[0];
-                gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, &([] as List<String>));
+                gen_elements_with_non_greedy(
+                    w,
+                    &alt.elements,
+                    &body.ops,
+                    ctx,
+                    name_counts,
+                    &([] as List<String>),
+                    &alt.actions,
+                );
             },
         };
     } else {
@@ -5818,94 +6050,81 @@ fn gen_op_excluded_call(e: &ExcludedOp) -> String {
 }
 
 fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
-    if let TokenRef(t) = elem {
-        let const_name = `TK_${t.name}`;
-        let field_name = dedup_name(&t.field_name, name_counts);
-        w.line(&`let ${field_name} = p.expect(${const_name}, &EMPTY_SYNC);`);
-        return;
-    }
-    if let Literal(l) = elem {
-        let const_name = literal_const_name(&l.text);
-        let field_name = dedup_name(&literal_field_name(&l.text), name_counts);
-        w.line(&`let ${field_name} = p.expect(${const_name}, &EMPTY_SYNC);`);
-        return;
-    }
-    if let RuleRef(r) = elem {
-        let field_name = dedup_name(&r.field_name, name_counts);
+    match elem {
+        TokenRef(t) => {
+            let field_name = dedup_name(&t.field_name, name_counts);
+            w.line(&`let ${field_name} = p.expect(TK_${t.name}, &EMPTY_SYNC);`);
+        },
+        Literal(l) => {
+            let const_name = literal_const_name(&l.text);
+            let field_name = dedup_name(&literal_field_name(&l.text), name_counts);
+            w.line(&`let ${field_name} = p.expect(${const_name}, &EMPTY_SYNC);`);
+        },
         // Per-call-site FOLLOW args are baked on `RuleCallOp.follow_arg`
-        // by lower and consumed by the op-driven walkers; the surface
-        // `gen_element` arm only fires for legacy paths (Label inner /
-        // LR-suffix fallback / Consume node) where the call needs no
-        // follow argument and so passes the defaulted `&EMPTY_FOLLOW`.
-        // Prefix LR alts' trailing self-ref is reached via `gen_op_leaf`
-        // on `RuleCallOp.min_prec_arg`, so `gen_element` never threads
-        // precedence here either.
-        gen_atn_ret_pending(w, ctx, r.atn_call_site);
-        w.line(&`let ${field_name} = _parse_${r.snake_name}(p);`);
-        return;
-    }
-    if let Wildcard(_) = elem {
-        let field_name = dedup_name(&"wildcard", name_counts);
-        w.line(&`let ${field_name} = p.any();`);
-        return;
-    }
-    if let Not(ne) = elem {
-        let field_name = dedup_name(&not_element_field_name(&ne.element), name_counts);
-        let check = not_match_call(&ne.element);
-        w.line(&`let ${field_name} = ${check};`);
-        return;
-    }
-    if let Repeat(_) = elem {
+        // by lower and consumed by the op-driven walkers; this surface arm
+        // only fires for legacy paths (Label inner / LR-suffix fallback /
+        // Consume node) where the call needs no follow argument and so
+        // passes the defaulted `&EMPTY_FOLLOW`. Prefix LR alts' trailing
+        // self-ref is reached via `gen_op_leaf` on `RuleCallOp.min_prec_arg`,
+        // so precedence is never threaded here either.
+        RuleRef(r) => {
+            let field_name = dedup_name(&r.field_name, name_counts);
+            gen_atn_ret_pending(w, ctx, r.atn_call_site);
+            w.line(&`let ${field_name} = _parse_${r.snake_name}(p);`);
+        },
+        Wildcard(_) => {
+            let field_name = dedup_name(&"wildcard", name_counts);
+            w.line(&`let ${field_name} = p.any();`);
+        },
+        Not(ne) => {
+            let field_name = dedup_name(&not_element_field_name(&ne.element), name_counts);
+            let check = not_match_call(&ne.element);
+            w.line(&`let ${field_name} = ${check};`);
+        },
+        // After the Phase 2-G op-driven migration, only token-only groups
+        // reach this surface walker — every other Group classification
+        // (SimpleCst, SingleAlt, General) is handled by op-driven walkers
+        // before `gen_element` is invoked.
+        Group(g) => {
+            assert is_token_only_group(&g.alternatives), "gen_element: only token-only groups reach the surface walker; other classifications must be handled op-driven before gen_element is invoked";
+            gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
+        },
+        Label(lab) => {
+            if lab.list {
+                // Bare list label: allocate the array, parse the inner element
+                // once, and push. Repeats wrap this via gen_repeat below.
+                let inner_info = element_field_info(&lab.element);
+                let lab_name = dedup_name(&lab.field_name, name_counts);
+                w.line(&`let mut ${lab_name}: List<${inner_info.1}> = [];`);
+                let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
+                gen_element(w, &lab.element, ctx, name_counts);
+                w.line(&`${lab_name}.push(${predicted_inner});`);
+            } else {
+                // Scalar label `name = element`: parse the inner element with
+                // the shared `name_counts` so its emitted binding dedups
+                // against the outer alt's scope (otherwise `a=e ... b=e` would
+                // emit two top-level `let e = _parse_e(p);` and the second
+                // would fail compilation with "cannot redeclare e"). Then
+                // re-bind under the label name so the struct initializer
+                // resolves. Peek the dedup'd inner name before calling
+                // `gen_element`, which performs the actual increment.
+                let lab_name = dedup_name(&lab.field_name, name_counts);
+                let inner_info = element_field_info(&lab.element);
+                let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
+                gen_element(w, &lab.element, ctx, name_counts);
+                w.line(&`let ${lab_name} = ${predicted_inner};`);
+            }
+        },
         // Every op-driven Repeat dispatch flows through
         // `gen_op_repeat_with_follow_override` against the lowered
-        // `RepeatOp` directly. The remaining surface `gen_element`
-        // callers (Label / scan-side fallbacks) never see a Repeat
-        // here because lower replaces them with op-driven walkers
-        // before this point. Probe with a panic so a future
-        // regression is surfaced.
-        panic(
+        // `RepeatOp` directly. The remaining surface callers (Label /
+        // scan-side fallbacks) never see a Repeat here because lower
+        // replaces them with op-driven walkers before this point. Probe
+        // with a panic so a future regression is surfaced.
+        Repeat(_) => panic(
             "gen_element: Repeat element reached the retired surface walker — route through op-driven `gen_op_repeat_with_follow_override`",
-        );
+        ),
     }
-    if let Group(g) = elem {
-        // After the Phase 2-G op-driven migration, only token-only
-        // groups reach this surface walker — every other Group
-        // classification (SimpleCst, SingleAlt, General) is handled
-        // by op-driven walkers before `gen_element` is invoked.
-        assert is_token_only_group(&g.alternatives), "gen_element: only token-only groups reach the surface walker; other classifications must be handled op-driven before gen_element is invoked";
-        gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
-        return;
-    }
-    if let Label(lab) = elem {
-        if lab.list {
-            // Bare list label: allocate the array, parse the inner element
-            // once, and push. Repeats wrap this via gen_repeat below.
-            let inner_info = element_field_info(&lab.element);
-            let lab_name = dedup_name(&lab.field_name, name_counts);
-            w.line(&`let mut ${lab_name}: List<${inner_info.1}> = [];`);
-            let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
-            gen_element(w, &lab.element, ctx, name_counts);
-            w.line(&`${lab_name}.push(${predicted_inner});`);
-            return;
-        }
-        // Scalar label `name = element`: parse the inner element with the
-        // shared `name_counts` so its emitted binding dedups against the
-        // outer alt's scope (otherwise `a=e ... b=e` would emit two
-        // top-level `let e = _parse_e(p);` and the second would fail
-        // compilation with "cannot redeclare e"). Then re-bind under the
-        // label name so the struct initializer resolves.
-        //
-        // We need to know the dedup'd inner name to write the alias; peek
-        // the dedup result before calling `gen_element`, which performs
-        // the actual increment with the same base name.
-        let lab_name = dedup_name(&lab.field_name, name_counts);
-        let inner_info = element_field_info(&lab.element);
-        let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
-        gen_element(w, &lab.element, ctx, name_counts);
-        w.line(&`let ${lab_name} = ${predicted_inner};`);
-        return;
-    }
-    panic("gen_element: unhandled Element shape — every variant is handled");
 }
 
 /// Op-driven top-level Repeat dispatcher. Walkers reach this with
@@ -6653,15 +6872,11 @@ fn gen_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -> St
 }
 
 fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
-    if let Repeat(rep) = elem {
-        if let Optional = rep.kind {
-            return &rep.element;
-        }
-    }
-    if let Label(lab) = elem {
-        return unwrap_optional(&lab.element);
-    }
-    return elem;
+    return match elem {
+        Repeat(rep) => if rep.kind matches { Optional } { &rep.element } else { elem },
+        Label(lab) => unwrap_optional(&lab.element),
+        Group(_) | TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => elem,
+    };
 }
 
 /// Emit an inline scan guard for an optional's inner element.
@@ -6719,17 +6934,15 @@ fn gen_scan_guard_with_prefix(
 
 /// literal that coerces to `List<i32>` at the call site.
 fn not_match_call(inner: &Element) -> String {
-    if let TokenRef(t) = inner {
-        let const_name = `TK_${t.name}`;
-        return `p.expect_not([${const_name}])`;
-    }
-    if let Literal(l) = inner {
-        let const_name = literal_const_name(&l.text);
-        return `p.expect_not([${const_name}])`;
-    }
-    if let Group(g) = inner {
-        let mut kinds: List<String> = [];
-        if collect_not_set_tokens(&g.alternatives, &mut kinds) {
+    let unsupported = "not_match_call: unsupported inner element for parser-side ~";
+    return match inner {
+        TokenRef(t) => `p.expect_not([TK_${t.name}])`,
+        Literal(l) => `p.expect_not([${literal_const_name(&l.text)}])`,
+        Group(g) => {
+            let mut kinds: List<String> = [];
+            if !collect_not_set_tokens(&g.alternatives, &mut kinds) {
+                panic(unsupported);
+            }
             let mut list = String::with_capacity(32);
             for let mut i = 0; i < kinds.len(); i += 1 {
                 if i > 0 {
@@ -6737,10 +6950,10 @@ fn not_match_call(inner: &Element) -> String {
                 }
                 list.push_str(&kinds[i]);
             }
-            return `p.expect_not([${list}])`;
-        }
-    }
-    panic("not_match_call: unsupported inner element for parser-side ~");
+            `p.expect_not([${list}])`;
+        },
+        RuleRef(_) | Label(_) | Repeat(_) | Wildcard(_) | Not(_) => panic(unsupported),
+    };
 }
 
 /// Collect terminal token constants from a `~ ( ... )` group's alternatives.
@@ -7566,127 +7779,188 @@ fn gen_prediction_code_inner(
     skip: i32,
     rule_display: &String,
 ) {
-    if let Leaf(idx) = node {
-        // Consume advanced `p.pos` past `skip` shared tokens without building a
-        // node; rewind so `_alt_<idx>` re-parses the alt from its start.
-        if skip > 0 {
-            w.line(&`p.pos -= ${skip};`);
-        }
-        w.line(&`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`);
-        return;
-    }
-    if let Consume(c) = node {
-        // Shared-prefix terminal: advance past it (the chosen `_alt_<idx>`
-        // re-parses it) and descend to the disambiguating dispatch. It must
-        // match every alt below (the group need not contain alt 0; regression:
-        // ll_consume_group.g4); on a mismatch leave `p.pos`/`skip` so the Leaf
-        // rewinds exactly what was advanced.
-        let mut node_alts: List<i32> = [];
-        prediction_collect_all_indices(&c.child, &mut node_alts);
-        let mut elem_matches = !node_alts.is_empty();
-        for let a of &node_alts {
-            if skip >= alts[*a].elements.len() || !elements_match(&c.element, &alts[*a].elements[skip]) {
-                elem_matches = false;
-                break;
+    match node {
+        Leaf(idx) => {
+            // Consume advanced `p.pos` past `skip` shared tokens without building a
+            // node; rewind so `_alt_<idx>` re-parses the alt from its start.
+            if skip > 0 {
+                w.line(&`p.pos -= ${skip};`);
             }
-        }
-        if elem_matches {
-            w.line(&"p.pos += 1;");
-            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip + 1, rule_display);
-        } else {
-            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip, rule_display);
-        }
-        return;
-    }
-    if let Ambiguous(a) = node {
-        // Sort by element count for proper ordering (single RuleRef first, etc.)
-        let mut sorted_indices = a.alts.sorted();
-        sort_group_by_element_count(&mut sorted_indices, alts);
-        if skip == 0 {
-            if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts, ctx) {
-                gen_predicate_gated_dispatch(w, &a.alts, alts, fn_name, ctx, rule_display);
-                return;
-            }
-            let amb_rule = ctx.current_rule_index();
-            let route_via_atn = ambiguous_node_routes_via_atn(a, rule_display, ctx);
-            if route_via_atn {
-                let dec = ctx.atn_rule_body_decision(amb_rule);
-                let disabled_arg = emit_atn_disabled_seed(w, &a.alts, alts, ctx);
-                w.line(
-                    &`let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${dec}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0${disabled_arg});`,
-                );
-                // A seed can exclude every alt (`_atn_alt == -1`), which the
-                // index dispatch would otherwise route to its last alt.
-                if !disabled_arg.is_empty() {
-                    w.begin(&"if _atn_alt < 0");
-                    w.line(&`p.no_viable("no viable alternative", p.peek_span(), []);`);
-                    emit_no_viable_return(w, ctx);
-                    w.end();
-                }
-                emit_index_pick_dispatch(w, &"_atn_alt", &sorted_indices, fn_name, rule_display, ctx);
-                return;
-            }
-            // Check if any alternatives have scan functions available.
-            // If ALL non-last alternatives have scans, we run a longest-match
-            // scan tournament: scan each, parse the winner. If some have
-            // scans and some don't, use a hybrid approach.
-            let mut all_have_scans = true;
-            for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
-                let idx = sorted_indices[i];
-                if !alt_has_scan(&alts[idx].elements, ctx) {
-                    all_have_scans = false;
+            w.line(&`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`);
+        },
+        Consume(c) => {
+            // Shared-prefix terminal: advance past it (the chosen `_alt_<idx>`
+            // re-parses it) and descend to the disambiguating dispatch. It must
+            // match every alt below (the group need not contain alt 0; regression:
+            // ll_consume_group.g4); on a mismatch leave `p.pos`/`skip` so the Leaf
+            // rewinds exactly what was advanced.
+            let mut node_alts: List<i32> = [];
+            prediction_collect_all_indices(&c.child, &mut node_alts);
+            let mut elem_matches = !node_alts.is_empty();
+            for let a of &node_alts {
+                if skip >= alts[*a].elements.len() || !elements_match(&c.element, &alts[*a].elements[skip]) {
+                    elem_matches = false;
                     break;
                 }
             }
-
-            if all_have_scans && sorted_indices.len() >= 2 {
-                // All non-last alternatives have scan functions.
-                // Check if ALL scans are full (cover entire alternative) —
-                // including the last alt, which we need to scan for
-                // longest-match dispatch.
-                let mut all_full = true;
-                for let mut i = 0; i < sorted_indices.len(); i += 1 {
+            if elem_matches {
+                w.line(&"p.pos += 1;");
+                gen_prediction_code_inner(
+                    w,
+                    &c.child,
+                    fn_name,
+                    alts,
+                    lowered_rule,
+                    type_name,
+                    ctx,
+                    skip + 1,
+                    rule_display,
+                );
+            } else {
+                gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip, rule_display);
+            }
+        },
+        Ambiguous(a) => {
+            // Sort by element count for proper ordering (single RuleRef first, etc.)
+            let mut sorted_indices = a.alts.sorted();
+            sort_group_by_element_count(&mut sorted_indices, alts);
+            if skip == 0 {
+                if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts, ctx) {
+                    gen_predicate_gated_dispatch(w, &a.alts, alts, fn_name, ctx, rule_display);
+                    return;
+                }
+                let amb_rule = ctx.current_rule_index();
+                let route_via_atn = ambiguous_node_routes_via_atn(a, rule_display, ctx);
+                if route_via_atn {
+                    let dec = ctx.atn_rule_body_decision(amb_rule);
+                    let disabled_arg = emit_atn_disabled_seed(w, &a.alts, alts, ctx);
+                    w.line(
+                        &`let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${dec}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0${disabled_arg});`,
+                    );
+                    // A seed can exclude every alt (`_atn_alt == -1`), which the
+                    // index dispatch would otherwise route to its last alt.
+                    if !disabled_arg.is_empty() {
+                        w.begin(&"if _atn_alt < 0");
+                        w.line(&`p.no_viable("no viable alternative", p.peek_span(), []);`);
+                        emit_no_viable_return(w, ctx);
+                        w.end();
+                    }
+                    emit_index_pick_dispatch(w, &"_atn_alt", &sorted_indices, fn_name, rule_display, ctx);
+                    return;
+                }
+                // Check if any alternatives have scan functions available.
+                // If ALL non-last alternatives have scans, we run a longest-match
+                // scan tournament: scan each, parse the winner. If some have
+                // scans and some don't, use a hybrid approach.
+                let mut all_have_scans = true;
+                for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
                     let idx = sorted_indices[i];
-                    if !alt_has_scan(&alts[idx].elements, ctx) || !alt_scan_is_full(&alts[idx].elements, ctx) {
-                        all_full = false;
+                    if !alt_has_scan(&alts[idx].elements, ctx) {
+                        all_have_scans = false;
                         break;
                     }
                 }
 
-                if all_full {
-                    // All scans cover entire alternatives — scan success
-                    // guarantees parse success. Use longest-match first-win
-                    // (ANTLR4-compatible): scan each alt, pick the one
-                    // advancing pos the furthest; ties go to the first alt
-                    // in grammar order.
-                    w.line(&"let _sd_tokens = &p.kinds;");
-                    w.line(&"let _sd_pos = p.pos;");
+                if all_have_scans && sorted_indices.len() >= 2 {
+                    // All non-last alternatives have scan functions.
+                    // Check if ALL scans are full (cover entire alternative) —
+                    // including the last alt, which we need to scan for
+                    // longest-match dispatch.
+                    let mut all_full = true;
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
-                        w.line(&`let _sd_p_${idx} = ${*fn_name}_scan_${idx}(_sd_tokens, _sd_pos);`);
-                    }
-                    if ctx.is_trace() {
-                        let rlit = str_lit(*rule_display);
-                        for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                            let idx = sorted_indices[i];
-                            w.line(&`trace_scan_alt(p, &${rlit}, ${idx}, _sd_p_${idx});`);
+                        if !alt_has_scan(&alts[idx].elements, ctx) || !alt_scan_is_full(&alts[idx].elements, ctx) {
+                            all_full = false;
+                            break;
                         }
                     }
-                    w.line(&"let mut _sd_best_i: i32 = -1;");
-                    w.line(&"let mut _sd_best_p: i32 = -1;");
-                    // Iterate in ascending alt-index order so a scan-length
-                    // tie resolves to the first grammar alternative (ANTLR4's
-                    // ambiguity resolution), not to the sort's front-runner.
-                    let best_i = "_sd_best_i";
-                    let best_p = "_sd_best_p";
-                    for let idx of sorted_indices.sorted() {
-                        let end_expr = `_sd_p_${idx}`;
-                        emit_argmax_update(w, &best_p, &best_i, &end_expr, idx);
+
+                    if all_full {
+                        // All scans cover entire alternatives — scan success
+                        // guarantees parse success. Use longest-match first-win
+                        // (ANTLR4-compatible): scan each alt, pick the one
+                        // advancing pos the furthest; ties go to the first alt
+                        // in grammar order.
+                        w.line(&"let _sd_tokens = &p.kinds;");
+                        w.line(&"let _sd_pos = p.pos;");
+                        for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                            let idx = sorted_indices[i];
+                            w.line(&`let _sd_p_${idx} = ${*fn_name}_scan_${idx}(_sd_tokens, _sd_pos);`);
+                        }
+                        if ctx.is_trace() {
+                            let rlit = str_lit(*rule_display);
+                            for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                                let idx = sorted_indices[i];
+                                w.line(&`trace_scan_alt(p, &${rlit}, ${idx}, _sd_p_${idx});`);
+                            }
+                        }
+                        w.line(&"let mut _sd_best_i: i32 = -1;");
+                        w.line(&"let mut _sd_best_p: i32 = -1;");
+                        // Iterate in ascending alt-index order so a scan-length
+                        // tie resolves to the first grammar alternative (ANTLR4's
+                        // ambiguity resolution), not to the sort's front-runner.
+                        let best_i = "_sd_best_i";
+                        let best_p = "_sd_best_p";
+                        for let idx of sorted_indices.sorted() {
+                            let end_expr = `_sd_p_${idx}`;
+                            emit_argmax_update(w, &best_p, &best_i, &end_expr, idx);
+                        }
+                        emit_index_pick_dispatch(w, &"_sd_best_i", &sorted_indices, fn_name, rule_display, ctx);
+                    } else {
+                        // Some scans are partial — scan success is a hint,
+                        // not a guarantee. Use save/restore with scan guards.
+                        emit_spec_alt_preamble(w);
+                        for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                            let idx = sorted_indices[i];
+                            let is_last = i == sorted_indices.len() - 1;
+                            if is_last {
+                                if ctx.is_trace() {
+                                    w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
+                                }
+                                w.line(
+                                    &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`,
+                                );
+                            } else {
+                                let has_scan = alt_has_scan(&alts[idx].elements, ctx);
+                                let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
+                                if is_full {
+                                    // Full scan: success guarantees parse success.
+                                    w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos) >= 0`);
+                                    if ctx.is_trace() {
+                                        w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
+                                    }
+                                    w.line(
+                                        &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(
+                                            ctx,
+                                        )});`,
+                                    );
+                                    w.end();
+                                } else if has_scan {
+                                    // Partial scan: try parse, fall through on failure.
+                                    w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos) >= 0`);
+                                    emit_spec_alt_try(
+                                        w,
+                                        &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
+                                        idx,
+                                        ctx,
+                                        rule_display,
+                                    );
+                                    w.end();
+                                } else {
+                                    // No scan: save-and-rewind speculative parse.
+                                    emit_spec_alt_try(
+                                        w,
+                                        &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
+                                        idx,
+                                        ctx,
+                                        rule_display,
+                                    );
+                                }
+                            }
+                        }
                     }
-                    emit_index_pick_dispatch(w, &"_sd_best_i", &sorted_indices, fn_name, rule_display, ctx);
                 } else {
-                    // Some scans are partial — scan success is a hint,
-                    // not a guarantee. Use save/restore with scan guards.
+                    // Fallback: save-and-rewind speculative parse pattern.
                     emit_spec_alt_preamble(w);
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
@@ -7699,94 +7973,46 @@ fn gen_prediction_code_inner(
                                 &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`,
                             );
                         } else {
-                            let has_scan = alt_has_scan(&alts[idx].elements, ctx);
-                            let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
-                            if is_full {
-                                // Full scan: success guarantees parse success.
-                                w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos) >= 0`);
-                                if ctx.is_trace() {
-                                    w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
-                                }
-                                w.line(
-                                    &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`,
-                                );
-                                w.end();
-                            } else if has_scan {
-                                // Partial scan: try parse, fall through on failure.
-                                w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos) >= 0`);
-                                emit_spec_alt_try(
-                                    w,
-                                    &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
-                                    idx,
-                                    ctx,
-                                    rule_display,
-                                );
-                                w.end();
-                            } else {
-                                // No scan: save-and-rewind speculative parse.
-                                emit_spec_alt_try(
-                                    w,
-                                    &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
-                                    idx,
-                                    ctx,
-                                    rule_display,
-                                );
-                            }
+                            emit_spec_alt_try(
+                                w,
+                                &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
+                                idx,
+                                ctx,
+                                rule_display,
+                            );
                         }
                     }
                 }
             } else {
-                // Fallback: save-and-rewind speculative parse pattern.
-                emit_spec_alt_preamble(w);
-                for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                    let idx = sorted_indices[i];
-                    let is_last = i == sorted_indices.len() - 1;
-                    if is_last {
-                        if ctx.is_trace() {
-                            w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
-                        }
-                        w.line(&`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`);
-                    } else {
-                        emit_spec_alt_try(
-                            w,
-                            &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
-                            idx,
-                            ctx,
-                            rule_display,
-                        );
-                    }
+                // Prefix already consumed — should not happen.
+                // Consume nodes that lead to Ambiguous are stripped at build time.
+                panic("unreachable: Consume leading to Ambiguous should have been stripped");
+            }
+        },
+        Dispatch(d) => {
+            let check_var = if d.depth == 0 { "p.peek_kind()" } else { `p.peek_at(${d.depth})` };
+            for let mut i = 0; i < d.branches.len(); i += 1 {
+                let branch = &d.branches[i];
+                let cond = ctx.kind_check_str(&branch.tokens, &check_var);
+                if i == 0 {
+                    w.begin(&`if ${cond}`);
+                } else {
+                    w.else_begin(&`else if ${cond}`);
                 }
+                gen_prediction_code_inner(
+                    w,
+                    &branch.child,
+                    fn_name,
+                    alts,
+                    lowered_rule,
+                    type_name,
+                    ctx,
+                    skip,
+                    rule_display,
+                );
             }
-        } else {
-            // Prefix already consumed — should not happen.
-            // Consume nodes that lead to Ambiguous are stripped at build time.
-            panic("unreachable: Consume leading to Ambiguous should have been stripped");
-        }
-        return;
-    }
-    if let Dispatch(d) = node {
-        let check_var = if d.depth == 0 { "p.peek_kind()" } else { `p.peek_at(${d.depth})` };
-        for let mut i = 0; i < d.branches.len(); i += 1 {
-            let branch = &d.branches[i];
-            let cond = ctx.kind_check_str(&branch.tokens, &check_var);
-            if i == 0 {
-                w.begin(&`if ${cond}`);
-            } else {
-                w.else_begin(&`else if ${cond}`);
-            }
-            gen_prediction_code_inner(
-                w,
-                &branch.child,
-                fn_name,
-                alts,
-                lowered_rule,
-                type_name,
-                ctx,
-                skip,
-                rule_display,
-            );
-        }
-        w.end();
+            w.end();
+        },
     }
 }
 
@@ -7795,17 +8021,11 @@ fn gen_prediction_code_inner(
 /// Unwraps Labels to compare inner elements.
 fn elements_match(consumed: &Element, expected: &Element) -> bool {
     let exp = unwrap_label(expected);
-    if let TokenRef(a) = consumed {
-        if let TokenRef(b) = exp {
-            return a.name == b.name;
-        }
-    }
-    if let Literal(a) = consumed {
-        if let Literal(b) = exp {
-            return a.text == b.text;
-        }
-    }
-    return false;
+    return match consumed {
+        TokenRef(a) => *exp matches { TokenRef(b) && b.name == a.name },
+        Literal(a) => *exp matches { Literal(b) && b.text == a.text },
+        RuleRef(_) | Group(_) | Repeat(_) | Label(_) | Wildcard(_) | Not(_) => false,
+    };
 }
 
 /// Collect the alt indices whose per-alt `_scan_<n>` helper the dispatch

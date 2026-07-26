@@ -2,265 +2,207 @@
 
 ## Context
 
-Wado has value semantics: a struct/array/tuple literal builds a fresh heap object
-every time it is evaluated. A constant-shaped, read-only literal rebuilt on every
-call — or loop iteration — is pure waste. In particular a
-`global ORIGIN: GPoint = GPoint { x: 0, y: 0 }` was initialized at runtime inside
-`__initialize_module` even though Wasm 3.0 GC allows `struct.new` /
-`array.new_fixed` / `array.new_default` in constant init expressions.
-
-Two problems blocked fixing this:
-
-- Narrow capability. The const-expr emitter handled only scalar consts and
-  `ref.null` (an `_ => i32.const 0` fallback), so aggregate literals could not be
-  instantiation-time const globals.
-- Scattered knowledge (smell). "Is this init a Wasm constant?" was encoded
-  redundantly across `is_constant_initializer` (TIR, `lower/plan`),
-  `translate_global_init` (NIR→WIR), the codegen emitter, and `is_scalar_constant`
-  (the NIR `const_global_promotion` pass) — each with a different, narrower
-  accepted set.
+Wado has value semantics: a struct / array / tuple literal builds a fresh heap
+object every time it is evaluated. A constant-shaped, read-only value rebuilt on
+every call — or every loop iteration — is pure waste, and Wasm 3.0 GC allows
+`struct.new` / `array.new_fixed` / `array.new_default` in constant initializer
+expressions, so such a value can be built once at instantiation instead.
 
 ## Decision
 
-A constant global initializer is promoted to an eager Wasm constant by one WIR
-pass, gated by one predicate. The eager/lazy split is decided once, after NIR
-optimization has simplified the init — "lazy iff optimize could not simplify it."
+Const-ness is decided once, by one predicate, in one WIR pass that runs after
+NIR optimization has simplified initializers — "lazy iff optimize could not
+simplify it". A NIR pass feeds that machinery by hoisting qualifying values out
+of function bodies into globals.
 
-### One const predicate — `WirInstr::is_const_expressible`
+### The const predicate — `WirInstr::is_const_expressible`
 
-A single recursive predicate (`wir.rs`) is the authority on const-ness for global
-initializers. It accepts: scalar consts, `ref.null` / `ref.i31` / `ref.func`,
-`struct.new` / `array.new_fixed` / `array.new_default` with const children, and a
-transparent `ref.as_non_null` wrapper (aggregate constructors wrap non-null ref
-fields in it, but already yield a non-null ref, so it is dropped in const
-context). It excludes `global.get` (a const init never references another global,
-sidestepping the core-Wasm const-expr ordering restriction) and `array.new_data`
-/ `array.new_elem` — these read a data/elem segment at runtime and are _not_ valid
-Wasm constant instructions. Codegen's `push_const_instrs` emits exactly this set
-and mirrors the predicate; a node reaching the emitter that fails the predicate is
-an ICE, not a silent `i32.const 0`.
+One recursive predicate (`wir.rs`) is the authority on const-ness for global
+initializers. It accepts scalar consts, `ref.null` / `ref.i31` / `ref.func`,
+`struct.new` / `array.new_fixed` / `array.new_default` with const children, and
+a transparent `ref.as_non_null` wrapper (aggregate constructors wrap non-null
+ref fields in it but already yield a non-null ref, so it is dropped in const
+context).
 
-This shapes how strings are materialized: a `String`'s `array.new_data<u8>` repr
-is not const-expressible, so a string built that way cannot be an eager const
-global. `translate_string_literal` therefore gives a **short** string (≤
-`NirPackage::string_inline_max_bytes` UTF-8 bytes) a constant `array.new_fixed<u8>`
-repr instead — one `i32.const` per byte — so a short constant string global _does_
-promote to eager. Longer strings keep the compact data-segment repr and stay lazy
-(each byte as an `array.new_fixed` operand would bloat code unboundedly). The
-threshold also skips registering a passive data segment for short strings, since
-the inline repr does not read one.
+It excludes `global.get`, keeping a const init clear of the core-Wasm
+const-expr ordering restriction, and `array.new_data` / `array.new_elem`, which
+read a segment at runtime and are not valid Wasm constant instructions.
+
+Codegen's `push_const_instrs` emits exactly this set. A node that reaches the
+emitter and fails the predicate is an ICE, never a silent `i32.const 0`.
+
+### String representation
+
+A string literal lowers to `StructLiteral String { repr: PackedArray(bytes),
+used: <len> }`, a bytes literal to the same shape over `List<u8>`;
+`ExprKind::PackedArray` is a raw constant `Array<u8>`. Strings and bytes are
+therefore ordinary const aggregates, with no string-specific code in the passes
+below.
+
+`PackedArray`'s WIR lowering picks the repr by size. A string of at most
+`NirPackage::string_inline_max_bytes` UTF-8 bytes gets a constant
+`array.new_fixed<u8>` repr — one `i32.const` per byte — and registers no data
+segment, so it can promote to an eager const global. A longer string keeps the
+compact `array.new_data` repr and stays lazy, since spelling every byte as an
+operand would bloat code unboundedly.
 
 The threshold is opt-level-driven (`optimize::string_inline_max_bytes`): 4 bytes
-by default (including `-Os`, which targets size) and 8 at `-O3`, which trades a
-little code size for more eager string globals. It is measured to be roughly
-size-neutral either way — `array.new_fixed` of N bytes offsets the dropped data
-segment + its header — so the threshold tunes how many string globals go eager
-rather than overall size; the body-globalization cost below dominates size.
+by default, including `-Os`, and 8 at `-O3`. It is measured to be roughly
+size-neutral — `array.new_fixed` of N bytes offsets the dropped data segment and
+its header — so it tunes how many string globals go eager rather than overall
+size.
 
-### One classifier — `wir_optimize::const_global`
+### The classifier — `wir_optimize::const_global`
 
-The eager/lazy decision lives in a single WIR pass, `promote_const_global_inits`,
-run in WIR phase 7 (before guard removal). `lower/plan/globals::extract` still
-emits each non-trivial init as an `__initialize_module` runtime assignment, and
-NIR optimization (`array_literal`, `string_push`, `const_folding`, …) collapses
-builder sequences. By WIR the assignment is `GlobalSet(G, value)` with `value`
-already fully lowered. The pass:
+`promote_const_global_inits` runs in WIR phase 7, before guard removal.
+`lower/plan/globals::extract` emits every non-trivial initializer as an
+`__initialize_module` runtime assignment, NIR optimization collapses builder
+sequences, and by WIR the assignment is a `GlobalSet(G, value)` with `value`
+fully lowered. The pass:
 
-- Considers user-immutable globals (`g.mutable && !g.wado_mutable`) — currently
-  Wasm-mutable only because their init was extracted. `WirGlobal` carries
-  `wado_mutable` so `global mut` is excluded.
-- Resolves each assignment to a constant via `is_const_expressible`, seeing
-  through the builder-temp `Seq` (`__b = struct.new …; __b`) an array literal
-  leaves. If every assignment to a global is constant, it moves the value into the
-  global's eager `init`, marks it immutable, and drops the `GlobalSet`(s).
-- Recurses into nested instructions: when a small `__initialize_module` is inlined
-  into the entry points, its `GlobalSet` lands inside an
-  `__inline___initialize_modules` guard block and is duplicated once per entry
-  export; a top-level-only scan would silently leave the global lazy.
+- Considers user-immutable globals (`g.mutable && !g.wado_mutable`), which are
+  Wasm-mutable only because their init was extracted. `global mut` is excluded.
+- Resolves each assignment through `is_const_expressible`, seeing through the
+  builder-temp `Seq` (`__b = struct.new …; __b`) an array literal leaves. When
+  every assignment to a global is constant, it moves the value into the global's
+  eager `init`, marks it immutable, and drops the `GlobalSet`s.
+- Recurses into nested instructions: an inlined `__initialize_module` puts its
+  `GlobalSet` inside an `__inline___initialize_modules` guard block, duplicated
+  per entry export, which a top-level-only scan would leave lazy.
 
-The emptied init body and `__modules_initialized` guard are reclaimed by
-`init_guard` / `dce` / `cleanup` in the same phase. This subsumes the scalar-only
-NIR `const_global_promotion`, which is deleted — const-ness is now decided once.
+`init_guard` / `dce` / `cleanup` reclaim the emptied init body and the
+`__modules_initialized` guard in the same phase. Promotion leaves `lazy_init`
+and the nullable slot as `register_globals` set them — a non-null const init is
+a valid subtype of a nullable slot.
 
-Promotion keeps `lazy_init` and the nullable slot as `register_globals` set them:
-a non-null const init is a valid subtype of a nullable slot, and codegen keeps
-narrowing reads with `ref.as_non_null`, correct since the eager value is non-null.
+The classifier sits at WIR because the value is already correctly lowered there
+— variant representation, non-null field wrapping and builder collapse all baked
+in — so it reuses the real translator's output instead of re-translating a NIR
+aggregate. Keeping `extract` in place also keeps lazy initializers flowing
+through the TIR `lower/plan` boxing / closure / value-copy passes they depend
+on; a const init needs none of those.
 
-### Why WIR-level, not a NIR→WIR `try_const_init`
+### Body globalization — `const_object_globalization`
 
-An earlier design put a `try_const_init` classifier at the NIR→WIR boundary and
-relocated `extract` / `build_initialize_modules` into `wir_build`. Two findings
-redirected it to a WIR pass:
+This NIR pass (`optimize/const_object_globalization.rs`) hoists a qualifying
+value out of a function body into a shared immutable global. It runs once after
+the optimizer fixpoint converges, on the stable post-inline shape.
 
-- Removing `extract` would route lazy (non-const) init code around the TIR
-  `lower/plan` boxing / closure / value-copy passes it depends on — those run
-  before NIR and process the synthesized `__initialize_module`. Const inits don't
-  need them (a const init can't contain `&mut`/closures), but lazy ones do.
-- At WIR the value is already correctly lowered — variant representation, non-null
-  field wrapping, builder collapse all baked in — so the pass reuses that lowering
-  instead of re-translating a NIR aggregate (which would risk divergence from the
-  real translator). The decision is still made once, post-optimization.
+It emits a Wasm-mutable / Wado-immutable global with a `null` placeholder init,
+mirroring `extract`, plus an inline `GlobalVarSet` where the value was built,
+and rewrites the binding's reads to `GlobalVarGet`. The classifier above then
+promotes the global and drops the assignment. Soundness therefore rests on the
+gates alone: a value that turns out not to be const-expressible merely leaves
+the global assigned at runtime, still correct.
 
-An earlier draft planned to give `register_globals` a path to lower an
-aggregate-literal initializer directly, so a body-globalized global could carry
-an eager aggregate `init`. Body globalization instead routes through the existing
-`__initialize_module`-style promotion (an inline `GlobalVarSet` promoted by
-`wir_optimize::const_global`), so this path is not needed and was never added —
-`translate_global_init` still handles only scalar / `null` inits. See "Body
-globalization — landed" below.
+Two shapes are matched, collected in a single exhaustive walk:
 
-### Body globalization — landed
+- A `let` binding of a qualifying value.
+- A qualifying value referenced via `&` directly at an expression position with
+  no enclosing `let` — the shape a synthesized `serde` field key takes
+  (`st.field(&"id_str", …)`). It is rewritten in place: the `Unary::Ref`'s inner
+  expression becomes `{ GlobalVarSet(G, …); GlobalVarGet(G) }`.
 
-`const_object_globalization` (a NIR pass,
-`optimize/const_object_globalization.rs`) hoists constant-aggregate `let`
-bindings out of function bodies into shared immutable globals. It was deferred
-until the original soundness blocker was removed: at `-O2`, `arr[i] = v` lowered
-to a builtin `array_set(arr.repr, i, v)`, a mutation through the `arr.repr`
-projection that a "every use is a projection read" gate misread as a read.
-[Phase 1 of the `builtin::array` redesign](./wep-2026-06-02-builtin-array-redesign.md)
-gave the `builtin::array_*` ops `&` / `&mut` first parameters, so the mutation is
-now an explicit `&mut arr.repr` the gate rejects.
+The walk skips into a qualifying `let`'s own value, because hoisting both would
+nest one global's `GlobalVarSet` inside another's initializer — a shape the
+single-assignment classifier cannot see through.
 
-Two independent gates:
+#### Gate: closed constant expression
 
-- Closed const aggregate (`is_globalizable_const`). The initializer must be a
-  side-effect-free constant with no free locals: literals, nested
-  `Struct` / `Tuple` / `Array` / `Enum` / `Variant` constructors, and the
-  builder-temp block (`{ let __b = …; *__b }`) an array literal leaves. String
-  and bytes literals qualify too: they lower to a `StructLiteral` over a packed
-  `Array<u8>`, a const aggregate (see the 2026-06-24 update below). Calls and
-  reads of other globals are excluded — a free local or side effect would make
-  hoisting to module scope unsound, and a non-const value cannot promote.
-- Read-only (`is_readonly`). Every use must be a borrowing / reading position.
-  Modelled on `value_copy_demote`'s element-immutability walk but stricter:
-  because the _whole_ object is shared, even a spine mutation (`push`) corrupts
-  it, so any `&mut self` method, any `&mut` of a projection, and any assignment
-  to the binding or a projection disqualifies it. A bare whole-value read in a
-  consuming position (return, block tail, `let y = xs`, an aggregate element) is
-  also rejected — the value-copy machinery may have elided the copy treating `xs`
-  as a movable local, which globalizing would break. By-`&` borrows, by-value
-  arguments (the callee gets an independent copy), field / index reads, and
-  `&self` methods are admitted.
+`is_globalizable_const` requires a side-effect-free constant with no free
+locals: literals, nested `Struct` / `Tuple` / `Array` / `Enum` / `Variant`
+constructors, `PackedArray`, and the builder-temp block an array literal leaves.
 
-The pass runs once after the optimizer fixpoint converges, on the stable
-post-inline shape. It does **not** re-translate the aggregate or extend
-`register_globals`: it emits a fresh Wasm-mutable / Wado-immutable global with a
-`null` placeholder init (mirroring `extract`) plus an inline `GlobalVarSet` at
-the original `let`, and rewrites the binding's reads to `GlobalVarGet`. The
-existing `wir_optimize::const_global` classifier then promotes the global to an
-eager Wasm constant and drops the assignment — reusing that machinery wholesale,
-so soundness rests on the read-only gate alone: if a value turns out not to be
-WIR-const-expressible, the global merely stays lazy-assigned each call, still
-correct. (This supersedes the earlier idea of a `register_globals` aggregate-init
-path, which is therefore not needed.)
+A pure call on such constants qualifies too — it is deterministic and
+side-effect free, so it is a closed constant expression in the same sense.
+Purity comes from `optimize::mod_ref::FnEffect`, a per-callee summary resolved
+as a least fixpoint over the call graph, tracking globals, linear memory and
+component-model I/O. It deliberately excludes the GC heap: a callee that mutates
+objects it allocated itself stays deterministic to its caller, and `stores` is
+what would let a reference escape. Without that exclusion no `String`-building
+function would qualify.
 
-Only aggregates that _survive_ optimization are reachable targets: a const struct
-that is only field-read is scalarized away by SROA before this pass runs, so the
-prime beneficiary is a constant `List` / `Array` indexed dynamically in a loop
-(the lookup-table case), which cannot be scalarized.
+Reads of other globals are excluded — a non-const value cannot promote.
 
-### Enablers (other WEPs)
+#### Gate: read-only
 
-- `NirExprKind::ArrayLiteral` + const push-sequence collapse — landed; without it
-  arrays reach NIR as builder push-sequences. See
-  [NIR Layer WEP](./wep-2026-05-11-nir.md) and
-  [`NirExprKind::ArrayLiteral` WEP](./wep-2026-05-31-nir-array-literal.md).
-- `niri` folding `G.field` / `G[const]` on immutable aggregate globals — not
-  landed. See [niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md) (Stage 6).
+`is_readonly` requires every use to be a borrowing or reading position. It is
+modelled on `value_copy_demote`'s element-immutability walk but stricter:
+because the whole object is shared, even a spine mutation (`push`) corrupts it.
+Any `&mut self` method, any `&mut` of a projection, and any assignment to the
+binding or a projection disqualifies it.
+
+A bare whole-value read in a consuming position (return, block tail, `let y =
+xs`, an aggregate element) is also rejected: the value-copy machinery may have
+elided the copy treating the binding as a movable local, which globalizing would
+break. By-`&` borrows, by-value arguments, field / index reads and `&self`
+methods are admitted.
+
+#### Gate: profitability
+
+Hoisting costs a global, a guard branch, and an object that stays live for the
+whole program, so it is restricted to values that own heap storage — those that
+transitively own a GC array, as `String` and `List` do. A small aggregate of
+scalars owns nothing: `multi_value_return` already lifts such a return into Wasm
+multi-values and allocates nothing, so hoisting it would trade zero allocations
+for a global.
+
+#### Lazy-init guard
+
+A call initializer is never Wasm-const-expressible, so the classifier cannot
+promote it to an eager `init`; the inline assignment survives and, unguarded,
+re-runs on every activation. Such an assignment is wrapped in
+`if builtin::is_uninitialized(G)`, which reads the global's slot at a nullable
+type and tests the `null` placeholder — the slot itself records whether
+initialization has happened, so no companion flag global is needed.
+
+The guard also pins the semantics: initialization happens at the first execution
+of the expression it replaced, so a callee that traps or diverges still does so,
+at the same point. Moving the work to module init would drag both to
+instantiation time.
+
+A literal initializer keeps the unguarded shape, since the classifier deletes
+its assignment outright.
+
+#### Representation and scope
+
+A global created from the inline-`&` case is marked
+`NirGlobal::prefer_fixed_string_repr` — a field rather than a name-prefix guess,
+so it cannot misidentify a user-declared global sharing the pass's
+`__const_obj_*` naming convention. WIR build gives only such a global's
+`GlobalVarSet` value a size-bounded override
+(`name::INLINE_REF_EAGER_MAX_BYTES`, 64 bytes) of `string_inline_max_bytes`, so
+a realistic field name promotes eager without forcing arbitrarily large literals
+eager too. `wir_optimize::prune_dead_data` drops any passive data segment
+speculatively registered for a literal that ends up wholly `array.new_fixed`.
+
+The pass is gated off any `wasi:*`-namespaced module: `wir_build::register_globals`
+asserts a `NirGlobal` never has a WASI `module_source`, so a hoisted global in a
+WASI-binding helper fails loudly at build time instead of dangling silently.
+
+Only values that survive optimization are reachable targets. A const struct that
+is only field-read is scalarized away by SROA before this pass runs, so the
+prime beneficiaries are a constant `List` / `Array` indexed dynamically in a
+loop, and a pure call building a heap value from literals.
 
 ## Consequences
 
-- Constant struct/array/tuple globals build once at instantiation; reads are a
-  bare `global.get`, no init flag check.
-- The const predicate lives once (`WirInstr::is_const_expressible`), codegen
-  mirrors it, and the scalar-only NIR promotion plus its duplicate predicate are
-  gone.
-- Short string globals (≤ `string_inline_max_bytes`: 4, or 8 at `-O3`) are eager
-  via a constant `array.new_fixed<u8>` repr; longer string globals stay lazy
-  (compact `array.new_data` data-segment repr is not const-expressible).
-- Known limitation: a derived scalar global (`global B = A + 10`) is still
-  promoted to an eager const, but its _reads_ no longer fold at use sites the way
-  the in-loop NIR pass enabled — `niri`'s `GlobalEnv` keys on Wasm-mutability
-  (`const_folding::build_global_env`), so an extracted (Wasm-mutable) global is
-  `NonConst` to the interpreter. Keying that on `wado_mutable` would fold
-  user-immutable globals' reads from their initializers directly; it overlaps the
-  niri Stage 6 enabler and is left as a follow-up.
-- Cost: a marginally larger global section for constants a path may never reach —
+- Constant struct / array / tuple globals build once at instantiation; reads are
+  a bare `global.get` with no init flag check.
+- The const predicate lives in one place and codegen mirrors it.
+- Short string globals are eager via a constant `array.new_fixed<u8>` repr;
+  longer ones stay lazy.
+- A derived scalar global (`global B = A + 10`) is promoted to an eager const,
+  but its reads no longer fold at use sites: `niri`'s `GlobalEnv` keys on
+  Wasm-mutability (`const_folding::build_global_env`), so an extracted global is
+  `NonConst` to the interpreter.
+- Cost: a marginally larger global section for constants a path may never reach,
   acceptable given no access-time overhead.
 
 ## TODO
 
-Landed:
-
-- [x] `WirInstr::is_const_expressible` — single const predicate; codegen
-      `push_const_instrs` mirrors it (fallback → ICE). `array.new_data` excluded.
-- [x] `wir_optimize::const_global::promote_const_global_inits` — single classifier
-      (recurses into inlined/duplicated init blocks); `WirGlobal.wado_mutable`
-      added; NIR `const_global_promotion` deleted.
-- [x] `const_object_globalization` NIR pass — hoists constant, read-only
-      aggregate `let` bindings into shared immutable globals via an inline
-      `GlobalVarSet` that `wir_optimize::const_global` promotes. Two gates
-      (`is_globalizable_const`, `is_readonly`); the `&mut`-aware read-only gate
-      is unblocked by builtin-array Phase 1. E2E fixture
-      `const_object_globalization` (loop-indexed `List` globalized; mutated array
-      and returned/escaping bindings left alone).
-- [x] Short string globals eager: `translate_string_literal` gives a string of
-      ≤ `NirPackage::string_inline_max_bytes` (opt-level-driven: 4, or 8 at `-O3`)
-      bytes a constant `array.new_fixed<u8>` repr (skipping its data segment);
-      longer strings keep `array.new_data` and stay lazy. Measured size-neutral,
-      so the threshold tunes eager-string-global coverage, not overall size.
-- [x] E2E fixtures: `const_global_object` (struct/array/short-string eager,
-      long-string lazy),
-      `const_global_entry` (inlined-init promotion).
-- [x] Inline-`&`-literal hoisting: `const_object_globalization` also matches a
-      constant aggregate referenced via `&` directly at an expression position
-      with no enclosing `let` — the shape a synthesized `serde` field key
-      takes (`st.field(&"id_str", …)`), rebuilt on every call under the
-      original `let`-only matcher. Rewritten in place (`Unary::Ref`'s inner
-      literal becomes `{ GlobalVarSet(G, …); GlobalVarGet(G) }`) rather than
-      replacing a statement. A single exhaustive walk collects both the
-      whole-binding and inline-literal shapes together, skipping into a
-      qualifying `let`'s own value — hoisting both would nest one global's
-      `GlobalVarSet` inside another's initializer, a shape
-      `wir_optimize::const_global`'s single-assignment classifier cannot see
-      through. Also gated off any `wasi:*`-namespaced module:
-      `wir_build::register_globals` asserts a `NirGlobal` never has a WASI
-      `module_source`, so a hoisted global in an ordinary WASI-binding-file
-      helper function fails loudly at build time instead of dangling
-      silently. E2E fixture `const_object_globalization_call_arg`.
-- [x] Bounded eager repr for inline-hoisted globals: a global created from
-      the inline-literal case above is marked
-      `NirGlobal::prefer_fixed_string_repr`, a field (not a name-prefix
-      guess) so it can't misidentify a user-declared global sharing the
-      pass's `__const_obj_*` naming convention. WIR build gives only such a
-      global's `GlobalVarSet` value a size-bounded
-      (`name::INLINE_REF_EAGER_MAX_BYTES`, 64 bytes) override of the shared
-      `string_inline_max_bytes` threshold, so a realistic field name (e.g. 34
-      bytes) promotes eager without forcing arbitrarily large literals eager
-      too. `wir_optimize::prune_dead_data` drops any passive data segment
-      `register_literal_data` speculatively registered for a literal that
-      ends up wholly `array.new_fixed`.
-
-Deferred:
-
 - [ ] Fold user-immutable globals' reads from their initializers (`niri`
       `GlobalEnv` keyed on `wado_mutable`) — overlaps
       [niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md) (Stage 6).
-
-## Update (2026-06-24): string/bytes literals as constant aggregates
-
-The atomic `ValueKind::String` was removed. A string literal now lowers to
-`StructLiteral String { repr: PackedArray(bytes), used: <len> }` (a bytes literal
-to the same shape over `List<u8>`), where `ExprKind::PackedArray` is a raw
-constant `Array<u8>` — the renamed former NIR `BytesLiteral`, now meaning the
-inner array rather than a `List<u8>` wrapper. The short/long split (the
-`array.new_fixed<u8>` vs `array.new_data<u8>` choice gated on
-`string_inline_max_bytes`) moved from the old `translate_string_literal` onto
-`PackedArray`'s WIR lowering; the `String`/`List` struct wrapping is the generic
-`StructLiteral` lowering.
-
-Consequence: string/bytes literals are now genuine const aggregates, so this
-pass globalizes constant read-only string/bytes bindings with no string-specific
-code (`is_globalizable_const` accepts `PackedArray` as a const leaf), and
-`"x".len()` folds via `project_struct_literal` + `ref_elim` (the latter extended
-to substitute a `&<pure inline aggregate>`).
+- [ ] `niri` folding `G.field` / `G[const]` on immutable aggregate globals —
+      see [niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md) (Stage 6).

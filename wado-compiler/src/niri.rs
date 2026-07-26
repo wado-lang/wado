@@ -431,10 +431,13 @@ impl EditSink for BodySink<'_> {
     }
 }
 
-/// - `inline_hint != InlineHint::Never` — respect the user's explicit
-///   "do not expand this" annotation.
-/// - `type_params` and `impl_type_params` empty — CTFE runs after
-///   monomorphization, so concrete bodies only.
+/// Whether `func` can be evaluated at compile time: pure, and concrete —
+/// `type_params` and `impl_type_params` empty, since CTFE runs after
+/// monomorphization.
+///
+/// `inline_hint` is deliberately not consulted: `#[inline(never)]` asks the
+/// optimizer to keep the body out of line, which says nothing about whether
+/// the result is knowable at compile time.
 #[must_use]
 pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
     func.effects.is_empty()
@@ -445,7 +448,6 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
         && !func.is_async
         && func.task_return_type.is_none()
         && func.stores.is_empty()
-        && func.inline_hint != crate::nir::InlineHint::Never
         && func.type_params.is_empty()
         && func.impl_type_params.is_empty()
 }

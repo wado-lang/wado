@@ -222,29 +222,13 @@ internal fn write_escaped_string(s: String, f: &mut Formatter) {
 // These functions implement the Component Model ABI for resource operations.
 // Synthesis rewrites #[cm("...")] method calls to call these adapters.
 
-/// Waits for a BLOCKED stream/future handle to become ready.
-/// When a canonical stream/future operation returns BLOCKED (0xFFFF_FFFF),
-/// this creates a temporary WaitableSet, joins the handle, and waits.
-/// Returns the event payload (same format as the original return value).
-internal fn wait_for_blocked(handle: i32) -> i32 {
-    let ws = builtin::waitable_set_new();
-    builtin::waitable_join(handle, ws);
-    let evt_ptr = builtin::realloc(0, 0, 4, 8);
-    let code = builtin::waitable_set_wait(ws, evt_ptr);
-    let payload = builtin::i32_load(evt_ptr + 4);
-    let freed = builtin::realloc(evt_ptr, 8, 4, 0);
-    builtin::waitable_set_drop(ws);
-    return payload;
-}
-
-/// Await a BLOCKED `future.read` / `future.write`. Joins the future handle to
-/// a fresh waitable set, waits for the transfer to complete, then unjoins the
-/// future before dropping the set (futures must be detached before the set is
-/// dropped). Returns the copy-result status the event delivered (the same
-/// `(count << 4) | status` packing `future.read` returns directly), so the
-/// caller's `status & 0xF` check distinguishes COMPLETED from DROPPED /
-/// CANCELLED on the blocked path exactly as on the non-blocked path.
-internal fn future_await_blocked(handle: i32) -> i32 {
+/// Await a BLOCKED stream or future copy. Returns the copy result in the same
+/// `(count << 4) | status` packing the canonical returns directly, so callers
+/// read the blocked and non-blocked paths identically.
+///
+/// The handle must be unjoined before the set is dropped; a set still holding a
+/// waitable cannot be deleted.
+internal fn cm_await_blocked(handle: i32) -> i32 {
     let ws = builtin::waitable_set_new();
     builtin::waitable_join(handle, ws);
     let evt_ptr = builtin::realloc(0, 0, 4, 8);
@@ -263,7 +247,7 @@ internal fn cm_stream_read_u8(handle: i32, max: i32) -> List<u8> {
     let ptr = builtin::realloc(0, 0, 1, max);
     let mut result = builtin::stream_read(handle, ptr, max);
     if result == -1 {
-        result = wait_for_blocked(handle);
+        result = cm_await_blocked(handle);
     }
     let count = result >> 4;
     let arr = memory_to_gc_array(ptr, count);
@@ -280,7 +264,7 @@ internal fn cm_stream_read_raw(handle: i32, max: i32, element_size: i32, element
     let ptr = builtin::realloc(0, 0, element_align, byte_count);
     let mut result = builtin::stream_read(handle, ptr, max);
     if result == -1 {
-        result = wait_for_blocked(handle);
+        result = cm_await_blocked(handle);
     }
     let count = result >> 4;
     return [ptr, count];
@@ -316,7 +300,7 @@ internal fn cm_stream_write_drain(handle: i32, ptr: i32, count: i32, elem_size: 
     for let mut offset = 0; offset < count;  {
         let mut result = builtin::stream_write(handle, ptr + offset * elem_size, count - offset);
         if result == -1 {
-            result = wait_for_blocked(handle);
+            result = cm_await_blocked(handle);
         }
         offset += result >> 4;
         // No progress, or the reader/stream closed (DROPPED/CANCELLED).

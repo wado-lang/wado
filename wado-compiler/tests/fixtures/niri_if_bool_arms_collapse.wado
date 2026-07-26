@@ -6,10 +6,11 @@
 // directly. This e2e fixture verifies correctness end-to-end: the
 // compiled program must still produce the same observable booleans
 // regardless of whether the if-form or the rewritten form is in
-// effect, for both the cond-preserving and the negated case. The
-// `#[inline(never)]` keeps niri from pure-call-folding the cond to
-// a constant — without it the const-condition splice rule fires
-// first and the bool-arms rule never sees the if.
+// effect, for both the cond-preserving and the negated case.
+//
+// `black_box` keeps the cond off const-folding's radar, so the const-condition
+// splice rule cannot fire before the bool-arms rule sees the `if`;
+// `#[inline(never)]` keeps the call itself in the WIR.
 
 use { println, Stdout } from "core:cli";
 
@@ -25,26 +26,26 @@ fn opaque_neg(x: i32) -> bool {
 
 export fn run() with Stdout {
     // true/false → cond
-    let a = if opaque_pos(7) {
+    let a = if opaque_pos(builtin::black_box(7)) {
         true;
     } else {
         false;
     };
 
     // false/true → !cond
-    let b = if opaque_neg(7) {
+    let b = if opaque_neg(builtin::black_box(7)) {
         false;
     } else {
         true;
     };
 
     // Same shape with the polarity that produces `false`.
-    let c = if opaque_pos(-1) {
+    let c = if opaque_pos(builtin::black_box(-1)) {
         true;
     } else {
         false;
     };
-    let d = if opaque_neg(-1) {
+    let d = if opaque_neg(builtin::black_box(-1)) {
         false;
     } else {
         true;

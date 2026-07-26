@@ -1,0 +1,43 @@
+//! A mid-alternative self-reference in a left-recursive alternative is a full
+//! sub-expression (`e[0]`), so it climbs a shared delimiter while the enclosing
+//! alternative can still find its own. Expected trees are the published ANTLR4
+//! jar's (black-box oracle).
+//!
+//! The climbing case is `#[TODO]`: it needs the loop entry decided per token,
+//! which makes the whole rule ATN-class — too expensive for a hot expression
+//! rule (TODO.md, "Soundness and compatibility divergence").
+
+use g from "./grammars/lr_mid_operand.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_mid_operand" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+fn assert_parses(input: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+}
+
+test "between's middle operand stops at the enclosing and" {
+    assert_tree(&"a between b and c", &"(s (e (e a) between (e b) and (e c)))");
+}
+
+// The divergence is the bracketing, not acceptance (see lr_between).
+test "between with a trailing and parses" {
+    assert_parses(&"a between b and c and d");
+}
+
+#[TODO]
+test "between's middle operand climbs the shared and when one is left over" {
+    assert_tree(&"a between b and c and d", &"(s (e (e a) between (e (e b) and (e c)) and (e d)))");
+}
+
+test "binary and chains left-associatively" {
+    assert_tree(&"a and b and c", &"(s (e (e (e a) and (e b)) and (e c)))");
+}

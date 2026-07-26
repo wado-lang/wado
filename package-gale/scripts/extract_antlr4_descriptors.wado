@@ -922,27 +922,81 @@ fn stage_a_err_category_eligible(category: &String) -> bool {
 ///
 ///   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]
 ///
-/// one line per token. Some descriptors prefix the dump with action-print
-/// output (`<writeln("foo")>` echoes inside `{ ... }` action bodies);
-/// the prefix is reproducible only by Stage C action-body translation.
+/// one line per token, optionally prefixed by action-print output
+/// (`<writeln("foo")>` echoes inside `{ ... }` action bodies).
 ///
-/// Returns:
-///   * `Clean(normalised)` — every non-empty line is a `[@…]` row. Eligible
-///     for a passing claim (d) test today.
-///   * `StageCBlocked(normalised)` — at least one non-`[@…]` prefix line is
-///     present. The test is still emitted (so the gap is visible in CI)
-///     and `#[TODO]`-marked with a Stage C rationale until action-body
-///     translation lands and the actual tokens dump gains the prefix.
-///   * `None` — the output cannot be reduced to a tokens dump at all
-///     (empty, or no `[@…]` line ever appears). Auto-skip.
-variant TokensTarget {
-    Clean(String),
-    StageCBlocked(String),
+/// Returns the normalised expectation, or `None` when the output cannot be
+/// reduced to a tokens dump at all (empty, or no `[@…]` line ever appears —
+/// auto-skip). Action-print prefix lines stay in the expectation: the lexer
+/// executes its action bodies and `to_lexer_string` renders the output sink
+/// ahead of the dump. Whether a descriptor still diverges is a
+/// `[stage_a_todo]` decision, not something this classifier can know — it never
+/// sees Gale's actual output.
+
+/// Whether `line` opens a row of ANTLR4's lexer DFA dump (`s0-' '->:s5=>3`,
+/// `:s1=>2-'n'->:s2=>2`), which `showDFA` descriptors append after the token
+/// rows. A row opens with a state id — an optional `:`, `s`, digits — followed
+/// immediately by its transition (`-`) or accept (`=>`) marker. It describes
+/// ANTLR's own simulator rather than the token stream, so it is not part of what
+/// a Gale-generated lexer can ever produce.
+fn is_lexer_dfa_row_start(line: &String) -> bool {
+    let cs: List<char> = line.trim().chars().collect();
+    let mut i = 0;
+    if i < cs.len() && cs[i] == ':' {
+        i += 1;
+    }
+    if i >= cs.len() || cs[i] != 's' {
+        return false;
+    }
+    i += 1;
+    let digits_at = i;
+    while i < cs.len() && cs[i] matches { '0'..='9' } {
+        i += 1;
+    }
+    if i == digits_at || i >= cs.len() {
+        return false;
+    }
+    return cs[i] == '-' || cs[i] == '=';
 }
 
-fn classify_output_for_tokens(raw: &String) -> Option<TokensTarget> {
+/// Drop the `showDFA` DFA dump from a descriptor `[output]` so claim (d)
+/// compares only the token stream. Without this every `showDFA` descriptor is
+/// permanently unmatchable and its real token-level gap stays hidden behind an
+/// unreachable expectation.
+///
+/// A row's transition char is quoted verbatim, so a transition on a newline
+/// (`s0-'\n'->:s2=>3`) spans two physical lines. A row therefore ends at the
+/// line carrying its `->`, not necessarily at the line it started on.
+fn strip_lexer_dfa_dump(raw: &String) -> String {
+    let mut lines: List<String> = [];
+    for let line of raw.lines() {
+        lines.push(line);
+    }
+    let mut out = String::with_capacity(raw.len());
+    let mut i = 0;
+    while i < lines.len() {
+        if is_lexer_dfa_row_start(&lines[i]) {
+            if lines[i].contains("->") {
+                i += 1;
+                continue;
+            }
+            // Require the `->` on the very next line, so an action print that
+            // merely looks like a row start does not swallow the rest.
+            if i + 1 < lines.len() && lines[i + 1].contains("->") {
+                i += 2;
+                continue;
+            }
+        }
+        out.push_str(&lines[i]);
+        out.push('\n');
+        i += 1;
+    }
+    return out;
+}
+
+fn classify_output_for_tokens(input: &String) -> Option<String> {
+    let raw = &strip_lexer_dfa_dump(input);
     let mut seen_token_line = false;
-    let mut has_action_prefix = false;
     for let line of raw.lines() {
         let t = line.trim();
         if t.is_empty() {
@@ -950,8 +1004,6 @@ fn classify_output_for_tokens(raw: &String) -> Option<TokensTarget> {
         }
         if t.starts_with("[@") {
             seen_token_line = true;
-        } else {
-            has_action_prefix = true;
         }
     }
     if !seen_token_line {
@@ -969,10 +1021,7 @@ fn classify_output_for_tokens(raw: &String) -> Option<TokensTarget> {
         out.push_str(&t);
         out.push('\n');
     }
-    if has_action_prefix {
-        return Option::<TokensTarget>::Some(TokensTarget::StageCBlocked(out));
-    }
-    return Option::<TokensTarget>::Some(TokensTarget::Clean(out));
+    return Option::<String>::Some(out);
 }
 
 /// Emit one Stage A claim (c) driver test file (parse-must-error) for
@@ -1251,7 +1300,6 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     let mut stage_a_parse_emitted = 0;
     let mut stage_a_err_emitted = 0;
     let mut stage_a_tokens_emitted = 0;
-    let mut stage_a_tokens_stage_c_blocked = 0;
     let mut stage_a_todo = 0;
     let mut stage_a_skip = 0;
     let mut stage_a_auto_skip = 0;
@@ -1536,34 +1584,14 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                     stage_a_err_emitted += 1;
                 }
             } else if let Some(target) = tokens_target {
-                // StageCBlocked targets carry an action-print prefix that
-                // `to_lexer_string` does not produce; default-route them to
-                // `#[TODO]` so the test runs and the failure is recorded.
-                // An explicit status.toml entry wins.
-                let effective_triage = match &target {
-                    TokensTarget::Clean(_) => stage_a_triage,
-                    TokensTarget::StageCBlocked(_) => match stage_a_triage {
-                        Triage::Pass => Triage::Todo(
-                            "Stage C: descriptor [output] is prefixed by action-print text (<writeln(...)> echoes inside { ... } action bodies); claim (d) actual lacks the prefix.",
-                        ),
-                        explicit => explicit,
-                    },
-                };
-                let normalised_t = match &target {
-                    TokensTarget::Clean(s) => s,
-                    TokensTarget::StageCBlocked(s) => s,
-                };
-                let src = emit_stage_a_tokens_test_file(category, &base, &parsed.input, normalised_t, &effective_triage);
+                let src = emit_stage_a_tokens_test_file(category, &base, &parsed.input, &target, &stage_a_triage);
                 if let Err(_) = write_file_string(&stage_a_cat_dir, &tokens_filename, &src) {
                     eprintln(`extract: cannot write stage_a/${*category}/${tokens_filename}`);
                 } else {
-                    if let Todo(_) = &effective_triage {
+                    if let Todo(_) = &stage_a_triage {
                         stage_a_todo += 1;
                     }
                     stage_a_tokens_emitted += 1;
-                    if let TokensTarget::StageCBlocked(_) = &target {
-                        stage_a_tokens_stage_c_blocked += 1;
-                    }
                 }
             }
 
@@ -1778,10 +1806,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     println(`extract:           ${stage_a_parse_emitted} parse-accepts-input (_parse_test.wado)`);
     println(`extract:           ${stage_a_err_emitted} parse-must-error    (_err_test.wado)`);
     println(`extract:           ${stage_a_tokens_emitted} tokens-equivalence  (_tokens_test.wado)`);
-    println(
-        `extract:             of which ${stage_a_tokens_stage_c_blocked} auto-#[TODO] (Stage C: action-print prefix)`,
-    );
-    println(`extract:           ${stage_a_todo} marked #[TODO] total (status.toml + auto)`);
+    println(`extract:           ${stage_a_todo} marked #[TODO]`);
     println(`extract:           ${stage_a_skip} explicit skip`);
     println(`extract:           ${stage_a_auto_skip} auto-skip (no eligible variant)`);
     println(`extract: stage B — tree-shape equivalence: emitted ${stage_b_emitted} per-descriptor driver(s)`);
@@ -2161,10 +2186,7 @@ fn extract_root_rule_name(s: &String) -> Option<String> {
 
 test "normalize: clean parse tree passes through trimmed" {
     let result = normalize_output_for_stage_b(&"(a x y)\n");
-    assert result matches { Some(_) };
-    if let Some(s) = result {
-        assert s == "(a x y)", `expected '(a x y)', got '${s}'`;
-    }
+    assert result matches { Some(s) && s == "(a x y)" };
 }
 
 test "normalize: trailing <EOF> token is stripped" {
@@ -2173,20 +2195,14 @@ test "normalize: trailing <EOF> token is stripped" {
     // tokens (CLAUDE.md "Driver Tests"). The normaliser bridges this gap
     // so descriptor `[output]` blocks line up with Gale's actual emission.
     let result = normalize_output_for_stage_b(&"(s (declarator a) <EOF>)");
-    assert result matches { Some(_) };
-    if let Some(s) = result {
-        assert s == "(s (declarator a))", `got '${s}'`;
-    }
+    assert result matches { Some(s) && s == "(s (declarator a))" };
 }
 
 test "normalize: nested tree with literal token text is preserved" {
     // Bracket characters are legitimate token text from grammars whose
     // alphabet contains them; the detector must not reject them.
     let result = normalize_output_for_stage_b(&"(s (declarator (declarator a) [ ]) <EOF>)");
-    assert result matches { Some(_) };
-    if let Some(s) = result {
-        assert s == "(s (declarator (declarator a) [ ]))", `got '${s}'`;
-    }
+    assert result matches { Some(s) && s == "(s (declarator (declarator a) [ ]))" };
 }
 
 test "normalize: empty output is not Stage B testable" {
@@ -2199,10 +2215,7 @@ test "normalize: nested-at-end EOF marker is stripped" {
     // EOF consumed by a sub-rule still sits at the tree's end, just inside
     // extra closing parens.
     let result = normalize_output_for_stage_b(&"(s (t a <EOF>))");
-    assert result matches { Some(_) };
-    if let Some(s) = result {
-        assert s == "(s (t a))", `got '${s}'`;
-    }
+    assert result matches { Some(s) && s == "(s (t a))" };
 }
 
 test "normalize: mid-tree EOF-looking token text auto-skips, not corrupts" {
@@ -2508,23 +2521,15 @@ test "extract_root_rule_name: rejects malformed prefixes" {
 test "classify_tokens: clean token dump returns Clean(normalised)" {
     let input = "[@0,0:2='end',<1>,1:0]\n[@1,3:3=' ',<3>,1:3]\n";
     let result = classify_output_for_tokens(&input);
-    assert result matches { Some(TokensTarget::Clean(_)) };
-    if let Some(TokensTarget::Clean(s)) = result {
-        assert s == input, `unexpected: '${s}'`;
-    }
+    assert result matches { Some(s) && s == input };
 }
 
-test "classify_tokens: action-print prefix returns StageCBlocked(normalised)" {
-    // LexerExec descriptors with `{<writeln(...)>}` actions emit action
-    // output BEFORE the token dump. The test is emitted (with `#[TODO]`)
-    // so the gap is recorded; the actual lacks the prefix until Stage C
-    // executes action bodies.
+test "classify_tokens: action-print prefix is part of the expectation" {
+    // The lexer executes those bodies and `to_lexer_string` renders the sink
+    // ahead of the dump, so the prefix belongs in the expectation.
     let raw = "stuff0:\nstuff1: a\n[@0,0:0='a',<1>,1:0]\n";
     let result = classify_output_for_tokens(&raw);
-    assert result matches { Some(TokensTarget::StageCBlocked(_)) };
-    if let Some(TokensTarget::StageCBlocked(s)) = result {
-        assert s == "stuff0:\nstuff1: a\n[@0,0:0='a',<1>,1:0]\n", `unexpected: '${s}'`;
-    }
+    assert result matches { Some(s) && s == "stuff0:\nstuff1: a\n[@0,0:0='a',<1>,1:0]\n" };
 }
 
 test "classify_tokens: empty output is not tokens-testable at all" {
@@ -2539,10 +2544,44 @@ test "classify_tokens: output with no token-dump line at all is None" {
     assert classify_output_for_tokens(&"hello\nworld\n") matches { None };
 }
 
-test "classify_tokens: leading garbage before token dump is Stage C blocked" {
+test "classify_tokens: leading garbage before the token dump is kept" {
     let raw = "abc\n[@0,0:0='a',<1>,1:0]\n";
     let result = classify_output_for_tokens(&raw);
-    assert result matches { Some(TokensTarget::StageCBlocked(_)) };
+    assert result matches { Some(_) };
+}
+
+test "classify_tokens: showDFA dump is dropped, leaving a clean token dump" {
+    // Gale has no DFA table, so a `showDFA` descriptor's rows must not sit in
+    // the expectation — the token rows alone are the claim (d) target.
+    let raw = "[@0,0:3='enum',<1>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\ns0-' '->:s3=>3\n:s1=>2-'n'->:s2=>2\n";
+    let result = classify_output_for_tokens(&raw);
+    assert result matches { Some(s) && s == "[@0,0:3='enum',<1>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n" };
+}
+
+test "is_lexer_dfa_row_start: only DFA rows, not action prints or token rows" {
+    assert is_lexer_dfa_row_start(&"s0-' '->:s5=>3");
+    assert is_lexer_dfa_row_start(&":s1=>2-'n'->:s2=>2");
+    assert !is_lexer_dfa_row_start(&"[@0,0:0='a',<1>,1:0]");
+    // Action prints that merely contain an arrow, or start with `s`.
+    assert !is_lexer_dfa_row_start(&"stuff0: a->b");
+    assert !is_lexer_dfa_row_start(&"s0 without a transition");
+    assert !is_lexer_dfa_row_start(&"sad-story");
+}
+
+test "strip_lexer_dfa_dump: a row-shaped action print keeps the token dump" {
+    // `s1=5` looks like a row start but never reaches a `->`; treating it as one
+    // would swallow every following line, silently auto-skipping the descriptor.
+    let raw = "s1=5\n[@0,0:0='a',<1>,1:0]\n";
+    let out = strip_lexer_dfa_dump(&raw);
+    assert out == raw, `unexpected: '${out}'`;
+}
+
+test "strip_lexer_dfa_dump: a row whose transition char is a newline" {
+    // `NL : '\n'` gives ANTLR a transition on a literal newline, so the row
+    // spans two physical lines and only the second carries the `->`.
+    let raw = "[@0,0:0='a',<1>,1:0]\ns0-'\n'->:s2=>3\n";
+    let out = strip_lexer_dfa_dump(&raw);
+    assert out == "[@0,0:0='a',<1>,1:0]\n", `unexpected: '${out}'`;
 }
 
 test "stage_a_err_category_eligible: only ParserErrors and LexerErrors" {

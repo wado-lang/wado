@@ -120,7 +120,7 @@ type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  //
 
 type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(36)
 
-type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(37)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(37)
 
 type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(38)
 
@@ -185,6 +185,7 @@ global global:treemap_literal_empty.wado::__const_obj_2: ref null "core:prelude/
 global global:treemap_literal_empty.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
 global global:treemap_literal_empty.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(109, 46, 108, 101, 110, 40, 41, 58, 32), used: 9 };
 global global:treemap_literal_empty.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 109, 46, 108, 101, 110, 40, 41, 32, 61, 61, 32, 48, 10), used: 25 };
+global mut global:treemap_literal_empty.wado::__const_obj_8: ref null "core:collections//TreeMap<core:prelude/string.wado/String,i32>" = ref.null none;
 
 fn "treemap_literal_empty.wado/run"() with Stdout {
     let __b: ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>";
@@ -201,13 +202,14 @@ fn "treemap_literal_empty.wado/run"() with Stdout {
         global:treemap_literal_empty.wado::__modules_initialized = 1;
     };
     __b = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::new"();
-    __v0_2 = __b.size;
+    global:treemap_literal_empty.wado::__const_obj_8 = __b;
+    __v0_2 = global:treemap_literal_empty.wado::__const_obj_8.size;
     if @unlikely((__v0_2 == 0) == 0) {
         cold_path;
         "core:rt/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(124); "core:prelude/string.wado/String::push_str"(__local_6, global:treemap_literal_empty.wado::__const_obj_3); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 114); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 117); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 110); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 116); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, global:treemap_literal_empty.wado::__const_obj_2); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 8 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, global:treemap_literal_empty.wado::__const_obj_5); "core:prelude/string.wado/String::push_str"(__local_6, global:treemap_literal_empty.wado::__const_obj_4); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_2 }, __local_7); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 10); __local_6);
         unreachable;
     }
-    __v0_4 = __b.size == 0;
+    __v0_4 = global:treemap_literal_empty.wado::__const_obj_8.size == 0;
     if @unlikely(__v0_4 == 0) {
         cold_path;
         "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(129); "core:prelude/string.wado/String::push_str"(__local_8, global:treemap_literal_empty.wado::__const_obj_3); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_8, 114); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_8, 117); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_8, 110); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_8, 32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_8, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_8, 116); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, global:treemap_literal_empty.wado::__const_obj_2); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 9 }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, global:treemap_literal_empty.wado::__const_obj_1); "core:prelude/string.wado/String::push_str"(__local_8, global:treemap_literal_empty.wado::__const_obj_0); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/bool^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<bool>" { value: __v0_4 }, __local_9); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_8, 10); __local_8);
@@ -404,18 +406,19 @@ fn "core:rt/cm_lower_list_u8"(data, start, len) {
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
-fn "core:rt/wait_for_blocked"(handle) {
+fn "core:rt/cm_await_blocked"(handle) {
     let ws: i32;
     let evt_ptr: i32;
-    let payload: i32;
+    let status: i32;
     ws = "wasi/waitable-set-new"();
     "wasi/waitable-join"(handle, ws);
     evt_ptr = "mem/realloc"(0, 0, 4, 8);
     drop("wasi/waitable-set-wait"(ws, evt_ptr));
-    payload = builtin::load_i32(evt_ptr + 4);
+    status = builtin::load_i32(evt_ptr + 4);
     drop("mem/realloc"(evt_ptr, 8, 4, 0));
+    "wasi/waitable-join"(handle, 0);
     "wasi/waitable-set-drop"(ws);
-    return payload;
+    return status;
 }
 
 fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
@@ -427,7 +430,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
             break_if b15 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
-                result = "core:rt/wait_for_blocked"(handle);
+                result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
             break_if b15 (if (result >> 4) == 0 -> i32 {

@@ -211,7 +211,7 @@ use { parse, render } from "lib:markdown"; // OK: pub / export
 // use { tokenize } from "lib:markdown";    // ERROR: private
 ```
 
-When published as a `.wasm` component (e.g., to an OCI registry), only `export` items appear in the component's CM interface; `pub`-only items reach Wado consumers via the provider-metadata path below.
+When published as a `.wasm` component (e.g., to an OCI registry), only `export` items appear in the component's CM interface; `pub`-only items reach Wado consumers via the provider-metadata path below (see [Provider Metadata](./wep-2026-07-26-provider-metadata.md)).
 
 Crossing the package boundary requires `pub` (or `export`): a consumer may import only the `pub` / `export` items of a dependency's `lib`, never its `internal` or private items. This is a settled rule; enforcing it for wado-to-wado source dependencies is not yet implemented.
 
@@ -252,7 +252,9 @@ Registry resolution and publishing use OCI (the OCI Distribution Spec): a compon
 
 The earlier warg protocol is dropped. Its registry (`bytecodealliance/registry`) is archived and the ecosystem (`wasm-pkg-tools`) defaults to OCI. A warg-only registry such as wa.dev is reachable only through the external `wkg` tool, not natively; Wado neither implements nor wraps warg. Publishing is likewise done with `wkg`, not a Wado subcommand.
 
-Consuming (pulling), unlike publishing, does not go through `wkg`: a published package is a standalone Wasm Component Model artifact (one `application/wasm` layer), and resolving a dependency is a hot path that must not require an external binary. So the CLI pulls with a native OCI client (the `oci-client` crate), authenticating exactly as publish does (`WKG_OCI_USERNAME` / `WKG_OCI_PASSWORD`, else anonymous). `integrity` is the OCI manifest digest. Because the artifact is a prebuilt component, a registry dependency carries no transitive Wado dependencies and is consumed across the Component Model boundary (see [Wado-to-Wado Optimization](#wado-to-wado-optimization) — the source-sharing path applies to `path` deps, not registry components).
+Consuming (pulling), unlike publishing, does not go through `wkg`: a published package is a standalone Wasm Component Model artifact (one `application/wasm` layer), and resolving a dependency is a hot path that must not require an external binary. So the CLI pulls with a native OCI client (the `oci-client` crate), authenticating exactly as publish does (`WKG_OCI_USERNAME` / `WKG_OCI_PASSWORD`, else anonymous). `integrity` is the OCI manifest digest — one layer, one digest, which is also why the package's source rides in a custom section of that same `.wasm` rather than a second layer.
+
+The artifact carries both a prebuilt component and the package's Wado source, so a registry dependency does have transitive Wado dependencies, and a Wado consumer resolves it on the source-sharing path — see [Provider Metadata](./wep-2026-07-26-provider-metadata.md) for the artifact layout and the all-or-nothing selection rule, and [Wado-to-Wado Optimization](#wado-to-wado-optimization) for the two consumption paths. A `--no-source` artifact is a prebuilt component only, consumed across the Component Model boundary with `export` items alone.
 
 ### `[dependencies]` and `[dev-dependencies]`
 
@@ -778,18 +780,24 @@ use { Router } from "lib:router" with { git = "https://github.com/user/router.gi
 
 ### Path Dependencies to Single Files
 
-`path` dependencies can point to a single `.wado` file (not just directories). The referenced file is implicitly treated as `lib = <that file>` — only `export` items are visible at the CM boundary:
+`path` dependencies can point to a single `.wado` file (not just directories). The referenced file is implicitly treated as `lib = <that file>`:
 
 ```toml
 "lib:shared" = { path = "../shared.wado" }    # treated as lib = "shared.wado"
 "lib:utils"  = { path = "../utils" }          # reads ../utils/wado.toml for entry points
 ```
 
-| Dependency type                      | Boundary    | Visible items                        |
-| ------------------------------------ | ----------- | ------------------------------------ |
-| Registry / Git (with `wado.toml`)    | CM boundary | `export` items only                  |
-| Path to directory (with `wado.toml`) | CM boundary | `export` items only                  |
-| Path to single `.wado` file          | CM boundary | `export` items only (implicit `lib`) |
+Which items a dependency exposes follows from whether its source is available, not from how it was fetched:
+
+| Dependency type                      | Path for a Wado consumer             | Visible items                     |
+| ------------------------------------ | ------------------------------------ | --------------------------------- |
+| Registry                             | Source (from the artifact's section) | `pub` + `export`                  |
+| Registry, published `--no-source`    | CM boundary                          | `export` items only               |
+| Git                                  | Source                               | `pub` + `export`                  |
+| Path to directory (with `wado.toml`) | Source                               | `pub` + `export`                  |
+| Path to single `.wado` file          | Source                               | `pub` + `export` (implicit `lib`) |
+
+A non-Wado CM consumer sees `export` items only in every row.
 
 ### CLI Integration
 

@@ -19,6 +19,8 @@
 global mut heap_offset: i32 = 8;
 
 /// Grow linear memory using a doubling strategy up to 16 MB, then 16 MB steps.
+/// Traps when the host refuses to grow, rather than handing out a pointer past
+/// the end of memory.
 fn grow_memory(new_offset: i32) {
     let current_bytes = builtin::memory_size() * 65536;
     let deficit = new_offset - current_bytes;
@@ -28,7 +30,9 @@ fn grow_memory(new_offset: i32) {
     // If deficit exceeds normal growth, round up to next power of two
     let grow_bytes = if deficit > normal_grow { 1 << 32 - builtin::i32_clz(deficit - 1) } else { normal_grow };
     let grow_pages = (grow_bytes + 65535) / 65536;
-    builtin::memory_grow(grow_pages);
+    if builtin::memory_grow(grow_pages) < 0 {
+        builtin::unreachable();
+    }
 }
 
 /// Bump allocator — advances a pointer with alignment.

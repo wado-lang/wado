@@ -1,0 +1,31 @@
+//! A shape-lookahead optional (`( 'a'? 'b' )?`) inside a left-recursive suffix
+//! is decided per shape, not by the union of the shapes' first tokens. Expected
+//! trees are the published ANTLR4 jar's (black-box oracle).
+
+use g from "./grammars/lr_suffix_opt_shape.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_suffix_opt_shape" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "the group is skipped when only the trailing element is present" {
+    assert_tree(&"x in a", &"(s (e (e x) in a))");
+}
+
+test "the group is entered on its longest shape" {
+    assert_tree(&"x in a b a", &"(s (e (e x) in a b a))");
+}
+
+test "the group is entered on its short shape" {
+    assert_tree(&"x in b a", &"(s (e (e x) in b a))");
+}
+
+test "the suffix repeats" {
+    assert_tree(&"x in a b a in b a", &"(s (e (e (e x) in a b a) in b a))");
+}

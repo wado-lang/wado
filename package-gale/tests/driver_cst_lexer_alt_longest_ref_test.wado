@@ -1,0 +1,14 @@
+//! A lexer rule another rule calls keeps first-match: maximal munch is only
+//! sound where nothing follows the alternation, and a caller's suffix does.
+
+use g from "./grammars/lexer_alt_longest_ref.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_alt_longest_ref" },
+    };
+use { TK_EOF } from "./grammars/lexer_alt_longest_ref.g4";
+
+test "a called rule does not strand its caller's suffix" {
+    let actual = g::to_lexer_string(&g::tokenize(&"abc"), TK_EOF);
+    let expected = "[@0,0:2='abc',<2>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n";
+    assert actual == expected, `actual:\n${actual}\nexpected:\n${expected}`;
+}
