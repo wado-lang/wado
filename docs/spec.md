@@ -795,7 +795,7 @@ if shape matches { Circle(_) | Square(_) } { ... }
 
 #### Nested Sub-Patterns in Tuple/Struct Destructuring
 
-Tuple and struct patterns support literal, variant, and enum sub-patterns. These are lowered into guard conditions with appropriate checks:
+Tuple and struct patterns support literal, variant, enum, or-pattern, and range sub-patterns. These are lowered into guard conditions with appropriate checks:
 
 ```wado
 // Literal sub-patterns in tuples
@@ -821,6 +821,13 @@ match [color, size] {
     [Red, Large] => "big red",
     [Blue, _] => "blue",
     _ => "other",
+}
+
+// Or-pattern and range sub-patterns
+match point {
+    { x: 0 | 1, y } => y,
+    { x: 10..=20, y } => -y,
+    _ => 0,
 }
 ```
 

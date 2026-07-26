@@ -33,9 +33,7 @@ pub enum Value {
     /// equality is exact.
     ///
     /// Aggregates exist only inside the interpreter: the value pool holds pure
-    /// *scalars*, so an aggregate never promotes into an operand slot. It is
-    /// read through [`Value::field`] and compared for equality; the scalars it
-    /// projects to are what reach the IR.
+    /// *scalars*, so what reaches the IR is the scalars projected out of them.
     Aggregate {
         type_id: TypeId,
         fields: Rc<[(u32, Value)]>,

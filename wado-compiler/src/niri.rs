@@ -62,15 +62,15 @@
 //!   arm whose pattern provably matches (later arms become infeasible
 //!   edges); a non-constant speculatable scrutinee with every arm
 //!   reducing to the same lattice constant collapses to that constant.
-//!   Modelled patterns: `_`, integer / bool / char literal, integer
-//!   range (signed and unsigned), or-of the above, `ConstantValue`
-//!   whose inner expression reduces to a `Value`, and struct /
-//!   exact-arity tuple patterns whose every field pattern is itself
-//!   modelled. `Binding`, tuple-with-rest, `Variant`, `Enum`, and
-//!   string / null literal patterns report `Unknown` — they never
-//!   wrongly commit a match and never wrongly drop a later arm. A
-//!   definite field mismatch still rules an arm out even when a
-//!   sibling field binds.
+//!   Modelled patterns: `_`, a binding, integer / bool / char literal,
+//!   integer range (signed and unsigned), or-of the above,
+//!   `ConstantValue` whose inner expression reduces to a `Value`, and
+//!   struct / exact-arity tuple patterns whose every field pattern is
+//!   itself modelled. Tuple-with-rest, `Variant`, `Enum`, and string /
+//!   null literal patterns report `Unknown` — they never wrongly commit
+//!   a match and never wrongly drop a later arm. A definite field
+//!   mismatch still rules an arm out even when a sibling field binds,
+//!   and an arm's guard is decided with its bindings in scope.
 //! - Struct / tuple literals: an aggregate whose every field reduces to
 //!   a constant is itself a constant ([`Value::Aggregate`]), and
 //!   `receiver.field` projects a field back out — including out of a
@@ -490,16 +490,9 @@ pub struct Interpreter<'a> {
     /// [`enter_function`]: Self::enter_function
     env: IndexMap<u32, Lattice>,
     ref_global_aliases: IndexMap<u32, GlobalKey>,
-    /// Locals of the *current function* whose value no handle can reach: every
-    /// mention only reads the value, and nothing borrows, stores through, or
-    /// mutates them. Only these may bind an aggregate constant —
-    /// niri models whole values, not the heap, so a local another handle could
-    /// write through would go stale. Scalars are unaffected: they carry no
-    /// fields, so no handle can change them in place.
-    ///
-    /// Populated by [`Self::record_aggregate_locals`]; cleared by
-    /// [`Self::enter_function`], so an unpopulated set simply refuses every
-    /// aggregate binding.
+    /// The current function's [`aggregate_safe_locals`] — the only locals that
+    /// may bind an aggregate constant. Cleared by [`Self::enter_function`], so
+    /// an unpopulated set simply refuses every aggregate binding.
     aggregate_locals: LocalSet,
     /// CTFE scratch-body fold memo: `expr → folded constant`. The scratch
     /// [`BodySink`] cannot promote a fold to an `Operand::Value` (no parent map)
@@ -725,11 +718,8 @@ impl<'a> Interpreter<'a> {
             .map_or(Lattice::Unevaluated, Lattice::Const)
     }
 
-    /// Compute which locals of `body` may hold an aggregate constant: those
-    /// whose every mention only reads the value, and which nothing assigns
-    /// through, borrows, or hands to a call that could mutate them. The driving
-    /// visitor calls this once per function, next to
-    /// [`Self::record_ref_global_aliases`].
+    /// Record `body`'s [`aggregate_safe_locals`]. The driving visitor calls
+    /// this once per function, next to [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
         self.aggregate_locals = aggregate_safe_locals(body);
     }

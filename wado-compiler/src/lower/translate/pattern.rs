@@ -1235,9 +1235,9 @@ impl<'a> PatternLowerer<'a> {
                     span,
                 );
 
-                // Alternatives are tried in order and the first that matches
-                // runs the continuation, so each carries its own copy of it —
-                // that is what re-tests the rest of the pattern per alternative.
+                // Alternatives are tried in order, first match wins, so each
+                // carries its own copy of the continuation — that is what
+                // re-tests the rest of the pattern per alternative.
                 let mut checks =
                     TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, span);
                 for alternative in alternatives.iter().rev() {
