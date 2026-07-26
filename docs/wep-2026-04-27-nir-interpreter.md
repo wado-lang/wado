@@ -254,7 +254,7 @@ scalar / payload-free matching today without committing to a heap-aware
       to a full payload model. Useful for inlining `Option::unwrap` and
       similar "scrutinee constructed locally" idioms.
 
-#### Phase C — aggregate values (struct / tuple done; variants deferred)
+#### Phase C — aggregate values (struct / tuple done; variants and sequences deferred)
 
 - [x] `Value::Aggregate { type_id, fields }` — a struct or tuple whose every
       field is itself a compile-time value. Fields are keyed by `field_index`
@@ -315,6 +315,13 @@ scalar / payload-free matching today without committing to a heap-aware
       and payload bindings. Gated on Phase B's tag pruning and on a real
       consumer (Stage 3 inlining producing residual matches over
       `Option<i32>`).
+- [ ] A sequence value — the backing array of the `{ repr, used }` shape
+      `String` and `List` share. `String` needs no case of its own: given a
+      sequence value it is an ordinary aggregate, so its length projects and it
+      passes into a compile-time call. Its patterns need none either — the
+      elaborator lowers a string pattern to an `Eq` call in the arm guard — but
+      deciding that guard is a byte-comparison loop, so it is gated on Stage 4,
+      not on this.
 
 ### Stage 3 — pure call inlining (in-process)
 
