@@ -619,7 +619,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let entries: Vec<(ModuleSource, AstId)> = self
                 .tysys
                 .trait_env
-                .inherent_impl_keys(&self.impl_target(&struct_name));
+                .inherent_impl_keys(&self.impl_target_of(base_type_id, &struct_name));
             for (impl_module, item_id) in &entries {
                 let Some(Item::Impl(impl_block)) =
                     self.loaded_modules[impl_module].item_by_id(*item_id)
@@ -824,7 +824,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let entries: Vec<(ModuleSource, AstId)> = self
                 .tysys
                 .trait_env
-                .inherent_impl_keys(&self.impl_target(&struct_name));
+                .inherent_impl_keys(&self.impl_target_of(base_type_id, &struct_name));
             for (search_module_source, item_id) in &entries {
                 let Some(Item::Impl(impl_block)) =
                     self.loaded_modules[search_module_source].item_by_id(*item_id)
