@@ -310,7 +310,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Fall back to base type trait methods
         if method_info.is_none()
             && let Some(trait_match) = self.find_trait_method_for_type(
-                &self.impl_target(&struct_name),
+                &self.impl_target_of(base_type_id, &struct_name),
                 method_name,
                 &struct_module,
                 receiver_type_args_for_trait.as_deref(),
