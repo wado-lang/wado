@@ -175,18 +175,16 @@ Two rules bound what is reflectable, and both are load-bearing:
   reflectable. An iterator adapter's `pub f: fn mut(I::Item) -> U` needs the
   bound's impl to resolve `I::Item`, which per-instantiation substitution does
   not consult, so the member cannot be named.
-- Coherence Rule 1 applies to a generic base: a type that writes its own impl of
-  a derived trait keeps it. Only generic bases need this stated — a plain type's
-  own impl already wins because impl selection keys on its name, whereas a
-  generic instance's mangled name (`TreeMap<String, i32>`) does not match the
-  impl written for `TreeMap`, so without the rule the derivation takes it.
+- A type whose members are all hidden at the use site is not reflectable there
+  (see [Visibility](#visibility)). This is what leaves `TreeMap`'s hand-written
+  `Inspect` as the only candidate: a generic instance's mangled name
+  (`TreeMap<String, i32>`) does not match the impl written for `TreeMap`, so
+  the derivation would otherwise take it — but its fields are private, so
+  nothing outside its module can enumerate them.
 
-Two further consequences follow from generic reflection being demand-driven
-rather than unconditional:
+One further consequence follows from a generic type's members being generic
+structs themselves:
 
-- A plain struct's impl is synthesized unconditionally — the set is closed and
-  each impl is finite. A generic one is synthesized only where a bound demands
-  it, because the member handles above are generic structs too.
 - A generic type's value bridges (`$field_get$S$F`, `$case_extract$V$P`,
   `$case_construct$V$P`) are minted _after_ monomorphization — the only synthesis
   that is. Lowering names a bridge by the concrete subject and member mangles,

@@ -685,11 +685,7 @@ fn register_reflect_assoc_types(
     for (assoc_name, resolved) in assocs {
         if is_generic {
             let Some(base_decl) = base_decl else { continue };
-            tt.register_generic_assoc_type_def(
-                base_decl,
-                (*assoc_name).to_string(),
-                *resolved,
-            );
+            tt.register_generic_assoc_type_def(base_decl, (*assoc_name).to_string(), *resolved);
         } else {
             tt.register_assoc_type_resolution(self_type, (*assoc_name).to_string(), *resolved);
         }
@@ -1534,14 +1530,15 @@ pub(super) fn generate_case_bridge_helpers(
     ref_variant_type: TypeId,
     span: Span,
 ) -> Vec<TirFunction> {
-    let mangled_variant = type_table
-        .borrow()
-        .mangle_type_arg_for_generic(variant_type);
+    // Both mangles must match the post-erasure call site: lowering reads the
+    // subject and payload through the erasure redirect map, so a `flags` or
+    // newtype spelled here would mint a name nothing calls.
+    let mangled_variant = type_table.borrow().mangle_type_arg_erased(variant_type);
 
     let mut by_payload: crate::hashmap::IndexMap<String, (TypeId, Vec<(String, u32)>)> =
         crate::hashmap::IndexMap::default();
     for (case_name, index, payload, _) in cases {
-        let mangled = type_table.borrow().mangle_type_arg_for_generic(*payload);
+        let mangled = type_table.borrow().mangle_type_arg_erased(*payload);
         by_payload
             .entry(mangled)
             .or_insert_with(|| (*payload, Vec::new()))

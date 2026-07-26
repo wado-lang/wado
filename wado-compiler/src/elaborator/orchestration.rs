@@ -995,12 +995,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // Pre-pass: register generic associated type defs from ALL modules before any module
-        // is resolved. This ensures that when resolving module X, it can look up associated
-        // types from module Y's impl blocks even if Y hasn't been processed yet in the main
-        // second pass (e.g., user module is sorted before prelude modules).
-        Self::register_all_generic_assoc_type_defs(modules, &type_table, &stdlib_set);
-
         // Wrap all_* maps in Rc for cheap sharing across per-module elaborators
         let all_newtypes = Rc::new(all_newtypes);
         let all_struct_fields = Rc::new(all_struct_fields);
@@ -1180,6 +1174,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // can resolve a `AstId` to a decl-backed type without running the
         // lower phase.
         Self::register_symbol_key_type_indices(symbols, &type_table);
+
+        // Register generic associated type defs from ALL modules before any
+        // module is resolved, so resolving module X can look up an associated
+        // type from module Y's impl even when Y is processed later. Keyed by
+        // the declaring `AstId`, so it must follow the index above.
+        Self::register_all_generic_assoc_type_defs(modules, &type_table, &stdlib_set);
 
         // Seed per-module semantics with the snapshot's pre-resolved stdlib
         // entries so the LSP edges remain consistent and the body walk on
@@ -3535,7 +3535,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         _ => continue,
                     };
 
-                    let base_decl = type_table.borrow().decl_by_name(&struct_name, module_source);
+                    // The impl need not live in the type's module, so fall
+                    // back to every loaded module before giving up.
+                    let base_decl = {
+                        let tt = type_table.borrow();
+                        tt.decl_by_name(&struct_name, module_source).or_else(|| {
+                            modules
+                                .keys()
+                                .find_map(|ms| tt.decl_by_name(&struct_name, ms))
+                        })
+                    };
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(
                             base_decl,

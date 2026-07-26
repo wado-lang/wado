@@ -617,36 +617,30 @@ impl TypeSystem {
         }
     }
 
-    /// The field types a reflection written at `scope`'s module can enumerate
-    /// (WEP 2026-06-13, Visibility). `None` when the struct declares fields but
-    /// exposes none there: its shape is unobservable, so it does not satisfy the
-    /// bound. A struct that declares no field at all is genuinely memberless and
-    /// yields an empty list.
-    fn visible_field_types(
-        &self,
-        scope: &TypeLookup,
-        info: &super::types::StructFieldInfo,
-    ) -> Option<Vec<TypeId>> {
-        if &info.module_source == scope.current_module_source {
-            return Some(info.fields.iter().map(|(_, ty, _)| *ty).collect());
+    /// Whether a reflection written at `scope`'s module can enumerate any of
+    /// `info`'s fields (WEP 2026-06-13, Visibility). False only when the struct
+    /// declares fields but exposes none there, leaving its shape unobservable;
+    /// a struct that declares no field at all is genuinely memberless.
+    ///
+    /// Visibility decides only this. Eligibility itself is a property of the
+    /// declaration, so [`Self::is_reflect_eligible`] always sees every field —
+    /// the predicate synthesis reads, over the input synthesis gives it.
+    fn has_visible_fields(&self, scope: &TypeLookup, info: &super::types::StructFieldInfo) -> bool {
+        if info.fields.is_empty() || &info.module_source == scope.current_module_source {
+            return true;
         }
         let same_package = info.module_source.same_package(scope.current_module_source);
-        let visible: Vec<TypeId> = info
-            .fields
+        info.fields
             .iter()
-            .filter(|(_, _, vis)| vis.reachable_from(same_package))
-            .map(|(_, ty, _)| *ty)
-            .collect();
-        if visible.is_empty() && !info.fields.is_empty() {
-            return None;
-        }
-        Some(visible)
+            .any(|(_, _, vis)| vis.reachable_from(same_package))
     }
 
     /// Whether a declaration can be reflected, via the shared eligibility
     /// predicate reflect synthesis reads.
     fn is_reflect_eligible(&self, type_id: TypeId, members: impl Iterator<Item = TypeId>) -> bool {
-        self.type_table.borrow().is_reflect_eligible(type_id, members)
+        self.type_table
+            .borrow()
+            .is_reflect_eligible(type_id, members)
     }
 
     pub(super) fn classify_on_bound_trait(
@@ -1054,9 +1048,17 @@ impl TypeSystem {
         // synthesis reads, so the two cannot disagree and nothing needs to be
         // recorded for synthesis to find later.
         let plain_reflect_subject = match (&resolved, on_bound) {
-            (ResolvedType::Struct { name, .. }, Some(OnBoundTrait::ReflectStruct)) => scope
-                .struct_fields(name)
-                .and_then(|info| self.visible_field_types(scope, info)),
+            (
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    ..
+                },
+                Some(OnBoundTrait::ReflectStruct),
+            ) => scope
+                .struct_fields_in(name, module_source)
+                .filter(|info| self.has_visible_fields(scope, info))
+                .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect()),
             (ResolvedType::Variant { name, .. }, Some(OnBoundTrait::ReflectVariant)) => scope
                 .variant_case(name)
                 .map(|info| info.cases.iter().map(|c| c.payload).collect()),
@@ -1081,12 +1083,19 @@ impl TypeSystem {
         } = &resolved
             && match on_bound {
                 Some(OnBoundTrait::ReflectStruct) => scope
-                    .struct_fields(name)
-                    .and_then(|info| self.visible_field_types(scope, info))
-                    .is_some_and(|tys| self.is_reflect_eligible(type_id, tys.into_iter())),
-                Some(OnBoundTrait::ReflectVariant) => scope.variant_case(name).is_some_and(|info| {
-                    self.is_reflect_eligible(type_id, info.cases.iter().map(|c| c.payload))
-                }),
+                    .struct_fields_in(name, module_source)
+                    .is_some_and(|info| {
+                        self.has_visible_fields(scope, info)
+                            && self.is_reflect_eligible(
+                                type_id,
+                                info.fields.iter().map(|(_, ty, _)| *ty),
+                            )
+                    }),
+                Some(OnBoundTrait::ReflectVariant) => scope
+                    .variant_case_in(name, module_source)
+                    .is_some_and(|info| {
+                        self.is_reflect_eligible(type_id, info.cases.iter().map(|c| c.payload))
+                    }),
                 _ => false,
             }
         {

@@ -158,10 +158,7 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
         // template that nothing instantiates, because lowering mints this call
         // after monomorphization has finished.
         let discriminant_name = crate::name::variant_tag_helper_name(
-            &flat
-                .type_table
-                .borrow()
-                .mangle_type_arg_for_generic(subject),
+            &flat.type_table.borrow().mangle_type_arg_erased(subject),
         );
         helpers.push(generate_variant_instance_discriminant_fn(
             discriminant_name,

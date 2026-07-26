@@ -974,6 +974,7 @@ impl TypeTable {
     /// and `Node<String>` answer with the one `Node` they were both spelled
     /// from, while a `Node` in another module answers with a different id.
     pub fn decl_of_type(&self, type_id: TypeId) -> Option<crate::ast::AstId> {
+        let type_id = self.peel_refs(type_id);
         if let Some(key) = self.symbol_by_type.get(type_id) {
             return Some(*key);
         }

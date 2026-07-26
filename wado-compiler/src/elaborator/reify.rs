@@ -8701,8 +8701,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if table.contains_type_param(expected) {
             return None;
         }
-        let recorded_is_concrete = matches!(table.get(recorded), ResolvedType::GenericInstance { .. })
-            && !table.contains_type_param(recorded);
+        let recorded_is_concrete =
+            matches!(table.get(recorded), ResolvedType::GenericInstance { .. })
+                && !table.contains_type_param(recorded);
         if recorded_is_concrete {
             return None;
         }

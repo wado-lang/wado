@@ -1,0 +1,67 @@
+// Blanket derivation over `ReflectVariant` for a generic variant: the
+// synthesized impl is generic, so `CasePayloads` binds the variant's own type
+// params and each instantiation substitutes them (WEP 2026-06-13).
+
+trait Tag {
+    fn tag(&self) -> String;
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> String {
+        return `${*self}`;
+    }
+}
+
+impl Tag for String {
+    fn tag(&self) -> String {
+        return *self;
+    }
+}
+
+impl Tag for bool {
+    fn tag(&self) -> String {
+        return `${*self}`;
+    }
+}
+
+impl<T: ReflectVariant<CasePayloads = [..P]>, ..P: Tag> Tag for T {
+    fn tag(&self) -> String {
+        for let c of ReflectVariant::<T>::members() {
+            if c.holds(self) {
+                return `${c.name()}(${c.extract(self).tag()})`;
+            }
+        }
+        return "?";
+    }
+}
+
+flags Perm { READ, WRITE }
+
+impl Tag for Perm {
+    fn tag(&self) -> String {
+        return "perm";
+    }
+}
+
+variant Either<T> {
+    Left(T),
+    Right(i32),
+}
+
+variant EitherPerm {
+    Left(Perm),
+    Right(i32),
+}
+
+test "a plain variant with a flags payload walks its members" {
+    let p = EitherPerm::Left(Perm::READ);
+    assert p.tag() == "Left(perm)";
+}
+
+test "a generic variant with a flags type arg walks its members" {
+    let e: Either<Perm> = Either::Left(Perm::READ);
+    assert e.tag() == "Left(perm)";
+}
+
+__DATA__
+{"test": {}}

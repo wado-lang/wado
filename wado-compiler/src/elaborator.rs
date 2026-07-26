@@ -1736,11 +1736,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 } else {
                     // For generic impls, register the definition so the monomorphizer
                     // can resolve associated types for GenericInstance types.
-                    let base_decl = scope
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .decl_of_type(target_type_id);
+                    let base_decl = scope.tysys.type_table.borrow().decl_of_type(target_type_id);
                     if let Some(base_decl) = base_decl {
                         scope
                             .tysys

@@ -1478,17 +1478,19 @@ fn compile_after_load<H: CompilerHost>(
         monomorphize(&mut flat);
     }
 
-    // === Phase 9a: Reflect bridges of monomorphized structs ===
-    // The only synthesis that must follow monomorphize: a generic struct's
-    // field-get bridges are keyed by its concrete field types.
-    synthesis::reflect_bridge::synthesize_monomorphized_reflect_bridges(&mut flat);
-
-    // === Phase 9b: Erase Newtypes and Flags ===
+    // === Phase 9a: Erase Newtypes and Flags ===
     // After monomorphize (which needs distinct Newtype/Flags types for trait dispatch)
     // and before lower/optimize/codegen (which expect Newtypes → base type; Flags → u32).
     {
         flat.type_table.borrow_mut().erase_newtypes_and_flags();
     }
+
+    // === Phase 9b: Reflect bridges of monomorphized structs ===
+    // The only synthesis that must follow monomorphize: a generic struct's
+    // field-get bridges are keyed by its concrete member types. It must also
+    // follow erasure, because lowering names the call from the erased mangle —
+    // minting `Either<Perm>` for a call written `Either<u32>` left it unresolved.
+    synthesis::reflect_bridge::synthesize_monomorphized_reflect_bridges(&mut flat);
 
     // === Phase 10: Lower (FlatPackage → NirPackage) ===
     let nir = {
@@ -1928,10 +1930,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 monomorphize(&mut flat);
             }
 
-            synthesis::reflect_bridge::synthesize_monomorphized_reflect_bridges(&mut flat);
-
             // Erase Newtypes and Flags (after monomorphize, before lower)
             flat.type_table.borrow_mut().erase_newtypes_and_flags();
+
+            // Reflect bridges (after erasure — lowering names the call from the
+            // erased mangle)
+            synthesis::reflect_bridge::synthesize_monomorphized_reflect_bridges(&mut flat);
 
             // Snapshot monomorphized state (only unparse; Debug format is deferred)
             let mono_text = Some(unparse::unparse_flat_package(&flat));

@@ -1128,7 +1128,6 @@ impl TraitEnv {
             .map(|b| b.param.clone())
     }
 
-
     /// The bound trait names on the value blanket's receiver param (`Bound` in
     /// `impl<I: Bound> Trait for I`). A call may only dispatch through the
     /// blanket if the receiver satisfies these bounds — otherwise a type with
