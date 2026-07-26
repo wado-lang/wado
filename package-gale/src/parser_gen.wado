@@ -5131,7 +5131,8 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     let cond = `${ctx.first_check_str(&r.body_first_set)}${gate}`;
     match r.kind {
         Optional => {
-            w.begin(&`if ${cond}`);
+            let entry = `${gen_op_optional_entry_cond(w, r, ctx, nc)}${gate}`;
+            w.begin(&`if ${entry}`);
             gen_op(w, &r.body, ctx, nc);
             w.end();
         },
@@ -5149,6 +5150,35 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     }
 }
 
+/// Entry condition for a greedy Optional under the op-only walker (LR-suffix
+/// bodies and the group bodies inside them). The surface-element walker picks the
+/// same strategies in `gen_op_storable_optional`; without this dispatch the
+/// op-only path silently downgraded every specialised strategy to a one-token
+/// first-set check, so a two-token optional (`( database_name '.' )? table_name`,
+/// FIRST(database_name) == FIRST(table_name)) was entered on the shared first
+/// token and then failed on the missing `'.'`.
+///
+/// `OptionalShapeLookahead` keeps the first-set check: its per-shape dispatch
+/// needs the surface element list, and the nested Optionals inside the body carry
+/// their own guards under this walker.
+fn gen_op_optional_entry_cond(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) -> String {
+    return match &r.strategy {
+        OptionalLookahead(s) => gen_lookahead_condition(ctx, &s.sig),
+        OptionalScanGuard => {
+            let scan_pos = gen_scan_guard_with_prefix(w, &r.scan_body, ctx, nc, &"opt_scan_pos", &"opt_scan", false);
+            `${scan_pos} >= 0`;
+        },
+        OptionalShapeLookahead(_) | Plain => ctx.first_check_str(&r.body_first_set),
+        NonGreedy(_) => panic(
+            "gen_op_optional_entry_cond: NonGreedy strategy reached the greedy-Optional arm — lower-side bug",
+        ),
+    };
+}
 
 /// Dispatch a `RepeatOp.body` whose shape is "storable" (a leaf op
 /// or a `Group(SingleAlt | TokenOnly | SimpleCst | General)` op) to

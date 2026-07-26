@@ -390,12 +390,39 @@ ATN literal is a measured problem.)
 
 These are ATN-class prediction gaps tracked for compatibility, but each is
 "Gale's static predictor commits where ANTLR4 defers" — relevant when reasoning
-about the scan/predict hot path. Full context in `TODO.md` ("Stage A gaps") and
+about the scan/predict hot path. Full context in `TODO.md` ("Soundness and compatibility divergence") and
 `antlr4-compatibility.md` (prediction design, soundness invariants).
 
 - **LR operator-precedence chain** (`DropLoopEntryBranchInLRRule_4`):
   `scan_expr_lr_*` sees `and X` match and commits where ANTLR4 resolves the
-  precedence via full-context prediction at the LR loop entry.
+  precedence via full-context prediction at the LR loop entry. The mid-operand
+  half of this (`expr BETWEEN expr AND expr` against `expr AND expr`) has a known
+  correct fix that is **priced out for now**: making the rule ATN-class puts the
+  simulator on every loop entry, parse-side and once per tournament re-scan.
+  Measured on the dev profile over 40 statements: `SELECT … BETWEEN 1 AND 10 AND
+  y = 2` 41 ms → 2.3 s, expression input without any `BETWEEN` still 11x, the
+  scan side ~6x of the total. Memoising the loop-entry decision per (decision,
+  position, precedence, caller depth) is the lever that would make it
+  affordable — the tournament re-asks the same question at the same positions.
+  Details in `TODO.md`.
+- **Ambiguous greedy `rule?` and non-greedy `*?` / `+?` min-match** — the other
+  two ambiguity divergences (`TODO.md`), and the reason the simulator is not
+  wired into either. Both were implemented and reverted: release `sqlite_parse`
+  **2.604 → 402.372 ms/iter (155×)**. **One prediction is a full closure over the
+  grammar** — ~4–8 ms on release for SQLite, and a 13 KB DDL script asks ~50 of
+  them, so the per-call setup, not the token budget, is the cost. Confirmed both
+  ways: a `CREATE TABLE`-heavy script measured the same at a 6- and a 12-token
+  budget, while gating the prediction behind the ambiguous lookahead — asking
+  only where the static first-set check cannot answer — cut 734 ms → 6 ms over 40
+  statements (dev; 90 ms unfixed baseline). What remains after gating is one
+  prediction per ambiguous occurrence: `a UNSIGNED BIG INT, b VARCHAR(10) NOT
+  NULL` (input the static path rejects outright) went 1.48 s → 776 ms, i.e. one
+  per `name+?` iteration. So the lever is a cheaper prediction — memoise per
+  (decision, position, caller stack) like ANTLR4's lookahead DFA, plus arena
+  reuse — or avoid it entirely by threading the caller's FOLLOW into callees so
+  the runtime FOLLOW gate answers these statically.
+  **Note for the next attempt:** measure on release `sqlite_parse`, not per-case
+  dev runs. The 155× was invisible in the fixture timings that guided the work.
 - **Recursive lexer rule with `.+?` / `.*?`**
   (`RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`): the static single-pass
   emitter over-consumes nested `/* … */` comments.

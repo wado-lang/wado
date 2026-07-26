@@ -1,0 +1,34 @@
+//! A non-greedy `+?` iterates as long as exiting would strand the
+//! continuation. Expected trees are the published ANTLR4 jar's (black-box
+//! oracle).
+//!
+//! The iterating cases are `#[TODO]`: no lookahead separates the body from the
+//! continuation here, and the simulator — which answers it correctly — costs a
+//! full closure per iteration, measured 155x on a DDL-heavy SQLite script. The
+//! affordable route is the runtime FOLLOW gate (TODO.md).
+
+use g from "./grammars/ll_non_greedy_plus_loop.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_non_greedy_plus_loop" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "non-greedy plus takes the minimum when the continuation fits" {
+    assert_tree(&"a a", &"(s (x a) (y a))");
+}
+
+#[TODO]
+test "non-greedy plus iterates when exiting would strand the continuation" {
+    assert_tree(&"a a a", &"(s (x a) (x a) (y a))");
+}
+
+#[TODO]
+test "non-greedy plus iterates as far as needed" {
+    assert_tree(&"a a a a", &"(s (x a) (x a) (x a) (y a))");
+}

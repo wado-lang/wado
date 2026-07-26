@@ -639,3 +639,53 @@ test "parse ll_ctx_follow.g4" {
     // r, wrapper, a, b
     assert g.parser_rules.len() == 4;
 }
+
+test "parse ll_opt_greedy_ambig.g4" {
+    let input = #include_str("../../tests/grammars/ll_opt_greedy_ambig.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "LlOptGreedyAmbig";
+    // s, t, c
+    assert g.parser_rules.len() == 3;
+    // `t` overlaps `c` on NULL, which is what makes `t?` ambiguous.
+    assert g.parser_rules[1].name == "t";
+    assert g.parser_rules[1].alternatives.len() == 2;
+}
+
+test "parse ll_non_greedy_plus_loop.g4" {
+    let input = #include_str("../../tests/grammars/ll_non_greedy_plus_loop.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "LlNonGreedyPlusLoop";
+    // s, x, y
+    assert g.parser_rules.len() == 3;
+    // `x+?` — a non-greedy Plus over a rule reference.
+    let rep = &g.parser_rules[0].alternatives[0].elements[0];
+    if let Repeat(r) = rep {
+        assert r.kind matches { Plus };
+        assert r.non_greedy;
+    } else {
+        panic("s's first element should be a Repeat");
+    }
+}
+
+test "parse lr_mid_operand.g4" {
+    let input = #include_str("../../tests/grammars/lr_mid_operand.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "LrMidOperand";
+    // s, e
+    assert g.parser_rules.len() == 2;
+    // `e` is the LR rule: atom, `e 'and' e`, `e 'between' e 'and' e`.
+    assert g.parser_rules[1].name == "e";
+    assert g.parser_rules[1].alternatives.len() == 3;
+    assert g.parser_rules[1].alternatives[2].elements.len() == 5;
+}
+
+test "parse lr_opt_two_token.g4" {
+    let input = #include_str("../../tests/grammars/lr_opt_two_token.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "LrOptTwoToken";
+    // s, e, d, t
+    assert g.parser_rules.len() == 4;
+    // The LR suffix carries the group holding `( d '.' )? t`.
+    assert g.parser_rules[1].name == "e";
+    assert g.parser_rules[1].alternatives.len() == 2;
+}

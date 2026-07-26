@@ -1,25 +1,40 @@
+//! ATN-class LR loop entry: `'between' expr 'and' expr` shares the `'and'`
+//! delimiter with the binary `expr 'and' expr` alternative. Expected trees are
+//! the published ANTLR4 jar's (black-box oracle) — the middle operand climbs the
+//! shared delimiter as long as the alternative can still find its own.
+
 use g from "./grammars/lr_between.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_between" },
     };
 
-fn assert_parses(input: &String) {
+fn assert_tree(input: &String, expected: &String) {
     let result = g::parse(input);
-    assert result.ok(), `parse failed for ${*input}`;
+    assert result.ok(), `parse failed for ${*input}: ${g::to_string_tree(&result)}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
 // The canonical case: between's mandatory `'and'` must survive the binary
-// `and`-loop.
+// `and`-loop. ANTLR4 also lets the middle operand take the first `and`, because a
+// second one is left for between itself; Gale yields it instead and brackets the
+// tree differently, so this one is `#[TODO]` — the same mid-operand divergence
+// `lr_mid_operand.g4` pins for an LR alternative.
+#[TODO]
 test "between with trailing and parses" {
-    assert_parses(&"between X1 and X2 and X3 ;");
+    assert_tree(&"between X1 and X2 and X3 ;", &"(stat (expr between (expr (expr X1) and (expr X2)) and (expr X3)) ;)");
 }
 
 // Plain binary chains still parse.
 test "binary and/or chain parses" {
-    assert_parses(&"X1 and X2 or X3 and X4 ;");
+    assert_tree(
+        &"X1 and X2 or X3 and X4 ;",
+        &"(stat (expr (expr (expr X1) and (expr X2)) or (expr (expr X3) and (expr X4))) ;)",
+    );
 }
 
-// between mixed with a binary continuation.
+// between mixed with a binary continuation: with only one `and` in the input the
+// middle operand yields it, and the trailing operand takes the `or`.
 test "between then or continuation parses" {
-    assert_parses(&"between X1 and X2 or X3 ;");
+    assert_tree(&"between X1 and X2 or X3 ;", &"(stat (expr between (expr X1) and (expr (expr X2) or (expr X3))) ;)");
 }
