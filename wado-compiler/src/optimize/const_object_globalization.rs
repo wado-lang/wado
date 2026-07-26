@@ -686,12 +686,7 @@ fn is_globalizable_const(
     }
 }
 
-fn block_is_const(
-    body: &Body,
-    block: BlockId,
-    gate: &Gate<'_>,
-    bound: &mut IndexSet<u32>,
-) -> bool {
+fn block_is_const(body: &Body, block: BlockId, gate: &Gate<'_>, bound: &mut IndexSet<u32>) -> bool {
     let stmts = &body.blocks[block].stmts;
     let Some((last, init)) = stmts.split_last() else {
         return false;
@@ -719,7 +714,8 @@ fn block_is_const(
 }
 
 fn contains_aggregate_operand(body: &Body, op: Operand, gate: &Gate<'_>) -> bool {
-    op.as_expr().is_some_and(|e| contains_aggregate(body, e, gate))
+    op.as_expr()
+        .is_some_and(|e| contains_aggregate(body, e, gate))
 }
 
 /// True when `expr` contains at least one aggregate constructor.
@@ -748,9 +744,9 @@ fn contains_aggregate(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
             let stmts = body.blocks[*block].stmts.clone();
             stmts.iter().any(|&s| match &body.stmts[s].kind {
                 StmtKind::Let { value, .. } => contains_aggregate_operand(body, *value, gate),
-                StmtKind::Expr(value) => {
-                    value.as_expr().is_some_and(|e| contains_aggregate(body, e, gate))
-                }
+                StmtKind::Expr(value) => value
+                    .as_expr()
+                    .is_some_and(|e| contains_aggregate(body, e, gate)),
                 _ => false,
             })
         }
@@ -780,10 +776,10 @@ impl Gate<'_> {
 
     /// Whether a value of `ty` owns heap storage worth building only once.
     ///
-    /// Hoisting is not free: it costs a global, an init flag, a guard branch,
-    /// and an object that stays live for the whole program. That only pays
-    /// when rebuilding the value would re-allocate — i.e. when it (transitively)
-    /// owns a GC array, as `String` and `List` do.
+    /// Hoisting is not free: it costs a global, a guard branch, and an object
+    /// that stays live for the whole program. That only pays when rebuilding
+    /// the value would re-allocate — i.e. when it (transitively) owns a GC
+    /// array, as `String` and `List` do.
     ///
     /// A small aggregate of scalars owns nothing: `multi_value_return` already
     /// lifts such a return into Wasm multi-values and allocates *nothing*, so
@@ -817,7 +813,9 @@ impl Gate<'_> {
             // Transparent wrappers.
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Newtype { base_type: inner, .. }
+            | ResolvedType::Newtype {
+                base_type: inner, ..
+            }
             | ResolvedType::Reactive(inner) => Some(*inner),
             // Struct / tuple: decided by the fields below. Anything else
             // (a variant and its payloads, a generic instance) cannot be
@@ -1164,14 +1162,6 @@ fn inline_sibling_lets(
     );
 }
 
-/// Replace the `let local_index = value` statement with an inline
-/// `GlobalVarSet(name, value)`, searching the whole body exhaustively —
-/// matching [`collect_candidates`]'s reach, so this always finds whatever it
-/// collected. Returns `false` if not found; the caller asserts on this,
-/// since a miss would leave the local's reads pointing at a global that's
-/// never set.
-
-
 /// True when `expr` contains a call anywhere — the marker for an initializer
 /// that cannot reduce to a Wasm constant instruction.
 fn expr_contains_call(body: &Body, expr: ExprId) -> bool {
@@ -1200,7 +1190,7 @@ fn stmt_value_contains_call(body: &Body, stmt: StmtId) -> bool {
     value.as_expr().is_some_and(|e| expr_contains_call(body, e))
 }
 
-/// Wrap a hoisted `GlobalVarSet` in `if !<flag> { …; <flag> = true }`.
+/// Wrap a hoisted `GlobalVarSet` in `if builtin::is_uninitialized(<global>)`.
 ///
 /// The unguarded form is correct only because `wir_optimize::const_global`
 /// promotes a Wasm-const-expressible initializer into the global's eager
@@ -1212,12 +1202,6 @@ fn stmt_value_contains_call(body: &Body, stmt: StmtId) -> bool {
 /// execution of the expression it replaced, so a callee that traps or diverges
 /// still does so, at the same point. Moving the work to module-init instead
 /// would drag both to instantiation time.
-///
-/// The flag is a separate `bool` global rather than a null test on the value
-/// slot itself: `lazy_init` promises codegen that every read of the slot is
-/// post-initialization, so it narrows reads with `ref.as_non_null` — and the
-/// guard's own read is by construction the one that precedes it. Testing a
-/// flag keeps that promise intact. Same shape as `__modules_initialized`.
 fn guard_set_on_uninit(
     body: &mut Body,
     set: ExprId,
@@ -1265,6 +1249,12 @@ fn guard_set_on_uninit(
     })
 }
 
+/// Replace the `let local_index = value` statement with an inline
+/// `GlobalVarSet(name, value)`, searching the whole body exhaustively —
+/// matching [`collect_candidates`]'s reach, so this always finds whatever it
+/// collected. Returns `false` if not found; the caller asserts on this,
+/// since a miss would leave the local's reads pointing at a global that's
+/// never set.
 fn replace_let_with_set(
     body: &mut Body,
     local_index: u32,
@@ -1295,15 +1285,8 @@ fn replace_let_with_set(
                 span,
             });
             if let Some(is_uninitialized) = guarded {
-                let guard = guard_set_on_uninit(
-                    body,
-                    set,
-                    module_source,
-                    name,
-                    ty,
-                    is_uninitialized,
-                    span,
-                );
+                let guard =
+                    guard_set_on_uninit(body, set, module_source, name, ty, is_uninitialized, span);
                 body.stmts[s].kind = body.stmts[guard].kind.clone();
             } else {
                 body.stmts[s].kind = StmtKind::Expr(set.into());

@@ -849,7 +849,10 @@ fn memory_builtin_effect(name: &str) -> Option<FnEffect> {
 /// are Wasm instructions: opaque only when they touch linear memory.
 /// Anything bodyless that is not a builtin at all (an extern declaration) is
 /// opaque, since there is no body to inspect.
-fn leaf_effect(f: &crate::nir::NirFunction, registry: &crate::builtin_registry::BuiltinRegistry) -> FnEffect {
+fn leaf_effect(
+    f: &crate::nir::NirFunction,
+    registry: &crate::builtin_registry::BuiltinRegistry,
+) -> FnEffect {
     let fref = crate::nir::FunctionRef::from_resolved(f, f.module_source.clone());
     let Some(qualified) = fref
         .builtin_name()
@@ -935,7 +938,6 @@ pub(super) fn compute_fn_effects(
     }
     effects
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1990,4 +1992,3 @@ mod tests {
         assert_eq!(mr_stmt(ret_none).control, Control::NonLocal);
     }
 }
-
