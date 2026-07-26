@@ -1147,10 +1147,7 @@ fn lattice_join_is_commutative_and_associative() {
         a.clone().join(b.clone()).join(c.clone()),
         a.clone().join(b.clone().join(c.clone())),
     );
-    assert_eq!(
-        b.clone().join(c.clone()).join(a.clone()),
-        c.join(a).join(b),
-    );
+    assert_eq!(b.clone().join(c.clone()).join(a.clone()), c.join(a).join(b),);
 }
 
 #[test]
@@ -4316,7 +4313,10 @@ fn struct_pattern_with_a_binding_field_stays_unknown() {
             arm(
                 struct_pat(
                     point,
-                    vec![(0, "x", lit_pat_i128(10)), (1, "y", binding_pat("y", 3, TypeTable::I32))],
+                    vec![
+                        (0, "x", lit_pat_i128(10)),
+                        (1, "y", binding_pat("y", 3, TypeTable::I32)),
+                    ],
                     false,
                 ),
                 int_lit(1013, TypeTable::I32, "1013"),
@@ -4328,7 +4328,10 @@ fn struct_pattern_with_a_binding_field_stays_unknown() {
     let (mut body, e) = into_body_expr(&expr);
     let table_ref = &table;
     let mut interp = Interpreter::new(table_ref);
-    assert_eq!(interp.reduce_to_lattice_full_a(&mut body, e), Lattice::NonConst);
+    assert_eq!(
+        interp.reduce_to_lattice_full_a(&mut body, e),
+        Lattice::NonConst
+    );
     assert!(
         matches!(body.exprs[e].kind, ExprKind::Match { .. }),
         "the match must survive: {:?}",
@@ -4348,7 +4351,10 @@ fn struct_pattern_rules_an_arm_out_despite_a_binding() {
             arm(
                 struct_pat(
                     point,
-                    vec![(0, "x", lit_pat_i128(99)), (1, "y", binding_pat("y", 3, TypeTable::I32))],
+                    vec![
+                        (0, "x", lit_pat_i128(99)),
+                        (1, "y", binding_pat("y", 3, TypeTable::I32)),
+                    ],
                     false,
                 ),
                 int_lit(1009, TypeTable::I32, "1009"),

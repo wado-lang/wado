@@ -1165,9 +1165,9 @@ impl<'a> Interpreter<'a> {
             PatKind::Tuple(pats, has_rest) if !*has_rest => self.all_fields_match(
                 body,
                 value,
-                pats.iter().enumerate().map(|(i, p)| {
-                    (u32::try_from(i).expect("tuple arity fits u32"), *p)
-                }),
+                pats.iter()
+                    .enumerate()
+                    .map(|(i, p)| (u32::try_from(i).expect("tuple arity fits u32"), *p)),
             ),
             PatKind::Tuple(_, _)
             | PatKind::Binding { .. }
@@ -1319,7 +1319,8 @@ impl<'a> Interpreter<'a> {
     /// promotes the returned value to an `Operand::Value` via
     /// `Engine::replace_expr_with_value`.
     pub fn const_fold_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
-        self.const_fold_candidate_a(body, e).filter(Value::is_scalar)
+        self.const_fold_candidate_a(body, e)
+            .filter(Value::is_scalar)
     }
 
     fn const_fold_candidate_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
