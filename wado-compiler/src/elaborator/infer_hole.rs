@@ -73,6 +73,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         hole
     }
 
+    /// Defer a variant constructor whose type arguments did not resolve here.
+    ///
+    /// `infer_variant_type_args` answers a generic variant with its bare
+    /// declaration type when nothing pinned the parameters. That type has no
+    /// case types registered, so leaving it in concrete code reaches WIR and
+    /// dies there — yet the arguments are not necessarily uninferable: a
+    /// sibling field (`Paired { v: Option::None, k: 1 }`), an annotation, or a
+    /// later use can still pin them. Mint a hole per parameter so a real sink
+    /// may solve it and `finalize_infer_holes` reports only what never was.
+    pub(super) fn defer_uninferable_variant(
+        &mut self,
+        type_id: TypeId,
+        variant_name: &str,
+        variant_info: &super::types::VariantInfo,
+        span: Span,
+    ) -> TypeId {
+        let arity = variant_info.type_param_type_ids.len();
+        if arity == 0 {
+            return type_id;
+        }
+        let is_bare_decl = self
+            .tysys
+            .type_table
+            .borrow()
+            .type_id_of_decl(variant_info.defined_at)
+            == type_id;
+        if !is_bare_decl {
+            return type_id;
+        }
+        let message = format!(
+            "cannot infer type parameter of variant `{variant_name}`; add a turbofish (`{variant_name}::<...>::…`) or a type annotation"
+        );
+        let holes: Vec<TypeId> = (0..arity)
+            .map(|_| {
+                self.mint_infer_hole(span, message.clone(), variant_name.to_string(), Vec::new())
+            })
+            .collect();
+        self.tysys.type_table.borrow_mut().make_generic_instance(
+            variant_info.name.clone(),
+            variant_info.module_source.clone(),
+            holes,
+        )
+    }
+
     pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {
         if self.infer_holes.is_empty() {
             return false;

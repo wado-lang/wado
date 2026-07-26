@@ -770,16 +770,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow()
                         .type_id_of_decl(variant_info.defined_at)
                 } else {
-                    self.tysys.infer_variant_type_args(
-                        &self.annotate_ctx,
-                        prefix,
-                        &variant_info,
-                        &case_data,
-                        None,
-                        expected_type,
-                        &[],
-                        &[],
-                    )
+                    {
+                        let inferred = self.tysys.infer_variant_type_args(
+                            &self.annotate_ctx,
+                            prefix,
+                            &variant_info,
+                            &case_data,
+                            None,
+                            expected_type,
+                            &[],
+                            &[],
+                        );
+                        self.defer_uninferable_variant(inferred, prefix, &variant_info, ident.span)
+                    }
                 };
 
                 // Stage 5 (Gap 1): record generic type args for

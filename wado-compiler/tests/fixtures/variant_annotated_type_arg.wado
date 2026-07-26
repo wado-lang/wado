@@ -1,0 +1,17 @@
+variant Tree<T> {
+    Empty,
+    Node(T),
+}
+
+test "an annotation pins a payload-less case" {
+    let e: Tree<i32> = Tree::Empty;
+    assert e matches { Tree::Empty };
+}
+
+test "a payload still infers on its own" {
+    let n = Tree::Node(7);
+    assert n matches { Tree::Node(7) };
+}
+
+__DATA__
+{"test": {}}
