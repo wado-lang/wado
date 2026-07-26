@@ -1938,6 +1938,7 @@ struct ArgsVals {
 }
 
 fn scan_root(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_continue(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
@@ -1947,6 +1948,7 @@ fn scan_root(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -2056,9 +2058,11 @@ fn scan_continue(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
 }
 
 fn scan_args(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_for(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 

@@ -3065,6 +3065,7 @@ fn scan_scriptlet_or_sea_ws(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
 }
 
 fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_2(tokens[pos]) {
         let sp = pos;
@@ -3080,6 +3081,7 @@ fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 

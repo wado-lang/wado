@@ -1862,6 +1862,7 @@ fn scan_top(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn scan_items(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_item(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -1880,6 +1881,7 @@ fn scan_items(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 

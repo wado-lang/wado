@@ -290,57 +290,32 @@ pub fn count_general_groups(elements: &List<Element>) -> i32 {
     return count;
 }
 
+/// Groups nested under `alts`, plus one when `alts` is itself a general group.
+fn group_nesting_count(alts: &List<Alternative>) -> i32 {
+    let mut max_nested: i32 = 0;
+    for let alt of alts {
+        let nested = count_general_groups(&alt.elements);
+        if nested > max_nested {
+            max_nested = nested;
+        }
+    }
+    if is_general_group(alts) {
+        return 1 + max_nested;
+    }
+    return max_nested;
+}
+
 pub fn count_element_groups(elem: &Element) -> i32 {
-    if let Group(g) = elem {
-        if is_general_group(&g.alternatives) {
-            // 1 for the group itself + max nested count across alts
-            let mut max_nested: i32 = 0;
-            for let alt of &g.alternatives {
-                let nested = count_general_groups(&alt.elements);
-                if nested > max_nested {
-                    max_nested = nested;
-                }
-            }
-            return 1 + max_nested;
-        }
-        // Non-matching group: recurse into alts to find nested general groups
-        let mut max_nested: i32 = 0;
-        for let alt of &g.alternatives {
-            let nested = count_general_groups(&alt.elements);
-            if nested > max_nested {
-                max_nested = nested;
-            }
-        }
-        return max_nested;
-    }
-    if let Repeat(rep) = elem {
-        if let Group(g) = &rep.element {
-            if is_general_group(&g.alternatives) {
-                let mut max_nested: i32 = 0;
-                for let alt of &g.alternatives {
-                    let nested = count_general_groups(&alt.elements);
-                    if nested > max_nested {
-                        max_nested = nested;
-                    }
-                }
-                return 1 + max_nested;
-            }
-            // Non-matching group inside Repeat: recurse into alts
-            let mut max_nested: i32 = 0;
-            for let alt of &g.alternatives {
-                let nested = count_general_groups(&alt.elements);
-                if nested > max_nested {
-                    max_nested = nested;
-                }
-            }
-            return max_nested;
-        }
-        return count_element_groups(&rep.element);
-    }
-    if let Label(lab) = elem {
-        return count_element_groups(&lab.element);
-    }
-    return 0;
+    return match elem {
+        Group(g) => group_nesting_count(&g.alternatives),
+        Repeat(rep) => if let Group(g) = &rep.element {
+            group_nesting_count(&g.alternatives);
+        } else {
+            count_element_groups(&rep.element);
+        },
+        Label(lab) => count_element_groups(&lab.element),
+        TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => 0,
+    };
 }
 
 /// Generate a variant type name for a general multi-alt group.
@@ -380,8 +355,7 @@ fn element_type_base_name(elem: &Element) -> String {
         let inner = element_base_name(&rep.element);
         return match rep.kind {
             Optional => `${inner}_opt`,
-            Star => `${inner}_list`,
-            Plus => `${inner}_list`,
+            Star | Plus => `${inner}_list`,
         };
     }
     return element_base_name(elem);
@@ -624,53 +598,37 @@ pub fn peek_dedup_name(base: &String, counts: &List<[String, i32]>) -> String {
 }
 
 pub fn element_field_info(elem: &Element) -> [String, String] {
-    if let TokenRef(t) = elem {
-        return [t.field_name, "Token"];
-    }
-    if let Literal(l) = elem {
-        return [literal_field_name(&l.text), "Token"];
-    }
-    if let RuleRef(r) = elem {
-        return [r.field_name, rule_type_name(&r.name)];
-    }
-    if let Wildcard(_) = elem {
-        return ["wildcard", "Token"];
-    }
-    if let Not(ne) = elem {
-        return [not_element_field_name(&ne.element), "Token"];
-    }
-    if let Label(lab) = elem {
-        if lab.list {
+    return match elem {
+        TokenRef(t) => [t.field_name, "Token"],
+        Literal(l) => [literal_field_name(&l.text), "Token"],
+        RuleRef(r) => [r.field_name, rule_type_name(&r.name)],
+        Wildcard(_) => ["wildcard", "Token"],
+        Not(ne) => [not_element_field_name(&ne.element), "Token"],
+        Label(lab) => if lab.list {
             let inner = element_field_info(&lab.element);
-            return [lab.field_name, `List<${inner.1}>`];
-        }
-        return element_field_info(&lab.element);
-    }
-    if let Group(g) = elem {
-        match classify_group(&g.alternatives) {
-            SimpleCst => {
-                return [
-                    group_field_base_name(&g.alternatives),
-                    group_variant_type_name(&g.alternatives),
-                ];
-            },
-            TokenOnly => {
-                return [token_group_field_name(&g.alternatives), "Token"];
-            },
-            SingleAlt => {
-                return [
-                    single_alt_group_field_name(&g.alternatives[0]),
-                    single_alt_group_type_name(&g.alternatives[0]),
-                ];
-            },
+            [lab.field_name, `List<${inner.1}>`];
+        } else {
+            element_field_info(&lab.element);
+        },
+        Group(g) => match classify_group(&g.alternatives) {
+            SimpleCst => [
+                group_field_base_name(&g.alternatives),
+                group_variant_type_name(&g.alternatives),
+            ],
+            TokenOnly => [token_group_field_name(&g.alternatives), "Token"],
+            SingleAlt => [
+                single_alt_group_field_name(&g.alternatives[0]),
+                single_alt_group_type_name(&g.alternatives[0]),
+            ],
             General => panic(
                 "element_field_info: general Group reached the surface helper — route through `gen_op_group`/`gen_general_group_store*` instead",
             ),
-            Transparent => {
-            },
-        }
-    }
-    panic(
-        "element_field_info: element has no storable field shape — caller routed a non-storable element into the field-info helper",
-    );
+            Transparent => panic(
+                "element_field_info: transparent Group has no storable field shape — caller routed a non-storable element into the field-info helper",
+            ),
+        },
+        Repeat(_) => panic(
+            "element_field_info: Repeat has no storable field shape — caller routed a non-storable element into the field-info helper",
+        ),
+    };
 }

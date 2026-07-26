@@ -27,7 +27,7 @@ The K-prefix caller-side mask analysis halts at a multi-alternative rule referen
 
 ## Stage B′ — JVM-oracle integration
 
-The Stage B′ pipeline covers 78 tests across `FullContextParsing`, `LeftRecursion`, `ParserErrors`, `ParserExec`, `SemPredEvalParser`, and `Sets`, with the remaining prediction divergences pinned as oracle-todo. The infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md)) is in place; Java is needed only at extract time, not in CI.
+The Stage B′ pipeline covers `FullContextParsing`, `LeftRecursion`, `ParserErrors`, `ParserExec`, `SemPredEvalParser`, and `Sets`, with the remaining prediction divergences pinned as oracle-todo. The infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md)) is in place; Java is needed only at extract time, not in CI.
 
 Remaining:
 
@@ -35,7 +35,7 @@ Remaining:
 
 ## Composite (slave-grammar) descriptors
 
-All 17 `CompositeLexers` / `CompositeParsers` descriptors short-circuit on the presence of imported slave grammars. Two independent blockers:
+Every `CompositeLexers` / `CompositeParsers` descriptor short-circuits on the presence of imported slave grammars. Independent blockers:
 
 - **Importer multi-input plumbing.** A grammar import (`import S;`) must resolve against the sibling slave-grammar files. Kiln already supports multi-input; lift the short-circuit once resolution lands.
 - **Host-side output (Stage C).** Every composite descriptor's expected output is a host-side artefact — action prints, token dumps, or empty — so none survive the Stage B output normalizer. Re-evaluate once Stage C lands.
@@ -51,6 +51,7 @@ Design in [`action.md`](./action.md). Remaining:
 - The `language = Java` lexer path (java2wado over lexer bodies).
 - The SuperClass effect interface for the real-world grammars below. Landed for **predicate-only** lexer bases, including `language = Java`: RustLexer tokenizes and parses end to end through a hand-written `impl RustLexerBase`. See `action.md` ("SuperClass — an effect interface"). Remaining before TypeScript / ANTLRv4 run: action ops (`{this.m();}` — the winner-replay path), the parser side (parser-rule superClass predicates like `{this.NextGT()}?`, currently discarded), and lifecycle hooks (`nextToken` for last-token tracking). Action-op bases stay carved out (byte-identical) until the replay path lands.
 - Make the ANTLR descriptor output corpus codegen-and-compare (parse-only today), unblocking the output acceptance.
+- Extend the Stage C output-compare beyond `Sets` and `SemPredEvalParser`, the categories it runs for today. The remaining ones are a mechanical extractor re-run plus triage of whatever lands in `[stage_c_todo]` / `[stage_c_skip]`.
 - java2wado numeric promotion: an `i32` token member (`$X.int` / `.type` / `.line` / `.pos` / `.index`) mixed with a wider value-channel field (`returns [long v]` / `[float]` / `[double]`) mismatches Wado's strict widths, since Wado has no implicit widening. Loud compile error, not silent; no corpus grammar hits it. A proper fix threads Java's promotion rules through the translator.
 
 Gale still silently discards action / predicate contents for the real-world grammars whose constructs the parser subset does not yet cover (`ANTLRv4Lexer`, `RustLexer`, `RustParser`, `TypeScriptLexer`, `TypeScriptParser`): they load cleanly, but the generated recognizer behaves as if every predicate were `true` and every action a no-op. That is wrong for:
@@ -81,6 +82,7 @@ Add a failing test before fixing.
 The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that can mis-parse valid input. Several need their own focused PR with full-corpus validation rather than a quick patch (the prediction design notes the static path always has edges).
 
 - [ ] SLL prediction under-approximates and emits incomplete dispatch trees, so valid input is rejected (codegen emits a dispatch with no else-fallback): `+`/`*` repeats collapse to "consumes exactly one token" (`a : X+ Y | X Z` mispredicts on `X X Y`), and the opaque-rule expansion path drops at-end alternatives its template keeps.
+- [ ] The `sqlite` Stage B′ `#[TODO]`s are independent divergences, each worth its own fixture. The `BETWEEN` operands climb from too high a precedence, so `a NOT BETWEEN 1 AND 2 AND b` brackets as `(a BETWEEN 1 AND 2) AND b` — a wrong tree with no diagnostic, which ranks it with the rest of this section. The others surface as a tree difference or an outright rejection: `column_def` skips `type_name?` where ANTLR4 enters it (`a NOT NULL`, `a CONSTRAINT c NOT NULL`); `type_name`'s non-greedy `name+?` stops after one name, rejecting `a UNSIGNED BIG INT`; and `IN`'s bare `table_name` branch (`a IN t`) is rejected.
 - [ ] Scan/parse EOF asymmetry: the parse side matches EOF without advancing, the scan side advances unconditionally — so a scan over-counts by one whenever EOF is the last matched element, which can flip a tournament tie.
 - [ ] Tournament / scan-gate call sites never forward the runtime caller-FOLLOW argument while the corresponding parse calls do — violating the documented scan/parse lockstep invariant on FOLLOW-gated grammars.
 - [ ] A simple-CST group threads the caller's FOLLOW on the scan side but an empty FOLLOW on the parse-op path, and the two code comments contradict each other about which is sound. Decide once, fix the other side, pin with a fixture.

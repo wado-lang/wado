@@ -1070,9 +1070,7 @@ fn gen_lexer_alt_seq(
 fn lexer_element_can_replay(elem: &LexerElement, single_char: bool) -> bool {
     return match *elem {
         Literal(text) => !single_char || text.chars().count() == 1,
-        CharRange(_) => true,
-        CharClass(_) => true,
-        AnyChar => true,
+        CharRange(_) | CharClass(_) | AnyChar => true,
         Not(not_inner) => lexer_element_can_replay(&not_inner.element, single_char),
         // `~('b')` parses as `Not(Group([Alt([Literal("b")])]))`,
         // `~('b' | ' ')` as `Not(Group([Alt(['b']), Alt([' '])]))`.
@@ -1484,40 +1482,49 @@ fn try_extract_ci_char(cc: &CharClass) -> Option<char> {
 /// too — ANTLR4's `caseInsensitive` option folds every grammar-level char to
 /// its opposing-case partner.
 fn try_extract_keyword_char(elem: &LexerElement, all_rules: &List<LexerRule>, rule_ci: bool) -> Option<[char, bool]> {
-    if let Literal(text) = elem {
-        let mut iter = text.chars();
-        if let Some(c) = iter.next() {
-            if let None = iter.next() {
+    return match elem {
+        Literal(text) => {
+            let mut iter = text.chars();
+            let first = iter.next();
+            if let Some(c) = first {
+                if iter.next() matches { None } {
+                    let is_letter = c.to_ascii_lowercase() != c.to_ascii_uppercase();
+                    let ci = rule_ci && is_letter;
+                    Option::<[char, bool]>::Some([c.to_ascii_lowercase(), ci]);
+                } else {
+                    null;
+                }
+            } else {
+                null;
+            }
+        },
+        CharClass(cc) => {
+            let ch = try_extract_ci_char(cc);
+            if let Some(c) = ch {
+                Option::<[char, bool]>::Some([c, true]);
+            } else if !cc.negated && cc.ranges.len() == 1 && cc.ranges[0].start == cc.ranges[0].end {
+                let c = cc.ranges[0].start;
                 let is_letter = c.to_ascii_lowercase() != c.to_ascii_uppercase();
                 let ci = rule_ci && is_letter;
-                return Option::<[char, bool]>::Some([c.to_ascii_lowercase(), ci]);
+                Option::<[char, bool]>::Some([c.to_ascii_lowercase(), ci]);
+            } else {
+                null;
             }
-        }
-        return null;
-    }
-    if let CharClass(cc) = elem {
-        let ch = try_extract_ci_char(cc);
-        if let Some(c) = ch {
-            return Option::<[char, bool]>::Some([c, true]);
-        }
-        if !cc.negated && cc.ranges.len() == 1 && cc.ranges[0].start == cc.ranges[0].end {
-            let c = cc.ranges[0].start;
-            let is_letter = c.to_ascii_lowercase() != c.to_ascii_uppercase();
-            let ci = rule_ci && is_letter;
-            return Option::<[char, bool]>::Some([c.to_ascii_lowercase(), ci]);
-        }
-        return null;
-    }
-    if let RuleRef(name) = elem {
-        let frag = find_fragment(all_rules, name);
-        if let Some(f) = frag {
-            if f.body.len() == 1 && f.body[0].elements.len() == 1 {
-                return try_extract_keyword_char(&f.body[0].elements[0], all_rules, rule_ci);
+        },
+        RuleRef(name) => {
+            let frag = find_fragment(all_rules, name);
+            if let Some(f) = frag {
+                if f.body.len() == 1 && f.body[0].elements.len() == 1 {
+                    try_extract_keyword_char(&f.body[0].elements[0], all_rules, rule_ci);
+                } else {
+                    null;
+                }
+            } else {
+                null;
             }
-        }
-        return null;
-    }
-    return null;
+        },
+        CharRange(_) | AnyChar | Group(_) | Repeat(_) | Not(_) => null,
+    };
 }
 
 /// Analyzes a lexer rule to determine if it's a fixed keyword pattern.

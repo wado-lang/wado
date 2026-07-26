@@ -38,7 +38,7 @@ regen_one() {
     echo 'use { Stdout, println } from "core:cli";'
     echo "use $module from \"./grammars/$grammar\""
     echo "    with { generator: { module: \"../src/generator.wado\", output_dir: \"$outdir\" } };"
-    echo "fn d(input: String) with Stdout { let r = ${module}::parse(&input); println(\`@@@{${module}::to_string_tree(&r)}\`); }"
+    echo "fn d(input: String) with Stdout { let r = ${module}::parse(&input); println(\`@@@\${${module}::to_string_tree(&r)}\`); }"
     echo 'export fn run() with Stdout {'
     while IFS= read -r line; do
       [ -z "$line" ] && continue
@@ -69,7 +69,7 @@ regen_one() {
     echo "    let result = ${module}::parse(input);"
     echo "    let actual = ${module}::to_string_tree(&result);"
     echo '    let norm = normalize_tree(expected);'
-    echo '    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;'
+    echo '    assert actual == norm, `\ninput:    ${*input}\nexpected: ${norm}\nactual:   ${actual}`;'
     echo '}'
     echo
     local i=0 todo=0

@@ -1853,20 +1853,30 @@ impl Parser {
 fn scan_stat(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_LIT_LPAREN && pos + 1 < tokens.len() && tokens[pos + 1] == TK_ID && pos + 2 < tokens.len() && tokens[pos + 2] == TK_LIT_RPAREN {
-        sol_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break sol_0; }
-            pos += 1;
-            pos = scan_expr(tokens, pos, 0);
-            if pos < 0 { break sol_0; }
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sol_0; }
-            pos += 1;
+        let sol_0_save = pos;
+        sol_0_done: {
+            sol_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break sol_0; }
+                pos += 1;
+                pos = scan_expr(tokens, pos, 0);
+                if pos < 0 { break sol_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sol_0; }
+                pos += 1;
+                break sol_0_done;
+            }
+            pos = sol_0_save;
         }
     } else if pos < tokens.len() && tokens[pos] == TK_LIT_LPAREN && pos + 1 < tokens.len() && tokens[pos + 1] == TK_LIT_RPAREN {
-        sol_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break sol_1; }
-            pos += 1;
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sol_1; }
-            pos += 1;
+        let sol_1_save = pos;
+        sol_1_done: {
+            sol_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break sol_1; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sol_1; }
+                pos += 1;
+                break sol_1_done;
+            }
+            pos = sol_1_save;
         }
     }
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }

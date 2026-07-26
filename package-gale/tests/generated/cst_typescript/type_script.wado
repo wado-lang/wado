@@ -7208,6 +7208,7 @@ fn scan_initializer(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
 }
 
 fn scan_binding_pattern(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -7228,6 +7229,7 @@ fn scan_binding_pattern(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
             pos = gp_0;
         }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -7246,6 +7248,7 @@ fn scan_type_parameters(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
 }
 
 fn scan_type_parameter_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_type_parameter(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -7264,6 +7267,7 @@ fn scan_type_parameter_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -7336,6 +7340,7 @@ fn scan_type_arguments(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
 }
 
 fn scan_type_argument_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_type_argument(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -7354,13 +7359,16 @@ fn scan_type_argument_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_type_argument(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_type_(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -7833,6 +7841,7 @@ fn scan_predefined_type(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
 }
 
 fn scan_type_reference(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_type_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -7841,6 +7850,7 @@ fn scan_type_reference(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
         pos = scan_type_generic(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -7903,6 +7913,7 @@ fn scan_object_type(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
 }
 
 fn scan_type_body(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_type_member_list(tokens, pos, &follow_prepend(&FOLLOW_MASK_5, follow), 0);
     if pos < 0 { return -1; }
@@ -7931,10 +7942,12 @@ fn scan_type_body(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
         }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_type_member_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_type_member(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -7972,6 +7985,7 @@ fn scan_type_member_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -8092,6 +8106,7 @@ fn scan_tuple_type(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
 }
 
 fn scan_tuple_element_types(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_type_(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8115,6 +8130,7 @@ fn scan_tuple_element_types(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
         if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -8262,6 +8278,7 @@ fn scan_type_query_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<
 }
 
 fn scan_property_signatur(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_ReadOnly {
         let sp = pos;
@@ -8294,6 +8311,7 @@ fn scan_property_signatur(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
         }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -8393,6 +8411,7 @@ fn scan_parameter_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
 }
 
 fn scan_required_parameter_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_required_parameter(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8411,6 +8430,7 @@ fn scan_required_parameter_list(tokens: &Array<i32>, pos: i32, follow: &List<Lis
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -8443,6 +8463,7 @@ fn scan_parameter(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
 }
 
 fn scan_optional_parameter(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_LIT_AT {
         let sp = pos;
@@ -8486,6 +8507,7 @@ fn scan_optional_parameter(tokens: &Array<i32>, pos: i32, follow: &List<List<i32
         }
         return -1;
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -8504,6 +8526,7 @@ fn scan_rest_parameter(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
 }
 
 fn scan_required_parameter(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_LIT_AT {
         let sp = pos;
@@ -8517,6 +8540,7 @@ fn scan_required_parameter(tokens: &Array<i32>, pos: i32, follow: &List<List<i32
         pos = scan_type_annotation(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -8618,6 +8642,7 @@ fn scan_index_signature(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
 }
 
 fn scan_method_signature(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_property_name(tokens, pos, &FOLLOW_MASK_10, 0);
     if pos < 0 { return -1; }
@@ -8628,6 +8653,7 @@ fn scan_method_signature(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
     }
     pos = scan_call_signature(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -8758,6 +8784,7 @@ fn scan_interface_extends_clause(tokens: &Array<i32>, pos: i32, follow: &List<Li
 }
 
 fn scan_class_or_interface_type_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_type_reference(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8776,6 +8803,7 @@ fn scan_class_or_interface_type_list(tokens: &Array<i32>, pos: i32, follow: &Lis
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -8803,6 +8831,7 @@ fn scan_enum_declaration(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
 }
 
 fn scan_enum_body(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_enum_member_list(tokens, pos, &follow_prepend(&FOLLOW_MASK_16, follow), 0);
     if pos < 0 { return -1; }
@@ -8811,10 +8840,12 @@ fn scan_enum_body(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
         if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_enum_member_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_enum_member(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8833,10 +8864,12 @@ fn scan_enum_member_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_enum_member(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_property_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8854,6 +8887,7 @@ fn scan_enum_member(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
         }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -8881,6 +8915,7 @@ fn scan_namespace_declaration(tokens: &Array<i32>, pos: i32, follow: &List<List<
 }
 
 fn scan_namespace_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8905,6 +8940,7 @@ fn scan_namespace_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -8922,6 +8958,7 @@ fn scan_import_alias_declaration(tokens: &Array<i32>, pos: i32, follow: &List<Li
 }
 
 fn scan_decorator_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_decorator(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
@@ -8931,6 +8968,7 @@ fn scan_decorator_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -9028,11 +9066,13 @@ fn scan_decorator_member_expression(tokens: &Array<i32>, pos: i32, follow: &List
 }
 
 fn scan_decorator_call_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_decorator_member_expression(tokens, pos, &FOLLOW_MASK_17, 0);
     if pos < 0 { return -1; }
     pos = scan_arguments(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -9049,6 +9089,7 @@ fn scan_program(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
 }
 
 fn scan_source_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Export {
         let sp = pos;
@@ -9057,6 +9098,7 @@ fn scan_source_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
     }
     pos = scan_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -9805,6 +9847,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn scan_statement_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_statement(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
@@ -9814,6 +9857,7 @@ fn scan_statement_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -9929,16 +9973,26 @@ fn scan_import_module_items(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
         if pos == sp { break; }
     }
     if pos < tokens.len() && _kind_set_25(tokens[pos]) && pos + 1 < tokens.len() && tokens[pos + 1] == TK_LIT_COMMA {
-        sol_32: {
-            pos = scan_import_alias_name(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_32; }
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sol_32; }
-            pos += 1;
+        let sol_32_save = pos;
+        sol_32_done: {
+            sol_32: {
+                pos = scan_import_alias_name(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_32; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sol_32; }
+                pos += 1;
+                break sol_32_done;
+            }
+            pos = sol_32_save;
         }
     } else if pos < tokens.len() && _kind_set_25(tokens[pos]) {
-        sol_33: {
-            pos = scan_import_alias_name(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_33; }
+        let sol_33_save = pos;
+        sol_33_done: {
+            sol_33: {
+                pos = scan_import_alias_name(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_33; }
+                break sol_33_done;
+            }
+            pos = sol_33_save;
         }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
@@ -9947,6 +10001,7 @@ fn scan_import_module_items(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
 }
 
 fn scan_import_alias_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_module_export_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -9964,6 +10019,7 @@ fn scan_import_alias_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
         }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -10012,6 +10068,7 @@ fn scan_import_default(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
 }
 
 fn scan_import_namespace(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     let gp_35 = pos;
     let sgk_35 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -10046,6 +10103,7 @@ fn scan_import_namespace(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
         }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -10059,6 +10117,7 @@ fn scan_import_from(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
 }
 
 fn scan_alias_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_identifier_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -10076,6 +10135,7 @@ fn scan_alias_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
         }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -10200,16 +10260,26 @@ fn scan_export_module_items(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
         if pos == sp { break; }
     }
     if pos < tokens.len() && _kind_set_25(tokens[pos]) && pos + 1 < tokens.len() && tokens[pos + 1] == TK_LIT_COMMA {
-        sol_40: {
-            pos = scan_export_alias_name(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_40; }
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sol_40; }
-            pos += 1;
+        let sol_40_save = pos;
+        sol_40_done: {
+            sol_40: {
+                pos = scan_export_alias_name(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_40; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sol_40; }
+                pos += 1;
+                break sol_40_done;
+            }
+            pos = sol_40_save;
         }
     } else if pos < tokens.len() && _kind_set_25(tokens[pos]) {
-        sol_41: {
-            pos = scan_export_alias_name(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_41; }
+        let sol_41_save = pos;
+        sol_41_done: {
+            sol_41: {
+                pos = scan_export_alias_name(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_41; }
+                break sol_41_done;
+            }
+            pos = sol_41_save;
         }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
@@ -10218,6 +10288,7 @@ fn scan_export_module_items(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
 }
 
 fn scan_export_alias_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_module_export_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -10235,6 +10306,7 @@ fn scan_export_alias_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
         }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -10415,6 +10487,7 @@ fn scan_variable_statement(tokens: &Array<i32>, pos: i32, follow: &List<List<i32
 }
 
 fn scan_variable_declaration_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_variable_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -10433,10 +10506,12 @@ fn scan_variable_declaration_list(tokens: &Array<i32>, pos: i32, follow: &List<L
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_variable_declaration(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     let gp_44 = pos;
     let sgk_44 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -10474,22 +10549,33 @@ fn scan_variable_declaration(tokens: &Array<i32>, pos: i32, follow: &List<List<i
         if pos < 0 { pos = sp; }
     }
     if pos < tokens.len() && tokens[pos] == TK_LIT_EQ && pos + 1 < tokens.len() && tokens[pos + 1] == TK_LIT_LT && pos + 2 < tokens.len() && _kind_set_31(tokens[pos + 2]) {
-        sol_45: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break sol_45; }
-            pos += 1;
-            pos = scan_type_parameters(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_45; }
-            pos = scan_single_expression(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_45; }
+        let sol_45_save = pos;
+        sol_45_done: {
+            sol_45: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break sol_45; }
+                pos += 1;
+                pos = scan_type_parameters(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_45; }
+                pos = scan_single_expression(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_45; }
+                break sol_45_done;
+            }
+            pos = sol_45_save;
         }
     } else if pos < tokens.len() && tokens[pos] == TK_LIT_EQ && pos + 1 < tokens.len() && _kind_set_31(tokens[pos + 1]) {
-        sol_46: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break sol_46; }
-            pos += 1;
-            pos = scan_single_expression(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_46; }
+        let sol_46_save = pos;
+        sol_46_done: {
+            sol_46: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break sol_46; }
+                pos += 1;
+                pos = scan_single_expression(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_46; }
+                break sol_46_done;
+            }
+            pos = sol_46_save;
         }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -10501,6 +10587,7 @@ fn scan_empty_statement_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
 }
 
 fn scan_expression_statement(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_expression_sequence(tokens, pos, &follow_prepend(&FOLLOW_MASK_14, follow), 0);
     if pos < 0 { return -1; }
@@ -10509,6 +10596,7 @@ fn scan_expression_statement(tokens: &Array<i32>, pos: i32, follow: &List<List<i
         if pos >= tokens.len() || tokens[pos] != TK_SemiColon { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -10890,16 +10978,26 @@ fn scan_case_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
         if pos < 0 { pos = sp; }
     }
     if pos < tokens.len() && tokens[pos] == TK_Default && pos + 1 < tokens.len() && tokens[pos + 1] == TK_Case {
-        sol_51: {
-            pos = scan_default_clause(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_51; }
-            pos = scan_case_clauses(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_51; }
+        let sol_51_save = pos;
+        sol_51_done: {
+            sol_51: {
+                pos = scan_default_clause(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_51; }
+                pos = scan_case_clauses(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_51; }
+                break sol_51_done;
+            }
+            pos = sol_51_save;
         }
     } else if pos < tokens.len() && tokens[pos] == TK_Default {
-        sol_52: {
-            pos = scan_default_clause(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_52; }
+        let sol_52_save = pos;
+        sol_52_done: {
+            sol_52: {
+                pos = scan_default_clause(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_52; }
+                break sol_52_done;
+            }
+            pos = sol_52_save;
         }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
@@ -10908,6 +11006,7 @@ fn scan_case_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
 }
 
 fn scan_case_clauses(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_case_clause(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
@@ -10917,6 +11016,7 @@ fn scan_case_clauses(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -11010,24 +11110,34 @@ fn scan_catch_production(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
     if pos >= tokens.len() || tokens[pos] != TK_Catch { return -1; }
     pos += 1;
     if pos < tokens.len() && tokens[pos] == TK_LIT_LPAREN && pos + 1 < tokens.len() && _kind_set_21(tokens[pos + 1]) && pos + 2 < tokens.len() && tokens[pos + 2] == TK_LIT_COLON && pos + 3 < tokens.len() && tokens[pos + 3] == TK_LIT_RPAREN {
-        sol_54: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break sol_54; }
-            pos += 1;
-            pos = scan_identifier(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_54; }
-            pos = scan_type_annotation(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_54; }
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sol_54; }
-            pos += 1;
+        let sol_54_save = pos;
+        sol_54_done: {
+            sol_54: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break sol_54; }
+                pos += 1;
+                pos = scan_identifier(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_54; }
+                pos = scan_type_annotation(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_54; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sol_54; }
+                pos += 1;
+                break sol_54_done;
+            }
+            pos = sol_54_save;
         }
     } else if pos < tokens.len() && tokens[pos] == TK_LIT_LPAREN && pos + 1 < tokens.len() && _kind_set_21(tokens[pos + 1]) && pos + 2 < tokens.len() && tokens[pos + 2] == TK_LIT_RPAREN {
-        sol_55: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break sol_55; }
-            pos += 1;
-            pos = scan_identifier(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_55; }
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sol_55; }
-            pos += 1;
+        let sol_55_save = pos;
+        sol_55_done: {
+            sol_55: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break sol_55; }
+                pos += 1;
+                pos = scan_identifier(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_55; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sol_55; }
+                pos += 1;
+                break sol_55_done;
+            }
+            pos = sol_55_save;
         }
     }
     pos = scan_block(tokens, pos, follow, 0);
@@ -11111,16 +11221,26 @@ fn scan_class_declaration(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
         if pos < 0 { pos = sp; }
     }
     if pos < tokens.len() && tokens[pos] == TK_Export && pos + 1 < tokens.len() && tokens[pos + 1] == TK_Default {
-        sol_58: {
-            if pos >= tokens.len() || tokens[pos] != TK_Export { break sol_58; }
-            pos += 1;
-            if pos >= tokens.len() || tokens[pos] != TK_Default { break sol_58; }
-            pos += 1;
+        let sol_58_save = pos;
+        sol_58_done: {
+            sol_58: {
+                if pos >= tokens.len() || tokens[pos] != TK_Export { break sol_58; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_Default { break sol_58; }
+                pos += 1;
+                break sol_58_done;
+            }
+            pos = sol_58_save;
         }
     } else if pos < tokens.len() && tokens[pos] == TK_Export {
-        sol_59: {
-            if pos >= tokens.len() || tokens[pos] != TK_Export { break sol_59; }
-            pos += 1;
+        let sol_59_save = pos;
+        sol_59_done: {
+            sol_59: {
+                if pos >= tokens.len() || tokens[pos] != TK_Export { break sol_59; }
+                pos += 1;
+                break sol_59_done;
+            }
+            pos = sol_59_save;
         }
     }
     if pos < tokens.len() && tokens[pos] == TK_Abstract {
@@ -11979,6 +12099,7 @@ fn scan_formal_parameter_list(tokens: &Array<i32>, pos: i32, follow: &List<List<
 }
 
 fn scan_formal_parameter_arg(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_LIT_AT {
         let sp = pos;
@@ -12011,6 +12132,7 @@ fn scan_formal_parameter_arg(tokens: &Array<i32>, pos: i32, follow: &List<List<i
         }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -12039,6 +12161,7 @@ fn scan_function_body(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
 }
 
 fn scan_source_elements(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_source_element(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
@@ -12048,6 +12171,7 @@ fn scan_source_elements(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -12112,6 +12236,7 @@ fn scan_element_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
 }
 
 fn scan_array_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Ellipsis {
         let sp = pos;
@@ -12144,6 +12269,7 @@ fn scan_array_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
         if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -12564,16 +12690,26 @@ fn scan_arguments(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
     if pos < tokens.len() && _kind_set_34(tokens[pos]) && pos + 1 < tokens.len() && tokens[pos + 1] == TK_LIT_COMMA {
-        sol_87: {
-            pos = scan_argument_list(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_87; }
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sol_87; }
-            pos += 1;
+        let sol_87_save = pos;
+        sol_87_done: {
+            sol_87: {
+                pos = scan_argument_list(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_87; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sol_87; }
+                pos += 1;
+                break sol_87_done;
+            }
+            pos = sol_87_save;
         }
     } else if pos < tokens.len() && _kind_set_34(tokens[pos]) {
-        sol_88: {
-            pos = scan_argument_list(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_88; }
+        let sol_88_save = pos;
+        sol_88_done: {
+            sol_88: {
+                pos = scan_argument_list(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_88; }
+                break sol_88_done;
+            }
+            pos = sol_88_save;
         }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
@@ -12582,6 +12718,7 @@ fn scan_arguments(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
 }
 
 fn scan_argument_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_argument(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -12600,10 +12737,12 @@ fn scan_argument_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_argument(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Ellipsis {
         let sp = pos;
@@ -12631,10 +12770,12 @@ fn scan_argument(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
             pos = gp_90;
         }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_expression_sequence(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_single_expression(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -12653,6 +12794,7 @@ fn scan_expression_sequence(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -14336,20 +14478,24 @@ fn scan_bigint_literal(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
 }
 
 fn scan_getter(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_40, 0);
     if pos < 0 { return -1; }
     pos = scan_class_element_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_setter(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_40, 0);
     if pos < 0 { return -1; }
     pos = scan_class_element_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 

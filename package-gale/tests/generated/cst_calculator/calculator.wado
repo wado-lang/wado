@@ -2367,6 +2367,7 @@ fn scan_equation(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
 }
 
 fn scan_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_multiplying_expression(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -2404,10 +2405,12 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_multiplying_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_pow_expression(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -2445,10 +2448,12 @@ fn scan_multiplying_expression(tokens: &Array<i32>, pos: i32, follow: &List<List
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_pow_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_signed_atom(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -2467,6 +2472,7 @@ fn scan_pow_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
