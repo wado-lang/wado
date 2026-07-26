@@ -1118,23 +1118,14 @@ impl TypeSystem {
             }
             ResolvedType::GenericInstance {
                 name, type_args, ..
-            } => {
-                if TypeTable::is_tuple_type(name) {
-                    // Tuples implement a trait when all elements implement it
-                    let elems = type_args.clone();
-                    return elems
-                        .iter()
-                        .all(|e| self.type_implements_trait(ctx, scope, *e, trait_name));
-                }
-                (
-                    name.clone(),
-                    if type_args.is_empty() {
-                        None
-                    } else {
-                        Some(type_args.clone())
-                    },
-                )
-            }
+            } => (
+                name.clone(),
+                if type_args.is_empty() {
+                    None
+                } else {
+                    Some(type_args.clone())
+                },
+            ),
             ResolvedType::Ref(inner) => {
                 // References always implement Eq via ref.eq (identity comparison)
                 if is_eq {
@@ -1633,6 +1624,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
+    /// The types a pack parameter's bound actually falls on.
+    ///
+    /// A pack is instantiated with the tuple that carries its elements, so the
+    /// bound is checked element-wise. A non-tuple argument is a pack of one.
+    pub(super) fn pack_elements(&self, type_arg: TypeId) -> Vec<TypeId> {
+        match self.type_table.borrow().get(type_arg) {
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } if TypeTable::is_tuple_type(name) => type_args.clone(),
+            _ => vec![type_arg],
+        }
+    }
     /// Check if an impl block's type parameter bounds are satisfied by the given type args.
     /// For `impl<T: Ord> List<T>`, checks that the concrete type substituted for T implements Ord.
     pub(super) fn check_impl_block_bounds(
@@ -1770,11 +1773,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Also covers holes (reserved-index params), re-checked at finalize.
                 continue;
             }
+            // `..T: Foo` binds every element of the pack, not the tuple that
+            // carries them: `f<..T: Foo>([1, "x"])` asks `i32: Foo` and
+            // `String: Foo`, never `[i32, String]: Foo` — which would be a
+            // question about a variadic impl of `Foo` for tuples.
+            let subjects = if param.is_pack {
+                self.tysys.pack_elements(type_arg)
+            } else {
+                vec![type_arg]
+            };
             for bound in &param.bounds {
                 if bound.fn_signature.is_some() {
                     continue;
                 }
-                self.enforce_single_bound(type_arg, &bound.name, &param.name, span);
+                for &subject in &subjects {
+                    self.enforce_single_bound(subject, &bound.name, &param.name, span);
+                }
             }
         }
     }

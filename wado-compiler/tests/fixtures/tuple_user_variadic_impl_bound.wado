@@ -1,0 +1,53 @@
+trait Holder {
+    type Item;
+    fn tag(&self) -> String;
+}
+
+impl<..T: Display> Holder for [..T] {
+    type Item = String;
+    fn tag(&self) -> String {
+        return "t";
+    }
+}
+
+fn plain<H: Holder>(h: &H) -> String {
+    return h.tag();
+}
+
+fn projected<H: Holder<Item = String>>(h: &H) -> String {
+    return h.tag();
+}
+
+fn shown<T: Inspect>(x: &T) -> String {
+    return `${*x:?}`;
+}
+
+test "a tuple satisfies a bound on a user variadic impl" {
+    let x = [1, 2];
+    assert plain(&x) == "t";
+}
+
+test "the same bound projecting the impl's associated type" {
+    let x = [1, 2];
+    assert projected(&x) == "t";
+}
+
+test "a stdlib variadic impl still satisfies its bound" {
+    let x = [1, 2];
+    assert shown(&x) == "[1, 2]";
+}
+
+fn packed<..T: Display>(items: [..T]) -> i32 {
+    let mut n = 0;
+    for let v of items {
+        n = n + 1;
+    }
+    return n;
+}
+
+test "a pack bound still falls on the elements, not the tuple" {
+    assert packed([1, "x", true]) == 3;
+}
+
+__DATA__
+{"test": {}}
