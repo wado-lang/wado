@@ -22,6 +22,7 @@ use { translate_lexer_predicate, translate_lexer_action } from "./action_transla
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_lit, char_range_pat } from "./wadopoet.wado";
 use { SuperOp, gen_super_interface, lexer_rule_calls_super } from "./superclass.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
+use { action_language_is_emittable } from "./java2wado.wado";
 use { TreeMap } from "core:collections";
 
 pub struct LitToken {
@@ -308,9 +309,10 @@ pub fn gen_lexer(
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
     let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);
-    // A superClass grammar's `this.m()` was rewritten to Wado before codegen,
-    // so the identity path emits its bodies regardless of the source language.
-    let ea = grammar.action_language matches { Wado } || !sc_name.is_empty();
+    // Java bodies (superClass `this.m()` calls, and whole action / predicate
+    // bodies) are rewritten to Wado before codegen, so the identity path emits
+    // them regardless of the source language.
+    let ea = lexer_grammar_executes_actions(grammar) || !sc_name.is_empty();
     let act_rule_names = executed_action_rule_names(grammar);
     let has_actions = !act_rule_names.is_empty();
     let uses_modes = has_modes(&grammar.mode_names);
@@ -359,6 +361,7 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
         s.add_field_default(&mf.name, &mf.ty, &mf.init);
     }
     if has_actions {
+        s.add_field_default(&"output", &"String", &"\"\"");
         s.add_field_default(&"act_type", &"i32", &"-1");
         s.add_field_default(&"act_channel", &"i32", &"-1");
         s.add_field_default(&"act_skip", &"bool", &"false");
@@ -415,6 +418,17 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
 
 fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool) {
     w.blank();
+    // The action-print sink. Appends in tokenization order; `tokenize` hands
+    // the buffer to the token stream, which is where consumers read it.
+    // Not reset per token — the stream is the whole run's output.
+    let mut fe = FnSpec::new("emit");
+    fe.set_receiver(&"&mut self");
+    fe.add_param(&"s", &"String");
+    fe.emit_begin(w);
+    w.line(&"self.output.push_str(&s);");
+    w.end();
+    w.blank();
+
     let mut fr = FnSpec::new("reset_actions");
     fr.set_receiver(&"&mut self");
     fr.emit_begin(w);
@@ -652,11 +666,13 @@ fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, befo
 }
 
 /// Whether codegen runs `{ ... }` action bodies for this grammar's lexer at
-/// all: `language = Wado`. The winner-replay path is wired for both the
-/// modeless and the `mode`-dispatch tournaments. `language = Java` lexer
-/// actions await java2wado.
+/// all. The winner-replay path is wired for both the modeless and the
+/// `mode`-dispatch tournaments. A `language = Java` lexer qualifies because
+/// codegen stages its bodies into Wado before emit (`rewrite_lexer_java_bodies`);
+/// a `superClass` grammar is carved out there, so it keeps the identity path it
+/// already had.
 pub fn lexer_grammar_executes_actions(grammar: &Grammar) -> bool {
-    return grammar.action_language matches { Wado };
+    return grammar.action_language matches { Wado } || action_language_is_emittable(grammar);
 }
 
 /// Whether this rule's top-level actions run: an executing grammar, a real
@@ -774,7 +790,9 @@ fn apply_body_reads_chars(rule: &LexerRule, has_members: bool) -> bool {
     }
     for let alt of &rule.body {
         for let a of &alt.actions {
-            if a.kind matches { Action } && a.source.text.contains("$text") {
+            // `$text` is the un-staged identity form; `chars` covers a body
+            // already staged into Wado (java2wado emits the slice expression).
+            if a.kind matches { Action } && (a.source.text.contains("$text") || a.source.text.contains("chars")) {
                 return true;
             }
         }
@@ -2958,6 +2976,11 @@ fn gen_tokenize_fn(
     // follows (the stream ends here), so this stays inline rather than
     // using `emit_token_commit`.
     w.line(&"ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());");
+    if has_actions {
+        // Hand the action-print sink to the stream, so a consumer that only
+        // holds the tokens still sees what the lexer printed.
+        w.line(&"ts.output = lexer.output;");
+    }
     w.line(&"return ts;");
     w.end();  // fn
     w.blank();

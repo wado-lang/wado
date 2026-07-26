@@ -16,7 +16,7 @@ use t from "../../grammars/LexerExec/ActionPlacement.g4"
     };
 use { TK_EOF } from "../../grammars/LexerExec/ActionPlacement.g4";
 
-// triage: Stage C: descriptor [output] is prefixed by action-print text (<writeln(...)> echoes inside { ... } action bodies); claim (d) actual lacks the prefix.
+// triage: nested-group / mid-element lexer actions are not executed (only an alternative's top-level actions are), so the three inner prints never reach the sink
 #[TODO]
 test "stage_a_tokens: LexerExec/ActionPlacement" {
     let input = "ab";

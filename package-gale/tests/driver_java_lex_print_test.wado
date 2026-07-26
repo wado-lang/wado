@@ -1,0 +1,36 @@
+//! Stage C over a `language = Java` lexer: java2wado translates the action and
+//! predicate bodies, `System.out.println` reaches the lexer output sink, and the
+//! sink is threaded onto the token stream so `to_lexer_string` renders it ahead
+//! of the token dump (the shape the ANTLR4 `LexerExec` descriptors compare).
+
+use t from "./grammars/java_lex_print.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/java_lex_print" },
+    };
+use { TK_EOF } from "./grammars/java_lex_print.g4";
+
+test "java lexer actions print ahead of the token dump" {
+    let tokens = t::tokenize(&"34 enum abc");
+    let actual = t::to_lexer_string(&tokens, TK_EOF);
+    let expected = "I
+enum!
+ID abc
+[@0,0:1='34',<1>,1:0]
+[@1,3:6='enum',<2>,1:3]
+[@2,8:10='abc',<3>,1:8]
+[@3,11:10='<EOF>',<-1>,1:11]
+";
+    assert actual == expected, `actual:\n${actual}\nexpected:\n${expected}`;
+}
+
+test "a java lexer predicate decides the winning rule" {
+    // `enum` only wins ENUM because `getText().equals("enum")` holds; every
+    // other lowercase run falls through to ID.
+    let tokens = t::tokenize(&"enu");
+    let actual = t::to_lexer_string(&tokens, TK_EOF);
+    let expected = "ID enu
+[@0,0:2='enu',<3>,1:0]
+[@1,3:2='<EOF>',<-1>,1:3]
+";
+    assert actual == expected, `actual:\n${actual}\nexpected:\n${expected}`;
+}

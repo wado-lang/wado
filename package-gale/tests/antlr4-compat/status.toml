@@ -67,15 +67,13 @@
 # the `else`. The wrong-binding behaviour is a tree-shape concern,
 # tracked under [stage_b_oracle_todo] below.
 #
-# The SemPredEvalLexer entries below are showDFA descriptors: the
-# extractor drops ANTLR's DFA dump from the expected (it describes
-# ANTLR's simulator, not the token stream), leaving a plain token dump
-# that diverges for one reason only — the lexer predicate is dropped.
-# They flip together when java2wado covers lexer bodies.
-"SemPredEvalLexer/IDvsEnum" = "lexer semantic predicates are dropped on the Java action path, so the predicate-disabled ENUM still wins the tournament and enum lexes as ENUM instead of ID"
-"SemPredEvalLexer/IDnotEnum" = "lexer semantic predicates are dropped on the Java action path — same root cause as IDvsEnum"
-"SemPredEvalLexer/EnumNotID" = "lexer semantic predicates are dropped on the Java action path, so ENUM wins for every lowercase run instead of only for enum"
-"SemPredEvalLexer/DisableRule" = "lexer semantic predicates are dropped on the Java action path, so E1 wins over E2 instead of being disabled"
+# Claim (d) has no auto-`#[TODO]`: a lexer executes its action bodies and
+# `to_lexer_string` renders the output sink ahead of the dump, so an
+# action-print prefix is a normal expectation. Every remaining gap is
+# listed here, with the reason it still diverges.
+"LexerExec/ActionPlacement" = "nested-group / mid-element lexer actions are not executed (only an alternative's top-level actions are), so the three inner prints never reach the sink"
+"SemPredEvalLexer/Indent" = "the predicate reads `_tokenStartCharPositionInLine`, an ANTLR recognizer field Gale does not model; java2wado reports it and the body is dropped"
+"SemPredEvalLexer/LexerInputPositionSensitivePredicates" = "the predicates call `getCharPositionInLine()`, which is not in the lexer attribute surface yet; java2wado reports it and the bodies are dropped"
 
 [stage_a_skip]
 

@@ -4,8 +4,10 @@
 //! `@members` methods (see `action.md`). A method call or constant that
 //! resolves to nothing real is a loud error, not a silently broken emit.
 
-use { ParserRule } from "../ir.wado";
+use { ParserRule, Alternative, GrammarOption, Visibility } from "../ir.wado";
 use {
+    lexer_matched_text_expr,
+    resolve_lexer_attr_ref,
     resolve_attr_ref,
     rule_binding_for,
     rule_is_left_recursive,
@@ -19,13 +21,52 @@ use { tokenize_java } from "./jlexer.wado";
 use { parse_java_expr, parse_java_stmts } from "./jparser.wado";
 
 /// Emit environment: the recognizer handle (`p` in a parse / predicate body,
-/// `self` in a `@members` method body), the grammar name (for the
-/// `<Name>Parser` / `<Name>Lexer` token-constant qualifier), and the snake_cased
-/// `@members` method names a call may resolve to.
+/// `lx` in a lexer action, `self` in a `@members` method body), the grammar name
+/// (for the `<Name>Parser` / `<Name>Lexer` token-constant qualifier), and the
+/// snake_cased `@members` method names a call may resolve to.
 pub struct JEnv {
     pub this_bind: String,
     pub grammar: String,
     pub methods: List<String>,
+    /// True inside a lexer action / predicate body, where the recognizer API is
+    /// the lexer's: `getText()` is the matched slice rather than a rule's token
+    /// span, and a `$`-attribute resolves against the match fn's cursor.
+    /// Defaulted so the parser-side construction sites are unchanged.
+    pub lexer: bool = false,
+    /// The snake_cased `@members` field names a bare name may resolve to. Only
+    /// consulted in lexer mode, where a bare name is either a member field or
+    /// an ANTLR recognizer field Gale does not model — and the latter must be a
+    /// loud error, not verbatim text that fails to compile downstream.
+    pub fields: List<String> = [],
+}
+
+/// Translate a lexer `{ ... }` action body. The lexer has no enclosing parser
+/// rule, so the parser-only context (rule, sibling rules, value channel, label
+/// bindings) is empty — any body that reaches for it fails loudly through the
+/// same paths a parser body would.
+pub fn translate_java_lexer_stmts(body: &String, env: &JEnv) -> Result<String, String> {
+    let rule = lexer_body_rule();
+    let rules: List<ParserRule> = [];
+    let bindings: List<[bool, String, String]> = [];
+    let tokens = tokenize_java(body)?;
+    let stmts = parse_java_stmts(&tokens)?;
+    return emit_java_stmts(&rule, &rules, &stmts, false, &bindings, env);
+}
+
+/// Translate a lexer `{ ... }?` predicate body to a Wado boolean expression.
+pub fn translate_java_lexer_expr(body: &String, env: &JEnv) -> Result<String, String> {
+    let rule = lexer_body_rule();
+    let rules: List<ParserRule> = [];
+    let bindings: List<[bool, String, String]> = [];
+    let tokens = tokenize_java(body)?;
+    let expr = parse_java_expr(&tokens)?;
+    return emit_expr(&rule, &rules, &expr, false, &bindings, env);
+}
+
+fn lexer_body_rule() -> ParserRule {
+    let opts: List<GrammarOption> = [];
+    let alts: List<Alternative> = [];
+    return ParserRule::new("", Visibility::Public, opts, alts);
 }
 
 pub fn translate_java_expr(
@@ -175,8 +216,22 @@ pub fn emit_expr(
         Int(v) => Result::Ok(*v),
         Bool(b) => Result::Ok(if *b { String::from("true") } else { String::from("false") }),
         Str(c) => Result::Ok(`"${*c}"`),
-        Attr(text) => resolve_attr_ref(rule, rules, text, vals_in_scope, bindings, &env.this_bind),
-        Name(n) => Result::Ok(if *n == "this" { env.this_bind } else { *n }),
+        Attr(text) => {
+            if env.lexer {
+                resolve_lexer_attr_ref(text);
+            } else {
+                resolve_attr_ref(rule, rules, text, vals_in_scope, bindings, &env.this_bind);
+            }
+        },
+        Name(n) => {
+            if *n == "this" {
+                Result::Ok(env.this_bind);
+            } else if env.lexer {
+                lexer_name_expr(env, n);
+            } else {
+                Result::Ok(*n);
+            }
+        },
         Member(m) => emit_member(rule, rules, m, vals_in_scope, bindings, env),
         Call(c) => emit_call(rule, rules, c, vals_in_scope, bindings, env),
         Cast(c) => emit_expr(rule, rules, &c.operand, vals_in_scope, bindings, env),
@@ -247,7 +302,11 @@ fn emit_call(
         Member(m) => emit_member_call(rule, rules, m, &c.args, &args_w, vals_in_scope, bindings, env),
         Name(n) => {
             if *n == "getText" {
-                Result::Ok(`${env.this_bind}.rule_text(${RULE_START_TOK_LOCAL})`);
+                if env.lexer {
+                    Result::Ok(lexer_matched_text_expr());
+                } else {
+                    Result::Ok(`${env.this_bind}.rule_text(${RULE_START_TOK_LOCAL})`);
+                }
             } else if method_declared(env, n) {
                 Result::Ok(`${env.this_bind}.${to_snake_case(n)}(${args_w})`);
             } else {
@@ -344,6 +403,20 @@ fn emit_member_call(
         emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
     };
     return Result::Ok(`${recv_w}.${to_snake_case(&meth)}(${*args_w})`);
+}
+
+/// A bare name in a lexer body: a declared `@members` field reads through the
+/// lexer handle. Anything else is an ANTLR recognizer field Gale does not model
+/// (`_tokenStartCharPositionInLine`, `_input`, ...) — a loud error, because
+/// passing it through verbatim emits Wado that references nothing.
+fn lexer_name_expr(env: &JEnv, name: &String) -> Result<String, String> {
+    let snake = to_snake_case(name);
+    for let f of &env.fields {
+        if *f == snake {
+            return Result::Ok(`${env.this_bind}.${snake}`);
+        }
+    }
+    return Result::Err(`java2wado: unsupported lexer name '${*name}': not a @members field`);
 }
 
 /// Whether `name` resolves to a declared `@members` method (compared

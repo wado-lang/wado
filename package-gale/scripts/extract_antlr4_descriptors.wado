@@ -922,23 +922,16 @@ fn stage_a_err_category_eligible(category: &String) -> bool {
 ///
 ///   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]
 ///
-/// one line per token. Some descriptors prefix the dump with action-print
-/// output (`<writeln("foo")>` echoes inside `{ ... }` action bodies);
-/// the prefix is reproducible only by Stage C action-body translation.
+/// one line per token, optionally prefixed by action-print output
+/// (`<writeln("foo")>` echoes inside `{ ... }` action bodies).
 ///
-/// Returns:
-///   * `Clean(normalised)` — every non-empty line is a `[@…]` row. Eligible
-///     for a passing claim (d) test today.
-///   * `StageCBlocked(normalised)` — at least one non-`[@…]` prefix line is
-///     present. The test is still emitted (so the gap is visible in CI)
-///     and `#[TODO]`-marked with a Stage C rationale until action-body
-///     translation lands and the actual tokens dump gains the prefix.
-///   * `None` — the output cannot be reduced to a tokens dump at all
-///     (empty, or no `[@…]` line ever appears). Auto-skip.
-variant TokensTarget {
-    Clean(String),
-    StageCBlocked(String),
-}
+/// Returns the normalised expectation, or `None` when the output cannot be
+/// reduced to a tokens dump at all (empty, or no `[@…]` line ever appears —
+/// auto-skip). Action-print prefix lines stay in the expectation: the lexer
+/// executes its action bodies and `to_lexer_string` renders the output sink
+/// ahead of the dump. Whether a descriptor still diverges is a
+/// `[stage_a_todo]` decision, not something this classifier can know — it never
+/// sees Gale's actual output.
 
 /// Whether `line` is a row of ANTLR4's lexer DFA dump (`s0-' '->:s5=>3`,
 /// `:s1=>2-'n'->:s2=>2`), which `showDFA` descriptors append after the token
@@ -977,10 +970,9 @@ fn strip_lexer_dfa_dump(raw: &String) -> String {
     return out;
 }
 
-fn classify_output_for_tokens(input: &String) -> Option<TokensTarget> {
+fn classify_output_for_tokens(input: &String) -> Option<String> {
     let raw = &strip_lexer_dfa_dump(input);
     let mut seen_token_line = false;
-    let mut has_action_prefix = false;
     for let line of raw.lines() {
         let t = line.trim();
         if t.is_empty() {
@@ -988,8 +980,6 @@ fn classify_output_for_tokens(input: &String) -> Option<TokensTarget> {
         }
         if t.starts_with("[@") {
             seen_token_line = true;
-        } else {
-            has_action_prefix = true;
         }
     }
     if !seen_token_line {
@@ -1007,10 +997,7 @@ fn classify_output_for_tokens(input: &String) -> Option<TokensTarget> {
         out.push_str(&t);
         out.push('\n');
     }
-    if has_action_prefix {
-        return Option::<TokensTarget>::Some(TokensTarget::StageCBlocked(out));
-    }
-    return Option::<TokensTarget>::Some(TokensTarget::Clean(out));
+    return Option::<String>::Some(out);
 }
 
 /// Emit one Stage A claim (c) driver test file (parse-must-error) for
@@ -1289,7 +1276,6 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     let mut stage_a_parse_emitted = 0;
     let mut stage_a_err_emitted = 0;
     let mut stage_a_tokens_emitted = 0;
-    let mut stage_a_tokens_stage_c_blocked = 0;
     let mut stage_a_todo = 0;
     let mut stage_a_skip = 0;
     let mut stage_a_auto_skip = 0;
@@ -1574,34 +1560,14 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                     stage_a_err_emitted += 1;
                 }
             } else if let Some(target) = tokens_target {
-                // StageCBlocked targets carry an action-print prefix that
-                // `to_lexer_string` does not produce; default-route them to
-                // `#[TODO]` so the test runs and the failure is recorded.
-                // An explicit status.toml entry wins.
-                let effective_triage = match &target {
-                    TokensTarget::Clean(_) => stage_a_triage,
-                    TokensTarget::StageCBlocked(_) => match stage_a_triage {
-                        Triage::Pass => Triage::Todo(
-                            "Stage C: descriptor [output] is prefixed by action-print text (<writeln(...)> echoes inside { ... } action bodies); claim (d) actual lacks the prefix.",
-                        ),
-                        explicit => explicit,
-                    },
-                };
-                let normalised_t = match &target {
-                    TokensTarget::Clean(s) => s,
-                    TokensTarget::StageCBlocked(s) => s,
-                };
-                let src = emit_stage_a_tokens_test_file(category, &base, &parsed.input, normalised_t, &effective_triage);
+                let src = emit_stage_a_tokens_test_file(category, &base, &parsed.input, &target, &stage_a_triage);
                 if let Err(_) = write_file_string(&stage_a_cat_dir, &tokens_filename, &src) {
                     eprintln(`extract: cannot write stage_a/${*category}/${tokens_filename}`);
                 } else {
-                    if let Todo(_) = &effective_triage {
+                    if let Todo(_) = &stage_a_triage {
                         stage_a_todo += 1;
                     }
                     stage_a_tokens_emitted += 1;
-                    if let TokensTarget::StageCBlocked(_) = &target {
-                        stage_a_tokens_stage_c_blocked += 1;
-                    }
                 }
             }
 
@@ -1816,10 +1782,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     println(`extract:           ${stage_a_parse_emitted} parse-accepts-input (_parse_test.wado)`);
     println(`extract:           ${stage_a_err_emitted} parse-must-error    (_err_test.wado)`);
     println(`extract:           ${stage_a_tokens_emitted} tokens-equivalence  (_tokens_test.wado)`);
-    println(
-        `extract:             of which ${stage_a_tokens_stage_c_blocked} auto-#[TODO] (Stage C: action-print prefix)`,
-    );
-    println(`extract:           ${stage_a_todo} marked #[TODO] total (status.toml + auto)`);
+    println(`extract:           ${stage_a_todo} marked #[TODO]`);
     println(`extract:           ${stage_a_skip} explicit skip`);
     println(`extract:           ${stage_a_auto_skip} auto-skip (no eligible variant)`);
     println(`extract: stage B — tree-shape equivalence: emitted ${stage_b_emitted} per-descriptor driver(s)`);
@@ -2546,21 +2509,21 @@ test "extract_root_rule_name: rejects malformed prefixes" {
 test "classify_tokens: clean token dump returns Clean(normalised)" {
     let input = "[@0,0:2='end',<1>,1:0]\n[@1,3:3=' ',<3>,1:3]\n";
     let result = classify_output_for_tokens(&input);
-    assert result matches { Some(TokensTarget::Clean(_)) };
-    if let Some(TokensTarget::Clean(s)) = result {
+    assert result matches { Some(_) };
+    if let Some(s) = result {
         assert s == input, `unexpected: '${s}'`;
     }
 }
 
-test "classify_tokens: action-print prefix returns StageCBlocked(normalised)" {
-    // LexerExec descriptors with `{<writeln(...)>}` actions emit action
-    // output BEFORE the token dump. The test is emitted (with `#[TODO]`)
-    // so the gap is recorded; the actual lacks the prefix until Stage C
-    // executes action bodies.
+test "classify_tokens: action-print prefix is part of the expectation" {
+    // LexerExec descriptors with `{<writeln(...)>}` actions emit action output
+    // BEFORE the token dump; the lexer executes those bodies and
+    // `to_lexer_string` renders the sink ahead of the dump, so the prefix stays
+    // in the expectation rather than routing the test to `#[TODO]`.
     let raw = "stuff0:\nstuff1: a\n[@0,0:0='a',<1>,1:0]\n";
     let result = classify_output_for_tokens(&raw);
-    assert result matches { Some(TokensTarget::StageCBlocked(_)) };
-    if let Some(TokensTarget::StageCBlocked(s)) = result {
+    assert result matches { Some(_) };
+    if let Some(s) = result {
         assert s == "stuff0:\nstuff1: a\n[@0,0:0='a',<1>,1:0]\n", `unexpected: '${s}'`;
     }
 }
@@ -2577,10 +2540,10 @@ test "classify_tokens: output with no token-dump line at all is None" {
     assert classify_output_for_tokens(&"hello\nworld\n") matches { None };
 }
 
-test "classify_tokens: leading garbage before token dump is Stage C blocked" {
+test "classify_tokens: leading garbage before the token dump is kept" {
     let raw = "abc\n[@0,0:0='a',<1>,1:0]\n";
     let result = classify_output_for_tokens(&raw);
-    assert result matches { Some(TokensTarget::StageCBlocked(_)) };
+    assert result matches { Some(_) };
 }
 
 test "classify_tokens: showDFA dump is dropped, leaving a clean token dump" {
@@ -2589,8 +2552,8 @@ test "classify_tokens: showDFA dump is dropped, leaving a clean token dump" {
     // sit in the expectation — the token rows alone are the claim (d) target.
     let raw = "[@0,0:3='enum',<1>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\ns0-' '->:s3=>3\n:s1=>2-'n'->:s2=>2\n";
     let result = classify_output_for_tokens(&raw);
-    assert result matches { Some(TokensTarget::Clean(_)) };
-    if let Some(TokensTarget::Clean(s)) = result {
+    assert result matches { Some(_) };
+    if let Some(s) = result {
         assert s == "[@0,0:3='enum',<1>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n", `unexpected: '${s}'`;
     }
 }

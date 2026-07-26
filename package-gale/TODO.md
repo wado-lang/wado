@@ -44,11 +44,10 @@ Every `CompositeLexers` / `CompositeParsers` descriptor short-circuits on the pr
 
 Design in [`action.md`](./action.md). Remaining:
 
-- Lexer `print` — an output sink threaded through tokenization onto the token stream.
-- Nested-group / mid-element lexer action placement.
+- Nested-group / mid-element lexer action placement (live case: the `LexerExec/ActionPlacement` descriptor).
 - The ATN-class lexer path.
-- The rest of the lexer `$`-attribute surface — `$type`, char position in line, member methods reading match position / text.
-- The `language = Java` lexer path (java2wado over lexer bodies).
+- The rest of the lexer `$`-attribute surface — `$type`, char position in line, member methods reading match position / text. Two descriptors wait on the char-position half: `SemPredEvalLexer/Indent` (`_tokenStartCharPositionInLine`) and `SemPredEvalLexer/LexerInputPositionSensitivePredicates` (`getCharPositionInLine()`).
+- Java locals in a lexer body: java2wado emits `let mut x = ...` but a lexer body's bare name only resolves against `@members` fields, so a body that declares and then reads a local is reported and dropped. No corpus grammar declares one.
 - The SuperClass effect interface for the real-world grammars below. Landed for **predicate-only** lexer bases, including `language = Java`: RustLexer tokenizes and parses end to end through a hand-written `impl RustLexerBase`. See `action.md` ("SuperClass — an effect interface"). Remaining before TypeScript / ANTLRv4 run: action ops (`{this.m();}` — the winner-replay path), the parser side (parser-rule superClass predicates like `{this.NextGT()}?`, currently discarded), and lifecycle hooks (`nextToken` for last-token tracking). Action-op bases stay carved out (byte-identical) until the replay path lands.
 - Make the ANTLR descriptor output corpus codegen-and-compare (parse-only today), unblocking the output acceptance.
 - Extend the Stage C output-compare beyond `Sets` and `SemPredEvalParser`, the categories it runs for today. The remaining ones are a mechanical extractor re-run plus triage of whatever lands in `[stage_c_todo]` / `[stage_c_skip]`.

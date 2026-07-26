@@ -128,9 +128,11 @@ Test sources covering Stage A:
      (`s0-'a'->:s4=>2`) is dropped from the expectation first — it
      describes ANTLR's simulator, not the token stream, so keeping it
      would make those descriptors permanently unmatchable and hide the
-     token-level gap underneath. When the `[output]` also carries
-     action-print prefix lines (`<writeln(...)>` echoes from `{ ... }`
-     action bodies), the test is emitted and auto-`#[TODO]`-marked.
+     token-level gap underneath. Action-print prefix lines
+     (`<writeln(...)>` echoes from `{ ... }` action bodies) stay: the
+     lexer executes those bodies and `to_lexer_string` renders the
+     output sink ahead of the dump. There is no auto-`#[TODO]` here —
+     every remaining divergence is an explicit `[stage_a_todo]` entry.
 
    The variants are **mutually exclusive** on `[type]` +
    `[errors]`, so at most one variant per descriptor is emitted. A

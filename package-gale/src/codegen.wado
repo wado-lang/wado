@@ -32,6 +32,8 @@ use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wa
 use {
     should_emit_actions,
     collect_member_method_names,
+    collect_lexer_member_method_names,
+    rewrite_lexer_java_bodies,
     translate_attr_types,
     translate_members,
     is_lexer_members,
@@ -171,6 +173,20 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
                 DiagnosticKind::UnsupportedAction,
                 `superClass '${sc}' has action operations ({this.m();}); superClass action ops are not yet executed, so the base is not wired`,
             );
+        }
+    }
+    // Stage the Java lexer bodies into Wado before codegen, so `lexer_gen`'s
+    // identity translator emits them (the superClass rewrite above stages the
+    // same way). Only for a grammar whose actions we emit at all.
+    if should_emit_actions(grammar) && grammar.action_language matches { Java } {
+        let lexer_methods = collect_lexer_member_method_names(grammar);
+        let lexer_fields = collect_lexer_members(grammar, &mut ctx).fields;
+        let mut field_names: List<String> = [];
+        for let f of &lexer_fields {
+            field_names.push(f.name);
+        }
+        for let msg of &rewrite_lexer_java_bodies(grammar, &lexer_methods, &field_names) {
+            ctx.warn(&"lexer action", DiagnosticKind::UnsupportedAction, *msg);
         }
     }
     ctx.precompute_scannability();
@@ -328,15 +344,15 @@ fn members_present(members: &MemberDecls) -> bool {
     return !members.fields.is_empty() || !members.methods.is_empty();
 }
 
-/// Translate every `@lexer::members` block into `Lexer` fields/methods.
-/// Wado-only: only the `language = Wado` lexer path reads them, so a Java
-/// block would emit dead fields no code references. Lives here rather than in
-/// `lexer_gen` to keep that module free of a `GenContext` dependency (which
-/// would cycle through `gen_context`'s `LitToken` import).
+/// Translate every `@lexer::members` block into `Lexer` fields/methods. Both
+/// action languages read them, so both are translated; a grammar whose actions
+/// we do not emit gets none. Lives here rather than in `lexer_gen` to keep that
+/// module free of a `GenContext` dependency (which would cycle through
+/// `gen_context`'s `LitToken` import).
 fn collect_lexer_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecls {
     let mut fields: List<MemberField> = [];
     let mut methods: List<String> = [];
-    if !ctx.emit_actions() || !ctx.action_language() matches { Wado } {
+    if !ctx.emit_actions() {
         return MemberDecls { fields, methods };
     }
     let lang = ctx.action_language();

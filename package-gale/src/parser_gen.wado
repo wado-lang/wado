@@ -572,6 +572,11 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.line(&"assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;");
     w.line(&"let tokens = tokenize(input);");
     w.line(&"let mut p = Parser::new(tokens);");
+    if ctx.emit_actions() {
+        // Lexer prints happen before any parser print, as they do on ANTLR4's
+        // stdout: seed the sink with what tokenizing produced.
+        w.line(&"p.output = p.tokens.output;");
+    }
     w.line(&"p.max_errors = max_errors;");
     w.line(&"entry(&mut p);");
     // The parser is infallible: a failure leaves `p.recovering` set and the

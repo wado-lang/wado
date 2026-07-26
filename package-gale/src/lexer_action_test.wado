@@ -131,13 +131,38 @@ WS : ' ' -> skip ;
     assert !src.contains("best_act"), "predicates need no best_act";
 }
 
-test "a language=Java lexer grammar emits no @lexer::members fields (Wado-only)" {
+test "a language=Java lexer grammar emits its @lexer::members fields" {
+    // java2wado stages Java lexer bodies into Wado before codegen, so the
+    // members they read are real `Lexer` fields, not dead declarations.
     let src = gen_source(&"lexer grammar L;
 @members { int nest = 0; }
-A : 'a' ;
+A : 'a' { nest = nest + 1; } ;
 WS : ' ' -> skip ;
 ");
-    assert !src.contains("nest: i32"), "Java lexer members must not be emitted";
+    assert src.contains("nest: i32"), "Java lexer members are emitted";
+    assert src.contains("lx.nest"), "a Java lexer body reads the member through the lexer handle";
+}
+
+test "a language=Java lexer body prints through the lexer output sink" {
+    let src = gen_source(&"lexer grammar L;
+A : 'a' {System.out.println(getText());} ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("fn emit"), "the lexer output sink is emitted";
+    assert src.contains("lx.emit("), "System.out.println becomes a sink write";
+    assert src.contains("ts.output = lexer.output;"), "the sink is threaded onto the token stream";
+}
+
+test "an unmodelled ANTLR lexer field is a loud diagnostic, not broken code" {
+    // `_tokenStartCharPositionInLine` is a recognizer field Gale does not model.
+    // Passing it through verbatim would emit Wado referencing nothing, so the
+    // body must be dropped and reported instead.
+    let src = &"lexer grammar L;
+INDENT : [ \t]+ { _tokenStartCharPositionInLine == 0 }? ;
+NL : '\n' ;
+";
+    assert unsupported_count(src) == 1, "an unmodelled lexer field must surface UnsupportedAction";
+    assert !gen_source(src).contains("_tokenStartCharPositionInLine"), "the untranslatable body must not be emitted";
 }
 
 test "a nested-group lexer action warns loudly (not yet executed)" {
