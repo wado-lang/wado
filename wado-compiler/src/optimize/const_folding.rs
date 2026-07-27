@@ -37,8 +37,8 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
-    CalleeMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice,
-    is_ctfe_eligible,
+    CalleeMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice, SeqBuiltin,
+    SeqBuiltinMap, is_ctfe_eligible,
 };
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
@@ -49,6 +49,7 @@ use crate::tir::{PrimitiveType, TypeId, TypeTable};
 /// they depend on changed. [`ConstFoldCache`] reuses them across iterations.
 struct FoldMaps {
     callees: CalleeMap,
+    seq_builtins: SeqBuiltinMap,
     globals: GlobalEnv,
     global_fields: GlobalFieldEnv,
 }
@@ -61,6 +62,9 @@ fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
     // a callee's body edit is visible without rebuilding the map — only its
     // *membership* (the ctfe-eligible function set) can go stale.
     let callees = build_callee_map(project);
+    // Element and length reads on a constant sequence reach NIR as builtin
+    // calls, so the engine needs to know which callee ids those are.
+    let seq_builtins = build_seq_builtin_map(project);
     // Every immutable global whose initializer reduces to a `Const(_)` becomes a
     // `GlobalVarGet` rewrite target; mutable globals are recorded as `NonConst`.
     let globals = build_global_env(project, type_table, &callees);
@@ -70,6 +74,7 @@ fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
     let global_fields = build_global_field_env(project);
     FoldMaps {
         callees,
+        seq_builtins,
         globals,
         global_fields,
     }
@@ -146,6 +151,7 @@ fn new_visitor<'a>(type_table: &'a TypeTable, maps: &'a FoldMaps) -> ConstFoldVi
         interpreter: Interpreter::new(type_table),
     };
     visitor.interpreter.with_callees(&maps.callees);
+    visitor.interpreter.with_seq_builtins(&maps.seq_builtins);
     visitor.interpreter.with_globals(&maps.globals);
     visitor.interpreter.with_global_fields(&maps.global_fields);
     visitor
@@ -270,6 +276,31 @@ pub(super) fn build_callee_map(project: &NirPackage) -> CalleeMap {
         };
         drop(func);
         map.insert(id, func_rc.clone());
+    }
+    map
+}
+
+/// Which callee ids are the array builtins the engine evaluates. Identified by
+/// the monomorphized builtin name, the same way every other pass recognizes a
+/// builtin, rather than by a canonical path.
+fn build_seq_builtin_map(project: &NirPackage) -> SeqBuiltinMap {
+    let mut map = SeqBuiltinMap::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        let Some(id) = func.id else {
+            continue;
+        };
+        let descriptor =
+            crate::nir::FunctionRef::from_resolved(&func, func.module_source.clone());
+        let Some(name) = descriptor.monomorphized_builtin_name() else {
+            continue;
+        };
+        let builtin = match name.as_str() {
+            "builtin::array_get" => SeqBuiltin::Get,
+            "builtin::array_len" => SeqBuiltin::Len,
+            _ => continue,
+        };
+        map.insert(id, builtin);
     }
     map
 }

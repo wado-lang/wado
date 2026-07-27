@@ -815,7 +815,7 @@ impl<'a> Engine<'a> {
             Value::Float { value, .. } => ValueKind::Float(value.to_bits(), type_id),
             Value::Bool(b) => ValueKind::Bool(b),
             Value::Char(c) => ValueKind::Char(c),
-            Value::Aggregate { .. } => return false,
+            Value::Aggregate { .. } | Value::Seq { .. } => return false,
         };
         let vid = self.body.values.alloc_unshared(kind, type_id);
         self.redirect_expr(id, Operand::Value(vid))

@@ -656,9 +656,9 @@ impl<'a> Builder<'a> {
             crate::const_eval::Value::Bool(b) => self.pool.bool(b),
             crate::const_eval::Value::Char(c) => self.pool.char(c),
             // The pool models pure scalars; the arithmetic folds feeding this
-            // never produce an aggregate.
-            crate::const_eval::Value::Aggregate { .. } => {
-                panic!("an aggregate constant cannot be interned as a pure value")
+            // never produce an aggregate or a sequence.
+            crate::const_eval::Value::Aggregate { .. } | crate::const_eval::Value::Seq { .. } => {
+                panic!("an aggregate or sequence constant cannot be interned as a pure value")
             }
         }
     }

@@ -23,7 +23,10 @@ use wado_compiler::nir_arena::{
     ExprNode, Operand, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
 use wado_compiler::nir_value_graph::ValueKind;
-use wado_compiler::niri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
+use wado_compiler::niri::{
+    CalleeMap, GlobalEnv, Interpreter, Lattice, MAX_SEQ_ELEMENTS, SeqBuiltin, SeqBuiltinMap, Value,
+    is_ctfe_eligible,
+};
 use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
 
 /// A deferred operand builder: appends any needed subtree to the arena `Body`
@@ -3450,6 +3453,217 @@ fn loop_stmt_b(stmts: Vec<StmtBuild>) -> StmtBuild {
         let body = block_of(b, &stmts);
         ps(b, StmtKind::Loop { body })
     })
+}
+
+fn array_literal(type_id: TypeId, elements: Vec<Build>) -> Build {
+    Rc::new(move |b| {
+        let elements = elements.iter().map(|e| e(b)).collect();
+        Operand::Expr(pe(b, ExprKind::ArrayLiteral { elements }, type_id))
+    })
+}
+
+fn packed_array(bytes: Vec<u8>, type_id: TypeId) -> Build {
+    Rc::new(move |b| Operand::Expr(pe(b, ExprKind::PackedArray(bytes.clone()), type_id)))
+}
+
+fn shared_ref(inner: Build, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let inner = inner(b);
+        Operand::Expr(pe(
+            b,
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: inner,
+            },
+            type_id,
+        ))
+    })
+}
+
+/// A call to a synthetic builtin id, paired with the map that classifies it.
+fn seq_builtin_call(
+    func_id: wado_compiler::nir::FuncId,
+    args: Vec<Build>,
+    type_id: TypeId,
+) -> Build {
+    Rc::new(move |b| {
+        let args = args
+            .iter()
+            .map(|a| wado_compiler::nir_arena::ArenaCallArg {
+                expr: a(b),
+                is_mut: false,
+            })
+            .collect();
+        Operand::Expr(pe(
+            b,
+            ExprKind::Call {
+                func_id,
+                type_args: Vec::new(),
+                args,
+            },
+            type_id,
+        ))
+    })
+}
+
+fn seq_builtin_map(func_id: wado_compiler::nir::FuncId, builtin: SeqBuiltin) -> SeqBuiltinMap {
+    let mut map = SeqBuiltinMap::default();
+    map.insert(func_id, builtin);
+    map
+}
+
+#[test]
+fn array_literal_reduces_to_a_sequence() {
+    let table = TypeTable::new();
+    let lit = array_literal(
+        TypeTable::I32,
+        vec![
+            int_lit(10, TypeTable::I32, "10"),
+            int_lit(20, TypeTable::I32, "20"),
+        ],
+    );
+    let Lattice::Const(v) = reduce_lat(&mut Interpreter::new(&table), &lit) else {
+        panic!("a constant array literal is a sequence");
+    };
+    assert_eq!(v.seq_len(), Some(2));
+    assert_eq!(v.element(1).and_then(Value::as_int).map(|(n, _)| n), Some(20));
+}
+
+#[test]
+fn packed_array_reduces_to_a_sequence_of_bytes() {
+    let table = TypeTable::new();
+    let lit = packed_array(b"hi".to_vec(), TypeTable::I32);
+    let Lattice::Const(v) = reduce_lat(&mut Interpreter::new(&table), &lit) else {
+        panic!("a byte-string literal is a sequence");
+    };
+    assert_eq!(v.seq_len(), Some(2));
+    assert_eq!(
+        v.element(0).and_then(Value::as_int),
+        Some((u64::from(b'h'), PrimitiveType::U8))
+    );
+}
+
+#[test]
+fn a_sequence_over_the_cap_is_not_modelled() {
+    // Building the value walks every element, so past the cap the literal is
+    // simply not a constant to the engine.
+    let table = TypeTable::new();
+    let big = packed_array(vec![0u8; MAX_SEQ_ELEMENTS + 1], TypeTable::I32);
+    assert_eq!(
+        reduce_lat(&mut Interpreter::new(&table), &big),
+        Lattice::NonConst,
+    );
+    let at_cap = packed_array(vec![0u8; MAX_SEQ_ELEMENTS], TypeTable::I32);
+    assert!(matches!(
+        reduce_lat(&mut Interpreter::new(&table), &at_cap),
+        Lattice::Const(_),
+    ));
+}
+
+#[test]
+fn array_get_folds_an_element() {
+    let func_id = next_test_func_id();
+    let map = seq_builtin_map(func_id, SeqBuiltin::Get);
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_seq_builtins(&map);
+    let call = seq_builtin_call(
+        func_id,
+        vec![
+            array_literal(
+                TypeTable::I32,
+                vec![
+                    int_lit(10, TypeTable::I32, "10"),
+                    int_lit(20, TypeTable::I32, "20"),
+                    int_lit(30, TypeTable::I32, "30"),
+                ],
+            ),
+            int_lit(2, TypeTable::I32, "2"),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(flow_fold(&mut interp, &call), i32_of(30));
+}
+
+#[test]
+fn array_get_reads_through_a_shared_reference() {
+    // The backing array reaches the builtin as `&arr`, so the borrow has to be
+    // transparent or no element read would ever fold.
+    let func_id = next_test_func_id();
+    let map = seq_builtin_map(func_id, SeqBuiltin::Get);
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_seq_builtins(&map);
+    let call = seq_builtin_call(
+        func_id,
+        vec![
+            shared_ref(packed_array(b"abc".to_vec(), TypeTable::I32), TypeTable::I32),
+            int_lit(1, TypeTable::I32, "1"),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        flow_fold(&mut interp, &call),
+        Some(Value::Int {
+            value: u64::from(b'b'),
+            prim: PrimitiveType::U8,
+        }),
+    );
+}
+
+#[test]
+fn array_get_past_the_end_is_left_alone() {
+    // The read traps at run time; folding it would delete the trap.
+    let func_id = next_test_func_id();
+    let map = seq_builtin_map(func_id, SeqBuiltin::Get);
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_seq_builtins(&map);
+    let call = seq_builtin_call(
+        func_id,
+        vec![
+            array_literal(TypeTable::I32, vec![int_lit(10, TypeTable::I32, "10")]),
+            int_lit(5, TypeTable::I32, "5"),
+        ],
+        TypeTable::I32,
+    );
+    let (changed, body, e) = reduce_local_into(&mut interp, &call);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+}
+
+#[test]
+fn array_len_folds_to_the_element_count() {
+    let func_id = next_test_func_id();
+    let map = seq_builtin_map(func_id, SeqBuiltin::Len);
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_seq_builtins(&map);
+    let call = seq_builtin_call(
+        func_id,
+        vec![packed_array(b"hello".to_vec(), TypeTable::I32)],
+        TypeTable::I32,
+    );
+    assert_eq!(flow_fold(&mut interp, &call), i32_of(5));
+}
+
+#[test]
+fn a_sequence_without_the_builtin_map_stays_a_call() {
+    // No map installed: the call is opaque, as before.
+    let func_id = next_test_func_id();
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let call = seq_builtin_call(
+        func_id,
+        vec![
+            array_literal(TypeTable::I32, vec![int_lit(10, TypeTable::I32, "10")]),
+            int_lit(0, TypeTable::I32, "0"),
+        ],
+        TypeTable::I32,
+    );
+    let (changed, body, e) = reduce_local_into(&mut interp, &call);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }
 
 fn continue_stmt_b() -> StmtBuild {

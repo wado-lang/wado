@@ -38,7 +38,33 @@ pub enum Value {
         type_id: TypeId,
         fields: Rc<[(u32, Value)]>,
     },
+    /// A backing array whose every element is itself a compile-time value —
+    /// what a byte-string literal and a fully-constant array literal denote.
+    ///
+    /// `String` and `List<T>` need no case of their own: each is an
+    /// [`Value::Aggregate`] whose backing field is one of these and whose
+    /// length field is an ordinary integer. An element is read against the
+    /// container's length, never this array's, because a grown container's
+    /// capacity outruns what it holds.
+    ///
+    /// Like an aggregate, a sequence never leaves the engine. `Rc` keeps a
+    /// copy free; building one is what costs, so [`MAX_SEQ_ELEMENTS`] bounds
+    /// the literals worth modelling.
+    Seq {
+        type_id: TypeId,
+        elements: Rc<[Value]>,
+    },
 }
+
+/// Longest literal the engine turns into a [`Value::Seq`]. Construction walks
+/// every element, so an embedded asset — a `#[include_str]` payload, a bundled
+/// data table — would cost more to model than any fold it could enable. Past
+/// this length the literal is simply not a constant to the engine.
+///
+/// Sized against what actually benefits: the stdlib's constant tables run to a
+/// few dozen entries and string literals in real code are shorter still, so
+/// this leaves room to spare rather than describing a limit anyone approaches.
+pub const MAX_SEQ_ELEMENTS: usize = 1024;
 
 impl Value {
     /// An aggregate over `fields`, canonicalized to `field_index` order so two
@@ -64,11 +90,44 @@ impl Value {
             .map(|pos| &fields[pos].1)
     }
 
+    /// A sequence over `elements`, or `None` when it is longer than
+    /// [`MAX_SEQ_ELEMENTS`].
+    #[must_use]
+    pub fn seq(type_id: TypeId, elements: Vec<Value>) -> Option<Self> {
+        (elements.len() <= MAX_SEQ_ELEMENTS).then(|| Self::Seq {
+            type_id,
+            elements: elements.into(),
+        })
+    }
+
+    /// The element at `index`, or `None` for a non-sequence or an index past
+    /// the end — where a read traps at run time and must not be folded.
+    #[must_use]
+    pub fn element(&self, index: u64) -> Option<&Self> {
+        let Self::Seq { elements, .. } = self else {
+            return None;
+        };
+        elements.get(usize::try_from(index).ok()?)
+    }
+
+    /// The number of elements, or `None` for a non-sequence.
+    #[must_use]
+    pub fn seq_len(&self) -> Option<usize> {
+        match self {
+            Self::Seq { elements, .. } => Some(elements.len()),
+            Self::Int { .. }
+            | Self::Float { .. }
+            | Self::Bool(_)
+            | Self::Char(_)
+            | Self::Aggregate { .. } => None,
+        }
+    }
+
     /// Whether the value can be promoted into a pure-value operand. Aggregates
-    /// cannot: the pool models scalars only.
+    /// and sequences cannot: the pool models scalars only.
     #[must_use]
     pub fn is_scalar(&self) -> bool {
-        !matches!(self, Self::Aggregate { .. })
+        !matches!(self, Self::Aggregate { .. } | Self::Seq { .. })
     }
 
     /// Returns the raw integer bit pattern, or `None` if not an int.
@@ -118,8 +177,10 @@ impl Value {
             Self::Float { value, .. } => format_float_repr(*value),
             Self::Bool(b) => b.to_string(),
             Self::Char(c) => format_char_repr(*c),
-            Self::Aggregate { .. } => {
-                panic!("an aggregate value has no NIR literal repr; it never enters the value pool")
+            Self::Aggregate { .. } | Self::Seq { .. } => {
+                panic!(
+                    "an aggregate or sequence value has no NIR literal repr; neither enters the value pool"
+                )
             }
         }
     }
@@ -191,7 +252,7 @@ pub(crate) fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
                     prim,
                 })
             }
-            Value::Bool(_) | Value::Char(_) | Value::Aggregate { .. } => None,
+            Value::Bool(_) | Value::Char(_) | Value::Aggregate { .. } | Value::Seq { .. } => None,
         },
         NirUnaryOp::Not => match operand {
             Value::Bool(b) => Some(Value::Bool(!b)),

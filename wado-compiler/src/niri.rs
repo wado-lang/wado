@@ -115,7 +115,7 @@ use crate::const_eval::{
 };
 // `Value` lives in `const_eval`; re-export it so `niri::Value` resolves for
 // the public API and tests.
-pub use crate::const_eval::Value;
+pub use crate::const_eval::{MAX_SEQ_ELEMENTS, Value};
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -229,6 +229,22 @@ pub type CalleeKey = crate::nir::FuncId;
 /// reduce, single recognized tail expression) are checked at fold
 /// time, not here.
 pub type CalleeMap = IndexMap<CalleeKey, Rc<RefCell<NirFunction>>>;
+
+/// The array builtins the engine can evaluate over a constant sequence.
+///
+/// An element read reaches NIR as a call to one of these, not as an `Index`
+/// node — indexing lowers through the container's `IndexValue` impl and out to
+/// the builtin — so folding the builtin is what makes a constant table's reads
+/// fold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SeqBuiltin {
+    Get,
+    Len,
+}
+
+/// Which sequence builtin each callee id is, for the ids that are one. Built
+/// once per pass by the driving visitor, like the [`CalleeMap`].
+pub type SeqBuiltinMap = IndexMap<CalleeKey, SeqBuiltin>;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Global env
@@ -517,6 +533,9 @@ pub struct Interpreter<'a> {
     ///
     /// [`with_callees`]: Self::with_callees
     callees: Option<&'a CalleeMap>,
+    /// Which callee ids are sequence builtins. When `None`, an `array_get` /
+    /// `array_len` call is just an opaque call.
+    seq_builtins: Option<&'a SeqBuiltinMap>,
     /// Pre-built lattice values for module-scope globals. When `None`,
     /// every `GlobalVarGet` stays [`Lattice::Unevaluated`]. The visitor
     /// populates this once per pass via [`with_globals`].
@@ -672,6 +691,7 @@ impl<'a> Interpreter<'a> {
             ctfe_clobbered: LocalSet::default(),
             scratch_folds: IndexMap::default(),
             callees: None,
+            seq_builtins: None,
             globals: None,
             global_fields: None,
             step_budget: DEFAULT_STEP_BUDGET,
@@ -700,6 +720,13 @@ impl<'a> Interpreter<'a> {
     /// pass), mirroring [`with_callees`].
     ///
     /// [`with_callees`]: Self::with_callees
+    /// Install the sequence-builtin lookup. Without it, an element or length
+    /// read stays an opaque call.
+    pub fn with_seq_builtins(&mut self, seq_builtins: &'a SeqBuiltinMap) -> &mut Self {
+        self.seq_builtins = Some(seq_builtins);
+        self
+    }
+
     pub fn with_globals(&mut self, globals: &'a GlobalEnv) -> &mut Self {
         self.globals = Some(globals);
         self
@@ -953,6 +980,44 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    /// Read an element out of a constant sequence. An index past the end is
+    /// `NonConst`, not a fold: the read traps at run time and must keep doing
+    /// so.
+    fn index_lattice(&self, body: &Body, receiver: Operand, index: Operand) -> Lattice {
+        let (Lattice::Const(receiver), Lattice::Const(index)) = (
+            self.operand_to_lattice_a(body, receiver),
+            self.operand_to_lattice_a(body, index),
+        ) else {
+            return Lattice::Unevaluated;
+        };
+        let Some((index, _)) = index.as_int() else {
+            return Lattice::Unevaluated;
+        };
+        receiver
+            .element(index)
+            .cloned()
+            .map_or(Lattice::NonConst, Lattice::Const)
+    }
+
+    /// The lattice of an array literal: `Const` only when every element is
+    /// itself constant, and only up to [`MAX_SEQ_ELEMENTS`].
+    fn seq_lattice(
+        &self,
+        body: &Body,
+        type_id: TypeId,
+        elements: &[Operand],
+    ) -> Lattice {
+        let mut values = Vec::with_capacity(elements.len());
+        for op in elements {
+            match self.operand_to_lattice_a(body, *op) {
+                Lattice::Const(v) => values.push(v),
+                Lattice::NonConst => return Lattice::NonConst,
+                Lattice::Unevaluated => return Lattice::Unevaluated,
+            }
+        }
+        Value::seq(type_id, values).map_or(Lattice::NonConst, Lattice::Const)
+    }
+
     /// The lattice of a struct / tuple literal: `Const` only when every field
     /// is itself constant, since a partially-known aggregate is not a value the
     /// engine can substitute or compare.
@@ -1005,6 +1070,31 @@ impl<'a> Interpreter<'a> {
                     .enumerate()
                     .map(|(i, op)| (u32::try_from(i).expect("tuple arity fits u32"), *op)),
             ),
+            ExprKind::ArrayLiteral { elements } => {
+                self.seq_lattice(body, node.type_id, elements)
+            }
+            // A byte-string literal's backing array: already a constant, so it
+            // only has to be lifted into the value model.
+            ExprKind::PackedArray(bytes) => {
+                let elements = bytes
+                    .iter()
+                    .map(|b| Value::Int {
+                        value: u64::from(*b),
+                        prim: PrimitiveType::U8,
+                    })
+                    .collect();
+                Value::seq(node.type_id, elements).map_or(Lattice::NonConst, Lattice::Const)
+            }
+            ExprKind::Index { expr: inner, index } => {
+                self.index_lattice(body, *inner, *index)
+            }
+            // A shared borrow of a constant reads as that constant. The engine
+            // only ever reads, and a write goes through `MutRef`, which stays
+            // unmodelled — so `&x` is transparent and `&mut x` is not.
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: inner,
+            } => self.operand_to_lattice_a(body, *inner),
             ExprKind::GlobalVarGet {
                 module_source,
                 name,
@@ -1920,7 +2010,8 @@ impl<'a> Interpreter<'a> {
                         Value::Int { .. }
                         | Value::Float { .. }
                         | Value::Char(_)
-                        | Value::Aggregate { .. },
+                        | Value::Aggregate { .. }
+                        | Value::Seq { .. },
                     )
                     | Lattice::NonConst
                     | Lattice::Unevaluated => Flow::Bail,
@@ -2036,7 +2127,44 @@ impl<'a> Interpreter<'a> {
     /// `Unevaluated` on any miss (non-call, unknown or recursive callee,
     /// non-const arg, a body the executor cannot follow, exhausted budget), so
     /// the original call — and any runtime trap inside it — survives.
+    /// Evaluate `array_get(seq, i)` / `array_len(seq)` over a constant
+    /// sequence. The argument is a reference to the array, and a reference to a
+    /// constant reads as that constant, so no separate deref step is needed.
+    fn try_seq_builtin_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+            return Lattice::Unevaluated;
+        };
+        let Some(builtin) = self.seq_builtins.and_then(|m| m.get(func_id)) else {
+            return Lattice::Unevaluated;
+        };
+        match (builtin, args.as_slice()) {
+            (SeqBuiltin::Len, [arr]) => {
+                let Lattice::Const(v) = self.operand_to_lattice_a(body, arr.expr) else {
+                    return Lattice::Unevaluated;
+                };
+                v.seq_len().map_or(Lattice::Unevaluated, |len| {
+                    Lattice::Const(Value::Int {
+                        value: len as u64,
+                        prim: PrimitiveType::I32,
+                    })
+                })
+            }
+            (SeqBuiltin::Get, [arr, index]) => self.index_lattice(body, arr.expr, index.expr),
+            (SeqBuiltin::Len | SeqBuiltin::Get, _) => Lattice::Unevaluated,
+        }
+    }
+
     fn try_call_fold_a(&mut self, body: &Body, e: ExprId) -> Lattice {
+        if let lattice @ (Lattice::Const(_) | Lattice::NonConst) =
+            self.try_seq_builtin_fold_a(body, e)
+        {
+            // `NonConst` here is an out-of-range read: keep the call so the
+            // trap survives, same as a body that does not reduce.
+            return match lattice {
+                Lattice::Const(v) => Lattice::Const(v),
+                Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
+            };
+        }
         let Some(callees) = self.callees else {
             return Lattice::Unevaluated;
         };
