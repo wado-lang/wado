@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785157600715,
+  "lastUpdate": 1785168704869,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44321,6 +44321,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5d7c93e290bceb62bb5bf724d247cbc5d6667a4f"
         },
         "date": 1785157599910,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8225,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 277354,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7f9f386699ca5264ce06b83de4044e603dbf1329",
+          "message": "Merge pull request #1702 from wado-lang/claude/elabolator-refactor-continue-qfck9j\n\nrefactor(elaborator): dispatch instantiates recorded declaration signatures",
+          "timestamp": "2026-07-28T00:58:24+09:00",
+          "tree_id": "d34ea8b63c1007df8df832f9ded2125cb6c513b9",
+          "url": "https://github.com/wado-lang/wado/commit/7f9f386699ca5264ce06b83de4044e603dbf1329"
+        },
+        "date": 1785168704053,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
