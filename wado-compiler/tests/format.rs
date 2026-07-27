@@ -484,6 +484,30 @@ fn test_format_struct_spread_roundtrips() {
     assert_eq!(formatted, formatted2, "idempotent");
 }
 
+/// A trait's supertrait clause survives formatting, spaced like a bound list.
+#[test]
+fn test_format_supertrait_clause_roundtrips() {
+    let source = concat!(
+        "trait Ord: Eq {\n",
+        "    fn cmp(&self, other: &Self) -> i32;\n",
+        "}\n",
+        "\n",
+        "trait Circle<T>: Shape + Collect<Item = T> {\n",
+        "    fn radius(&self) -> i32;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+
+    let dirty = "trait Ord :Eq+Display{\n    fn cmp(&self)->i32;\n}\n";
+    let expected = "trait Ord: Eq + Display {\n    fn cmp(&self) -> i32;\n}\n";
+    assert_eq!(
+        wado_compiler::format(dirty).expect("format failed"),
+        expected
+    );
+}
+
 /// Anonymous composition round-trips with spreads interleaved by position.
 #[test]
 fn test_format_anon_composition_roundtrips() {
