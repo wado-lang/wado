@@ -601,10 +601,15 @@ fn analyze_expr(
 // Deref-only elision: `let r = &StructLit; ... *r ...` → inline the literal.
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Tracking state for `let r = &struct_or_tuple_literal` where r is only used
-/// as `*r`.
+/// Tracking state for a local bound to a freshly built aggregate and only ever
+/// read back through `*x` — either `let r = &literal` or the binding of the
+/// literal itself, which the builder collapse leaves behind as
+/// `let b = [ … ]; *b`.
+///
+/// Freshness is what makes moving the literal to the deref sound: nothing else
+/// holds the value, so copying it out is the value.
 struct DerefOnlyRef {
-    /// The arena id of the source struct / tuple literal from `let r = &source`.
+    /// The arena id of the source aggregate literal.
     source_e: ExprId,
     /// True until a non-deref use is found.
     eliminable: bool,
@@ -623,13 +628,7 @@ fn deref_collect_stmt(body: &Body, stmt: StmtId, refs: &mut IndexMap<u32, DerefO
         local_index, value, ..
     } = &body.stmts[stmt].kind
         && let Some(ve) = value.as_expr()
-        && let ExprKind::Unary { op, expr } = &body.exprs[ve].kind
-        && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-        && let Some(src_e) = expr.as_expr()
-        && matches!(
-            body.exprs[src_e].kind,
-            ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
-        )
+        && let Some(src_e) = deref_only_source(body, ve)
     {
         refs.insert(
             *local_index,
@@ -645,6 +644,28 @@ fn deref_collect_stmt(body: &Body, stmt: StmtId, refs: &mut IndexMap<u32, DerefO
     for c in kids {
         deref_collect_node(body, c, refs);
     }
+}
+
+/// The freshly built aggregate a `let` binds, when reading the local back
+/// through `*x` would just be that aggregate.
+///
+/// Two spellings reach here. Inlining a getter leaves `let r = &Literal`,
+/// borrowing a literal it then derefs. Collapsing a sequence-literal builder
+/// leaves `let b = [ … ]` bound directly, with the trailing `*b` the inlined
+/// `build` that copies the value out.
+fn deref_only_source(body: &Body, value_e: ExprId) -> Option<ExprId> {
+    let candidate = match &body.exprs[value_e].kind {
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr,
+        } => expr.as_expr()?,
+        _ => value_e,
+    };
+    matches!(
+        body.exprs[candidate].kind,
+        ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. } | ExprKind::ArrayLiteral { .. }
+    )
+    .then_some(candidate)
 }
 
 fn deref_collect_node(body: &Body, node: NodeRef, refs: &mut IndexMap<u32, DerefOnlyRef>) {

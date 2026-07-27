@@ -5,10 +5,10 @@
 // list literal forwards into every constant-index check before the
 // call, folding each `N >= used` comparison away.
 //
-// `__b` is the WIR builder's name for the list temp, pinned as a
-// snapshot (like the `__const_obj_N` names in the array_bounds_elim
-// fixtures); the `0 >= __v1`-style patterns below are the pre-fold
-// bounds-check shape that must not survive.
+// The list literal binds straight to `arr`: collapsing the sequence
+// builder leaves `let b = [ … ]; *b`, and eliding that copy leaves no
+// separate temp to name. The `0 >= __v1`-style patterns below are the
+// pre-fold bounds-check shape that must not survive.
 
 use { println, Stdout } from "core:cli";
 
@@ -35,10 +35,10 @@ __DATA__
 {
     "stdout": "10 20 31 61\n",
     "wir_expect:O2": [
-        "builtin::array_get<i32>(__b.repr, 0)",
-        "builtin::array_get<i32>(__b.repr, 1)",
-        "builtin::array_get<i32>(__b.repr, 2)",
-        "builtin::array_set<i32>(__b.repr, 2, 31)"
+        "builtin::array_get<i32>(arr.repr, 0)",
+        "builtin::array_get<i32>(arr.repr, 1)",
+        "builtin::array_get<i32>(arr.repr, 2)",
+        "builtin::array_set<i32>(arr.repr, 2, 31)"
     ],
     "wir_not_expect:O2": [
         "0 >= __v1",
