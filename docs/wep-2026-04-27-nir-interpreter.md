@@ -99,7 +99,9 @@ Control flow:
 Calls:
 
 - A free call whose arguments are all constant and whose callee is pure,
-  non-async and monomorphic runs at compile time. The body executes statement
+  non-async, monomorphic, and returning something runs at compile time. A call
+  that yields nothing has no value to substitute, and handing one back would
+  leave a value where the program expects none. The body executes statement
   by statement, so a `let` sequence, assignment to a local, an `if` whose
   condition decides, an early `return`, a labeled block completed by its
   `break`, and a loop all reach a value. Recursion and total work are bounded.
@@ -111,10 +113,11 @@ Calls:
   stepping past them would drop it.
 - A loop needs no constant trip count. The work budget bounds it, so one that
   does not finish in time abandons the evaluation rather than guessing, and
-  what an iteration derived does not survive into the next.
-- A local the frame cannot track — one a borrow, a mutable argument, a method
-  receiver, a store through a projection, or an assignment buried inside a
-  larger expression can write — carries no value, so a stale constant cannot
+  what an iteration derived does not survive into the next. The budget is per
+  function, so what one spends cannot decide whether the next one folds.
+- A local the frame cannot track — one a mutable borrow, a mutable argument, a
+  method receiver, a store through a projection, or an assignment buried inside
+  a larger expression can write — carries no value, so a stale constant cannot
   outlive the write.
 - A string literal's `len()` folds, as a consequence of the generic
   struct-field projection rather than any string-specific rule.
@@ -125,16 +128,22 @@ Sequences:
   literal or a fully-constant array literal, bounded by a maximum length past
   which building one would cost more than any fold it enables. `String` and
   `List` need no case of their own: each is an aggregate whose backing field is
-  a sequence and whose length field is an integer.
+  a sequence and whose length field is an integer — and an array literal
+  denotes that whole container, since that is what it lowers to.
+- Whether a local may carry an aggregate is decided from the reachable body. A
+  node an earlier rewrite orphaned cannot run, so it must not disqualify one:
+  inlining `t.len()` leaves the original method call behind, and counting its
+  receiver would refuse every list the caller then reads.
 - An element or length read folds through the array builtins the read lowers
   to, not through an index node. A read past the end is left alone, since it
   traps at run time.
 - A shared borrow reads as the constant it points at, which is what makes a
   backing array reachable at all — it reaches the builtin as `&arr`. Only a
   shared one: a write goes through a mutable borrow, which stays unmodelled.
-- What this does not yet reach: a constant table declared as a global. Its
-  reads still do not fold, because the global's recorded initializer is a
-  placeholder — see the aggregate-globals TODO below.
+- A constant list's length folds, so a constant-index bounds check on it does
+  too. What this does not yet reach is the element: body globalization hoists
+  the value into a global before the read, and a deferred global's recorded
+  initializer is a placeholder — see the aggregate-globals TODO below.
 
 ## TODO
 
