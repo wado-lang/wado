@@ -23,6 +23,7 @@ use wado_compiler::nir_arena::{
     ExprNode, Operand, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
 use wado_compiler::nir_value_graph::ValueKind;
+use wado_compiler::compiler_item::SeqField;
 use wado_compiler::niri::{
     CalleeMap, GlobalEnv, Interpreter, Lattice, MAX_SEQ_ELEMENTS, SeqBuiltin, SeqBuiltinMap, Value,
     is_ctfe_eligible,
@@ -3517,7 +3518,11 @@ fn seq_builtin_map(func_id: wado_compiler::nir::FuncId, builtin: SeqBuiltin) -> 
 }
 
 #[test]
-fn array_literal_reduces_to_a_sequence() {
+fn array_literal_reduces_to_the_container_it_denotes() {
+    // An array literal lowers to `{ repr: array.new_fixed, used: N }`, so it
+    // denotes the whole `List` — not the backing array. Modelling it as a bare
+    // sequence would leave `.used` unreadable, and a length read is what most
+    // of a constant list's folds go through.
     let table = TypeTable::new();
     let lit = array_literal(
         TypeTable::I32,
@@ -3527,11 +3532,16 @@ fn array_literal_reduces_to_a_sequence() {
         ],
     );
     let Lattice::Const(v) = reduce_lat(&mut Interpreter::new(&table), &lit) else {
-        panic!("a constant array literal is a sequence");
+        panic!("a constant array literal is a constant container");
     };
-    assert_eq!(v.seq_len(), Some(2));
     assert_eq!(
-        v.element(1).and_then(Value::as_int).map(|(n, _)| n),
+        v.field(SeqField::Len.index()).and_then(Value::as_int),
+        Some((2, PrimitiveType::I32))
+    );
+    let backing = v.field(SeqField::Backing.index()).expect("a backing array");
+    assert_eq!(backing.seq_len(), Some(2));
+    assert_eq!(
+        backing.element(1).and_then(Value::as_int).map(|(n, _)| n),
         Some(20)
     );
 }
@@ -3574,16 +3584,23 @@ fn array_get_folds_an_element() {
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     interp.with_seq_builtins(&map);
+    // The builtin takes the backing array, which a read projects out of the
+    // container — the shape `arr[i]` lowers to.
     let call = seq_builtin_call(
         func_id,
         vec![
-            array_literal(
+            field_access(
+                array_literal(
+                    TypeTable::I32,
+                    vec![
+                        int_lit(10, TypeTable::I32, "10"),
+                        int_lit(20, TypeTable::I32, "20"),
+                        int_lit(30, TypeTable::I32, "30"),
+                    ],
+                ),
+                SeqField::Backing.index(),
+                "repr",
                 TypeTable::I32,
-                vec![
-                    int_lit(10, TypeTable::I32, "10"),
-                    int_lit(20, TypeTable::I32, "20"),
-                    int_lit(30, TypeTable::I32, "30"),
-                ],
             ),
             int_lit(2, TypeTable::I32, "2"),
         ],

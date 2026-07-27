@@ -1,0 +1,39 @@
+// A local list literal is a compile-time value, so its length folds and the
+// helper holding it disappears entirely.
+//
+// The chain this pins: the sequence-literal builder collapses to an array
+// literal, eliding the copy leaves the literal bound directly to `t`, the
+// literal is modelled as the container it denotes (`{ repr, used }` — not a
+// bare backing array), and only the reachable body decides whether `t` may
+// carry that value. Break any link and `table_len` survives to run time.
+//
+// `#[inline(never)]` keeps the inliner out, so the fold is attributable to
+// compile-time evaluation rather than to inlining plus local folding.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn table_len() -> i32 {
+    let t: List<i32> = [10, 20, 30];
+    return t.len();
+}
+
+// A constant index against a constant length: the bounds check folds away, so
+// no panic path survives for it.
+#[inline(never)]
+fn third() -> i32 {
+    let t: List<i32> = [10, 20, 31];
+    return t[2];
+}
+
+export fn run() with Stdout {
+    assert table_len() == 3;
+    assert third() == 31;
+    println(`${table_len()} ${third()}`);
+}
+
+__DATA__
+{
+    "stdout": "3 31\n",
+    "wir_not_expect:O2": ["table_len"]
+}

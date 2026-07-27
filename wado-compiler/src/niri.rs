@@ -116,6 +116,7 @@ use crate::const_eval::{
 // `Value` lives in `const_eval`; re-export it so `niri::Value` resolves for
 // the public API and tests.
 pub use crate::const_eval::{MAX_SEQ_ELEMENTS, Value};
+use crate::compiler_item::SeqField;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -616,8 +617,31 @@ fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
 /// argument roots at them. Such a local is unreachable through any other
 /// handle, so its whole value cannot change under the binding.
 ///
-/// The scan walks the whole expression arena, orphaned nodes included: a
-/// mention the reachable body no longer contains only costs a fold.
+/// The scan walks the reachable body. An orphaned node cannot run, so a
+/// mention left behind by an earlier rewrite must not disqualify a local —
+/// inlining `t.len()` leaves the original method call in the arena, and
+/// counting its receiver would refuse every list the caller then reads.
+/// Every expression id reachable from the body root, in arena order.
+fn reachable_exprs(body: &Body) -> Vec<ExprId> {
+    struct Collect(Vec<ExprId>);
+    impl NirRefVisitor for Collect {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Expr(e) = node {
+                self.0.push(e);
+            }
+            self.walk_node(body, node);
+        }
+    }
+    // A body with no block structure is a bare expression: its arena holds
+    // only that expression, so nothing in it is orphaned.
+    if body.blocks.is_empty() {
+        return body.exprs.iter().map(|(e, _)| e).collect();
+    }
+    let mut collect = Collect(Vec::new());
+    collect.visit_node(body, NodeRef::Block(body.root));
+    collect.0
+}
+
 fn aggregate_safe_locals(body: &Body) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
@@ -627,7 +651,8 @@ fn aggregate_safe_locals(body: &Body) -> LocalSet {
     let mut value_reads: IndexSet<ExprId> = IndexSet::default();
     let mut local_mentions: Vec<(ExprId, u32)> = Vec::new();
     let mut disqualified = LocalSet::default();
-    for (e, node) in &body.exprs {
+    for e in reachable_exprs(body) {
+        let node = &body.exprs[e];
         match &node.kind {
             ExprKind::Local { index, .. } => local_mentions.push((e, *index)),
             ExprKind::FieldAccess { expr, .. }
@@ -642,8 +667,10 @@ fn aggregate_safe_locals(body: &Body) -> LocalSet {
             ExprKind::Assign { target, .. } => {
                 disqualify_root(body, (*target).into(), &mut disqualified);
             }
+            // A shared borrow can only read through, so it cannot make the
+            // value go stale under the binding; a mutable one can.
             ExprKind::Unary {
-                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                op: NirUnaryOp::MutRef,
                 expr,
             } => disqualify_root(body, *expr, &mut disqualified),
             ExprKind::MethodCall { receiver, args, .. } => {
@@ -1065,7 +1092,27 @@ impl<'a> Interpreter<'a> {
                     .enumerate()
                     .map(|(i, op)| (u32::try_from(i).expect("tuple arity fits u32"), *op)),
             ),
-            ExprKind::ArrayLiteral { elements } => self.seq_lattice(body, node.type_id, elements),
+            // An array literal denotes the whole container, not the backing
+            // array: `wir_build` lowers it to `{ repr: array.new_fixed, used: N }`.
+            // Modelling it as a bare sequence would leave `.used` unreadable.
+            ExprKind::ArrayLiteral { elements } => {
+                match self.seq_lattice(body, node.type_id, elements) {
+                    Lattice::Const(backing) => Lattice::Const(Value::aggregate(
+                        node.type_id,
+                        vec![
+                            (SeqField::Backing.index(), backing),
+                            (
+                                SeqField::Len.index(),
+                                Value::Int {
+                                    value: elements.len() as u64,
+                                    prim: PrimitiveType::I32,
+                                },
+                            ),
+                        ],
+                    )),
+                    other => other,
+                }
+            }
             // A byte-string literal's backing array: already a constant, so it
             // only has to be lifted into the value model.
             ExprKind::PackedArray(bytes) => {
