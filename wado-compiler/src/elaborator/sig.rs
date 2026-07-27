@@ -299,12 +299,14 @@ impl ImplSig {
         }
     }
 
-    /// The slot substitution a receiver's type arguments imply.
+    /// The slot substitution a receiver's type arguments imply — the one
+    /// alignment, shared by [`Self::instantiate`] and by the instantiation
+    /// of any [`MethodSig`] the block declares.
     ///
     /// Target position `i` binds a slot only where the impl wrote a type
     /// parameter there; a concrete argument (`u8` in `impl List<u8>`) binds
     /// nothing, which is what makes a partially-concrete target expressible.
-    fn slots(
+    pub(crate) fn slots(
         &self,
         type_table: &RefCell<TypeTable>,
         receiver_args: &[TypeId],

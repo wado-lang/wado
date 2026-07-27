@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, AstId, BinaryOp, Expr, Item, Type};
+use crate::ast::{self, AstId, BinaryOp, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, RefKind};
@@ -620,342 +620,75 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => return None,
         };
 
-        // Try looking up in loaded modules (for imported structs).
-        // Only inherent impls here; trait impls are handled separately.
+        // Inherent impls on the receiver's own declaration. A user-owned
+        // type may receive them from any same-package module, not just its
+        // declaring one (coherence permits it), so every module that hosts
+        // an `impl <struct_name>` is a candidate — disambiguated by type
+        // identity below so a same-named type elsewhere is never matched.
+        // Trait impls are handled separately.
         if let Some(ref module_source) = struct_module_source {
-            // A user-owned type may receive inherent methods from any
-            // same-package module, not just its declaring one (coherence
-            // permits it), so search every module that hosts an
-            // `impl <struct_name>` — disambiguated by type identity below so
-            // a same-named type declared in a different module is not matched.
             let entries: Vec<(ModuleSource, AstId)> = self
                 .tysys
                 .trait_env
                 .inherent_impl_keys(&self.impl_target_of(base_type_id, &struct_name));
             for (impl_module, item_id) in &entries {
-                let Some(Item::Impl(impl_block)) =
-                    self.loaded_modules[impl_module].item_by_id(*item_id)
-                else {
-                    continue;
-                };
-                if self.get_type_name(&impl_block.ty) != struct_name {
+                let impl_ref = ImplBlockRef(impl_module.clone(), *item_id);
+                let trait_env = Arc::clone(&self.tysys.trait_env);
+                let header = impl_header(&trait_env, &impl_ref);
+                if self.get_type_name(&header.ty) != struct_name {
                     continue;
                 }
-                // Skip impls that don't define the requested method before
-                // doing any perspective work.
-                let Some(method) = impl_block.methods.iter().find(|m| m.name == method_name) else {
-                    continue;
-                };
-                // Build the impl's *own* module import context: type names in
-                // the method's signature resolve in that module's perspective
-                // (the impl may live in a different module than the receiver
-                // type's declaration), and it reveals which declaration the
-                // impl's bare target name refers to.
-                let target_scope = self.tysys.trait_env.import_scope(impl_module);
-                // Identity guard: the impl's target type must be the receiver's
-                // own declaration. An impl in the receiver's home module
-                // declares it; otherwise the impl must import that same
-                // declaration (its bare target name resolves to `module_source`),
-                // so a same-named type in another module is never matched.
+                // Identity guard: the impl's target type must be the
+                // receiver's own declaration. An impl in the receiver's home
+                // module declares it; otherwise the impl must import that
+                // same declaration, so its bare target name resolves to
+                // `module_source`.
                 let targets_receiver = impl_module == module_source
-                    || target_scope
+                    || self
+                        .tysys
+                        .trait_env
+                        .import_scope(impl_module)
                         .sources
                         .get(&struct_name)
                         .is_some_and(|m| m == module_source);
                 if !targets_receiver {
                     continue;
                 }
-                if !(self.tysys.inherent_impl_type_args_match(
-                    &impl_block.ty,
-                    &impl_block.type_params,
-                    receiver_type_args.as_deref(),
-                    impl_module,
-                ) && self.tysys.check_impl_block_bounds(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
-                    &impl_block.type_params,
-                    &impl_block.ty,
-                    receiver_type_args.as_deref(),
-                )) {
+                if !self.inherent_impl_applies(header, receiver_type_args.as_deref(), impl_module) {
                     continue;
                 }
-
-                // Set up impl-level type params for generic impls (e.g.,
-                // impl List<T> -> bind T to the receiver's arg). A fully
-                // concrete instantiation (impl List<u8>) has no free impl-level
-                // params, so its method type params start at index 0 — matching
-                // the monomorphizer's substitution map.
-                let mut scope = self.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.type_params.clear();
-                let from_concrete_impl = scope.impl_is_concrete_instantiation(
-                    &impl_block.ty,
-                    &impl_block.type_params,
-                    impl_module,
-                );
-                let mut impl_offset = 0u32;
-                if let Some(ref type_args) = receiver_type_args
-                    && let Type::Generic(generic) = &impl_block.ty
-                    && !from_concrete_impl
+                if let Some(info) =
+                    self.inherent_method_info(&impl_ref, method_name, receiver_type_args.as_deref())
                 {
-                    impl_offset = type_args.len() as u32;
-                    for (i, arg) in generic.args.iter().enumerate() {
-                        if let Type::Named(named) = arg
-                            && i < type_args.len()
-                        {
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_params
-                                .insert(named.name.clone(), (i as u32, type_args[i]));
-                        }
-                    }
+                    return Some(info);
                 }
-
-                // Resolve the signature in the impl module's perspective so
-                // same-named types from different modules don't get confused.
-                // Method-level type params are seeded inside that perspective:
-                // effect params (`<effect E>`) live on a separate channel and
-                // are seeded first so an `<F: fn() with E>` bound sees `E` as
-                // `EffectRef::Param`; fn-bound params (`<F: fn(...)>`) are
-                // eagerly resolved to the bound's function type and do NOT
-                // consume a `TypeParam` index, mirroring the free-function path
-                // so the substitution map lines up.
-                let (
-                    return_type,
-                    self_kind,
-                    param_types,
-                    param_is_mut,
-                    param_defaults,
-                    param_names,
-                ) = scope.with_module_perspective(impl_module.clone(), target_scope, |s| {
-                    s.annotate_ctx
-                        .trait_ctx
-                        .install_effect_params(&method.type_params);
-
-                    let mut idx = impl_offset;
-                    for tp in method.type_params.iter().filter(|p| !p.is_effect) {
-                        if s.annotate_ctx.trait_ctx.type_params.contains_key(&tp.name) {
-                            continue;
-                        }
-                        let fn_bound_sig = if tp.is_pack {
-                            None
-                        } else {
-                            tp.bounds.iter().find_map(|b| b.fn_signature.as_ref())
-                        };
-                        let (type_id, consumed_index) = if tp.is_pack {
-                            (
-                                s.tysys
-                                    .type_table
-                                    .borrow_mut()
-                                    .make_type_pack(tp.name.clone(), idx),
-                                true,
-                            )
-                        } else if let Some(sig) = fn_bound_sig {
-                            (s.resolve_type(&ast::Type::Function(sig.clone())), false)
-                        } else {
-                            (
-                                s.tysys
-                                    .type_table
-                                    .borrow_mut()
-                                    .make_type_param(tp.name.clone(), idx),
-                                true,
-                            )
-                        };
-                        s.annotate_ctx
-                            .trait_ctx
-                            .type_params
-                            .insert(tp.name.clone(), (idx, type_id));
-                        if consumed_index {
-                            idx += 1;
-                        }
-                    }
-
-                    let return_type = method
-                        .return_type
-                        .as_ref()
-                        .map(|t| s.resolve_type(t))
-                        .unwrap_or(TypeTable::UNIT);
-                    let self_kind = method
-                        .params
-                        .first()
-                        .map(|p| p.self_kind)
-                        .unwrap_or(ast::SelfKind::None);
-                    let param_types = s.extract_param_types(&method.params);
-                    let param_is_mut: Vec<bool> = method
-                        .params
-                        .iter()
-                        .filter(|p| p.name != "self")
-                        .map(|p| p.is_mut)
-                        .collect();
-                    let param_defaults: Vec<Option<ast::Expr>> = method
-                        .params
-                        .iter()
-                        .filter(|p| p.name != "self")
-                        .map(|p| p.default.clone())
-                        .collect();
-                    let param_names: Vec<String> = method
-                        .params
-                        .iter()
-                        .filter(|p| p.name != "self")
-                        .map(|p| p.name.clone())
-                        .collect();
-
-                    (
-                        return_type,
-                        self_kind,
-                        param_types,
-                        param_is_mut,
-                        param_defaults,
-                        param_names,
-                    )
-                });
-                drop(scope);
-                return Some(MethodInfo {
-                    impl_offset: None,
-                    return_type,
-                    self_kind,
-                    param_types,
-                    param_is_mut,
-                    inherited_from_base: None,
-                    cm_name: None,
-                    is_ref_impl: false,
-                    method_type_param_ids: vec![],
-                    impl_module: Some(impl_module.clone()),
-                    from_concrete_impl,
-                    param_defaults,
-                    param_names,
-                    consumes_self: takes_self_by_value(&method.params),
-                });
             }
         }
 
-        // Search all loaded modules if no specific module (for prelude types)
-        // Only check inherent impls (not trait impls) - trait impls are handled separately
+        // No specific module (prelude types): every inherent impl
+        // registered for this type name, from the same index.
         if struct_module_source.is_none() {
-            // No specific module: fetch every inherent impl registered for
-            // this type name across all loaded modules from the index.
             let entries: Vec<(ModuleSource, AstId)> = self
                 .tysys
                 .trait_env
                 .inherent_impl_keys(&self.impl_target_of(base_type_id, &struct_name));
             for (search_module_source, item_id) in &entries {
-                let Some(Item::Impl(impl_block)) =
-                    self.loaded_modules[search_module_source].item_by_id(*item_id)
-                else {
-                    continue;
-                };
-                let impl_struct_name = self.get_type_name(&impl_block.ty);
-                if impl_struct_name == struct_name
-                    && self.tysys.inherent_impl_type_args_match(
-                        &impl_block.ty,
-                        &impl_block.type_params,
+                let impl_ref = ImplBlockRef(search_module_source.clone(), *item_id);
+                let trait_env = Arc::clone(&self.tysys.trait_env);
+                let header = impl_header(&trait_env, &impl_ref);
+                if self.get_type_name(&header.ty) != struct_name
+                    || !self.inherent_impl_applies(
+                        header,
                         receiver_type_args.as_deref(),
                         search_module_source,
                     )
-                    && self.tysys.check_impl_block_bounds(
-                        &self.annotate_ctx,
-                        &self.type_lookup(),
-                        &impl_block.type_params,
-                        &impl_block.ty,
-                        receiver_type_args.as_deref(),
-                    )
                 {
-                    for method in &impl_block.methods {
-                        if method.name == method_name {
-                            // Set up type params for generic impls (e.g., impl List<T>).
-                            // Inherited scope; only `type_params` is replaced.
-                            let mut scope = self.enter_inherited_type_param_scope();
-                            scope.annotate_ctx.trait_ctx.type_params.clear();
-                            let mut impl_offset = 0u32;
-                            if let Some(ref type_args) = receiver_type_args
-                                && let Type::Generic(generic) = &impl_block.ty
-                            {
-                                impl_offset = type_args.len() as u32;
-                                for (i, arg) in generic.args.iter().enumerate() {
-                                    if let Type::Named(named) = arg
-                                        && i < type_args.len()
-                                    {
-                                        scope
-                                            .annotate_ctx
-                                            .trait_ctx
-                                            .type_params
-                                            .insert(named.name.clone(), (i as u32, type_args[i]));
-                                    }
-                                }
-                            }
-
-                            // Set up method-level type params (e.g., Acc in fold<Acc>)
-                            // These get TypeParam types that will be substituted at call sites
-                            for (i, type_param) in method.type_params.iter().enumerate() {
-                                let index = impl_offset + i as u32;
-                                let type_param_id = scope.tysys.type_table.borrow_mut().intern(
-                                    ResolvedType::TypeParam {
-                                        name: type_param.name.clone(),
-                                        index,
-                                    },
-                                );
-                                scope
-                                    .annotate_ctx
-                                    .trait_ctx
-                                    .type_params
-                                    .insert(type_param.name.clone(), (index, type_param_id));
-                            }
-
-                            let return_type = method
-                                .return_type
-                                .as_ref()
-                                .map(|t| scope.resolve_type(t))
-                                .unwrap_or(TypeTable::UNIT);
-                            let self_kind = method
-                                .params
-                                .first()
-                                .map(|p| p.self_kind)
-                                .unwrap_or(ast::SelfKind::None);
-                            let param_types = scope.extract_param_types(&method.params);
-                            let param_is_mut: Vec<bool> = method
-                                .params
-                                .iter()
-                                .filter(|p| p.name != "self")
-                                .map(|p| p.is_mut)
-                                .collect();
-                            let param_defaults: Vec<Option<ast::Expr>> = method
-                                .params
-                                .iter()
-                                .filter(|p| p.name != "self")
-                                .map(|p| p.default.clone())
-                                .collect();
-                            let param_names: Vec<String> = method
-                                .params
-                                .iter()
-                                .filter(|p| p.name != "self")
-                                .map(|p| p.name.clone())
-                                .collect();
-
-                            drop(scope);
-
-                            let from_concrete_impl = self.impl_is_concrete_instantiation(
-                                &impl_block.ty,
-                                &impl_block.type_params,
-                                search_module_source,
-                            );
-                            return Some(MethodInfo {
-                                impl_offset: None,
-                                return_type,
-                                self_kind,
-                                param_types,
-                                param_is_mut,
-                                inherited_from_base: None,
-                                cm_name: None,
-                                is_ref_impl: false,
-                                method_type_param_ids: vec![],
-                                impl_module: Some(search_module_source.clone()),
-                                from_concrete_impl,
-                                param_defaults,
-                                param_names,
-                                consumes_self: takes_self_by_value(&method.params),
-                            });
-                        }
-                    }
+                    continue;
+                }
+                if let Some(info) =
+                    self.inherent_method_info(&impl_ref, method_name, receiver_type_args.as_deref())
+                {
+                    return Some(info);
                 }
             }
         }
@@ -996,6 +729,77 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         None
+    }
+
+    /// Whether an inherent `impl` block accepts a receiver with these type
+    /// arguments — its target's concrete positions must match, and its type
+    /// parameters' bounds must hold.
+    fn inherent_impl_applies(
+        &mut self,
+        header: &ImplHeader,
+        receiver_type_args: Option<&[TypeId]>,
+        impl_module: &ModuleSource,
+    ) -> bool {
+        self.tysys.inherent_impl_type_args_match(
+            &header.ty,
+            &header.type_params,
+            receiver_type_args,
+            impl_module,
+        ) && self.tysys.check_impl_block_bounds(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            &header.type_params,
+            &header.ty,
+            receiver_type_args,
+        )
+    }
+
+    /// `MethodInfo` for `method_name` on the inherent `impl` block at
+    /// `impl_ref`, or `None` when the block declares no such method.
+    ///
+    /// The decl pass resolved the signature in the impl's own frame and its
+    /// own module's perspective — which is what kept a same-named type from
+    /// another module out of it — so the receiver's type arguments only fill
+    /// the block's slots.
+    fn inherent_method_info(
+        &mut self,
+        impl_ref: &ImplBlockRef,
+        method_name: &str,
+        receiver_type_args: Option<&[TypeId]>,
+    ) -> Option<MethodInfo> {
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let signatures = Rc::clone(&self.tysys.signatures);
+        let header = impl_header(&trait_env, impl_ref);
+        let method_header = header.methods.iter().find(|m| m.name == method_name)?;
+        let sig = signatures.method_sig(method_header.ast_id)?;
+        let impl_sig = signatures
+            .impl_sig(impl_ref.1)
+            .expect("the decl pass records every impl block's declaration facts");
+
+        let slots = impl_sig.slots(&self.tysys.type_table, receiver_type_args.unwrap_or(&[]));
+        let instantiated = sig.decl.instantiate_slots(&self.tysys.type_table, &slots);
+        let first_value = sig.first_value_param().min(instantiated.param_types.len());
+
+        Some(MethodInfo {
+            impl_offset: None,
+            return_type: instantiated.return_type,
+            self_kind: sig.self_kind,
+            param_types: instantiated.param_types[first_value..].to_vec(),
+            param_is_mut: super::sig::Param::is_mut_flags(&sig.params),
+            inherited_from_base: None,
+            cm_name: None,
+            is_ref_impl: false,
+            method_type_param_ids: vec![],
+            impl_module: Some(impl_ref.0.clone()),
+            from_concrete_impl: self.impl_is_concrete_instantiation(
+                &header.ty,
+                &header.type_params,
+                &impl_ref.0,
+            ),
+            param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
+            param_names: super::sig::Param::names(&sig.params),
+            consumes_self: sig.self_kind == ast::SelfKind::Value,
+        })
     }
 
     /// The signature of `method_name` as an instance method on the resource

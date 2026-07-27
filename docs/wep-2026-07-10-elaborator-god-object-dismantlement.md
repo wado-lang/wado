@@ -399,8 +399,27 @@ declaration rather than at whichever use site reaches it first.
       `StaticMethodEntry` loses `module` and `impl_id`. They existed to
       re-resolve the method under the impl's module; the signature already
       is that resolution, so the method's own `AstId` is the whole entry.
-- [ ] S5b-6c The remaining `MethodInfo` producers in `method_lookup` and
-      `trait_query` become `instantiate(sig, receiver_args)`.
+- [x] S5b-6c Inherent-method dispatch instantiates the recorded signature.
+      Its two branches — receiver module known, and the prelude case where
+      it is not — each fetched the impl AST, rebuilt the block's slot scope
+      from the receiver's type arguments, seeded the method's own slots
+      after it, and re-resolved the signature under the impl module's
+      perspective. They now share `inherent_method_info`, which reads the
+      digest, and `inherent_impl_applies`, which asks `ImplHeader` the two
+      applicability questions.
+
+      With that, `method_lookup.rs` holds no `loaded_modules` read at all —
+      the file that was the God Object's whole reason for carrying the
+      module map.
+
+      The branches also numbered the method's own slots from
+      `receiver_type_args.len()`. `MethodSig` numbers them from
+      `method_param_offset`, the single predicate S5e converged on, which
+      differs precisely when a concrete argument sits among the free ones.
+
+      The `MethodInfo` producers that remain are not signature lookups: the
+      tuple builtins (`len` / `zip`) synthesise a signature no declaration
+      has, and the trait-bound path is S6's.
 
 **What the remaining `loaded_modules` reads are waiting on.** The
 trait-bound path (`find_method_in_trait_bounds`) is the one place a
@@ -468,20 +487,19 @@ a time rather than as a single cut. S8–S9 are last.
 
 Progress metric:
 
-| Metric                                           | S4 | S5b-6a | Target |
-| ------------------------------------------------ | -- | ------ | ------ |
-| `loaded_modules` reads outside reify / decl pass | 25 | 11     | 0      |
-| AST-level type-param substitution helpers        | 2  | 0      | 0      |
-| `get_impl_block` + callers                       | 15 | 0      | 0      |
-| `with_module_perspective` call sites             | 16 | 6      | 1      |
-| `suppress_reference_recording` call sites        | 7  | 2      | 0      |
-| Manual scope save/restore clusters               | 0  | 0      | 0      |
-| `Elaborator` fields                              | 13 | 13     | 6      |
+| Metric                                           | S4 | S5b-6 | Target |
+| ------------------------------------------------ | -- | ----- | ------ |
+| `loaded_modules` reads outside reify / decl pass | 25 | 8     | 0      |
+| AST-level type-param substitution helpers        | 2  | 0     | 0      |
+| `get_impl_block` + callers                       | 15 | 0     | 0      |
+| `with_module_perspective` call sites             | 16 | 5     | 1      |
+| `suppress_reference_recording` call sites        | 7  | 2     | 0      |
+| Manual scope save/restore clusters               | 0  | 0     | 0      |
+| `Elaborator` fields                              | 13 | 13    | 6      |
 
-S5c removed no `loaded_modules` read of its own: the associated-type
-queries reached the impl AST through `TraitEnv::impl_headers`, not through
-the module map. The eleven that remain are the static-method sites S5b-6b
-takes and the trait-declaration sites S6 takes.
+The eight that remain are three `method_call.rs` name-scan fallbacks, the
+three trait-declaration sites S6 takes, `expr.rs`'s scan for the module
+declaring a `From` impl, and `find_impl_method_ast_id`.
 
 Compile-time is a stated benefit (one signature resolution per declaration
 instead of per use site), so the baseline is captured before S5 rather than
