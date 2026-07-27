@@ -190,41 +190,47 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Expand a written bound list to include every bound's supertraits, so a
-    /// declared `T: Ord` carries `Eq` wherever bounds are consulted — method
-    /// lookup on the parameter, bound checking, on-demand derivation.
+    /// declared `T: Ord` also demands `Eq`. Only for the sites that *check* a
+    /// bound: what a type parameter is known to satisfy is elaborated on read
+    /// ([`super::tysys::TypeSystem::bound_implies`]), never on registration —
+    /// there are too many registration sites to keep in step.
     /// `fn(...)` bounds name no trait and pass through untouched.
     pub(super) fn elaborate_bounds(&self, bounds: &[ast::TraitBound]) -> Vec<ast::TraitBound> {
-        if bounds.iter().all(|b| {
-            b.fn_signature.is_some()
-                || self
-                    .tysys
-                    .trait_env
-                    .supertrait_closure(&self.canonical_decl_key(&b.name))
-                    .is_empty()
-        }) {
-            return bounds.to_vec();
-        }
         let mut elaborated = Vec::with_capacity(bounds.len());
         for bound in bounds {
             super::trait_env::push_unique_bound(&mut elaborated, bound);
             if bound.fn_signature.is_some() {
                 continue;
             }
-            let key = self.canonical_decl_key(&bound.name);
-            for inherited in self.tysys.trait_env.supertrait_closure(&key).to_vec() {
+            for inherited in self
+                .tysys
+                .supertraits_of(&self.type_lookup(), &bound.name)
+                .to_vec()
+            {
                 super::trait_env::push_unique_bound(&mut elaborated, &inherited);
             }
         }
         elaborated
     }
 
-    /// [`Self::elaborate_bounds`] projected to trait names, for the callers
-    /// that record bounds as bare names.
-    pub(super) fn elaborate_bound_names(&self, bounds: &[ast::TraitBound]) -> Vec<String> {
-        self.elaborate_bounds(bounds)
-            .into_iter()
-            .map(|b| b.name)
-            .collect()
+    /// [`Self::elaborate_bounds`] over bare trait names.
+    pub(super) fn elaborate_bound_names(&self, names: &[String]) -> Vec<String> {
+        let mut elaborated: Vec<String> = Vec::with_capacity(names.len());
+        for name in names {
+            if !elaborated.contains(name) {
+                elaborated.push(name.clone());
+            }
+            for inherited in self
+                .tysys
+                .supertraits_of(&self.type_lookup(), name)
+                .to_vec()
+            {
+                if !elaborated.contains(&inherited.name) {
+                    elaborated.push(inherited.name);
+                }
+            }
+        }
+        elaborated
     }
 
     /// Register a list of generic parameters as `TypeParam` / `TypePack` ids
@@ -288,13 +294,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // Filter out `fn`/`fn mut` bounds before recording (they're already
             // realised in the bound type itself); only "real" trait bounds need
             // remembering for method lookup.
-            let real_bounds: Vec<ast::TraitBound> = self.elaborate_bounds(
-                &tp.bounds
-                    .iter()
-                    .filter(|b| b.fn_signature.is_none())
-                    .cloned()
-                    .collect::<Vec<_>>(),
-            );
+            let real_bounds: Vec<ast::TraitBound> = tp
+                .bounds
+                .iter()
+                .filter(|b| b.fn_signature.is_none())
+                .cloned()
+                .collect();
             if !real_bounds.is_empty() {
                 self.annotate_ctx
                     .trait_ctx
@@ -351,13 +356,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .type_params
                 .insert(tp.name.clone(), (idx, resolved_arg));
             if !tp.bounds.is_empty() {
-                let bounds = self.elaborate_bounds(&tp.bounds);
                 self.annotate_ctx
                     .trait_ctx
                     .type_param_bounds
                     .entry(tp.name.clone())
                     .or_default()
-                    .extend(bounds);
+                    .extend(tp.bounds.clone());
             }
         }
     }

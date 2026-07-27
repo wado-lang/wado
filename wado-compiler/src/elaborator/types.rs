@@ -277,6 +277,28 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl Sub for T` block whose `T` does not implement one of `Sub`'s
+    /// supertraits. Reported at the impl block: the impl is what promises the
+    /// subtrait, so it is what owes the supertrait.
+    SupertraitNotSatisfied {
+        type_name: String,
+        trait_name: String,
+        supertrait: String,
+        /// Reason chain, as in [`Self::TraitBoundNotSatisfied`].
+        reason: Vec<String>,
+        span: Span,
+    },
+
+    /// A subtrait redeclares a method its supertrait already has. Rust defers
+    /// this to the use site and requires `<T as Trait>::m`; Wado has no
+    /// qualified form, so the declaration is rejected instead.
+    SupertraitMethodCollision {
+        trait_name: String,
+        supertrait: String,
+        method: String,
+        span: Span,
+    },
+
     /// A trait reaches itself through its supertrait clause, so no type could
     /// ever satisfy the obligation. `chain` is the path back to the trait,
     /// starting and ending at it (`A -> B -> A`).
@@ -750,6 +772,34 @@ impl TypeError {
                         "type '{type_name}' does not implement trait '{trait_name}' required by bound on '{param_name}'"
                     ),
                     reason,
+                ),
+                *span,
+            ),
+            TypeError::SupertraitNotSatisfied {
+                type_name,
+                trait_name,
+                supertrait,
+                reason,
+                span,
+            } => (
+                Code::TypeMismatch,
+                append_reason_chain(
+                    format!(
+                        "type '{type_name}' implements trait '{trait_name}' but not its supertrait '{supertrait}'"
+                    ),
+                    reason,
+                ),
+                *span,
+            ),
+            TypeError::SupertraitMethodCollision {
+                trait_name,
+                supertrait,
+                method,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "method '{method}' of trait '{trait_name}' collides with the same method of its supertrait '{supertrait}'"
                 ),
                 *span,
             ),

@@ -500,3 +500,90 @@ export fn run() {
 ",
     );
 }
+
+#[test]
+fn implementing_a_subtrait_requires_its_supertrait() {
+    compile_err_contains(
+        r"
+trait Base {
+    fn base(&self) -> i32;
+}
+
+trait Derived: Base {
+    fn derived(&self) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl Derived for S {
+    fn derived(&self) -> i32 {
+        return self.v;
+    }
+}
+
+export fn run() {
+}
+",
+        "supertrait",
+    );
+}
+
+#[test]
+fn an_indirect_supertrait_is_required_too() {
+    compile_err_contains(
+        r"
+trait Root {
+    fn root(&self) -> i32;
+}
+
+trait Middle: Root {
+    fn middle(&self) -> i32;
+}
+
+trait Leaf: Middle {
+    fn leaf(&self) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl Middle for S {
+    fn middle(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Leaf for S {
+    fn leaf(&self) -> i32 {
+        return self.v;
+    }
+}
+
+export fn run() {
+}
+",
+        "Root",
+    );
+}
+
+#[test]
+fn a_subtrait_may_not_shadow_a_supertrait_method() {
+    compile_err_contains(
+        r"
+trait Base {
+    fn name(&self) -> i32;
+}
+
+trait Derived: Base {
+    fn name(&self) -> i32;
+}
+
+export fn run() {
+}
+",
+        "collides",
+    );
+}

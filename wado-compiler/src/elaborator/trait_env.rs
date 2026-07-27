@@ -527,6 +527,11 @@ pub struct TraitEnv {
     /// Transitive supertraits per trait declaration. See
     /// [`SupertraitClosureIndex`].
     supertrait_closures: SupertraitClosureIndex,
+    /// The same closures keyed by bare trait name, for the uniquely-named
+    /// traits. Prelude-implicit names (`Ord`, `Eq`, …) reach a query through
+    /// no import, so a scoped lookup cannot canonicalise them; a name declared
+    /// exactly once needs no disambiguation anyway.
+    supertrait_closures_by_name: IndexMap<String, Vec<ast::TraitBound>>,
     /// Free-function type parameters keyed by `(declaring module, function
     /// name)`. Lets `lookup_function_type_params` read a callee's type params
     /// without scanning the module AST.
@@ -1059,11 +1064,17 @@ impl TraitEnv {
 
         let mut violations = check_all_orphan_rules(modules, &decl_index, &type_decl_index);
 
+        let resolve_trait = |module: &ModuleSource, name: &str| {
+            decl_index.get(&canonical_key(module, name)).cloned()
+        };
         let (supertrait_closures, cycles) =
-            build_supertrait_closures(&trait_decl_headers, &|module, name| {
-                decl_index.get(&canonical_key(module, name)).cloned()
-            });
+            build_supertrait_closures(&trait_decl_headers, &resolve_trait);
         violations.extend(cycles);
+        violations.extend(check_supertrait_method_collisions(
+            &trait_decl_headers,
+            &supertrait_closures,
+            &resolve_trait,
+        ));
 
         (
             Arc::new(Self {
@@ -1075,6 +1086,10 @@ impl TraitEnv {
                 effect_decl_index,
                 resource_decl_index,
                 impl_headers,
+                supertrait_closures_by_name: index_closures_by_name(
+                    &trait_decl_headers,
+                    &supertrait_closures,
+                ),
                 trait_decl_headers,
                 supertrait_closures,
                 function_type_params,
@@ -1124,6 +1139,15 @@ impl TraitEnv {
         self.decl_index
             .get(key)
             .and_then(|loc| self.supertrait_closures.get(loc))
+            .map_or_else(|| self.supertrait_closure_named(&key.1), Vec::as_slice)
+    }
+
+    /// [`Self::supertrait_closure`] for a caller holding a bare name with no
+    /// import context to canonicalise it. Empty when the name is declared by
+    /// more than one module.
+    pub(super) fn supertrait_closure_named(&self, name: &str) -> &[ast::TraitBound] {
+        self.supertrait_closures_by_name
+            .get(name)
             .map_or(&[], Vec::as_slice)
     }
 
@@ -1657,6 +1681,63 @@ fn expand_supertraits(
 
     closures.insert(loc.clone(), closure.clone());
     closure
+}
+
+/// Re-key the closures by bare trait name, dropping any name more than one
+/// module declares — an ambiguous name must not silently pick a closure.
+fn index_closures_by_name(
+    headers: &IndexMap<TraitDeclLoc, TraitDeclHeader>,
+    closures: &SupertraitClosureIndex,
+) -> IndexMap<String, Vec<ast::TraitBound>> {
+    let mut by_name: IndexMap<String, Option<Vec<ast::TraitBound>>> = IndexMap::default();
+    for (loc, header) in headers {
+        let closure = closures.get(loc).cloned().unwrap_or_default();
+        by_name
+            .entry(header.name.clone())
+            .and_modify(|slot| *slot = None)
+            .or_insert(Some(closure));
+    }
+    by_name
+        .into_iter()
+        .filter_map(|(name, closure)| closure.map(|c| (name, c)))
+        .collect()
+}
+
+/// Reject a subtrait method that redeclares a supertrait's. Method lookup on a
+/// bound picks the first trait that has the name, so a shadowed method would
+/// resolve silently to one of the two with no way to ask for the other.
+fn check_supertrait_method_collisions(
+    headers: &IndexMap<TraitDeclLoc, TraitDeclHeader>,
+    closures: &SupertraitClosureIndex,
+    resolve: ResolveTrait<'_>,
+) -> Vec<(ModuleSource, TypeError)> {
+    let mut collisions = Vec::new();
+    for (loc, header) in headers {
+        let Some(closure) = closures.get(loc).filter(|c| !c.is_empty()) else {
+            continue;
+        };
+        for supertrait in closure {
+            let Some(super_header) =
+                resolve(&loc.0, &supertrait.name).and_then(|l| headers.get(&l))
+            else {
+                continue;
+            };
+            for method in &header.methods {
+                if super_header.methods.iter().any(|m| m.name == method.name) {
+                    collisions.push((
+                        loc.0.clone(),
+                        TypeError::SupertraitMethodCollision {
+                            trait_name: header.name.clone(),
+                            supertrait: super_header.name.clone(),
+                            method: method.name.clone(),
+                            span: header.span,
+                        },
+                    ));
+                }
+            }
+        }
+    }
+    collisions
 }
 
 /// Report the cycle closed by the edge back to `stack[pos]`, attributing it to

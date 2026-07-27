@@ -505,6 +505,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Enforce a trait's supertraits against `impl Trait for T`: `T` must
+    /// implement every trait in the closure, not only the direct ones — a
+    /// supertrait satisfied structurally has no impl block of its own to carry
+    /// the rest of the chain.
+    pub(super) fn enforce_impl_supertraits(&mut self, impl_block: &ast::ImplBlock) {
+        let Some(trait_type) = &impl_block.trait_type else {
+            return;
+        };
+        let trait_name = self.get_type_name(trait_type);
+        let supertraits: Vec<String> = self
+            .tysys
+            .trait_env
+            .supertrait_closure(&self.canonical_decl_key(&trait_name))
+            .iter()
+            .map(|b| b.name.clone())
+            .collect();
+        if supertraits.is_empty() {
+            return;
+        }
+        let self_type = self.resolve_type(&impl_block.ty);
+        for supertrait in supertraits {
+            if self.tysys.type_implements_trait(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                self_type,
+                &supertrait,
+            ) {
+                continue;
+            }
+            let type_name = self.tysys.type_id_to_string(self_type);
+            let reason = self.tysys.trait_unimpl_reason_chain(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                self_type,
+                &supertrait,
+            );
+            let _ = self.emit(TypeError::SupertraitNotSatisfied {
+                type_name,
+                trait_name: trait_name.clone(),
+                supertrait,
+                reason,
+                span: impl_block.span,
+            });
+        }
+    }
+
     /// Find a trait declaration's type parameters (e.g., `<T, U>` in `trait Foo<T, U>`).
     pub(super) fn find_trait_decl_type_params(
         &self,
@@ -725,6 +771,36 @@ impl TypeSystem {
     /// The trait declaration `trait_name` binds to in scope (local, else an
     /// explicit import); `None` when it falls through to the ambient compiler
     /// trait. Lets a same-name user `trait` be distinguished from the compiler's.
+    /// Whether holding `bound_name` also gives `trait_name` — the same trait,
+    /// or one of its supertraits. The single place a declared bound is read as
+    /// its elaborated form, so no registration site can bypass it.
+    pub(super) fn bound_implies(
+        &self,
+        scope: &TypeLookup,
+        bound_name: &str,
+        trait_name: &str,
+    ) -> bool {
+        bound_name == trait_name
+            || self
+                .supertraits_of(scope, bound_name)
+                .iter()
+                .any(|s| s.name == trait_name)
+    }
+
+    /// The transitive supertraits of `trait_name` as seen from `scope`.
+    pub(super) fn supertraits_of(
+        &self,
+        scope: &TypeLookup,
+        trait_name: &str,
+    ) -> &[ast::TraitBound] {
+        match self.scoped_trait_decl_module(scope, trait_name) {
+            Some(module) => self
+                .trait_env
+                .supertrait_closure(&(module.clone(), trait_name.to_string())),
+            None => self.trait_env.supertrait_closure_named(trait_name),
+        }
+    }
+
     fn scoped_trait_decl_module<'a>(
         &self,
         scope: &TypeLookup<'a>,
@@ -958,7 +1034,11 @@ impl TypeSystem {
                 .trait_ctx
                 .type_param_bounds
                 .get(name)
-                .is_some_and(|bounds| bounds.iter().any(|b| b.name == trait_name));
+                .is_some_and(|bounds| {
+                    bounds
+                        .iter()
+                        .any(|b| self.bound_implies(scope, &b.name, trait_name))
+                });
         }
 
         if on_bound == Some(OnBoundTrait::Ref) {
@@ -1423,8 +1503,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         self_type_id: TypeId,
     ) -> Option<(String, MethodInfo)> {
+        let bounds = self.elaborate_bound_names(bounds);
         // Collect trait declarations from all modules
-        for trait_name in bounds {
+        for trait_name in &bounds {
             // Search all loaded modules for the trait declaration
             let mut found_trait_method: Option<(
                 ast::Function,
