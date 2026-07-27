@@ -193,8 +193,8 @@ fn validate_call_sites(project: &NirPackage, mut candidates: IndexSet<FnKey>) ->
     // `scan_node` rejects every candidate used as a `Call` / `MethodCall`.
     for global in &project.globals {
         ctx.scan_node(
-            global.initializer.body(),
-            NodeRef::Block(global.initializer.body().root),
+            global.init.slot_expr().body(),
+            NodeRef::Block(global.init.slot_expr().body().root),
         );
     }
     let ValidateCtx {
@@ -327,7 +327,7 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) -> Vec<usiz
         }
     }
     for global in &mut project.globals {
-        retype_calls(global.initializer.body_mut(), confirmed);
+        retype_calls(global.init.slot_expr_mut().body_mut(), confirmed);
     }
     touched.into_iter().collect()
 }

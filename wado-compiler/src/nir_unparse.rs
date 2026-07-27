@@ -191,12 +191,17 @@ impl<'a> NirUnparser<'a> {
         self.write_indent();
         self.emit_kw_if(g.visibility.is_public(), "pub ");
         self.output.push_str("global ");
-        self.emit_kw_if(g.mutable, "mut ");
+        self.emit_kw_if(g.wado_mutable, "mut ");
         self.output.push_str(&g.name);
         self.output.push_str(": ");
         self.output.push_str(&self.type_table.type_name(g.ty));
-        self.output.push_str(" = ");
-        self.unparse_operand(g.initializer.body(), g.initializer.expr());
+        // A deferred global's expression is the placeholder its storage
+        // starts at, not the value it holds; say so rather than render it
+        // as an initializer.
+        self.output
+            .push_str(if g.init.is_deferred() { " = deferred " } else { " = " });
+        let slot = g.init.slot_expr();
+        self.unparse_operand(slot.body(), slot.expr());
         self.output.push_str(";\n");
     }
 

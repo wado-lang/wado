@@ -134,7 +134,7 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
     // coverage). Benign today — lower hoisting keeps aggregate builders out of
     // initializers — but the coverage is now uniform across every body.
     for global in &project.globals {
-        let body = global.initializer.body();
+        let body = global.init.slot_expr().body();
         validate_uses_in_block(body, body.root, &candidate_ids, &candidates, &mut invalid);
     }
 

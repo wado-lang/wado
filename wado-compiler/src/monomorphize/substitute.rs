@@ -38,7 +38,7 @@ impl Monomorphizer {
         // Rewrite global variable initializers
         for global in &mut module.globals {
             global.ty = rewriter.rewrite_type_id(global.ty);
-            rewriter.visit_expr(&mut global.initializer);
+            rewriter.visit_expr(global.init.slot_expr_mut());
         }
     }
 

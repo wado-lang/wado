@@ -112,7 +112,7 @@ fn run_globals(
     // allocates, so it stays empty.
     let mut no_locals: Vec<crate::nir::NirLocal> = Vec::new();
     for global in globals {
-        let mut engine = Engine::new(global.initializer.body_mut(), buffers, &mut no_locals);
+        let mut engine = Engine::new(global.init.slot_expr_mut().body_mut(), buffers, &mut no_locals);
         engine.set_value_graph_type_table(type_table);
         engine.set_pure_builtin_callees(pure_builtin_callees);
         changed |= engine.run(&[rule]);

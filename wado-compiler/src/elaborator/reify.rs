@@ -70,7 +70,8 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{Receiver, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    self as tir, CallArg, ResolvedType, TirBinaryOp, TirBlock, TirEnum, TirEnumCase, TirExpr,
+    self as tir, CallArg, GlobalInit, ResolvedType, TirBinaryOp, TirBlock, TirEnum, TirEnumCase,
+    TirExpr,
     TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirModule, TirNewtype,
     TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl, TypeId,
     TypeTable,
@@ -1871,15 +1872,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(TirGlobal {
             name: global_decl.name.clone(),
             ty,
-            initializer,
-            mutable: global_decl.mutable,
+            // Every global starts out holding its declared value; `lower`
+            // defers the ones whose value no constant expression can write.
+            init: GlobalInit::Direct(initializer),
             param,
             wado_mutable: global_decl.mutable,
             visibility: global_decl.visibility,
             module_source: self.current_module_source.clone(),
             span: global_decl.span,
-            is_nullable: false,
-            lazy_init: false,
             locals: ctx.locals.clone(),
         })
     }

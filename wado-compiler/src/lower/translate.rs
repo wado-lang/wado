@@ -34,7 +34,7 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::tir;
 use crate::tir::{
-    CallArg, ClosureFunctor, FunctionRef, MonomorphInfo, TirBlock, TirCapture, TirEnum,
+    CallArg, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, TirBlock, TirCapture, TirEnum,
     TirEnumCase, TirExpr, TirExprKind, TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
     TirImport, TirLiteralPattern, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
     TirStmtKind, TirStruct, TirStructField, TirStructPatternField, TirTest, TirTypeParam,
@@ -542,26 +542,28 @@ impl Translator<'_> {
         // Build the initializer directly into the arena, wrapped in a
         // single-`Expr`-statement block — the canonical global-init `Body`
         // shape the optimizer and `wir_build` read via `Body::sole_expr`.
-        let span = global.initializer.span;
-        let init_op = fctx.convert_operand(&global.initializer);
+        let slot = global.init.slot_expr();
+        let span = slot.span;
+        let init_op = fctx.convert_operand(slot);
         let init_stmt = fctx.alloc_stmt(StmtKind::Expr(init_op), span);
         let init_root = fctx.alloc_block(vec![init_stmt], span);
-        let initializer = ExprBody::from_body({
+        let body = ExprBody::from_body({
             let mut body = fctx.arena.into_inner();
             body.root = init_root;
             body
         });
+        let init = match global.init {
+            GlobalInit::Direct(_) => GlobalInit::Direct(body),
+            GlobalInit::Deferred(_) => GlobalInit::Deferred(body),
+        };
         NirGlobal {
             name: global.name.clone(),
             ty: global.ty,
-            initializer,
-            mutable: global.mutable,
+            init,
             wado_mutable: global.wado_mutable,
             visibility: global.visibility,
             module_source: global.module_source.clone(),
             span: global.span,
-            is_nullable: global.is_nullable,
-            lazy_init: global.lazy_init,
             locals: global.locals.iter().map(convert_local).collect(),
             prefer_fixed_string_repr: false,
         }

@@ -633,15 +633,22 @@ fn register_globals(ctx: &mut WirContext<'_>) {
 
         let mut wir_type = ctx.type_id_to_wir_type(type_table, global.ty);
 
-        // For nullable globals (lazy-init reference types, or constant
-        // `null` initialisers on reference-typed globals), widen the WIR
-        // slot to its nullable form so the `ref.null` placeholder in the
-        // Wasm initialiser validates. Both `WirType::Ref` (concrete
-        // struct/array references) and `WirType::AbstractRef` (e.g.
-        // closure-typed globals lowered to abstract `structref`) need
-        // this. Codegen narrows reads back to the non-null type via
-        // `ref.as_non_null` for `lazy_init` globals.
-        if global.is_nullable {
+        // The slot shape follows from how the global is initialized, so it is
+        // derived here rather than carried down from the earlier IRs.
+        //
+        // A deferred reference-typed global starts at `ref.null` and is
+        // assigned before any other code runs, so the slot must accept null
+        // and reads narrow back with `ref.as_non_null`. A global whose
+        // declared value is itself `null` also needs a nullable slot, but its
+        // reads must not narrow — `null` is a value the program observes, and
+        // narrowing would trap on every `None`.
+        let deferred = global.init.is_deferred();
+        let lazy_init = deferred && is_wir_reference(&wir_type);
+        let declared_null = global
+            .init
+            .declared()
+            .is_some_and(|d| is_null_operand(d.body(), d.expr()));
+        if lazy_init || declared_null {
             match &mut wir_type {
                 WirType::Ref { nullable, .. } | WirType::AbstractRef { nullable, .. } => {
                     *nullable = true;
@@ -650,9 +657,11 @@ fn register_globals(ctx: &mut WirContext<'_>) {
             }
         }
 
-        // Convert the initializer to a WIR constant instruction
-        let init_body = global.initializer.body();
-        let init_op = global.initializer.expr();
+        // Convert the slot's initializer — the declared value, or the
+        // placeholder a deferred global starts at — to a WIR constant.
+        let slot = global.init.slot_expr();
+        let init_body = slot.body();
+        let init_op = slot.expr();
         let init = translate_global_init(
             init_body,
             init_op,
@@ -666,15 +675,36 @@ fn register_globals(ctx: &mut WirContext<'_>) {
         ctx.globals.push(WirGlobal {
             name: WirName { fq: global_name },
             ty: wir_type,
-            mutable: global.mutable,
+            // The program may assign a `global mut`; the initialization
+            // function assigns a deferred one. Either makes the slot mutable.
+            mutable: global.wado_mutable || deferred,
             wado_mutable: global.wado_mutable,
             init,
-            lazy_init: global.lazy_init,
+            lazy_init,
             meta: WirMeta {
                 module_source: Some(module_source.clone()),
                 ..WirMeta::default()
             },
         });
+    }
+}
+
+/// Whether the slot holds a reference, which is what makes a placeholder
+/// `ref.null` — and therefore a narrowing read — necessary.
+fn is_wir_reference(ty: &WirType) -> bool {
+    matches!(ty, WirType::Ref { .. } | WirType::AbstractRef { .. })
+}
+
+/// Whether the declared value is `null` itself, rather than a placeholder
+/// standing in for a value assigned elsewhere.
+fn is_null_operand(body: &crate::nir_arena::Body, op: crate::nir_arena::Operand) -> bool {
+    match op {
+        crate::nir_arena::Operand::Value(v) => {
+            matches!(body.values.kind(v), crate::nir_value_graph::ValueKind::Null)
+        }
+        // `null` reaches the pool as a value; nothing builds it as a
+        // skeleton node.
+        crate::nir_arena::Operand::Expr(_) => false,
     }
 }
 

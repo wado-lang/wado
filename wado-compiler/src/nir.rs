@@ -243,37 +243,21 @@ pub fn matches_builtin(name: &str, monomorph_info: Option<&MonomorphInfo>, built
 pub struct NirGlobal {
     pub name: String,
     pub ty: TypeId,
-    /// Initializer expression, wrapped in an [`crate::nir_arena::ExprBody`]
-    /// (a single-`Expr`-statement arena `Body`; read it via `.expr()`).
-    /// Arena-shaped like function bodies so the optimizer passes share one
-    /// representation.
-    pub initializer: crate::nir_arena::ExprBody,
-    pub mutable: bool,
-    /// Whether the user declared this global as `global mut`.
-    /// Preserved across lowering so the optimizer can promote lazy-init globals
-    /// back to immutable when their initializers fold to constants.
+    /// How the storage gets its value: the declared initializer, or a
+    /// placeholder plus an assignment from the module's initialization
+    /// function. Either way the expression is an
+    /// [`crate::nir_arena::ExprBody`] (a single-`Expr`-statement arena `Body`;
+    /// read it via `.expr()`), arena-shaped like function bodies so the
+    /// optimizer passes share one representation.
+    pub init: crate::tir::GlobalInit<crate::nir_arena::ExprBody>,
+    /// Whether the program may assign to this global — `global mut`. The Wasm
+    /// slot's own mutability is wider (a deferred global is assigned by its
+    /// initialization function) and is derived when the module is built.
     pub wado_mutable: bool,
     pub visibility: crate::ast::Visibility,
     /// Module where this global is defined
     pub module_source: ModuleSource,
     pub span: Span,
-    /// True if this global's Wasm type should be nullable.
-    /// Set by the lower phase for two distinct cases:
-    /// 1. Lazy-initialized reference globals — the slot starts `null`
-    ///    until `__initialize_module` runs, so the storage must accept
-    ///    `ref.null`. (`lazy_init` is also set in this case.)
-    /// 2. Constant-initialized reference globals whose user-facing
-    ///    initializer is `null` (e.g. `global mut x: Option<&T> = null`)
-    ///    — the slot needs to accept `ref.null` because that IS the
-    ///    intended runtime value. (`lazy_init` stays false.)
-    pub is_nullable: bool,
-    /// True when this global is lazy-initialized: the Wasm slot starts
-    /// `null`, and `__initialize_module` runs the original (non-constant)
-    /// initializer to assign the real value before any non-init use.
-    ///
-    /// `false` for constant-initialized globals, including
-    /// `Option<&T> = null` whose `null` is itself the runtime value.
-    pub lazy_init: bool,
     /// Per-local metadata for the initializer expression. Populated when
     /// the initializer is non-trivial (e.g., `SequenceLiteralBuilder`
     /// coercion). Indexed by local index, like `NirFunction::locals`.

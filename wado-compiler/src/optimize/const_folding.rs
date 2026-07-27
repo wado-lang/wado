@@ -324,20 +324,26 @@ fn build_global_env(
     let mut env = GlobalEnv::default();
     for global in &project.globals {
         let key = (global.module_source.clone(), global.name.clone());
-        let lattice = if global.mutable {
-            Lattice::NonConst
-        } else {
-            // The initializer runs at module scope: no local env, but
-            // it may call pure functions and read previously-declared
-            // globals. Threading `&env` in lets `global B = A + 1;`
-            // fold once `A` has been recorded earlier in this loop.
-            let mut interp = Interpreter::new(type_table);
-            interp.with_callees(callees);
-            interp.with_globals(&env);
-            let body = global.initializer.body();
-            match global.initializer.expr() {
-                Operand::Expr(e) => interp.reduce_to_lattice_a(body, e),
-                op @ Operand::Value(_) => interp.operand_to_lattice_a(body, op),
+        // A `global mut` can be reassigned, and a deferred global's storage
+        // holds a placeholder rather than its value — neither is something to
+        // read a constant out of. `NonConst` rather than absent, so a parent
+        // fold like `GLOBAL + 1` reports non-constant instead of unevaluated.
+        let declared = (!global.wado_mutable).then(|| global.init.declared()).flatten();
+        let lattice = match declared {
+            None => Lattice::NonConst,
+            Some(declared) => {
+                // The initializer runs at module scope: no local env, but
+                // it may call pure functions and read previously-declared
+                // globals. Threading `&env` in lets `global B = A + 1;`
+                // fold once `A` has been recorded earlier in this loop.
+                let mut interp = Interpreter::new(type_table);
+                interp.with_callees(callees);
+                interp.with_globals(&env);
+                let body = declared.body();
+                match declared.expr() {
+                    Operand::Expr(e) => interp.reduce_to_lattice_a(body, e),
+                    op @ Operand::Value(_) => interp.operand_to_lattice_a(body, op),
+                }
             }
         };
         if !matches!(lattice, Lattice::Unevaluated) {
@@ -440,8 +446,9 @@ fn build_global_field_env(project: &NirPackage) -> GlobalFieldEnv {
     // direct source.
     for global in &project.globals {
         if !global.wado_mutable
-            && let Some(init_e) = global.initializer.expr().as_expr()
-            && let Some(n) = const_seq_len_a(global.initializer.body(), init_e)
+            && let Some(declared) = global.init.declared()
+            && let Some(init_e) = declared.expr().as_expr()
+            && let Some(n) = const_seq_len_a(declared.body(), init_e)
         {
             record_seq_len(
                 &mut env,

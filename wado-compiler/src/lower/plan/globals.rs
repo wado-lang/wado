@@ -8,8 +8,9 @@ use crate::flat_package::FlatPackage;
 use crate::module_source::ModuleSource;
 use crate::tir::FunctionRef;
 use crate::tir::{
-    FunctionKind, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
-    TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    FunctionKind, GlobalInit, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirGlobal, TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -41,17 +42,6 @@ fn is_constant_initializer(expr: &TirExpr) -> bool {
     }
 }
 
-/// Check if an expression is a `null` initializer (possibly inside casts).
-/// Used to mark reference-typed globals nullable when their constant
-/// initializer is `ref.null`, since a non-null Wasm global slot can't
-/// accept a `ref.null` initializer.
-fn is_null_initializer(expr: &TirExpr) -> bool {
-    match &expr.kind {
-        TirExprKind::Null => true,
-        TirExprKind::Cast { expr: inner, .. } => is_null_initializer(inner),
-        _ => false,
-    }
-}
 
 /// Create a default value expression for a type (used for lazy-initialized globals)
 fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
@@ -123,14 +113,6 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
     }
 }
 
-/// Check if a type is a reference type (needs nullable Wasm type for lazy init)
-fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    match type_table.get(type_id) {
-        ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never => false,
-        // Struct, List, String, etc. are reference types in Wasm GC
-        _ => true,
-    }
-}
 
 /// Extract non-constant global initializers into a per-module
 /// `__initialize_module` function (one per source module; the
@@ -152,44 +134,27 @@ pub fn extract(flat: &mut FlatPackage) {
         Vec::new();
 
     for (idx, global) in flat.globals.iter_mut().enumerate() {
-        if !is_constant_initializer(&global.initializer) {
-            // Save the original initializer with index and local types
-            lazy_inits.push((
-                idx,
-                global.name.clone(),
-                global.module_source.clone(),
-                global.ty,
-                global.initializer.clone(),
-                global.locals.clone(),
-            ));
-            // Replace with default value
-            global.initializer = default_value_for_type(global.ty, &type_table, global.span);
-            // Lazy-init globals must be Wasm-mutable (even if Wado-immutable)
-            global.mutable = true;
-            // Reference types need nullable Wasm type for lazy init,
-            // and codegen narrows reads (`global.get` followed by
-            // `ref.as_non_null`) since the slot is guaranteed non-null
-            // after `__initialize_module` runs.
-            if is_reference_type(global.ty, &type_table) {
-                global.is_nullable = true;
-                global.lazy_init = true;
-            }
-        } else if is_null_initializer(&global.initializer)
-            && is_reference_type(global.ty, &type_table)
-        {
-            // Constant `null` initializer for a reference-typed global.
-            // The Wasm initializer is `ref.null`, which only validates
-            // against a nullable global slot. Without this, the global's
-            // WIR type stays `(ref X)` non-null and the linker rejects
-            // the module with `expected (ref X), found nullref`.
-            //
-            // Codegen does NOT narrow reads of these globals: `null` is
-            // a legitimate runtime value (e.g. `Option<&T>::None`), so
-            // wrapping `global.get` in `ref.as_non_null` would trap
-            // every time we read a `None` value back. `lazy_init` stays
-            // false so the codegen narrowing path is skipped.
-            global.is_nullable = true;
+        if is_constant_initializer(global.init.slot_expr()) {
+            continue;
         }
+        // The declared value needs code to produce, so it moves into the
+        // module's initialization function and the storage keeps a
+        // placeholder. The move is what stops the two from drifting apart:
+        // the global no longer claims a value it does not hold.
+        let placeholder = default_value_for_type(global.ty, &type_table, global.span);
+        let GlobalInit::Direct(declared) =
+            std::mem::replace(&mut global.init, GlobalInit::Deferred(placeholder))
+        else {
+            panic!("a global is Direct until this pass defers it");
+        };
+        lazy_inits.push((
+            idx,
+            global.name.clone(),
+            global.module_source.clone(),
+            global.ty,
+            declared,
+            global.locals.clone(),
+        ));
     }
 
     drop(type_table);
@@ -689,15 +654,16 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
     let init_flag_global = TirGlobal {
         name: "__modules_initialized".to_string(),
         ty: TypeTable::BOOL,
-        initializer: TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, span),
-        mutable: true,
+        init: GlobalInit::Direct(TirExpr::new(
+            TirExprKind::BoolLiteral(false),
+            TypeTable::BOOL,
+            span,
+        )),
         param: None,
         wado_mutable: true,
         visibility: crate::ast::Visibility::Private,
         module_source: entry_source.clone(),
         span,
-        is_nullable: false,
-        lazy_init: false,
         locals: Vec::new(),
     };
     flat.globals.push(init_flag_global);

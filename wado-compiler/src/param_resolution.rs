@@ -170,7 +170,8 @@ pub fn resolve_params<H: CompilerHost>(
         if let Some(literal) =
             convert_builtin(trimmed, global.ty, &builtins, &type_table, global.span)
         {
-            global.initializer = literal;
+            // A resolved parameter is a literal, so the storage can hold it.
+            global.init = crate::tir::GlobalInit::Direct(literal);
         } else {
             let type_name = type_table.borrow().type_name(global.ty);
             let origin = match &from_env_name {
