@@ -1189,13 +1189,45 @@ pub(crate) fn receiver_satisfies_blanket_bounds_inner(
     if bounds.is_empty() {
         return true;
     }
-    let reflect_name = tt.compiler_items().trait_name(CompilerItem::ReflectStruct);
+    let items = tt.compiler_items();
+    let struct_name = items.trait_name(CompilerItem::ReflectStruct).to_string();
+    let variant_name = items.trait_name(CompilerItem::ReflectVariant).to_string();
+    let enum_name = items.trait_name(CompilerItem::ReflectEnum).to_string();
+    let flags_name = items.trait_name(CompilerItem::ReflectFlags).to_string();
     for bound in bounds {
-        if bound == reflect_name && !type_is_reflect(type_id, tt, allow_pre_reflect_struct) {
+        // A type is exactly one reflection kind, so each `Reflect*` bound is
+        // decided by the receiver's kind. Deciding only `ReflectStruct` would
+        // let the other three kinds' derivations claim any receiver at all.
+        let holds = if *bound == struct_name {
+            type_is_reflect(type_id, tt, allow_pre_reflect_struct)
+        } else if *bound == variant_name {
+            type_is_declared_variant(type_id, tt)
+        } else if *bound == enum_name {
+            matches!(tt.get(type_id), ResolvedType::Enum { .. })
+        } else if *bound == flags_name {
+            matches!(tt.get(type_id), ResolvedType::Flags { .. })
+        } else {
+            true
+        };
+        if !holds {
             return false;
         }
     }
     true
+}
+
+/// Whether `type_id` is spelled from a variant declaration. A `GenericInstance`
+/// counts: `Option<i32>` is a variant because `Option` is.
+fn type_is_declared_variant(type_id: TypeId, tt: &TypeTable) -> bool {
+    match tt.get(type_id) {
+        ResolvedType::Variant { .. } => true,
+        ResolvedType::GenericInstance {
+            name,
+            module_source,
+            ..
+        } => tt.find_variant_type(name, module_source).is_some(),
+        _ => false,
+    }
 }
 
 fn type_is_reflect(type_id: TypeId, tt: &TypeTable, allow_pre_reflect_struct: bool) -> bool {
@@ -1277,29 +1309,27 @@ pub(crate) fn blanket_dispatch_for(
         return None;
     }
     let type_module = type_module_hint_tt(type_id, tt);
-    let blanket_module = trait_env
-        .blanket_impl_module_for_trait(trait_name, type_module.as_ref())?
-        .clone();
-    if !receiver_satisfies_blanket_bounds_inner(
-        type_id,
-        &trait_env
-            .blanket_impl_bounds_for_trait(trait_name, Some(&blanket_module))
-            .unwrap_or_default(),
-        tt,
-        allow_pre_reflect_struct,
-    ) {
-        return None;
-    }
-    let param = trait_env.blanket_impl_param_for_trait(trait_name, Some(&blanket_module))?;
-    let generic_name =
-        LocalMethodName::new(param, Some(trait_name.to_string()), method_name.to_string())
-            .to_mangled_name();
+    // The four reflection kinds each derive over their own `Reflect*` bound, so
+    // the blanket is chosen by which one the receiver satisfies — not by
+    // registration order. Param and pack projections must come from that same
+    // blanket, or the template name would name one kind and the args another.
+    let blanket = trait_env.value_blanket_for_receiver(trait_name, type_module.as_ref(), &|bounds| {
+        receiver_satisfies_blanket_bounds_inner(type_id, bounds, tt, allow_pre_reflect_struct)
+    })?;
+    let blanket_module = blanket.module.clone();
+    let generic_name = LocalMethodName::new(
+        blanket.param.clone(),
+        Some(trait_name.to_string()),
+        method_name.to_string(),
+    )
+    .to_mangled_name();
     let mut impl_type_args = vec![type_id];
-    if let Some(fields) =
-        tt.resolve_assoc_type(type_id, crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC)
-    {
-        impl_type_args.push(fields);
-    }
+    impl_type_args.extend(
+        trait_env
+            .pack_assocs_of_blanket(blanket)
+            .iter()
+            .filter_map(|assoc| tt.resolve_assoc_type(type_id, assoc)),
+    );
     Some((
         MonomorphInfo {
             generic_name,

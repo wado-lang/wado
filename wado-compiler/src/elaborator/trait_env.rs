@@ -1228,6 +1228,30 @@ impl TraitEnv {
     /// never dispatch a value receiver. The `blanket_impl_{param,bounds,arity}`
     /// projections below all read the same selected blanket, so they stay
     /// mutually consistent.
+    /// The value blanket for `trait_name` whose receiver-param bounds `satisfies`
+    /// accepts. A trait may carry several disjoint value blankets — the four
+    /// reflection kinds each derive `Inspect` over their own `Reflect*` bound —
+    /// so a receiver-blind first-wins selection would hand every receiver the
+    /// first-registered kind and then reject it on the bound check.
+    pub(crate) fn value_blanket_for_receiver(
+        &self,
+        trait_name: &str,
+        type_module: Option<&ModuleSource>,
+        satisfies: &dyn Fn(&[String]) -> bool,
+    ) -> Option<&BlanketImpl> {
+        let impls = self.blanket_impls.get(trait_name)?;
+        let mut values = impls
+            .iter()
+            .filter(|b| b.receiver == BlanketReceiver::Value)
+            .filter(|b| satisfies(&b.bounds));
+        if let Some(hint) = type_module
+            && let Some(b) = values.clone().find(|b| &b.module == hint)
+        {
+            return Some(b);
+        }
+        values.next()
+    }
+
     fn value_blanket_for_trait(
         &self,
         trait_name: &str,
@@ -1295,6 +1319,12 @@ impl TraitEnv {
         let Some(blanket) = self.value_blanket_for_trait(trait_name, type_module) else {
             return Vec::new();
         };
+        self.pack_assocs_of_blanket(blanket)
+    }
+
+    /// [`Self::blanket_projected_pack_assocs`] for a caller that already
+    /// selected the blanket (see [`Self::value_blanket_for_receiver`]).
+    pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<String> {
         let Some(header) = self
             .impl_headers
             .get(&(blanket.module.clone(), blanket.ast_id))

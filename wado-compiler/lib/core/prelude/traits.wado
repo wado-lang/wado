@@ -752,11 +752,11 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for T {
 
 /// Enum debug formatting derived over `ReflectEnum` (WEP 2026-06-13): find the
 /// live case and write `Name::Case`.
-impl<T: ReflectEnum<Members = [..M]>, ..M> Inspect for T {
+impl<E: ReflectEnum<Members = [..M]>, ..M> Inspect for E {
     fn inspect(&self, f: &mut Formatter) {
-        for let case of ReflectEnum::<T>::members() {
+        for let case of ReflectEnum::<E>::members() {
             if case.holds(self) {
-                f.write_str(&ReflectEnum::<T>::type_name());
+                f.write_str(&ReflectEnum::<E>::type_name());
                 f.write_str(&"::");
                 f.write_str(&case.name());
             }
@@ -766,11 +766,11 @@ impl<T: ReflectEnum<Members = [..M]>, ..M> Inspect for T {
 
 /// Variant debug formatting derived over `ReflectVariant` (WEP 2026-06-13):
 /// write `Name::Case`, then the payload in parens unless the case is unit.
-impl<T: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> Inspect for T {
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> Inspect for V {
     fn inspect(&self, f: &mut Formatter) {
-        for let case of ReflectVariant::<T>::members() {
+        for let case of ReflectVariant::<V>::members() {
             if case.holds(self) {
-                f.write_str(&ReflectVariant::<T>::type_name());
+                f.write_str(&ReflectVariant::<V>::type_name());
                 f.write_str(&"::");
                 f.write_str(&case.name());
                 if !case.is_unit() {
@@ -785,22 +785,22 @@ impl<T: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> Inspect for T {
 
 /// Flags debug formatting derived over `ReflectFlags` (WEP 2026-06-13): the set
 /// bits joined by ` | `, or `Name::none()` when no bit is set.
-impl<T: ReflectFlags<Members = [..M]>, ..M> Inspect for T {
+impl<L: ReflectFlags<Members = [..M]>, ..M> Inspect for L {
     fn inspect(&self, f: &mut Formatter) {
         let mut wrote_bit = false;
-        for let bit of ReflectFlags::<T>::members() {
+        for let bit of ReflectFlags::<L>::members() {
             if bit.is_set(self) {
                 if wrote_bit {
                     f.write_str(&" | ");
                 }
-                f.write_str(&ReflectFlags::<T>::type_name());
+                f.write_str(&ReflectFlags::<L>::type_name());
                 f.write_str(&"::");
                 f.write_str(&bit.name());
                 wrote_bit = true;
             }
         }
         if !wrote_bit {
-            f.write_str(&ReflectFlags::<T>::type_name());
+            f.write_str(&ReflectFlags::<L>::type_name());
             f.write_str(&"::none()");
         }
     }
