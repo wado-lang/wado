@@ -302,3 +302,56 @@ test "rule_follow: terminates on left recursion" {
     assert fs_e.kinds.contains("TK_EOF");
     assert fs_e.kinds.contains("TK_PLUS");
 }
+
+fn star(elem: Element) -> Element {
+    return Element::Repeat(RepeatElement {
+        kind: RepeatKind::Star,
+        element: elem,
+        non_greedy: false,
+    });
+}
+
+test "rule_follow: an optional's callee does not receive the inner's own FIRST" {
+    // r : A a? B ;   // a cannot repeat, so FOLLOW(a) = {B} — never {X}.
+    // a : X ;
+    let rules: List<ParserRule> = [
+        mk_rule("r", [
+            alt([
+                tk("A"),
+                opt(rr("a")),
+                tk("B"),
+            ]),
+        ]),
+        mk_rule("a", [alt([tk("X")])]),
+    ];
+    let mut ctx = mk_ctx(&rules);
+    let start = "r";
+    let env = build(&rules, &mut ctx, &start);
+    let a = "a";
+    let fs_a = env.rule_follow(&a);
+    assert fs_a.kinds.contains("TK_B"), "FOLLOW(a) must include the token after the optional";
+    assert !fs_a.kinds.contains("TK_X"), "an optional cannot iterate, so FIRST(a) must not leak into FOLLOW(a)";
+}
+
+test "rule_follow: a star's callee does receive the inner's own FIRST" {
+    // r : A a* B ;   // another iteration can follow, so FOLLOW(a) ⊇ {X, B}.
+    // a : X ;
+    let rules: List<ParserRule> = [
+        mk_rule("r", [
+            alt([
+                tk("A"),
+                star(rr("a")),
+                tk("B"),
+            ]),
+        ]),
+        mk_rule("a", [alt([tk("X")])]),
+    ];
+    let mut ctx = mk_ctx(&rules);
+    let start = "r";
+    let env = build(&rules, &mut ctx, &start);
+    let a = "a";
+    let fs_a = env.rule_follow(&a);
+    assert fs_a.kinds.contains("TK_B");
+    assert fs_a.kinds.contains("TK_X"), "a star iteration follows itself";
+}
+
