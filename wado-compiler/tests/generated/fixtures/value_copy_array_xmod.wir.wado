@@ -159,10 +159,7 @@ global mut global:value_copy_array_xmod.wado::__const_obj_18: ref null "core:pre
 
 fn "value_copy_array_xmod.wado/__test_0_bare_array_of_same_named_cross_module_structs_keeps_distinct_copy_helpers"() {
     let arr_a: ref "Array<./sub/value_copy_array_xmod_a.wado/Foo>";
-    let __b_1: ref "core:prelude//List<i32>";
     let arr_b: ref "Array<./sub/value_copy_array_xmod_b.wado/Foo>";
-    let __b_3: ref "core:prelude//List<i32>";
-    let __b_4: ref "core:prelude//List<i32>";
     let a2: ref "Array<./sub/value_copy_array_xmod_a.wado/Foo>";
     let b2: ref "Array<./sub/value_copy_array_xmod_b.wado/Foo>";
     let __v0_7: i32;
@@ -184,10 +181,10 @@ fn "value_copy_array_xmod.wado/__test_0_bare_array_of_same_named_cross_module_st
     let self_56: ref "core:prelude//List<i32>";
     let self_59: ref "core:prelude//List<i32>";
     arr_a = builtin::array_new<ref "./sub/value_copy_array_xmod_a.wado//Foo">(1);
-    value_25 = struct.new "./sub/value_copy_array_xmod_a.wado//Foo" { a: ref.as_non_null(__b_1 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }; __b_1) };
+    value_25 = struct.new "./sub/value_copy_array_xmod_a.wado//Foo" { a: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 } };
     builtin::array_set<ref "./sub/value_copy_array_xmod_a.wado//Foo">(arr_a, 0, value_25);
     arr_b = builtin::array_new<ref "./sub/value_copy_array_xmod_b.wado//Foo">(1);
-    value_33 = struct.new "./sub/value_copy_array_xmod_b.wado//Foo" { b: ref.as_non_null(__b_3 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(2), used: 1 }; __b_3), c: ref.as_non_null(__b_4 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3), used: 1 }; __b_4) };
+    value_33 = struct.new "./sub/value_copy_array_xmod_b.wado//Foo" { b: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(2), used: 1 }, c: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3), used: 1 } };
     builtin::array_set<ref "./sub/value_copy_array_xmod_b.wado//Foo">(arr_b, 0, value_33);
     a2 = builtin::array_clone_deep<ref "./sub/value_copy_array_xmod_a.wado//Foo">(arr_a);
     b2 = builtin::array_clone_deep<ref "./sub/value_copy_array_xmod_b.wado//Foo">(arr_b);

@@ -228,7 +228,7 @@ fn "value_copy_variant_recursive.wado/__test_0_recursive_struct_copy_is_deep"() 
 }
 
 fn "value_copy_variant_recursive.wado/__test_1_recursive_variant_copy_is_deep"() {
-    let __b: ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>";
+    let leaves: ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>";
     let a: ref "core:prelude/types.wado//Box<value_copy_variant_recursive.wado/Tree>";
     let b: ref "core:prelude/types.wado//Box<value_copy_variant_recursive.wado/Tree>";
     let children_4: ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>";
@@ -243,8 +243,8 @@ fn "value_copy_variant_recursive.wado/__test_1_recursive_variant_copy_is_deep"()
     let v_24: ref "value_copy_variant_recursive.wado//Tree";
     let __vc_payload_0: ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>";
     let __vc_payload_1: i32;
-    __b = struct.new "core:prelude//List<value_copy_variant_recursive.wado/Tree>" { repr: array.new_fixed<ref "value_copy_variant_recursive.wado//Tree">(struct.new "value_copy_variant_recursive.wado//Tree::Leaf" { discriminant: 1, payload_0: 1 }), used: 1 };
-    a = struct.new "core:prelude/types.wado//Box<value_copy_variant_recursive.wado/Tree>" { value: struct.new "value_copy_variant_recursive.wado//Tree::Branch" { discriminant: 0, payload_0: struct.new "core:prelude//List<value_copy_variant_recursive.wado/Tree>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "value_copy_variant_recursive.wado//Tree">(__b.repr)), used: 1 } } };
+    leaves = struct.new "core:prelude//List<value_copy_variant_recursive.wado/Tree>" { repr: array.new_fixed<ref "value_copy_variant_recursive.wado//Tree">(struct.new "value_copy_variant_recursive.wado//Tree::Leaf" { discriminant: 1, payload_0: 1 }), used: 1 };
+    a = struct.new "core:prelude/types.wado//Box<value_copy_variant_recursive.wado/Tree>" { value: struct.new "value_copy_variant_recursive.wado//Tree::Branch" { discriminant: 0, payload_0: struct.new "core:prelude//List<value_copy_variant_recursive.wado/Tree>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "value_copy_variant_recursive.wado//Tree">(leaves.repr)), used: 1 } } };
     b = struct.new "core:prelude/types.wado//Box<value_copy_variant_recursive.wado/Tree>" { value: ref.as_non_null(v_24 = a.value; (if ref.test "value_copy_variant_recursive.wado//Tree::Branch"(v_24) -> ref "value_copy_variant_recursive.wado//Tree" {
         __vc_payload_0 = ref.cast "value_copy_variant_recursive.wado//Tree::Branch"(v_24).payload_0;
         struct.new "value_copy_variant_recursive.wado//Tree::Branch" { discriminant: 0, payload_0: struct.new "core:prelude//List<value_copy_variant_recursive.wado/Tree>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "value_copy_variant_recursive.wado//Tree">(__vc_payload_0.repr)), used: __vc_payload_0.used } };

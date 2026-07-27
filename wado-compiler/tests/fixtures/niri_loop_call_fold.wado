@@ -1,0 +1,70 @@
+// A pure callee containing a loop is run at compile time: the call folds to a
+// literal and the callee drops as unused.
+//
+// No constant trip count is required: the engine runs the loop under a work
+// budget, so a loop that does not finish in time leaves the call in place —
+// `runaway` outruns the budget and must survive to run time.
+//
+// `#[inline(never)]` keeps the inliner away, so the fold is attributable to
+// niri.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn triangular(n: i32) -> i32 {
+    let mut acc = 0;
+    let mut i = 1;
+    while i <= n {
+        acc += i;
+        i += 1;
+    }
+    return acc;
+}
+
+// A `for` loop with an early exit, so the break path is exercised too.
+#[inline(never)]
+fn first_multiple_over(limit: i32, step: i32) -> i32 {
+    for let mut i = step; i < 10000; i += step {
+        if i > limit {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Long enough that the engine gives up and the call stays.
+#[inline(never)]
+fn runaway(n: i32) -> i32 {
+    let mut acc = 0;
+    let mut i = 0;
+    while i < n {
+        acc += i;
+        i += 1;
+    }
+    return acc;
+}
+
+export fn run() with Stdout {
+    let a = triangular(10);
+    let b = first_multiple_over(20, 7);
+    let c = runaway(builtin::black_box(50000));
+    if a != 55 {
+        panic("dead_loop_triangular_71442");
+    }
+    if b != 21 {
+        panic("dead_loop_break_71442");
+    }
+    println(`${a} ${b} ${c}`);
+}
+
+__DATA__
+{
+    "stdout": "55 21 1249975000\n",
+    "wir_not_expect:O2": [
+        "dead_loop_triangular_71442",
+        "dead_loop_break_71442",
+        "triangular",
+        "first_multiple_over"
+    ],
+    "wir_expect:O2": ["runaway"]
+}

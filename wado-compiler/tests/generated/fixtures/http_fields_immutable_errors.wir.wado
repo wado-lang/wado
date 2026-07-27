@@ -503,7 +503,7 @@ fn "http_fields_immutable_errors.wado/handle"(request) {
     let headers: i32;
     let append_result: ref null "wasi:http/types.wado//HeaderError";
     let __cond_5: bool;
-    let __b: ref "core:prelude//List<core:prelude/list.wado/List<u8>>";
+    let values: ref "core:prelude//List<core:prelude/list.wado/List<u8>>";
     let set_result: ref null "wasi:http/types.wado//HeaderError";
     let __cond_9: bool;
     let delete_result: ref null "wasi:http/types.wado//HeaderError";
@@ -675,8 +675,8 @@ fn "http_fields_immutable_errors.wado/handle"(request) {
         "core:rt/panic"(__local_25 = "core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/String::push_str"(__local_25, global:http_fields_immutable_errors.wado::__const_obj_2); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_25, 104); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_25, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_25, 110); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_25, 100); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_25, 108); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_25, 101); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_25, 32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_25, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_25, 116); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_25, 32); "core:prelude/string.wado/String::push_str"(__local_25, global:http_fields_immutable_errors.wado::__const_obj_1); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_25, 58); __local_26 = "core:prelude/format.wado/Formatter::new"(__local_25); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 27 }, __local_26); "core:prelude/string.wado/String::push_str"(__local_25, global:http_fields_immutable_errors.wado::__const_obj_12); __local_25);
         unreachable;
     }
-    __b = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: array.new_fixed<ref "core:prelude//List<u8>">(self_196 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_fixed<u8>(118, 97, 108), used: 3, index: 0 }; "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(self_196)), used: 1 };
-    set_result = "http_fields_immutable_errors.wado/__cm_binding__Fields_set"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 111, 115, 116), used: 4 }, __b);
+    values = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: array.new_fixed<ref "core:prelude//List<u8>">(self_196 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_fixed<u8>(118, 97, 108), used: 3, index: 0 }; "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(self_196)), used: 1 };
+    set_result = "http_fields_immutable_errors.wado/__cm_binding__Fields_set"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 111, 115, 116), used: 4 }, values);
     __cond_9 = ref.is_null(set_result) == 0;
     if @unlikely(__cond_9 == 0) {
         cold_path;
@@ -2172,12 +2172,12 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
 }
 
 fn "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(iter) {
-    let __b: ref "core:prelude//List<u8>";
+    let result: ref "core:prelude//List<u8>";
     let byte: u8;
     let _licm_used_12: i32;
     let _licm_repr_13: ref Array<u8>;
     let __hfs_index_14: i32;
-    __b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
     _licm_used_12 = iter.used;
     _licm_repr_13 = iter.repr;
     __hfs_index_14 = iter.index;
@@ -2189,11 +2189,11 @@ fn "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.
             }
             byte = builtin::array_get<u8>(_licm_repr_13, __hfs_index_14);
             __hfs_index_14 = __hfs_index_14 + 1;
-            "core:prelude/list.wado/List<u8>::push"(__b, byte);
+            "core:prelude/list.wado/List<u8>::push"(result, byte);
             continue l223;
         };
     };
-    return __b;
+    return result;
 }
 
 fn "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(self) {

@@ -97,7 +97,7 @@ pub(super) fn build_ref_elim(body: &Body) -> RefElimRule {
     }
 
     let mut deref: IndexMap<u32, DerefOnlyRef> = IndexMap::default();
-    deref_collect_block(body, body.root, &mut deref);
+    deref_collect_block(body, body.root, &rebound, &mut deref);
     // Only eliminate refs still eliminable AND used exactly once via `*r`;
     // multi-use elision would duplicate the source literal at every site.
     let deref_sources = deref
@@ -601,35 +601,37 @@ fn analyze_expr(
 // Deref-only elision: `let r = &StructLit; ... *r ...` → inline the literal.
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Tracking state for `let r = &struct_or_tuple_literal` where r is only used
-/// as `*r`.
+/// A local bound to a freshly built aggregate and only ever read back through
+/// `*x`. Freshness is what makes moving the literal to the deref sound.
 struct DerefOnlyRef {
-    /// The arena id of the source struct / tuple literal from `let r = &source`.
     source_e: ExprId,
-    /// True until a non-deref use is found.
     eliminable: bool,
-    /// Number of times r is used as `*r`.
     use_count: u32,
 }
 
-fn deref_collect_block(body: &Body, block: BlockId, refs: &mut IndexMap<u32, DerefOnlyRef>) {
+fn deref_collect_block(
+    body: &Body,
+    block: BlockId,
+    rebound: &IndexSet<u32>,
+    refs: &mut IndexMap<u32, DerefOnlyRef>,
+) {
     for s in &body.blocks[block].stmts {
-        deref_collect_stmt(body, *s, refs);
+        deref_collect_stmt(body, *s, rebound, refs);
     }
 }
 
-fn deref_collect_stmt(body: &Body, stmt: StmtId, refs: &mut IndexMap<u32, DerefOnlyRef>) {
+fn deref_collect_stmt(
+    body: &Body,
+    stmt: StmtId,
+    rebound: &IndexSet<u32>,
+    refs: &mut IndexMap<u32, DerefOnlyRef>,
+) {
     if let StmtKind::Let {
         local_index, value, ..
     } = &body.stmts[stmt].kind
+        && !rebound.contains(local_index)
         && let Some(ve) = value.as_expr()
-        && let ExprKind::Unary { op, expr } = &body.exprs[ve].kind
-        && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-        && let Some(src_e) = expr.as_expr()
-        && matches!(
-            body.exprs[src_e].kind,
-            ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
-        )
+        && let Some(src_e) = deref_only_source(body, ve)
     {
         refs.insert(
             *local_index,
@@ -643,32 +645,66 @@ fn deref_collect_stmt(body: &Body, stmt: StmtId, refs: &mut IndexMap<u32, DerefO
     let mut kids = Vec::new();
     body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
     for c in kids {
-        deref_collect_node(body, c, refs);
+        deref_collect_node(body, c, rebound, refs);
     }
 }
 
-fn deref_collect_node(body: &Body, node: NodeRef, refs: &mut IndexMap<u32, DerefOnlyRef>) {
+/// The freshly built aggregate a `let` binds, either as `&Literal` or as the
+/// literal itself.
+fn deref_only_source(body: &Body, value_e: ExprId) -> Option<ExprId> {
+    let candidate = match &body.exprs[value_e].kind {
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr,
+        } => expr.as_expr()?,
+        _ => value_e,
+    };
+    matches!(
+        body.exprs[candidate].kind,
+        ExprKind::StructLiteral { .. }
+            | ExprKind::TupleLiteral { .. }
+            | ExprKind::ArrayLiteral { .. }
+    )
+    .then_some(candidate)
+}
+
+fn deref_collect_node(
+    body: &Body,
+    node: NodeRef,
+    rebound: &IndexSet<u32>,
+    refs: &mut IndexMap<u32, DerefOnlyRef>,
+) {
     match node {
-        NodeRef::Expr(id) => deref_collect_expr(body, id, refs),
-        NodeRef::Block(b) => deref_collect_block(body, b, refs),
-        NodeRef::Stmt(s) => deref_collect_stmt(body, s, refs),
+        NodeRef::Expr(id) => deref_collect_expr(body, id, rebound, refs),
+        NodeRef::Block(b) => deref_collect_block(body, b, rebound, refs),
+        NodeRef::Stmt(s) => deref_collect_stmt(body, s, rebound, refs),
         NodeRef::Pat(_) => {
             let mut kids = Vec::new();
             body.for_each_child(node, |c| kids.push(c));
             for c in kids {
-                deref_collect_node(body, c, refs);
+                deref_collect_node(body, c, rebound, refs);
             }
         }
     }
 }
 
-fn deref_collect_expr_operand(body: &Body, op: Operand, refs: &mut IndexMap<u32, DerefOnlyRef>) {
+fn deref_collect_expr_operand(
+    body: &Body,
+    op: Operand,
+    rebound: &IndexSet<u32>,
+    refs: &mut IndexMap<u32, DerefOnlyRef>,
+) {
     if let Some(e) = op.as_expr() {
-        deref_collect_expr(body, e, refs);
+        deref_collect_expr(body, e, rebound, refs);
     }
 }
 
-fn deref_collect_expr(body: &Body, id: ExprId, refs: &mut IndexMap<u32, DerefOnlyRef>) {
+fn deref_collect_expr(
+    body: &Body,
+    id: ExprId,
+    rebound: &IndexSet<u32>,
+    refs: &mut IndexMap<u32, DerefOnlyRef>,
+) {
     match &body.exprs[id].kind {
         // `*r` where r is a deref-only candidate: an acceptable use.
         ExprKind::Unary {
@@ -686,7 +722,7 @@ fn deref_collect_expr(body: &Body, id: ExprId, refs: &mut IndexMap<u32, DerefOnl
                     return;
                 }
             }
-            deref_collect_expr_operand(body, inner, refs);
+            deref_collect_expr_operand(body, inner, rebound, refs);
         }
         // Any other bare use of r disqualifies it.
         ExprKind::Local { index, .. } => {
@@ -699,7 +735,7 @@ fn deref_collect_expr(body: &Body, id: ExprId, refs: &mut IndexMap<u32, DerefOnl
             let mut kids = Vec::new();
             body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
             for c in kids {
-                deref_collect_node(body, c, refs);
+                deref_collect_node(body, c, rebound, refs);
             }
         }
     }

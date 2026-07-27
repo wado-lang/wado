@@ -296,9 +296,8 @@ global global:effect_handler_resource_stream.wado::__const_obj_19: ref null "cor
 global global:effect_handler_resource_stream.wado::__const_obj_20: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 103, 111, 116, 46, 108, 101, 110, 40, 41, 32, 61, 61, 32, 50, 10), used: 27 };
 
 fn "effect_handler_resource_stream.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//List<u8>";
     let s: ref "effect_handler_resource_stream.wado//MockStream";
-    let __b_4: ref "core:prelude//List<u8>";
+    let payload: ref "core:prelude//List<u8>";
     let __v0_9: u8;
     let __v0_11: u8;
     let __local_13: ref "core:prelude/string.wado//String";
@@ -328,7 +327,7 @@ fn "effect_handler_resource_stream.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:effect_handler_resource_stream.wado::__modules_initialized = 1;
     };
-    s = struct.new "effect_handler_resource_stream.wado//MockStream" { log: ref.as_non_null(__b_0 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 }; __b_0) };
+    s = struct.new "effect_handler_resource_stream.wado//MockStream" { log: struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 } };
     __save_Stream<u8> = global:effect_handler_resource_stream.wado::__effect_Stream<u8>;
     __d_Stream<u8> = struct.new "effect_handler_resource_stream.wado//__Dispatch_Stream<u8>" { outer: __save_Stream<u8>, op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_resource_stream.wado//__Closure_2" { __capture_0: s }, func: ref.func "closure/effect_handler_resource_stream.wado/__closure_wrapper_0" }, op_read: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_resource_stream.wado//__Closure_3" { __capture_0: s }, func: ref.func "closure/effect_handler_resource_stream.wado/__closure_wrapper_1" }, op_cancel_read: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_stream.wado//__Closure_4" {  }, func: ref.func "closure/effect_handler_resource_stream.wado/__closure_wrapper_2" }, op_drop: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_stream.wado//__Closure_5" { __capture_0: s }, func: ref.func "closure/effect_handler_resource_stream.wado/__closure_wrapper_3" } };
     global:effect_handler_resource_stream.wado::__effect_Stream<u8> = __d_Stream<u8>;
@@ -338,8 +337,8 @@ fn "effect_handler_resource_stream.wado/run"() with Stdout {
     v_30 = "effect_handler_resource_stream.wado/__effect_dispatch__Stream<u8>__new"();
     __sroa___pattern_temp_0_0 = v_30.0;
     __sroa___pattern_temp_0_1 = v_30.1;
-    __b_4 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(104, 105), used: 2 };
-    "effect_handler_resource_stream.wado/__effect_dispatch__StreamWritable<u8>__write"(__sroa___pattern_temp_0_1, __b_4);
+    payload = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(104, 105), used: 2 };
+    "effect_handler_resource_stream.wado/__effect_dispatch__StreamWritable<u8>__write"(__sroa___pattern_temp_0_1, payload);
     v_38 = "effect_handler_resource_stream.wado/__effect_dispatch__Stream<u8>__read"(__sroa___pattern_temp_0_0, 16);
     let __array_clone_src_2: ref Array<u8>;
     __array_clone_src_2 = v_38.repr;
@@ -997,8 +996,7 @@ fn "effect_handler_resource_stream.wado/__Closure_2::__call"() {
 fn "effect_handler_resource_stream.wado/__Closure_3::__call"(self_0, self_1, max) {
     let self_3: ref "effect_handler_resource_stream.wado//MockStream";
     let snapshot: ref "core:prelude//List<u8>";
-    let __b: ref "core:prelude//List<u8>";
-    return self_3 = self_0.__capture_0, snapshot = self_3.log, self_3.log = ref.as_non_null(__b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 }; __b), snapshot;
+    return self_3 = self_0.__capture_0, snapshot = self_3.log, self_3.log = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 }, snapshot;
 }
 
 fn "effect_handler_resource_stream.wado/__Closure_4::__call"() {

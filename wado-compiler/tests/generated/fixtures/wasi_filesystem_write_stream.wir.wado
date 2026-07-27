@@ -316,7 +316,7 @@ fn "wasi_filesystem_write_stream.wado/run"() with Stdout, Stderr, Preopens {
     let write_result: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
     let file: i32;
     let sub1: i32;
-    let __b: ref "core:prelude//List<u8>";
+    let data: ref "core:prelude//List<u8>";
     let file_rx: i32;
     let read_done: i32;
     let sub2: i32;
@@ -364,8 +364,8 @@ fn "wasi_filesystem_write_stream.wado/run"() with Stdout, Stderr, Preopens {
         rx_33 = builtin::i32_wrap_i64(local.tee packed_32("wasi/stream-new"()));
         tx_34 = builtin::i32_wrap_i64(packed_32 >> 32_i64);
         sub1 = "wasi_filesystem_write_stream.wado/__cm_binding__Descriptor_write_via_stream"(file, rx_33, 0_i64);
-        __b = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 44, 32, 83, 116, 114, 101, 97, 109, 33, 10), used: 15 };
-        "core:rt/cm_stream_write_u8"(tx_34, __b);
+        data = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 44, 32, 83, 116, 114, 101, 97, 109, 33, 10), used: 15 };
+        "core:rt/cm_stream_write_u8"(tx_34, data);
         "wasi/stream-drop-writable"(tx_34);
         "wasi/future-drop-readable:transmission-filesystem"(sub1);
         __local_17 = "wasi_filesystem_write_stream.wado/__cm_binding__Descriptor_read_via_stream"(file, 0_i64);

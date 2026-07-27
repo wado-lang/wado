@@ -160,7 +160,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:iter_map_collect_variant.wado::__modules_initialized: bool = 0;
 
 fn "iter_map_collect_variant.wado/run"() with Stdout {
-    let __b: ref "core:prelude//List<iter_map_collect_variant.wado/Color>";
+    let colors: ref "core:prelude//List<iter_map_collect_variant.wado/Color>";
     let names: ref "core:prelude//List<core:prelude/string.wado/String>";
     let self_10: ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/ArrayIter<iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>";
     let self_12: ref "core:prelude/slice.wado//ArrayRefIter<iter_map_collect_variant.wado/Color>";
@@ -172,8 +172,8 @@ fn "iter_map_collect_variant.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:iter_map_collect_variant.wado::__modules_initialized = 1;
     };
-    __b = struct.new "core:prelude//List<iter_map_collect_variant.wado/Color>" { repr: array.new_fixed<ref "iter_map_collect_variant.wado//Color">(struct.new "iter_map_collect_variant.wado//Color" { 0 }, struct.new "iter_map_collect_variant.wado//Color" { 1 }), used: 2 };
-    self_12 = struct.new "core:prelude/slice.wado//ArrayRefIter<iter_map_collect_variant.wado/Color>" { repr: __b.repr, index: 0, end: 2 };
+    colors = struct.new "core:prelude//List<iter_map_collect_variant.wado/Color>" { repr: array.new_fixed<ref "iter_map_collect_variant.wado//Color">(struct.new "iter_map_collect_variant.wado//Color" { 0 }, struct.new "iter_map_collect_variant.wado//Color" { 1 }), used: 2 };
+    self_12 = struct.new "core:prelude/slice.wado//ArrayRefIter<iter_map_collect_variant.wado/Color>" { repr: colors.repr, index: 0, end: 2 };
     repr_18 = self_12.repr;
     f = struct.new "canonical//CanonicalClosure_0" { env: struct.new "iter_map_collect_variant.wado//__Closure_2" {  }, func: ref.func "closure/iter_map_collect_variant.wado/__closure_wrapper_0" };
     self_10 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/ArrayIter<iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>" { inner: ref.as_non_null(struct.new "core:prelude/slice.wado//ArrayIter<iter_map_collect_variant.wado/Color>" { repr: repr_18, index: 0, end: 2 }), f: f };
@@ -514,23 +514,23 @@ fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::join"(self, se
 }
 
 fn "core:prelude/list.wado/List<core:prelude/string.wado/String>^FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>>"(iter) {
-    let __b: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let result: ref "core:prelude//List<core:prelude/string.wado/String>";
     let item: ref "core:prelude/string.wado//String";
     let __match_4: ref null "core:prelude/string.wado//String";
-    __b = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
+    result = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
     b32: block {
         l33: loop {
             __match_4 = "core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>^Iterator::next"(iter);
             if ref.is_null(__match_4) == 0 {
                 item = ref.as_non_null(__match_4);
-                "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b, item);
+                "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(result, item);
             } else {
                 break b32;
             }
             continue l33;
         };
     };
-    return __b;
+    return result;
 }
 
 fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {

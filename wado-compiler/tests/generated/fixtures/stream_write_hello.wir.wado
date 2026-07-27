@@ -77,7 +77,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:stream_write_hello.wado::__modules_initialized: bool = 0;
 
 fn "stream_write_hello.wado/run"() with Stdout {
-    let __b: ref "core:prelude//List<u8>";
+    let data: ref "core:prelude//List<u8>";
     let packed: i64;
     let rx_6: i32;
     let tx_7: i32;
@@ -90,8 +90,8 @@ fn "stream_write_hello.wado/run"() with Stdout {
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
     "wasi/stream-drop-readable"(rx_6);
-    __b = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 10), used: 6 };
-    "core:rt/cm_stream_write_u8"(tx_7, __b);
+    data = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 10), used: 6 };
+    "core:rt/cm_stream_write_u8"(tx_7, data);
     "wasi/stream-drop-writable"(tx_7);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("write ok"), used: 8 });
 }

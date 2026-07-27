@@ -12,6 +12,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use wado_compiler::Span;
+use wado_compiler::compiler_item::SeqField;
 use wado_compiler::hashmap::IndexSet;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::nir::{
@@ -23,7 +24,10 @@ use wado_compiler::nir_arena::{
     ExprNode, Operand, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
 use wado_compiler::nir_value_graph::ValueKind;
-use wado_compiler::niri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
+use wado_compiler::niri::{
+    CalleeMap, GlobalEnv, Interpreter, Lattice, MAX_SEQ_ELEMENTS, SeqBuiltin, SeqBuiltinMap, Value,
+    is_ctfe_eligible,
+};
 use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
 
 /// A deferred operand builder: appends any needed subtree to the arena `Body`
@@ -3385,6 +3389,395 @@ fn let_stmt_b(name: &str, local_index: u32, type_id: TypeId, value: Build) -> St
     })
 }
 
+fn let_mut_stmt_b(name: &str, local_index: u32, type_id: TypeId, value: Build) -> StmtBuild {
+    let name = name.to_string();
+    Rc::new(move |b| {
+        let value = value(b);
+        ps(
+            b,
+            StmtKind::Let {
+                name: name.clone(),
+                local_index,
+                is_mut: true,
+                is_reactive: false,
+                type_id,
+                value,
+                skip_value_copy: false,
+            },
+        )
+    })
+}
+
+/// `local = value` as an expression statement.
+fn assign_local_stmt_b(local_index: u32, type_id: TypeId, value: Build) -> StmtBuild {
+    Rc::new(move |b| {
+        let target = pe(
+            b,
+            ExprKind::Local {
+                index: local_index,
+                name: String::new(),
+            },
+            type_id,
+        );
+        let value = value(b);
+        let assign = pe(b, ExprKind::Assign { target, value }, TypeTable::UNIT);
+        ps(b, StmtKind::Expr(Operand::Expr(assign)))
+    })
+}
+
+fn block_of(b: &mut Body, stmts: &[StmtBuild]) -> BlockId {
+    let ids: Vec<StmtId> = stmts.iter().map(|s| s(b)).collect();
+    b.blocks.push(BlockNode {
+        stmts: ids,
+        span: Span::default(),
+    })
+}
+
+fn if_stmt_b(
+    condition: Build,
+    then_stmts: Vec<StmtBuild>,
+    else_stmts: Vec<StmtBuild>,
+) -> StmtBuild {
+    Rc::new(move |b| {
+        let condition = condition(b);
+        let then_block = block_of(b, &then_stmts);
+        let else_block = (!else_stmts.is_empty()).then(|| block_of(b, &else_stmts));
+        ps(
+            b,
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            },
+        )
+    })
+}
+
+fn loop_stmt_b(stmts: Vec<StmtBuild>) -> StmtBuild {
+    Rc::new(move |b| {
+        let body = block_of(b, &stmts);
+        ps(b, StmtKind::Loop { body })
+    })
+}
+
+fn array_literal(type_id: TypeId, elements: Vec<Build>) -> Build {
+    Rc::new(move |b| {
+        let elements = elements.iter().map(|e| e(b)).collect();
+        Operand::Expr(pe(b, ExprKind::ArrayLiteral { elements }, type_id))
+    })
+}
+
+fn packed_array(bytes: Vec<u8>, type_id: TypeId) -> Build {
+    Rc::new(move |b| Operand::Expr(pe(b, ExprKind::PackedArray(bytes.clone()), type_id)))
+}
+
+fn shared_ref(inner: Build, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let inner = inner(b);
+        Operand::Expr(pe(
+            b,
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: inner,
+            },
+            type_id,
+        ))
+    })
+}
+
+/// A call to a synthetic builtin id, paired with the map that classifies it.
+fn seq_builtin_call(
+    func_id: wado_compiler::nir::FuncId,
+    args: Vec<Build>,
+    type_id: TypeId,
+) -> Build {
+    Rc::new(move |b| {
+        let args = args
+            .iter()
+            .map(|a| wado_compiler::nir_arena::ArenaCallArg {
+                expr: a(b),
+                is_mut: false,
+            })
+            .collect();
+        Operand::Expr(pe(
+            b,
+            ExprKind::Call {
+                func_id,
+                type_args: Vec::new(),
+                args,
+            },
+            type_id,
+        ))
+    })
+}
+
+fn seq_builtin_map(func_id: wado_compiler::nir::FuncId, builtin: SeqBuiltin) -> SeqBuiltinMap {
+    let mut map = SeqBuiltinMap::default();
+    map.insert(func_id, builtin);
+    map
+}
+
+#[test]
+fn array_literal_reduces_to_the_container_it_denotes() {
+    // An array literal lowers to `{ repr: array.new_fixed, used: N }`, so it
+    // denotes the whole `List` — not the backing array.
+    let table = TypeTable::new();
+    let lit = array_literal(
+        TypeTable::I32,
+        vec![
+            int_lit(10, TypeTable::I32, "10"),
+            int_lit(20, TypeTable::I32, "20"),
+        ],
+    );
+    let Lattice::Const(v) = reduce_lat(&mut Interpreter::new(&table), &lit) else {
+        panic!("a constant array literal is a constant container");
+    };
+    assert_eq!(
+        v.field(SeqField::Len.index()).and_then(Value::as_int),
+        Some((2, PrimitiveType::I32))
+    );
+    let backing = v.field(SeqField::Backing.index()).expect("a backing array");
+    assert_eq!(backing.seq_len(), Some(2));
+    assert_eq!(
+        backing.element(1).and_then(Value::as_int).map(|(n, _)| n),
+        Some(20)
+    );
+}
+
+#[test]
+fn packed_array_reduces_to_a_sequence_of_bytes() {
+    let table = TypeTable::new();
+    let lit = packed_array(b"hi".to_vec(), TypeTable::I32);
+    let Lattice::Const(v) = reduce_lat(&mut Interpreter::new(&table), &lit) else {
+        panic!("a byte-string literal is a sequence");
+    };
+    assert_eq!(v.seq_len(), Some(2));
+    assert_eq!(
+        v.element(0).and_then(Value::as_int),
+        Some((u64::from(b'h'), PrimitiveType::U8))
+    );
+}
+
+#[test]
+fn a_sequence_over_the_cap_is_not_modelled() {
+    let table = TypeTable::new();
+    let big = packed_array(vec![0u8; MAX_SEQ_ELEMENTS + 1], TypeTable::I32);
+    assert_eq!(
+        reduce_lat(&mut Interpreter::new(&table), &big),
+        Lattice::NonConst,
+    );
+    let at_cap = packed_array(vec![0u8; MAX_SEQ_ELEMENTS], TypeTable::I32);
+    assert!(matches!(
+        reduce_lat(&mut Interpreter::new(&table), &at_cap),
+        Lattice::Const(_),
+    ));
+}
+
+#[test]
+fn array_get_folds_an_element() {
+    let func_id = next_test_func_id();
+    let map = seq_builtin_map(func_id, SeqBuiltin::Get);
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_seq_builtins(&map);
+    // `arr[i]` lowers to the builtin over the backing array projected out of
+    // the container.
+    let call = seq_builtin_call(
+        func_id,
+        vec![
+            field_access(
+                array_literal(
+                    TypeTable::I32,
+                    vec![
+                        int_lit(10, TypeTable::I32, "10"),
+                        int_lit(20, TypeTable::I32, "20"),
+                        int_lit(30, TypeTable::I32, "30"),
+                    ],
+                ),
+                SeqField::Backing.index(),
+                "repr",
+                TypeTable::I32,
+            ),
+            int_lit(2, TypeTable::I32, "2"),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(flow_fold(&mut interp, &call), i32_of(30));
+}
+
+#[test]
+fn array_get_reads_through_a_shared_reference() {
+    let func_id = next_test_func_id();
+    let map = seq_builtin_map(func_id, SeqBuiltin::Get);
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_seq_builtins(&map);
+    let call = seq_builtin_call(
+        func_id,
+        vec![
+            shared_ref(
+                packed_array(b"abc".to_vec(), TypeTable::I32),
+                TypeTable::I32,
+            ),
+            int_lit(1, TypeTable::I32, "1"),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(
+        flow_fold(&mut interp, &call),
+        Some(Value::Int {
+            value: u64::from(b'b'),
+            prim: PrimitiveType::U8,
+        }),
+    );
+}
+
+#[test]
+fn array_get_past_the_end_is_left_alone() {
+    // Folding the read would delete the run-time trap.
+    let func_id = next_test_func_id();
+    let map = seq_builtin_map(func_id, SeqBuiltin::Get);
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_seq_builtins(&map);
+    let call = seq_builtin_call(
+        func_id,
+        vec![
+            array_literal(TypeTable::I32, vec![int_lit(10, TypeTable::I32, "10")]),
+            int_lit(5, TypeTable::I32, "5"),
+        ],
+        TypeTable::I32,
+    );
+    let (changed, body, e) = reduce_local_into(&mut interp, &call);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+}
+
+#[test]
+fn array_len_folds_to_the_element_count() {
+    let func_id = next_test_func_id();
+    let map = seq_builtin_map(func_id, SeqBuiltin::Len);
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_seq_builtins(&map);
+    let call = seq_builtin_call(
+        func_id,
+        vec![packed_array(b"hello".to_vec(), TypeTable::I32)],
+        TypeTable::I32,
+    );
+    assert_eq!(flow_fold(&mut interp, &call), i32_of(5));
+}
+
+#[test]
+fn a_sequence_without_the_builtin_map_stays_a_call() {
+    let func_id = next_test_func_id();
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let call = seq_builtin_call(
+        func_id,
+        vec![
+            array_literal(TypeTable::I32, vec![int_lit(10, TypeTable::I32, "10")]),
+            int_lit(0, TypeTable::I32, "0"),
+        ],
+        TypeTable::I32,
+    );
+    let (changed, body, e) = reduce_local_into(&mut interp, &call);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+}
+
+fn continue_stmt_b() -> StmtBuild {
+    Rc::new(|b| ps(b, StmtKind::Continue))
+}
+
+fn labeled_block_stmt_b(label: &str, stmts: Vec<StmtBuild>) -> StmtBuild {
+    let label = label.to_string();
+    Rc::new(move |b| {
+        let block = block_of(b, &stmts);
+        ps(
+            b,
+            StmtKind::LabeledBlock {
+                label: label.clone(),
+                block,
+            },
+        )
+    })
+}
+
+fn break_stmt_b(label: Option<&str>, value: Option<Build>) -> StmtBuild {
+    let label = label.map(str::to_string);
+    Rc::new(move |b| {
+        let value = value.as_ref().map(|v| v(b));
+        ps(
+            b,
+            StmtKind::Break {
+                label: label.clone(),
+                value,
+            },
+        )
+    })
+}
+
+/// `{ local = value }` as a block expression, so the assignment sits inside an
+/// operand rather than at statement position.
+fn block_expr_assigning_local(local_index: u32, type_id: TypeId, value: Build) -> Build {
+    Rc::new(move |b| {
+        let target = pe(
+            b,
+            ExprKind::Local {
+                index: local_index,
+                name: String::new(),
+            },
+            type_id,
+        );
+        let value = value(b);
+        let assign = pe(b, ExprKind::Assign { target, value }, TypeTable::UNIT);
+        let stmt = ps(b, StmtKind::Expr(Operand::Expr(assign)));
+        let block = b.blocks.push(BlockNode {
+            stmts: vec![stmt],
+            span: Span::default(),
+        });
+        Operand::Expr(pe(b, ExprKind::Block(block), TypeTable::UNIT))
+    })
+}
+
+fn global_set(name: &str, type_id: TypeId, value: Build) -> Build {
+    let name = name.to_string();
+    Rc::new(move |b| {
+        let value = value(b);
+        Operand::Expr(pe(
+            b,
+            ExprKind::GlobalVarSet {
+                module_source: ModuleSource::default(),
+                name: name.clone(),
+                value,
+            },
+            type_id,
+        ))
+    })
+}
+
+fn mut_ref_of_local(index: u32, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let local = pe(
+            b,
+            ExprKind::Local {
+                index,
+                name: String::new(),
+            },
+            type_id,
+        );
+        Operand::Expr(pe(
+            b,
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: Operand::Expr(local),
+            },
+            type_id,
+        ))
+    })
+}
+
 /// Build a root block from `stmts` and install it as `f`'s arena body.
 fn set_arena_body(f: &mut NirFunction, stmts: Vec<StmtBuild>) {
     let mut body = Body::empty();
@@ -3651,19 +4044,67 @@ fn non_pure_call_with_effect_left_intact() {
     assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }
 
+/// The `Value` a folded `i32` expression yields.
+fn i32_of(value: u64) -> Option<Value> {
+    Some(Value::Int {
+        value,
+        prim: PrimitiveType::I32,
+    })
+}
+
+/// Append locals after the params, which occupy `0..params.len()`.
+fn push_locals(f: &mut NirFunction, locals: &[(&str, TypeId, bool)]) {
+    for (name, type_id, is_mut) in locals {
+        f.locals.push(NirLocal {
+            name: (*name).to_string(),
+            type_id: *type_id,
+            is_mut: *is_mut,
+        });
+    }
+}
+
+/// A CTFE-eligible callee with a multi-statement arena body.
+fn make_multi_stmt_fn(
+    name: &str,
+    params: Vec<(&str, TypeId)>,
+    return_type: TypeId,
+    locals: &[(&str, TypeId, bool)],
+    stmts: Vec<StmtBuild>,
+) -> NirFunction {
+    let mut f = make_pure_fn(name, params, return_type, return_none());
+    set_arena_body(&mut f, stmts);
+    push_locals(&mut f, locals);
+    f
+}
+
+/// Fold `f(args)` through a fresh interpreter holding just `f`.
+fn fold_call_of(f: &NirFunction, args: Vec<Build>) -> Option<Value> {
+    let callees = build_callee_map_test(std::slice::from_ref(f));
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    flow_fold(&mut interp, &call_expr(f, args))
+}
+
+/// Assert `f(args)` is left as a `Call`.
+fn assert_call_intact(f: &NirFunction, args: Vec<Build>) {
+    let callees = build_callee_map_test(std::slice::from_ref(f));
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    let (changed, body, e) = reduce_local_into(&mut interp, &call_expr(f, args));
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+}
+
 #[test]
-fn multi_stmt_body_left_intact() {
-    // fn f(x) { let y = x * 2; return y; }
-    // The recognized body shape is single-stmt only, so the fold
-    // declines.
-    let mut f = make_pure_fn(
+fn multi_stmt_let_sequence_folds() {
+    // fn f(x) { let y = x * 2; return y; }  f(3) → 6
+    let f = make_multi_stmt_fn(
         "f",
         vec![("x", TypeTable::I32)],
         TypeTable::I32,
-        return_none(), // placeholder, replaced below
-    );
-    set_arena_body(
-        &mut f,
+        &[("y", TypeTable::I32, false)],
         vec![
             let_stmt_b(
                 "y",
@@ -3679,20 +4120,544 @@ fn multi_stmt_body_left_intact() {
             return_stmt(local_expr(1, TypeTable::I32)),
         ],
     );
-    // local 1 = `y`; pushing it makes `f.local_count()` (== locals.len()) 2.
-    f.locals.push(NirLocal {
-        name: "y".to_string(),
-        type_id: TypeTable::I32,
-        is_mut: false,
-    });
+    assert_eq!(
+        fold_call_of(&f, vec![int_lit(3, TypeTable::I32, "3")]),
+        i32_of(6)
+    );
+}
 
+#[test]
+fn multi_stmt_chained_lets_fold() {
+    // fn f(x) { let a = x + 1; let b = a * 3; return b; }  f(4) → 15
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![("x", TypeTable::I32)],
+        TypeTable::I32,
+        &[("a", TypeTable::I32, false), ("b", TypeTable::I32, false)],
+        vec![
+            let_stmt_b(
+                "a",
+                1,
+                TypeTable::I32,
+                binary(
+                    NirBinaryOp::Add,
+                    local_expr(0, TypeTable::I32),
+                    int_lit(1, TypeTable::I32, "1"),
+                    TypeTable::I32,
+                ),
+            ),
+            let_stmt_b(
+                "b",
+                2,
+                TypeTable::I32,
+                binary(
+                    NirBinaryOp::Mul,
+                    local_expr(1, TypeTable::I32),
+                    int_lit(3, TypeTable::I32, "3"),
+                    TypeTable::I32,
+                ),
+            ),
+            return_stmt(local_expr(2, TypeTable::I32)),
+        ],
+    );
+    assert_eq!(
+        fold_call_of(&f, vec![int_lit(4, TypeTable::I32, "4")]),
+        i32_of(15)
+    );
+}
+
+/// `fn f(x) { if x > 0 { return 1; } return 2; }`
+fn early_return_fn() -> NirFunction {
+    make_multi_stmt_fn(
+        "f",
+        vec![("x", TypeTable::I32)],
+        TypeTable::I32,
+        &[],
+        vec![
+            if_stmt_b(
+                binary(
+                    NirBinaryOp::Gt,
+                    local_expr(0, TypeTable::I32),
+                    int_lit(0, TypeTable::I32, "0"),
+                    TypeTable::BOOL,
+                ),
+                vec![return_stmt(int_lit(1, TypeTable::I32, "1"))],
+                vec![],
+            ),
+            return_stmt(int_lit(2, TypeTable::I32, "2")),
+        ],
+    )
+}
+
+#[test]
+fn multi_stmt_early_return_taken() {
+    let f = early_return_fn();
+    assert_eq!(
+        fold_call_of(&f, vec![int_lit(5, TypeTable::I32, "5")]),
+        i32_of(1)
+    );
+}
+
+#[test]
+fn multi_stmt_early_return_falls_through() {
+    let f = early_return_fn();
+    assert_eq!(
+        fold_call_of(&f, vec![int_lit(0, TypeTable::I32, "0")]),
+        i32_of(2)
+    );
+}
+
+#[test]
+fn multi_stmt_assign_rebinds_local() {
+    // fn f() { let mut y = 1; y = y + 41; return y; }  → 42
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("y", TypeTable::I32, true)],
+        vec![
+            let_mut_stmt_b("y", 0, TypeTable::I32, int_lit(1, TypeTable::I32, "1")),
+            assign_local_stmt_b(
+                0,
+                TypeTable::I32,
+                binary(
+                    NirBinaryOp::Add,
+                    local_expr(0, TypeTable::I32),
+                    int_lit(41, TypeTable::I32, "41"),
+                    TypeTable::I32,
+                ),
+            ),
+            return_stmt(local_expr(0, TypeTable::I32)),
+        ],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(42));
+}
+
+#[test]
+fn multi_stmt_trailing_expr_is_the_value() {
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("y", TypeTable::I32, false)],
+        vec![
+            let_stmt_b("y", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            expr_stmt_b(binary(
+                NirBinaryOp::Mul,
+                local_expr(0, TypeTable::I32),
+                int_lit(3, TypeTable::I32, "3"),
+                TypeTable::I32,
+            )),
+        ],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(6));
+}
+
+#[test]
+fn multi_stmt_undecidable_condition_bails() {
+    // The condition reads a local the engine knows nothing about.
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("flag", TypeTable::BOOL, false)],
+        vec![
+            if_stmt_b(
+                local_expr(0, TypeTable::BOOL),
+                vec![return_stmt(int_lit(1, TypeTable::I32, "1"))],
+                vec![],
+            ),
+            return_stmt(int_lit(2, TypeTable::I32, "2")),
+        ],
+    );
+    assert_call_intact(&f, vec![]);
+}
+
+#[test]
+fn loop_runs_to_its_break() {
+    // fn f() { loop { break; } return 7; }
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[],
+        vec![
+            loop_stmt_b(vec![break_stmt_b(None, None)]),
+            return_stmt(int_lit(7, TypeTable::I32, "7")),
+        ],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(7));
+}
+
+/// `fn f() { let mut i = 0; let mut acc = 0;
+///           loop { if i >= 3 { break; } acc = acc + i * 2; i = i + 1; }
+///           return acc; }` → 0 + 2 + 4 = 6.
+///
+/// `i * 2` and `acc + …` differ each time round, so 6 is only reached if an
+/// iteration's folds do not survive into the next one.
+fn accumulating_loop_fn() -> NirFunction {
+    make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("i", TypeTable::I32, true), ("acc", TypeTable::I32, true)],
+        vec![
+            let_mut_stmt_b("i", 0, TypeTable::I32, int_lit(0, TypeTable::I32, "0")),
+            let_mut_stmt_b("acc", 1, TypeTable::I32, int_lit(0, TypeTable::I32, "0")),
+            loop_stmt_b(vec![
+                if_stmt_b(
+                    binary(
+                        NirBinaryOp::GtEq,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(3, TypeTable::I32, "3"),
+                        TypeTable::BOOL,
+                    ),
+                    vec![break_stmt_b(None, None)],
+                    vec![],
+                ),
+                assign_local_stmt_b(
+                    1,
+                    TypeTable::I32,
+                    binary(
+                        NirBinaryOp::Add,
+                        local_expr(1, TypeTable::I32),
+                        binary(
+                            NirBinaryOp::Mul,
+                            local_expr(0, TypeTable::I32),
+                            int_lit(2, TypeTable::I32, "2"),
+                            TypeTable::I32,
+                        ),
+                        TypeTable::I32,
+                    ),
+                ),
+                assign_local_stmt_b(
+                    0,
+                    TypeTable::I32,
+                    binary(
+                        NirBinaryOp::Add,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(1, TypeTable::I32, "1"),
+                        TypeTable::I32,
+                    ),
+                ),
+            ]),
+            return_stmt(local_expr(1, TypeTable::I32)),
+        ],
+    )
+}
+
+#[test]
+fn loop_accumulates_across_iterations() {
+    assert_eq!(fold_call_of(&accumulating_loop_fn(), vec![]), i32_of(6));
+}
+
+#[test]
+fn loop_iterations_do_not_reuse_an_earlier_fold() {
+    let f = accumulating_loop_fn();
     let callees = build_callee_map_test(std::slice::from_ref(&f));
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
+    interp.set_step_budget(200);
+    assert_eq!(flow_fold(&mut interp, &call_expr(&f, vec![])), i32_of(6));
+}
 
-    let expr = call_expr(&f, vec![int_lit(3, TypeTable::I32, "3")]);
-    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+#[test]
+fn loop_iteration_does_not_keep_an_earlier_structural_rewrite() {
+    // fn f() { let mut i = 0; let mut acc = 0;
+    //          loop { if i >= 3 { break; }
+    //                 acc = acc + (if i == 0 { 10 } else { 1 });
+    //                 i = i + 1; }
+    //          return acc; }  → 10 + 1 + 1 = 12
+    //
+    // The inner `if` is an *expression*, so a constant condition collapses it
+    // to the chosen arm in the body itself. Keeping that would add 10 every
+    // time round.
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("i", TypeTable::I32, true), ("acc", TypeTable::I32, true)],
+        vec![
+            let_mut_stmt_b("i", 0, TypeTable::I32, int_lit(0, TypeTable::I32, "0")),
+            let_mut_stmt_b("acc", 1, TypeTable::I32, int_lit(0, TypeTable::I32, "0")),
+            loop_stmt_b(vec![
+                if_stmt_b(
+                    binary(
+                        NirBinaryOp::GtEq,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(3, TypeTable::I32, "3"),
+                        TypeTable::BOOL,
+                    ),
+                    vec![break_stmt_b(None, None)],
+                    vec![],
+                ),
+                assign_local_stmt_b(
+                    1,
+                    TypeTable::I32,
+                    binary(
+                        NirBinaryOp::Add,
+                        local_expr(1, TypeTable::I32),
+                        if_expr(
+                            binary(
+                                NirBinaryOp::Eq,
+                                local_expr(0, TypeTable::I32),
+                                int_lit(0, TypeTable::I32, "0"),
+                                TypeTable::BOOL,
+                            ),
+                            block_with_tail_expr(int_lit(10, TypeTable::I32, "10")),
+                            Some(block_with_tail_expr(int_lit(1, TypeTable::I32, "1"))),
+                            TypeTable::I32,
+                        ),
+                        TypeTable::I32,
+                    ),
+                ),
+                assign_local_stmt_b(
+                    0,
+                    TypeTable::I32,
+                    binary(
+                        NirBinaryOp::Add,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(1, TypeTable::I32, "1"),
+                        TypeTable::I32,
+                    ),
+                ),
+            ]),
+            return_stmt(local_expr(1, TypeTable::I32)),
+        ],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(12));
+}
+
+#[test]
+fn loop_without_an_exit_exhausts_the_budget() {
+    // `loop {}` — an empty body charges no statement, so the loop must charge.
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[],
+        vec![
+            loop_stmt_b(vec![]),
+            return_stmt(int_lit(7, TypeTable::I32, "7")),
+        ],
+    );
+    assert_call_intact(&f, vec![]);
+}
+
+#[test]
+fn loop_return_leaves_the_function() {
+    // fn f() { loop { return 5; } }
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[],
+        vec![loop_stmt_b(vec![return_stmt(int_lit(
+            5,
+            TypeTable::I32,
+            "5",
+        ))])],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(5));
+}
+
+#[test]
+fn loop_labeled_break_escapes_to_its_block() {
+    // fn f() { L: { loop { break L; } } return 7; }
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[],
+        vec![
+            labeled_block_stmt_b("L", vec![loop_stmt_b(vec![break_stmt_b(Some("L"), None)])]),
+            return_stmt(int_lit(7, TypeTable::I32, "7")),
+        ],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(7));
+}
+
+#[test]
+fn loop_continue_starts_the_next_iteration() {
+    // fn f() { let mut i = 0;
+    //          loop { i = i + 1; if i >= 2 { break; } continue; }
+    //          return i; }  → 2
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("i", TypeTable::I32, true)],
+        vec![
+            let_mut_stmt_b("i", 0, TypeTable::I32, int_lit(0, TypeTable::I32, "0")),
+            loop_stmt_b(vec![
+                assign_local_stmt_b(
+                    0,
+                    TypeTable::I32,
+                    binary(
+                        NirBinaryOp::Add,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(1, TypeTable::I32, "1"),
+                        TypeTable::I32,
+                    ),
+                ),
+                if_stmt_b(
+                    binary(
+                        NirBinaryOp::GtEq,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(2, TypeTable::I32, "2"),
+                        TypeTable::BOOL,
+                    ),
+                    vec![break_stmt_b(None, None)],
+                    vec![],
+                ),
+                continue_stmt_b(),
+            ]),
+            return_stmt(local_expr(0, TypeTable::I32)),
+        ],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(2));
+}
+
+#[test]
+fn multi_stmt_labeled_block_break_is_caught() {
+    // fn f() { L: { break L; } return 7; }
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[],
+        vec![
+            labeled_block_stmt_b("L", vec![break_stmt_b(Some("L"), None)]),
+            return_stmt(int_lit(7, TypeTable::I32, "7")),
+        ],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(7));
+}
+
+#[test]
+fn multi_stmt_mut_borrowed_local_blocks_fold() {
+    // fn f() { let mut y = 1; sink(&mut y); return y; }
+    let sink = make_pure_fn(
+        "sink",
+        vec![("p", TypeTable::I32)],
+        TypeTable::UNIT,
+        return_none(),
+    );
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("y", TypeTable::I32, true)],
+        vec![
+            let_mut_stmt_b("y", 0, TypeTable::I32, int_lit(1, TypeTable::I32, "1")),
+            expr_stmt_b(call_expr(&sink, vec![mut_ref_of_local(0, TypeTable::I32)])),
+            return_stmt(local_expr(0, TypeTable::I32)),
+        ],
+    );
+    assert_call_intact(&f, vec![]);
+}
+
+#[test]
+fn multi_stmt_global_write_blocks_fold() {
+    // fn bump() { COUNT = 1; return 0; }
+    // A global write carries no effect, so the callee is admitted — but
+    // folding the call to `0` would drop the write.
+    let f = make_multi_stmt_fn(
+        "bump",
+        vec![],
+        TypeTable::I32,
+        &[],
+        vec![
+            expr_stmt_b(global_set(
+                "COUNT",
+                TypeTable::I32,
+                int_lit(1, TypeTable::I32, "1"),
+            )),
+            return_stmt(int_lit(0, TypeTable::I32, "0")),
+        ],
+    );
+    assert_call_intact(&f, vec![]);
+}
+
+#[test]
+fn multi_stmt_discarded_unfoldable_call_blocks_fold() {
+    let opaque = make_pure_fn("opaque", vec![], TypeTable::I32, return_none());
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[],
+        vec![
+            expr_stmt_b(call_expr(&opaque, vec![])),
+            return_stmt(int_lit(3, TypeTable::I32, "3")),
+        ],
+    );
+    assert_call_intact(&f, vec![]);
+}
+
+#[test]
+fn multi_stmt_assign_inside_an_operand_blocks_fold() {
+    // fn f() { let mut y = 1; { y = 99 }; return y; }
+    // The write sits inside an expression the executor reduces rather than runs.
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("y", TypeTable::I32, true)],
+        vec![
+            let_mut_stmt_b("y", 0, TypeTable::I32, int_lit(1, TypeTable::I32, "1")),
+            expr_stmt_b(block_expr_assigning_local(
+                0,
+                TypeTable::I32,
+                int_lit(99, TypeTable::I32, "99"),
+            )),
+            return_stmt(local_expr(0, TypeTable::I32)),
+        ],
+    );
+    assert_call_intact(&f, vec![]);
+}
+
+#[test]
+fn multi_stmt_aggregate_let_projects_a_field() {
+    // fn f() { let p = Point { x: 10, y: 32 }; return p.x; }  → 10
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("p", point, false)],
+        vec![
+            let_stmt_b("p", 0, point, point_lit(point)),
+            return_stmt(field_access(local_expr(0, point), 0, "x", TypeTable::I32)),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&f));
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    assert_eq!(flow_fold(&mut interp, &call_expr(&f, vec![])), i32_of(10));
+}
+
+#[test]
+fn multi_stmt_step_budget_bails() {
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("a", TypeTable::I32, false), ("b", TypeTable::I32, false)],
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(1, TypeTable::I32, "1")),
+            let_stmt_b("b", 1, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            return_stmt(local_expr(1, TypeTable::I32)),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&f));
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.set_step_budget(2);
+    let (changed, body, e) = reduce_local_into(&mut interp, &call_expr(&f, vec![]));
     assert!(!changed);
     assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }

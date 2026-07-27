@@ -18,8 +18,14 @@ fn store_point(p: &Point) -> Holder with stores[p] {
 }
 
 // After inlining store_point and decomposing Holder, p can be fully SROA'd.
+//
+// `black_box` keeps the fields off the constant path, so the stores-blocked
+// path is what the golden shows rather than a folded-away program.
 export fn run() {
-    let p = Point { x: 10, y: 20 };
+    let p = Point {
+        x: builtin::black_box(10),
+        y: builtin::black_box(20),
+    };
     let h = store_point(&p);
     // The stored ref must see the same struct, so p must remain allocated.
     assert p.x == 10;

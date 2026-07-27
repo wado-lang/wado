@@ -927,12 +927,12 @@ fn "core:prelude/slice.wado/ArrayIter<i32>::collect"(self) {
 }
 
 fn "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(iter) {
-    let __b: ref "core:prelude//List<u8>";
+    let result: ref "core:prelude//List<u8>";
     let byte: u8;
     let _licm_used_12: i32;
     let _licm_repr_13: ref Array<u8>;
     let __hfs_index_14: i32;
-    __b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
     _licm_used_12 = iter.used;
     _licm_repr_13 = iter.repr;
     __hfs_index_14 = iter.index;
@@ -944,30 +944,30 @@ fn "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.
             }
             byte = builtin::array_get<u8>(_licm_repr_13, __hfs_index_14);
             __hfs_index_14 = __hfs_index_14 + 1;
-            "core:prelude/list.wado/List<u8>::push"(__b, byte);
+            "core:prelude/list.wado/List<u8>::push"(result, byte);
             continue l70;
         };
     };
-    return __b;
+    return result;
 }
 
 fn "core:prelude/list.wado/List<u32>^FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>>"(iter) {
-    let __b: ref "core:prelude//List<u32>";
-    __b = struct.new "core:prelude//List<u32>" { repr: builtin::array_new<u32>(0), used: 0 };
+    let result: ref "core:prelude//List<u32>";
+    result = struct.new "core:prelude//List<u32>" { repr: builtin::array_new<u32>(0), used: 0 };
     b72: block {
         l73: loop {
             let __sroa___match_4_discriminant: i32;
             let __sroa___match_4_payload_0: u32;
             multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^Iterator::next"(iter);
             if __sroa___match_4_discriminant == 0 {
-                "core:prelude/list.wado/List<u32>::push"(__b, __sroa___match_4_payload_0);
+                "core:prelude/list.wado/List<u32>::push"(result, __sroa___match_4_payload_0);
             } else {
                 break b72;
             }
             continue l73;
         };
     };
-    return __b;
+    return result;
 }
 
 fn "core:prelude/list.wado/List<u8>::grow"(self) {

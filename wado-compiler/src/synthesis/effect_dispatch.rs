@@ -412,19 +412,18 @@ fn synthesize_dispatch_global(
     plan: &DispatchPlan,
 ) {
     let span = synth_span();
+    // `null` is this global's value, not a placeholder: the dispatch record
+    // is installed by a `with` handler and read back as `None` until then.
     let initializer = TirExpr::new(TirExprKind::Null, plan.nullable_ref_type_id, span);
     let global = TirGlobal {
         name: plan.global_name.clone(),
         ty: plan.nullable_ref_type_id,
-        initializer,
-        mutable: true,
+        init: crate::tir::GlobalInit::Direct(initializer),
         param: None,
         wado_mutable: true,
         visibility: crate::ast::Visibility::Private,
         module_source: entry_source.clone(),
         span,
-        is_nullable: true,
-        lazy_init: false,
         locals: Vec::new(),
     };
     let entry_module = project

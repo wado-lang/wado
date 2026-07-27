@@ -9,6 +9,10 @@
 // `#[inline(never)]` keeps `find_sqrt_bound` a standalone function so the
 // WIR pattern check sees the CSE'd loop unchanged regardless of the
 // inliner threshold.
+//
+// `black_box` keeps the arguments off the constant path: with constant ones
+// the loop runs at compile time, the call folds to its result, and the
+// function this fixture inspects is gone.
 
 #[inline(never)]
 fn find_sqrt_bound(limit: i32) -> i32 {
@@ -22,9 +26,9 @@ fn find_sqrt_bound(limit: i32) -> i32 {
 }
 
 test {
-    assert find_sqrt_bound(100) == 100;
-    assert find_sqrt_bound(99) == 81;
-    assert find_sqrt_bound(1) == 0;
+    assert find_sqrt_bound(builtin::black_box(100)) == 100;
+    assert find_sqrt_bound(builtin::black_box(99)) == 81;
+    assert find_sqrt_bound(builtin::black_box(1)) == 0;
 }
 
 __DATA__

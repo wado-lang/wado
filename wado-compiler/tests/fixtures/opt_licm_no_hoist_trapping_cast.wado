@@ -4,6 +4,9 @@
 // zero-iteration loop never evaluates it. Here `n == 0`, so the loop body —
 // and the `x as i32` cast — must never run, even though `1e30` is out of i32
 // range. If the cast were hoisted, this would trap; instead it returns 0.
+//
+// `black_box` keeps the arguments off the constant path: with constant ones
+// the loop runs at compile time and the function under test is gone.
 
 use { println, Stdout } from "core:cli";
 
@@ -19,7 +22,7 @@ fn sum_up_to(n: i32, x: f64) -> i32 {
 }
 
 export fn run() with Stdout {
-    let r = sum_up_to(0, 1.0e30);
+    let r = sum_up_to(builtin::black_box(0), builtin::black_box(1.0e30));
     println(`${r}`);
 }
 

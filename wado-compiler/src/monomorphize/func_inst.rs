@@ -70,7 +70,7 @@ pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<Trait
     }
 
     for global in &mut module.globals {
-        lowerer.visit_expr(&mut global.initializer);
+        lowerer.visit_expr(global.init.slot_expr_mut());
     }
 }
 
@@ -510,7 +510,7 @@ impl Monomorphizer {
 
         // Also scan global variable initializers for function instantiation sites
         for global in &module.globals {
-            collector.visit_expr(&global.initializer);
+            collector.visit_expr(global.init.slot_expr());
         }
     }
 

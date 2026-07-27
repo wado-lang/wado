@@ -4151,41 +4151,67 @@ pub struct ParamSpec {
     pub from_env: Option<String>,
 }
 
+/// How a global's storage gets its value.
+///
+/// One choice rather than a flag beside an initializer field, so a placeholder
+/// can never be read as the declared value — it is a plausible constant, and
+/// mistaking it folds every read of `global A: i32 = 1 + 2` to zero.
+///
+/// See [Global Variables](../../docs/wep-2026-01-27-global-variables.md).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GlobalInit<E> {
+    /// The storage holds the declared value, as a constant expression.
+    Direct(E),
+    /// The storage starts at this placeholder; the module's initialization
+    /// function assigns the declared value before anything else runs.
+    Deferred(E),
+}
+
+impl<E> GlobalInit<E> {
+    /// What the storage is initialized with: the declared value, or the
+    /// placeholder standing in for it.
+    pub fn slot_expr(&self) -> &E {
+        match self {
+            Self::Direct(e) | Self::Deferred(e) => e,
+        }
+    }
+
+    pub fn slot_expr_mut(&mut self) -> &mut E {
+        match self {
+            Self::Direct(e) | Self::Deferred(e) => e,
+        }
+    }
+
+    /// The declared value, or `None` when it is assigned elsewhere. Anything
+    /// asking what a global holds goes through this.
+    pub fn declared(&self) -> Option<&E> {
+        match self {
+            Self::Direct(e) => Some(e),
+            Self::Deferred(_) => None,
+        }
+    }
+
+    pub fn is_deferred(&self) -> bool {
+        matches!(self, Self::Deferred(_))
+    }
+}
+
 /// Global variable declaration in TIR
 #[derive(Debug, Clone)]
 pub struct TirGlobal {
     pub name: String,
     pub ty: TypeId,
-    pub initializer: TirExpr,
-    pub mutable: bool,
+    pub init: GlobalInit<TirExpr>,
     /// `Some` when the global carries a `#[param]` attribute. Drives the
     /// param-resolution pass; `None` for ordinary globals.
     pub param: Option<ParamSpec>,
-    /// Whether the user declared this global as `global mut`.
-    /// Preserved across lowering so the optimizer can promote lazy-init globals
-    /// back to immutable when their initializers fold to constants.
+    /// Whether the program may assign to this global — `global mut`. The Wasm
+    /// slot's mutability is wider and derived when the module is built.
     pub wado_mutable: bool,
     pub visibility: crate::ast::Visibility,
     /// Module where this global is defined
     pub module_source: ModuleSource,
     pub span: Span,
-    /// True if this global's Wasm type should be nullable.
-    /// Set by the lower phase for two distinct cases:
-    /// 1. Lazy-initialized reference globals — the slot starts `null`
-    ///    until `__initialize_module` runs, so the storage must accept
-    ///    `ref.null`. (`lazy_init` is also set in this case.)
-    /// 2. Constant-initialized reference globals whose user-facing
-    ///    initializer is `null` (e.g. `global mut x: Option<&T> = null`)
-    ///    — the slot needs to accept `ref.null` because that IS the
-    ///    intended runtime value. (`lazy_init` stays false.)
-    pub is_nullable: bool,
-    /// True when this global is lazy-initialized: the Wasm slot starts
-    /// `null`, and `__initialize_module` runs the original (non-constant)
-    /// initializer to assign the real value before any non-init use.
-    ///
-    /// `false` for constant-initialized globals, including
-    /// `Option<&T> = null` whose `null` is itself the runtime value.
-    pub lazy_init: bool,
     /// Per-local metadata for the initializer expression. Populated when
     /// the initializer is non-trivial (e.g., `SequenceLiteralBuilder`
     /// coercion). Indexed by local index, like `TirFunction::locals`.

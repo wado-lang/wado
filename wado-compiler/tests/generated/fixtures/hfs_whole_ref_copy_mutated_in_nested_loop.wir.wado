@@ -179,7 +179,6 @@ global global:core:prelude/format.wado::__const_obj_6: ref null "core:prelude/st
 global global:core:prelude/format.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
 
 fn "hfs_whole_ref_copy_mutated_in_nested_loop.wado/__test_0_nested_loop_indentation_survives_hfs"() {
-    let __b: ref "core:prelude//List<core:prelude/string.wado/String>";
     let w: ref "hfs_whole_ref_copy_mutated_in_nested_loop.wado//CodeWriter";
     let expected: ref "core:prelude/string.wado//String";
     let __v0: ref "core:prelude/string.wado//String";
@@ -189,13 +188,14 @@ fn "hfs_whole_ref_copy_mutated_in_nested_loop.wado/__test_0_nested_loop_indentat
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let v: ref "core:prelude/string.wado//String";
     let __sroa_f_name: ref "core:prelude/string.wado//String";
+    let __sroa_f_members: ref "core:prelude//List<core:prelude/string.wado/String>";
     __sroa_f_name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Perms"), used: 5 };
-    __b = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
-    "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 97, 100), used: 4 });
-    "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Write"), used: 5 });
-    "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Execute"), used: 7 });
+    __sroa_f_members = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
+    "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__sroa_f_members, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 97, 100), used: 4 });
+    "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__sroa_f_members, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Write"), used: 5 });
+    "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__sroa_f_members, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Execute"), used: 7 });
     w = struct.new "hfs_whole_ref_copy_mutated_in_nested_loop.wado//CodeWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(65536), used: 0 }, level: 0 };
-    "hfs_whole_ref_copy_mutated_in_nested_loop.wado/FlagsSpec::emit"(struct.new "hfs_whole_ref_copy_mutated_in_nested_loop.wado//FlagsSpec" { name: __sroa_f_name, members: __b }, w);
+    "hfs_whole_ref_copy_mutated_in_nested_loop.wado/FlagsSpec::emit"(struct.new "hfs_whole_ref_copy_mutated_in_nested_loop.wado//FlagsSpec" { name: __sroa_f_name, members: __sroa_f_members }, w);
     v = w.buf;
     __v0 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v.used };
     expected = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("flags Perms {

@@ -133,15 +133,15 @@ fn "opt_const_obj_global_runtime_value.wado/sum"(xs) {
 }
 
 fn "opt_const_obj_global_runtime_value.wado/recur"(depth) {
-    let __b: ref "core:prelude//List<i32>";
+    let xs: ref "core:prelude//List<i32>";
     let deeper: i32;
-    __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(depth * 2, 7), used: 2 };
+    xs = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(depth * 2, 7), used: 2 };
     deeper = (if depth > 0 -> i32 {
         "opt_const_obj_global_runtime_value.wado/recur"(depth - 1);
     } else {
         0;
     });
-    return "opt_const_obj_global_runtime_value.wado/sum"(__b) + deeper;
+    return "opt_const_obj_global_runtime_value.wado/sum"(xs) + deeper;
 }
 
 fn "opt_const_obj_global_runtime_value.wado/run"() with Stdout {

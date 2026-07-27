@@ -474,25 +474,25 @@ fn "try_merged.wado/first_positive"(arr) {
 }
 
 fn "try_merged.wado/test_try_op_option_basic"() with Stdout {
-    let __b_0: ref "core:prelude//List<i32>";
     let n_1: i32;
     let __cond_2: bool;
-    let __b_3: ref "core:prelude//List<i32>";
     let __cond_4: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
+    let arr_18: ref "core:prelude//List<i32>";
     let __qm_v_19: i32;
     let n_20: i32;
+    let arr_28: ref "core:prelude//List<i32>";
     let __qm_v_29: i32;
     let n_30: i32;
     let __match_scrut_1: ref "core:prelude/types.wado//Option<i32>";
     __match_scrut_1 = __inline_first_positive_doubled_6: block -> ref "core:prelude/types.wado//Option<i32>" {
-        __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+        arr_18 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         let __sroa___match_scrut_0_discriminant: i32;
         let __sroa___match_scrut_0_payload_0: i32;
-        multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_payload_0] = "try_merged.wado/first_positive"(__b_0);
+        multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_payload_0] = "try_merged.wado/first_positive"(arr_18);
         n_20 = (if @likely(__sroa___match_scrut_0_discriminant == 0) -> i32 {
             local.tee __qm_v_19(__sroa___match_scrut_0_payload_0);
         } else {
@@ -515,10 +515,10 @@ condition: first_positive_doubled([1, 2, 3] as List<i32>) matches { Some(n) && n
     }
     let __match_scrut_3: ref "core:prelude/types.wado//Option<i32>";
     __match_scrut_3 = __inline_first_positive_doubled_12: block -> ref "core:prelude/types.wado//Option<i32>" {
-        __b_3 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(-1, -2), used: 2 };
+        arr_28 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(-1, -2), used: 2 };
         let __sroa___match_scrut_2_discriminant: i32;
         let __sroa___match_scrut_2_payload_0: i32;
-        multivalue_bind [__sroa___match_scrut_2_discriminant, __sroa___match_scrut_2_payload_0] = "try_merged.wado/first_positive"(__b_3);
+        multivalue_bind [__sroa___match_scrut_2_discriminant, __sroa___match_scrut_2_payload_0] = "try_merged.wado/first_positive"(arr_28);
         n_30 = (if @likely(__sroa___match_scrut_2_discriminant == 0) -> i32 {
             local.tee __qm_v_29(__sroa___match_scrut_2_payload_0);
         } else {
@@ -1077,7 +1077,6 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal"(self, f) {
 
 fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
     let is_negative: bool;
-    let remaining_digits: i32;
     let offset_7: i32;
     let repr: ref Array<u8>;
     let abs_val: i64;
@@ -1087,12 +1086,11 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
     let self_13: ref "core:prelude/string.wado//String";
     is_negative = self < 0_i64;
     if self == -9223372036854775808_i64 {
-        remaining_digits = "core:prelude/primitive.wado/count_digits_i64"(922337203685477580_i64);
-        offset_7 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 1, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, remaining_digits + 1);
+        offset_7 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 1, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, 19);
         self_12 = f.buf;
         repr = self_12.repr;
-        "core:prelude/primitive.wado/write_decimal_digits"(repr, offset_7, 922337203685477580_i64, remaining_digits);
-        builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
+        "core:prelude/primitive.wado/write_decimal_digits"(repr, offset_7, 922337203685477580_i64, 18);
+        builtin::array_set_u8(repr, offset_7 + 18, 56);
     } else {
         digit_count_10 = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - self, self)));
         offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_10);

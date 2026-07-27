@@ -1,0 +1,28 @@
+// A cast in a global initializer is a conversion, not a relabelling: the
+// arithmetic under it must be evaluated at its own width and only then
+// widened. Each global below is compared against the identical local
+// expression, which goes through the ordinary evaluator — a global that
+// disagrees with its local twin is the bug this pins.
+
+use { println, Stdout } from "core:cli";
+
+global WRAPS_THEN_WIDENS: i64 = (2147483647 + 1) as i64;
+global NARROWS_THEN_ADDS: i32 = (300 as u8) as i32 + 1;
+global UNSIGNED_WRAPS: i64 = (3000000000 as u32 * 2) as i64;
+
+export fn run() with Stdout {
+    let wraps_then_widens: i64 = (2147483647 + 1) as i64;
+    let narrows_then_adds: i32 = (300 as u8) as i32 + 1;
+    let unsigned_wraps: i64 = (3000000000 as u32 * 2) as i64;
+
+    assert WRAPS_THEN_WIDENS == wraps_then_widens;
+    assert NARROWS_THEN_ADDS == narrows_then_adds;
+    assert UNSIGNED_WRAPS == unsigned_wraps;
+
+    println(`${WRAPS_THEN_WIDENS} ${NARROWS_THEN_ADDS} ${UNSIGNED_WRAPS}`);
+}
+
+__DATA__
+{
+    "stdout": "-2147483648 45 1705032704\n"
+}

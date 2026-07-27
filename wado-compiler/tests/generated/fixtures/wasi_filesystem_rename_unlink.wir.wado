@@ -396,7 +396,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
     let src_result: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
     let src_file: i32;
     let sub: i32;
-    let __b: ref "core:prelude//List<u8>";
+    let data: ref "core:prelude//List<u8>";
     let rename_result: ref null "wasi:filesystem/types.wado//ErrorCode";
     let old_result: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
     let err_11: ref "wasi:filesystem/types.wado//ErrorCode";
@@ -468,8 +468,8 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         rx = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
         tx = builtin::i32_wrap_i64(packed >> 32_i64);
         sub = "wasi_filesystem_rename_unlink.wado/__cm_binding__Descriptor_write_via_stream"(src_file, rx, 0_i64);
-        __b = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(82, 69, 78, 65, 77, 69), used: 6 };
-        "core:rt/cm_stream_write_u8"(tx, __b);
+        data = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(82, 69, 78, 65, 77, 69), used: 6 };
+        "core:rt/cm_stream_write_u8"(tx, data);
         "wasi/stream-drop-writable"(tx);
         "wasi/future-drop-readable:transmission-filesystem"(sub);
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rename: source file created"), used: 27 });

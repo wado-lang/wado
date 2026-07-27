@@ -38,7 +38,20 @@ pub enum Value {
         type_id: TypeId,
         fields: Rc<[(u32, Value)]>,
     },
+    /// A backing array of compile-time values. `String` and `List<T>` need no
+    /// case of their own: each is an [`Value::Aggregate`] over one of these
+    /// and a length. Read an element against the container's length, not this
+    /// array's — a grown container's capacity outruns what it holds.
+    Seq {
+        type_id: TypeId,
+        elements: Rc<[Value]>,
+    },
 }
+
+/// Longest literal the engine turns into a [`Value::Seq`]. Building one walks
+/// every element, so an embedded asset would cost more than any fold it could
+/// enable; past this it is simply not a constant here.
+pub const MAX_SEQ_ELEMENTS: usize = 1024;
 
 impl Value {
     /// An aggregate over `fields`, canonicalized to `field_index` order so two
@@ -64,11 +77,41 @@ impl Value {
             .map(|pos| &fields[pos].1)
     }
 
+    /// `None` when longer than [`MAX_SEQ_ELEMENTS`].
+    #[must_use]
+    pub fn seq(type_id: TypeId, elements: Vec<Value>) -> Option<Self> {
+        (elements.len() <= MAX_SEQ_ELEMENTS).then(|| Self::Seq {
+            type_id,
+            elements: elements.into(),
+        })
+    }
+
+    /// The element at `index`. `None` past the end, where a read traps.
+    #[must_use]
+    pub fn element(&self, index: u64) -> Option<&Self> {
+        let Self::Seq { elements, .. } = self else {
+            return None;
+        };
+        elements.get(usize::try_from(index).ok()?)
+    }
+
+    #[must_use]
+    pub fn seq_len(&self) -> Option<usize> {
+        match self {
+            Self::Seq { elements, .. } => Some(elements.len()),
+            Self::Int { .. }
+            | Self::Float { .. }
+            | Self::Bool(_)
+            | Self::Char(_)
+            | Self::Aggregate { .. } => None,
+        }
+    }
+
     /// Whether the value can be promoted into a pure-value operand. Aggregates
-    /// cannot: the pool models scalars only.
+    /// and sequences cannot: the pool models scalars only.
     #[must_use]
     pub fn is_scalar(&self) -> bool {
-        !matches!(self, Self::Aggregate { .. })
+        !matches!(self, Self::Aggregate { .. } | Self::Seq { .. })
     }
 
     /// Returns the raw integer bit pattern, or `None` if not an int.
@@ -118,8 +161,10 @@ impl Value {
             Self::Float { value, .. } => format_float_repr(*value),
             Self::Bool(b) => b.to_string(),
             Self::Char(c) => format_char_repr(*c),
-            Self::Aggregate { .. } => {
-                panic!("an aggregate value has no NIR literal repr; it never enters the value pool")
+            Self::Aggregate { .. } | Self::Seq { .. } => {
+                panic!(
+                    "an aggregate or sequence value has no NIR literal repr; neither enters the value pool"
+                )
             }
         }
     }
@@ -191,7 +236,7 @@ pub(crate) fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
                     prim,
                 })
             }
-            Value::Bool(_) | Value::Char(_) | Value::Aggregate { .. } => None,
+            Value::Bool(_) | Value::Char(_) | Value::Aggregate { .. } | Value::Seq { .. } => None,
         },
         NirUnaryOp::Not => match operand {
             Value::Bool(b) => Some(Value::Bool(!b)),

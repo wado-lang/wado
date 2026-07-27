@@ -6,10 +6,11 @@
 //
 // `const_object_globalization` also hoists unrelated `&`-literal call
 // arguments elsewhere in this program (e.g. `println`'s Formatter/Inspect
-// stack and the array-indexing bounds-check assert's own diagnostic
-// fragments), so the exact `__const_obj_N` number below is not stable
-// across unrelated optimizer changes — it is whatever this fixture's own
-// global happens to land on, pinned as a snapshot.
+// stack), so the exact `__const_obj_N` number below is not stable across
+// unrelated optimizer changes — it is whatever this fixture's own global
+// happens to land on, pinned as a snapshot. It comes first now that the
+// bounds checks fold before their assert's diagnostic fragments are
+// hoisted, leaving nothing ahead of it.
 
 use { println, Stdout } from "core:cli";
 
@@ -25,15 +26,15 @@ __DATA__
 {
     "stdout": "10, 20, 30\n",
     "wir_expect:O2": [
-        "global global:array_bounds_elim_const_wir.wado::__const_obj_18",
+        "global global:array_bounds_elim_const_wir.wado::__const_obj_0",
         "array.new_fixed<i32>(10, 20, 30)",
-        "builtin::array_get<i32>(global:array_bounds_elim_const_wir.wado::__const_obj_18.repr, 0)",
-        "builtin::array_get<i32>(global:array_bounds_elim_const_wir.wado::__const_obj_18.repr, 1)",
-        "builtin::array_get<i32>(global:array_bounds_elim_const_wir.wado::__const_obj_18.repr, 2)"
+        "builtin::array_get<i32>(global:array_bounds_elim_const_wir.wado::__const_obj_0.repr, 0)",
+        "builtin::array_get<i32>(global:array_bounds_elim_const_wir.wado::__const_obj_0.repr, 1)",
+        "builtin::array_get<i32>(global:array_bounds_elim_const_wir.wado::__const_obj_0.repr, 2)"
     ],
     "wir_not_expect:O2": [
-        "if 0 >= global:array_bounds_elim_const_wir.wado::__const_obj_18.used",
-        "if 1 >= global:array_bounds_elim_const_wir.wado::__const_obj_18.used",
-        "if 2 >= global:array_bounds_elim_const_wir.wado::__const_obj_18.used"
+        "if 0 >= global:array_bounds_elim_const_wir.wado::__const_obj_0.used",
+        "if 1 >= global:array_bounds_elim_const_wir.wado::__const_obj_0.used",
+        "if 2 >= global:array_bounds_elim_const_wir.wado::__const_obj_0.used"
     ]
 }

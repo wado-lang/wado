@@ -439,8 +439,8 @@ global global:http_fields_from_list.wado::__const_obj_2: ref null "core:prelude/
 global global:http_fields_from_list.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
 
 fn "http_fields_from_list.wado/handle"(request) {
-    let __b_1: ref "core:prelude//List<u8>";
-    let __b_3: ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
+    let name_bytes: ref "core:prelude//List<u8>";
+    let entries: ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
     let result: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>";
     let fields: i32;
     let __v0: bool;
@@ -582,9 +582,9 @@ fn "http_fields_from_list.wado/handle"(request) {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:http_fields_from_list.wado::__modules_initialized = 1;
     };
-    __b_1 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(118, 49), used: 2 };
-    __b_3 = struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>" { repr: array.new_fixed<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-one"), used: 5 }, 1: ref.as_non_null(struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = __b_1.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: 2 }) }), used: 1 };
-    result = "http_fields_from_list.wado/__cm_binding__Fields_from_list"(__b_3);
+    name_bytes = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(118, 49), used: 2 };
+    entries = struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>" { repr: array.new_fixed<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-one"), used: 5 }, 1: ref.as_non_null(struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = name_bytes.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: 2 }) }), used: 1 };
+    result = "http_fields_from_list.wado/__cm_binding__Fields_from_list"(entries);
     if @likely(ref.test "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>::Ok"(result)) {
         fields = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>::Ok"(result).payload_0;
         __v0 = "http_fields_from_list.wado/__cm_binding__Fields_has"(fields, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-one"), used: 5 });

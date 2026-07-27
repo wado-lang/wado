@@ -2,6 +2,10 @@
 // `unreachable` trap is hinted cold without any `cold_path()` marker. The
 // inference runs at every optimization level. Arms that merely diverge
 // (break / return) must NOT be hinted — divergence is not a trap.
+//
+// `black_box` keeps the arguments off the constant path: with constant ones
+// the calls are evaluated at compile time and the functions fold away, leaving
+// no branch to hint.
 
 // Then-arm traps: the condition is hinted unlikely-true.
 #[inline(never)]
@@ -45,10 +49,10 @@ fn early(n: i32) -> i32 {
 }
 
 export fn run() {
-    assert checked(5) == 6;
-    assert pick(7) == 7;
-    assert count_to(3) == 3;
-    assert early(4) == 8;
+    assert checked(builtin::black_box(5)) == 6;
+    assert pick(builtin::black_box(7)) == 7;
+    assert count_to(builtin::black_box(3)) == 3;
+    assert early(builtin::black_box(4)) == 8;
 }
 
 __DATA__

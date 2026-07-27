@@ -8,8 +8,9 @@ use crate::flat_package::FlatPackage;
 use crate::module_source::ModuleSource;
 use crate::tir::FunctionRef;
 use crate::tir::{
-    FunctionKind, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
-    TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    FunctionKind, GlobalInit, InlineHint, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirGlobal, TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -23,8 +24,15 @@ use crate::lower::wide_int_literal::{create_i128_literal, create_u128_literal};
 // `build_initialize_modules` half combines them into the top-level
 // `__initialize_modules` aggregator.
 
-/// Check if an expression is a constant initializer (can be evaluated at Wasm instantiation time)
-fn is_constant_initializer(expr: &TirExpr) -> bool {
+/// Whether the Wasm slot can hold this value directly, so the global needs no
+/// assignment from an initialization function.
+///
+/// Deliberately under-approximates what a constant expression can express: an
+/// aggregate only becomes a `struct.new` once the optimizer has collapsed the
+/// builder producing it, which is not knowable here. The classifier on the
+/// lowered Wasm value promotes back what this defers. Decidable here is what
+/// is already a value: a literal, and arithmetic over literals.
+fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
     match &expr.kind {
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -32,25 +40,34 @@ fn is_constant_initializer(expr: &TirExpr) -> bool {
         | TirExprKind::CharLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit => true,
-        TirExprKind::Cast { expr: inner, .. } => is_constant_initializer(inner),
+        TirExprKind::Cast { expr: inner, .. } => is_constant_initializer(inner, type_table),
         TirExprKind::Unary { op, expr: inner } => {
             // Negation of literals is constant
-            matches!(op, TirUnaryOp::Neg) && is_constant_initializer(inner)
+            matches!(op, TirUnaryOp::Neg) && is_constant_initializer(inner, type_table)
+        }
+        TirExprKind::Binary { op, left, right } => {
+            matches!(op, TirBinaryOp::Add | TirBinaryOp::Sub | TirBinaryOp::Mul)
+                && is_wasm_width_int(expr.type_id, type_table)
+                && is_constant_initializer(left, type_table)
+                && is_constant_initializer(right, type_table)
         }
         _ => false,
     }
 }
 
-/// Check if an expression is a `null` initializer (possibly inside casts).
-/// Used to mark reference-typed globals nullable when their constant
-/// initializer is `ref.null`, since a non-null Wasm global slot can't
-/// accept a `ref.null` initializer.
-fn is_null_initializer(expr: &TirExpr) -> bool {
-    match &expr.kind {
-        TirExprKind::Null => true,
-        TirExprKind::Cast { expr: inner, .. } => is_null_initializer(inner),
-        _ => false,
-    }
+/// An integer whose Wado width matches the Wasm operand it lowers to, so
+/// wrapping needs no masking. Wasm admits constant `add` / `sub` / `mul` on
+/// `i32` and `i64` only — never a narrower integer, and never a float.
+fn is_wasm_width_int(type_id: TypeId, type_table: &TypeTable) -> bool {
+    matches!(
+        type_table.get(type_id),
+        ResolvedType::Primitive(
+            crate::tir::PrimitiveType::I32
+                | crate::tir::PrimitiveType::U32
+                | crate::tir::PrimitiveType::I64
+                | crate::tir::PrimitiveType::U64
+        )
+    )
 }
 
 /// Create a default value expression for a type (used for lazy-initialized globals)
@@ -123,15 +140,6 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
     }
 }
 
-/// Check if a type is a reference type (needs nullable Wasm type for lazy init)
-fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    match type_table.get(type_id) {
-        ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never => false,
-        // Struct, List, String, etc. are reference types in Wasm GC
-        _ => true,
-    }
-}
-
 /// Extract non-constant global initializers into a per-module
 /// `__initialize_module` function (one per source module; the
 /// functions share a name and are disambiguated by their
@@ -152,44 +160,26 @@ pub fn extract(flat: &mut FlatPackage) {
         Vec::new();
 
     for (idx, global) in flat.globals.iter_mut().enumerate() {
-        if !is_constant_initializer(&global.initializer) {
-            // Save the original initializer with index and local types
-            lazy_inits.push((
-                idx,
-                global.name.clone(),
-                global.module_source.clone(),
-                global.ty,
-                global.initializer.clone(),
-                global.locals.clone(),
-            ));
-            // Replace with default value
-            global.initializer = default_value_for_type(global.ty, &type_table, global.span);
-            // Lazy-init globals must be Wasm-mutable (even if Wado-immutable)
-            global.mutable = true;
-            // Reference types need nullable Wasm type for lazy init,
-            // and codegen narrows reads (`global.get` followed by
-            // `ref.as_non_null`) since the slot is guaranteed non-null
-            // after `__initialize_module` runs.
-            if is_reference_type(global.ty, &type_table) {
-                global.is_nullable = true;
-                global.lazy_init = true;
-            }
-        } else if is_null_initializer(&global.initializer)
-            && is_reference_type(global.ty, &type_table)
-        {
-            // Constant `null` initializer for a reference-typed global.
-            // The Wasm initializer is `ref.null`, which only validates
-            // against a nullable global slot. Without this, the global's
-            // WIR type stays `(ref X)` non-null and the linker rejects
-            // the module with `expected (ref X), found nullref`.
-            //
-            // Codegen does NOT narrow reads of these globals: `null` is
-            // a legitimate runtime value (e.g. `Option<&T>::None`), so
-            // wrapping `global.get` in `ref.as_non_null` would trap
-            // every time we read a `None` value back. `lazy_init` stays
-            // false so the codegen narrowing path is skipped.
-            global.is_nullable = true;
+        if is_constant_initializer(global.init.slot_expr(), &type_table) {
+            continue;
         }
+        // The declared value moves into the initialization function rather
+        // than being copied, so the global cannot claim a value it no longer
+        // holds.
+        let placeholder = default_value_for_type(global.ty, &type_table, global.span);
+        let GlobalInit::Direct(declared) =
+            std::mem::replace(&mut global.init, GlobalInit::Deferred(placeholder))
+        else {
+            panic!("a global is Direct until this pass defers it");
+        };
+        lazy_inits.push((
+            idx,
+            global.name.clone(),
+            global.module_source.clone(),
+            global.ty,
+            declared,
+            global.locals.clone(),
+        ));
     }
 
     drop(type_table);
@@ -689,15 +679,16 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
     let init_flag_global = TirGlobal {
         name: "__modules_initialized".to_string(),
         ty: TypeTable::BOOL,
-        initializer: TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, span),
-        mutable: true,
+        init: GlobalInit::Direct(TirExpr::new(
+            TirExprKind::BoolLiteral(false),
+            TypeTable::BOOL,
+            span,
+        )),
         param: None,
         wado_mutable: true,
         visibility: crate::ast::Visibility::Private,
         module_source: entry_source.clone(),
         span,
-        is_nullable: false,
-        lazy_init: false,
         locals: Vec::new(),
     };
     flat.globals.push(init_flag_global);

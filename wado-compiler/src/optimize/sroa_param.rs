@@ -723,7 +723,7 @@ fn rewrite_call_sites(
     }
     let empty = IndexMap::default();
     for global in &mut project.globals {
-        let body = global.initializer.body_mut();
+        let body = global.init.slot_expr_mut().body_mut();
         let root = body.root;
         let type_table = type_table_rc.borrow();
         rewrite_calls_node(

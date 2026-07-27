@@ -148,7 +148,7 @@ impl Monomorphizer {
 
         // Rewrite function calls in global variable initializers
         for global in &mut module.globals {
-            rewriter.visit_expr(&mut global.initializer);
+            rewriter.visit_expr(global.init.slot_expr_mut());
         }
     }
 

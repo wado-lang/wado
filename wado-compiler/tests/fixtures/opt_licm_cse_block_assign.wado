@@ -4,6 +4,10 @@
 // level blocks (an if-expression arm) and in nested loop bodies — both were
 // missed, so the two `x + y` below shared one `__cse` temp and the second
 // occurrence read the pre-decrement value (156 instead of 153).
+//
+// `black_box` keeps the arguments off the constant path: with constant ones
+// both loops run at compile time and the functions this fixture inspects are
+// gone.
 
 use { println, Stdout } from "core:cli";
 
@@ -43,8 +47,8 @@ fn accumulate_nested_loop_assign(y: i32, start: i32) -> i32 {
 
 export fn run() with Stdout {
     // i=0: a=27, x=19, b=26; i=1: a=26, x=18, b=25; i=2: a=25, x=17, b=24.
-    println(`${accumulate_if_assign(7, 20)}`);
-    println(`${accumulate_nested_loop_assign(7, 20)}`);
+    println(`${accumulate_if_assign(builtin::black_box(7), builtin::black_box(20))}`);
+    println(`${accumulate_nested_loop_assign(builtin::black_box(7), builtin::black_box(20))}`);
 }
 
 __DATA__

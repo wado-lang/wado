@@ -2,6 +2,9 @@
 //
 // `a` has only non-stores ref → should be SROA'd.
 // `b` has stores ref → should NOT be SROA'd.
+//
+// `black_box` keeps the fields off the constant path: with constant ones both
+// structs are compile-time values and there is nothing left to decompose.
 
 struct Point {
     x: i32,
@@ -23,12 +26,18 @@ fn store_point(p: &Point) -> Holder with stores[p] {
 
 export fn run() {
     // a: only non-stores ref — should be SROA'd
-    let a = Point { x: 1, y: 2 };
+    let a = Point {
+        x: builtin::black_box(1),
+        y: builtin::black_box(2),
+    };
     let ra = read_point(&a);
     assert a.x + ra == 4;
 
     // b: has stores ref — should NOT be SROA'd
-    let b = Point { x: 3, y: 4 };
+    let b = Point {
+        x: builtin::black_box(3),
+        y: builtin::black_box(4),
+    };
     let h = store_point(&b);
     assert b.x == 3;
     assert h.p.x == 3;

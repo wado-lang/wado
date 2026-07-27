@@ -189,18 +189,17 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         project.globals.push(NirGlobal {
             name,
             ty,
-            initializer: ExprBody::wrapping_value(
+            // The hoisted value is written by the `GlobalVarSet` this pass
+            // emits at the use site, so the storage starts at a placeholder.
+            init: crate::tir::GlobalInit::Deferred(ExprBody::wrapping_value(
                 crate::nir_value_graph::ValueKind::Null,
                 ty,
                 crate::token::Span::new(0, 0, 1, 1),
-            ),
-            mutable: true,
+            )),
             wado_mutable: false,
             visibility: crate::ast::Visibility::Private,
             module_source,
             span: crate::token::Span::new(0, 0, 1, 1),
-            is_nullable: true,
-            lazy_init: true,
             locals: Vec::new(),
             prefer_fixed_string_repr: is_inline_ref,
         });

@@ -171,7 +171,7 @@ global global:single_module_variant_iter.wado::__const_obj_3: ref null "core:pre
 fn "single_module_variant_iter.wado/run"() {
     let leaf1: ref "single_module_variant_iter.wado//Choice";
     let leaf2: ref "single_module_variant_iter.wado//Choice";
-    let __b: ref "core:prelude//List<single_module_variant_iter.wado/Choice>";
+    let children: ref "core:prelude//List<single_module_variant_iter.wado/Choice>";
     let result: i32;
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
@@ -187,8 +187,8 @@ fn "single_module_variant_iter.wado/run"() {
     };
     leaf1 = struct.new "single_module_variant_iter.wado//Choice::B" { discriminant: 1, payload_0: struct.new "single_module_variant_iter.wado//BData" { value: 10 } };
     leaf2 = struct.new "single_module_variant_iter.wado//Choice::B" { discriminant: 1, payload_0: struct.new "single_module_variant_iter.wado//BData" { value: 20 } };
-    __b = struct.new "core:prelude//List<single_module_variant_iter.wado/Choice>" { repr: array.new_fixed<ref "single_module_variant_iter.wado//Choice">(leaf1, leaf2), used: 2 };
-    __sroa_tree_value = struct.new "single_module_variant_iter.wado//Choice::A" { discriminant: 0, payload_0: struct.new "single_module_variant_iter.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 111, 111, 116), used: 4 }, children: __b } };
+    children = struct.new "core:prelude//List<single_module_variant_iter.wado/Choice>" { repr: array.new_fixed<ref "single_module_variant_iter.wado//Choice">(leaf1, leaf2), used: 2 };
+    __sroa_tree_value = struct.new "single_module_variant_iter.wado//Choice::A" { discriminant: 0, payload_0: struct.new "single_module_variant_iter.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 111, 111, 116), used: 4 }, children: children } };
     counter = struct.new "single_module_variant_iter.wado//Counter" { total: 0 };
     "single_module_variant_iter.wado/single_module_variant_iter.wado/walk<single_module_variant_iter.wado/Counter>"(counter, __sroa_tree_value);
     result = counter.total;

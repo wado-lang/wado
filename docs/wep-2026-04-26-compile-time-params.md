@@ -94,7 +94,7 @@ v1 converts override strings to the declared type natively in the compiler — n
 
 v1 supports `#[param]` on the built-in scalar types only: `String`, `char`, the integer types, `f32` / `f64`, and `bool`. Their accepted spellings are the built-in impls of [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md).
 
-An unaccepted value (a `"yes"` for `bool`, an out-of-range integer) is an invalid value, handled per `--param-invalid`. `#[param]` on any other type is an error — `#[param] on <Type>: only built-in types are supported in v1`. v2 lifts this by evaluating [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) for arbitrary types through the wasm-CTFE backend ([niri Stage 5](./wep-2026-04-27-nir-interpreter.md)).
+An unaccepted value (a `"yes"` for `bool`, an out-of-range integer) is an invalid value, handled per `--param-invalid`. `#[param]` on any other type is an error — `#[param] on <Type>: only built-in types are supported in v1`. v2 lifts this by evaluating [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) for arbitrary types through the [wasm-CTFE backend](./wep-2026-04-27-nir-interpreter.md).
 
 ### Resolution Timing
 
@@ -202,7 +202,7 @@ An `invalid` value from `from_env` names the env var instead. At `warn` / `ignor
 
 ### Future Extensions
 
-- Arbitrary user types via [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) over wasm-CTFE ([niri Stage 5](./wep-2026-04-27-nir-interpreter.md)): conversion runs at compile time, so `--param-invalid` keeps its compile-time meaning.
+- Arbitrary user types via [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) over [wasm-CTFE](./wep-2026-04-27-nir-interpreter.md): conversion runs at compile time, so `--param-invalid` keeps its compile-time meaning.
 - Parameter file (`WADO_PARAM_FILE` or `wado.toml [params]`).
 - Per-package `-D` scoping.
 - Per-declaration `#[param(required)]` with initializer-less `global` syntax.

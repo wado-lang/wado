@@ -37,8 +37,8 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
-    CalleeMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice,
-    is_ctfe_eligible,
+    CalleeMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice, SeqBuiltin,
+    SeqBuiltinMap, is_ctfe_eligible,
 };
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
@@ -49,6 +49,7 @@ use crate::tir::{PrimitiveType, TypeId, TypeTable};
 /// they depend on changed. [`ConstFoldCache`] reuses them across iterations.
 struct FoldMaps {
     callees: CalleeMap,
+    seq_builtins: SeqBuiltinMap,
     globals: GlobalEnv,
     global_fields: GlobalFieldEnv,
 }
@@ -61,6 +62,7 @@ fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
     // a callee's body edit is visible without rebuilding the map — only its
     // *membership* (the ctfe-eligible function set) can go stale.
     let callees = build_callee_map(project);
+    let seq_builtins = build_seq_builtin_map(project);
     // Every immutable global whose initializer reduces to a `Const(_)` becomes a
     // `GlobalVarGet` rewrite target; mutable globals are recorded as `NonConst`.
     let globals = build_global_env(project, type_table, &callees);
@@ -70,6 +72,7 @@ fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
     let global_fields = build_global_field_env(project);
     FoldMaps {
         callees,
+        seq_builtins,
         globals,
         global_fields,
     }
@@ -146,6 +149,7 @@ fn new_visitor<'a>(type_table: &'a TypeTable, maps: &'a FoldMaps) -> ConstFoldVi
         interpreter: Interpreter::new(type_table),
     };
     visitor.interpreter.with_callees(&maps.callees);
+    visitor.interpreter.with_seq_builtins(&maps.seq_builtins);
     visitor.interpreter.with_globals(&maps.globals);
     visitor.interpreter.with_global_fields(&maps.global_fields);
     visitor
@@ -274,6 +278,28 @@ pub(super) fn build_callee_map(project: &NirPackage) -> CalleeMap {
     map
 }
 
+/// Which callee ids are the array builtins the engine evaluates.
+fn build_seq_builtin_map(project: &NirPackage) -> SeqBuiltinMap {
+    let mut map = SeqBuiltinMap::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        let Some(id) = func.id else {
+            continue;
+        };
+        let descriptor = crate::nir::FunctionRef::from_resolved(&func, func.module_source.clone());
+        let Some(name) = descriptor.monomorphized_builtin_name() else {
+            continue;
+        };
+        let builtin = match name.as_str() {
+            "builtin::array_get" => SeqBuiltin::Get,
+            "builtin::array_len" => SeqBuiltin::Len,
+            _ => continue,
+        };
+        map.insert(id, builtin);
+    }
+    map
+}
+
 /// Pre-build the [`GlobalEnv`] from every global in `project`. Each
 /// non-`mut` global's initializer is reduced through a fresh
 /// [`Interpreter`] (with `callees` installed so calls in initializers
@@ -294,20 +320,20 @@ fn build_global_env(
     let mut env = GlobalEnv::default();
     for global in &project.globals {
         let key = (global.module_source.clone(), global.name.clone());
-        let lattice = if global.mutable {
-            Lattice::NonConst
-        } else {
-            // The initializer runs at module scope: no local env, but
-            // it may call pure functions and read previously-declared
-            // globals. Threading `&env` in lets `global B = A + 1;`
-            // fold once `A` has been recorded earlier in this loop.
-            let mut interp = Interpreter::new(type_table);
-            interp.with_callees(callees);
-            interp.with_globals(&env);
-            let body = global.initializer.body();
-            match global.initializer.expr() {
-                Operand::Expr(e) => interp.reduce_to_lattice_a(body, e),
-                op @ Operand::Value(_) => interp.operand_to_lattice_a(body, op),
+        let declared = (!global.wado_mutable)
+            .then(|| global.init.declared())
+            .flatten();
+        let lattice = match declared {
+            None => Lattice::NonConst,
+            Some(declared) => {
+                let mut interp = Interpreter::new(type_table);
+                interp.with_callees(callees);
+                interp.with_globals(&env);
+                let body = declared.body();
+                match declared.expr() {
+                    Operand::Expr(e) => interp.reduce_to_lattice_a(body, e),
+                    op @ Operand::Value(_) => interp.operand_to_lattice_a(body, op),
+                }
             }
         };
         if !matches!(lattice, Lattice::Unevaluated) {
@@ -410,8 +436,9 @@ fn build_global_field_env(project: &NirPackage) -> GlobalFieldEnv {
     // direct source.
     for global in &project.globals {
         if !global.wado_mutable
-            && let Some(init_e) = global.initializer.expr().as_expr()
-            && let Some(n) = const_seq_len_a(global.initializer.body(), init_e)
+            && let Some(declared) = global.init.declared()
+            && let Some(init_e) = declared.expr().as_expr()
+            && let Some(n) = const_seq_len_a(declared.body(), init_e)
         {
             record_seq_len(
                 &mut env,

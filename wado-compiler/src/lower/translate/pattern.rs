@@ -172,8 +172,11 @@ impl Lowering {
 
         let mut const_int_globals: IndexMap<(ModuleSource, String), i128> = IndexMap::default();
         for g in &flat.globals {
-            if !g.mutable
-                && let TirExprKind::IntLiteral { value, .. } = &g.initializer.kind
+            // A `global mut` can change, and a deferred global holds a
+            // placeholder rather than its value — neither is a constant.
+            if !g.wado_mutable
+                && let Some(declared) = g.init.declared()
+                && let TirExprKind::IntLiteral { value, .. } = &declared.kind
             {
                 const_int_globals.insert(
                     (g.module_source.clone(), g.name.clone()),

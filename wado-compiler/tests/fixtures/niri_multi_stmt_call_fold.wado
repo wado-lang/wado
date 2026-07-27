@@ -1,0 +1,67 @@
+// A pure callee whose body is a statement sequence — `let` bindings, an
+// assignment, an early return — is evaluated at compile time, so the call
+// folds to a literal and the callee drops as unused.
+//
+// `#[inline(never)]` keeps the inliner away, so the fold is attributable to
+// niri rather than to inlining plus local folding.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn scaled_offset(x: i32) -> i32 {
+    let doubled = x * 2;
+    let shifted = doubled + 3;
+    return shifted;
+}
+
+#[inline(never)]
+fn classify(n: i32) -> i32 {
+    let limit = 10;
+    if n > limit {
+        return 1;
+    }
+    let squared = n * n;
+    return squared;
+}
+
+#[inline(never)]
+fn accumulate(start: i32) -> i32 {
+    let mut acc = start;
+    acc = acc + 7;
+    acc = acc * 2;
+    return acc;
+}
+
+export fn run() with Stdout {
+    let a = scaled_offset(5);
+    let b = classify(4);
+    let c = classify(20);
+    let d = accumulate(3);
+    if a != 13 {
+        panic("dead_multi_stmt_let_58210");
+    }
+    if b != 16 {
+        panic("dead_multi_stmt_fallthrough_58210");
+    }
+    if c != 1 {
+        panic("dead_multi_stmt_early_return_58210");
+    }
+    if d != 20 {
+        panic("dead_multi_stmt_assign_58210");
+    }
+    println(`${a} ${b} ${c} ${d}`);
+}
+
+__DATA__
+{
+    "stdout": "13 16 1 20\n",
+    "wir_not_expect:O2": [
+        "dead_multi_stmt_let_58210",
+        "dead_multi_stmt_fallthrough_58210",
+        "dead_multi_stmt_early_return_58210",
+        "dead_multi_stmt_assign_58210",
+        "scaled_offset",
+        "classify",
+        "accumulate"
+    ]
+}

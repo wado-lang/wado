@@ -3,6 +3,10 @@
 // rendered as `break_if` / `continue_if` in the WIR. Branch hints carried by
 // the condition survive the rewrite, and a `br_if` whose fall-through always
 // traps is inferred likely-taken.
+//
+// `black_box` keeps the arguments off the constant path: with constant ones
+// the loop runs at compile time, the call folds to its result, and the
+// function this fixture inspects is gone.
 
 // Plain break guard → `break_if`.
 #[inline(never)]
@@ -64,10 +68,10 @@ fn must_finish(n: i32) -> i32 {
 }
 
 export fn run() {
-    assert count_to(3) == 3;
-    assert sum_odd(4) == 4;
-    assert find_limit(2) == 2;
-    assert must_finish(1) == 1;
+    assert count_to(builtin::black_box(3)) == 3;
+    assert sum_odd(builtin::black_box(4)) == 4;
+    assert find_limit(builtin::black_box(2)) == 2;
+    assert must_finish(builtin::black_box(1)) == 1;
 }
 
 __DATA__

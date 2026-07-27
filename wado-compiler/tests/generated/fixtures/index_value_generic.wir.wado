@@ -344,7 +344,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
 
 fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
     let is_negative: bool;
-    let remaining_digits: i32;
     let offset_7: i32;
     let repr: ref Array<u8>;
     let abs_val: i64;
@@ -354,12 +353,11 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
     let self_13: ref "core:prelude/string.wado//String";
     is_negative = self < 0_i64;
     if self == -9223372036854775808_i64 {
-        remaining_digits = "core:prelude/primitive.wado/count_digits_i64"(922337203685477580_i64);
-        offset_7 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 1, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, remaining_digits + 1);
+        offset_7 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 1, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, 19);
         self_12 = f.buf;
         repr = self_12.repr;
-        "core:prelude/primitive.wado/write_decimal_digits"(repr, offset_7, 922337203685477580_i64, remaining_digits);
-        builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
+        "core:prelude/primitive.wado/write_decimal_digits"(repr, offset_7, 922337203685477580_i64, 18);
+        builtin::array_set_u8(repr, offset_7 + 18, 56);
     } else {
         digit_count_10 = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - self, self)));
         offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_10);

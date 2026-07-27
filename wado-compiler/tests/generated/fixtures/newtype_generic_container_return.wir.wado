@@ -108,23 +108,21 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(42)
 
-type "functype//newtype_generic_container_return.wado/Point::make_list" = fn(ref "newtype_generic_container_return.wado//Point") -> ref "core:prelude//List<newtype_generic_container_return.wado/Point>";  // TypeId(43)
+type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(43)
 
-type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(44)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(44)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(45)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(45)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(46)
+type "functype//core:prelude/list.wado/List<newtype_generic_container_return.wado/Point>::push" = fn(ref "core:prelude//List<newtype_generic_container_return.wado/Point>", ref "newtype_generic_container_return.wado//Point");  // TypeId(46)
 
-type "functype//core:prelude/list.wado/List<newtype_generic_container_return.wado/Point>::push" = fn(ref "core:prelude//List<newtype_generic_container_return.wado/Point>", ref "newtype_generic_container_return.wado//Point");  // TypeId(47)
+type "functype//core:prelude/list.wado/List<newtype_generic_container_return.wado/Point>::grow" = fn(ref "core:prelude//List<newtype_generic_container_return.wado/Point>");  // TypeId(47)
 
-type "functype//core:prelude/list.wado/List<newtype_generic_container_return.wado/Point>::grow" = fn(ref "core:prelude//List<newtype_generic_container_return.wado/Point>");  // TypeId(48)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(49)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(50)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(51)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(50)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -155,7 +153,6 @@ fn "newtype_generic_container_return.wado/run"() with Stdout {
     let loc: ref "newtype_generic_container_return.wado//Point";
     let opt: ref null "newtype_generic_container_return.wado//Point";
     let l: ref "newtype_generic_container_return.wado//Point";
-    let arr: ref "core:prelude//List<newtype_generic_container_return.wado/Point>";
     let first: ref "newtype_generic_container_return.wado//Point";
     let __local_5_5: ref "core:prelude/string.wado//String";
     let __local_6_6: ref "core:prelude/format.wado//Formatter";
@@ -176,6 +173,7 @@ fn "newtype_generic_container_return.wado/run"() with Stdout {
     let start_83: i32;
     let f_92: ref "core:prelude/format.wado//Formatter";
     let start_97: i32;
+    let arr_106: ref "core:prelude//List<newtype_generic_container_return.wado/Point>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:newtype_generic_container_return.wado::__modules_initialized);
         cold_path;
@@ -183,21 +181,22 @@ fn "newtype_generic_container_return.wado/run"() with Stdout {
         global:newtype_generic_container_return.wado::__modules_initialized = 1;
     };
     loc = struct.new "newtype_generic_container_return.wado//Point" { x: 5, y: 10 };
-    opt = struct.new "newtype_generic_container_return.wado//Point" { x: 5, y: 10 };
+    opt = struct.new "newtype_generic_container_return.wado//Point" { x: loc.x, y: loc.y };
     if ref.is_null(opt) == 0 {
         l = ref.as_non_null(opt);
         "core:cli/println"(__local_5_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(44), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5_5, global:newtype_generic_container_return.wado::__const_obj_8); __local_6_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5_5 }; f_15 = __local_6_6; "core:prelude/primitive.wado/i32::fmt_decimal"(l.x, f_15); start_20 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_5_5, 1); builtin::array_set_u8(__local_5_5.repr, start_20, 44); start_29 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_5_5, 1); builtin::array_set_u8(__local_5_5.repr, start_29, 32); __local_6_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5_5 }; f_38 = __local_6_6; "core:prelude/primitive.wado/i32::fmt_decimal"(l.y, f_38); start_43 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_5_5, 1); builtin::array_set_u8(__local_5_5.repr, start_43, 41); __local_5_5);
     } else {
     }
-    arr = "newtype_generic_container_return.wado/Point::make_list"(loc);
-    "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_7, global:newtype_generic_container_return.wado::__const_obj_7); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; "core:prelude/primitive.wado/i32::fmt_decimal"(arr.used, __local_8); __local_7);
-    __v1 = arr.used;
+    arr_106 = struct.new "core:prelude//List<newtype_generic_container_return.wado/Point>" { repr: builtin::array_new<ref "newtype_generic_container_return.wado//Point">(0), used: 0 };
+    "core:prelude/list.wado/List<newtype_generic_container_return.wado/Point>::push"(arr_106, struct.new "newtype_generic_container_return.wado//Point" { x: loc.x, y: loc.y });
+    "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_7, global:newtype_generic_container_return.wado::__const_obj_7); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; "core:prelude/primitive.wado/i32::fmt_decimal"(arr_106.used, __local_8); __local_7);
+    __v1 = arr_106.used;
     if @unlikely(0 >= __v1) {
         cold_path;
         "core:rt/panic"(__local_5_62 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5_62, global:newtype_generic_container_return.wado::__const_obj_6); "core:prelude/string.wado/String::push_str"(__local_5_62, global:newtype_generic_container_return.wado::__const_obj_5); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 116); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 32); "core:prelude/string.wado/String::push_str"(__local_5_62, global:newtype_generic_container_return.wado::__const_obj_4); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 58); __local_6_63 = "core:prelude/format.wado/Formatter::new"(__local_5_62); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 354 }, __local_6_63); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 58); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 32); "core:prelude/string.wado/String::push_str"(__local_5_62, global:newtype_generic_container_return.wado::__const_obj_3); "core:prelude/string.wado/String::push_str"(__local_5_62, global:newtype_generic_container_return.wado::__const_obj_2); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 105); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 110); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 100); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 101); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 120); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 58); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 32); __local_6_63 = "core:prelude/format.wado/Formatter::new"(__local_5_62); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }, __local_6_63); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 10); "core:prelude/string.wado/String::push_str"(__local_5_62, global:newtype_generic_container_return.wado::__const_obj_1); __local_6_63 = "core:prelude/format.wado/Formatter::new"(__local_5_62); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v1 }, __local_6_63); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_62, 10); __local_5_62);
         unreachable;
     }
-    first = builtin::array_get<ref "newtype_generic_container_return.wado//Point">(arr.repr, 0);
+    first = builtin::array_get<ref "newtype_generic_container_return.wado//Point">(arr_106.repr, 0);
     "core:cli/println"(__local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(46), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_9, global:newtype_generic_container_return.wado::__const_obj_0); __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 }; f_69 = __local_10; "core:prelude/primitive.wado/i32::fmt_decimal"(first.x, f_69); start_74 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_9, 1); builtin::array_set_u8(__local_9.repr, start_74, 44); start_83 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_9, 1); builtin::array_set_u8(__local_9.repr, start_83, 32); __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 }; f_92 = __local_10; "core:prelude/primitive.wado/i32::fmt_decimal"(first.y, f_92); start_97 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_9, 1); builtin::array_set_u8(__local_9.repr, start_97, 41); __local_9);
 }
 
@@ -515,13 +514,6 @@ fn "core:prelude/string.wado/String::push_ascii_unchecked"(self, byte) {
     let start: i32;
     start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
     builtin::array_set_u8(self.repr, start, byte);
-}
-
-fn "newtype_generic_container_return.wado/Point::make_list"(self) {
-    let __b: ref "core:prelude//List<newtype_generic_container_return.wado/Point>";
-    __b = struct.new "core:prelude//List<newtype_generic_container_return.wado/Point>" { repr: builtin::array_new<ref "newtype_generic_container_return.wado//Point">(0), used: 0 };
-    "core:prelude/list.wado/List<newtype_generic_container_return.wado/Point>::push"(__b, struct.new "newtype_generic_container_return.wado//Point" { x: self.x, y: self.y });
-    return __b;
 }
 
 fn "core:prelude/format.wado/Formatter::new"(buf) {

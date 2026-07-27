@@ -1,11 +1,14 @@
 //! Function collection — gathers all reachable functions from the `NirPackage`,
 //! registers their types and creates `WirFunction` stubs (bodies filled later).
 
+use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_f32_type, prim_of};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::global_name;
-use crate::nir::NirFunction;
-use crate::tir::TypeTable;
+use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir_arena::{Body, ExprKind, Operand};
+use crate::nir_value_graph::ValueKind;
+use crate::tir::{PrimitiveType, TypeTable};
 use crate::wir::{
     CanonicalIntrinsic, WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType,
 };
@@ -633,15 +636,16 @@ fn register_globals(ctx: &mut WirContext<'_>) {
 
         let mut wir_type = ctx.type_id_to_wir_type(type_table, global.ty);
 
-        // For nullable globals (lazy-init reference types, or constant
-        // `null` initialisers on reference-typed globals), widen the WIR
-        // slot to its nullable form so the `ref.null` placeholder in the
-        // Wasm initialiser validates. Both `WirType::Ref` (concrete
-        // struct/array references) and `WirType::AbstractRef` (e.g.
-        // closure-typed globals lowered to abstract `structref`) need
-        // this. Codegen narrows reads back to the non-null type via
-        // `ref.as_non_null` for `lazy_init` globals.
-        if global.is_nullable {
+        // Both cases need a nullable slot, but only a deferred one narrows its
+        // reads: a declared `null` is a value the program observes, and
+        // narrowing would trap on every `None`.
+        let deferred = global.init.is_deferred();
+        let lazy_init = deferred && is_wir_reference(&wir_type);
+        let declared_null = global
+            .init
+            .declared()
+            .is_some_and(|d| is_null_operand(d.body(), d.expr()));
+        if lazy_init || declared_null {
             match &mut wir_type {
                 WirType::Ref { nullable, .. } | WirType::AbstractRef { nullable, .. } => {
                     *nullable = true;
@@ -650,9 +654,9 @@ fn register_globals(ctx: &mut WirContext<'_>) {
             }
         }
 
-        // Convert the initializer to a WIR constant instruction
-        let init_body = global.initializer.body();
-        let init_op = global.initializer.expr();
+        let slot = global.init.slot_expr();
+        let init_body = slot.body();
+        let init_op = slot.expr();
         let init = translate_global_init(
             init_body,
             init_op,
@@ -666,10 +670,10 @@ fn register_globals(ctx: &mut WirContext<'_>) {
         ctx.globals.push(WirGlobal {
             name: WirName { fq: global_name },
             ty: wir_type,
-            mutable: global.mutable,
+            mutable: global.wado_mutable || deferred,
             wado_mutable: global.wado_mutable,
             init,
-            lazy_init: global.lazy_init,
+            lazy_init,
             meta: WirMeta {
                 module_source: Some(module_source.clone()),
                 ..WirMeta::default()
@@ -678,78 +682,107 @@ fn register_globals(ctx: &mut WirContext<'_>) {
     }
 }
 
+/// Whether the slot needs a `ref.null` placeholder, and so a narrowing read.
+fn is_wir_reference(ty: &WirType) -> bool {
+    matches!(ty, WirType::Ref { .. } | WirType::AbstractRef { .. })
+}
+
+/// Whether the declared value is `null` itself.
+fn is_null_operand(body: &Body, op: Operand) -> bool {
+    match op {
+        Operand::Value(v) => matches!(body.values.kind(v), ValueKind::Null),
+        // `null` reaches the pool as a value, never as a skeleton node.
+        Operand::Expr(_) => false,
+    }
+}
+
+/// Evaluate a global's initializer to a compile-time value.
+///
+/// Every node is evaluated at its *own* type, which is what makes a cast a
+/// conversion rather than a relabelling: `(2147483647 + 1) as i64` wraps at
+/// `i32` before it widens. Shares the evaluators with compile-time function
+/// evaluation, so a global and an equivalent local expression agree.
+fn global_init_value(body: &Body, op: Operand, type_table: &TypeTable) -> Option<Value> {
+    match op {
+        Operand::Value(v) => {
+            let ty = body.values.type_of(v)?;
+            match body.values.kind(v) {
+                ValueKind::Bool(b) => Some(Value::Bool(*b)),
+                ValueKind::Char(c) => Some(Value::Char(*c)),
+                ValueKind::Int(value, _) => Some(Value::Int {
+                    value: *value,
+                    prim: prim_of(ty, type_table)?,
+                }),
+                ValueKind::Float(bits, _) => Some(Value::Float {
+                    value: f64::from_bits(*bits),
+                    prim: if is_f32_type(ty, type_table) {
+                        PrimitiveType::F32
+                    } else {
+                        PrimitiveType::F64
+                    },
+                }),
+                _ => None,
+            }
+        }
+        Operand::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Cast { expr: inner, .. } => {
+                let value = global_init_value(body, *inner, type_table)?;
+                eval_cast(value, prim_of(body.exprs[e].type_id, type_table)?)
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::Neg,
+                expr: inner,
+            } => eval_unary(
+                NirUnaryOp::Neg,
+                global_init_value(body, *inner, type_table)?,
+            ),
+            ExprKind::Binary { left, op, right } => eval_binary(
+                global_init_value(body, *left, type_table)?,
+                *op,
+                global_init_value(body, *right, type_table)?,
+            ),
+            _ => None,
+        },
+    }
+}
+
 /// Convert a NIR global initializer operand to a WIR constant instruction.
-/// `type_id` is the type to interpret a literal as, propagated downward unchanged
-/// through enclosing casts (the outermost cast's type wins).
+/// `type_id` is the global's declared type, which decides the constant's
+/// width.
 fn translate_global_init(
-    body: &crate::nir_arena::Body,
-    op: crate::nir_arena::Operand,
+    body: &Body,
+    op: Operand,
     type_id: crate::tir::TypeId,
     type_table: &TypeTable,
 ) -> crate::wir::WirInstr {
-    use crate::nir_arena::{ExprKind, Operand};
-    use crate::nir_value_graph::ValueKind;
-    use crate::tir::{PrimitiveType, ResolvedType};
+    use crate::tir::ResolvedType;
     use crate::wir::WirInstr;
 
-    let int_const = |value: u64| match type_table.get(type_id) {
-        ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
-            WirInstr::I64Const(value as i64)
-        }
-        _ => WirInstr::I32Const(value as i32),
-    };
-    let float_const = |value: f64| match type_table.get(type_id) {
-        ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(value as f32),
-        _ => WirInstr::F64Const(value),
-    };
     let ref_null = || WirInstr::RefNull {
         heap_type: crate::wir::WirAbstractHeapType::None,
     };
-
-    // A pure scalar constant lives in the value pool (WEP: The Live ValueGraph);
-    // emit it per the target `type_id`.
-    if let Operand::Value(v) = op {
-        return match body.values.kind(v) {
-            ValueKind::Int(value, _) => int_const(*value),
-            ValueKind::Float(bits, _) => float_const(f64::from_bits(*bits)),
-            ValueKind::Bool(b) => WirInstr::I32Const(i32::from(*b)),
-            ValueKind::Char(c) => WirInstr::I32Const(*c as i32),
-            _ => ref_null(),
-        };
-    }
-    let Some(id) = op.as_expr() else {
+    // What the evaluator cannot reduce is assigned by the initialization
+    // function instead, so the slot starts at a placeholder.
+    let Some(value) = global_init_value(body, op, type_table) else {
         return ref_null();
     };
-
-    match &body.exprs[id].kind {
-        ExprKind::Cast { expr: inner, .. } => {
-            // For casts, evaluate the inner expression with the cast's target
-            // type (propagate the current `type_id` downward).
-            translate_global_init(body, *inner, type_id, type_table)
+    let bits = match value {
+        Value::Int { value, .. } => value,
+        Value::Bool(b) => u64::from(b),
+        Value::Char(c) => u64::from(c),
+        Value::Float { value, .. } => {
+            return match type_table.get(type_id) {
+                ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(value as f32),
+                _ => WirInstr::F64Const(value),
+            };
         }
-        ExprKind::Unary {
-            op: crate::nir::NirUnaryOp::Neg,
-            expr: inner,
-        } => {
-            // Negation of constant (normally folded by elaborator, but handle
-            // for robustness). The inner constant uses its own type.
-            let inner = *inner;
-            let inner_wir =
-                translate_global_init(body, inner, body.operand_type(inner), type_table);
-            match inner_wir {
-                WirInstr::I32Const(v) => WirInstr::I32Const(v.wrapping_neg()),
-                WirInstr::I64Const(v) => WirInstr::I64Const(v.wrapping_neg()),
-                WirInstr::F32Const(v) => WirInstr::F32Const(-v),
-                WirInstr::F64Const(v) => WirInstr::F64Const(-v),
-                _ => ref_null(),
-            }
+        Value::Aggregate { .. } | Value::Seq { .. } => return ref_null(),
+    };
+    match type_table.get(type_id) {
+        ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
+            WirInstr::I64Const(bits as i64)
         }
-        _ => {
-            // Non-constant initializers use null placeholder (lazy init at runtime)
-            WirInstr::RefNull {
-                heap_type: crate::wir::WirAbstractHeapType::None,
-            }
-        }
+        _ => WirInstr::I32Const(bits as i32),
     }
 }
 

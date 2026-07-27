@@ -2,569 +2,249 @@
 
 ## Context
 
-The Wado optimizer relies on constant folding to reduce literal-only
-expressions to a single literal node. Until now the folding logic lived
-inside `optimize/const_folding.rs` as a hand-rolled set of
-operator helpers, mixed with the NIR visitor that drove it.
+The Wado optimizer needs to reduce expressions the source made constant —
+literal arithmetic, a branch whose condition is known, a pure call with
+constant arguments — to the value they denote. `niri` ("NIR Interpreter") is
+the engine that answers what a NIR expression evaluates to at compile time.
+Constant folding is its primary consumer; branch pruning, constant
+propagation, and compile-time function evaluation reuse it.
 
-This commit splits the engine out into a new top-level module,
-`wado_compiler::niri` ("NIR Interpreter"), exposing
-`Interpreter::reduce(&NirExpr) -> NirExpr` as the canonical API.
-`const_folding.rs` becomes a thin visitor that delegates each visited
-node's local rewrite to `Interpreter::reduce_local`.
-
-This WEP records the planned trajectory so future contributors don't
-have to re-litigate the design every time we want to fold a richer
-expression.
+This WEP records the trajectory so contributors don't re-litigate the design
+each time we want to fold a richer expression. It states capabilities, not
+mechanisms: what `niri` can and cannot evaluate. How it does so is the code's
+business.
 
 ## Decision
 
-`niri` evolves into a **partial evaluator** for NIR. The public surface
-keeps a single shape — `reduce(&NirExpr) -> NirExpr` — and each stage
-extends what kinds of expressions can be reduced. Beyond a single-process
-interpreter, a complementary **wasm-CTFE backend** runs full pure
-function calls through `wasmtime`, leveraging Wado's effect system as a
-type-checked purity gate.
+`niri` is a **partial evaluator** for NIR: it reduces what it can and leaves
+a residual otherwise. Beyond the in-process engine, a complementary
+**wasm-CTFE backend** runs full pure calls through a real Wasm runtime, using
+Wado's effect system as a type-checked purity gate.
 
 ### Why two backends
 
 |              | niri (in-process)                                  | wasm execution                                          |
 | ------------ | -------------------------------------------------- | ------------------------------------------------------- |
 | Sweet spot   | `2+3 → 5`, identity simplification, branch pruning | `fib(20)`, lookup-table generation, full pure-call CTFE |
-| Cost / call  | µs, memoizable                                     | ms (codegen + instantiate), amortized via module cache  |
+| Cost / call  | µs                                                 | ms (codegen + instantiate), amortized via module cache  |
 | Partial eval | Yes (residuals)                                    | No (whole-call)                                         |
 | Coverage     | Whatever we hand-write                             | All of Wado, for free                                   |
 
-These are complementary, not alternatives. niri stays sub-quadratic and
-fine-grained; wasm execution covers anything niri would balk at.
+These are complementary, not alternatives. `niri` stays cheap and
+fine-grained; wasm execution covers anything `niri` balks at.
 
-## Stages
+### Scope boundary against the ValueGraph
 
-### Stage 0 — split & rename
+`niri` evaluates **pure values**: given an expression and what is known about
+its inputs, what does it denote. The engine's `ValueGraph` owns everything
+**flow-sensitive**: reaching definitions, branch merges, loop and heap-write
+invalidation, field store-to-load seeding.
 
-Status: done.
+The boundary is load-bearing. `niri` once carried its own per-local map of
+known fields, with branch-merge and loop-invalidation logic; it was built and
+then retired once the `ValueGraph` covered the same ground. Anything that
+needs to know _which_ definition reaches a use belongs to the `ValueGraph`,
+and a proposal to teach `niri` about control flow between statements should be
+read as a sign the fact belongs on the other side of this line.
 
-- [x] `wado_compiler::niri` exists with `Value`, `Interpreter`,
-      `reduce(&NirExpr) -> NirExpr`, `reduce_local(&mut NirExpr) -> bool`,
-      and `reduce_to_value(&NirExpr) -> Option<Value>`.
-- [x] `const_folding.rs` is a thin visitor.
-- [x] Identity simplification for `&&` / `||` lives in niri, not the
-      visitor.
-- [x] Integration tests at `wado-compiler/tests/niri.rs` cover the four
-      arithmetic ops on i32/i64/u8/u32/f32/f64 plus `reduce`-API
-      contracts (repr preservation, short-circuit, binary collapse).
+### Effects are the purity gate
 
-Out of scope at Stage 0 (matches the previous behaviour, deferred to
-later stages): float-to-int and int-to-float casts (only int-to-int
-casts fold), heap-allocated `Value` payloads, and any cross-function
-reasoning. Stage 1 and onward extend the engine; Stage 0 is purely a
-relocation + API reshape with zero behaviour change.
+CTFE soundness rests on effect inference: a function admitted for
+compile-time evaluation is one the effect system called pure. A bug there
+lets an impure function be evaluated at compile time. This is the same trust
+already placed in effect checking elsewhere.
 
-### Stage 1 — local environment + lattice
+## Done
 
-Status: done.
+Value model:
 
-- [x] Replace `Option<Value>` with a 3-state lattice. `Option<Value>`
-      conflated four distinct meanings (unevaluated, const, non-const,
-      unsupported-op), which made memoization unsafe to add later —
-      caching `None` couldn't distinguish "we know it's non-const" from
-      "we haven't computed it yet". The lattice fixes this at the type
-      level:
+- Integer, float, bool and char scalars, with the arithmetic, comparison,
+  bitwise and unary operators over them, and casts between them.
+- Structs and tuples whose every field is constant, and field reads
+  projecting back out of them — out of a literal, a local, an immutable
+  global, or a compile-time call result. Aggregates never leave the engine;
+  what reaches the IR is the scalars projected out of them.
+- A three-state lattice — unevaluated, constant, non-constant — with a join,
+  so an unreachable branch contributes nothing to the result and a trapping
+  arm does not contaminate a fold.
 
-  ```rust
-  pub enum Lattice {
-      Unevaluated,    // = SCCP Bottom: not yet computed / unreachable
-      Const(Value),   // provably this value
-      NonConst,       // = SCCP Top: non-constant (or modelled-out op)
-  }
-  ```
+Bindings:
 
-  Names favour readability over the academic `Bottom` / `Top`.
-  Comments in `niri.rs` reference the SCCP lattice for readers
-  familiar with the abstract-interpretation literature.
+- Immutable locals whose initializer is constant read back as that constant.
+  Mutable and assigned locals are non-constant.
+- Immutable globals whose initializer is constant fold at every read, as do
+  the known constant fields of a global (a sequence global's length).
+- An aggregate constant binds to a local only when every mention of that local
+  merely reads it. `niri` models whole values, not the heap, so a local
+  another handle can write through would go stale.
 
-- [x] `reduce_to_lattice(&NirExpr) -> Lattice` is the canonical engine
-      API. Callers that only need "is this a literal?" use
-      `Lattice::as_const() -> Option<Value>` — kept as a _projection_,
-      not a separate function, so the lattice is always the source of
-      truth.
-- [x] `env: IndexMap<LocalId, Lattice>` on `Interpreter` for `let`-bound
-      constants. Immutable bindings are captured as `Const(v)` when the
-      RHS reduces; `let mut` and assignments invalidate to `NonConst`.
-      Reads of `NirExprKind::Local` consult `env`.
-- [x] `GlobalEnv: IndexMap<(ModuleSource, String), Lattice>` on
-      `Interpreter` for module-scope globals. The driving visitor
-      (`const_folding`) builds the env once per pass by walking
-      `FlatPackage::globals`: each `global FOO: T = init;` whose
-      initializer reduces to `Const(v)` is recorded as `Const(v)`,
-      mutable globals as `NonConst`. Reads of
-      `NirExprKind::GlobalVarGet` consult `globals` and bare reads of
-      a `Const(v)` global rewrite to the literal via the same
-      leaf-rewrite path as a `Local`. Initializers are reduced
-      through a fresh `Interpreter` with the partially-built env
-      installed, so `global B = A + 1` folds once `A` is in scope.
-      Calls inside initializers fold via Stage 3's `with_callees`.
+Control flow:
 
-### Stage 1.5 — memoization (deferred)
+- `if`, expression and statement form: a constant condition collapses to the
+  chosen arm; a side-effect-free condition whose arms denote the same constant
+  collapses to that constant.
+- `match`: a constant scrutinee selects the first arm that provably matches;
+  a provably exhaustive match whose every arm denotes the same constant
+  collapses to it. The exhaustiveness requirement is what keeps the implicit
+  no-match trap alive.
+- Patterns decided: wildcard, binding, integer / bool / char literal, range,
+  or-patterns, a constant-valued pattern, struct patterns, and exact-arity
+  tuple patterns. A definite field mismatch rules an arm out even when a
+  sibling field binds.
+- An arm's guard and body are evaluated with that arm's bindings in scope.
+- `match X { Enum::Case => true, _ => false }` — the shape
+  `X matches { Case }` desugars to — collapses to a discriminator comparison
+  before the match ever reaches pattern lowering.
 
-Status: deferred to Stage 3.
+Calls:
 
-- [ ] Add `memo: HashMap<ExprKey, Lattice>` once cross-context
-      re-evaluation actually exists (pure call inlining). In Stage 1's
-      pure bottom-up walk every node is visited exactly once, so the
-      memo carries no payoff and risks invariant drift.
-- [ ] When introduced, only `Const(v)` and structurally-final `NonConst`
-      results are cached. `Unevaluated` is the cache-miss sentinel by
-      construction. "Unsupported-op `NonConst`" is **not** memoized so
-      model extensions don't leave stale entries — `NonConst` is cheap
-      to recompute (one op-match), so the precision gain outweighs the
-      cache hit.
+- A free call whose arguments are all constant and whose callee is pure,
+  non-async, monomorphic, and returning something runs at compile time. A call
+  that yields nothing has no value to substitute, and handing one back would
+  leave a value where the program expects none. The body executes statement
+  by statement, so a `let` sequence, assignment to a local, an `if` whose
+  condition decides, an early `return`, a labeled block completed by its
+  `break`, and a loop all reach a value. Recursion and total work are bounded.
+  A body that does not produce a constant leaves the call in place, so a
+  runtime trap inside it stays observable.
+- A statement counts as executed only when everything it evaluates lands on a
+  constant. Reducing an expression is not performing it: an unfolded call, a
+  global write, or an operation that would trap all leave work undone, and
+  stepping past them would drop it.
+- A loop needs no constant trip count. The work budget bounds it, so one that
+  does not finish in time abandons the evaluation rather than guessing, and
+  what an iteration derived does not survive into the next. The budget is per
+  function, so what one spends cannot decide whether the next one folds.
+- A local the frame cannot track — one a mutable borrow, a mutable argument, a
+  method receiver, a store through a projection, or an assignment buried inside
+  a larger expression can write — carries no value, so a stale constant cannot
+  outlive the write.
+- A string literal's `len()` folds, as a consequence of the generic
+  struct-field projection rather than any string-specific rule.
 
-### Stage 2 — `if` reduction
+Sequences:
 
-Status: done. `match` reduction is split into its own Stage 2.5 below;
-payload-aware variant matching is deferred to Phase B/C of that stage,
-since the lattice work for variant payloads is more involved than scalar
-`if`.
+- The array backing a `String` or a `List` is a value, built from a byte-string
+  literal or a fully-constant array literal, bounded by a maximum length past
+  which building one would cost more than any fold it enables. `String` and
+  `List` need no case of their own: each is an aggregate whose backing field is
+  a sequence and whose length field is an integer — and an array literal
+  denotes that whole container, since that is what it lowers to.
+- Whether a local may carry an aggregate is decided from the reachable body. A
+  node an earlier rewrite orphaned cannot run, so it must not disqualify one:
+  inlining `t.len()` leaves the original method call behind, and counting its
+  receiver would refuse every list the caller then reads.
+- An element or length read folds through the array builtins the read lowers
+  to, not through an index node. A read past the end is left alone, since it
+  traps at run time.
+- A shared borrow reads as the constant it points at, which is what makes a
+  backing array reachable at all — it reaches the builtin as `&arr`. Only a
+  shared one: a write goes through a mutable borrow, which stays unmodelled.
+- A constant list's length folds, so a constant-index bounds check on it does
+  too. What this does not yet reach is the element: body globalization hoists
+  the value into a global before the read, and a deferred global's recorded
+  initializer is a placeholder — see the aggregate-globals TODO below.
 
-- [x] `Lattice::join` (SCCP join over the chain
-      `Unevaluated ⊑ Const(v) ⊑ NonConst`):
+## TODO
 
-  ```text
-  Unevaluated ⊔ x       = x        (infeasible-edge identity)
-  Const(v)    ⊔ Const(v) = Const(v) (arms agree)
-  Const(a)    ⊔ Const(b) = NonConst (a ≠ b)
-  NonConst    ⊔ _        = NonConst (Top is absorbing)
-  ```
+### Values the engine cannot represent
 
-  Commutative, associative, idempotent. Tests verify each property.
+- Enum and variant values with their payloads. Today an enum or variant
+  pattern cannot be decided, so an `Option` / `Result` accessor exposed by
+  inlining leaves a residual match the engine walks past.
+- Comparing two literal strings. A string pattern reaches the engine as a
+  guard, and deciding it means running the comparison — which is a method call
+  taking references, so it waits on the two entries below rather than on the
+  value model.
 
-- [x] Constant-condition expr-form `if` (`if true { A } else { B }` →
-      `Block(A)`, `if false { A } else { B }` → `Block(B)`,
-      `if false { A }` no-else → `Unit`). The unreachable arm is treated
-      as an SCCP infeasible edge: its lattice value never enters the
-      join, so a trapping `else { panic(…) }` does not contaminate the
-      result.
-- [x] Constant-condition stmt-form `if` (block-level splice via new
-      `Interpreter::reduce_local_block`).
-- [x] Both-arms-equal collapse: when the condition is non-constant but
-      effect-free (`is_speculatable`) and both arms reduce to the same
-      `Const(v)`, the `if` is rewritten to that literal. The
-      "effect-free" gate is conservative — literals, locals, captures,
-      arithmetic / comparison / bitwise binary, non-trapping unary,
-      casts, and field accesses on the above. Calls / division / deref
-      / mutation are excluded.
-- [x] `expr_to_lattice(If { … })` returns the SCCP lattice value of the
-      `if`: chosen-arm value when the condition is constant, joined arm
-      values when not. Crucially, `Unevaluated` arms in the
-      non-constant-condition path are promoted to `NonConst` before the
-      join — under a non-constant condition the arm IS reachable, so
-      "we don't know its value" is SCCP-Top, not infeasible.
-- [x] Subsumes the constant-condition cases of `const_branch_prune`
-      (both expr-form and stmt-form). The legacy pass now only handles
-      trivial-block / labeled-block simplifications and keeps a doc
-      pointer at the top of `const_branch_prune.rs` redirecting future
-      `if`-related rewrites to niri. Removing those branches and
-      observing every existing fixture still pass is the equivalence
-      proof.
-- [x] `wado-compiler/tests/niri.rs` covers `Lattice::join`, the
-      feasible-edge constant-true / constant-false / no-else cases, the
-      both-arms-equal collapse, the structurally-unequal-arms negative
-      case, the Unevaluated-arm regression, and the stmt-form splice
-      (true / false-no-else / non-const-untouched).
+### Calls
 
-### Stage 2.5 — `match` reduction
+- A destructuring `let`, which binds a pattern rather than a name; a body
+  containing one is abandoned.
+- Method calls, excluded because a `&mut self` receiver mutates through the
+  call. Worth revisiting now that mod-ref and alias analysis can prove a
+  receiver is not written.
+- Closure calls: an indirect call whose closure is known at the call site is
+  never resolved to a direct call, so neither inlining nor CTFE can reach
+  through it.
+- Recursion beyond a base case. The wasm-CTFE backend below is the intended
+  answer.
 
-Status: Phase A done. Phases B and C are scoped but not implemented.
+### Control flow
 
-Match reduction is split into three phases by pattern shape, in
-increasing order of representation cost. The split lets us land
-scalar / payload-free matching today without committing to a heap-aware
-[`Value`] type that the WEP otherwise reserves for Stage 4+.
+- A `switch` with a constant scrutinee is not folded, although `if` and
+  `match` are. Since a switch is formed before inlining, a scrutinee that
+  inlining makes constant survives to the end untouched.
+- Unrolling a loop in place in the caller. Distinct from running one during a
+  compile-time call, which is done: this is a code-size trade needing a cost
+  model, not an evaluation capability.
+- Guards decided when the engine is only asked what an expression denotes;
+  today an arm's bindings are only in scope on the rewriting path.
 
-#### Phase A — payload-free patterns (done)
+### Aggregate globals and element projection
 
-- [x] `Interpreter::match_lattice` — for a constant scrutinee, walk
-      arms in source order; the first definite-`Yes` arm contributes
-      its body's lattice (chosen-arm, infeasible-edge for later arms).
-      An earlier `Unknown` arm (unmodelled pattern, guarded arm,
-      unanalyzable `ConstantValue`) cannot be ruled out, so every arm
-      from that point on participates in the join. Non-constant
-      scrutinee → join all arm bodies, with `Unevaluated → NonConst`
-      promotion (same fix as the `if` non-const-condition path).
-- [x] `Interpreter::pattern_matches` — three-state
-      `PatternMatch { Yes, No, Unknown }`. Phase A handles `Wildcard`,
-      `Literal(I128 | U128 | Bool | Char)`, `Or`, `Range` (signed and
-      unsigned, integer and char), and `ConstantValue` whose inner
-      expression reduces to a primitive `Value`. `Binding`, `Tuple`,
-      `Variant`, `Enum`, `Struct`, and string / null literal patterns
-      report `Unknown` so they never wrongly commit a match (`Yes`)
-      and never wrongly drop a later arm (`No`). Phase C lifts this for
-      `Binding`, `Struct`, and exact-arity `Tuple`.
-- [x] `rewrite_match_expr` — two rewrites:
-      1. **Const scrutinee**: replace the `Match` with
-      `Block { stmts: [Expr(arm.body)] }` for the first definite-`Yes`
-      arm (mirrors the `if true` → `Block(then_branch)` shape so the
-      outer visitor walks the residual normally). Bails on any
-      earlier `Unknown` so the original trap-on-no-match behaviour
-      is preserved.
-      2. **All-arms-equal collapse**: when the scrutinee is non-constant
-      but speculatable (same `is_speculatable` gate as the `if`
-      rule), every arm has no guard, every arm body reduces to the
-      same `Const(v)`, **and the match is provably exhaustive**
-      (`is_provably_exhaustive`: an unguarded `Wildcard` / `Binding`
-      arm, or an `Or` containing one), rewrite the whole match to
-      that literal. Without the exhaustiveness gate the rewrite
-      would drop the lowering's implicit `Unreachable` fallback
-      trap — Wado's elaborator checks exhaustiveness for
-      `bool` / `enum` / `variant` / range-covered `int` but skips
-      `struct` / `string` / `tuple`, so the gate is load-bearing.
-- [x] `match_lattice` applies the same exhaustiveness gate before
-      returning a non-`NonConst` lattice for a non-const scrutinee,
-      and bails to `NonConst` when no definite-`Yes` arm is found
-      under a const scrutinee. Without these, an enclosing `if`
-      both-arms-equal collapse would pick up the `Const(v)` and
-      erase the trap on the lattice's behalf.
-- [x] `reduce_in_place` recurses into the scrutinee, every arm guard,
-      and every arm body so the visitor-driven path sees fully-folded
-      operands at each match node.
-- [x] Unit tests at `wado-compiler/tests/niri.rs` cover: literal-arm
-      first-match selection, wildcard fallthrough, char and range
-      patterns (inclusive / exclusive bounds, signed / unsigned mix,
-      char codepoint ordering), or-patterns (match / no-match / mixed),
-      `ConstantValue` (definite Yes / No / Unknown), guard handling
-      (an undecided guard blocks the arm and every arm below it),
-      unmodelled patterns (Tuple → Unknown → Match left intact),
-      Unevaluated-arm regression under non-constant scrutinee,
-      env-resolved local scrutinee, first-match wins on overlap, and
-      visitor-driven `reduce_local` rewrites. Single e2e fixture
-      `niri_match_const_fold.wado` checks observable end-to-end fold
-      (constant-scrutinee match's chosen arm body survives at -O2,
-      non-chosen arms are gone).
-
-#### Phase B — definite-no enum / variant tag pruning (deferred)
-
-- [ ] Extend `pattern_matches` to handle `Enum { case_index }`
-      patterns when the scrutinee is structurally an `EnumConstruct`
-      (no [`Value`] enrichment needed — peek the NIR shape at match
-      time). Same trick for `Variant { variant_name }` against a
-      `VariantConstruct` scrutinee.
-- [ ] Lets the engine drop arms that are definitely infeasible
-      (`match Color::Red { Color::Green => …, … }`) without committing
-      to a full payload model. Useful for inlining `Option::unwrap` and
-      similar "scrutinee constructed locally" idioms.
-
-#### Phase C — aggregate values (struct / tuple done; variants and sequences deferred)
-
-- [x] `Value::Aggregate { type_id, fields }` — a struct or tuple whose every
-      field is itself a compile-time value. A struct and a tuple are the same
-      thing here: fields are keyed by `field_index`, which every reader
-      already carries, and canonicalized to that order, so structural
-      equality does not depend on literal field order. A NIR aggregate
-      literal always lists every field — the elaborator fills defaults and
-      rejects omissions — so the value is complete and equality is exact.
-- [x] Aggregates never leave the engine. The value pool models pure scalars,
-      so a constant struct keeps its skeleton node and what folds is the
-      scalars projected out of it. That is what keeps extraction and WIR
-      build untouched by aggregate support.
-- [x] Construction from `StructLiteral` / `TupleLiteral` (`Const` only when
-      every field is constant; `NonConst` when a field is known
-      non-constant), and projection through `FieldAccess` — out of a literal,
-      an env-bound local, an immutable global, or a CTFE-folded call result,
-      so a pure factory's field reads fold across the call.
-- [x] Struct patterns and exact-arity tuple patterns, as the conjunction of
-      their field patterns: definite-no as soon as one field rules the arm
-      out (sound even when a sibling field binds), definite-yes only when
-      every listed field matches. `has_rest` ignores unlisted fields. A
-      tuple-with-rest pattern is `Unknown` — the trailing sub-patterns have no
-      fixed element index. A non-aggregate value never vacuously matches a
-      field-less aggregate pattern.
-- [x] `Binding` sub-patterns match whatever the field holds. A pattern with
-      literal fields reaches niri as bindings plus a guard — the elaborator
-      moves the literals there — so bindings and guards are one feature, not
-      two.
-- [x] An arm's guard and body are evaluated with that arm's bindings in scope.
-      A true guard decides the arm, a false one skips it, an undecided one
-      stops the rewrite: a later arm is only reachable once every earlier arm
-      is ruled out.
-- [x] An arm whose body still reads a binding is left alone — splicing it
-      would drop the pattern that binds. Bindings being in scope while the body
-      reduces usually folds such a read away first, `{ x, y } => x + y`
-      included.
-- [ ] Decide guards in the read-only lattice path too; today only the rewrite
-      path can scope bindings.
-- [x] Aggregate constants bind to a local only when every mention of that
-      local merely reads the value — a field read's receiver or a `match` /
-      `switch` scrutinee — and no store target, borrow, method receiver, or
-      mutable argument roots at it. niri models whole values, not the heap: a
-      local another handle can write through would go stale. Scalars keep
-      their previous behaviour exactly — they carry no fields, so no handle
-      can change them in place.
-- [ ] `Value::Enum { case_index, type_id }` / `Value::Variant { tag, payload }`
-      and payload bindings. Gated on Phase B's tag pruning and on a real
-      consumer (Stage 3 inlining producing residual matches over
-      `Option<i32>`).
-- [ ] A sequence value — the backing array of the `{ repr, used }` shape
-      `String` and `List` share. `String` needs no case of its own: given a
-      sequence value it is an ordinary aggregate, so its length projects and it
-      passes into a compile-time call. Its patterns need none either — the
-      elaborator lowers a string pattern to an `Eq` call in the arm guard — but
-      deciding that guard is a byte-comparison loop, so it is gated on Stage 4,
-      not on this.
-
-### Stage 3 — pure call inlining (in-process)
-
-Status: done. Multi-stmt bodies, `MethodCall` / `IndirectCall`, and
-heap-aware return values stay deferred (call them Stage 3.5+).
-
-- [x] `Interpreter::with_callees(&CalleeMap)` installs a pre-built
-      lookup of CTFE-eligible callees, keyed by `(module_source,
-      full_name)` to match `FunctionRef::full_name()` exactly. The
-      driving visitor (`const_folding`) builds the map once per pass
-      by walking `FlatPackage::functions` and admitting every function
-      that passes [`is_ctfe_eligible`]. Values are
-      `Rc<RefCell<NirFunction>>` handles aliased with
-      `FlatPackage::functions`, not body clones, so per-iteration
-      rebuild costs only refcount bumps. The interpreter reads each
-      callee body via `RefCell::try_borrow`; failure means the visitor
-      already holds `borrow_mut` on this same function (the
-      self-recursive-call-inside-the-walked-function case) and the
-      fold bails cleanly. CTFE-internal recursion across nested
-      folds is caught separately by `Interpreter::call_stack` since
-      `try_borrow` permits concurrent immutable borrows.
-- [x] [`is_ctfe_eligible`] gate: `effects.is_empty()`, has body, not
-      `is_cm_binding` / `is_dispatch_wrapper` / `is_cm_export`, not
-      `is_async`, no `task_return_type`, `stores.is_empty()`,
-      `inline_hint != Never`, no remaining type params (Stage 3 runs
-      after monomorphization, so concrete bodies only). The check is
-      conservative: a Wado function that traps but is otherwise pure
-      is still admitted; the trap is preserved by Stage 3's
-      `Const(_)`-only acceptance criterion (see below).
-- [x] Recognized body shape: a single statement that is either
-      `Return { value: Some(expr) }` or `Expr(expr)`. Anything else
-      (zero or multiple stmts, intermediate `Let`, `Loop`, `Break`,
-      `Return` without value) reports "no fold" and the original Call
-      survives. This covers the high-value targets (`fn double(x) {
-      return x*2 }`, expression-bodied helpers, single-tail-`if`
-      bodies). Multi-stmt bodies (let-sequences, multi-return) are
-      deferred — bailing here costs an optimization, not correctness.
-- [x] `Interpreter::try_call_fold(&NirExpr) -> Lattice`: matches on
-      `Call`, looks the callee up, reduces every arg to a `Value` via
-      `expr_to_lattice(...).as_const()`, refuses if the callee key is
-      already on `self.call_stack` (recursion guard) or
-      `self.step_budget == 0` (budget guard), then saves the env,
-      binds parameter local indices `0..params.len()` to the args'
-      `Const(v)`, evaluates the tail through `reduce_to_lattice`
-      (which clones internally, so the body in the `CalleeMap`
-      remains shareable across multiple call sites and across
-      iterations), and restores. Only `Const(v)` is exposed to the
-      caller; both `NonConst` and `Unevaluated` from the tail downgrade
-      to `Unevaluated` so the original `Call` survives. This matters
-      when the body would trap at runtime (e.g. internal div-by-zero
-      reduces to `NonConst`) — the caller gets back `Unevaluated`,
-      doesn't rewrite the node, and the trap stays observable.
-- [x] Per-pass step budget (`DEFAULT_STEP_BUDGET = 1000`,
-      overridable via `set_step_budget`). One charge per
-      `try_call_fold` entry, before any work. Budget is intentionally
-      _not_ reset per function — it caps total CTFE work in a pass,
-      mirroring rustc's CTFE step counter (`LINT_TERMINATOR_LIMIT`).
-      `enter_function` only resets `env` and asserts the recursion
-      guard is empty.
-- [x] Recursion guard via `call_stack: Vec<CalleeKey>`. A direct
-      self-call (`fn f(x) { return f(x); }`) refuses re-entry on the
-      first attempt, so the inner `f` evaluates to `Unevaluated` and
-      the outer `Call` therefore stays unfolded. A recursive function
-      with a const-condition base case (`fn f(n) { return if n==0 {
-      A } else { f(n-1) } }` invoked as `f(0)`) still folds because
-      niri's `if` rule treats the unreachable else-arm as an SCCP
-      infeasible edge — the recursive call inside it never gets
-      asked. This is by design: classical CTFE engines key their
-      recursion guard on `(callee, arg-values)` to allow deep
-      recursive evaluation; Stage 3 keys on `callee` alone for
-      simplicity, accepting that only base cases fold. The step
-      budget guarantees termination either way.
-- [x] Memoization (Stage 1.5) is **not** added in Stage 3. The
-      tail-evaluation cost is small and the same `(callee, args)` rarely
-      shows up many times in the same walk; a memo would add hash
-      overhead per attempt with unclear payoff. Re-evaluate when a
-      benchmark shows a hot CTFE chain.
-- [x] Wired into `const_folding::fold_constants`: the visitor builds
-      the `CalleeMap` once at pass entry and hands a borrow to
-      `Interpreter::with_callees`. Every iteration of the optimizer's
-      outer loop rebuilds the map (cheap) so newly-monomorphized
-      bodies show up.
-- [x] Out of scope for Stage 3:
-  - `MethodCall`. A `&mut self` receiver mutates through the call, and
-    nothing in the CTFE gate rules that out, so folding the tail would
-    drop the mutation. Free `Call`s take and return aggregates by value
-    (Phase C) and need no such check.
-  - `IndirectCall` / `CmRawCall` (closure / CM-import calls).
-  - Multi-statement bodies (let-sequences, multi-return). This is what
-    keeps a callee whose body `lower_patterns` desugared into a
-    statement sequence out of CTFE, aggregate parameters included.
-  - `String` / `List` return values: their `PackedArray` repr never
-    reduces to a `Value`, so the body's lattice stays `Unevaluated` and
-    we bail. Struct and tuple results fold (Phase C).
-  - User-facing `const fn` / `#[const_eval]` syntax.
-  - Salvaging recursive depth — Stage 5 (wasm-CTFE) covers anything
-    Stage 3's recursion guard refuses.
-- [x] Unit tests at `wado-compiler/tests/niri.rs` cover: const-args
-      via `Return` and via tail-expr bodies, two-level chained folds,
-      non-const arg left intact, effectful callee left intact,
-      multi-stmt body left intact, direct self-recursion bails via
-      `call_stack`, `set_step_budget(0)` bails up front, internal
-      div-by-zero in the body leaves the Call intact, missing-callee
-      and no-callee-map paths, every `is_ctfe_eligible` rejection
-      branch (`async`, `inline(never)`, no body, accept default), and
-      composition with the outer `if`-fold rule. E2E fixture
-      `niri_pure_call_fold.wado` checks observable end-to-end fold —
-      a recursive function called at its base-case argument folds to
-      a literal in WIR at -O2 even though the inliner refuses
-      recursive functions outright.
-
-### Stage 4 — bounded loop unrolling
-
-- [ ] For `while` / `loop` with a constant trip count, unroll within the
-      shared `step_budget`. Expressions that don't terminate within the
-      budget are left as residuals.
-
-### Stage 5 — wasm-CTFE backend (via `CompilerHost`)
-
-- [ ] `wado-compiler` itself must compile to `wasm32-unknown-unknown`
-      (CI enforces this), so it cannot link `wasmtime` directly. Extend
-      `CompilerHost` with `run_compile_time_eval(component_wasm, args)`
-      (mirroring today's `run_generator`). Hosts with a Wasm runtime —
-      `wado-cli` via `wasmtime` — implement it; LSP and browser hosts
-      return `Unsupported` and niri stays in-process.
-- [ ] niri compiles a pure callee to wasm using the existing pipeline,
-      caches the resulting component bytes per
-      `(FunctionKey, monomorph_args)`, and hands them to the host with
-      the constant args. The host runs the component (with fuel /
-      resource limits of its choice) and returns the result.
-- [ ] Triggered when in-process reduction exceeds `step_budget` but
-      the callee is still pure-by-effects. The result decoded back
-      into a `Value` is used as if the in-process evaluator had
-      produced it.
-- [ ] Enables `compute_lookup_table(256)` and similar workloads at
-      compile time without re-implementing every NIR construct, and
-      without breaking wasm32 compatibility of `wado-compiler`.
-
-### Stage 6 — aggregate global & field/element projection
-
-Status: partly done. Independent of Stages 4-5; builds on Phase C's
-aggregate [`Value`]. Motivated by
+Motivated by
 [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md),
-which turns read-only constant aggregates into immutable module-scope
-globals and needs `niri` to see through them so the fold cascades.
+which turns read-only constant aggregates into immutable module-scope globals
+and needs `niri` to see through them so the fold cascades.
 
-- [x] `GlobalEnv` carries aggregates without an extension: an immutable
-      global whose initializer reduces is recorded as its `Lattice`, and
-      Phase C makes a struct / tuple initializer reduce to
-      `Value::Aggregate`.
-- [x] `FieldAccess(GlobalVarGet(G), f)` folds to the field constant. The
-      `GlobalFieldEnv` still wins where it has an entry — it knows fields no
-      initializer shows, such as the length body globalization records for a
-      hoisted sequence — and the receiver's own value decides otherwise.
-- [ ] `ArrayLiteral` elements and `Index(GlobalVarGet(G), const)`. Element
-      projection needs a `Value` shape for sequences, which the
-      `PackedArray` repr of a `List` / `String` does not currently reduce to.
-- [ ] Record an aggregate snapshot for a global whose value is only visible
-      as the inline `GlobalVarSet` body globalization emits (the initializer
-      is a `null` placeholder there, so the `GlobalEnv` path sees nothing).
-- [ ] Loop effect: a globalized constant's field/element reads fold to
-      scalars module-wide → `const_global_promotion` / `const_fold` /
-      `const_branch_prune` reduce further → the now-unread global is removed
-      by DCE. This is the cross-function constant propagation that
-      intra-function SROA cannot reach.
+- Elements of array literals, and an indexed read of a constant global.
+- A global whose value is visible only as the inline store globalization
+  emits, rather than as an initializer. Narrower than it looks once
+  [Global Variables](./wep-2026-01-27-global-variables.md) stops replacing a
+  deferred global's initializer with a placeholder: the initializer becomes
+  readable, and only the values that genuinely need run-time work stay hidden.
+- The cascade this is for: a globalized constant's field and element reads
+  fold to scalars module-wide, the folding and branch-pruning passes reduce
+  further, and the now-unread global drops by DCE. This is the
+  cross-function constant propagation intra-function SROA cannot reach.
 
-## Cost model
+### wasm-CTFE backend
 
-The in-process engine stays sub-quadratic by following the patterns
-production compilers use:
+- `wado-compiler` must compile to `wasm32-unknown-unknown`, so it cannot link
+  a Wasm runtime. Compile-time evaluation of a whole call therefore routes
+  through the compiler host, as generator execution already does. Hosts with
+  a runtime implement it; the LSP and browser hosts decline and `niri` stays
+  in-process.
+- Triggered when in-process reduction gives up on a callee that is still
+  pure by its effects; the result is used as if the in-process engine had
+  produced it.
+- Enables `compute_lookup_table(256)` and similar workloads at compile time
+  without re-implementing every NIR construct in the interpreter.
 
-- **Sparse, on-demand evaluation** — `reduce` is called only on nodes
-  the visitor touches; results are memoized per pass.
-- **Finite-height lattice** — `Bottom` / `Const(v)` / `Top`. Each cell
-  transitions a bounded number of times → `O(N × height)` total work.
-- **Worklist with dependent re-queueing** — added in Stage 1; an
-  expression re-evaluates when one of its inputs becomes constant,
-  not on every fixed-point iteration. This is what lets LLVM's
-  `InstCombine` settle in a single iteration (LLVM D154579).
-- **No internal fixed-point loop in niri** — each invocation is
-  monotone (only `Top → Const` transitions). The optimizer's outer
-  loop is the one fixed-point.
+## Complexity
 
-The wasm backend's cost is dominated by module compilation (~1-100 ms)
-and instantiation overhead (~µs-ms). Both amortize with the
-per-`(fn, monomorph)` `Module` cache, so a `fib(_)` invoked 100 times
-incurs one codegen.
+Reduction is monotone — expressions only move toward literal form — and
+idempotent, and the optimizer's fixed-point loop is the only fixed point:
+`niri` does not iterate internally. Each extension should keep the engine's
+work bounded in the size of what it is asked about; a rule whose cost is
+quadratic in body size, or that rebuilds a large value per query, is the
+failure mode to watch for. Everything else about speed is a profiling
+question, not a design-time one.
 
 ## Determinism
 
-- Float NaN bits are nondeterministic in wasm; `non_nan_float` already
-  refuses to fold NaN-producing arithmetic. Keep that for both backends.
-- `v128` / relaxed-SIMD has implementation-defined corner cases;
-  defer SIMD CTFE to a later WEP.
-- Integer wrapping / signed `MIN / -1` semantics match Wasm.
-- Stage 2 caveat — float signed-zero folding: the both-arms-equal
-  `if`-collapse uses [`Lattice`]'s derived `PartialEq`, which delegates
-  to f64's IEEE 754 `==`. That treats `-0.0` and `+0.0` as equal, so
-  `if cond { -0.0 } else { 0.0 }` collapses to `-0.0` (the chosen
-  representative is the then-arm's bit pattern). Operations that
-  observe the sign of zero — `1.0 / x` (signed infinity) and explicit
-  `f64::is_sign_positive` — see the folded representative rather than
-  the cond-dependent value. This matches IEEE 754 equality semantics
-  and the golden fixtures encode the resulting WIR. If a future caller
-  needs bit-precise zero distinction here, add a per-op equality
-  predicate to `Value` rather than weakening the fold globally.
-
-## Consequences
-
-- `const_folding.rs` shrinks to a thin glue file, and stays that way.
-- `niri` covers immutable-global folding through Stage 1's
-  `GlobalEnv` (scalars); Stage 6 extends it to aggregate globals and
-  field/element projection. May further absorb parts of
-  `const_branch_prune` and `inline` — to be evaluated as later stages land.
-- Stage 2.5's match-fold is observable in the NIR optimize phase even
-  though `lower_patterns` runs before `optimize`: not every match is
-  desugared by `lower_patterns` (some shapes survive to optimize
-  intact), and Stage 3's pure-call inlining will produce fresh match
-  expressions when inlining `Option` / `Result` accessors. Phase A
-  handles both paths today; Phase B/C extend coverage as those
-  scenarios materialize.
-- `wasmtime` is **not** linked by `wado-compiler` (the crate must build
-  for `wasm32-unknown-unknown`). The wasm-CTFE backend instead routes
-  through `CompilerHost`, just like Kiln generator execution does today.
-  Hosts without a Wasm runtime (LSP, browser) decline the call and
-  niri falls back to in-process reduction — no `cfg`-gated backend in
-  the compiler crate itself.
-- Effect-system guarantees become load-bearing for CTFE soundness. A bug
-  in effect inference could cause non-pure functions to be CTFE-evaluated.
-  This is the same trust we already place in effect-check elsewhere.
+- Float NaN bits are nondeterministic in Wasm, so NaN-producing arithmetic is
+  never folded. This holds for both backends.
+- `v128` and relaxed-SIMD have implementation-defined corner cases; SIMD CTFE
+  is deferred to a later WEP.
+- Integer wrapping and signed `MIN / -1` semantics match Wasm. Division by
+  zero and signed `MIN / -1` are left unfolded so the runtime trap survives.
+- Float zero carries no sign distinction through a fold: `-0.0` and `+0.0`
+  are equal, so `if cond { -0.0 } else { 0.0 }` collapses to one of the two
+  and an operation that observes the sign of zero sees the chosen
+  representative. This matches IEEE 754 equality. A caller needing
+  bit-precise zeros should get a per-operation equality predicate rather than
+  a globally weakened fold.
 
 ## Out of scope
 
-- User-facing CTFE syntax (`#[const_eval]`, `const fn`). Decide later
-  once we see real usage demand.
-- Sequence values (`List`, `String`) in the in-process `Value` type: their
-  backing `PackedArray` has no constant form here, so they never reduce.
-  Structs and tuples of constants do (Stage 2.5 Phase C). The wasm backend
-  doesn't need either since it returns whatever wasm returns.
+- User-facing CTFE syntax (`#[const_eval]`, `const fn`). Decide once real
+  demand shows up.
 - Salsa-style demand-driven reanalysis across compiler runs.
 
 ## Open questions
 
-- Where does the wasm CTFE module cache live — per `compile` invocation
-  or per process? Per-invocation is simpler; per-process speeds up
-  watch-mode workflows but needs eviction.
-
-## Resolved questions
-
-### Lattice ownership vs. `Option<Value>`
-
-Resolved as part of Stage 1: niri owns
-`Lattice { Unevaluated, Const(Value), NonConst }`. `Option<Value>` is
-dropped — it conflated four meanings, making memoization unsafe to add
-later. Lattice is exposed via `reduce_to_lattice`; the
-`Lattice::as_const()` projection covers the simple "is this a literal?"
-case without re-introducing the ambiguity at the API surface.
+- Where does the wasm-CTFE module cache live — per `compile` invocation or per
+  process? Per-invocation is simpler; per-process speeds up watch-mode
+  workflows but needs eviction.

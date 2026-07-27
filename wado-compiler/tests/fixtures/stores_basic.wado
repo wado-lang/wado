@@ -18,8 +18,12 @@ fn use_data(data: &Data) -> i32 {
     return data.value;
 }
 
+// `black_box` keeps the value off the constant path, so the golden shows the
+// stores plumbing rather than a program folded to nothing.
 export fn run() {
-    let d = Data { value: 42 };
+    let d = Data {
+        value: builtin::black_box(42),
+    };
     let c = store_data(&d);
     let v = use_data(&d);
     assert v == 42;

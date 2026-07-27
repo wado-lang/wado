@@ -4269,12 +4269,12 @@ impl<'a> TirUnparser<'a> {
         self.write_indent();
         self.emit_kw_if(g.visibility.is_public(), "pub ");
         self.output.push_str("global ");
-        self.emit_kw_if(g.mutable, "mut ");
+        self.emit_kw_if(g.wado_mutable, "mut ");
         self.output.push_str(&g.name);
         self.output.push_str(": ");
         self.output.push_str(&self.type_table.type_name(g.ty));
         self.output.push_str(" = ");
-        self.unparse_expr(&g.initializer);
+        self.unparse_expr(g.init.slot_expr());
         self.output.push_str(";\n");
     }
 

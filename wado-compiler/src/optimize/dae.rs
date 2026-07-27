@@ -276,7 +276,7 @@ fn validate_call_sites(
     }
     for global in &project.globals {
         validate_in_body(
-            global.initializer.body(),
+            global.init.slot_expr().body(),
             &candidates,
             &mut rejected,
             &type_table,
@@ -420,7 +420,7 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -
         }
     }
     for global in &mut project.globals {
-        rewrite_calls_in_body(global.initializer.body_mut(), confirmed);
+        rewrite_calls_in_body(global.init.slot_expr_mut().body_mut(), confirmed);
     }
     touched.into_iter().collect()
 }

@@ -115,25 +115,23 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(44)
 
-type "functype//licm_reloadable_hoist_nonunit.wado/Bag::swap_out" = fn(ref "licm_reloadable_hoist_nonunit.wado//Bag") -> i32;  // TypeId(45)
+type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(45)
 
-type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(46)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(46)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(47)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(47)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(48)
+type "functype//core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(48)
 
-type "functype//core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(49)
+type "functype//core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(49)
 
-type "functype//core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(50)
+type "functype//core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(50)
 
-type "functype//core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(51)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(51)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(52)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(52)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(53)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(54)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(53)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -176,7 +174,8 @@ fn "licm_reloadable_hoist_nonunit.wado/probe"(sink, b, out) {
                 unreachable;
             }; builtin::array_get<i32>(_licm_items_13.repr, i));
             if i == 0 {
-                drop("licm_reloadable_hoist_nonunit.wado/Bag::swap_out"(sink));
+                drop(sink.items.used);
+                sink.items = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(7, 7, 7), used: 3 };
                 _licm_items_13 = b.items;
             }
             i = i + 1;
@@ -186,9 +185,8 @@ fn "licm_reloadable_hoist_nonunit.wado/probe"(sink, b, out) {
 }
 
 fn "licm_reloadable_hoist_nonunit.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//List<i32>";
     let bag: ref "licm_reloadable_hoist_nonunit.wado//Bag";
-    let __b_2: ref "core:prelude//List<i32>";
+    let out: ref "core:prelude//List<i32>";
     let s: ref "core:prelude/string.wado//String";
     let __iter_5: ref "core:prelude/slice.wado//ArrayRefIter<i32>";
     let x: ref "core:prelude/types.wado//Box<i32>";
@@ -202,11 +200,11 @@ fn "licm_reloadable_hoist_nonunit.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:licm_reloadable_hoist_nonunit.wado::__modules_initialized = 1;
     };
-    bag = struct.new "licm_reloadable_hoist_nonunit.wado//Bag" { items: ref.as_non_null(__b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }; __b_0) };
-    __b_2 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    "licm_reloadable_hoist_nonunit.wado/probe"(bag, bag, __b_2);
+    bag = struct.new "licm_reloadable_hoist_nonunit.wado//Bag" { items: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 } };
+    out = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    "licm_reloadable_hoist_nonunit.wado/probe"(bag, bag, out);
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: __b_2.repr, index: 0, end: __b_2.used };
+    __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: out.repr, index: 0, end: out.used };
     b4: block {
         l5: loop {
             __match_9 = "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_5);
@@ -536,14 +534,6 @@ fn "core:prelude/string.wado/String::push_ascii_unchecked"(self, byte) {
     let start: i32;
     start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
     builtin::array_set_u8(self.repr, start, byte);
-}
-
-fn "licm_reloadable_hoist_nonunit.wado/Bag::swap_out"(self) {
-    let old: i32;
-    let __b: ref "core:prelude//List<i32>";
-    old = self.items.used;
-    self.items = ref.as_non_null(__b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(7, 7, 7), used: 3 }; __b);
-    return old;
 }
 
 fn "core:prelude/format.wado/Formatter::new"(buf) {

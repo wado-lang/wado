@@ -1859,12 +1859,6 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 }
 
 fn "core:base64/__initialize_module"() {
-    let __b_0: ref "core:prelude//List<u8>";
-    let __b_1: ref "core:prelude//List<u8>";
-    __b_0 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 43, 47), used: 64 };
-    drop(__b_0);
-    __b_1 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 45, 95), used: 64 };
-    drop(__b_1);
     global:core:base64::DECODE_TABLE = "core:base64/build_decode_table"();
 }
 
@@ -2196,12 +2190,12 @@ fn "core:prelude/slice.wado/ArrayIter<u8>::collect<core:prelude/list.wado/List<u
 }
 
 fn "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(iter) {
-    let __b: ref "core:prelude//List<u8>";
+    let result: ref "core:prelude//List<u8>";
     let byte: u8;
     let _licm_used_12: i32;
     let _licm_repr_13: ref Array<u8>;
     let __hfs_index_14: i32;
-    __b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
     _licm_used_12 = iter.used;
     _licm_repr_13 = iter.repr;
     __hfs_index_14 = iter.index;
@@ -2213,11 +2207,11 @@ fn "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.
             }
             byte = builtin::array_get<u8>(_licm_repr_13, __hfs_index_14);
             __hfs_index_14 = __hfs_index_14 + 1;
-            "core:prelude/list.wado/List<u8>::push"(__b, byte);
+            "core:prelude/list.wado/List<u8>::push"(result, byte);
             continue l250;
         };
     };
-    return __b;
+    return result;
 }
 
 export fn "http_base64_decode.wado/__cm_export__handle" as "handle"

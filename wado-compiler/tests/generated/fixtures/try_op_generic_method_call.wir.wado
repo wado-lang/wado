@@ -153,7 +153,6 @@ fn "try_op_generic_method_call.wado/write_values"(s, values) {
 
 fn "try_op_generic_method_call.wado/run"() with Stdout {
     let s: ref "try_op_generic_method_call.wado//StringSink";
-    let __b: ref "core:prelude//List<i32>";
     let r: ref null "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:try_op_generic_method_call.wado::__modules_initialized);
@@ -162,7 +161,7 @@ fn "try_op_generic_method_call.wado/run"() with Stdout {
         global:try_op_generic_method_call.wado::__modules_initialized = 1;
     };
     s = struct.new "try_op_generic_method_call.wado//StringSink" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-    r = "try_op_generic_method_call.wado/write_values"(s, __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }; __b);
+    r = "try_op_generic_method_call.wado/write_values"(s, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 });
     if ref.is_null(r) {
         "core:cli/println"(s.buf);
     } else {

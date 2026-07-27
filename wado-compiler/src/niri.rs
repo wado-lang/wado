@@ -79,19 +79,18 @@
 //!   scalars projected out of them. A local carries an aggregate
 //!   constant only when every mention of it merely reads the value; see
 //!   [`Interpreter::record_aggregate_locals`].
-//! - Pure-call inlining: a free `Call` whose args all reduce to
+//! - Pure-call evaluation: a free `Call` whose args all reduce to
 //!   constants and whose callee was admitted to the [`CalleeMap`]
-//!   (pure, non-async, monomorphic — see [`is_ctfe_eligible`]) and
-//!   whose body is a single `Return { Some(_) }` or `Expr(_)`
-//!   evaluates the body's tail with the args bound into a fresh local
-//!   environment. The `call_stack` of in-flight callees blocks
-//!   recursive re-entry; a per-pass step budget caps total CTFE work;
-//!   the dynamic borrow on the shared callee `RefCell` blocks the
-//!   visitor's outer `borrow_mut`. `NonConst` tail results (e.g. body
-//!   contains a runtime div-by-zero) are downgraded to Unevaluated so
-//!   the original Call survives and the runtime trap is preserved.
-//!   `MethodCall` / `IndirectCall` / `CmRawCall` and multi-stmt bodies
-//!   are out of scope.
+//!   (pure, non-async, monomorphic — see [`is_ctfe_eligible`]) runs the
+//!   callee's body with the args bound into a fresh local environment.
+//!   The body is executed statement by statement — `let` bindings,
+//!   assignment to a local, a decidable `if`, an early `return`, a
+//!   labeled block completed by its `break`, and a loop run until it
+//!   breaks. Anything else abandons the evaluation, leaving the
+//!   original call — and any runtime trap inside it — in place. The
+//!   `call_stack` blocks recursive re-entry and the step budget caps
+//!   total work, so a loop needs no constant trip count.
+//!   `MethodCall` / `IndirectCall` / `CmRawCall` are out of scope.
 //!
 //! Float arithmetic uses native Rust IEEE 754 ops (same as Wasm), following
 //! cranelift's approach: fold the result, but skip if it is NaN since NaN
@@ -110,7 +109,8 @@ use crate::const_eval::{
 };
 // `Value` lives in `const_eval`; re-export it so `niri::Value` resolves for
 // the public API and tests.
-pub use crate::const_eval::Value;
+use crate::compiler_item::SeqField;
+pub use crate::const_eval::{MAX_SEQ_ELEMENTS, Value};
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -225,6 +225,17 @@ pub type CalleeKey = crate::nir::FuncId;
 /// time, not here.
 pub type CalleeMap = IndexMap<CalleeKey, Rc<RefCell<NirFunction>>>;
 
+/// The array builtins the engine can evaluate over a constant sequence. An
+/// element read reaches NIR as a call to one of these, not as an `Index` node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SeqBuiltin {
+    Get,
+    Len,
+}
+
+/// Which sequence builtin each callee id is, for the ids that are one.
+pub type SeqBuiltinMap = IndexMap<CalleeKey, SeqBuiltin>;
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Global env
 // ──────────────────────────────────────────────────────────────────────────────
@@ -257,13 +268,10 @@ pub type GlobalEnv = IndexMap<GlobalKey, Lattice>;
 /// sequence global hoisted by body globalization.
 pub type GlobalFieldEnv = IndexMap<GlobalKey, IndexMap<String, Value>>;
 
-/// Default per-pass CTFE step budget. Mirrors rustc's CTFE step counter
-/// shape: a hard ceiling on the number of productive call entries
-/// before the engine starts bailing. Borrow-blocked re-entries (the
-/// recursion guard) bail before the budget charge, so they don't
-/// consume budget; the ceiling only applies to new-frame work that
-/// actually runs.
-pub const DEFAULT_STEP_BUDGET: u32 = 1000;
+/// Ceiling on total CTFE work, charged per call entry, statement, and loop
+/// iteration. Reset per function so what one function spends cannot decide
+/// whether the next one folds.
+pub const DEFAULT_STEP_BUDGET: u32 = 10_000;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Field knowledge
@@ -454,7 +462,9 @@ impl EditSink for BodySink<'_> {
 /// the result is knowable at compile time.
 #[must_use]
 pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
-    func.effects.is_empty()
+    // A unit call has no value to substitute for it.
+    func.return_type != crate::tir::TypeTable::UNIT
+        && func.effects.is_empty()
         && func.body.is_some()
         && !func.is_cm_binding
         && !func.is_dispatch_wrapper
@@ -494,6 +504,9 @@ pub struct Interpreter<'a> {
     /// may bind an aggregate constant. Cleared by [`Self::enter_function`], so
     /// an unpopulated set simply refuses every aggregate binding.
     aggregate_locals: LocalSet,
+    /// Locals of the CTFE frame currently executing that another handle may
+    /// write — see [`clobbered_locals`]. Empty outside a frame.
+    ctfe_clobbered: LocalSet,
     /// CTFE scratch-body fold memo: `expr → folded constant`. The scratch
     /// [`BodySink`] cannot promote a fold to an `Operand::Value` (no parent map)
     /// and pure scalars have no literal-node form, so a fold is recorded here and
@@ -507,6 +520,8 @@ pub struct Interpreter<'a> {
     ///
     /// [`with_callees`]: Self::with_callees
     callees: Option<&'a CalleeMap>,
+    /// When `None`, an `array_get` / `array_len` call is just an opaque call.
+    seq_builtins: Option<&'a SeqBuiltinMap>,
     /// Pre-built lattice values for module-scope globals. When `None`,
     /// every `GlobalVarGet` stays [`Lattice::Unevaluated`]. The visitor
     /// populates this once per pass via [`with_globals`].
@@ -581,14 +596,33 @@ fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
     }
 }
 
+/// Every expression id reachable from the body root, in arena order.
+fn reachable_exprs(body: &Body) -> Vec<ExprId> {
+    struct Collect(Vec<ExprId>);
+    impl NirRefVisitor for Collect {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Expr(e) = node {
+                self.0.push(e);
+            }
+            self.walk_node(body, node);
+        }
+    }
+    // A body with no block structure is a bare expression, nothing orphaned.
+    if body.blocks.is_empty() {
+        return body.exprs.iter().map(|(e, _)| e).collect();
+    }
+    let mut collect = Collect(Vec::new());
+    collect.visit_node(body, NodeRef::Block(body.root));
+    collect.0
+}
+
 /// Locals of `body` that may bind an aggregate constant: every mention only
 /// reads the value — as a field read's receiver or a `match` / `switch`
-/// scrutinee — and no store target, borrow, method receiver, or mutable
-/// argument roots at them. Such a local is unreachable through any other
-/// handle, so its whole value cannot change under the binding.
+/// scrutinee — and no store target, mutable borrow, method receiver, or
+/// mutable argument roots at them.
 ///
-/// The scan walks the whole expression arena, orphaned nodes included: a
-/// mention the reachable body no longer contains only costs a fold.
+/// Only the reachable body is scanned: a mention orphaned by an earlier rewrite
+/// cannot run, so it must not disqualify a local.
 fn aggregate_safe_locals(body: &Body) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
@@ -598,7 +632,8 @@ fn aggregate_safe_locals(body: &Body) -> LocalSet {
     let mut value_reads: IndexSet<ExprId> = IndexSet::default();
     let mut local_mentions: Vec<(ExprId, u32)> = Vec::new();
     let mut disqualified = LocalSet::default();
-    for (e, node) in &body.exprs {
+    for e in reachable_exprs(body) {
+        let node = &body.exprs[e];
         match &node.kind {
             ExprKind::Local { index, .. } => local_mentions.push((e, *index)),
             ExprKind::FieldAccess { expr, .. }
@@ -614,7 +649,7 @@ fn aggregate_safe_locals(body: &Body) -> LocalSet {
                 disqualify_root(body, (*target).into(), &mut disqualified);
             }
             ExprKind::Unary {
-                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                op: NirUnaryOp::MutRef,
                 expr,
             } => disqualify_root(body, *expr, &mut disqualified),
             ExprKind::MethodCall { receiver, args, .. } => {
@@ -659,8 +694,10 @@ impl<'a> Interpreter<'a> {
             env: IndexMap::default(),
             ref_global_aliases: IndexMap::default(),
             aggregate_locals: LocalSet::default(),
+            ctfe_clobbered: LocalSet::default(),
             scratch_folds: IndexMap::default(),
             callees: None,
+            seq_builtins: None,
             globals: None,
             global_fields: None,
             step_budget: DEFAULT_STEP_BUDGET,
@@ -677,6 +714,13 @@ impl<'a> Interpreter<'a> {
     /// pass).
     pub fn with_callees(&mut self, callees: &'a CalleeMap) -> &mut Self {
         self.callees = Some(callees);
+        self
+    }
+
+    /// Install the sequence-builtin lookup. Without it, an element or length
+    /// read stays opaque.
+    pub fn with_seq_builtins(&mut self, seq_builtins: &'a SeqBuiltinMap) -> &mut Self {
+        self.seq_builtins = Some(seq_builtins);
         self
     }
 
@@ -744,13 +788,16 @@ impl<'a> Interpreter<'a> {
     /// are unique per function, not project-wide).
     ///
     /// Asserts the recursion guard is clear — a leaked entry would mean
-    /// a previous walk panicked mid-call. The step budget is
-    /// intentionally *not* touched: it caps total CTFE work across the
-    /// pass, not per-function.
+    /// a previous walk panicked mid-call.
+    ///
+    /// The step budget resets here, so one function with a long compile-time
+    /// loop cannot decide whether the functions walked after it fold.
     pub fn enter_function(&mut self) {
+        self.step_budget = DEFAULT_STEP_BUDGET;
         self.env.clear();
         self.ref_global_aliases.clear();
         self.aggregate_locals = LocalSet::default();
+        self.ctfe_clobbered = LocalSet::default();
         self.scratch_folds.clear();
         debug_assert!(
             self.call_stack.is_empty(),
@@ -941,6 +988,38 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    /// Read an element out of a constant sequence. An index past the end is
+    /// `NonConst`, so the run-time trap survives.
+    fn index_lattice(&self, body: &Body, receiver: Operand, index: Operand) -> Lattice {
+        let (Lattice::Const(receiver), Lattice::Const(index)) = (
+            self.operand_to_lattice_a(body, receiver),
+            self.operand_to_lattice_a(body, index),
+        ) else {
+            return Lattice::Unevaluated;
+        };
+        let Some((index, _)) = index.as_int() else {
+            return Lattice::Unevaluated;
+        };
+        receiver
+            .element(index)
+            .cloned()
+            .map_or(Lattice::NonConst, Lattice::Const)
+    }
+
+    /// `Const` only when every element is itself constant, and only up to
+    /// [`MAX_SEQ_ELEMENTS`].
+    fn seq_lattice(&self, body: &Body, type_id: TypeId, elements: &[Operand]) -> Lattice {
+        let mut values = Vec::with_capacity(elements.len());
+        for op in elements {
+            match self.operand_to_lattice_a(body, *op) {
+                Lattice::Const(v) => values.push(v),
+                Lattice::NonConst => return Lattice::NonConst,
+                Lattice::Unevaluated => return Lattice::Unevaluated,
+            }
+        }
+        Value::seq(type_id, values).map_or(Lattice::NonConst, Lattice::Const)
+    }
+
     /// The lattice of a struct / tuple literal: `Const` only when every field
     /// is itself constant, since a partially-known aggregate is not a value the
     /// engine can substitute or compare.
@@ -993,6 +1072,41 @@ impl<'a> Interpreter<'a> {
                     .enumerate()
                     .map(|(i, op)| (u32::try_from(i).expect("tuple arity fits u32"), *op)),
             ),
+            // An array literal denotes the whole container: `wir_build` lowers
+            // it to `{ repr: array.new_fixed, used: N }`.
+            ExprKind::ArrayLiteral { elements } => {
+                match self.seq_lattice(body, node.type_id, elements) {
+                    Lattice::Const(backing) => Lattice::Const(Value::aggregate(
+                        node.type_id,
+                        vec![
+                            (SeqField::Backing.index(), backing),
+                            (
+                                SeqField::Len.index(),
+                                Value::Int {
+                                    value: elements.len() as u64,
+                                    prim: PrimitiveType::I32,
+                                },
+                            ),
+                        ],
+                    )),
+                    other => other,
+                }
+            }
+            ExprKind::PackedArray(bytes) => {
+                let elements = bytes
+                    .iter()
+                    .map(|b| Value::Int {
+                        value: u64::from(*b),
+                        prim: PrimitiveType::U8,
+                    })
+                    .collect();
+                Value::seq(node.type_id, elements).map_or(Lattice::NonConst, Lattice::Const)
+            }
+            ExprKind::Index { expr: inner, index } => self.index_lattice(body, *inner, *index),
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: inner,
+            } => self.operand_to_lattice_a(body, *inner),
             ExprKind::GlobalVarGet {
                 module_source,
                 name,
@@ -1843,12 +1957,213 @@ impl<'a> Interpreter<'a> {
         sink.replace_with_value(e, v)
     }
 
-    /// Fold a pure call whose args are all constant: bind the params, evaluate
-    /// the callee's single tail expression, and return `Const(v)` only when it
-    /// reduces to a value. `Unevaluated` on any miss (non-call, unknown or
-    /// recursive callee, non-const arg, unrecognized body, exhausted budget),
-    /// so the original call — and any runtime trap inside it — survives.
+    fn exec_block_a(&mut self, body: &mut Body, block: BlockId) -> Flow {
+        let stmts = body.blocks[block].stmts.clone();
+        let mut value = Lattice::Unevaluated;
+        for s in stmts {
+            match self.exec_stmt_a(body, s) {
+                Flow::Fallthrough(v) => value = v,
+                other => return other,
+            }
+        }
+        Flow::Fallthrough(value)
+    }
+
+    /// Execute one statement, charging the step budget.
+    ///
+    /// A statement counts as executed only when everything it evaluates lands
+    /// on a constant. Reducing an expression is not performing it, so anything
+    /// left undone — an unfolded call, a global write, a would-be trap —
+    /// abandons the evaluation rather than being stepped past.
+    fn exec_stmt_a(&mut self, body: &mut Body, s: StmtId) -> Flow {
+        if self.step_budget == 0 {
+            return Flow::Bail;
+        }
+        self.step_budget -= 1;
+        match &body.stmts[s].kind {
+            StmtKind::Let {
+                local_index, value, ..
+            } => {
+                let (index, value) = (*local_index, *value);
+                match self.eval_operand_a(body, value) {
+                    lattice @ Lattice::Const(_) => {
+                        self.bind_ctfe_local(index, lattice);
+                        Flow::Fallthrough(Lattice::Unevaluated)
+                    }
+                    Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
+                }
+            }
+            StmtKind::Expr(op) => {
+                let op = *op;
+                self.exec_expr_stmt_a(body, op)
+            }
+            StmtKind::Return { value } => {
+                let lattice = self.eval_optional_operand_a(body, *value);
+                Flow::Return(lattice)
+            }
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
+                match self.eval_operand_a(body, condition) {
+                    Lattice::Const(Value::Bool(true)) => self.exec_block_a(body, then_block),
+                    Lattice::Const(Value::Bool(false)) => match else_block {
+                        Some(eb) => self.exec_block_a(body, eb),
+                        None => Flow::Fallthrough(Lattice::Unevaluated),
+                    },
+                    Lattice::Const(
+                        Value::Int { .. }
+                        | Value::Float { .. }
+                        | Value::Char(_)
+                        | Value::Aggregate { .. }
+                        | Value::Seq { .. },
+                    )
+                    | Lattice::NonConst
+                    | Lattice::Unevaluated => Flow::Bail,
+                }
+            }
+            StmtKind::Break { label, value } => {
+                let (label, value) = (label.clone(), *value);
+                let value = self.eval_optional_operand_a(body, value);
+                Flow::Break { label, value }
+            }
+            StmtKind::Continue => Flow::Continue,
+            StmtKind::Loop { body: block } => {
+                let block = *block;
+                self.exec_loop_a(body, block)
+            }
+            StmtKind::LabeledBlock { label, block } => {
+                let (label, block) = (label.clone(), *block);
+                match self.exec_block_a(body, block) {
+                    Flow::Break {
+                        label: Some(broke),
+                        value,
+                    } if broke == label => Flow::Fallthrough(value),
+                    other => other,
+                }
+            }
+            StmtKind::LetDestructure { .. } => Flow::Bail,
+        }
+    }
+
+    /// Run a loop until it breaks, control leaves the function, or the budget
+    /// runs out. Termination rests on the budget alone — the per-iteration
+    /// charge covers an empty body too — so no constant trip count is needed.
+    fn exec_loop_a(&mut self, body: &mut Body, block: BlockId) -> Flow {
+        let snapshot = LoopSnapshot::capture(body, block);
+        loop {
+            if self.step_budget == 0 {
+                return Flow::Bail;
+            }
+            self.step_budget -= 1;
+            match self.exec_block_a(body, block) {
+                Flow::Fallthrough(_) | Flow::Continue => {}
+                // A labeled `break` belongs to an enclosing labeled block.
+                Flow::Break { label: None, .. } => {
+                    return Flow::Fallthrough(Lattice::Unevaluated);
+                }
+                other => return other,
+            }
+            snapshot.restore(body);
+            self.scratch_folds.clear();
+        }
+    }
+
+    /// An assignment updates the environment; anything else contributes its
+    /// value as the block's result.
+    fn exec_expr_stmt_a(&mut self, body: &mut Body, op: Operand) -> Flow {
+        if let Some(e) = op.as_expr()
+            && let ExprKind::Assign { target, value } = &body.exprs[e].kind
+        {
+            let (target, value) = (*target, *value);
+            let Some(index) = assign_target_local(body, target) else {
+                return Flow::Bail;
+            };
+            let Lattice::Const(v) = self.eval_operand_a(body, value) else {
+                return Flow::Bail;
+            };
+            self.bind_ctfe_local(index, Lattice::Const(v));
+            return Flow::Fallthrough(Lattice::Unevaluated);
+        }
+        match self.eval_operand_a(body, op) {
+            lattice @ Lattice::Const(_) => Flow::Fallthrough(lattice),
+            Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
+        }
+    }
+
+    fn eval_optional_operand_a(&mut self, body: &mut Body, op: Option<Operand>) -> Lattice {
+        match op {
+            Some(op) => self.eval_operand_a(body, op),
+            None => Lattice::Unevaluated,
+        }
+    }
+
+    /// Reducing in place first is what lets a nested call fold before the
+    /// operand is projected.
+    fn eval_operand_a(&mut self, body: &mut Body, op: Operand) -> Lattice {
+        match op.as_expr() {
+            Some(e) => {
+                self.reduce_in_place_a(body, e);
+                self.reduce_to_lattice_a(body, e)
+            }
+            None => self.operand_to_lattice_a(body, op),
+        }
+    }
+
+    /// Bind a local inside a compile-time frame. A local the frame may reach
+    /// through another handle keeps no value.
+    fn bind_ctfe_local(&mut self, index: u32, lattice: Lattice) {
+        if self.ctfe_clobbered.contains(index) {
+            self.env.insert(index, Lattice::NonConst);
+        } else {
+            self.bind_local(index, lattice);
+        }
+    }
+
+    /// Evaluate `array_get(seq, i)` / `array_len(seq)` over a constant
+    /// sequence. The argument is a reference to the array, and a reference to a
+    /// constant reads as that constant, so no separate deref step is needed.
+    fn try_seq_builtin_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+            return Lattice::Unevaluated;
+        };
+        let Some(builtin) = self.seq_builtins.and_then(|m| m.get(func_id)) else {
+            return Lattice::Unevaluated;
+        };
+        match (builtin, args.as_slice()) {
+            (SeqBuiltin::Len, [arr]) => {
+                let Lattice::Const(v) = self.operand_to_lattice_a(body, arr.expr) else {
+                    return Lattice::Unevaluated;
+                };
+                v.seq_len().map_or(Lattice::Unevaluated, |len| {
+                    Lattice::Const(Value::Int {
+                        value: len as u64,
+                        prim: PrimitiveType::I32,
+                    })
+                })
+            }
+            (SeqBuiltin::Get, [arr, index]) => self.index_lattice(body, arr.expr, index.expr),
+            (SeqBuiltin::Len | SeqBuiltin::Get, _) => Lattice::Unevaluated,
+        }
+    }
+
+    /// Fold a pure call whose args are all constant: bind the params, run the
+    /// callee's body, and return `Const(v)` only when it produces a value.
+    /// `Unevaluated` on any miss, so the original call — and any runtime trap
+    /// inside it — survives.
     fn try_call_fold_a(&mut self, body: &Body, e: ExprId) -> Lattice {
+        if let lattice @ (Lattice::Const(_) | Lattice::NonConst) =
+            self.try_seq_builtin_fold_a(body, e)
+        {
+            // `NonConst` here is an out-of-range read: keep the call so the
+            // trap survives.
+            return match lattice {
+                Lattice::Const(v) => Lattice::Const(v),
+                Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
+            };
+        }
         let Some(callees) = self.callees else {
             return Lattice::Unevaluated;
         };
@@ -1881,9 +2196,6 @@ impl<'a> Interpreter<'a> {
         let Some(callee_body) = callee.body.as_ref() else {
             return Lattice::Unevaluated;
         };
-        let Some(tail) = single_tail_expression_a(callee_body) else {
-            return Lattice::Unevaluated;
-        };
         if self.step_budget == 0 {
             return Lattice::Unevaluated;
         }
@@ -1897,22 +2209,31 @@ impl<'a> Interpreter<'a> {
         // Local indices are per-function, so the caller's read-only-local set
         // says nothing about the callee's.
         let saved_aggregates = std::mem::take(&mut self.aggregate_locals);
-        for (i, v) in bound.into_iter().enumerate() {
-            #[allow(clippy::cast_possible_truncation)]
-            self.env.insert(i as u32, Lattice::Const(v));
-        }
-        // Reduce the tail on a scratch copy of the callee's nodes so the shared
-        // callee body (held under an immutable `Ref`) is not mutated. Only the
-        // node maps are cloned (`nodes_only_clone`) — reduction reads no
-        // function-level metadata, so cloning the callee's `locals` would be
-        // pure waste.
+        let saved_clobbered = std::mem::take(&mut self.ctfe_clobbered);
+        // Execute on a scratch copy so the shared callee body, held under an
+        // immutable `Ref`, is not mutated.
         let mut scratch = callee_body.nodes_only_clone();
-        self.reduce_in_place_a(&mut scratch, tail);
-        let result = self.reduce_to_lattice_a(&scratch, tail);
+        self.record_aggregate_locals(&scratch);
+        self.ctfe_clobbered = clobbered_locals(&scratch);
+        for (i, v) in bound.into_iter().enumerate() {
+            let index = u32::try_from(i).expect("param count fits u32");
+            let lattice = if self.ctfe_clobbered.contains(index) {
+                Lattice::NonConst
+            } else {
+                Lattice::Const(v)
+            };
+            self.env.insert(index, lattice);
+        }
+        let root = scratch.root;
+        let result = match self.exec_block_a(&mut scratch, root) {
+            Flow::Return(lattice) | Flow::Fallthrough(lattice) => lattice,
+            Flow::Break { .. } | Flow::Continue | Flow::Bail => Lattice::Unevaluated,
+        };
         self.env = saved_env;
         self.scratch_folds = saved_folds;
         self.ref_global_aliases = saved_aliases;
         self.aggregate_locals = saved_aggregates;
+        self.ctfe_clobbered = saved_clobbered;
         self.call_stack.pop();
         match result {
             c @ Lattice::Const(_) => c,
@@ -1970,20 +2291,6 @@ fn operand_reads_any_local(body: &Body, op: Operand, binds: &PatBindings) -> boo
     visitor.found
 }
 
-/// The tail expression of a body whose root block is a single statement —
-/// `Return { Some(e) }` or `Expr(e)`. `None` for any other shape, which the
-/// caller treats as "do not fold this call".
-fn single_tail_expression_a(body: &Body) -> Option<ExprId> {
-    let [single] = body.blocks[body.root].stmts.as_slice() else {
-        return None;
-    };
-    match body.stmts[*single].kind {
-        StmtKind::Return { value: Some(e) } => e.as_expr(),
-        StmtKind::Expr(e) => e.as_expr(),
-        _ => None,
-    }
-}
-
 /// `Some(v)` ↦ `Const(v)`, `None` ↦ `NonConst`. Used at the boundary
 /// where a numeric-evaluation helper that still returns `Option<Value>`
 /// (because its failure modes are runtime traps, not "haven't tried")
@@ -2012,6 +2319,151 @@ enum PatternMatch {
     Yes,
     No,
     Unknown,
+}
+
+/// How control left a statement sequence during compile-time execution.
+///
+/// `Break` is not loop-specific: a labeled block is the value-producing shape
+/// a `break L: v` completes, and a loop catches only an unlabeled `break`.
+enum Flow {
+    /// Reached the end, carrying the value of the last statement that
+    /// produced one.
+    Fallthrough(Lattice),
+    Return(Lattice),
+    Break {
+        label: Option<String>,
+        value: Lattice,
+    },
+    Continue,
+    /// The engine could not follow the program: abandon the evaluation so the
+    /// original call survives.
+    Bail,
+}
+
+/// The loop-body nodes one iteration may rewrite, kept so the next iteration
+/// starts from the same program. Reduction rewrites an expression toward the
+/// value it took *this* time round — `acc + 1` becomes the literal `1` on the
+/// first pass — so without restoring, later iterations read the first one's
+/// results.
+struct LoopSnapshot {
+    exprs: Vec<(ExprId, ExprNode)>,
+    stmts: Vec<(StmtId, StmtNode)>,
+    blocks: Vec<(BlockId, Vec<StmtId>)>,
+}
+
+impl LoopSnapshot {
+    fn capture(body: &Body, block: BlockId) -> Self {
+        #[derive(Default)]
+        struct Collect {
+            exprs: Vec<ExprId>,
+            stmts: Vec<StmtId>,
+            blocks: Vec<BlockId>,
+        }
+        impl NirRefVisitor for Collect {
+            fn visit_node(&mut self, body: &Body, node: NodeRef) {
+                match node {
+                    NodeRef::Expr(e) => self.exprs.push(e),
+                    NodeRef::Stmt(s) => self.stmts.push(s),
+                    NodeRef::Block(b) => self.blocks.push(b),
+                    // Patterns are matched, never rewritten.
+                    NodeRef::Pat(_) => {}
+                }
+                self.walk_node(body, node);
+            }
+        }
+        let mut collect = Collect::default();
+        collect.visit_node(body, NodeRef::Block(block));
+        Self {
+            exprs: collect
+                .exprs
+                .into_iter()
+                .map(|e| (e, body.exprs[e].clone()))
+                .collect(),
+            stmts: collect
+                .stmts
+                .into_iter()
+                .map(|s| (s, body.stmts[s].clone()))
+                .collect(),
+            blocks: collect
+                .blocks
+                .into_iter()
+                .map(|b| (b, body.blocks[b].stmts.clone()))
+                .collect(),
+        }
+    }
+
+    /// Put the captured nodes back. Nodes an iteration allocated are left
+    /// behind unreferenced.
+    fn restore(&self, body: &mut Body) {
+        for (e, node) in &self.exprs {
+            body.exprs[*e] = node.clone();
+        }
+        for (s, node) in &self.stmts {
+            body.stmts[*s] = node.clone();
+        }
+        for (b, stmts) in &self.blocks {
+            body.blocks[*b].stmts.clone_from(stmts);
+        }
+    }
+}
+
+/// Locals of `body` that a compile-time frame cannot track, because something
+/// other than a bare assignment at statement position can write them: a
+/// borrow, a mutable argument, a method receiver, a store through a
+/// projection, or an assignment buried inside a larger expression.
+fn clobbered_locals(body: &Body) -> LocalSet {
+    fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
+        if let Some(index) = lvalue_root_local(body, op) {
+            set.insert(index);
+        }
+    }
+    // Assignments the executor applies itself. Any other assignment is only
+    // reduced, never run, so its target would keep a stale value.
+    let mut executed: IndexSet<ExprId> = IndexSet::default();
+    for (_, stmt) in &body.stmts {
+        if let StmtKind::Expr(op) = &stmt.kind
+            && let Some(e) = op.as_expr()
+            && matches!(body.exprs[e].kind, ExprKind::Assign { .. })
+        {
+            executed.insert(e);
+        }
+    }
+    let mut set = LocalSet::default();
+    for (e, node) in &body.exprs {
+        match &node.kind {
+            ExprKind::Assign { target, .. } => {
+                if !executed.contains(&e)
+                    || !matches!(body.exprs[*target].kind, ExprKind::Local { .. })
+                {
+                    disqualify(body, (*target).into(), &mut set);
+                }
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                expr,
+            } => disqualify(body, *expr, &mut set),
+            ExprKind::MethodCall { receiver, args, .. } => {
+                disqualify(body, *receiver, &mut set);
+                for arg in args.iter().filter(|a| a.is_mut) {
+                    disqualify(body, arg.expr, &mut set);
+                }
+            }
+            ExprKind::Call { args, .. } => {
+                for arg in args.iter().filter(|a| a.is_mut) {
+                    disqualify(body, arg.expr, &mut set);
+                }
+            }
+            _ => {}
+        }
+    }
+    set
+}
+
+fn assign_target_local(body: &Body, target: ExprId) -> Option<u32> {
+    match &body.exprs[target].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        _ => None,
+    }
 }
 
 /// The locals a matched pattern binds, paired with the scrutinee sub-values
