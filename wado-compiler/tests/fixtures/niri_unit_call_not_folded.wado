@@ -1,0 +1,34 @@
+// A call that yields nothing has no value to substitute. Compile-time
+// evaluation must not hand one back: putting a value where the program
+// expects none leaves it on the stack, and the Wasm module fails to
+// validate.
+//
+// The discarded tail call is what makes the body produce a value at all —
+// `compute(k)` reduces to a constant, and without a return-type check that
+// constant becomes the unit call's result.
+
+use { println, Stdout } from "core:cli";
+
+fn compute(n: i32) -> i32 {
+    return n + 1;
+}
+
+fn discards_a_constant(n: i32) {
+    let k = n + 1;
+    compute(k);
+}
+
+fn also_discards() {
+    compute(7);
+}
+
+export fn run() with Stdout {
+    discards_a_constant(4);
+    also_discards();
+    println(`ok`);
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

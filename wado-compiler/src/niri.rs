@@ -279,13 +279,16 @@ pub type GlobalEnv = IndexMap<GlobalKey, Lattice>;
 /// sequence global hoisted by body globalization.
 pub type GlobalFieldEnv = IndexMap<GlobalKey, IndexMap<String, Value>>;
 
-/// Default per-pass CTFE step budget. Mirrors rustc's CTFE step counter
+/// Default per-function CTFE step budget. Mirrors rustc's CTFE step counter
 /// shape: a hard ceiling on the work the engine performs before it starts
-/// bailing. A step is one call entry plus one per statement executed, so the
-/// ceiling bounds total interpretation, not just how many calls are attempted.
-/// Borrow-blocked re-entries (the recursion guard) bail before the budget
-/// charge, so they don't consume budget; the ceiling only applies to
-/// new-frame work that actually runs.
+/// bailing. A step is one call entry, one statement executed, or one loop
+/// iteration, so the ceiling bounds total interpretation rather than just how
+/// many calls are attempted. Borrow-blocked re-entries (the recursion guard)
+/// bail before the budget charge, so they don't consume budget; the ceiling
+/// only applies to new-frame work that actually runs.
+///
+/// Reset per function ([`Interpreter::enter_function`]) so what one function
+/// spends cannot decide whether the next one folds.
 pub const DEFAULT_STEP_BUDGET: u32 = 10_000;
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -477,7 +480,11 @@ impl EditSink for BodySink<'_> {
 /// the result is knowable at compile time.
 #[must_use]
 pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
-    func.effects.is_empty()
+    // A call that yields nothing has no value to substitute. Folding one would
+    // put a value where the program expects none, so the callee must return
+    // something.
+    func.return_type != crate::tir::TypeTable::UNIT
+        && func.effects.is_empty()
         && func.body.is_some()
         && !func.is_cm_binding
         && !func.is_dispatch_wrapper
@@ -611,16 +618,6 @@ fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
     }
 }
 
-/// Locals of `body` that may bind an aggregate constant: every mention only
-/// reads the value — as a field read's receiver or a `match` / `switch`
-/// scrutinee — and no store target, borrow, method receiver, or mutable
-/// argument roots at them. Such a local is unreachable through any other
-/// handle, so its whole value cannot change under the binding.
-///
-/// The scan walks the reachable body. An orphaned node cannot run, so a
-/// mention left behind by an earlier rewrite must not disqualify a local —
-/// inlining `t.len()` leaves the original method call in the arena, and
-/// counting its receiver would refuse every list the caller then reads.
 /// Every expression id reachable from the body root, in arena order.
 fn reachable_exprs(body: &Body) -> Vec<ExprId> {
     struct Collect(Vec<ExprId>);
@@ -642,6 +639,17 @@ fn reachable_exprs(body: &Body) -> Vec<ExprId> {
     collect.0
 }
 
+/// Locals of `body` that may bind an aggregate constant: every mention only
+/// reads the value — as a field read's receiver or a `match` / `switch`
+/// scrutinee — and no store target, mutable borrow, method receiver, or
+/// mutable argument roots at them. Such a local is unreachable through any
+/// handle that could write it, so its whole value cannot change under the
+/// binding.
+///
+/// The scan walks the reachable body. An orphaned node cannot run, so a
+/// mention left behind by an earlier rewrite must not disqualify a local —
+/// inlining `t.len()` leaves the original method call in the arena, and
+/// counting its receiver would refuse every list the caller then reads.
 fn aggregate_safe_locals(body: &Body) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
@@ -738,6 +746,13 @@ impl<'a> Interpreter<'a> {
         self
     }
 
+    /// Install the sequence-builtin lookup. Without it, an element or length
+    /// read stays an opaque call.
+    pub fn with_seq_builtins(&mut self, seq_builtins: &'a SeqBuiltinMap) -> &mut Self {
+        self.seq_builtins = Some(seq_builtins);
+        self
+    }
+
     /// Install the [`GlobalEnv`]. Without this, every `GlobalVarGet`
     /// node remains [`Lattice::Unevaluated`] — the engine has no
     /// initializer lattice to look up.
@@ -747,13 +762,6 @@ impl<'a> Interpreter<'a> {
     /// pass), mirroring [`with_callees`].
     ///
     /// [`with_callees`]: Self::with_callees
-    /// Install the sequence-builtin lookup. Without it, an element or length
-    /// read stays an opaque call.
-    pub fn with_seq_builtins(&mut self, seq_builtins: &'a SeqBuiltinMap) -> &mut Self {
-        self.seq_builtins = Some(seq_builtins);
-        self
-    }
-
     pub fn with_globals(&mut self, globals: &'a GlobalEnv) -> &mut Self {
         self.globals = Some(globals);
         self
@@ -809,10 +817,14 @@ impl<'a> Interpreter<'a> {
     /// are unique per function, not project-wide).
     ///
     /// Asserts the recursion guard is clear — a leaked entry would mean
-    /// a previous walk panicked mid-call. The step budget is
-    /// intentionally *not* touched: it caps total CTFE work across the
-    /// pass, not per-function.
+    /// a previous walk panicked mid-call.
+    ///
+    /// The step budget resets here. A statement is the unit charged, so one
+    /// function with a long compile-time loop would otherwise drain the pass
+    /// and silently stop every function after it from folding — making the
+    /// result depend on the order functions happen to be walked in.
     pub fn enter_function(&mut self) {
+        self.step_budget = DEFAULT_STEP_BUDGET;
         self.env.clear();
         self.ref_global_aliases.clear();
         self.aggregate_locals = LocalSet::default();
@@ -2336,9 +2348,6 @@ fn operand_reads_any_local(body: &Body, op: Operand, binds: &PatBindings) -> boo
     visitor.found
 }
 
-/// The tail expression of a body whose root block is a single statement —
-/// `Return { Some(e) }` or `Expr(e)`. `None` for any other shape, which the
-/// caller treats as "do not fold this call".
 /// `Some(v)` ↦ `Const(v)`, `None` ↦ `NonConst`. Used at the boundary
 /// where a numeric-evaluation helper that still returns `Option<Value>`
 /// (because its failure modes are runtime traps, not "haven't tried")
@@ -2371,9 +2380,9 @@ enum PatternMatch {
 
 /// How control left a statement sequence during compile-time execution.
 ///
-/// `Break` and `Continue` are modelled even though loops are not executed:
-/// a labeled block is the value-producing shape a `break L: v` completes, so
-/// the signal is not loop-specific.
+/// `Break` and `Continue` are not loop-specific: a labeled block is the
+/// value-producing shape a `break L: v` completes, and a loop catches only an
+/// unlabeled `break`.
 enum Flow {
     /// Reached the end of the sequence, carrying the value of the last
     /// statement that produced one — a body ending in an expression statement

@@ -708,119 +708,109 @@ fn is_null_operand(body: &crate::nir_arena::Body, op: crate::nir_arena::Operand)
     }
 }
 
+/// Evaluate a global's initializer to a compile-time value.
+///
+/// Every node is evaluated at its *own* type, which is what makes a cast a
+/// conversion rather than a relabelling: `(2147483647 + 1) as i64` must wrap
+/// at `i32` first and only then widen. Evaluating the addition at the cast's
+/// type would produce `2147483648`, a value the same expression never yields
+/// anywhere else in the language.
+///
+/// Uses the same evaluators as compile-time function evaluation, so a global
+/// initializer and an equivalent local expression cannot disagree.
+fn global_init_value(
+    body: &crate::nir_arena::Body,
+    op: crate::nir_arena::Operand,
+    type_table: &TypeTable,
+) -> Option<crate::const_eval::Value> {
+    use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_f32_type, prim_of};
+    use crate::nir_arena::{ExprKind, Operand};
+    use crate::nir_value_graph::ValueKind;
+    use crate::tir::PrimitiveType;
+
+    match op {
+        Operand::Value(v) => {
+            let ty = body.values.type_of(v)?;
+            match body.values.kind(v) {
+                ValueKind::Bool(b) => Some(Value::Bool(*b)),
+                ValueKind::Char(c) => Some(Value::Char(*c)),
+                ValueKind::Int(value, _) => Some(Value::Int {
+                    value: *value,
+                    prim: prim_of(ty, type_table)?,
+                }),
+                ValueKind::Float(bits, _) => Some(Value::Float {
+                    value: f64::from_bits(*bits),
+                    prim: if is_f32_type(ty, type_table) {
+                        PrimitiveType::F32
+                    } else {
+                        PrimitiveType::F64
+                    },
+                }),
+                _ => None,
+            }
+        }
+        Operand::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Cast { expr: inner, .. } => {
+                let value = global_init_value(body, *inner, type_table)?;
+                eval_cast(value, prim_of(body.exprs[e].type_id, type_table)?)
+            }
+            ExprKind::Unary {
+                op: crate::nir::NirUnaryOp::Neg,
+                expr: inner,
+            } => eval_unary(
+                crate::nir::NirUnaryOp::Neg,
+                global_init_value(body, *inner, type_table)?,
+            ),
+            ExprKind::Binary { left, op, right } => eval_binary(
+                global_init_value(body, *left, type_table)?,
+                *op,
+                global_init_value(body, *right, type_table)?,
+            ),
+            _ => None,
+        },
+    }
+}
+
 /// Convert a NIR global initializer operand to a WIR constant instruction.
-/// `type_id` is the type to interpret a literal as, propagated downward unchanged
-/// through enclosing casts (the outermost cast's type wins).
+/// `type_id` is the global's declared type, which decides the constant's
+/// width; the value itself is evaluated at the types the expression carries.
 fn translate_global_init(
     body: &crate::nir_arena::Body,
     op: crate::nir_arena::Operand,
     type_id: crate::tir::TypeId,
     type_table: &TypeTable,
 ) -> crate::wir::WirInstr {
-    use crate::nir_arena::{ExprKind, Operand};
-    use crate::nir_value_graph::ValueKind;
+    use crate::const_eval::Value;
     use crate::tir::{PrimitiveType, ResolvedType};
     use crate::wir::WirInstr;
 
-    let int_const = |value: u64| match type_table.get(type_id) {
-        ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
-            WirInstr::I64Const(value as i64)
-        }
-        _ => WirInstr::I32Const(value as i32),
-    };
-    let float_const = |value: f64| match type_table.get(type_id) {
-        ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(value as f32),
-        _ => WirInstr::F64Const(value),
-    };
     let ref_null = || WirInstr::RefNull {
         heap_type: crate::wir::WirAbstractHeapType::None,
     };
-
-    // A pure scalar constant lives in the value pool (WEP: The Live ValueGraph);
-    // emit it per the target `type_id`.
-    if let Operand::Value(v) = op {
-        return match body.values.kind(v) {
-            ValueKind::Int(value, _) => int_const(*value),
-            ValueKind::Float(bits, _) => float_const(f64::from_bits(*bits)),
-            ValueKind::Bool(b) => WirInstr::I32Const(i32::from(*b)),
-            ValueKind::Char(c) => WirInstr::I32Const(*c as i32),
-            _ => ref_null(),
-        };
-    }
-    let Some(id) = op.as_expr() else {
+    // Anything the evaluator cannot reduce is initialized by the module's
+    // initialization function instead, so the slot starts at a placeholder.
+    let Some(value) = global_init_value(body, op, type_table) else {
         return ref_null();
     };
-
-    match &body.exprs[id].kind {
-        ExprKind::Cast { expr: inner, .. } => {
-            // For casts, evaluate the inner expression with the cast's target
-            // type (propagate the current `type_id` downward).
-            translate_global_init(body, *inner, type_id, type_table)
-        }
-        ExprKind::Unary {
-            op: crate::nir::NirUnaryOp::Neg,
-            expr: inner,
-        } => {
-            // Negation of constant (normally folded by elaborator, but handle
-            // for robustness). The inner constant uses its own type.
-            let inner = *inner;
-            let inner_wir =
-                translate_global_init(body, inner, body.operand_type(inner), type_table);
-            match inner_wir {
-                WirInstr::I32Const(v) => WirInstr::I32Const(v.wrapping_neg()),
-                WirInstr::I64Const(v) => WirInstr::I64Const(v.wrapping_neg()),
-                WirInstr::F32Const(v) => WirInstr::F32Const(-v),
-                WirInstr::F64Const(v) => WirInstr::F64Const(-v),
-                _ => ref_null(),
-            }
-        }
-        // `add` / `sub` / `mul` on `i32` / `i64` is a Wasm constant expression,
-        // and both operands are constants here, so emit the result rather than
-        // the instruction: a single const is smaller and needs no extended-const
-        // support from the engine. Only reachable when the optimizer did not
-        // already fold it, which is to say at `-O0`.
-        ExprKind::Binary { op, left, right } => {
-            let (op, left, right) = (*op, *left, *right);
-            let l = translate_global_init(body, left, type_id, type_table);
-            let r = translate_global_init(body, right, type_id, type_table);
-            match (l, r) {
-                (WirInstr::I32Const(a), WirInstr::I32Const(b)) => {
-                    WirInstr::I32Const(wrapping_i32(op, a, b))
+    let bits = match value {
+        Value::Int { value, .. } => value,
+        Value::Bool(b) => u64::from(b),
+        Value::Char(c) => u64::from(c),
+        Value::Float { value, .. } => {
+            return match type_table.get(type_id) {
+                ResolvedType::Primitive(PrimitiveType::F32) => {
+                    WirInstr::F32Const(value as f32)
                 }
-                (WirInstr::I64Const(a), WirInstr::I64Const(b)) => {
-                    WirInstr::I64Const(wrapping_i64(op, a, b))
-                }
-                _ => ref_null(),
-            }
+                _ => WirInstr::F64Const(value),
+            };
         }
-        _ => {
-            // Non-constant initializers use null placeholder (lazy init at runtime)
-            WirInstr::RefNull {
-                heap_type: crate::wir::WirAbstractHeapType::None,
-            }
+        Value::Aggregate { .. } | Value::Seq { .. } => return ref_null(),
+    };
+    match type_table.get(type_id) {
+        ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
+            WirInstr::I64Const(bits as i64)
         }
-    }
-}
-
-/// The `i32` constant-expression operators, wrapping as Wasm does.
-fn wrapping_i32(op: crate::nir::NirBinaryOp, a: i32, b: i32) -> i32 {
-    use crate::nir::NirBinaryOp;
-    match op {
-        NirBinaryOp::Add => a.wrapping_add(b),
-        NirBinaryOp::Sub => a.wrapping_sub(b),
-        NirBinaryOp::Mul => a.wrapping_mul(b),
-        other => panic!("{other:?} is not a Wasm constant-expression operator"),
-    }
-}
-
-/// The `i64` constant-expression operators, wrapping as Wasm does.
-fn wrapping_i64(op: crate::nir::NirBinaryOp, a: i64, b: i64) -> i64 {
-    use crate::nir::NirBinaryOp;
-    match op {
-        NirBinaryOp::Add => a.wrapping_add(b),
-        NirBinaryOp::Sub => a.wrapping_sub(b),
-        NirBinaryOp::Mul => a.wrapping_mul(b),
-        other => panic!("{other:?} is not a Wasm constant-expression operator"),
+        _ => WirInstr::I32Const(bits as i32),
     }
 }
 
