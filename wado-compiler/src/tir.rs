@@ -1905,7 +1905,7 @@ impl TypeTable {
 
     /// Register a generic associated type definition.
     /// E.g., for `impl Iterator for ListIter<T> { type Item = T; }`,
-    /// register `(ListIter's `AstId`, "Item") → TypeParam(0, "T")`.
+    /// register `(ListIter's ``AstId``, "Item") → TypeParam(0, "T")`.
     ///
     /// Keyed by the declaring [`AstId`](crate::ast::AstId): two modules may
     /// each declare a `Node<T>`, and their definitions must not overwrite one

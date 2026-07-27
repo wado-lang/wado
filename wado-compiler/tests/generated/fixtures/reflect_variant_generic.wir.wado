@@ -164,7 +164,7 @@ type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  //
 
 type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(46)
 
-type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(47)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(47)
 
 type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(48)
 
@@ -252,6 +252,8 @@ global global:reflect_variant_generic.wado::__const_obj_19: ref null "core:prelu
 global mut global:reflect_variant_generic.wado::__const_obj_21: ref null "core:prelude/string.wado//String" = ref.null none;
 global global:core:prelude/format.wado::__const_obj_31: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
 global global:core:prelude/format.wado::__const_obj_32: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
+global mut global:reflect_variant_generic.wado::__const_obj_33: ref null "tuple//[core:prelude/traits.wado/VariantCase<reflect_variant_generic.wado/Either<bool>,bool>, core:prelude/traits.wado/VariantCase<reflect_variant_generic.wado/Either<bool>,i32>]" = ref.null none;
+global mut global:reflect_variant_generic.wado::__const_obj_34: ref null "tuple//[core:prelude/traits.wado/VariantCase<reflect_variant_generic.wado/Either<core:prelude/string.wado/String>,core:prelude/string.wado/String>, core:prelude/traits.wado/VariantCase<reflect_variant_generic.wado/Either<core:prelude/string.wado/String>,i32>]" = ref.null none;
 
 fn "reflect_variant_generic.wado/__test_0_a_generic_variant_walks_its_members_with_the_type_arg_substituted"() {
     let e: ref "reflect_variant_generic.wado//Either<core:prelude/string.wado/String>";
@@ -593,18 +595,19 @@ fn "core:rt/cm_lower_list_u8"(data, start, len) {
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
-fn "core:rt/wait_for_blocked"(handle) {
+fn "core:rt/cm_await_blocked"(handle) {
     let ws: i32;
     let evt_ptr: i32;
-    let payload: i32;
+    let status: i32;
     ws = "wasi/waitable-set-new"();
     "wasi/waitable-join"(handle, ws);
     evt_ptr = "mem/realloc"(0, 0, 4, 8);
     drop("wasi/waitable-set-wait"(ws, evt_ptr));
-    payload = builtin::load_i32(evt_ptr + 4);
+    status = builtin::load_i32(evt_ptr + 4);
     drop("mem/realloc"(evt_ptr, 8, 4, 0));
+    "wasi/waitable-join"(handle, 0);
     "wasi/waitable-set-drop"(ws);
-    return payload;
+    return status;
 }
 
 fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
@@ -616,7 +619,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
             break_if b32 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
-                result = "core:rt/wait_for_blocked"(handle);
+                result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
             break_if b32 (if (result >> 4) == 0 -> i32 {
@@ -1029,7 +1032,6 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
 
 fn "reflect_variant_generic.wado/reflect_variant_generic.wado/Either<bool>^Tag::tag"(self) {
     let __local_2_2: ref "core:prelude/string.wado//String";
-    let __tuple_1: ref "tuple//[core:prelude/traits.wado/VariantCase<reflect_variant_generic.wado/Either<bool>,bool>, core:prelude/traits.wado/VariantCase<reflect_variant_generic.wado/Either<bool>,i32>]";
     let c_4: ref "core:prelude/traits.wado//VariantCase<reflect_variant_generic.wado/Either<bool>,bool>";
     let c_5: ref "core:prelude/traits.wado//VariantCase<reflect_variant_generic.wado/Either<bool>,i32>";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -1049,8 +1051,10 @@ fn "reflect_variant_generic.wado/reflect_variant_generic.wado/Either<bool>^Tag::
     let __sroa_self_value_62: bool;
     let index_65: i32;
     let index_70: i32;
-    __tuple_1 = "reflect_variant_generic.wado/Either<bool>^ReflectVariant::members"();
-    c_4 = __tuple_1.0;
+    if ref.is_null(global:reflect_variant_generic.wado::__const_obj_33) {
+        global:reflect_variant_generic.wado::__const_obj_33 = "reflect_variant_generic.wado/Either<bool>^ReflectVariant::members"();
+    }
+    c_4 = global:reflect_variant_generic.wado::__const_obj_33.0;
     v_8 = self.value;
     if v_8.discriminant == c_4.index {
         return __local_2_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_2_2, c_4.case_name), start_13 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2_2, 1), builtin::array_set_u8(__local_2_2.repr, start_13, 40), "core:prelude/string.wado/String::push_str"(__local_2_2, v_21 = self.value; index_65 = c_4.index; if @unlikely(v_21.discriminant != index_65) {
@@ -1061,7 +1065,7 @@ fn "reflect_variant_generic.wado/reflect_variant_generic.wado/Either<bool>^Tag::
             unreachable;
         }); __local_1_23 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2_24 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1_23 }; "core:prelude/primitive.wado/bool^Display::fmt"(struct.new "core:prelude/types.wado//Box<bool>" { value: __sroa_self_value_62 }, __local_2_24); __local_1_23), start_27 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2_2, 1), builtin::array_set_u8(__local_2_2.repr, start_27, 41), __local_2_2;
     }
-    c_5 = __tuple_1.1;
+    c_5 = global:reflect_variant_generic.wado::__const_obj_33.1;
     v_35 = self.value;
     if v_35.discriminant == c_5.index {
         return __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_6, c_5.case_name), start_40 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_6, 1), builtin::array_set_u8(__local_6.repr, start_40, 40), "core:prelude/string.wado/String::push_str"(__local_6, v_48 = self.value; index_70 = c_5.index; if @unlikely(v_48.discriminant != index_70) {
@@ -1077,7 +1081,6 @@ fn "reflect_variant_generic.wado/reflect_variant_generic.wado/Either<bool>^Tag::
 
 fn "reflect_variant_generic.wado/reflect_variant_generic.wado/Either<core:prelude/string.wado/String>^Tag::tag"(self) {
     let __local_2_2: ref "core:prelude/string.wado//String";
-    let __tuple_1: ref "tuple//[core:prelude/traits.wado/VariantCase<reflect_variant_generic.wado/Either<core:prelude/string.wado/String>,core:prelude/string.wado/String>, core:prelude/traits.wado/VariantCase<reflect_variant_generic.wado/Either<core:prelude/string.wado/String>,i32>]";
     let c_4: ref "core:prelude/traits.wado//VariantCase<reflect_variant_generic.wado/Either<core:prelude/string.wado/String>,core:prelude/string.wado/String>";
     let c_5: ref "core:prelude/traits.wado//VariantCase<reflect_variant_generic.wado/Either<core:prelude/string.wado/String>,i32>";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -1095,8 +1098,10 @@ fn "reflect_variant_generic.wado/reflect_variant_generic.wado/Either<core:prelud
     let __sroa_self_value: i32;
     let index_62: i32;
     let index_65: i32;
-    __tuple_1 = "reflect_variant_generic.wado/Either<core:prelude/string.wado/String>^ReflectVariant::members"();
-    c_4 = __tuple_1.0;
+    if ref.is_null(global:reflect_variant_generic.wado::__const_obj_34) {
+        global:reflect_variant_generic.wado::__const_obj_34 = "reflect_variant_generic.wado/Either<core:prelude/string.wado/String>^ReflectVariant::members"();
+    }
+    c_4 = global:reflect_variant_generic.wado::__const_obj_34.0;
     v_8 = self.value;
     if v_8.discriminant == c_4.index {
         return __local_2_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_2_2, c_4.case_name), start_13 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2_2, 1), builtin::array_set_u8(__local_2_2.repr, start_13, 40), "core:prelude/string.wado/String::push_str"(__local_2_2, v_21 = self.value; index_62 = c_4.index; if @unlikely(v_21.discriminant != index_62) {
@@ -1107,7 +1112,7 @@ fn "reflect_variant_generic.wado/reflect_variant_generic.wado/Either<core:prelud
             unreachable;
         }); self_22), start_25 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2_2, 1), builtin::array_set_u8(__local_2_2.repr, start_25, 41), __local_2_2;
     }
-    c_5 = __tuple_1.1;
+    c_5 = global:reflect_variant_generic.wado::__const_obj_34.1;
     v_33 = self.value;
     if v_33.discriminant == c_5.index {
         return __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_6, c_5.case_name), start_38 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_6, 1), builtin::array_set_u8(__local_6.repr, start_38, 40), "core:prelude/string.wado/String::push_str"(__local_6, v_46 = self.value; index_65 = c_5.index; if @unlikely(v_46.discriminant != index_65) {
