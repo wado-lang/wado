@@ -117,6 +117,12 @@ share); no over-fill regression.
   nested lists, and don't decode/build what the grammar never reads.** The
   residual cost of even flat resident data is a Wado-runtime GC characteristic,
   tracked outside Gale.
+- **Benchmark on an idle host, or not at all.** A first A/B of the continuation
+  probe ran while the test suite compiled alongside it and put both arms at
+  4.65–4.97 MB/s; re-run idle, the same two commits measured 4.83–5.36, and the
+  ranking between them changed. Concurrent load moves the number further than
+  most changes worth measuring, so a run sharing the machine with a build or a
+  test sweep is not evidence either way.
 - **A GC-bound win measured on the dev host overstates the release win.** The
   dev-profile runtime / GC / allocator run unoptimized (~4–5× slower, the
   measurement note above), so GC is a far larger share of dev wall-clock than
@@ -426,13 +432,13 @@ gate.
   no closure, no allocation, and nothing resident for the collector. The probe
   is emitted only where the two readings compete, so a grammar whose optional
   does not overlap its continuation keeps its previous emit. Measured on release
-  `sqlite_parse`, alternating base and probe on one host: base 4.74 / 4.74 /
-  4.65 / 4.80 MB/s, probe 4.71 / 4.69 / 4.97 / 4.76 — the spread inside each
-  group is wider than the gap between them, so the probe costs **nothing
-  measurable** (the machine's noise floor is ~3%, and the `sqlparser-rs`
-  reference row moved 6.98–7.49 MB/s across the same runs). Measure it this way
-  and not on dev per-case timings — the reverted attempt's 155× was invisible
-  in those. What remains is a tail-position loop, where the probe has nothing
+  `sqlite_parse`, alternating base and probe on an otherwise idle host: base
+  5.28 / 4.83 / 5.08 / 5.36 / 5.29 MB/s, probe 5.12 / 5.19 / 5.23 / 5.36 /
+  5.19. Best-of is identical (5.36) and the spread inside each group is wider
+  than the gap between them, so the probe costs **nothing measurable** — on
+  both the parse side and the scan side, which runs it once per tournament
+  scan. Measure it this way and not on dev per-case timings: the reverted
+  attempt's 155× was invisible in those. What remains is a tail-position loop, where the probe has nothing
   local to scan and falls back to the FOLLOW mask; `TODO.md` has why the mask
   cannot answer it.
 - **Recursive lexer rule with `.+?` / `.*?`**
