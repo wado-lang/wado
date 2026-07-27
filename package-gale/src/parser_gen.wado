@@ -6451,6 +6451,14 @@ fn gen_op_repeat_optional_rulecall(
     let opt_field = rep_op.field;
     let _ = dedup_name(&opt_field, name_counts);
 
+    // Ambiguous entry: the subtraction below would hand every shared token
+    // to the continuation, but ANTLR4 resolves the ambiguity by entering
+    // whenever entering leaves a viable parse. Ask the probe instead.
+    if optional_probe_decides(rep_op, follow, ctx) {
+        gen_optional_probe_entry(w, rep_op, &raw_first, ctx, name_counts);
+        return;
+    }
+
     if first.is_empty() {
         // RuleCall always has a field — `body_shape == LeafRuleCall`
         // implies `body_has_field == true`. The optional can
@@ -6470,6 +6478,53 @@ fn gen_op_repeat_optional_rulecall(
     // The if-expression collapses to a present/absent
     // statement — the body appends when taken, nothing otherwise.
     gen_optional_present(w, &rep_op.body, &caller_follow_gate, &ctx.first_check_str(&first), ctx);
+}
+
+/// True when the entry probe should decide a greedy Optional instead of the
+/// caller-follow subtraction. Only where the two readings actually compete —
+/// the body's first set overlaps the continuation's — and only when both
+/// sides of the probe are scannable; everywhere else the subtraction already
+/// agrees with ANTLR4 and keeps its emit byte-identical.
+fn optional_probe_decides(r: &RepeatOp, follow: &List<String>, ctx: &mut GenContext) -> bool {
+    return r.body_scannable && r.continuation_scannable && sets_overlap(&r.body_first_set, follow);
+}
+
+/// Greedy Optional decided by the entry probe: scan the body, then the
+/// continuation from where the body ended, then ask the caller's FOLLOW.
+/// Entering wins when all three hold — "ambiguity is resolved by entering,
+/// not by yielding", with the viability check that makes preferring to
+/// enter sound. The cheap first-set check stays in front so a token that
+/// cannot start the body never pays for a scan.
+fn gen_optional_probe_entry(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    raw_first: &List<String>,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) {
+    let verdict = dedup_name(&"opt_enter", nc);
+    let label = dedup_name(&"opt_enter_scan", nc);
+    w.line(&`let mut ${verdict}: bool = false;`);
+    w.begin(&`if ${ctx.first_check_str(raw_first)}`);
+    w.begin(&`${label}:`);
+    w.line(&"let tokens = &p.kinds;");
+    w.line(&"let mut pos: i32 = p.pos;");
+    let fail = `break ${label};`;
+    gen_scan_op_element(w, &r.scan_body, ctx, &fail);
+    for let se of &r.continuation_scan {
+        gen_scan_op_element(w, se, ctx, &fail);
+    }
+    if ctx.emit_follow() {
+        w.line(&`if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) \{ ${verdict} = true; \}`);
+    } else {
+        w.line(&`${verdict} = true;`);
+    }
+    w.end();
+    w.end();
+    w.begin(&`if ${verdict}`);
+    let mut body_nc: List<[String, i32]> = [];
+    gen_op_leaf(w, &r.body, ctx, &mut body_nc);
+    w.end();
 }
 
 /// Greedy-Optional leaf body: `if [!gate &&] cond { <body> }`.

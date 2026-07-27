@@ -1802,7 +1802,25 @@ fn scan_c(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn _parse_s__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let id = p.expect(TK_ID, &SYNC_0);
-    if p.peek_kind() == TK_ID {
+    let mut opt_enter: bool = false;
+    if _kind_set_0(p.peek_kind()) {
+        opt_enter_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_t(tokens, pos, 0);
+            if pos < 0 { break opt_enter_scan; }
+            while pos < tokens.len() && tokens[pos] == TK_NULL {
+                let sp = pos;
+                pos = scan_c(tokens, pos, 0);
+                if pos < 0 { pos = sp; break; }
+                if pos == sp { break; }
+            }
+            if pos >= tokens.len() || tokens[pos] != TK_EOF { break opt_enter_scan; }
+            pos += 1;
+            opt_enter = true;
+        }
+    }
+    if opt_enter {
         let t = _parse_t(p);
     }
     loop {

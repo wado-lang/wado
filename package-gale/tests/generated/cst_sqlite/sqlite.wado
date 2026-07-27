@@ -14023,7 +14023,23 @@ fn _parse_vacuum_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 fn _parse_column_def__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let column_name = _parse_column_name(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_24(p.peek_kind())) {
+    let mut opt_enter: bool = false;
+    if _kind_set_8(p.peek_kind()) {
+        opt_enter_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_type_name(tokens, pos, &EMPTY_FOLLOW, 0);
+            if pos < 0 { break opt_enter_scan; }
+            while pos < tokens.len() && _kind_set_25(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                let sp = pos;
+                pos = scan_column_constraint(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { pos = sp; break; }
+                if pos == sp { break; }
+            }
+            if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) { opt_enter = true; }
+        }
+    }
+    if opt_enter {
         let type_name = _parse_type_name(p, &EMPTY_FOLLOW);
     }
     loop {
@@ -14418,7 +14434,66 @@ fn _parse_expr__inner_scan_15(tokens: &Array<i32>, pos: i32, follow: &List<List<
 fn _parse_expr__inner_alt_22(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let k_case = p.expect(TK_K_CASE, &SYNC_5);
-    if _kind_set_35(p.peek_kind()) {
+    let mut opt_enter: bool = false;
+    if _kind_set_13(p.peek_kind()) {
+        opt_enter_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_expr(tokens, pos, &EMPTY_FOLLOW, 0);
+            if pos < 0 { break opt_enter_scan; }
+            sg_325_done: {
+                sg_325: {
+                    if pos >= tokens.len() || tokens[pos] != TK_K_WHEN { break sg_325; }
+                    pos += 1;
+                    pos = scan_expr(tokens, pos, &FOLLOW_MASK_19, 0);
+                    if pos < 0 { break sg_325; }
+                    if pos >= tokens.len() || tokens[pos] != TK_K_THEN { break sg_325; }
+                    pos += 1;
+                    pos = scan_expr(tokens, pos, follow, 0);
+                    if pos < 0 { break sg_325; }
+                    break sg_325_done;
+                }
+                break opt_enter_scan;
+            }
+            while pos < tokens.len() && tokens[pos] == TK_K_WHEN {
+                let sp = pos;
+                sg_326_done: {
+                    sg_326: {
+                        if pos >= tokens.len() || tokens[pos] != TK_K_WHEN { break sg_326; }
+                        pos += 1;
+                        pos = scan_expr(tokens, pos, &FOLLOW_MASK_19, 0);
+                        if pos < 0 { break sg_326; }
+                        if pos >= tokens.len() || tokens[pos] != TK_K_THEN { break sg_326; }
+                        pos += 1;
+                        pos = scan_expr(tokens, pos, follow, 0);
+                        if pos < 0 { break sg_326; }
+                        break sg_326_done;
+                    }
+                    pos = -1;
+                }
+                if pos < 0 { pos = sp; break; }
+                if pos == sp { break; }
+            }
+            if pos < tokens.len() && tokens[pos] == TK_K_ELSE {
+                let sp = pos;
+                sg_327_done: {
+                    sg_327: {
+                        if pos >= tokens.len() || tokens[pos] != TK_K_ELSE { break sg_327; }
+                        pos += 1;
+                        pos = scan_expr(tokens, pos, follow, 0);
+                        if pos < 0 { break sg_327; }
+                        break sg_327_done;
+                    }
+                    pos = -1;
+                }
+                if pos < 0 { pos = sp; }
+            }
+            if pos >= tokens.len() || tokens[pos] != TK_K_END { break opt_enter_scan; }
+            pos += 1;
+            if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) { opt_enter = true; }
+        }
+    }
+    if opt_enter {
         let expr = _parse_expr(p, &EMPTY_FOLLOW);
     }
     let mut _plus_first = true;
@@ -14429,17 +14504,17 @@ fn _parse_expr__inner_alt_22(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                sg_325_done: {
-                    sg_325: {
-                        if pos >= tokens.len() || tokens[pos] != TK_K_WHEN { break sg_325; }
+                sg_328_done: {
+                    sg_328: {
+                        if pos >= tokens.len() || tokens[pos] != TK_K_WHEN { break sg_328; }
                         pos += 1;
                         pos = scan_expr(tokens, pos, &FOLLOW_MASK_19, 0);
-                        if pos < 0 { break sg_325; }
-                        if pos >= tokens.len() || tokens[pos] != TK_K_THEN { break sg_325; }
+                        if pos < 0 { break sg_328; }
+                        if pos >= tokens.len() || tokens[pos] != TK_K_THEN { break sg_328; }
                         pos += 1;
                         pos = scan_expr(tokens, pos, follow, 0);
-                        if pos < 0 { break sg_325; }
-                        break sg_325_done;
+                        if pos < 0 { break sg_328; }
+                        break sg_328_done;
                     }
                     break rep_scan;
                 }
@@ -14471,33 +14546,33 @@ fn _parse_expr__inner_scan_22(tokens: &Array<i32>, pos: i32, follow: &List<List<
         pos = scan_expr(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    sg_326_done: {
-        sg_326: {
-            if pos >= tokens.len() || tokens[pos] != TK_K_WHEN { break sg_326; }
+    sg_329_done: {
+        sg_329: {
+            if pos >= tokens.len() || tokens[pos] != TK_K_WHEN { break sg_329; }
             pos += 1;
             pos = scan_expr(tokens, pos, &FOLLOW_MASK_19, 0);
-            if pos < 0 { break sg_326; }
-            if pos >= tokens.len() || tokens[pos] != TK_K_THEN { break sg_326; }
+            if pos < 0 { break sg_329; }
+            if pos >= tokens.len() || tokens[pos] != TK_K_THEN { break sg_329; }
             pos += 1;
             pos = scan_expr(tokens, pos, follow, 0);
-            if pos < 0 { break sg_326; }
-            break sg_326_done;
+            if pos < 0 { break sg_329; }
+            break sg_329_done;
         }
         return -1;
     }
     while pos < tokens.len() && tokens[pos] == TK_K_WHEN {
         let sp = pos;
-        sg_327_done: {
-            sg_327: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_WHEN { break sg_327; }
+        sg_330_done: {
+            sg_330: {
+                if pos >= tokens.len() || tokens[pos] != TK_K_WHEN { break sg_330; }
                 pos += 1;
                 pos = scan_expr(tokens, pos, &FOLLOW_MASK_19, 0);
-                if pos < 0 { break sg_327; }
-                if pos >= tokens.len() || tokens[pos] != TK_K_THEN { break sg_327; }
+                if pos < 0 { break sg_330; }
+                if pos >= tokens.len() || tokens[pos] != TK_K_THEN { break sg_330; }
                 pos += 1;
                 pos = scan_expr(tokens, pos, follow, 0);
-                if pos < 0 { break sg_327; }
-                break sg_327_done;
+                if pos < 0 { break sg_330; }
+                break sg_330_done;
             }
             pos = -1;
         }
@@ -14506,13 +14581,13 @@ fn _parse_expr__inner_scan_22(tokens: &Array<i32>, pos: i32, follow: &List<List<
     }
     if pos < tokens.len() && tokens[pos] == TK_K_ELSE {
         let sp = pos;
-        sg_328_done: {
-            sg_328: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_ELSE { break sg_328; }
+        sg_331_done: {
+            sg_331: {
+                if pos >= tokens.len() || tokens[pos] != TK_K_ELSE { break sg_331; }
                 pos += 1;
                 pos = scan_expr(tokens, pos, follow, 0);
-                if pos < 0 { break sg_328; }
-                break sg_328_done;
+                if pos < 0 { break sg_331; }
+                break sg_331_done;
             }
             pos = -1;
         }
@@ -14542,26 +14617,26 @@ fn _parse_expr__inner_alt_21(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 fn _parse_expr__inner_scan_21(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_K_NOT && pos + 1 < tokens.len() && tokens[pos + 1] == TK_K_EXISTS {
-        let sol_329_save = pos;
-        sol_329_done: {
-            sol_329: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_NOT { break sol_329; }
+        let sol_332_save = pos;
+        sol_332_done: {
+            sol_332: {
+                if pos >= tokens.len() || tokens[pos] != TK_K_NOT { break sol_332; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_K_EXISTS { break sol_329; }
+                if pos >= tokens.len() || tokens[pos] != TK_K_EXISTS { break sol_332; }
                 pos += 1;
-                break sol_329_done;
+                break sol_332_done;
             }
-            pos = sol_329_save;
+            pos = sol_332_save;
         }
     } else if pos < tokens.len() && tokens[pos] == TK_K_EXISTS {
-        let sol_330_save = pos;
-        sol_330_done: {
-            sol_330: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_EXISTS { break sol_330; }
+        let sol_333_save = pos;
+        sol_333_done: {
+            sol_333: {
+                if pos >= tokens.len() || tokens[pos] != TK_K_EXISTS { break sol_333; }
                 pos += 1;
-                break sol_330_done;
+                break sol_333_done;
             }
-            pos = sol_330_save;
+            pos = sol_333_save;
         }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
@@ -14626,94 +14701,6 @@ fn _parse_expr__inner_alt_13(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        let gp_331 = pos;
-        let sgk_331 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_33(sgk_331) {
-            sg_331: {
-                pos = gp_331;
-                sg_331_0: {
-                    if pos < tokens.len() && tokens[pos] == TK_K_DISTINCT {
-                        let sp = pos;
-                        if pos >= tokens.len() || tokens[pos] != TK_K_DISTINCT { pos = -1; } else { pos += 1; }
-                        if pos < 0 { pos = sp; }
-                    }
-                    pos = scan_expr(tokens, pos, follow, 0);
-                    if pos < 0 { break sg_331_0; }
-                    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-                        let sp = pos;
-                        sg_332_done: {
-                            sg_332: {
-                                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_332; }
-                                pos += 1;
-                                pos = scan_expr(tokens, pos, follow, 0);
-                                if pos < 0 { break sg_332; }
-                                break sg_332_done;
-                            }
-                            pos = -1;
-                        }
-                        if pos < 0 { pos = sp; break; }
-                        if pos == sp { break; }
-                    }
-                    break sg_331;
-                }
-                pos = gp_331;
-                sg_331_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_331_1; }
-                    pos += 1;
-                    break sg_331;
-                }
-                break opt_scan;
-            }
-        } else {
-            break opt_scan;
-        }
-        opt_scan_pos = pos;
-    }
-    if opt_scan_pos >= 0 {
-        if _kind_set_13(p.peek_kind()) {
-            if p.peek_kind() == TK_K_DISTINCT {
-                let k_distinct = p.expect(TK_K_DISTINCT, &EMPTY_SYNC);
-            }
-            let expr = _parse_expr(p, follow);
-            loop {
-                if p.recovering { break; }
-                let mut rep_scan_pos: i32 = -1;
-                rep_scan: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    sg_333_done: {
-                        sg_333: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_333; }
-                            pos += 1;
-                            pos = scan_expr(tokens, pos, follow, 0);
-                            if pos < 0 { break sg_333; }
-                            break sg_333_done;
-                        }
-                        break rep_scan;
-                    }
-                    if pos <= p.pos { break rep_scan; }
-                    rep_scan_pos = pos;
-                }
-                if rep_scan_pos < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA, &SYNC_5);
-                let expr = _parse_expr(p, follow);
-            }
-        } else {
-            let star = p.expect(TK_LIT_STAR, &EMPTY_SYNC);
-        }
-    }
-    let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
-    return;
-}
-
-fn _parse_expr__inner_scan_13(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    pos = scan_function_name(tokens, pos, &FOLLOW_MASK_5, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
-    pos += 1;
-    if pos < tokens.len() && _kind_set_33(tokens[pos]) {
-        let sp = pos;
         let gp_334 = pos;
         let sgk_334 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if _kind_set_33(sgk_334) {
@@ -14749,6 +14736,94 @@ fn _parse_expr__inner_scan_13(tokens: &Array<i32>, pos: i32, follow: &List<List<
                     if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_334_1; }
                     pos += 1;
                     break sg_334;
+                }
+                break opt_scan;
+            }
+        } else {
+            break opt_scan;
+        }
+        opt_scan_pos = pos;
+    }
+    if opt_scan_pos >= 0 {
+        if _kind_set_13(p.peek_kind()) {
+            if p.peek_kind() == TK_K_DISTINCT {
+                let k_distinct = p.expect(TK_K_DISTINCT, &EMPTY_SYNC);
+            }
+            let expr = _parse_expr(p, follow);
+            loop {
+                if p.recovering { break; }
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    sg_336_done: {
+                        sg_336: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_336; }
+                            pos += 1;
+                            pos = scan_expr(tokens, pos, follow, 0);
+                            if pos < 0 { break sg_336; }
+                            break sg_336_done;
+                        }
+                        break rep_scan;
+                    }
+                    if pos <= p.pos { break rep_scan; }
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
+                let comma = p.expect(TK_LIT_COMMA, &SYNC_5);
+                let expr = _parse_expr(p, follow);
+            }
+        } else {
+            let star = p.expect(TK_LIT_STAR, &EMPTY_SYNC);
+        }
+    }
+    let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_expr__inner_scan_13(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_function_name(tokens, pos, &FOLLOW_MASK_5, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    if pos < tokens.len() && _kind_set_33(tokens[pos]) {
+        let sp = pos;
+        let gp_337 = pos;
+        let sgk_337 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_33(sgk_337) {
+            sg_337: {
+                pos = gp_337;
+                sg_337_0: {
+                    if pos < tokens.len() && tokens[pos] == TK_K_DISTINCT {
+                        let sp = pos;
+                        if pos >= tokens.len() || tokens[pos] != TK_K_DISTINCT { pos = -1; } else { pos += 1; }
+                        if pos < 0 { pos = sp; }
+                    }
+                    pos = scan_expr(tokens, pos, follow, 0);
+                    if pos < 0 { break sg_337_0; }
+                    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
+                        let sp = pos;
+                        sg_338_done: {
+                            sg_338: {
+                                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_338; }
+                                pos += 1;
+                                pos = scan_expr(tokens, pos, follow, 0);
+                                if pos < 0 { break sg_338; }
+                                break sg_338_done;
+                            }
+                            pos = -1;
+                        }
+                        if pos < 0 { pos = sp; break; }
+                        if pos == sp { break; }
+                    }
+                    break sg_337;
+                }
+                pos = gp_337;
+                sg_337_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_337_1; }
+                    pos += 1;
+                    break sg_337;
                 }
                 pos = -1;
             }
@@ -14808,32 +14883,32 @@ fn _parse_expr__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 fn _parse_expr__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_8(tokens[pos]) && pos + 1 < tokens.len() && tokens[pos + 1] == TK_LIT_DOT && pos + 2 < tokens.len() && _kind_set_8(tokens[pos + 2]) && pos + 3 < tokens.len() && tokens[pos + 3] == TK_LIT_DOT {
-        let sol_336_save = pos;
-        sol_336_done: {
-            sol_336: {
+        let sol_339_save = pos;
+        sol_339_done: {
+            sol_339: {
                 pos = scan_database_name(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break sol_336; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sol_336; }
+                if pos < 0 { break sol_339; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sol_339; }
                 pos += 1;
                 pos = scan_table_name(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break sol_336; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sol_336; }
+                if pos < 0 { break sol_339; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sol_339; }
                 pos += 1;
-                break sol_336_done;
+                break sol_339_done;
             }
-            pos = sol_336_save;
+            pos = sol_339_save;
         }
     } else if pos < tokens.len() && _kind_set_8(tokens[pos]) && pos + 1 < tokens.len() && tokens[pos + 1] == TK_LIT_DOT {
-        let sol_337_save = pos;
-        sol_337_done: {
-            sol_337: {
+        let sol_340_save = pos;
+        sol_340_done: {
+            sol_340: {
                 pos = scan_table_name(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break sol_337; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sol_337; }
+                if pos < 0 { break sol_340; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sol_340; }
                 pos += 1;
-                break sol_337_done;
+                break sol_340_done;
             }
-            pos = sol_337_save;
+            pos = sol_340_save;
         }
     }
     pos = scan_column_name(tokens, pos, follow, 0);
@@ -15214,39 +15289,39 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                             pos += 1;
                             if pos < tokens.len() && _kind_set_13(tokens[pos]) {
                                 let sp = pos;
-                                let gp_338 = pos;
-                                let sgk_338 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                                if _kind_set_13(sgk_338) {
-                                    let mut sg_338_best = -1;
-                                    sg_338: {
-                                        pos = gp_338;
-                                        sg_338_0: {
+                                let gp_341 = pos;
+                                let sgk_341 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                                if _kind_set_13(sgk_341) {
+                                    let mut sg_341_best = -1;
+                                    sg_341: {
+                                        pos = gp_341;
+                                        sg_341_0: {
                                             pos = scan_select_stmt(tokens, pos, follow, 0);
-                                            if pos < 0 { break sg_338_0; }
-                                            if pos > sg_338_best { sg_338_best = pos; }
+                                            if pos < 0 { break sg_341_0; }
+                                            if pos > sg_341_best { sg_341_best = pos; }
                                         }
-                                        pos = gp_338;
-                                        sg_338_1: {
+                                        pos = gp_341;
+                                        sg_341_1: {
                                             pos = scan_expr(tokens, pos, follow, 0);
-                                            if pos < 0 { break sg_338_1; }
+                                            if pos < 0 { break sg_341_1; }
                                             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                                 let sp = pos;
-                                                sg_339_done: {
-                                                    sg_339: {
-                                                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_339; }
+                                                sg_342_done: {
+                                                    sg_342: {
+                                                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_342; }
                                                         pos += 1;
                                                         pos = scan_expr(tokens, pos, follow, 0);
-                                                        if pos < 0 { break sg_339; }
-                                                        break sg_339_done;
+                                                        if pos < 0 { break sg_342; }
+                                                        break sg_342_done;
                                                     }
                                                     pos = -1;
                                                 }
                                                 if pos < 0 { pos = sp; break; }
                                                 if pos == sp { break; }
                                             }
-                                            if pos > sg_338_best { sg_338_best = pos; }
+                                            if pos > sg_341_best { sg_341_best = pos; }
                                         }
-                                        if sg_338_best >= 0 { pos = sg_338_best; break sg_338; }
+                                        if sg_341_best >= 0 { pos = sg_341_best; break sg_341; }
                                         pos = -1;
                                     }
                                 } else {
@@ -15271,13 +15346,13 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                             let mut pos: i32 = p.pos;
                             if pos < tokens.len() && _kind_set_8(tokens[pos]) {
                                 let sp = pos;
-                                sg_340_done: {
-                                    sg_340: {
+                                sg_343_done: {
+                                    sg_343: {
                                         pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, 0);
-                                        if pos < 0 { break sg_340; }
-                                        if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_340; }
+                                        if pos < 0 { break sg_343; }
+                                        if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_343; }
                                         pos += 1;
-                                        break sg_340_done;
+                                        break sg_343_done;
                                     }
                                     pos = -1;
                                 }
@@ -15301,40 +15376,40 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         opt_scan: {
                             let tokens = &p.kinds;
                             let mut pos: i32 = p.pos;
-                            let gp_341 = pos;
-                            let sgk_341 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                            if _kind_set_13(sgk_341) {
-                                let mut sg_341_best = -1;
-                                sg_341: {
-                                    pos = gp_341;
-                                    sg_341_0: {
+                            let gp_344 = pos;
+                            let sgk_344 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                            if _kind_set_13(sgk_344) {
+                                let mut sg_344_best = -1;
+                                sg_344: {
+                                    pos = gp_344;
+                                    sg_344_0: {
                                         pos = scan_select_stmt(tokens, pos, follow, 0);
-                                        if pos < 0 { break sg_341_0; }
-                                        if pos > sg_341_best { sg_341_best = pos; }
+                                        if pos < 0 { break sg_344_0; }
+                                        if pos > sg_344_best { sg_344_best = pos; }
                                     }
-                                    pos = gp_341;
-                                    sg_341_1: {
+                                    pos = gp_344;
+                                    sg_344_1: {
                                         pos = scan_expr(tokens, pos, follow, 0);
-                                        if pos < 0 { break sg_341_1; }
+                                        if pos < 0 { break sg_344_1; }
                                         while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                             let sp = pos;
-                                            sg_342_done: {
-                                                sg_342: {
-                                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_342; }
+                                            sg_345_done: {
+                                                sg_345: {
+                                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_345; }
                                                     pos += 1;
                                                     pos = scan_expr(tokens, pos, follow, 0);
-                                                    if pos < 0 { break sg_342; }
-                                                    break sg_342_done;
+                                                    if pos < 0 { break sg_345; }
+                                                    break sg_345_done;
                                                 }
                                                 pos = -1;
                                             }
                                             if pos < 0 { pos = sp; break; }
                                             if pos == sp { break; }
                                         }
-                                        if pos > sg_341_best { sg_341_best = pos; }
+                                        if pos > sg_344_best { sg_344_best = pos; }
                                     }
-                                    if sg_341_best >= 0 { pos = sg_341_best; break sg_341; }
-                                    pos = gp_341;
+                                    if sg_344_best >= 0 { pos = sg_344_best; break sg_344; }
+                                    pos = gp_344;
                                 }
                             }
                             opt_scan_pos = pos;
@@ -15366,13 +15441,13 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                                     if pos < 0 { break gd_scan_4; }
                                     while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                         let sp = pos;
-                                        sg_343_done: {
-                                            sg_343: {
-                                                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_343; }
+                                        sg_346_done: {
+                                            sg_346: {
+                                                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_346; }
                                                 pos += 1;
                                                 pos = scan_expr(tokens, pos, follow, 0);
-                                                if pos < 0 { break sg_343; }
-                                                break sg_343_done;
+                                                if pos < 0 { break sg_346; }
+                                                break sg_346_done;
                                             }
                                             pos = -1;
                                         }
@@ -15405,13 +15480,13 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         opt_scan_2: {
                             let tokens = &p.kinds;
                             let mut pos: i32 = p.pos;
-                            sg_344_done: {
-                                sg_344: {
+                            sg_347_done: {
+                                sg_347: {
                                     pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, 0);
-                                    if pos < 0 { break sg_344; }
-                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_344; }
+                                    if pos < 0 { break sg_347; }
+                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_347; }
                                     pos += 1;
-                                    break sg_344_done;
+                                    break sg_347_done;
                                 }
                                 break opt_scan_2;
                             }
@@ -15584,39 +15659,39 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                                 pos += 1;
                                 if pos < tokens.len() && _kind_set_13(tokens[pos]) {
                                     let sp = pos;
-                                    let gp_345 = pos;
-                                    let sgk_345 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                                    if _kind_set_13(sgk_345) {
-                                        let mut sg_345_best = -1;
-                                        sg_345: {
-                                            pos = gp_345;
-                                            sg_345_0: {
+                                    let gp_348 = pos;
+                                    let sgk_348 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                                    if _kind_set_13(sgk_348) {
+                                        let mut sg_348_best = -1;
+                                        sg_348: {
+                                            pos = gp_348;
+                                            sg_348_0: {
                                                 pos = scan_select_stmt(tokens, pos, follow, 0);
-                                                if pos < 0 { break sg_345_0; }
-                                                if pos > sg_345_best { sg_345_best = pos; }
+                                                if pos < 0 { break sg_348_0; }
+                                                if pos > sg_348_best { sg_348_best = pos; }
                                             }
-                                            pos = gp_345;
-                                            sg_345_1: {
+                                            pos = gp_348;
+                                            sg_348_1: {
                                                 pos = scan_expr(tokens, pos, follow, 0);
-                                                if pos < 0 { break sg_345_1; }
+                                                if pos < 0 { break sg_348_1; }
                                                 while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                                     let sp = pos;
-                                                    sg_346_done: {
-                                                        sg_346: {
-                                                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_346; }
+                                                    sg_349_done: {
+                                                        sg_349: {
+                                                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_349; }
                                                             pos += 1;
                                                             pos = scan_expr(tokens, pos, follow, 0);
-                                                            if pos < 0 { break sg_346; }
-                                                            break sg_346_done;
+                                                            if pos < 0 { break sg_349; }
+                                                            break sg_349_done;
                                                         }
                                                         pos = -1;
                                                     }
                                                     if pos < 0 { pos = sp; break; }
                                                     if pos == sp { break; }
                                                 }
-                                                if pos > sg_345_best { sg_345_best = pos; }
+                                                if pos > sg_348_best { sg_348_best = pos; }
                                             }
-                                            if sg_345_best >= 0 { pos = sg_345_best; break sg_345; }
+                                            if sg_348_best >= 0 { pos = sg_348_best; break sg_348; }
                                             pos = -1;
                                         }
                                     } else {
@@ -15641,13 +15716,13 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                                 let mut pos: i32 = p.pos;
                                 if pos < tokens.len() && _kind_set_8(tokens[pos]) {
                                     let sp = pos;
-                                    sg_347_done: {
-                                        sg_347: {
+                                    sg_350_done: {
+                                        sg_350: {
                                             pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, 0);
-                                            if pos < 0 { break sg_347; }
-                                            if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_347; }
+                                            if pos < 0 { break sg_350; }
+                                            if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_350; }
                                             pos += 1;
-                                            break sg_347_done;
+                                            break sg_350_done;
                                         }
                                         pos = -1;
                                     }
@@ -15671,40 +15746,40 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                             opt_scan_3: {
                                 let tokens = &p.kinds;
                                 let mut pos: i32 = p.pos;
-                                let gp_348 = pos;
-                                let sgk_348 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                                if _kind_set_13(sgk_348) {
-                                    let mut sg_348_best = -1;
-                                    sg_348: {
-                                        pos = gp_348;
-                                        sg_348_0: {
+                                let gp_351 = pos;
+                                let sgk_351 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                                if _kind_set_13(sgk_351) {
+                                    let mut sg_351_best = -1;
+                                    sg_351: {
+                                        pos = gp_351;
+                                        sg_351_0: {
                                             pos = scan_select_stmt(tokens, pos, follow, 0);
-                                            if pos < 0 { break sg_348_0; }
-                                            if pos > sg_348_best { sg_348_best = pos; }
+                                            if pos < 0 { break sg_351_0; }
+                                            if pos > sg_351_best { sg_351_best = pos; }
                                         }
-                                        pos = gp_348;
-                                        sg_348_1: {
+                                        pos = gp_351;
+                                        sg_351_1: {
                                             pos = scan_expr(tokens, pos, follow, 0);
-                                            if pos < 0 { break sg_348_1; }
+                                            if pos < 0 { break sg_351_1; }
                                             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                                 let sp = pos;
-                                                sg_349_done: {
-                                                    sg_349: {
-                                                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_349; }
+                                                sg_352_done: {
+                                                    sg_352: {
+                                                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_352; }
                                                         pos += 1;
                                                         pos = scan_expr(tokens, pos, follow, 0);
-                                                        if pos < 0 { break sg_349; }
-                                                        break sg_349_done;
+                                                        if pos < 0 { break sg_352; }
+                                                        break sg_352_done;
                                                     }
                                                     pos = -1;
                                                 }
                                                 if pos < 0 { pos = sp; break; }
                                                 if pos == sp { break; }
                                             }
-                                            if pos > sg_348_best { sg_348_best = pos; }
+                                            if pos > sg_351_best { sg_351_best = pos; }
                                         }
-                                        if sg_348_best >= 0 { pos = sg_348_best; break sg_348; }
-                                        pos = gp_348;
+                                        if sg_351_best >= 0 { pos = sg_351_best; break sg_351; }
+                                        pos = gp_351;
                                     }
                                 }
                                 opt_scan_pos_3 = pos;
@@ -15736,13 +15811,13 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                                         if pos < 0 { break gd_scan_8; }
                                         while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                             let sp = pos;
-                                            sg_350_done: {
-                                                sg_350: {
-                                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_350; }
+                                            sg_353_done: {
+                                                sg_353: {
+                                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_353; }
                                                     pos += 1;
                                                     pos = scan_expr(tokens, pos, follow, 0);
-                                                    if pos < 0 { break sg_350; }
-                                                    break sg_350_done;
+                                                    if pos < 0 { break sg_353; }
+                                                    break sg_353_done;
                                                 }
                                                 pos = -1;
                                             }
@@ -15775,13 +15850,13 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                             opt_scan_4: {
                                 let tokens = &p.kinds;
                                 let mut pos: i32 = p.pos;
-                                sg_351_done: {
-                                    sg_351: {
+                                sg_354_done: {
+                                    sg_354: {
                                         pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, 0);
-                                        if pos < 0 { break sg_351; }
-                                        if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_351; }
+                                        if pos < 0 { break sg_354; }
+                                        if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_354; }
                                         pos += 1;
-                                        break sg_351_done;
+                                        break sg_354_done;
                                     }
                                     break opt_scan_4;
                                 }
@@ -15935,13 +16010,13 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                sg_352_done: {
-                    sg_352: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_352; }
+                sg_355_done: {
+                    sg_355: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_355; }
                         pos += 1;
                         pos = scan_column_name(tokens, pos, follow, 0);
-                        if pos < 0 { break sg_352; }
-                        break sg_352_done;
+                        if pos < 0 { break sg_355; }
+                        break sg_355_done;
                     }
                     break rep_scan;
                 }
@@ -15961,91 +16036,91 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            let gp_353 = pos;
-            let sgk_353 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_45(sgk_353) {
-                sg_353: {
-                    pos = gp_353;
-                    sg_353_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_K_ON { break sg_353_0; }
+            let gp_356 = pos;
+            let sgk_356 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if _kind_set_45(sgk_356) {
+                sg_356: {
+                    pos = gp_356;
+                    sg_356_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_K_ON { break sg_356_0; }
                         pos += 1;
-                        let gp_354 = pos;
-                        let sgk_354 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if _kind_set_43(sgk_354) {
-                            sg_354: {
-                                pos = gp_354;
-                                sg_354_0: {
-                                    if pos >= tokens.len() || tokens[pos] != TK_K_DELETE { break sg_354_0; }
+                        let gp_357 = pos;
+                        let sgk_357 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                        if _kind_set_43(sgk_357) {
+                            sg_357: {
+                                pos = gp_357;
+                                sg_357_0: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_K_DELETE { break sg_357_0; }
                                     pos += 1;
-                                    break sg_354;
+                                    break sg_357;
                                 }
-                                pos = gp_354;
-                                sg_354_1: {
-                                    if pos >= tokens.len() || tokens[pos] != TK_K_UPDATE { break sg_354_1; }
+                                pos = gp_357;
+                                sg_357_1: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_K_UPDATE { break sg_357_1; }
                                     pos += 1;
-                                    break sg_354;
+                                    break sg_357;
                                 }
-                                break sg_353_0;
+                                break sg_356_0;
                             }
                         } else {
-                            break sg_353_0;
+                            break sg_356_0;
                         }
-                        let gp_355 = pos;
-                        let sgk_355 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if _kind_set_44(sgk_355) {
-                            let mut sg_355_best = -1;
-                            sg_355: {
-                                pos = gp_355;
-                                sg_355_0: {
-                                    if pos >= tokens.len() || tokens[pos] != TK_K_SET { break sg_355_0; }
+                        let gp_358 = pos;
+                        let sgk_358 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                        if _kind_set_44(sgk_358) {
+                            let mut sg_358_best = -1;
+                            sg_358: {
+                                pos = gp_358;
+                                sg_358_0: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_K_SET { break sg_358_0; }
                                     pos += 1;
-                                    if pos >= tokens.len() || tokens[pos] != TK_K_NULL { break sg_355_0; }
+                                    if pos >= tokens.len() || tokens[pos] != TK_K_NULL { break sg_358_0; }
                                     pos += 1;
-                                    if pos > sg_355_best { sg_355_best = pos; }
+                                    if pos > sg_358_best { sg_358_best = pos; }
                                 }
-                                pos = gp_355;
-                                sg_355_1: {
-                                    if pos >= tokens.len() || tokens[pos] != TK_K_SET { break sg_355_1; }
+                                pos = gp_358;
+                                sg_358_1: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_K_SET { break sg_358_1; }
                                     pos += 1;
-                                    if pos >= tokens.len() || tokens[pos] != TK_K_DEFAULT { break sg_355_1; }
+                                    if pos >= tokens.len() || tokens[pos] != TK_K_DEFAULT { break sg_358_1; }
                                     pos += 1;
-                                    if pos > sg_355_best { sg_355_best = pos; }
+                                    if pos > sg_358_best { sg_358_best = pos; }
                                 }
-                                pos = gp_355;
-                                sg_355_2: {
-                                    if pos >= tokens.len() || tokens[pos] != TK_K_CASCADE { break sg_355_2; }
+                                pos = gp_358;
+                                sg_358_2: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_K_CASCADE { break sg_358_2; }
                                     pos += 1;
-                                    break sg_355;
+                                    break sg_358;
                                 }
-                                pos = gp_355;
-                                sg_355_3: {
-                                    if pos >= tokens.len() || tokens[pos] != TK_K_RESTRICT { break sg_355_3; }
+                                pos = gp_358;
+                                sg_358_3: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_K_RESTRICT { break sg_358_3; }
                                     pos += 1;
-                                    break sg_355;
+                                    break sg_358;
                                 }
-                                pos = gp_355;
-                                sg_355_4: {
-                                    if pos >= tokens.len() || tokens[pos] != TK_K_NO { break sg_355_4; }
+                                pos = gp_358;
+                                sg_358_4: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_K_NO { break sg_358_4; }
                                     pos += 1;
-                                    if pos >= tokens.len() || tokens[pos] != TK_K_ACTION { break sg_355_4; }
+                                    if pos >= tokens.len() || tokens[pos] != TK_K_ACTION { break sg_358_4; }
                                     pos += 1;
-                                    break sg_355;
+                                    break sg_358;
                                 }
-                                if sg_355_best >= 0 { pos = sg_355_best; break sg_355; }
-                                pos = gp_355;
+                                if sg_358_best >= 0 { pos = sg_358_best; break sg_358; }
+                                pos = gp_358;
                             }
                         }
-                        break sg_353;
+                        break sg_356;
                     }
-                    pos = gp_353;
-                    sg_353_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_K_MATCH { break sg_353_1; }
+                    pos = gp_356;
+                    sg_356_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_K_MATCH { break sg_356_1; }
                         pos += 1;
                         pos = scan_name(tokens, pos, follow, 0);
-                        if pos < 0 { break sg_353_1; }
-                        break sg_353;
+                        if pos < 0 { break sg_356_1; }
+                        break sg_356;
                     }
-                    pos = gp_353;
+                    pos = gp_356;
                 }
             }
             if pos <= p.pos { break rep_scan; }
@@ -16125,28 +16200,28 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &
         opt_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            let gp_356 = pos;
-            let sgk_356 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if sgk_356 == TK_K_INITIALLY {
-                let mut sg_356_best = -1;
-                sg_356: {
-                    pos = gp_356;
-                    sg_356_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_K_INITIALLY { break sg_356_0; }
+            let gp_359 = pos;
+            let sgk_359 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if sgk_359 == TK_K_INITIALLY {
+                let mut sg_359_best = -1;
+                sg_359: {
+                    pos = gp_359;
+                    sg_359_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_K_INITIALLY { break sg_359_0; }
                         pos += 1;
-                        if pos >= tokens.len() || tokens[pos] != TK_K_DEFERRED { break sg_356_0; }
+                        if pos >= tokens.len() || tokens[pos] != TK_K_DEFERRED { break sg_359_0; }
                         pos += 1;
-                        if pos > sg_356_best { sg_356_best = pos; }
+                        if pos > sg_359_best { sg_359_best = pos; }
                     }
-                    pos = gp_356;
-                    sg_356_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_K_INITIALLY { break sg_356_1; }
+                    pos = gp_359;
+                    sg_359_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_K_INITIALLY { break sg_359_1; }
                         pos += 1;
-                        if pos >= tokens.len() || tokens[pos] != TK_K_IMMEDIATE { break sg_356_1; }
+                        if pos >= tokens.len() || tokens[pos] != TK_K_IMMEDIATE { break sg_359_1; }
                         pos += 1;
-                        if pos > sg_356_best { sg_356_best = pos; }
+                        if pos > sg_359_best { sg_359_best = pos; }
                     }
-                    if sg_356_best >= 0 { pos = sg_356_best; break sg_356; }
+                    if sg_359_best >= 0 { pos = sg_359_best; break sg_359; }
                     break opt_scan;
                 }
             } else {
@@ -16210,28 +16285,28 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &
         opt_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            let gp_357 = pos;
-            let sgk_357 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if sgk_357 == TK_K_INITIALLY {
-                let mut sg_357_best = -1;
-                sg_357: {
-                    pos = gp_357;
-                    sg_357_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_K_INITIALLY { break sg_357_0; }
+            let gp_360 = pos;
+            let sgk_360 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if sgk_360 == TK_K_INITIALLY {
+                let mut sg_360_best = -1;
+                sg_360: {
+                    pos = gp_360;
+                    sg_360_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_K_INITIALLY { break sg_360_0; }
                         pos += 1;
-                        if pos >= tokens.len() || tokens[pos] != TK_K_DEFERRED { break sg_357_0; }
+                        if pos >= tokens.len() || tokens[pos] != TK_K_DEFERRED { break sg_360_0; }
                         pos += 1;
-                        if pos > sg_357_best { sg_357_best = pos; }
+                        if pos > sg_360_best { sg_360_best = pos; }
                     }
-                    pos = gp_357;
-                    sg_357_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_K_INITIALLY { break sg_357_1; }
+                    pos = gp_360;
+                    sg_360_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_K_INITIALLY { break sg_360_1; }
                         pos += 1;
-                        if pos >= tokens.len() || tokens[pos] != TK_K_IMMEDIATE { break sg_357_1; }
+                        if pos >= tokens.len() || tokens[pos] != TK_K_IMMEDIATE { break sg_360_1; }
                         pos += 1;
-                        if pos > sg_357_best { sg_357_best = pos; }
+                        if pos > sg_360_best { sg_360_best = pos; }
                     }
-                    if sg_357_best >= 0 { pos = sg_357_best; break sg_357; }
+                    if sg_360_best >= 0 { pos = sg_360_best; break sg_360; }
                     break opt_scan;
                 }
             } else {
@@ -16349,21 +16424,21 @@ fn _parse_indexed_column__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        let gp_358 = pos;
-        let sgk_358 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_27(sgk_358) {
-            sg_358: {
-                pos = gp_358;
-                sg_358_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_K_ASC { break sg_358_0; }
+        let gp_361 = pos;
+        let sgk_361 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_27(sgk_361) {
+            sg_361: {
+                pos = gp_361;
+                sg_361_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_K_ASC { break sg_361_0; }
                     pos += 1;
-                    break sg_358;
+                    break sg_361;
                 }
-                pos = gp_358;
-                sg_358_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_K_DESC { break sg_358_1; }
+                pos = gp_361;
+                sg_361_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_K_DESC { break sg_361_1; }
                     pos += 1;
-                    break sg_358;
+                    break sg_361;
                 }
                 break opt_scan;
             }
@@ -16412,13 +16487,13 @@ fn _parse_table_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                sg_359_done: {
-                    sg_359: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_359; }
+                sg_362_done: {
+                    sg_362: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_362; }
                         pos += 1;
                         pos = scan_indexed_column(tokens, pos, follow, 0);
-                        if pos < 0 { break sg_359; }
-                        break sg_359_done;
+                        if pos < 0 { break sg_362; }
+                        break sg_362_done;
                     }
                     break rep_scan;
                 }
@@ -16447,13 +16522,13 @@ fn _parse_table_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                sg_360_done: {
-                    sg_360: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_360; }
+                sg_363_done: {
+                    sg_363: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_363; }
                         pos += 1;
                         pos = scan_column_name(tokens, pos, follow, 0);
-                        if pos < 0 { break sg_360; }
-                        break sg_360_done;
+                        if pos < 0 { break sg_363; }
+                        break sg_363_done;
                     }
                     break rep_scan;
                 }
@@ -16495,13 +16570,13 @@ fn _parse_with_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_361_done: {
-                sg_361: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_361; }
+            sg_364_done: {
+                sg_364: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_364; }
                     pos += 1;
                     pos = scan_common_table_expression(tokens, pos, follow, 0);
-                    if pos < 0 { break sg_361; }
-                    break sg_361_done;
+                    if pos < 0 { break sg_364; }
+                    break sg_364_done;
                 }
                 break rep_scan;
             }
@@ -16547,27 +16622,27 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow: &List<List<i32>> =
     opt_scan_2: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        let gp_362 = pos;
-        let sgk_362 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_51(sgk_362) {
-            sg_362: {
-                pos = gp_362;
-                sg_362_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_K_INDEXED { break sg_362_0; }
+        let gp_365 = pos;
+        let sgk_365 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_51(sgk_365) {
+            sg_365: {
+                pos = gp_365;
+                sg_365_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_K_INDEXED { break sg_365_0; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_K_BY { break sg_362_0; }
+                    if pos >= tokens.len() || tokens[pos] != TK_K_BY { break sg_365_0; }
                     pos += 1;
                     pos = scan_index_name(tokens, pos, follow, 0);
-                    if pos < 0 { break sg_362_0; }
-                    break sg_362;
+                    if pos < 0 { break sg_365_0; }
+                    break sg_365;
                 }
-                pos = gp_362;
-                sg_362_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_K_NOT { break sg_362_1; }
+                pos = gp_365;
+                sg_365_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_K_NOT { break sg_365_1; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_K_INDEXED { break sg_362_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_K_INDEXED { break sg_365_1; }
                     pos += 1;
-                    break sg_362;
+                    break sg_365;
                 }
                 break opt_scan_2;
             }
@@ -16611,21 +16686,21 @@ fn _parse_ordering_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        let gp_363 = pos;
-        let sgk_363 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_27(sgk_363) {
-            sg_363: {
-                pos = gp_363;
-                sg_363_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_K_ASC { break sg_363_0; }
+        let gp_366 = pos;
+        let sgk_366 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_27(sgk_366) {
+            sg_366: {
+                pos = gp_366;
+                sg_366_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_K_ASC { break sg_366_0; }
                     pos += 1;
-                    break sg_363;
+                    break sg_366;
                 }
-                pos = gp_363;
-                sg_363_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_K_DESC { break sg_363_1; }
+                pos = gp_366;
+                sg_366_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_K_DESC { break sg_366_1; }
                     pos += 1;
-                    break sg_363;
+                    break sg_366;
                 }
                 break opt_scan;
             }
@@ -16742,13 +16817,13 @@ fn _parse_common_table_expression__inner(p: &mut Parser, follow: &List<List<i32>
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                sg_364_done: {
-                    sg_364: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_364; }
+                sg_367_done: {
+                    sg_367: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_367; }
                         pos += 1;
                         pos = scan_column_name(tokens, pos, follow, 0);
-                        if pos < 0 { break sg_364; }
-                        break sg_364_done;
+                        if pos < 0 { break sg_367; }
+                        break sg_367_done;
                     }
                     break rep_scan;
                 }
@@ -16817,26 +16892,26 @@ fn _parse_result_column__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &Li
     pos = scan_expr(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_53(tokens[pos + 1]) {
-        let sol_365_save = pos;
-        sol_365_done: {
-            sol_365: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_365; }
+        let sol_368_save = pos;
+        sol_368_done: {
+            sol_368: {
+                if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_368; }
                 pos += 1;
                 pos = scan_column_alias(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break sol_365; }
-                break sol_365_done;
+                if pos < 0 { break sol_368; }
+                break sol_368_done;
             }
-            pos = sol_365_save;
+            pos = sol_368_save;
         }
     } else if pos < tokens.len() && _kind_set_53(tokens[pos]) {
-        let sol_366_save = pos;
-        sol_366_done: {
-            sol_366: {
+        let sol_369_save = pos;
+        sol_369_done: {
+            sol_369: {
                 pos = scan_column_alias(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break sol_366; }
-                break sol_366_done;
+                if pos < 0 { break sol_369; }
+                break sol_369_done;
             }
-            pos = sol_366_save;
+            pos = sol_369_save;
         }
     }
     return pos;
@@ -16920,26 +16995,26 @@ fn _parse_table_or_subquery__inner_scan_3(tokens: &Array<i32>, pos: i32, follow:
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
     pos += 1;
     if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_55(tokens[pos + 1]) {
-        let sol_367_save = pos;
-        sol_367_done: {
-            sol_367: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_367; }
+        let sol_370_save = pos;
+        sol_370_done: {
+            sol_370: {
+                if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_370; }
                 pos += 1;
                 pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break sol_367; }
-                break sol_367_done;
+                if pos < 0 { break sol_370; }
+                break sol_370_done;
             }
-            pos = sol_367_save;
+            pos = sol_370_save;
         }
     } else if pos < tokens.len() && _kind_set_55(tokens[pos]) {
-        let sol_368_save = pos;
-        sol_368_done: {
-            sol_368: {
+        let sol_371_save = pos;
+        sol_371_done: {
+            sol_371: {
                 pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break sol_368; }
-                break sol_368_done;
+                if pos < 0 { break sol_371; }
+                break sol_371_done;
             }
-            pos = sol_368_save;
+            pos = sol_371_save;
         }
     }
     return pos;
@@ -16961,13 +17036,13 @@ fn _parse_table_or_subquery__inner_alt_2(p: &mut Parser, follow: &List<List<i32>
                 if pos < 0 { break gd_scan; }
                 while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
-                    sg_369_done: {
-                        sg_369: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_369; }
+                    sg_372_done: {
+                        sg_372: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_372; }
                             pos += 1;
                             pos = scan_table_or_subquery(tokens, pos, follow, 0);
-                            if pos < 0 { break sg_369; }
-                            break sg_369_done;
+                            if pos < 0 { break sg_372; }
+                            break sg_372_done;
                         }
                         pos = -1;
                     }
@@ -17009,13 +17084,13 @@ fn _parse_table_or_subquery__inner_alt_2(p: &mut Parser, follow: &List<List<i32>
                 rep_scan: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    sg_370_done: {
-                        sg_370: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_370; }
+                    sg_373_done: {
+                        sg_373: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_373; }
                             pos += 1;
                             pos = scan_table_or_subquery(tokens, pos, follow, 0);
-                            if pos < 0 { break sg_370; }
-                            break sg_370_done;
+                            if pos < 0 { break sg_373; }
+                            break sg_373_done;
                         }
                         break rep_scan;
                     }
@@ -17036,40 +17111,40 @@ fn _parse_table_or_subquery__inner_scan_2(tokens: &Array<i32>, pos: i32, follow:
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    let gp_371 = pos;
-    let sgk_371 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_8(sgk_371) {
-        let mut sg_371_best = -1;
-        sg_371: {
-            pos = gp_371;
-            sg_371_0: {
+    let gp_374 = pos;
+    let sgk_374 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_8(sgk_374) {
+        let mut sg_374_best = -1;
+        sg_374: {
+            pos = gp_374;
+            sg_374_0: {
                 pos = scan_table_or_subquery(tokens, pos, follow, 0);
-                if pos < 0 { break sg_371_0; }
+                if pos < 0 { break sg_374_0; }
                 while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
-                    sg_372_done: {
-                        sg_372: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_372; }
+                    sg_375_done: {
+                        sg_375: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_375; }
                             pos += 1;
                             pos = scan_table_or_subquery(tokens, pos, follow, 0);
-                            if pos < 0 { break sg_372; }
-                            break sg_372_done;
+                            if pos < 0 { break sg_375; }
+                            break sg_375_done;
                         }
                         pos = -1;
                     }
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos > sg_371_best { sg_371_best = pos; }
+                if pos > sg_374_best { sg_374_best = pos; }
             }
-            pos = gp_371;
-            sg_371_1: {
+            pos = gp_374;
+            sg_374_1: {
                 pos = scan_join_clause(tokens, pos, follow, 0);
-                if pos < 0 { break sg_371_1; }
-                if pos > sg_371_best { sg_371_best = pos; }
+                if pos < 0 { break sg_374_1; }
+                if pos > sg_374_best { sg_374_best = pos; }
             }
-            if sg_371_best >= 0 { pos = sg_371_best; break sg_371; }
-            pos = gp_371;
+            if sg_374_best >= 0 { pos = sg_374_best; break sg_374; }
+            pos = gp_374;
         }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
@@ -17103,13 +17178,13 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: &List<List<i32>
         if pos < 0 { break opt_scan_2; }
         while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
             let sp = pos;
-            sg_373_done: {
-                sg_373: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_373; }
+            sg_376_done: {
+                sg_376: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_376; }
                     pos += 1;
                     pos = scan_expr(tokens, pos, follow, 0);
-                    if pos < 0 { break sg_373; }
-                    break sg_373_done;
+                    if pos < 0 { break sg_376; }
+                    break sg_376_done;
                 }
                 pos = -1;
             }
@@ -17126,13 +17201,13 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: &List<List<i32>
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                sg_374_done: {
-                    sg_374: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_374; }
+                sg_377_done: {
+                    sg_377: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_377; }
                         pos += 1;
                         pos = scan_expr(tokens, pos, follow, 0);
-                        if pos < 0 { break sg_374; }
-                        break sg_374_done;
+                        if pos < 0 { break sg_377; }
+                        break sg_377_done;
                     }
                     break rep_scan;
                 }
@@ -17160,13 +17235,13 @@ fn _parse_table_or_subquery__inner_scan_1(tokens: &Array<i32>, pos: i32, follow:
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_8(tokens[pos]) {
         let sp = pos;
-        sg_375_done: {
-            sg_375: {
+        sg_378_done: {
+            sg_378: {
                 pos = scan_schema_name(tokens, pos, &FOLLOW_MASK_0, 0);
-                if pos < 0 { break sg_375; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_375; }
+                if pos < 0 { break sg_378; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_378; }
                 pos += 1;
-                break sg_375_done;
+                break sg_378_done;
             }
             pos = -1;
         }
@@ -17178,26 +17253,26 @@ fn _parse_table_or_subquery__inner_scan_1(tokens: &Array<i32>, pos: i32, follow:
     pos += 1;
     if pos < tokens.len() && _kind_set_13(tokens[pos]) {
         let sp = pos;
-        sg_376_done: {
-            sg_376: {
+        sg_379_done: {
+            sg_379: {
                 pos = scan_expr(tokens, pos, follow, 0);
-                if pos < 0 { break sg_376; }
+                if pos < 0 { break sg_379; }
                 while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
-                    sg_377_done: {
-                        sg_377: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_377; }
+                    sg_380_done: {
+                        sg_380: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_380; }
                             pos += 1;
                             pos = scan_expr(tokens, pos, follow, 0);
-                            if pos < 0 { break sg_377; }
-                            break sg_377_done;
+                            if pos < 0 { break sg_380; }
+                            break sg_380_done;
                         }
                         pos = -1;
                     }
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                break sg_376_done;
+                break sg_379_done;
             }
             pos = -1;
         }
@@ -17206,26 +17281,26 @@ fn _parse_table_or_subquery__inner_scan_1(tokens: &Array<i32>, pos: i32, follow:
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
     pos += 1;
     if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_55(tokens[pos + 1]) {
-        let sol_378_save = pos;
-        sol_378_done: {
-            sol_378: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_378; }
+        let sol_381_save = pos;
+        sol_381_done: {
+            sol_381: {
+                if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_381; }
                 pos += 1;
                 pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break sol_378; }
-                break sol_378_done;
+                if pos < 0 { break sol_381; }
+                break sol_381_done;
             }
-            pos = sol_378_save;
+            pos = sol_381_save;
         }
     } else if pos < tokens.len() && _kind_set_55(tokens[pos]) {
-        let sol_379_save = pos;
-        sol_379_done: {
-            sol_379: {
+        let sol_382_save = pos;
+        sol_382_done: {
+            sol_382: {
                 pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break sol_379; }
-                break sol_379_done;
+                if pos < 0 { break sol_382; }
+                break sol_382_done;
             }
-            pos = sol_379_save;
+            pos = sol_382_save;
         }
     }
     return pos;
@@ -17260,27 +17335,27 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: &List<List<i32>
     opt_scan_2: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        let gp_380 = pos;
-        let sgk_380 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_51(sgk_380) {
-            sg_380: {
-                pos = gp_380;
-                sg_380_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_K_INDEXED { break sg_380_0; }
+        let gp_383 = pos;
+        let sgk_383 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_51(sgk_383) {
+            sg_383: {
+                pos = gp_383;
+                sg_383_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_K_INDEXED { break sg_383_0; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_K_BY { break sg_380_0; }
+                    if pos >= tokens.len() || tokens[pos] != TK_K_BY { break sg_383_0; }
                     pos += 1;
                     pos = scan_index_name(tokens, pos, follow, 0);
-                    if pos < 0 { break sg_380_0; }
-                    break sg_380;
+                    if pos < 0 { break sg_383_0; }
+                    break sg_383;
                 }
-                pos = gp_380;
-                sg_380_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_K_NOT { break sg_380_1; }
+                pos = gp_383;
+                sg_383_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_K_NOT { break sg_383_1; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_K_INDEXED { break sg_380_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_K_INDEXED { break sg_383_1; }
                     pos += 1;
-                    break sg_380;
+                    break sg_383;
                 }
                 break opt_scan_2;
             }
@@ -17306,13 +17381,13 @@ fn _parse_table_or_subquery__inner_scan_0(tokens: &Array<i32>, pos: i32, follow:
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_8(tokens[pos]) {
         let sp = pos;
-        sg_381_done: {
-            sg_381: {
+        sg_384_done: {
+            sg_384: {
                 pos = scan_schema_name(tokens, pos, &FOLLOW_MASK_0, 0);
-                if pos < 0 { break sg_381; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_381; }
+                if pos < 0 { break sg_384; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_384; }
                 pos += 1;
-                break sg_381_done;
+                break sg_384_done;
             }
             pos = -1;
         }
@@ -17321,51 +17396,51 @@ fn _parse_table_or_subquery__inner_scan_0(tokens: &Array<i32>, pos: i32, follow:
     pos = scan_table_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_55(tokens[pos + 1]) {
-        let sol_382_save = pos;
-        sol_382_done: {
-            sol_382: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_382; }
+        let sol_385_save = pos;
+        sol_385_done: {
+            sol_385: {
+                if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_385; }
                 pos += 1;
                 pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break sol_382; }
-                break sol_382_done;
+                if pos < 0 { break sol_385; }
+                break sol_385_done;
             }
-            pos = sol_382_save;
+            pos = sol_385_save;
         }
     } else if pos < tokens.len() && _kind_set_55(tokens[pos]) {
-        let sol_383_save = pos;
-        sol_383_done: {
-            sol_383: {
+        let sol_386_save = pos;
+        sol_386_done: {
+            sol_386: {
                 pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break sol_383; }
-                break sol_383_done;
+                if pos < 0 { break sol_386; }
+                break sol_386_done;
             }
-            pos = sol_383_save;
+            pos = sol_386_save;
         }
     }
     if pos < tokens.len() && _kind_set_51(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
-        let gp_384 = pos;
-        let sgk_384 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_51(sgk_384) {
-            sg_384: {
-                pos = gp_384;
-                sg_384_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_K_INDEXED { break sg_384_0; }
+        let gp_387 = pos;
+        let sgk_387 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_51(sgk_387) {
+            sg_387: {
+                pos = gp_387;
+                sg_387_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_K_INDEXED { break sg_387_0; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_K_BY { break sg_384_0; }
+                    if pos >= tokens.len() || tokens[pos] != TK_K_BY { break sg_387_0; }
                     pos += 1;
                     pos = scan_index_name(tokens, pos, follow, 0);
-                    if pos < 0 { break sg_384_0; }
-                    break sg_384;
+                    if pos < 0 { break sg_387_0; }
+                    break sg_387;
                 }
-                pos = gp_384;
-                sg_384_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_K_NOT { break sg_384_1; }
+                pos = gp_387;
+                sg_387_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_K_NOT { break sg_387_1; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_K_INDEXED { break sg_384_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_K_INDEXED { break sg_387_1; }
                     pos += 1;
-                    break sg_384;
+                    break sg_387;
                 }
                 pos = -1;
             }
@@ -17471,15 +17546,15 @@ fn _parse_join_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_385_done: {
-                sg_385: {
+            sg_388_done: {
+                sg_388: {
                     pos = scan_join_operator(tokens, pos, &FOLLOW_MASK_22, 0);
-                    if pos < 0 { break sg_385; }
+                    if pos < 0 { break sg_388; }
                     pos = scan_table_or_subquery(tokens, pos, follow, 0);
-                    if pos < 0 { break sg_385; }
+                    if pos < 0 { break sg_388; }
                     pos = scan_join_constraint(tokens, pos, follow, 0);
-                    if pos < 0 { break sg_385; }
-                    break sg_385_done;
+                    if pos < 0 { break sg_388; }
+                    break sg_388_done;
                 }
                 break rep_scan;
             }
@@ -17520,32 +17595,32 @@ fn _parse_join_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         opt_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            let gp_386 = pos;
-            let sgk_386 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_58(sgk_386) {
-                sg_386: {
-                    pos = gp_386;
-                    sg_386_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_K_LEFT { break sg_386_0; }
+            let gp_389 = pos;
+            let sgk_389 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if _kind_set_58(sgk_389) {
+                sg_389: {
+                    pos = gp_389;
+                    sg_389_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_K_LEFT { break sg_389_0; }
                         pos += 1;
                         if pos < tokens.len() && tokens[pos] == TK_K_OUTER {
                             let sp = pos;
                             if pos >= tokens.len() || tokens[pos] != TK_K_OUTER { pos = -1; } else { pos += 1; }
                             if pos < 0 { pos = sp; }
                         }
-                        break sg_386;
+                        break sg_389;
                     }
-                    pos = gp_386;
-                    sg_386_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_K_INNER { break sg_386_1; }
+                    pos = gp_389;
+                    sg_389_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_K_INNER { break sg_389_1; }
                         pos += 1;
-                        break sg_386;
+                        break sg_389;
                     }
-                    pos = gp_386;
-                    sg_386_2: {
-                        if pos >= tokens.len() || tokens[pos] != TK_K_CROSS { break sg_386_2; }
+                    pos = gp_389;
+                    sg_389_2: {
+                        if pos >= tokens.len() || tokens[pos] != TK_K_CROSS { break sg_389_2; }
                         pos += 1;
-                        break sg_386;
+                        break sg_389;
                     }
                     break opt_scan;
                 }
@@ -17594,44 +17669,44 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        let gp_387 = pos;
-        let sgk_387 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_59(sgk_387) {
-            sg_387: {
-                pos = gp_387;
-                sg_387_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_K_ON { break sg_387_0; }
+        let gp_390 = pos;
+        let sgk_390 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_59(sgk_390) {
+            sg_390: {
+                pos = gp_390;
+                sg_390_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_K_ON { break sg_390_0; }
                     pos += 1;
                     pos = scan_expr(tokens, pos, follow, 0);
-                    if pos < 0 { break sg_387_0; }
-                    break sg_387;
+                    if pos < 0 { break sg_390_0; }
+                    break sg_390;
                 }
-                pos = gp_387;
-                sg_387_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_K_USING { break sg_387_1; }
+                pos = gp_390;
+                sg_390_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_K_USING { break sg_390_1; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break sg_387_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break sg_390_1; }
                     pos += 1;
                     pos = scan_column_name(tokens, pos, &FOLLOW_MASK_6, 0);
-                    if pos < 0 { break sg_387_1; }
+                    if pos < 0 { break sg_390_1; }
                     while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                         let sp = pos;
-                        sg_388_done: {
-                            sg_388: {
-                                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_388; }
+                        sg_391_done: {
+                            sg_391: {
+                                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_391; }
                                 pos += 1;
                                 pos = scan_column_name(tokens, pos, follow, 0);
-                                if pos < 0 { break sg_388; }
-                                break sg_388_done;
+                                if pos < 0 { break sg_391; }
+                                break sg_391_done;
                             }
                             pos = -1;
                         }
                         if pos < 0 { pos = sp; break; }
                         if pos == sp { break; }
                     }
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sg_387_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sg_390_1; }
                     pos += 1;
-                    break sg_387;
+                    break sg_390;
                 }
                 break opt_scan;
             }
@@ -17654,13 +17729,13 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
                 rep_scan: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    sg_389_done: {
-                        sg_389: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_389; }
+                    sg_392_done: {
+                        sg_392: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_392; }
                             pos += 1;
                             pos = scan_column_name(tokens, pos, follow, 0);
-                            if pos < 0 { break sg_389; }
-                            break sg_389_done;
+                            if pos < 0 { break sg_392; }
+                            break sg_392_done;
                         }
                         break rep_scan;
                     }
@@ -17697,21 +17772,21 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         opt_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            let gp_390 = pos;
-            let sgk_390 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_23(sgk_390) {
-                sg_390: {
-                    pos = gp_390;
-                    sg_390_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_K_DISTINCT { break sg_390_0; }
+            let gp_393 = pos;
+            let sgk_393 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if _kind_set_23(sgk_393) {
+                sg_393: {
+                    pos = gp_393;
+                    sg_393_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_K_DISTINCT { break sg_393_0; }
                         pos += 1;
-                        break sg_390;
+                        break sg_393;
                     }
-                    pos = gp_390;
-                    sg_390_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_K_ALL { break sg_390_1; }
+                    pos = gp_393;
+                    sg_393_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_K_ALL { break sg_393_1; }
                         pos += 1;
-                        break sg_390;
+                        break sg_393;
                     }
                     break opt_scan;
                 }
@@ -17731,13 +17806,13 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                sg_391_done: {
-                    sg_391: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_391; }
+                sg_394_done: {
+                    sg_394: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_394; }
                         pos += 1;
                         pos = scan_result_column(tokens, pos, follow, 0);
-                        if pos < 0 { break sg_391; }
-                        break sg_391_done;
+                        if pos < 0 { break sg_394; }
+                        break sg_394_done;
                     }
                     break rep_scan;
                 }
@@ -17763,13 +17838,13 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                         if pos < 0 { break gd_scan; }
                         while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                             let sp = pos;
-                            sg_392_done: {
-                                sg_392: {
-                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_392; }
+                            sg_395_done: {
+                                sg_395: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_395; }
                                     pos += 1;
                                     pos = scan_table_or_subquery(tokens, pos, follow, 0);
-                                    if pos < 0 { break sg_392; }
-                                    break sg_392_done;
+                                    if pos < 0 { break sg_395; }
+                                    break sg_395_done;
                                 }
                                 pos = -1;
                             }
@@ -17812,13 +17887,13 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                         rep_scan: {
                             let tokens = &p.kinds;
                             let mut pos: i32 = p.pos;
-                            sg_393_done: {
-                                sg_393: {
-                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_393; }
+                            sg_396_done: {
+                                sg_396: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_396; }
                                     pos += 1;
                                     pos = scan_table_or_subquery(tokens, pos, follow, 0);
-                                    if pos < 0 { break sg_393; }
-                                    break sg_393_done;
+                                    if pos < 0 { break sg_396; }
+                                    break sg_396_done;
                                 }
                                 break rep_scan;
                             }
@@ -17847,13 +17922,13 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 rep_scan: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    sg_394_done: {
-                        sg_394: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_394; }
+                    sg_397_done: {
+                        sg_397: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_397; }
                             pos += 1;
                             pos = scan_expr(tokens, pos, follow, 0);
-                            if pos < 0 { break sg_394; }
-                            break sg_394_done;
+                            if pos < 0 { break sg_397; }
+                            break sg_397_done;
                         }
                         break rep_scan;
                     }
@@ -17881,13 +17956,13 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                sg_395_done: {
-                    sg_395: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_395; }
+                sg_398_done: {
+                    sg_398: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_398; }
                         pos += 1;
                         pos = scan_expr(tokens, pos, follow, 0);
-                        if pos < 0 { break sg_395; }
-                        break sg_395_done;
+                        if pos < 0 { break sg_398; }
+                        break sg_398_done;
                     }
                     break rep_scan;
                 }
@@ -17906,32 +17981,32 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             rep_scan_2: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                sg_396_done: {
-                    sg_396: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_396; }
+                sg_399_done: {
+                    sg_399: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_399; }
                         pos += 1;
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break sg_396; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break sg_399; }
                         pos += 1;
                         pos = scan_expr(tokens, pos, &FOLLOW_MASK_6, 0);
-                        if pos < 0 { break sg_396; }
+                        if pos < 0 { break sg_399; }
                         while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                             let sp = pos;
-                            sg_397_done: {
-                                sg_397: {
-                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_397; }
+                            sg_400_done: {
+                                sg_400: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_400; }
                                     pos += 1;
                                     pos = scan_expr(tokens, pos, follow, 0);
-                                    if pos < 0 { break sg_397; }
-                                    break sg_397_done;
+                                    if pos < 0 { break sg_400; }
+                                    break sg_400_done;
                                 }
                                 pos = -1;
                             }
                             if pos < 0 { pos = sp; break; }
                             if pos == sp { break; }
                         }
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sg_396; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sg_399; }
                         pos += 1;
-                        break sg_396_done;
+                        break sg_399_done;
                     }
                     break rep_scan_2;
                 }
@@ -17948,13 +18023,13 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 rep_scan: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    sg_398_done: {
-                        sg_398: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_398; }
+                    sg_401_done: {
+                        sg_401: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_401; }
                             pos += 1;
                             pos = scan_expr(tokens, pos, follow, 0);
-                            if pos < 0 { break sg_398; }
-                            break sg_398_done;
+                            if pos < 0 { break sg_401; }
+                            break sg_401_done;
                         }
                         break rep_scan;
                     }
@@ -18076,21 +18151,21 @@ fn _parse_signed_number__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        let gp_399 = pos;
-        let sgk_399 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_37(sgk_399) {
-            sg_399: {
-                pos = gp_399;
-                sg_399_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_399_0; }
+        let gp_402 = pos;
+        let sgk_402 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_37(sgk_402) {
+            sg_402: {
+                pos = gp_402;
+                sg_402_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_402_0; }
                     pos += 1;
-                    break sg_399;
+                    break sg_402;
                 }
-                pos = gp_399;
-                sg_399_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { break sg_399_1; }
+                pos = gp_402;
+                sg_402_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { break sg_402_1; }
                     pos += 1;
-                    break sg_399;
+                    break sg_402;
                 }
                 break opt_scan;
             }
