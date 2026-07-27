@@ -1871,8 +1871,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(TirGlobal {
             name: global_decl.name.clone(),
             ty,
-            // Every global starts out holding its declared value; `lower`
-            // defers the ones whose value no constant expression can write.
             init: GlobalInit::Direct(initializer),
             param,
             wado_mutable: global_decl.mutable,

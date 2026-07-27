@@ -1,9 +1,7 @@
-// A call that yields nothing has no value to substitute. Compile-time
-// evaluation must not hand one back: putting a value where the program
-// expects none leaves it on the stack, and the Wasm module fails to
-// validate.
+// A unit call has no value to substitute, and handing one back leaves it on
+// the stack so the Wasm module fails to validate.
 //
-// The discarded tail call is what makes the body produce a value at all —
+// The discarded tail call is what makes the body produce a value at all:
 // `compute(k)` reduces to a constant, and without a return-type check that
 // constant becomes the unit call's result.
 

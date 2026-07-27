@@ -278,9 +278,7 @@ pub(super) fn build_callee_map(project: &NirPackage) -> CalleeMap {
     map
 }
 
-/// Which callee ids are the array builtins the engine evaluates. Identified by
-/// the monomorphized builtin name, the same way every other pass recognizes a
-/// builtin, rather than by a canonical path.
+/// Which callee ids are the array builtins the engine evaluates.
 fn build_seq_builtin_map(project: &NirPackage) -> SeqBuiltinMap {
     let mut map = SeqBuiltinMap::default();
     for func_rc in &project.functions {
@@ -322,20 +320,12 @@ fn build_global_env(
     let mut env = GlobalEnv::default();
     for global in &project.globals {
         let key = (global.module_source.clone(), global.name.clone());
-        // A `global mut` can be reassigned, and a deferred global's storage
-        // holds a placeholder rather than its value — neither is something to
-        // read a constant out of. `NonConst` rather than absent, so a parent
-        // fold like `GLOBAL + 1` reports non-constant instead of unevaluated.
         let declared = (!global.wado_mutable)
             .then(|| global.init.declared())
             .flatten();
         let lattice = match declared {
             None => Lattice::NonConst,
             Some(declared) => {
-                // The initializer runs at module scope: no local env, but
-                // it may call pure functions and read previously-declared
-                // globals. Threading `&env` in lets `global B = A + 1;`
-                // fold once `A` has been recorded earlier in this loop.
                 let mut interp = Interpreter::new(type_table);
                 interp.with_callees(callees);
                 interp.with_globals(&env);

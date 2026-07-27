@@ -5,11 +5,10 @@
 // The `-O0` run is the load-bearing one: with no optimizer to fold `1 + 2`
 // first, the value has to survive lowering and reach the Wasm slot on its own.
 // A global that claimed to be directly initialized but could not be emitted
-// would read back as a null/zero placeholder, which the asserts below catch.
+// would read back as a placeholder, which the asserts below catch.
 //
-// Narrower integers are deliberately excluded — they share the `i32`
-// representation but must wrap at their own width — so `SMALL` is expected to
-// go the deferred route and still hold the right value.
+// Narrower integers must wrap at their own width, so `SMALL` goes the deferred
+// route and still holds the right value.
 
 use { println, Stdout } from "core:cli";
 

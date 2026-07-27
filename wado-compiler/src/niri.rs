@@ -84,19 +84,13 @@
 //!   (pure, non-async, monomorphic — see [`is_ctfe_eligible`]) runs the
 //!   callee's body with the args bound into a fresh local environment.
 //!   The body is executed statement by statement — `let` bindings,
-//!   assignment to a local, an `if` whose condition decides, an early
-//!   `return`, a labeled block completed by its `break`, and a loop
-//!   run until it breaks. A destructuring `let`, an undecidable `if`,
-//!   or a store the frame does not own abandons the evaluation. The
-//!   `call_stack` of
-//!   in-flight callees blocks recursive re-entry; a per-pass step
-//!   budget charged per statement and per loop iteration caps total
-//!   work, so a loop needs no constant trip count; the dynamic borrow
-//!   on the shared callee `RefCell` blocks the visitor's outer
-//!   `borrow_mut`. A body that does not produce a constant (e.g. it
-//!   contains a runtime div-by-zero) leaves the original Call in place
-//!   so the runtime trap is preserved. `MethodCall` / `IndirectCall` /
-//!   `CmRawCall` are out of scope.
+//!   assignment to a local, a decidable `if`, an early `return`, a
+//!   labeled block completed by its `break`, and a loop run until it
+//!   breaks. Anything else abandons the evaluation, leaving the
+//!   original call — and any runtime trap inside it — in place. The
+//!   `call_stack` blocks recursive re-entry and the step budget caps
+//!   total work, so a loop needs no constant trip count.
+//!   `MethodCall` / `IndirectCall` / `CmRawCall` are out of scope.
 //!
 //! Float arithmetic uses native Rust IEEE 754 ops (same as Wasm), following
 //! cranelift's approach: fold the result, but skip if it is NaN since NaN
@@ -231,20 +225,15 @@ pub type CalleeKey = crate::nir::FuncId;
 /// time, not here.
 pub type CalleeMap = IndexMap<CalleeKey, Rc<RefCell<NirFunction>>>;
 
-/// The array builtins the engine can evaluate over a constant sequence.
-///
-/// An element read reaches NIR as a call to one of these, not as an `Index`
-/// node — indexing lowers through the container's `IndexValue` impl and out to
-/// the builtin — so folding the builtin is what makes a constant table's reads
-/// fold.
+/// The array builtins the engine can evaluate over a constant sequence. An
+/// element read reaches NIR as a call to one of these, not as an `Index` node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SeqBuiltin {
     Get,
     Len,
 }
 
-/// Which sequence builtin each callee id is, for the ids that are one. Built
-/// once per pass by the driving visitor, like the [`CalleeMap`].
+/// Which sequence builtin each callee id is, for the ids that are one.
 pub type SeqBuiltinMap = IndexMap<CalleeKey, SeqBuiltin>;
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -279,16 +268,9 @@ pub type GlobalEnv = IndexMap<GlobalKey, Lattice>;
 /// sequence global hoisted by body globalization.
 pub type GlobalFieldEnv = IndexMap<GlobalKey, IndexMap<String, Value>>;
 
-/// Default per-function CTFE step budget. Mirrors rustc's CTFE step counter
-/// shape: a hard ceiling on the work the engine performs before it starts
-/// bailing. A step is one call entry, one statement executed, or one loop
-/// iteration, so the ceiling bounds total interpretation rather than just how
-/// many calls are attempted. Borrow-blocked re-entries (the recursion guard)
-/// bail before the budget charge, so they don't consume budget; the ceiling
-/// only applies to new-frame work that actually runs.
-///
-/// Reset per function ([`Interpreter::enter_function`]) so what one function
-/// spends cannot decide whether the next one folds.
+/// Ceiling on total CTFE work, charged per call entry, statement, and loop
+/// iteration. Reset per function so what one function spends cannot decide
+/// whether the next one folds.
 pub const DEFAULT_STEP_BUDGET: u32 = 10_000;
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -480,9 +462,7 @@ impl EditSink for BodySink<'_> {
 /// the result is knowable at compile time.
 #[must_use]
 pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
-    // A call that yields nothing has no value to substitute. Folding one would
-    // put a value where the program expects none, so the callee must return
-    // something.
+    // A unit call has no value to substitute for it.
     func.return_type != crate::tir::TypeTable::UNIT
         && func.effects.is_empty()
         && func.body.is_some()
@@ -525,8 +505,7 @@ pub struct Interpreter<'a> {
     /// an unpopulated set simply refuses every aggregate binding.
     aggregate_locals: LocalSet,
     /// Locals of the CTFE frame currently executing that another handle may
-    /// write — see [`clobbered_locals`]. Empty outside a frame, so ordinary
-    /// folding is unaffected.
+    /// write — see [`clobbered_locals`]. Empty outside a frame.
     ctfe_clobbered: LocalSet,
     /// CTFE scratch-body fold memo: `expr → folded constant`. The scratch
     /// [`BodySink`] cannot promote a fold to an `Operand::Value` (no parent map)
@@ -541,8 +520,7 @@ pub struct Interpreter<'a> {
     ///
     /// [`with_callees`]: Self::with_callees
     callees: Option<&'a CalleeMap>,
-    /// Which callee ids are sequence builtins. When `None`, an `array_get` /
-    /// `array_len` call is just an opaque call.
+    /// When `None`, an `array_get` / `array_len` call is just an opaque call.
     seq_builtins: Option<&'a SeqBuiltinMap>,
     /// Pre-built lattice values for module-scope globals. When `None`,
     /// every `GlobalVarGet` stays [`Lattice::Unevaluated`]. The visitor
@@ -629,8 +607,7 @@ fn reachable_exprs(body: &Body) -> Vec<ExprId> {
             self.walk_node(body, node);
         }
     }
-    // A body with no block structure is a bare expression: its arena holds
-    // only that expression, so nothing in it is orphaned.
+    // A body with no block structure is a bare expression, nothing orphaned.
     if body.blocks.is_empty() {
         return body.exprs.iter().map(|(e, _)| e).collect();
     }
@@ -642,14 +619,10 @@ fn reachable_exprs(body: &Body) -> Vec<ExprId> {
 /// Locals of `body` that may bind an aggregate constant: every mention only
 /// reads the value — as a field read's receiver or a `match` / `switch`
 /// scrutinee — and no store target, mutable borrow, method receiver, or
-/// mutable argument roots at them. Such a local is unreachable through any
-/// handle that could write it, so its whole value cannot change under the
-/// binding.
+/// mutable argument roots at them.
 ///
-/// The scan walks the reachable body. An orphaned node cannot run, so a
-/// mention left behind by an earlier rewrite must not disqualify a local —
-/// inlining `t.len()` leaves the original method call in the arena, and
-/// counting its receiver would refuse every list the caller then reads.
+/// Only the reachable body is scanned: a mention orphaned by an earlier rewrite
+/// cannot run, so it must not disqualify a local.
 fn aggregate_safe_locals(body: &Body) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
@@ -745,7 +718,7 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Install the sequence-builtin lookup. Without it, an element or length
-    /// read stays an opaque call.
+    /// read stays opaque.
     pub fn with_seq_builtins(&mut self, seq_builtins: &'a SeqBuiltinMap) -> &mut Self {
         self.seq_builtins = Some(seq_builtins);
         self
@@ -817,10 +790,8 @@ impl<'a> Interpreter<'a> {
     /// Asserts the recursion guard is clear — a leaked entry would mean
     /// a previous walk panicked mid-call.
     ///
-    /// The step budget resets here. A statement is the unit charged, so one
-    /// function with a long compile-time loop would otherwise drain the pass
-    /// and silently stop every function after it from folding — making the
-    /// result depend on the order functions happen to be walked in.
+    /// The step budget resets here, so one function with a long compile-time
+    /// loop cannot decide whether the functions walked after it fold.
     pub fn enter_function(&mut self) {
         self.step_budget = DEFAULT_STEP_BUDGET;
         self.env.clear();
@@ -1018,8 +989,7 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Read an element out of a constant sequence. An index past the end is
-    /// `NonConst`, not a fold: the read traps at run time and must keep doing
-    /// so.
+    /// `NonConst`, so the run-time trap survives.
     fn index_lattice(&self, body: &Body, receiver: Operand, index: Operand) -> Lattice {
         let (Lattice::Const(receiver), Lattice::Const(index)) = (
             self.operand_to_lattice_a(body, receiver),
@@ -1036,8 +1006,8 @@ impl<'a> Interpreter<'a> {
             .map_or(Lattice::NonConst, Lattice::Const)
     }
 
-    /// The lattice of an array literal: `Const` only when every element is
-    /// itself constant, and only up to [`MAX_SEQ_ELEMENTS`].
+    /// `Const` only when every element is itself constant, and only up to
+    /// [`MAX_SEQ_ELEMENTS`].
     fn seq_lattice(&self, body: &Body, type_id: TypeId, elements: &[Operand]) -> Lattice {
         let mut values = Vec::with_capacity(elements.len());
         for op in elements {
@@ -1102,9 +1072,8 @@ impl<'a> Interpreter<'a> {
                     .enumerate()
                     .map(|(i, op)| (u32::try_from(i).expect("tuple arity fits u32"), *op)),
             ),
-            // An array literal denotes the whole container, not the backing
-            // array: `wir_build` lowers it to `{ repr: array.new_fixed, used: N }`.
-            // Modelling it as a bare sequence would leave `.used` unreadable.
+            // An array literal denotes the whole container: `wir_build` lowers
+            // it to `{ repr: array.new_fixed, used: N }`.
             ExprKind::ArrayLiteral { elements } => {
                 match self.seq_lattice(body, node.type_id, elements) {
                     Lattice::Const(backing) => Lattice::Const(Value::aggregate(
@@ -1134,8 +1103,6 @@ impl<'a> Interpreter<'a> {
                 Value::seq(node.type_id, elements).map_or(Lattice::NonConst, Lattice::Const)
             }
             ExprKind::Index { expr: inner, index } => self.index_lattice(body, *inner, *index),
-            // Reading through a shared borrow reads the referent; only a
-            // mutable one can make that go stale.
             ExprKind::Unary {
                 op: NirUnaryOp::Ref,
                 expr: inner,
@@ -1990,7 +1957,6 @@ impl<'a> Interpreter<'a> {
         sink.replace_with_value(e, v)
     }
 
-    /// Execute a block's statements in order under the current environment.
     fn exec_block_a(&mut self, body: &mut Body, block: BlockId) -> Flow {
         let stmts = body.blocks[block].stmts.clone();
         let mut value = Lattice::Unevaluated;
@@ -2003,14 +1969,12 @@ impl<'a> Interpreter<'a> {
         Flow::Fallthrough(value)
     }
 
-    /// Execute one statement, charging the shared budget so a body cannot run
-    /// unbounded.
+    /// Execute one statement, charging the step budget.
     ///
-    /// A statement only counts as executed when everything it evaluates lands
-    /// on a constant. Reducing an expression is not performing it: an
-    /// unfolded call, a global write, or an operation that would trap all
-    /// leave work the engine did not do, and stepping past them would drop
-    /// it. Such a statement abandons the evaluation instead.
+    /// A statement counts as executed only when everything it evaluates lands
+    /// on a constant. Reducing an expression is not performing it, so anything
+    /// left undone — an unfolded call, a global write, a would-be trap —
+    /// abandons the evaluation rather than being stepped past.
     fn exec_stmt_a(&mut self, body: &mut Body, s: StmtId) -> Flow {
         if self.step_budget == 0 {
             return Flow::Bail;
@@ -2049,8 +2013,6 @@ impl<'a> Interpreter<'a> {
                         Some(eb) => self.exec_block_a(body, eb),
                         None => Flow::Fallthrough(Lattice::Unevaluated),
                     },
-                    // Which branch runs decides what the body does; an
-                    // undecidable condition cannot be guessed.
                     Lattice::Const(
                         Value::Int { .. }
                         | Value::Float { .. }
@@ -2087,12 +2049,8 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Run a loop until it breaks, control leaves the function, or the budget
-    /// runs out.
-    ///
-    /// Termination rests on the budget alone — no constant trip count is
-    /// needed, because a loop that does not finish in time simply abandons
-    /// the evaluation and leaves the call in place. The iteration charge is
-    /// what makes that true of an empty body too.
+    /// runs out. Termination rests on the budget alone — the per-iteration
+    /// charge covers an empty body too — so no constant trip count is needed.
     fn exec_loop_a(&mut self, body: &mut Body, block: BlockId) -> Flow {
         let snapshot = LoopSnapshot::capture(body, block);
         loop {
@@ -2102,9 +2060,7 @@ impl<'a> Interpreter<'a> {
             self.step_budget -= 1;
             match self.exec_block_a(body, block) {
                 Flow::Fallthrough(_) | Flow::Continue => {}
-                // A bare `break` completes this loop; a labeled one belongs to
-                // an enclosing labeled block. The loop is a statement, so the
-                // value a `break` carries is discarded either way.
+                // A labeled `break` belongs to an enclosing labeled block.
                 Flow::Break { label: None, .. } => {
                     return Flow::Fallthrough(Lattice::Unevaluated);
                 }
@@ -2115,8 +2071,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// An expression statement: an assignment updates the environment,
-    /// anything else contributes its value as the block's result.
+    /// An assignment updates the environment; anything else contributes its
+    /// value as the block's result.
     fn exec_expr_stmt_a(&mut self, body: &mut Body, op: Operand) -> Flow {
         if let Some(e) = op.as_expr()
             && let ExprKind::Assign { target, value } = &body.exprs[e].kind
@@ -2144,8 +2100,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Evaluate an operand in the current frame. Reducing in place first is
-    /// what lets a nested call fold before the operand is projected.
+    /// Reducing in place first is what lets a nested call fold before the
+    /// operand is projected.
     fn eval_operand_a(&mut self, body: &mut Body, op: Operand) -> Lattice {
         match op.as_expr() {
             Some(e) => {
@@ -2166,11 +2122,6 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Fold a pure call whose args are all constant: bind the params, run the
-    /// callee's body, and return `Const(v)` only when it produces a value.
-    /// `Unevaluated` on any miss (non-call, unknown or recursive callee,
-    /// non-const arg, a body the executor cannot follow, exhausted budget), so
-    /// the original call — and any runtime trap inside it — survives.
     /// Evaluate `array_get(seq, i)` / `array_len(seq)` over a constant
     /// sequence. The argument is a reference to the array, and a reference to a
     /// constant reads as that constant, so no separate deref step is needed.
@@ -2198,12 +2149,16 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    /// Fold a pure call whose args are all constant: bind the params, run the
+    /// callee's body, and return `Const(v)` only when it produces a value.
+    /// `Unevaluated` on any miss, so the original call — and any runtime trap
+    /// inside it — survives.
     fn try_call_fold_a(&mut self, body: &Body, e: ExprId) -> Lattice {
         if let lattice @ (Lattice::Const(_) | Lattice::NonConst) =
             self.try_seq_builtin_fold_a(body, e)
         {
             // `NonConst` here is an out-of-range read: keep the call so the
-            // trap survives, same as a body that does not reduce.
+            // trap survives.
             return match lattice {
                 Lattice::Const(v) => Lattice::Const(v),
                 Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
@@ -2255,11 +2210,8 @@ impl<'a> Interpreter<'a> {
         // says nothing about the callee's.
         let saved_aggregates = std::mem::take(&mut self.aggregate_locals);
         let saved_clobbered = std::mem::take(&mut self.ctfe_clobbered);
-        // Execute on a scratch copy of the callee's nodes so the shared callee
-        // body (held under an immutable `Ref`) is not mutated. Only the node
-        // maps are cloned (`nodes_only_clone`) — evaluation reads no
-        // function-level metadata, so cloning the callee's `locals` would be
-        // pure waste.
+        // Execute on a scratch copy so the shared callee body, held under an
+        // immutable `Ref`, is not mutated.
         let mut scratch = callee_body.nodes_only_clone();
         self.record_aggregate_locals(&scratch);
         self.ctfe_clobbered = clobbered_locals(&scratch);
@@ -2275,9 +2227,6 @@ impl<'a> Interpreter<'a> {
         let root = scratch.root;
         let result = match self.exec_block_a(&mut scratch, root) {
             Flow::Return(lattice) | Flow::Fallthrough(lattice) => lattice,
-            // A `break` or `continue` escaping the body, or a construct the
-            // engine cannot follow, means the evaluation never produced the
-            // call's value.
             Flow::Break { .. } | Flow::Continue | Flow::Bail => Lattice::Unevaluated,
         };
         self.env = saved_env;
@@ -2374,13 +2323,11 @@ enum PatternMatch {
 
 /// How control left a statement sequence during compile-time execution.
 ///
-/// `Break` and `Continue` are not loop-specific: a labeled block is the
-/// value-producing shape a `break L: v` completes, and a loop catches only an
-/// unlabeled `break`.
+/// `Break` is not loop-specific: a labeled block is the value-producing shape
+/// a `break L: v` completes, and a loop catches only an unlabeled `break`.
 enum Flow {
-    /// Reached the end of the sequence, carrying the value of the last
-    /// statement that produced one — a body ending in an expression statement
-    /// yields it.
+    /// Reached the end, carrying the value of the last statement that
+    /// produced one.
     Fallthrough(Lattice),
     Return(Lattice),
     Break {
@@ -2388,20 +2335,16 @@ enum Flow {
         value: Lattice,
     },
     Continue,
-    /// The engine could not follow the program. The whole evaluation is
-    /// abandoned and the original call survives, so anything the body would
-    /// have done at run time still happens.
+    /// The engine could not follow the program: abandon the evaluation so the
+    /// original call survives.
     Bail,
 }
 
 /// The loop-body nodes one iteration may rewrite, kept so the next iteration
-/// starts from the same program.
-///
-/// Reduction rewrites an expression toward the value it took *this* time
-/// round — `acc + 1` becomes the literal `1` on the first pass — so without
-/// restoring, later iterations would read the first one's results. Capturing
-/// the loop body rather than the whole body keeps the per-iteration cost
-/// proportional to the iteration's own work.
+/// starts from the same program. Reduction rewrites an expression toward the
+/// value it took *this* time round — `acc + 1` becomes the literal `1` on the
+/// first pass — so without restoring, later iterations read the first one's
+/// results.
 struct LoopSnapshot {
     exprs: Vec<(ExprId, ExprNode)>,
     stmts: Vec<(StmtId, StmtNode)>,
@@ -2450,7 +2393,7 @@ impl LoopSnapshot {
     }
 
     /// Put the captured nodes back. Nodes an iteration allocated are left
-    /// behind unreferenced, which costs arena space and nothing else.
+    /// behind unreferenced.
     fn restore(&self, body: &mut Body) {
         for (e, node) in &self.exprs {
             body.exprs[*e] = node.clone();
@@ -2467,17 +2410,15 @@ impl LoopSnapshot {
 /// Locals of `body` that a compile-time frame cannot track, because something
 /// other than a bare assignment at statement position can write them: a
 /// borrow, a mutable argument, a method receiver, a store through a
-/// projection, or an assignment buried inside a larger expression. `niri`
-/// models whole values, not the heap, so such a local must not carry one.
+/// projection, or an assignment buried inside a larger expression.
 fn clobbered_locals(body: &Body) -> LocalSet {
     fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
             set.insert(index);
         }
     }
-    // Assignments the executor applies itself. Any other assignment is reached
-    // through the operand path, which reduces expressions but does not run
-    // them, so its target would keep a stale value.
+    // Assignments the executor applies itself. Any other assignment is only
+    // reduced, never run, so its target would keep a stale value.
     let mut executed: IndexSet<ExprId> = IndexSet::default();
     for (_, stmt) in &body.stmts {
         if let StmtKind::Expr(op) = &stmt.kind
@@ -2490,8 +2431,6 @@ fn clobbered_locals(body: &Body) -> LocalSet {
     let mut set = LocalSet::default();
     for (e, node) in &body.exprs {
         match &node.kind {
-            // `local = v` at statement position is modelled exactly; a store
-            // through a projection reaches a value the frame does not own.
             ExprKind::Assign { target, .. } => {
                 if !executed.contains(&e)
                     || !matches!(body.exprs[*target].kind, ExprKind::Local { .. })
@@ -2520,7 +2459,6 @@ fn clobbered_locals(body: &Body) -> LocalSet {
     set
 }
 
-/// The local a bare `local = value` assigns, if the target is one.
 fn assign_target_local(body: &Body, target: ExprId) -> Option<u32> {
     match &body.exprs[target].kind {
         ExprKind::Local { index, .. } => Some(*index),

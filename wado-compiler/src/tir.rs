@@ -4036,18 +4036,14 @@ pub struct ParamSpec {
 
 /// How a global's storage gets its value.
 ///
-/// A global whose declared initializer is not a Wasm constant expression is
-/// assigned by its module's initialization function instead, and its storage
-/// starts at a placeholder. The two cases are one choice rather than a flag
-/// beside an initializer field, so a placeholder can never be read as the
-/// value the program declared — it is a perfectly plausible constant, and
-/// mistaking it for the declared value silently folds every read of
-/// `global A: i32 = 1 + 2` to zero.
+/// One choice rather than a flag beside an initializer field, so a placeholder
+/// can never be read as the declared value — it is a plausible constant, and
+/// mistaking it folds every read of `global A: i32 = 1 + 2` to zero.
 ///
 /// See [Global Variables](../../docs/wep-2026-01-27-global-variables.md).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GlobalInit<E> {
-    /// The storage holds the declared value, written as a constant expression.
+    /// The storage holds the declared value, as a constant expression.
     Direct(E),
     /// The storage starts at this placeholder; the module's initialization
     /// function assigns the declared value before anything else runs.
@@ -4055,8 +4051,8 @@ pub enum GlobalInit<E> {
 }
 
 impl<E> GlobalInit<E> {
-    /// The expression the storage is initialized with, whichever case — the
-    /// declared value or the placeholder standing in for it.
+    /// What the storage is initialized with: the declared value, or the
+    /// placeholder standing in for it.
     pub fn slot_expr(&self) -> &E {
         match self {
             Self::Direct(e) | Self::Deferred(e) => e,
@@ -4070,7 +4066,7 @@ impl<E> GlobalInit<E> {
     }
 
     /// The declared value, or `None` when it is assigned elsewhere. Anything
-    /// asking what a global holds must go through this.
+    /// asking what a global holds goes through this.
     pub fn declared(&self) -> Option<&E> {
         match self {
             Self::Direct(e) => Some(e),
@@ -4093,8 +4089,7 @@ pub struct TirGlobal {
     /// param-resolution pass; `None` for ordinary globals.
     pub param: Option<ParamSpec>,
     /// Whether the program may assign to this global — `global mut`. The Wasm
-    /// slot's own mutability is wider (a deferred global is assigned by its
-    /// initialization function) and is derived when the module is built.
+    /// slot's mutability is wider and derived when the module is built.
     pub wado_mutable: bool,
     pub visibility: crate::ast::Visibility,
     /// Module where this global is defined

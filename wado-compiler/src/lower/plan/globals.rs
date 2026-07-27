@@ -27,13 +27,11 @@ use crate::lower::wide_int_literal::{create_i128_literal, create_u128_literal};
 /// Whether the Wasm slot can hold this value directly, so the global needs no
 /// assignment from an initialization function.
 ///
-/// This is a syntactic under-approximation of what a Wasm constant expression
-/// can express, and deliberately so: an aggregate or a sequence only becomes a
-/// `struct.new` / `array.new_fixed` once the optimizer has collapsed the
-/// builder sequence that produces it, and whether it did is not knowable here.
-/// Those are left to the classifier that runs on the lowered Wasm value, which
-/// promotes back everything this defers. What is decidable here is what is
-/// already a value: a literal, and arithmetic over literals.
+/// Deliberately under-approximates what a constant expression can express: an
+/// aggregate only becomes a `struct.new` once the optimizer has collapsed the
+/// builder producing it, which is not knowable here. The classifier on the
+/// lowered Wasm value promotes back what this defers. Decidable here is what
+/// is already a value: a literal, and arithmetic over literals.
 fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
     match &expr.kind {
         TirExprKind::IntLiteral { .. }
@@ -47,10 +45,6 @@ fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
             // Negation of literals is constant
             matches!(op, TirUnaryOp::Neg) && is_constant_initializer(inner, type_table)
         }
-        // Wasm admits `add` / `sub` / `mul` on `i32` and `i64` in a constant
-        // expression. Narrower integers are not among them: they share the
-        // `i32` representation but must wrap at their own width, which no
-        // constant expression does. Floats are not among them at all.
         TirExprKind::Binary { op, left, right } => {
             matches!(op, TirBinaryOp::Add | TirBinaryOp::Sub | TirBinaryOp::Mul)
                 && is_wasm_width_int(expr.type_id, type_table)
@@ -61,8 +55,9 @@ fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
     }
 }
 
-/// Whether the type is an integer whose Wado width matches the Wasm operand it
-/// lowers to, so wrapping arithmetic needs no masking.
+/// An integer whose Wado width matches the Wasm operand it lowers to, so
+/// wrapping needs no masking. Wasm admits constant `add` / `sub` / `mul` on
+/// `i32` and `i64` only — never a narrower integer, and never a float.
 fn is_wasm_width_int(type_id: TypeId, type_table: &TypeTable) -> bool {
     matches!(
         type_table.get(type_id),
@@ -168,10 +163,9 @@ pub fn extract(flat: &mut FlatPackage) {
         if is_constant_initializer(global.init.slot_expr(), &type_table) {
             continue;
         }
-        // The declared value needs code to produce, so it moves into the
-        // module's initialization function and the storage keeps a
-        // placeholder. The move is what stops the two from drifting apart:
-        // the global no longer claims a value it does not hold.
+        // The declared value moves into the initialization function rather
+        // than being copied, so the global cannot claim a value it no longer
+        // holds.
         let placeholder = default_value_for_type(global.ty, &type_table, global.span);
         let GlobalInit::Direct(declared) =
             std::mem::replace(&mut global.init, GlobalInit::Deferred(placeholder))

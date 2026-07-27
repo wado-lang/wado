@@ -195,9 +195,6 @@ impl<'a> NirUnparser<'a> {
         self.output.push_str(&g.name);
         self.output.push_str(": ");
         self.output.push_str(&self.type_table.type_name(g.ty));
-        // A deferred global's expression is the placeholder its storage
-        // starts at, not the value it holds; say so rather than render it
-        // as an initializer.
         self.output.push_str(if g.init.is_deferred() {
             " = deferred "
         } else {

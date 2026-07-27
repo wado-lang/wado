@@ -1,14 +1,12 @@
 // A pure callee containing a loop is run at compile time: the call folds to a
 // literal and the callee drops as unused.
 //
-// No constant trip count is required. The engine runs the loop and the work
-// budget bounds it, so a loop that does not finish in time simply leaves the
-// call in place — `runaway` below is called with an argument large enough to
-// outrun the budget, and must survive to run time.
+// No constant trip count is required: the engine runs the loop under a work
+// budget, so a loop that does not finish in time leaves the call in place —
+// `runaway` outruns the budget and must survive to run time.
 //
 // `#[inline(never)]` keeps the inliner away, so the fold is attributable to
-// niri. `black_box` keeps `runaway`'s call off the constant path only where
-// the fixture wants the loop to reach run time.
+// niri.
 
 use { println, Stdout } from "core:cli";
 

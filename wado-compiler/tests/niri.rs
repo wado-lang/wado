@@ -3520,9 +3520,7 @@ fn seq_builtin_map(func_id: wado_compiler::nir::FuncId, builtin: SeqBuiltin) -> 
 #[test]
 fn array_literal_reduces_to_the_container_it_denotes() {
     // An array literal lowers to `{ repr: array.new_fixed, used: N }`, so it
-    // denotes the whole `List` — not the backing array. Modelling it as a bare
-    // sequence would leave `.used` unreadable, and a length read is what most
-    // of a constant list's folds go through.
+    // denotes the whole `List` — not the backing array.
     let table = TypeTable::new();
     let lit = array_literal(
         TypeTable::I32,
@@ -3562,8 +3560,6 @@ fn packed_array_reduces_to_a_sequence_of_bytes() {
 
 #[test]
 fn a_sequence_over_the_cap_is_not_modelled() {
-    // Building the value walks every element, so past the cap the literal is
-    // simply not a constant to the engine.
     let table = TypeTable::new();
     let big = packed_array(vec![0u8; MAX_SEQ_ELEMENTS + 1], TypeTable::I32);
     assert_eq!(
@@ -3584,8 +3580,8 @@ fn array_get_folds_an_element() {
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     interp.with_seq_builtins(&map);
-    // The builtin takes the backing array, which a read projects out of the
-    // container — the shape `arr[i]` lowers to.
+    // `arr[i]` lowers to the builtin over the backing array projected out of
+    // the container.
     let call = seq_builtin_call(
         func_id,
         vec![
@@ -3611,8 +3607,6 @@ fn array_get_folds_an_element() {
 
 #[test]
 fn array_get_reads_through_a_shared_reference() {
-    // The backing array reaches the builtin as `&arr`, so the borrow has to be
-    // transparent or no element read would ever fold.
     let func_id = next_test_func_id();
     let map = seq_builtin_map(func_id, SeqBuiltin::Get);
     let table = TypeTable::new();
@@ -3640,7 +3634,7 @@ fn array_get_reads_through_a_shared_reference() {
 
 #[test]
 fn array_get_past_the_end_is_left_alone() {
-    // The read traps at run time; folding it would delete the trap.
+    // Folding the read would delete the run-time trap.
     let func_id = next_test_func_id();
     let map = seq_builtin_map(func_id, SeqBuiltin::Get);
     let table = TypeTable::new();
@@ -3676,7 +3670,6 @@ fn array_len_folds_to_the_element_count() {
 
 #[test]
 fn a_sequence_without_the_builtin_map_stays_a_call() {
-    // No map installed: the call is opaque, as before.
     let func_id = next_test_func_id();
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
@@ -4059,8 +4052,7 @@ fn i32_of(value: u64) -> Option<Value> {
     })
 }
 
-/// Append locals to `f` so its local indices line up with the arena body the
-/// test installed. Params already occupy `0..params.len()`.
+/// Append locals after the params, which occupy `0..params.len()`.
 fn push_locals(f: &mut NirFunction, locals: &[(&str, TypeId, bool)]) {
     for (name, type_id, is_mut) in locals {
         f.locals.push(NirLocal {
@@ -4208,7 +4200,6 @@ fn multi_stmt_early_return_taken() {
 
 #[test]
 fn multi_stmt_early_return_falls_through() {
-    // The then-arm does not run, so execution continues past the `if`.
     let f = early_return_fn();
     assert_eq!(
         fold_call_of(&f, vec![int_lit(0, TypeTable::I32, "0")]),
@@ -4244,7 +4235,6 @@ fn multi_stmt_assign_rebinds_local() {
 
 #[test]
 fn multi_stmt_trailing_expr_is_the_value() {
-    // A tail expression statement, not a `return`, carries the body's value.
     let f = make_multi_stmt_fn(
         "f",
         vec![],
@@ -4265,8 +4255,7 @@ fn multi_stmt_trailing_expr_is_the_value() {
 
 #[test]
 fn multi_stmt_undecidable_condition_bails() {
-    // The condition reads a local the engine knows nothing about, so which
-    // branch runs is undecidable and the whole evaluation is abandoned.
+    // The condition reads a local the engine knows nothing about.
     let f = make_multi_stmt_fn(
         "f",
         vec![],
@@ -4304,8 +4293,8 @@ fn loop_runs_to_its_break() {
 ///           loop { if i >= 3 { break; } acc = acc + i * 2; i = i + 1; }
 ///           return acc; }` → 0 + 2 + 4 = 6.
 ///
-/// `i * 2` and `acc + …` take a different value each time round, so this only
-/// reaches 6 if an iteration's folds do not survive into the next one.
+/// `i * 2` and `acc + …` differ each time round, so 6 is only reached if an
+/// iteration's folds do not survive into the next one.
 fn accumulating_loop_fn() -> NirFunction {
     make_multi_stmt_fn(
         "f",
@@ -4364,8 +4353,6 @@ fn loop_accumulates_across_iterations() {
 
 #[test]
 fn loop_iterations_do_not_reuse_an_earlier_fold() {
-    // The same body under a budget that comfortably covers it: reaching 6
-    // rather than a first-iteration value proves each iteration re-evaluates.
     let f = accumulating_loop_fn();
     let callees = build_callee_map_test(std::slice::from_ref(&f));
     let table = TypeTable::new();
@@ -4384,8 +4371,8 @@ fn loop_iteration_does_not_keep_an_earlier_structural_rewrite() {
     //          return acc; }  → 10 + 1 + 1 = 12
     //
     // The inner `if` is an *expression*, so a constant condition collapses it
-    // to the chosen arm in the body itself. That rewrite is only right for the
-    // iteration that made it: keeping it would add 10 every time round.
+    // to the chosen arm in the body itself. Keeping that would add 10 every
+    // time round.
     let f = make_multi_stmt_fn(
         "f",
         vec![],
@@ -4444,8 +4431,7 @@ fn loop_iteration_does_not_keep_an_earlier_structural_rewrite() {
 
 #[test]
 fn loop_without_an_exit_exhausts_the_budget() {
-    // `loop {}` — an empty body charges nothing per statement, so the loop
-    // itself must charge or the engine would spin forever.
+    // `loop {}` — an empty body charges no statement, so the loop must charge.
     let f = make_multi_stmt_fn(
         "f",
         vec![],
@@ -4479,7 +4465,6 @@ fn loop_return_leaves_the_function() {
 #[test]
 fn loop_labeled_break_escapes_to_its_block() {
     // fn f() { L: { loop { break L; } } return 7; }
-    // A labeled break belongs to the enclosing labeled block, not the loop.
     let f = make_multi_stmt_fn(
         "f",
         vec![],
@@ -4536,8 +4521,7 @@ fn loop_continue_starts_the_next_iteration() {
 
 #[test]
 fn multi_stmt_labeled_block_break_is_caught() {
-    // `L: { break L; }` completes the labeled block; it must not escape and
-    // abandon the evaluation of the statements after it.
+    // fn f() { L: { break L; } return 7; }
     let f = make_multi_stmt_fn(
         "f",
         vec![],
@@ -4554,7 +4538,6 @@ fn multi_stmt_labeled_block_break_is_caught() {
 #[test]
 fn multi_stmt_mut_borrowed_local_blocks_fold() {
     // fn f() { let mut y = 1; sink(&mut y); return y; }
-    // `sink` may write through the borrow, so `y` must not keep its literal.
     let sink = make_pure_fn(
         "sink",
         vec![("p", TypeTable::I32)],
@@ -4578,9 +4561,8 @@ fn multi_stmt_mut_borrowed_local_blocks_fold() {
 #[test]
 fn multi_stmt_global_write_blocks_fold() {
     // fn bump() { COUNT = 1; return 0; }
-    // Writing a module global carries no effect in the effect system, so the
-    // callee is admitted — but the executor cannot perform the write, and
-    // folding the call to `0` would drop it.
+    // A global write carries no effect, so the callee is admitted — but
+    // folding the call to `0` would drop the write.
     let f = make_multi_stmt_fn(
         "bump",
         vec![],
@@ -4600,8 +4582,6 @@ fn multi_stmt_global_write_blocks_fold() {
 
 #[test]
 fn multi_stmt_discarded_unfoldable_call_blocks_fold() {
-    // A statement the executor cannot evaluate is a statement it cannot skip:
-    // whatever the call does at run time must still happen.
     let opaque = make_pure_fn("opaque", vec![], TypeTable::I32, return_none());
     let f = make_multi_stmt_fn(
         "f",
@@ -4618,9 +4598,8 @@ fn multi_stmt_discarded_unfoldable_call_blocks_fold() {
 
 #[test]
 fn multi_stmt_assign_inside_an_operand_blocks_fold() {
-    // fn f() { let mut y = 1; if_expr_writing_y; return y; }
-    // The write sits inside an expression the executor reduces rather than
-    // runs, so `y` must not keep its pre-write literal.
+    // fn f() { let mut y = 1; { y = 99 }; return y; }
+    // The write sits inside an expression the executor reduces rather than runs.
     let f = make_multi_stmt_fn(
         "f",
         vec![],
@@ -4662,8 +4641,6 @@ fn multi_stmt_aggregate_let_projects_a_field() {
 
 #[test]
 fn multi_stmt_step_budget_bails() {
-    // Executing a statement costs budget, so a body longer than the budget
-    // leaves the call in place instead of running unbounded.
     let f = make_multi_stmt_fn(
         "f",
         vec![],

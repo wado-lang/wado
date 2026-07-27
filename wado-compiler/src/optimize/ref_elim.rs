@@ -601,19 +601,11 @@ fn analyze_expr(
 // Deref-only elision: `let r = &StructLit; ... *r ...` → inline the literal.
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Tracking state for a local bound to a freshly built aggregate and only ever
-/// read back through `*x` — either `let r = &literal` or the binding of the
-/// literal itself, which the builder collapse leaves behind as
-/// `let b = [ … ]; *b`.
-///
-/// Freshness is what makes moving the literal to the deref sound: nothing else
-/// holds the value, so copying it out is the value.
+/// A local bound to a freshly built aggregate and only ever read back through
+/// `*x`. Freshness is what makes moving the literal to the deref sound.
 struct DerefOnlyRef {
-    /// The arena id of the source aggregate literal.
     source_e: ExprId,
-    /// True until a non-deref use is found.
     eliminable: bool,
-    /// Number of times r is used as `*r`.
     use_count: u32,
 }
 
@@ -657,13 +649,8 @@ fn deref_collect_stmt(
     }
 }
 
-/// The freshly built aggregate a `let` binds, when reading the local back
-/// through `*x` would just be that aggregate.
-///
-/// Two spellings reach here. Inlining a getter leaves `let r = &Literal`,
-/// borrowing a literal it then derefs. Collapsing a sequence-literal builder
-/// leaves `let b = [ … ]` bound directly, with the trailing `*b` the inlined
-/// `build` that copies the value out.
+/// The freshly built aggregate a `let` binds, either as `&Literal` or as the
+/// literal itself.
 fn deref_only_source(body: &Body, value_e: ExprId) -> Option<ExprId> {
     let candidate = match &body.exprs[value_e].kind {
         ExprKind::Unary {

@@ -1,11 +1,14 @@
 //! Function collection — gathers all reachable functions from the `NirPackage`,
 //! registers their types and creates `WirFunction` stubs (bodies filled later).
 
+use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_f32_type, prim_of};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::global_name;
-use crate::nir::NirFunction;
-use crate::tir::TypeTable;
+use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir_arena::{Body, ExprKind, Operand};
+use crate::nir_value_graph::ValueKind;
+use crate::tir::{PrimitiveType, TypeTable};
 use crate::wir::{
     CanonicalIntrinsic, WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType,
 };
@@ -633,14 +636,8 @@ fn register_globals(ctx: &mut WirContext<'_>) {
 
         let mut wir_type = ctx.type_id_to_wir_type(type_table, global.ty);
 
-        // The slot shape follows from how the global is initialized, so it is
-        // derived here rather than carried down from the earlier IRs.
-        //
-        // A deferred reference-typed global starts at `ref.null` and is
-        // assigned before any other code runs, so the slot must accept null
-        // and reads narrow back with `ref.as_non_null`. A global whose
-        // declared value is itself `null` also needs a nullable slot, but its
-        // reads must not narrow — `null` is a value the program observes, and
+        // Both cases need a nullable slot, but only a deferred one narrows its
+        // reads: a declared `null` is a value the program observes, and
         // narrowing would trap on every `None`.
         let deferred = global.init.is_deferred();
         let lazy_init = deferred && is_wir_reference(&wir_type);
@@ -673,8 +670,6 @@ fn register_globals(ctx: &mut WirContext<'_>) {
         ctx.globals.push(WirGlobal {
             name: WirName { fq: global_name },
             ty: wir_type,
-            // The program may assign a `global mut`; the initialization
-            // function assigns a deferred one. Either makes the slot mutable.
             mutable: global.wado_mutable || deferred,
             wado_mutable: global.wado_mutable,
             init,
@@ -687,45 +682,27 @@ fn register_globals(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Whether the slot holds a reference, which is what makes a placeholder
-/// `ref.null` — and therefore a narrowing read — necessary.
+/// Whether the slot needs a `ref.null` placeholder, and so a narrowing read.
 fn is_wir_reference(ty: &WirType) -> bool {
     matches!(ty, WirType::Ref { .. } | WirType::AbstractRef { .. })
 }
 
-/// Whether the declared value is `null` itself, rather than a placeholder
-/// standing in for a value assigned elsewhere.
-fn is_null_operand(body: &crate::nir_arena::Body, op: crate::nir_arena::Operand) -> bool {
+/// Whether the declared value is `null` itself.
+fn is_null_operand(body: &Body, op: Operand) -> bool {
     match op {
-        crate::nir_arena::Operand::Value(v) => {
-            matches!(body.values.kind(v), crate::nir_value_graph::ValueKind::Null)
-        }
-        // `null` reaches the pool as a value; nothing builds it as a
-        // skeleton node.
-        crate::nir_arena::Operand::Expr(_) => false,
+        Operand::Value(v) => matches!(body.values.kind(v), ValueKind::Null),
+        // `null` reaches the pool as a value, never as a skeleton node.
+        Operand::Expr(_) => false,
     }
 }
 
 /// Evaluate a global's initializer to a compile-time value.
 ///
 /// Every node is evaluated at its *own* type, which is what makes a cast a
-/// conversion rather than a relabelling: `(2147483647 + 1) as i64` must wrap
-/// at `i32` first and only then widen. Evaluating the addition at the cast's
-/// type would produce `2147483648`, a value the same expression never yields
-/// anywhere else in the language.
-///
-/// Uses the same evaluators as compile-time function evaluation, so a global
-/// initializer and an equivalent local expression cannot disagree.
-fn global_init_value(
-    body: &crate::nir_arena::Body,
-    op: crate::nir_arena::Operand,
-    type_table: &TypeTable,
-) -> Option<crate::const_eval::Value> {
-    use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_f32_type, prim_of};
-    use crate::nir_arena::{ExprKind, Operand};
-    use crate::nir_value_graph::ValueKind;
-    use crate::tir::PrimitiveType;
-
+/// conversion rather than a relabelling: `(2147483647 + 1) as i64` wraps at
+/// `i32` before it widens. Shares the evaluators with compile-time function
+/// evaluation, so a global and an equivalent local expression agree.
+fn global_init_value(body: &Body, op: Operand, type_table: &TypeTable) -> Option<Value> {
     match op {
         Operand::Value(v) => {
             let ty = body.values.type_of(v)?;
@@ -753,10 +730,10 @@ fn global_init_value(
                 eval_cast(value, prim_of(body.exprs[e].type_id, type_table)?)
             }
             ExprKind::Unary {
-                op: crate::nir::NirUnaryOp::Neg,
+                op: NirUnaryOp::Neg,
                 expr: inner,
             } => eval_unary(
-                crate::nir::NirUnaryOp::Neg,
+                NirUnaryOp::Neg,
                 global_init_value(body, *inner, type_table)?,
             ),
             ExprKind::Binary { left, op, right } => eval_binary(
@@ -771,22 +748,21 @@ fn global_init_value(
 
 /// Convert a NIR global initializer operand to a WIR constant instruction.
 /// `type_id` is the global's declared type, which decides the constant's
-/// width; the value itself is evaluated at the types the expression carries.
+/// width.
 fn translate_global_init(
-    body: &crate::nir_arena::Body,
-    op: crate::nir_arena::Operand,
+    body: &Body,
+    op: Operand,
     type_id: crate::tir::TypeId,
     type_table: &TypeTable,
 ) -> crate::wir::WirInstr {
-    use crate::const_eval::Value;
-    use crate::tir::{PrimitiveType, ResolvedType};
+    use crate::tir::ResolvedType;
     use crate::wir::WirInstr;
 
     let ref_null = || WirInstr::RefNull {
         heap_type: crate::wir::WirAbstractHeapType::None,
     };
-    // Anything the evaluator cannot reduce is initialized by the module's
-    // initialization function instead, so the slot starts at a placeholder.
+    // What the evaluator cannot reduce is assigned by the initialization
+    // function instead, so the slot starts at a placeholder.
     let Some(value) = global_init_value(body, op, type_table) else {
         return ref_null();
     };

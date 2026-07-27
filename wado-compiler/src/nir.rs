@@ -246,16 +246,13 @@ pub fn matches_builtin(name: &str, monomorph_info: Option<&MonomorphInfo>, built
 pub struct NirGlobal {
     pub name: String,
     pub ty: TypeId,
-    /// How the storage gets its value: the declared initializer, or a
-    /// placeholder plus an assignment from the module's initialization
-    /// function. Either way the expression is an
+    /// How the storage gets its value. Either case holds an
     /// [`crate::nir_arena::ExprBody`] (a single-`Expr`-statement arena `Body`;
     /// read it via `.expr()`), arena-shaped like function bodies so the
     /// optimizer passes share one representation.
     pub init: tir::GlobalInit<ExprBody>,
     /// Whether the program may assign to this global — `global mut`. The Wasm
-    /// slot's own mutability is wider (a deferred global is assigned by its
-    /// initialization function) and is derived when the module is built.
+    /// slot's mutability is wider and derived when the module is built.
     pub wado_mutable: bool,
     pub visibility: ast::Visibility,
     /// Module where this global is defined

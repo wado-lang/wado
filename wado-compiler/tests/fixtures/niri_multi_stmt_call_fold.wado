@@ -1,11 +1,9 @@
-// A pure callee whose body is a statement sequence — `let` bindings, an early
-// return — is evaluated at compile time, so the call folds to a literal and the
-// callee drops as unused.
+// A pure callee whose body is a statement sequence — `let` bindings, an
+// assignment, an early return — is evaluated at compile time, so the call
+// folds to a literal and the callee drops as unused.
 //
 // `#[inline(never)]` keeps the inliner away, so the fold is attributable to
-// niri's compile-time evaluation rather than to inlining plus local folding.
-// Before statement sequences were executed, only a single-expression body
-// folded and both calls below survived to run time.
+// niri rather than to inlining plus local folding.
 
 use { println, Stdout } from "core:cli";
 

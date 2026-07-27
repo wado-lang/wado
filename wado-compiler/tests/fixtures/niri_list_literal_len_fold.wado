@@ -3,12 +3,12 @@
 //
 // The chain this pins: the sequence-literal builder collapses to an array
 // literal, eliding the copy leaves the literal bound directly to `t`, the
-// literal is modelled as the container it denotes (`{ repr, used }` — not a
-// bare backing array), and only the reachable body decides whether `t` may
-// carry that value. Break any link and `table_len` survives to run time.
+// literal is modelled as the container it denotes (`{ repr, used }`), and only
+// the reachable body decides whether `t` may carry that value. Break any link
+// and `table_len` survives to run time.
 //
 // `#[inline(never)]` keeps the inliner out, so the fold is attributable to
-// compile-time evaluation rather than to inlining plus local folding.
+// niri.
 
 use { println, Stdout } from "core:cli";
 
