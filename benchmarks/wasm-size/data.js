@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785108355991,
+  "lastUpdate": 1785113620897,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44189,6 +44189,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/61d666ff5c0d811be4cc2e09ac4afd9574a560a1"
         },
         "date": 1785108355459,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8225,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273073,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "139904abe623fd52ced1710477fa8572e6b9cac4",
+          "message": "Merge pull request #1699 from wado-lang/claude/niri-struct-handling-nj5k3q\n\nfeat(niri): fold struct and tuple values at compile time",
+          "timestamp": "2026-07-27T09:43:27+09:00",
+          "tree_id": "01a274c4f665b60658fc9375a90ac6849c4864bf",
+          "url": "https://github.com/wado-lang/wado/commit/139904abe623fd52ced1710477fa8572e6b9cac4"
+        },
+        "date": 1785113620109,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
