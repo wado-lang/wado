@@ -425,8 +425,9 @@ gate.
   exiting. Where the scan runs out — the rule's tail — the verdict conjoins
   the rule's classical FOLLOW, which cost one bug fix in `follow_env` (an
   optional's callee was receiving the inner's own FIRST) rather than a second
-  runtime argument. Release `sqlite_parse` is unchanged (best-of identical,
-  each arm's spread wider than the gap between them).
+  runtime argument. Release `sqlite_parse` measured unchanged at both steps:
+  each arm's own spread — and the `sqlparser-rs` reference row — moved more
+  than any gap between the arms.
 - **Recursive lexer rule with `.+?` / `.*?`**
   (`RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`): the static single-pass
   emitter over-consumes nested `/* … */` comments.
