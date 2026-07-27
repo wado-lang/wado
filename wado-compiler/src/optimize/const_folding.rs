@@ -62,8 +62,6 @@ fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
     // a callee's body edit is visible without rebuilding the map — only its
     // *membership* (the ctfe-eligible function set) can go stale.
     let callees = build_callee_map(project);
-    // Element and length reads on a constant sequence reach NIR as builtin
-    // calls, so the engine needs to know which callee ids those are.
     let seq_builtins = build_seq_builtin_map(project);
     // Every immutable global whose initializer reduces to a `Const(_)` becomes a
     // `GlobalVarGet` rewrite target; mutable globals are recorded as `NonConst`.

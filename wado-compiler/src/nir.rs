@@ -15,11 +15,14 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::ast;
+use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
-use crate::tir::{EffectRef, TypeId, TypeTable};
+use crate::nir_arena::{Body, ExprBody};
+use crate::tir::{self, EffectRef, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Canonical identity of a function entity. Minted in `lower` over the
@@ -249,12 +252,12 @@ pub struct NirGlobal {
     /// [`crate::nir_arena::ExprBody`] (a single-`Expr`-statement arena `Body`;
     /// read it via `.expr()`), arena-shaped like function bodies so the
     /// optimizer passes share one representation.
-    pub init: crate::tir::GlobalInit<crate::nir_arena::ExprBody>,
+    pub init: tir::GlobalInit<ExprBody>,
     /// Whether the program may assign to this global — `global mut`. The Wasm
     /// slot's own mutability is wider (a deferred global is assigned by its
     /// initialization function) and is derived when the module is built.
     pub wado_mutable: bool,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: ast::Visibility,
     /// Module where this global is defined
     pub module_source: ModuleSource,
     pub span: Span,
@@ -292,7 +295,7 @@ pub struct NirFunction {
     /// per-module body data into flat lists; before link, the `module_source` is
     /// carried implicitly by the parent `NirModule`.
     pub module_source: ModuleSource,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: ast::Visibility,
     /// Whether this function is exported at the Component Model boundary (world export)
     pub is_export: bool,
     /// Whether this is an async function (`export async fn`).
@@ -318,7 +321,7 @@ pub struct NirFunction {
     pub effects: Vec<EffectRef>,
     /// Parameter names declared in `stores[...]` — the function may store these references.
     pub stores: Vec<String>,
-    pub body: Option<crate::nir_arena::Body>,
+    pub body: Option<Body>,
     pub span: Span,
     /// Per-local metadata — `name`, `type_id`, `is_mut` — indexed by Wasm
     /// local index. Entries `0..params.len()` shadow the corresponding
@@ -366,7 +369,7 @@ pub struct NirFunction {
     /// The compiler-recognized stdlib role this function fills, if any.
     /// Set from `#[compiler_item("...")]` on the source declaration; see
     /// [`crate::compiler_item::CompilerItem`].
-    pub compiler_item: Option<crate::compiler_item::CompilerItem>,
+    pub compiler_item: Option<CompilerItem>,
 
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,
@@ -482,7 +485,7 @@ impl NirFunction {
             is_dead: false,
             name: func_ref.name.clone(),
             module_source: func_ref.module_source.clone(),
-            visibility: crate::ast::Visibility::Private,
+            visibility: ast::Visibility::Private,
             is_export: false,
             is_async: false,
             type_params: Vec::new(),
@@ -637,7 +640,7 @@ pub struct NirParam {
 pub struct NirStruct {
     pub name: String,
     pub module_source: ModuleSource,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: ast::Visibility,
     /// Generic type parameters (empty for non-generic structs)
     pub type_params: Vec<NirTypeParam>,
     /// If this struct was created by monomorphization, contains the origin info
@@ -651,7 +654,7 @@ pub struct NirStruct {
 #[derive(Debug, Clone)]
 pub struct NirField {
     pub name: String,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: ast::Visibility,
     pub type_id: TypeId,
     pub index: u32,
     pub span: Span,
@@ -667,7 +670,7 @@ pub struct NirField {
 pub struct NirEnum {
     pub name: String,
     pub module_source: ModuleSource,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: ast::Visibility,
     /// Generic type parameters (empty for non-generic enums)
     pub type_params: Vec<NirTypeParam>,
     /// If this enum was created by monomorphization, contains the origin info
@@ -692,7 +695,7 @@ pub struct NirEnumCase {
 pub struct NirFlags {
     pub name: String,
     pub module_source: ModuleSource,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: ast::Visibility,
     /// The newtype `TypeId` (base type is u32)
     pub type_id: TypeId,
     pub members: Vec<NirFlagsMember>,
@@ -714,7 +717,7 @@ pub struct NirFlagsMember {
 pub struct NirVariantDecl {
     pub name: String,
     pub module_source: ModuleSource,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: ast::Visibility,
     /// Generic type parameters (e.g., `T` in `variant Option<T>`)
     pub type_params: Vec<NirTypeParam>,
     /// Cases of the variant (e.g., Some, None for Option)
@@ -743,7 +746,7 @@ pub struct NirVariantCase {
 pub struct NirNewtype {
     pub name: String,
     pub module_source: ModuleSource,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: ast::Visibility,
     pub type_id: TypeId,
     pub span: Span,
 }
@@ -774,7 +777,7 @@ pub struct NirTest {
 #[derive(Debug, Clone)]
 pub struct NirEffect {
     pub name: String,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: ast::Visibility,
     pub operations: Vec<NirEffectOp>,
     pub span: Span,
 }
@@ -803,7 +806,7 @@ pub struct NirEffectOp {
 #[derive(Debug, Clone)]
 pub struct NirResource {
     pub name: String,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: ast::Visibility,
     pub operations: Vec<NirEffectOp>,
     pub span: Span,
 }
@@ -812,7 +815,7 @@ pub struct NirResource {
 #[derive(Debug, Clone)]
 pub struct NirTrait {
     pub name: String,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: ast::Visibility,
     pub type_params: Vec<NirTypeParam>,
     pub methods: Vec<NirTraitMethod>,
     pub span: Span,

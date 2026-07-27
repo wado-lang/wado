@@ -675,8 +675,6 @@ fn aggregate_safe_locals(body: &Body) -> LocalSet {
             ExprKind::Assign { target, .. } => {
                 disqualify_root(body, (*target).into(), &mut disqualified);
             }
-            // A shared borrow can only read through, so it cannot make the
-            // value go stale under the binding; a mutable one can.
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr,
@@ -1125,8 +1123,6 @@ impl<'a> Interpreter<'a> {
                     other => other,
                 }
             }
-            // A byte-string literal's backing array: already a constant, so it
-            // only has to be lifted into the value model.
             ExprKind::PackedArray(bytes) => {
                 let elements = bytes
                     .iter()
@@ -1138,9 +1134,8 @@ impl<'a> Interpreter<'a> {
                 Value::seq(node.type_id, elements).map_or(Lattice::NonConst, Lattice::Const)
             }
             ExprKind::Index { expr: inner, index } => self.index_lattice(body, *inner, *index),
-            // A shared borrow of a constant reads as that constant. The engine
-            // only ever reads, and a write goes through `MutRef`, which stays
-            // unmodelled — so `&x` is transparent and `&mut x` is not.
+            // Reading through a shared borrow reads the referent; only a
+            // mutable one can make that go stale.
             ExprKind::Unary {
                 op: NirUnaryOp::Ref,
                 expr: inner,
@@ -2087,7 +2082,6 @@ impl<'a> Interpreter<'a> {
                     other => other,
                 }
             }
-            // Binding a destructuring `let`'s pattern is future work.
             StmtKind::LetDestructure { .. } => Flow::Bail,
         }
     }

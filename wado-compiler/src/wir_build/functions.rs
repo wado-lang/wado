@@ -657,8 +657,6 @@ fn register_globals(ctx: &mut WirContext<'_>) {
             }
         }
 
-        // Convert the slot's initializer — the declared value, or the
-        // placeholder a deferred global starts at — to a WIR constant.
         let slot = global.init.slot_expr();
         let init_body = slot.body();
         let init_op = slot.expr();

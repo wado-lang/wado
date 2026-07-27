@@ -29,6 +29,7 @@
 //! - Pattern bindings (`LetDestructure`, `Match` arm bindings) are seeded
 //!   with `Opaque`.
 
+use crate::const_eval;
 use crate::hashmap::IndexMap;
 use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
@@ -564,7 +565,7 @@ impl<'a> Builder<'a> {
         if lhs == rhs
             && matches!(op, NirBinaryOp::Eq | NirBinaryOp::NotEq)
             && !matches!(
-                crate::const_eval::prim_of(self.operand_type(left), tt),
+                const_eval::prim_of(self.operand_type(left), tt),
                 Some(
                     crate::tir::PrimitiveType::F32
                         | crate::tir::PrimitiveType::F64
@@ -572,10 +573,9 @@ impl<'a> Builder<'a> {
                 )
             )
         {
-            return Some(self.const_to_value(
-                crate::const_eval::Value::Bool(op == NirBinaryOp::Eq),
-                result_type,
-            ));
+            return Some(
+                self.const_to_value(const_eval::Value::Bool(op == NirBinaryOp::Eq), result_type),
+            );
         }
         // Logical identities with one constant-bool operand. `&&` / `||`
         // short-circuit, but both operands reach here as pure values (the
@@ -589,16 +589,16 @@ impl<'a> Builder<'a> {
             let folded = match op {
                 NirBinaryOp::Or => match (lb, rb) {
                     (Some(true), _) | (_, Some(true)) => {
-                        Some(self.const_to_value(crate::const_eval::Value::Bool(true), result_type))
+                        Some(self.const_to_value(const_eval::Value::Bool(true), result_type))
                     }
                     (Some(false), _) => Some(rhs),
                     (_, Some(false)) => Some(lhs),
                     _ => None,
                 },
                 NirBinaryOp::And => match (lb, rb) {
-                    (Some(false), _) | (_, Some(false)) => Some(
-                        self.const_to_value(crate::const_eval::Value::Bool(false), result_type),
-                    ),
+                    (Some(false), _) | (_, Some(false)) => {
+                        Some(self.const_to_value(const_eval::Value::Bool(false), result_type))
+                    }
                     (Some(true), _) => Some(rhs),
                     (_, Some(true)) => Some(lhs),
                     _ => None,
@@ -611,7 +611,7 @@ impl<'a> Builder<'a> {
         }
         let lv = self.value_to_const(lhs, left, tt)?;
         let rv = self.value_to_const(rhs, right, tt)?;
-        let result = crate::const_eval::eval_binary(lv, op, rv)?;
+        let result = const_eval::eval_binary(lv, op, rv)?;
         Some(self.const_to_value(result, result_type))
     }
 
@@ -625,7 +625,7 @@ impl<'a> Builder<'a> {
     ) -> Option<ValueId> {
         let tt = self.type_table?;
         let v = self.value_to_const(operand, inner, tt)?;
-        let result = crate::const_eval::eval_unary(op, v)?;
+        let result = const_eval::eval_unary(op, v)?;
         Some(self.const_to_value(result, result_type))
     }
 
@@ -637,27 +637,23 @@ impl<'a> Builder<'a> {
         vn: ValueId,
         op: Operand,
         tt: &crate::tir::TypeTable,
-    ) -> Option<crate::const_eval::Value> {
-        let prim = crate::const_eval::prim_of(self.operand_type(op), tt);
+    ) -> Option<const_eval::Value> {
+        let prim = const_eval::prim_of(self.operand_type(op), tt);
         super::value_kind_to_const(self.pool.kind(vn), prim)
     }
 
     /// Intern niri's folded [`crate::const_eval::Value`] back as a literal
     /// `ValueId`, carrying `result_type` as the width-bearing type for `Int` /
     /// `Float` (the folded expr's NIR type).
-    fn const_to_value(
-        &mut self,
-        v: crate::const_eval::Value,
-        result_type: crate::tir::TypeId,
-    ) -> ValueId {
+    fn const_to_value(&mut self, v: const_eval::Value, result_type: crate::tir::TypeId) -> ValueId {
         match v {
-            crate::const_eval::Value::Int { value, .. } => self.pool.int_typed(value, result_type),
-            crate::const_eval::Value::Float { value, .. } => self.pool.float(value, result_type),
-            crate::const_eval::Value::Bool(b) => self.pool.bool(b),
-            crate::const_eval::Value::Char(c) => self.pool.char(c),
+            const_eval::Value::Int { value, .. } => self.pool.int_typed(value, result_type),
+            const_eval::Value::Float { value, .. } => self.pool.float(value, result_type),
+            const_eval::Value::Bool(b) => self.pool.bool(b),
+            const_eval::Value::Char(c) => self.pool.char(c),
             // The pool models pure scalars; the arithmetic folds feeding this
             // never produce an aggregate or a sequence.
-            crate::const_eval::Value::Aggregate { .. } | crate::const_eval::Value::Seq { .. } => {
+            const_eval::Value::Aggregate { .. } | const_eval::Value::Seq { .. } => {
                 panic!("an aggregate or sequence constant cannot be interned as a pure value")
             }
         }
