@@ -6,6 +6,10 @@
 //
 // At O0: `t = (a * b) + 1` then `return t * t`
 // At O2: `return local.tee t((a * b) + 1) * t`
+//
+// `black_box` keeps the arguments off the constant path: with constant ones
+// the whole call is evaluated at compile time, and a folded-away function has
+// no `local.set` / `local.get` pair to fuse.
 
 #[inline(never)]
 fn square_of(a: i32, b: i32) -> i32 {
@@ -14,9 +18,9 @@ fn square_of(a: i32, b: i32) -> i32 {
 }
 
 test {
-    assert square_of(3, 4) == 169;
-    assert square_of(0, 0) == 1;
-    assert square_of(-2, 5) == 81;
+    assert square_of(builtin::black_box(3), 4) == 169;
+    assert square_of(builtin::black_box(0), 0) == 1;
+    assert square_of(builtin::black_box(-2), 5) == 81;
 }
 
 __DATA__

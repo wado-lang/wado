@@ -1,6 +1,9 @@
 // Test: Intraprocedural SROA patterns
 // Tests struct field access patterns that should benefit from SROA optimization.
-// Uses #[inline(never)] to isolate intraprocedural patterns from inlining.
+// Uses #[inline(never)] to isolate intraprocedural patterns from inlining, and
+// `black_box` to keep the calls off the constant path — a call whose arguments
+// are all constant is evaluated at compile time, so the function SROA is meant
+// to be observed in folds away entirely.
 
 struct Point {
     x: i32,
@@ -26,8 +29,8 @@ fn basic_sroa() -> i32 {
 
 
 #[inline("never")]
-fn mutable_field_write() -> i32 {
-    let mut p = Point { x: 0, y: 0 };
+fn mutable_field_write(seed: i32) -> i32 {
+    let mut p = Point { x: seed, y: 0 };
     p.x = 42;
     p.y = 58;
     return p.x + p.y;
@@ -93,7 +96,7 @@ fn build_and_return(x: i32, y: i32) -> Point {
 
 export fn run() {
     assert basic_sroa() == 30;
-    assert mutable_field_write() == 100;
+    assert mutable_field_write(builtin::black_box(7)) == 100;
     assert partial_escape(50) == 150;
     assert nested_struct() == 33;
     assert multiple_structs() == 10;
