@@ -2111,7 +2111,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         let _sk = p.peek_kind();
         if _sk == TK_AND {
             if 2 >= min_prec {
-                if scan_expression_lr_1(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_1(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -2127,7 +2127,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _sk == TK_OR {
             if 1 >= min_prec {
-                if scan_expression_lr_2(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_2(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);

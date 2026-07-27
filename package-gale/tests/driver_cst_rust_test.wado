@@ -1,12 +1,11 @@
 /// Driver test for the Rust grammar parser.
 ///
-/// A few constructs are not parsed yet — a top-level `fn` item (`expected Eof,
-/// got "fn"`) and a `use` path (`expected PATHSEP`). These are prediction /
-/// dispatch gaps in the item / `useTree` rules, not semantic-predicate gaps:
-/// `function_` and `useTree` use no predicate, and `match` / nested generics
-/// parse fine. The lexer's superClass predicates (`SOF`, float disambiguation)
-/// do run here via the installed base handler. These tests cover items and
-/// expressions that parse correctly, plus a couple of negative tripwires.
+/// A top-level `fn` item is not parsed yet (`expected Eof, got "fn"`) — a
+/// dispatch gap in `item`, not a semantic-predicate gap: `function_` uses no
+/// predicate, and `match` / nested generics parse fine. The lexer's superClass
+/// predicates (`SOF`, float disambiguation) do run here via the installed base
+/// handler. These tests cover items and expressions that parse correctly, plus
+/// a couple of negative tripwires.
 use rust from "./grammars/RustLexer.g4"
     with {
         generator: {
@@ -167,6 +166,15 @@ test "tree: bare `return` as if condition (caller-FOLLOW gate)" {
     }
 }
 
+
+// `useTree : (simplePath? PATHSEP)? (STAR | …)` — the group's end is not the
+// rule's tail, so a probe that asks the caller's FOLLOW there rejects this.
+test "tree: glob `use` path (probe continuation past the enclosing group)" {
+    let r = rlex_prs(&"use foo::*;");
+    if !r.ok() {
+        panic(`parse failed: ${r.diagnostics[0].message}`);
+    }
+}
 
 fn assert_tree(input: &String, expected: &String) {
     let result = rlex_prs(input);

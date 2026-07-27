@@ -120,7 +120,12 @@ use { translate_action, translate_predicate, translate_members, is_parser_member
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { unwrap_label } from "./lr_util.wado";
 use { escape_ident } from "./ident.wado";
-use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
+use {
+    compute_shapes_for_alt,
+    shape_lookahead_signature_for_alt,
+    rebind_op_field,
+    non_greedy_static_undecided,
+} from "./lower.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
 /// parse/scan/LR function signature, BEFORE any `min_prec` so a
@@ -659,6 +664,23 @@ fn emit_consume_return(w: &mut CodeWriter) {
 /// stream holds one EOF; advancing past it reads out of bounds, ANTLR4's
 /// `matchedEOF`), everything else advances. Used by `expect`'s match / delete /
 /// resync branches, which all consume `kind` the same way.
+/// The LR loop's caller-continuation argument. Separate from `follow`
+/// because every caller sets that one; only a mid-operand call sets this.
+fn add_lr_cont_param(f: &mut FnSpec) {
+    f.add_param_spec(ParamSpec {
+        name: "lr_cont",
+        type_str: "&List<List<i32>>",
+        default_value: Option::Some("&EMPTY_FOLLOW"),
+    });
+}
+
+fn lr_mid_operand_gated(lowered_rule: &Rule) -> bool {
+    if let LeftRecursive(l) = lowered_rule {
+        return l.mid_operand_gated;
+    }
+    return false;
+}
+
 fn emit_consume_kind_return(w: &mut CodeWriter) {
     w.begin(&"if kind == TK_EOF");
     w.line(&"self.b.token(self.pos);");
@@ -1575,6 +1597,7 @@ fn gen_scan_function_named(
             ctx,
             fn_name,
             atn_loop_dec,
+            l.mid_operand_gated,
         );
         return;
     }
@@ -1692,6 +1715,7 @@ fn gen_scan_lr_functions(
     ctx: &mut GenContext,
     fn_name: &String,
     atn_loop_dec: i32,
+    mid_operand_gated: bool = false,
 ) {
     let atom_name = `${*fn_name}_atom`;
 
@@ -1736,6 +1760,9 @@ fn gen_scan_lr_functions(
         type_str: "i32",
         default_value: Option::Some("0"),
     });
+    if mid_operand_gated {
+        add_lr_cont_param(&mut f2);
+    }
     f2.set_return_type(&"i32");
     f2.emit_begin(w);
     w.line(&`let mut pos = ${atom_name}(tokens, pos${follow_sep(ctx.emit_follow())});`);
@@ -1744,7 +1771,7 @@ fn gen_scan_lr_functions(
     if atn_loop_dec >= 0 {
         gen_lr_suffix_dispatch_atn(w, &side, lr_alts, lr_dispatch, ctx, atn_loop_dec);
     } else {
-        gen_lr_suffix_dispatch(w, &side, rule, lr_alts, lr_dispatch, ctx);
+        gen_lr_suffix_dispatch(w, &side, rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
     }
     w.line(&"return pos;");
     w.end();
@@ -1860,10 +1887,17 @@ struct LrDispatchSide {
     use_prec: bool,  // parse side only
 }
 
-fn gen_lr_branch_call(w: &mut CodeWriter, side: &LrDispatchSide, lr_idx: i32, prec: i32, emit_follow: bool) {
+fn gen_lr_branch_call(
+    w: &mut CodeWriter,
+    side: &LrDispatchSide,
+    lr_idx: i32,
+    prec: i32,
+    emit_follow: bool,
+    mid_operand_gated: bool = false,
+) {
     let suffix_fn = `${side.fn_name}_lr_${lr_idx}`;
     if side.scan {
-        gen_scan_lr_call_with_prec(w, &suffix_fn, prec, emit_follow);
+        gen_scan_lr_call_with_prec(w, &suffix_fn, prec, emit_follow, mid_operand_gated);
     } else {
         let scan_suffix_fn = `${side.scan_fn_name}_lr_${lr_idx}`;
         gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, side.use_prec, emit_follow);
@@ -1877,6 +1911,7 @@ fn gen_lr_suffix_dispatch(
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
     ctx: &mut GenContext,
+    mid_operand_gated: bool = false,
 ) {
     let projected = project_lr_dispatch(lr_alts, lr_dispatch);
     let valid_lr_indices = projected.0;
@@ -1919,7 +1954,7 @@ fn gen_lr_suffix_dispatch(
         if group.len() == 1 {
             let lr_idx = valid_lr_indices[group[0]];
             let prec = lr_precs[group[0]];
-            gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow());
+            gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
         } else {
             gen_lr_overlap_dispatch(
                 w,
@@ -1930,6 +1965,7 @@ fn gen_lr_suffix_dispatch(
                 &lr_precs,
                 &suffix_first_sets,
                 ctx,
+                mid_operand_gated,
             );
         }
     }
@@ -1947,7 +1983,13 @@ fn gen_lr_suffix_dispatch(
     w.end();  // loop
 }
 
-fn gen_scan_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32, emit_follow: bool) {
+fn gen_scan_lr_call_with_prec(
+    w: &mut CodeWriter,
+    suffix_fn: &String,
+    prec: i32,
+    emit_follow: bool,
+    mid_operand_gated: bool = false,
+) {
     // The LR loop must always commit to the longest valid prefix it can
     // build. If the suffix scan fails (e.g. the suffix's first token matches
     // but a deeper element does not, as in `statement letterA 'b'` consuming
@@ -1960,6 +2002,13 @@ fn gen_scan_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32,
     w.line(&`let lr_saved_pos = pos;`);
     w.line(&`pos = ${*suffix_fn}(tokens, pos${follow_sep(emit_follow)});`);
     w.line(&"if pos < 0 { pos = lr_saved_pos; break; }");
+    if mid_operand_gated {
+        // Lockstep with the parse loop: the tournament must measure the same
+        // climb the parse will take.
+        w.line(
+            &"if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }",
+        );
+    }
     w.else_begin(&"else");
     w.line(&"break;");
     w.end();
@@ -1974,6 +2023,7 @@ fn gen_lr_overlap_dispatch(
     lr_precs: &List<i32>,
     suffix_first_sets: &List<List<String>>,
     ctx: &mut GenContext,
+    mid_operand_gated: bool = false,
 ) {
     let mut emitted = TreeSet::<String>::new();
     let mut first_branch = true;
@@ -2004,7 +2054,7 @@ fn gen_lr_overlap_dispatch(
                 } else {
                     w.else_begin(&`else if suffix_kind == ${*tk}`);
                 }
-                gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow());
+                gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
                 emitted.insert(*tk);
             }
         }
@@ -2056,10 +2106,10 @@ fn gen_lr_overlap_dispatch(
             let alt = &rule.alternatives[lr_idx];
             if k == last_k {
                 if sub_first {
-                    gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow());
+                    gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
                 } else {
                     w.else_begin(&"else");
-                    gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow());
+                    gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
                     w.end();
                 }
             } else {
@@ -2071,7 +2121,7 @@ fn gen_lr_overlap_dispatch(
                 } else {
                     w.else_begin(&`else if ${sub_cond}`);
                 }
-                gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow());
+                gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
             }
         }
         emitted.insert(*shared_tk);
@@ -2391,12 +2441,13 @@ fn gen_scan_op_element(
             // rule-entry wrapper does. Pop before the fail check so an early return
             // never leaks the frame.
             let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
+            let cont = if rc.lr_cont_mask >= 0 { `, &FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
             if push_ret >= 0 {
                 w.line(&`SCAN_STACK.push(${push_ret});`);
-                w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec});`);
+                w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec}${cont});`);
                 w.line(&"SCAN_STACK.pop();");
             } else {
-                w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec});`);
+                w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec}${cont});`);
             }
             w.line(&`if pos < 0 \{ ${*fail_stmt} \}`);
         },
@@ -2445,7 +2496,8 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
             } else {
                 0;
             };
-            w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec});`);
+            let cont = if rc.lr_cont_mask >= 0 { `, &FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
+            w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec}${cont});`);
         },
         Wildcard => {
             w.line(&"if pos >= tokens.len() || tokens[pos] == TK_EOF { pos = -1; } else { pos += 1; }");
@@ -2491,6 +2543,92 @@ fn gen_scan_non_greedy_skip(w: &mut CodeWriter, exit_first: &List<String>, ctx: 
     w.line(&`while pos < tokens.len() && tokens[pos] != TK_EOF && !(${exit_check}) \{ pos += 1; \}`);
 }
 
+/// Scan mirror of `gen_optional_probe_entry`: try the body, then the
+/// continuation from where it ended, then the caller's FOLLOW. The body is
+/// kept only when all three hold, so the scan advances by exactly what the
+/// parse will consume.
+fn gen_scan_optional_probe(
+    w: &mut CodeWriter,
+    re: &ScanRepeatElement,
+    ctx: &mut GenContext,
+    caller_follow_gate: &String,
+) {
+    let check = ctx.kind_check_str(&re.inner_first, &"tokens[pos]");
+    let guard = if caller_follow_gate.is_empty() {
+        `pos < tokens.len() && ${check}`;
+    } else {
+        `pos < tokens.len() && ${check} && !(${*caller_follow_gate})`;
+    };
+    w.begin(&`if ${guard}`);
+    w.line(&"let sp = pos;");
+    gen_scan_op_element_assign(w, &re.body, ctx);
+    w.begin(&"if pos < 0");
+    w.line(&"pos = sp;");
+    w.else_begin(&"else");
+    w.line(&"let bp = pos;");
+    w.line(&"let mut opt_ok: bool = false;");
+    w.begin(&"opt_probe:");
+    let fail = "break opt_probe;";
+    for let se of &re.continuation_scan {
+        gen_scan_op_element(w, se, ctx, &fail);
+    }
+    let opt_ok = "opt_ok";
+    emit_probe_verdict(w, &re.probe_viable, &opt_ok, ctx);
+    w.end();
+    w.line(&"pos = if opt_ok { bp } else { sp };");
+    w.end();
+    w.end();
+}
+
+/// Scan mirror of `begin_non_greedy_probe_loop`: iterate only while exiting
+/// stays non-viable, so the tournament measures what the parse consumes.
+/// `Plus`'s mandatory first iteration is emitted by the caller.
+fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext) {
+    let check = ctx.kind_check_str(&re.inner_first, &"tokens[pos]");
+    w.begin(&"loop");
+    w.line(&"let ep = pos;");
+    w.line(&"let mut ng_exit: bool = false;");
+    w.begin(&"ng_exit_scan:");
+    let fail = "break ng_exit_scan;";
+    for let se of &re.continuation_scan {
+        gen_scan_op_element(w, se, ctx, &fail);
+    }
+    let ng_exit = "ng_exit";
+    emit_probe_verdict(w, &re.probe_viable, &ng_exit, ctx);
+    w.end();
+    w.line(&"pos = ep;");
+    w.line(&"if ng_exit { break; }");
+    w.line(&`if !(pos < tokens.len() && ${check}) \{ break; \}`);
+    w.line(&"let sp = pos;");
+    gen_scan_op_element_assign(w, &re.body, ctx);
+    w.line(&"if pos < 0 { pos = sp; break; }");
+    w.line(&"if pos == sp { break; }");
+    w.end();
+}
+
+/// Whether the exit probe decides this scan-side loop, from the same stamp
+/// and parts the parse side reads.
+fn scan_non_greedy_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> bool {
+    return re.non_greedy
+        && re.static_exit_undecided
+        && !re.inner_first.is_empty()
+        && probe_decides(&re.inner_first, &re.inner_first, &re.continuation_scan, re.continuation_scannable, ctx);
+}
+
+/// Scan-side twin of `optional_probe_decides` — same conjuncts off the mirror
+/// stamps, so the two sides answer identically.
+fn scan_optional_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> bool {
+    return re.body matches { RuleCall(_) }
+        && re.body_scannable
+        && probe_decides(
+        &re.inner_first,
+        &re.caller_follow_first,
+        &re.continuation_scan,
+        re.continuation_scannable,
+        ctx,
+    );
+}
+
 fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
     let loop_first = re.inner_first;
 
@@ -2510,6 +2648,11 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         if loop_first.is_empty() {
             return;
         }
+        let body_is_rulecall = re.body matches { RuleCall(_) };
+        if scan_optional_probe_decides(re, ctx) {
+            gen_scan_optional_probe(w, re, ctx, &caller_follow_gate);
+            return;
+        }
         // Mirror the pre-Phase-2-F `gen_scan_repeat_optional_with_follow`
         // contract: when the Optional's body is a RuleCall, subtract
         // the caller-side follow first (the tokens that may appear
@@ -2517,7 +2660,6 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         // don't fire the Optional on a token that belongs to the
         // caller's next position. The `caller_follow_first` subtraction
         // matches the surface emitter's `combined_follow = follow_first`.
-        let body_is_rulecall = re.body matches { RuleCall(_) };
         let effective_first = if body_is_rulecall && !re.caller_follow_first.is_empty() {
             subtract_sets(&loop_first, &re.caller_follow_first);
         } else {
@@ -2553,6 +2695,10 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
             }
             return;
         }
+        if scan_non_greedy_probe_decides(re, ctx) {
+            gen_scan_non_greedy_probe_loop(w, re, ctx);
+            return;
+        }
         let check = ctx.kind_check_str(&loop_first, &"tokens[pos]");
         let guard = if caller_follow_gate.is_empty() {
             `pos < tokens.len() && ${check}`;
@@ -2576,6 +2722,10 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
             if re.non_greedy {
                 gen_scan_non_greedy_skip(w, &re.caller_follow_first, ctx);
             }
+            return;
+        }
+        if scan_non_greedy_probe_decides(re, ctx) {
+            gen_scan_non_greedy_probe_loop(w, re, ctx);
             return;
         }
         let check = ctx.kind_check_str(&loop_first, &"tokens[pos]");
@@ -2917,6 +3067,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         ctx.needs_atn(),
         &rule_result_type_for(rule, ctx),
         ctx,
+        lr_mid_operand_gated(lowered_rule),
     );
 }
 
@@ -3046,6 +3197,7 @@ fn gen_rule_entry_wrapper(
     needs_atn: bool,
     result_type: &String,
     ctx: &GenContext,
+    mid_operand_gated: bool = false,
 ) {
     let rule_display = &rule.name;
     let returns_vals = result_type_carries_vals(result_type);
@@ -3064,6 +3216,9 @@ fn gen_rule_entry_wrapper(
             type_str: "i32",
             default_value: Option::Some("0"),
         });
+    }
+    if mid_operand_gated {
+        add_lr_cont_param(&mut f);
     }
     // Threaded rule arguments come last (defaulted), so the entry and plain
     // callers omit them. Only single-alt rules thread args, so `takes_min_prec`
@@ -3084,10 +3239,11 @@ fn gen_rule_entry_wrapper(
     // the caller's continuation.
     let fsep = if emit_follow { ", follow" } else { "" };
     let argfwd = wrapper_arg_forward(rule, ctx);
+    let contfwd = if mid_operand_gated { ", lr_cont" } else { "" };
     let call = if takes_min_prec {
-        `${*inner_name}(p${fsep}, min_prec${argfwd})`;
+        `${*inner_name}(p${fsep}, min_prec${contfwd}${argfwd})`;
     } else {
-        `${*inner_name}(p${fsep}${argfwd})`;
+        `${*inner_name}(p${fsep}${contfwd}${argfwd})`;
     };
     // open this rule's `CstNode` before the body and close it after, so the
     // body's appended terminals / subtrees become its children. The body may
@@ -3495,7 +3651,9 @@ fn gen_parse_fn_named(
             false;
         };
         let h_loop_dec = if h_atn_class { ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name)) } else { -1 };
-        gen_lr_fn(w, rule, lr_alts, lr_dispatch, ctx, fn_name, h_atn_class, h_loop_dec);
+        gen_lr_fn(w, rule, lr_alts, lr_dispatch, ctx, fn_name, h_atn_class, h_loop_dec, lr_mid_operand_gated(
+            lowered_rule,
+        ));
         return;
     } else {
         let mut f = FnSpec::new(fn_name);
@@ -4560,8 +4718,9 @@ pub fn gen_op_leaf(
             // reads a single source.
             gen_atn_ret_pending(w, ctx, r.atn_call_site);
             let argsfx = call_arg_suffix(&r, ctx);
+            let cont = if r.lr_cont_mask >= 0 { `, &FOLLOW_MASK_${r.lr_cont_mask}` } else { "" };
             if let Some(min_prec) = r.min_prec_arg {
-                w.line(&`let ${r.field} = ${fn_name}(p${follow_arg_str}, ${min_prec}${argsfx});`);
+                w.line(&`let ${r.field} = ${fn_name}(p${follow_arg_str}, ${min_prec}${cont}${argsfx});`);
             } else {
                 w.line(&`let ${r.field} = ${fn_name}(p${follow_arg_str}${argsfx});`);
             }
@@ -4702,6 +4861,7 @@ fn gen_lr_fn(
     fn_name: &String,
     atn_class: bool,
     loop_dec: i32,
+    mid_operand_gated: bool = false,
 ) {
     let rk = rule_kind_const(&rule.name);
     let mut f = FnSpec::new(fn_name);
@@ -4714,6 +4874,9 @@ fn gen_lr_fn(
         type_str: "i32",
         default_value: Option::Some("0"),
     });
+    if mid_operand_gated {
+        add_lr_cont_param(&mut f);
+    }
     f.set_return_type(&rule_result_type_for(rule, ctx));
     f.emit_begin(w);
     let emits_vals = rule_emits_vals(ctx, rule);
@@ -4786,9 +4949,19 @@ fn gen_lr_fn(
             w.else_begin(&`else if ${cond}`);
         }
         if group.len() == 1 {
-            emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[0]]], rule, &rk, &scan_fn, labeled, ctx, &mut nc);
+            emit_lr_branch(
+                w,
+                &lr_alts[lr_dispatch.valid_lr_alts[group[0]]],
+                rule,
+                &rk,
+                &scan_fn,
+                labeled,
+                ctx,
+                &mut nc,
+                mid_operand_gated,
+            );
         } else {
-            emit_lr_overlap(w, rule, lr_alts, lr_dispatch, group, &rk, &scan_fn, ctx, &mut nc);
+            emit_lr_overlap(w, rule, lr_alts, lr_dispatch, group, &rk, &scan_fn, ctx, &mut nc, mid_operand_gated);
         }
     }
     if first {
@@ -4895,11 +5068,22 @@ fn emit_lr_branch(
     labeled: bool,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
+    mid_operand_gated: bool = false,
 ) {
     w.begin(&`if ${lr.own_prec} >= min_prec`);
-    w.begin(&`if ${*scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos) < 0`);
-    w.line(&"break;");
-    w.end();
+    let scan_call = `${*scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())})`;
+    if mid_operand_gated {
+        // A caller that needs this operand to leave a delimiter behind hands
+        // it down as `lr_cont`. Take the operator only while that
+        // continuation is still there — climbing past it strands the caller.
+        w.line(&`let _lr_end = ${scan_call};`);
+        w.line(&"if _lr_end < 0 { break; }");
+        w.line(&"if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }");
+    } else {
+        w.begin(&`if ${scan_call} < 0`);
+        w.line(&"break;");
+        w.end();
+    }
     emit_lr_branch_body(w, lr, rule, rk, labeled, ctx, nc);
     w.else_begin(&"else");
     w.line(&"break;");
@@ -4972,6 +5156,7 @@ fn emit_lr_overlap(
     scan_fn: &String,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
+    mid_operand_gated: bool = false,
 ) {
     let labeled = rule_alts_labeled(&rule.alternatives);
     let mut first_sets: List<List<String>> = [];
@@ -4998,7 +5183,17 @@ fn emit_lr_overlap(
                 } else {
                     w.else_begin(&`else if _sk == ${*tk}`);
                 }
-                emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rule, rk, scan_fn, labeled, ctx, nc);
+                emit_lr_branch(
+                    w,
+                    &lr_alts[lr_dispatch.valid_lr_alts[group[k]]],
+                    rule,
+                    rk,
+                    scan_fn,
+                    labeled,
+                    ctx,
+                    nc,
+                    mid_operand_gated,
+                );
                 emitted.push(*tk);
             }
         }
@@ -5033,10 +5228,10 @@ fn emit_lr_overlap(
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
             if k == last_k {
                 if sub_first {
-                    emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc);
+                    emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc, mid_operand_gated);
                 } else {
                     w.else_begin(&"else");
-                    emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc);
+                    emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc, mid_operand_gated);
                     w.end();
                 }
             } else {
@@ -5049,7 +5244,7 @@ fn emit_lr_overlap(
                 } else {
                     w.else_begin(&`else if ${sub_cond}`);
                 }
-                emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc);
+                emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc, mid_operand_gated);
             }
         }
         emitted.push(*shared_tk);
@@ -5065,6 +5260,15 @@ fn emit_lr_overlap(
 /// to `Plain` + `mark_needs_atn` and so never reaches here.
 fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     let cond = compute_non_greedy_condition(r, &r.caller_follow_first, &r.caller_follow_second, ctx);
+    if non_greedy_probe_decides(r, ctx) {
+        if let Plus = r.kind {
+            gen_op(w, &r.body, ctx, nc);
+        }
+        begin_non_greedy_probe_loop(w, r, ctx, nc);
+        gen_op(w, &r.body, ctx, nc);
+        w.end();
+        return;
+    }
     let loops = cond != "false";
     match r.kind {
         Plus => {
@@ -5084,6 +5288,85 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCon
         },
         Optional => panic("gen_repeat_non_greedy_body: non-greedy `??` should be excluded by needs_atn"),
     }
+}
+
+/// Whether the exit probe should decide this loop. Unlike the Optional the
+/// competing readings are the loop's own, so `body_first_set` stands in for
+/// the overlap; it also gates each iteration, hence non-empty.
+fn non_greedy_probe_decides(r: &RepeatOp, ctx: &mut GenContext) -> bool {
+    return r.static_exit_undecided
+        && r.kind matches { Star | Plus }
+        && !r.body_first_set.is_empty()
+        && probe_decides(&r.body_first_set, &r.body_first_set, &r.continuation_scan, r.continuation_scannable, ctx);
+}
+
+/// Open a non-greedy loop that exits only when exiting is viable. The caller
+/// emits the body and closes the block, so both emit walkers share one
+/// decision.
+fn begin_non_greedy_probe_loop(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+    w.begin(&"loop");
+    w.line(&"if p.recovering { break; }");
+    let verdict = dedup_name(&"ng_exit", nc);
+    w.line(&`let mut ${verdict}: bool = false;`);
+    gen_viability_probe(w, &r.continuation_scan, &verdict, &"ng_exit_scan", ctx, nc, null, &r.probe_viable);
+    w.line(&`if ${verdict} \{ break; \}`);
+    w.line(&`if !(${ctx.first_check_str(&r.body_first_set)}) \{ break; \}`);
+}
+
+/// A labelled block that scans `continuation` from the parse position and,
+/// when it matches, lets the caller's FOLLOW rule on everything past the
+/// rule; `verdict` is the caller's already-declared `bool`. `prefix_scan`
+/// runs first, for the entry probe's body.
+fn gen_viability_probe(
+    w: &mut CodeWriter,
+    continuation: &List<ScanElement>,
+    verdict: &String,
+    label_base: &String,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+    prefix_scan: Option<ScanElement> = null,
+    probe_viable: &List<String> = &EMPTY_PROBE_VIABLE,
+) {
+    let label = dedup_name(label_base, nc);
+    w.begin(&`${label}:`);
+    w.line(&"let tokens = &p.kinds;");
+    w.line(&"let mut pos: i32 = p.pos;");
+    let fail = `break ${label};`;
+    if let Some(body) = prefix_scan {
+        gen_scan_op_element(w, &body, ctx, &fail);
+    }
+    for let se of continuation {
+        gen_scan_op_element(w, se, ctx, &fail);
+    }
+    emit_probe_verdict(w, probe_viable, verdict, ctx);
+    w.end();
+}
+
+global EMPTY_PROBE_VIABLE: List<String> = [];
+
+/// The probe's verdict once its scan has reached the rule's tail: the
+/// threaded mask has to admit the position, and so does the rule's own
+/// FOLLOW when lowering stamped one. The mask answers "yes" wherever a call
+/// site left it empty; the FOLLOW conjunct is what still says no there, and
+/// conjoining can only move a verdict from "exit" to "iterate".
+fn emit_probe_verdict(w: &mut CodeWriter, probe_viable: &List<String>, verdict: &String, ctx: &mut GenContext) {
+    let mask = if ctx.emit_follow() {
+        "follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF)";
+    } else {
+        "true";
+    };
+    if probe_viable.is_empty() {
+        if mask == "true" {
+            w.line(&`${*verdict} = true;`);
+        } else {
+            w.line(&`if ${mask} \{ ${*verdict} = true; \}`);
+        }
+        return;
+    }
+    w.line(&"let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
+    let viable = ctx.kind_check_str(probe_viable, &"probe_kind");
+    let cond = if mask == "true" { viable } else { `(${mask}) && (${viable})` };
+    w.line(&`if ${cond} \{ ${*verdict} = true; \}`);
 }
 
 /// Greedy `*` / `+` / `?` under the emitter: loop the body (which
@@ -6229,14 +6512,17 @@ fn gen_op_repeat_non_greedy_storable(
     if is_plus {
         let mut nc: List<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
-        if *while_cond != "false" {
-            w.begin(&`while !p.recovering && (${*while_cond})`);
-            let mut nc2: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc2, &empty_iter_follow);
-            w.end();
-        }
-    } else if *while_cond != "false" {
-        w.begin(&`while ${*while_cond}`);
+    }
+    if non_greedy_probe_decides(rep_op, ctx) {
+        begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
+        let mut nc: List<[String, i32]> = [];
+        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
+        w.end();
+        return;
+    }
+    if *while_cond != "false" {
+        let guard = if is_plus { `!p.recovering && (${*while_cond})` } else { *while_cond };
+        w.begin(&`while ${guard}`);
         let mut nc: List<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
         w.end();
@@ -6277,6 +6563,13 @@ fn gen_op_repeat_non_greedy_transparent(
     if is_plus {
         let mut nc: List<[String, i32]> = [];
         gen_op_group(w, g_op, inner, ctx, &mut nc);
+    }
+    if non_greedy_probe_decides(rep_op, ctx) {
+        begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
+        let mut nc: List<[String, i32]> = [];
+        gen_op_group(w, g_op, inner, ctx, &mut nc);
+        w.end();
+        return;
     }
     if *while_cond != "false" {
         w.begin(&`while ${*while_cond}`);
@@ -6365,6 +6658,14 @@ fn gen_op_repeat_optional_rulecall(
     let opt_field = rep_op.field;
     let _ = dedup_name(&opt_field, name_counts);
 
+    // Ambiguous entry: the subtraction below would hand every shared token
+    // to the continuation, but ANTLR4 resolves the ambiguity by entering
+    // whenever entering leaves a viable parse. Ask the probe instead.
+    if optional_probe_decides(rep_op, follow, ctx) {
+        gen_optional_probe_entry(w, rep_op, &raw_first, ctx, name_counts);
+        return;
+    }
+
     if first.is_empty() {
         // RuleCall always has a field — `body_shape == LeafRuleCall`
         // implies `body_has_field == true`. The optional can
@@ -6384,6 +6685,63 @@ fn gen_op_repeat_optional_rulecall(
     // The if-expression collapses to a present/absent
     // statement — the body appends when taken, nothing otherwise.
     gen_optional_present(w, &rep_op.body, &caller_follow_gate, &ctx.first_check_str(&first), ctx);
+}
+
+fn optional_probe_decides(r: &RepeatOp, follow: &List<String>, ctx: &mut GenContext) -> bool {
+    return r.body_scannable
+        && probe_decides(&r.body_first_set, follow, &r.continuation_scan, r.continuation_scannable, ctx);
+}
+
+/// Whether a probe can decide this Repeat, from the parts the parse-side
+/// `RepeatOp` and the scan-side `ScanRepeatElement` both carry — the two must
+/// answer identically or the tournament measures a length the parse will not
+/// consume. It takes a lowered continuation, a competing reading to rule on,
+/// and something to ask: with nothing after the body and no runtime FOLLOW
+/// the probe would reduce to "the body scans, so enter".
+fn probe_decides(
+    body_first: &List<String>,
+    follow: &List<String>,
+    continuation: &List<ScanElement>,
+    continuation_scannable: bool,
+    ctx: &mut GenContext,
+) -> bool {
+    return continuation_scannable && sets_overlap(body_first, follow) && (!continuation.is_empty() || ctx.emit_follow());
+}
+
+/// Greedy Optional that enters when entering stays viable. The cheap
+/// first-set check stays in front so a token that cannot start the body
+/// never pays for a scan, and the caller-FOLLOW yield gate still wins —
+/// where the repair already decided to yield the probe does not rule.
+fn gen_optional_probe_entry(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    raw_first: &List<String>,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) {
+    let verdict = dedup_name(&"opt_enter", nc);
+    let entry_gate = if ctx.emit_follow() && r.gate_caller_follow {
+        `!(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && `;
+    } else {
+        "";
+    };
+    w.line(&`let mut ${verdict}: bool = false;`);
+    w.begin(&`if ${entry_gate}${ctx.first_check_str(raw_first)}`);
+    gen_viability_probe(
+        w,
+        &r.continuation_scan,
+        &verdict,
+        &"opt_enter_scan",
+        ctx,
+        nc,
+        Option::Some(r.scan_body),
+        &r.probe_viable,
+    );
+    w.end();
+    w.begin(&`if ${verdict}`);
+    let mut body_nc: List<[String, i32]> = [];
+    gen_op_leaf(w, &r.body, ctx, &mut body_nc);
+    w.end();
 }
 
 /// Greedy-Optional leaf body: `if [!gate &&] cond { <body> }`.
@@ -6773,12 +7131,6 @@ fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &List<Strin
     return ctx.kind_negate_check_str(&excluded, &"p.peek_kind()");
 }
 
-/// A first set larger than this is treated as "matches almost anything"
-/// (e.g. `name+?` where `name` covers every keyword): single-token
-/// lookahead can't distinguish the inner from the continuation, so the
-/// non-greedy loop falls back to the minimum match instead of gating.
-global BROAD_FIRST_SET_THRESHOLD: i32 = 20;
-
 pub fn compute_non_greedy_condition(
     rep_op: &RepeatOp,
     follow_first: &List<String>,
@@ -6798,35 +7150,23 @@ pub fn compute_non_greedy_condition(
         return wildcard_non_greedy_condition(ctx, follow_first);
     }
 
-    let continue_first = subtract_sets(raw_first, follow_first);
+    let inner_second_first = &rep_op.body_second_position_first;
+    if non_greedy_static_undecided(raw_first, follow_first, inner_second_first, follow_second) {
+        return "false";
+    }
 
-    if continue_first.len() > 0 {
-        // Check if the subtracted set is still very broad (inner matches almost anything).
-        // For cases like `name+?` where name matches all keywords, lookahead can't
-        // distinguish names from constraint keywords. Use minimum match (don't loop).
-        if continue_first.len() > BROAD_FIRST_SET_THRESHOLD && raw_first.len() > BROAD_FIRST_SET_THRESHOLD {
-            // Very broad first set — match minimum (1 for +?, 0 for *?)
-            return "false";
-        }
+    let continue_first = subtract_sets(raw_first, follow_first);
+    if !continue_first.is_empty() {
         return ctx.first_check_str(&continue_first);
     }
 
-    // First sets completely overlap (e.g. both start with ',').
-    // Use 2-token lookahead with follow_second to disambiguate.
-    // For (',' column_def)*? followed by (',' table_constraint)*:
-    //   peek(0) == ',' for both, peek(1) distinguishes column_def from table_constraint.
-    let inner_second_first = &rep_op.body_second_position_first;
-    if inner_second_first.len() > 0 && follow_second.len() > 0 {
-        let second_continue = subtract_sets(inner_second_first, follow_second);
-        if second_continue.len() > 0 {
-            let peek0_cond = ctx.first_check_str(raw_first);
-            let peek1_cond = ctx.kind_check_str(&second_continue, &"p.peek_at(1)");
-            return `(${peek0_cond}) && (${peek1_cond})`;
-        }
-    }
-
-    // Fallback: can't disambiguate, don't loop (match minimum)
-    return "false";
+    // First sets completely overlap (e.g. both start with ','), so peek(1)
+    // separates them: for `(',' column_def)*?` before `(',' table_constraint)*`
+    // peek(0) is ',' either way.
+    let second_continue = subtract_sets(inner_second_first, follow_second);
+    let peek0_cond = ctx.first_check_str(raw_first);
+    let peek1_cond = ctx.kind_check_str(&second_continue, &"p.peek_at(1)");
+    return `(${peek0_cond}) && (${peek1_cond})`;
 }
 
 
@@ -7656,7 +7996,7 @@ fn gen_lr_call_with_prec(
     // (mutating) parse when the scan confirms the suffix would succeed.
     if use_prec {
         w.begin(&`if ${prec} >= min_prec`);
-        w.begin(&`if ${*scan_suffix_fn}(&p.kinds, p.pos) < 0`);
+        w.begin(&`if ${*scan_suffix_fn}(&p.kinds, p.pos${follow_sep(emit_follow)}) < 0`);
         w.line(&"break;");
         w.end();
         w.line(&`result = ${*suffix_fn}(p, result, start${follow_sep(emit_follow)});`);
@@ -7664,7 +8004,7 @@ fn gen_lr_call_with_prec(
         w.line(&"break;");
         w.end();
     } else {
-        w.begin(&`if ${*scan_suffix_fn}(&p.kinds, p.pos) < 0`);
+        w.begin(&`if ${*scan_suffix_fn}(&p.kinds, p.pos${follow_sep(emit_follow)}) < 0`);
         w.line(&"break;");
         w.end();
         w.line(&`result = ${*suffix_fn}(p, result, start${follow_sep(emit_follow)});`);
@@ -7925,7 +8265,9 @@ fn gen_prediction_code_inner(
                                 let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
                                 if is_full {
                                     // Full scan: success guarantees parse success.
-                                    w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos) >= 0`);
+                                    w.begin(
+                                        &`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())}) >= 0`,
+                                    );
                                     if ctx.is_trace() {
                                         w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
                                     }
@@ -7937,7 +8279,9 @@ fn gen_prediction_code_inner(
                                     w.end();
                                 } else if has_scan {
                                     // Partial scan: try parse, fall through on failure.
-                                    w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos) >= 0`);
+                                    w.begin(
+                                        &`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())}) >= 0`,
+                                    );
                                     emit_spec_alt_try(
                                         w,
                                         &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,

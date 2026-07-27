@@ -1,0 +1,3195 @@
+#![generated(by = "gale", sources = ["tests/grammars/lr_atn_mid_operand.g4"])]
+
+//! Core lexing vocabulary shared by every generated parser and by Gale's
+//! own front end: source spans, lazy token-text slices, tokens, and the
+//! parse-error type. Prelude-only and self-contained so it can be both
+//! imported as a module (by Gale's `token`/`lexer`/`parser`/`ir`) and
+//! `#include_str`'d verbatim into generated parsers.
+
+/// Span represents a byte range in source text.
+pub struct Span {
+    pub start: i32,
+    pub end: i32,
+}
+
+impl Span {
+    pub fn new(start: i32, end: i32) -> Span {
+        return Span { start, end };
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+
+    pub fn merge(&self, other: &Span) -> Span {
+        let start = if self.start < other.start { self.start } else { other.start };
+        let end = if self.end > other.end { self.end } else { other.end };
+        return Span { start, end };
+    }
+}
+
+impl Eq for Span {
+    fn eq(&self, other: &Self) -> bool {
+        return self.start == other.start && self.end == other.end;
+    }
+}
+
+/// LexerSlice is a lazy reference to a range of characters in the source input.
+/// It avoids allocating a String for every token during tokenization.
+pub struct LexerSlice {
+    pub chars: &List<char>,
+    pub start: i32,
+    pub end: i32,
+}
+
+impl LexerSlice {
+    pub fn new(chars: &List<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
+        return LexerSlice { chars, start, end };
+    }
+
+    pub fn empty(chars: &List<char>) -> LexerSlice with stores[chars] {
+        return LexerSlice { chars, start: 0, end: 0 };
+    }
+
+    pub fn from_string(s: String) -> LexerSlice {
+        let chars = s.chars().collect();
+        return LexerSlice { chars: &chars, start: 0, end: chars.len() };
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.start >= self.end;
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+
+    pub fn push_to(&self, out: &mut String) {
+        for let mut i = self.start; i < self.end; i += 1 {
+            out.push(self.chars[i]);
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut s = String::with_capacity(self.end - self.start);
+        self.push_to(&mut s);
+        return s;
+    }
+
+    pub fn eq_str(a: &String, b: &LexerSlice) -> bool {
+        let a_chars = a.chars();
+        let mut a_iter = a_chars;
+        let mut i = b.start;
+        loop {
+            let a_next = a_iter.next();
+            if i >= b.end {
+                return a_next matches { None };
+            }
+            if let Some(ac) = a_next {
+                if ac != b.chars[i] {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+            i += 1;
+        }
+    }
+}
+
+impl Display for LexerSlice {
+    fn fmt(&self, f: &mut Formatter) {
+        for let mut i = self.start; i < self.end; i += 1 {
+            f.write_char(self.chars[i]);
+        }
+    }
+}
+
+impl Eq for LexerSlice {
+    fn eq(&self, other: &Self) -> bool {
+        let len = self.end - self.start;
+        if len != other.end - other.start {
+            return false;
+        }
+        for let mut i = 0; i < len; i += 1 {
+            if self.chars[self.start + i] != other.chars[other.start + i] {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+/// The 0-based column of char index `i`: the number of chars since the last
+/// newline. ANTLR4's `getCharPositionInLine()` (over the live match cursor) and
+/// `_tokenStartCharPositionInLine` (over the token's start) are both this.
+/// Scans back to the line start, so the cost is the column, not the offset —
+/// a lexer predicate may call it once per candidate rule per token.
+pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
+    let mut j = if i < chars.len() { i } else { chars.len() };
+    let mut col = 0;
+    while j > 0 && chars[j - 1] != '\n' {
+        col += 1;
+        j -= 1;
+    }
+    return col;
+}
+
+/// Token represents a lexed token with its kind, text, and position.
+/// Leading trivia (whitespace, comments) is attached to each token.
+/// `channel` is the ANTLR4 channel id (0 = default, 1 = HIDDEN; named
+/// channels resolve to integer ids declared in the grammar).
+pub struct Token {
+    pub kind: i32,
+    pub text: LexerSlice,
+    pub span: Span,
+    pub leading_trivia: List<Token>,
+    pub channel: i32,
+}
+
+impl Token {
+    pub fn new(kind: i32, text: LexerSlice, span: Span) -> Token {
+        return Token { kind, text, span, leading_trivia: [], channel: 0 };
+    }
+
+    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: List<Token>) -> Token {
+        return Token { kind, text, span, leading_trivia, channel: 0 };
+    }
+
+    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: List<Token>, channel: i32) -> Token {
+        return Token { kind, text, span, leading_trivia, channel };
+    }
+}
+
+// Note: Token Eq is intentionally omitted. Auto-derived Eq on recursive structs
+// with reference-containing fields triggers a compiler bug
+// (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
+
+/// Per-token recovery flags (a bitset stored in `TokenStream.flags`). A normal
+/// lexed token has `none()`. The bits mark tokens the error-resilient parser
+/// created or set aside during recovery, so the tree builder and diagnostics can
+/// render them without a side table:
+///
+/// - `Synthetic` — a zero-width token the parser *inserted* to stand in for
+///   a required terminal that was absent (its `kinds[i]` is the expected kind).
+/// - `Skipped` — a real lexed token the parser *deleted* during recovery
+///   (it belongs to no rule; preserved for lossless round-trip).
+/// - `LexError` — a fast mirror of the `TK_ERROR` kind: a char run that
+///   matched no lexer rule.
+pub flags TokenFlags {
+    Synthetic,
+    Skipped,
+    LexError,
+}
+
+/// TokenStream is the struct-of-arrays token storage for generated parsers.
+/// A "token" is an `i32` index into these parallel arrays; no per-token
+/// aggregate is ever allocated. The hot fields (`kinds` / `starts` / `ends`)
+/// are read on every scan/dispatch step as a single `array.get i32`; the
+/// trivia and source-char data are cold, materialised on demand only by the
+/// diagnostic / round-trip paths.
+///
+/// `Token` above stays the value-typed vocabulary for Gale's own `.g4` front
+/// end; the generated-parser runtime uses `TokenStream` instead.
+///
+/// Layout invariant: the per-token arrays (`kinds` / `starts` / `ends` /
+/// `triv_lo` / `triv_hi` / `flags`) always share a length, because
+/// `push_token` is the only writer and advances all of them together. Hidden /
+/// skip tokens ("trivia") live in the flat `triv_*` arrays in source order;
+/// each parser token owns the half-open range `[triv_lo[i], triv_hi[i])`.
+pub struct TokenStream {
+    pub kinds: List<i32>,
+    pub starts: List<i32>,
+    pub ends: List<i32>,
+    pub triv_lo: List<i32>,
+    pub triv_hi: List<i32>,
+    pub chars: &List<char>,
+    pub triv_kinds: List<i32>,
+    pub triv_starts: List<i32>,
+    pub triv_ends: List<i32>,
+    pub triv_chans: List<i32>,
+    pub flags: List<TokenFlags>,
+    /// Text the lexer's executed actions printed, in tokenization order
+    /// (Stage C). Empty unless the lexer was generated with action execution
+    /// on. Defaulted so existing construction sites keep compiling.
+    pub output: String = "",
+}
+
+impl TokenStream {
+    /// Empty stream over `chars` (a borrow of the source char list, like
+    /// `LexerSlice`). Pre-size every array — trivia included — to ~one token
+    /// per four chars; trivia tracks token count, so `[]` would re-grow from
+    /// zero every parse.
+    pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
+        let cap = chars.len() / 4 + 1;
+        return TokenStream {
+            kinds: List::with_capacity(cap),
+            starts: List::with_capacity(cap),
+            ends: List::with_capacity(cap),
+            triv_lo: List::with_capacity(cap),
+            triv_hi: List::with_capacity(cap),
+            chars,
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
+            flags: List::with_capacity(cap),
+        };
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.kinds.len();
+    }
+
+    /// The next trivia index — the lexer records this as a token's `triv_lo`
+    /// before accumulating that token's leading trivia, and again as `triv_hi`
+    /// after.
+    pub fn trivia_mark(&self) -> i32 {
+        return self.triv_kinds.len();
+    }
+
+    /// Append one hidden / skip token to the flat trivia arrays.
+    pub fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
+        self.triv_kinds.push(kind);
+        self.triv_starts.push(start);
+        self.triv_ends.push(end);
+        self.triv_chans.push(channel);
+    }
+
+    /// Append one parser (default-channel) token. The sole writer of the
+    /// per-token arrays, so their lengths stay in lockstep by construction.
+    pub fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
+        self.push_token_flagged(kind, start, end, triv_lo, triv_hi, TokenFlags::none());
+    }
+
+    /// Append a token carrying recovery `flags`, returning its index. The
+    /// real lockstep writer; `push_token` is the `flags = 0` common case.
+    pub fn push_token_flagged(
+        &mut self,
+        kind: i32,
+        start: i32,
+        end: i32,
+        triv_lo: i32,
+        triv_hi: i32,
+        flags: TokenFlags,
+    ) -> i32 {
+        let idx = self.kinds.len();
+        self.kinds.push(kind);
+        self.starts.push(start);
+        self.ends.push(end);
+        self.triv_lo.push(triv_lo);
+        self.triv_hi.push(triv_hi);
+        self.flags.push(flags);
+        return idx;
+    }
+
+    /// Append a zero-width synthetic token at byte offset `at`, standing in for
+    /// a required terminal of kind `expected_kind` that the parser inserted
+    /// during recovery. Returns the new token index. The token owns no trivia.
+    pub fn push_synthetic(&mut self, expected_kind: i32, at: i32) -> i32 {
+        let m = self.trivia_mark();
+        return self.push_token_flagged(expected_kind, at, at, m, m, TokenFlags::Synthetic);
+    }
+
+    pub fn flags_at(&self, i: i32) -> TokenFlags {
+        return self.flags[i];
+    }
+
+    pub fn set_flag(&mut self, i: i32, flag: TokenFlags) {
+        self.flags[i] = self.flags[i] | flag;
+    }
+
+    /// Mark token `i` as deleted by recovery (preserved, but bound to no rule).
+    pub fn mark_skipped(&mut self, i: i32) {
+        self.set_flag(i, TokenFlags::Skipped);
+    }
+
+    /// Mark token `i` as a lexer error (a char run that matched no rule). The
+    /// lexer sets this alongside the `TK_ERROR` kind so consumers can test the
+    /// flag without knowing the grammar's `TK_ERROR` id.
+    pub fn mark_lex_error(&mut self, i: i32) {
+        self.set_flag(i, TokenFlags::LexError);
+    }
+
+    pub fn is_synthetic(&self, i: i32) -> bool {
+        return self.flags[i] & TokenFlags::Synthetic != TokenFlags::none();
+    }
+
+    pub fn is_skipped(&self, i: i32) -> bool {
+        return self.flags[i] & TokenFlags::Skipped != TokenFlags::none();
+    }
+
+    pub fn is_lex_error(&self, i: i32) -> bool {
+        return self.flags[i] & TokenFlags::LexError != TokenFlags::none();
+    }
+
+    pub fn kind_at(&self, i: i32) -> i32 {
+        return self.kinds[i];
+    }
+
+    pub fn span_at(&self, i: i32) -> Span {
+        return Span::new(self.starts[i], self.ends[i]);
+    }
+
+    pub fn is_empty_text(&self, i: i32) -> bool {
+        return self.starts[i] >= self.ends[i];
+    }
+
+    /// Append `chars[start..end]` to `out` (no allocation).
+    pub fn push_text(&self, out: &mut String, start: i32, end: i32) {
+        for let mut j = start; j < end; j += 1 {
+            out.push(self.chars[j]);
+        }
+    }
+
+    /// Materialise token `i`'s text as an owned `String` (cold path).
+    pub fn token_text(&self, i: i32) -> String {
+        let start = self.starts[i];
+        let end = self.ends[i];
+        let mut s = String::with_capacity(end - start);
+        self.push_text(&mut s, start, end);
+        return s;
+    }
+
+    /// Append token `i`'s text to `out` (no allocation).
+    pub fn push_token_text(&self, out: &mut String, i: i32) {
+        self.push_text(out, self.starts[i], self.ends[i]);
+    }
+
+    /// Append token `i`'s text with whitespace rendered as escapes, matching
+    /// ANTLR4's `Trees.toStringTree` node text (spaces are left alone). Used by
+    /// tree rendering only; `$text` and friends keep the raw text.
+    pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
+        for let mut j = self.starts[i]; j < self.ends[i]; j += 1 {
+            match self.chars[j] {
+                '\n' => out.push_str(&"\\n"),
+                '\r' => out.push_str(&"\\r"),
+                '\t' => out.push_str(&"\\t"),
+                c => out.push(c),
+            }
+        }
+    }
+
+    /// Append the text of token `i`'s leading trivia, in source order.
+    pub fn push_leading_trivia_text(&self, out: &mut String, i: i32) {
+        for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
+            self.push_text(out, self.triv_starts[j], self.triv_ends[j]);
+        }
+    }
+
+    /// `$text` for a rule spanning tokens `[start_tok, end_tok]`: the token
+    /// texts with each token's leading *hidden-channel* trivia interleaved
+    /// (`triv_chans != 0`), matching ANTLR's `TokenStream.getText(interval)`.
+    /// `skip` trivia (channel 0, removed from the stream) is excluded, and so is
+    /// the start token's own leading trivia (the interval begins at the token).
+    pub fn rule_text(&self, start_tok: i32, end_tok: i32) -> String {
+        let mut out = String::new();
+        for let mut i = start_tok; i <= end_tok; i += 1 {
+            if i > start_tok {
+                for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
+                    if self.triv_chans[j] != 0 {
+                        self.push_text(&mut out, self.triv_starts[j], self.triv_ends[j]);
+                    }
+                }
+            }
+            self.push_token_text(&mut out, i);
+        }
+        return out;
+    }
+}
+
+
+/// ParseError represents a parse failure with location and expected tokens.
+///
+/// `message` is the local "expected X, got Y" description, kept free of
+/// position and rule context so it stays composable. `line`/`col` are a
+/// 1-based line and 0-based column (ANTLR4 `Token` convention) resolved
+/// from `span.start` against the source at error-construction time;
+/// `Parser::error` fills them in. `rule_stack` records the chain of parser
+/// rules that were active when the error was raised, innermost first — each
+/// rule entry wrapper pushes its own name as the `Err` propagates outward,
+/// so the last element is the start rule and the first is the rule the
+/// failing token sat in. The `Display` impl renders all of this into a
+/// human-readable diagnostic.
+pub struct ParseError {
+    pub message: String,
+    pub span: Span,
+    pub expected: List<String>,
+    pub line: i32 = 1,
+    pub col: i32 = 0,
+    pub rule_stack: List<String> = [],
+}
+
+impl ParseError {
+    pub fn new(message: String, span: Span, expected: List<String>) -> ParseError {
+        return ParseError { message, span, expected };
+    }
+
+    /// Construct a ParseError whose position is already resolved. Used by
+    /// `Parser::error`, which has the source on hand to compute line/col.
+    pub fn at(message: String, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
+        return ParseError { message, span, expected, line, col, rule_stack: [] };
+    }
+
+    /// Render the rule chain as `outer > ... > inner` (start rule first).
+    /// `rule_stack` is stored innermost-first, so iterate it in reverse.
+    /// Consecutive duplicates are collapsed: a left-recursive rule re-enters
+    /// itself once per precedence level, which would otherwise print
+    /// `expr > expr > expr` for a deep expression.
+    pub fn rule_path(&self) -> String {
+        let mut out = String::with_capacity(self.rule_stack.len() * 8);
+        let n = self.rule_stack.len();
+        let mut written = 0;
+        for let mut i = 0; i < n; i += 1 {
+            let name = &self.rule_stack[n - 1 - i];
+            if written > 0 && *name == self.rule_stack[n - i] {
+                continue;
+            }
+            if written > 0 {
+                out.push_str(&" > ");
+            }
+            out.push_str(name);
+            written += 1;
+        }
+        return out;
+    }
+}
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.message}`);
+        if !self.rule_stack.is_empty() {
+            f.write_str(&`\n  in rule: ${self.rule_path()}`);
+        }
+    }
+}
+//! Diagnostics emitted by the error-resilient parser. A parse always returns a
+//! tree; `Diagnostic`s say where and how it was repaired. Inlined into every
+//! generated parser alongside the recovery runtime. Imports `Span` from
+//! `lex.wado`; that import is stripped at `#include_str` time.
+
+
+pub enum Severity {
+    Error,
+    Warning,
+    Info,
+    Hint,
+}
+
+impl Severity {
+    pub fn label(&self) -> String {
+        return match *self {
+            Error => "error",
+            Warning => "warning",
+            Info => "info",
+            Hint => "hint",
+        };
+    }
+}
+
+/// What went wrong, independent of the specific tokens. Tooling can switch on
+/// this without parsing the human message.
+pub enum DiagnosticCode {
+    UnexpectedToken,  // a token that fits nowhere in the current rule
+    MissingToken,  // a required terminal was absent (one was inserted)
+    ExtraToken,  // a spurious terminal was deleted
+    NoViableAlternative,  // alternative dispatch found no match
+    UnterminatedConstruct,  // EOF reached inside a rule (missing closer)
+    LexError,  // a char run matched no lexer rule (TK_ERROR)
+}
+
+impl DiagnosticCode {
+    pub fn name(&self) -> String {
+        return match *self {
+            UnexpectedToken => "unexpected-token",
+            MissingToken => "missing-token",
+            ExtraToken => "extra-token",
+            NoViableAlternative => "no-viable-alternative",
+            UnterminatedConstruct => "unterminated-construct",
+            LexError => "lex-error",
+        };
+    }
+}
+
+/// The repair the parser applied at this site, so a fixit/IDE can describe it.
+pub enum RecoveryAction {
+    Inserted,  // synthesised a missing terminal
+    Deleted,  // skipped one spurious terminal
+    SkippedTo,  // skipped a run up to a synchronizing token
+    FilledMissing,  // hit EOF; filled remaining required terminals
+    None,  // reported only, no edit
+}
+
+/// A secondary location attached to a diagnostic, e.g. "'(' opened here" for an
+/// unterminated group.
+pub struct RelatedInfo {
+    pub message: String,
+    pub span: Span,
+}
+
+/// A single parse diagnostic. `expected`/`found` carry token-kind ids (not
+/// names) so tooling reuses the grammar's own name tables; `message` is the
+/// pre-rendered human text. `line`/`col` are 1-based line and 0-based column
+/// (ANTLR4 `Token` convention) resolved from `span.start`.
+pub struct Diagnostic {
+    pub severity: Severity,
+    pub code: DiagnosticCode,
+    pub message: String,
+    pub span: Span,
+    pub line: i32 = 1,
+    pub col: i32 = 0,
+    pub expected: List<i32> = [],
+    pub found: i32 = -1,
+    pub rule_stack: List<String> = [],
+    pub recovery: RecoveryAction = RecoveryAction::None,
+    pub related: List<RelatedInfo> = [],
+}
+
+impl Diagnostic {
+    /// A bare error diagnostic with position resolved; callers fill the
+    /// optional fields (`expected`, `rule_stack`, `related`, ...) as needed.
+    pub fn error(code: DiagnosticCode, message: String, span: Span, line: i32, col: i32) -> Diagnostic {
+        return Diagnostic {
+            severity: Severity::Error,
+            code,
+            message,
+            span,
+            line,
+            col,
+        };
+    }
+
+    pub fn is_error(&self) -> bool {
+        return self.severity matches { Error };
+    }
+}
+
+impl Display for Diagnostic {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&`${self.severity.label()}[${self.code.name()}] at ${self.line}:${self.col}: ${self.message}`);
+        for let r of &self.related {
+            f.write_str(&`\n  note: ${r.message}`);
+        }
+    }
+}
+
+/// Resolve a char index to (line, column): 1-based line, 0-based column
+/// (ANTLR4 `Token` convention). A linear scan; the parser resolves at most a
+/// handful of positions per parse, so this stays off the hot path.
+pub fn line_col(chars: &List<char>, pos: i32) -> [i32, i32] {
+    let mut line = 1;
+    let mut col = 0;
+    let cap = if pos < chars.len() { pos } else { chars.len() };
+    for let mut i = 0; i < cap; i += 1 {
+        if chars[i] == '\n' {
+            line += 1;
+            col = 0;
+        } else {
+            col += 1;
+        }
+    }
+    return [line, col];
+}
+//! The single (untyped) concrete syntax tree produced by every generated
+//! error-resilient parser, stored as a flat columnar event stream that is
+//! itself the tree (the single source of truth), the `TreeBuilder` the parser
+//! drives to construct it, and the `ParseResult` the parser returns.
+//!
+//! The parser records a flat pre-order event stream directly into parallel
+//! columns (an `EventTag` tag plus `i32` payloads); there is no per-node object
+//! tree and no walk/convert
+//! step. `finish()` runs one linear pass (`finalize`) that fills the derived
+//! columns (`span.end`, `flags`, subtree extent) so every query stays O(1).
+//! Consumers read the store as a cursor — a `(&CstStore, index)` pair threaded
+//! as unbundled scalars — so traversal allocates nothing and copies nothing.
+//!
+//! A node is the row index of its `Open`; the root is row 0. The store holds
+//! no reference to the token stream, so `ParseResult` owns both the store and
+//! the stream it indexes without a self-referential borrow. Functions that need
+//! terminal text or kinds take a `&TokenStream` argument.
+//!
+//! Error tokens are first-class and lossless: `Miss` (an inserted synthetic
+//! terminal), `Skip` (a real terminal deleted during recovery), and a
+//! `<error>` region node (kind `K_ERROR`) together capture every recovery edit
+//! (insert / delete / region) so the original input round-trips. The token-
+//! stream flags (`TokenFlags::Synthetic` / `Skipped`, see `lex.wado`) carry the same
+//! facts at the terminal level.
+//!
+//! Imports `TokenStream` from `lex.wado` and `Diagnostic` from `diag.wado`;
+//! those imports are stripped at `#include_str` time (see `gen_runtime` in
+//! `codegen.wado`), where the fragments are concatenated into one module.
+
+
+/// A node's kind: a parser-rule id (`0..num_rules`, in grammar declaration
+/// order) or the reserved `K_ERROR` sentinel for a recovery region node. A
+/// newtype over `i32` so the generated parser can give it a name-aware
+/// `Display` (`Inspect` shows `name(id)`); the name table is grammar-specific,
+/// so codegen emits those impls.
+pub type NodeKind = i32;
+
+/// The reserved kind for a `<error>` region node — a run of skipped tokens or
+/// a partial sub-parse swept up during panic-mode recovery. Never collides with
+/// a real rule id (those are non-negative).
+pub global K_ERROR: NodeKind = -1;
+
+/// Derived per-node condition bits (the `flags` column, valid on an `Open` row).
+///
+/// - `Error` — this node, or some descendant, contains a recovery edit (a
+///   missing/skipped terminal or an error region). Bubbles up so a consumer can
+///   prune clean subtrees in one check.
+/// - `Incomplete` — this node is missing a required terminal that the parser
+///   had to insert (it has a `Miss` child).
+pub flags NodeFlags {
+    Error,
+    Incomplete,
+}
+
+/// Event-stream row tag. Every row is a triple `(tag, a, b)`; `a` / `b` carry
+/// the tag-specific payload below.
+///
+/// - `Open`  — `a` = node kind, `b` = start byte offset (also the finalized
+///   `span.start`).
+/// - `Close` — `a` = end byte offset; `b` is stamped with the matching open's
+///   kind during `finalize`, so a linear walk knows whether to exit a rule.
+/// - `Tok` / `Miss` / `Skip` — `a` = token index into the `TokenStream`.
+pub enum EventTag {
+    Open,
+    Close,
+    Tok,
+    Miss,
+    Skip,
+}
+
+/// The flat CST: parallel columns, one row per event, in pre-order. `tag`,
+/// `a`, `b` and `alt` are written during the parse; `end`, `flags` and `next`
+/// are derived by `finalize` (in `TreeBuilder::finish`). A node is addressed by
+/// the row index of its `Open` row. Columns are `pub` so a linear walk
+/// (`highlight_walk`) can read them in a tight loop; external consumers use the
+/// `impl CstStore` cursor methods below for O(1) queries and child navigation.
+pub struct CstStore {
+    pub tag: List<EventTag>,
+    pub a: List<i32>,
+    pub b: List<i32>,
+    /// The matched labeled-alternative index for an `Open` row (grammar
+    /// declaration order), or -1 when unlabeled / unset / non-open.
+    alt: List<i32>,
+    /// `span.end` for an `Open` row (max of its close offset and every child
+    /// end); derived.
+    end: List<i32>,
+    /// The `NodeFlags` for an `Open` row; derived.
+    flags: List<NodeFlags>,
+    /// Row index just past this `Open` node's whole subtree, so a random-
+    /// access consumer skips a subtree in O(1); derived.
+    next: List<i32>,
+}
+
+/// What a direct child slot is. A plain discriminant enum (no payload), so it
+/// is an `i32` — matching over it allocates nothing. `child_kind` yields it
+/// so a consumer can `match` a child instead of chaining `is_node` / `is_token`.
+pub enum ChildKind {
+    Node,
+    Token,
+    Missing,
+    Skipped,
+}
+
+/// The read cursor over the flat store. Every method is `&self` over an `i32`
+/// row index — no node / cursor value is constructed, so traversal allocates
+/// nothing. The raw `tag` / `a` / `b` columns stay `pub` for the internal
+/// `highlight_walk` flat scan; external consumers use these methods.
+impl CstStore {
+    /// Number of event rows (upper bound for a flat scan; row 0 is the root).
+    pub fn row_count(&self) -> i32 {
+        return self.tag.len();
+    }
+
+    /// Kind of the node at row `i`.
+    pub fn kind(&self, i: i32) -> NodeKind {
+        return self.a[i] as NodeKind;
+    }
+
+    /// Byte span of the node at row `i`.
+    pub fn span(&self, i: i32) -> Span {
+        return Span::new(self.b[i], self.end[i]);
+    }
+
+    /// Matched labeled-alternative index of the node at row `i` (-1 when unset).
+    pub fn alt(&self, i: i32) -> i32 {
+        return self.alt[i];
+    }
+
+    /// True when the node at row `i`, or some descendant, carries a recovery edit.
+    pub fn is_error(&self, i: i32) -> bool {
+        return self.flags[i] & NodeFlags::Error != NodeFlags::none();
+    }
+
+    /// True when the node at row `i` is missing a required terminal.
+    pub fn is_incomplete(&self, i: i32) -> bool {
+        return self.flags[i] & NodeFlags::Incomplete != NodeFlags::none();
+    }
+
+    /// True when row `i` is a rule / error node (has a kind, span, children).
+    pub fn is_node(&self, i: i32) -> bool {
+        return self.tag[i] matches { Open };
+    }
+
+    /// True when row `i` is a terminal (real, missing, or skipped).
+    pub fn is_token(&self, i: i32) -> bool {
+        let t = self.tag[i];
+        return t matches { Tok | Miss | Skip };
+    }
+
+    /// The `ChildKind` of the (child) row `i`.
+    pub fn child_kind(&self, i: i32) -> ChildKind {
+        return match self.tag[i] {
+            Open => ChildKind::Node,
+            Miss => ChildKind::Missing,
+            Skip => ChildKind::Skipped,
+            _ => ChildKind::Token,
+        };
+    }
+
+    /// Token-stream index of the terminal at row `i` (valid when `is_token`).
+    pub fn token_index(&self, i: i32) -> i32 {
+        return self.a[i];
+    }
+
+    /// Row of the first direct child of node `i` (a node or a terminal), or -1
+    /// when `i` has no children. Pair with `next_sibling` to walk children:
+    /// `for let mut c = s.first_child(i); c >= 0; c = s.next_sibling(c) { … }`.
+    pub fn first_child(&self, i: i32) -> i32 {
+        let c = i + 1;
+        if c >= self.tag.len() || self.tag[c] matches { Close } {
+            return -1;
+        }
+        return c;
+    }
+
+    /// Row of the next direct child after `child`, or -1 when `child` is the
+    /// last (the next row is the parent's close). A child node is skipped in
+    /// O(1) via its subtree extent. Returns -1 for a row with no parent (the
+    /// root), rather than indexing past the columns.
+    pub fn next_sibling(&self, child: i32) -> i32 {
+        let c = if self.tag[child] matches { Open } { self.next[child] } else { child + 1 };
+        if c >= self.tag.len() || self.tag[c] matches { Close } {
+            return -1;
+        }
+        return c;
+    }
+
+    /// Row of the first direct child node of rule `kind` under row `i`, or -1.
+    /// Used by sub-tree rendering (an ANTLR4 descriptor whose `[output]` is a
+    /// labelled child subtree, not the start rule's full tree).
+    pub fn find_child(&self, i: i32, kind: NodeKind) -> i32 {
+        let k = kind as i32;
+        for let mut c = self.first_child(i); c >= 0; c = self.next_sibling(c) {
+            if self.tag[c] matches { Open } && self.a[c] == k {
+                return c;
+            }
+        }
+        return -1;
+    }
+
+    /// ANTLR4-style S-expression for the subtree at row `i`: `(name child ...)`,
+    /// tokens as their text with whitespace escaped (`\n`, `\r`, `\t`, as
+    /// `Trees.toStringTree` does); a childless node renders as its bare name, no
+    /// parens (ANTLR4's `Trees.toStringTree`). `rule_names[kind]` names rule
+    /// nodes (`K_ERROR` renders `<error>`); `token_names[kind]` names missing
+    /// terminals. Real terminals with empty text (e.g. EOF) are omitted;
+    /// missing/skipped terminals render markers.
+    pub fn to_string_tree(
+        &self,
+        i: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        let mut out = String::with_capacity(256);
+        cst_to_string_tree_impl(&mut out, self, i, toks, rule_names, token_names);
+        return out;
+    }
+}
+
+fn cst_to_string_tree_impl(
+    out: &mut String,
+    s: &CstStore,
+    i: i32,
+    toks: &TokenStream,
+    rule_names: &List<String>,
+    token_names: &List<String>,
+) {
+    let name = if s.a[i] == K_ERROR as i32 { "<error>" } else { rule_names[s.a[i]] };
+    if i + 1 >= s.tag.len() || s.tag[i + 1] matches { Close } {
+        out.push_str(&name);
+        return;
+    }
+    out.push_str(&"(");
+    out.push_str(&name);
+    let mut c = i + 1;
+    while c < s.next[i] {
+        match s.tag[c] {
+            Open => {
+                out.push_str(&" ");
+                cst_to_string_tree_impl(out, s, c, toks, rule_names, token_names);
+                c = s.next[c];
+            },
+            Tok => {
+                if !toks.is_empty_text(s.a[c]) {
+                    out.push_str(&" ");
+                    toks.push_token_text_escaped(out, s.a[c]);
+                }
+                c += 1;
+            },
+            Miss => {
+                out.push_str(&` <missing ${token_names[toks.kind_at(s.a[c])]}>`);
+                c += 1;
+            },
+            Skip => {
+                out.push_str(&" <skip ");
+                toks.push_token_text_escaped(out, s.a[c]);
+                out.push_str(&">");
+                c += 1;
+            },
+            _ => c += 1,
+        }
+    }
+    out.push_str(&")");
+}
+
+/// What a parse returns: the flat CST store, the token stream its terminal
+/// indices point into, and any diagnostics. A clean parse leaves `diagnostics`
+/// empty. Owns both `cst` and `tokens` outright (the store borrows nothing), so
+/// the result is a freely movable value. The root node is row 0 of `cst`.
+pub struct ParseResult {
+    pub cst: CstStore,
+    pub tokens: TokenStream,
+    pub diagnostics: List<Diagnostic>,
+    /// Text emitted by executed actions via `p.emit(...)`, in execution
+    /// order (Stage C). Empty unless the parser was generated with action
+    /// execution on. Defaulted so existing construction sites and tests keep
+    /// compiling.
+    pub output: String = "",
+}
+
+impl ParseResult {
+    pub fn has_errors(&self) -> bool {
+        for let d of &self.diagnostics {
+            if d.is_error() {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// True when the parse produced no error-severity diagnostics.
+    pub fn ok(&self) -> bool {
+        return !self.has_errors();
+    }
+}
+
+/// Widen the parent open's span end and error bit from a just-closed child.
+/// `stack` must already have the child popped, so its top is the parent (if any).
+fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<NodeFlags>, child: i32) {
+    if stack.len() > 0 {
+        let parent = stack[stack.len() - 1];
+        if end[child] > end[parent] {
+            end[parent] = end[child];
+        }
+        flags[parent] = flags[parent] | flags[child] & NodeFlags::Error;
+    }
+}
+
+/// The builder the generated parser drives. It appends events into the flat
+/// columns (`start_node` / `token` / `missing` / `skip` / `finish_node`) and
+/// finalises them in `finish()`. It is purely structural — it stores token
+/// *indices*, never the stream itself; the parser owns the `TokenStream`,
+/// appending synthetic "missing" tokens and marking skipped ones on its own
+/// copy. `open` is the stack of currently-open row indices (`set_alt` targets
+/// the innermost).
+pub struct TreeBuilder {
+    tag: List<EventTag>,
+    a: List<i32>,
+    b: List<i32>,
+    alt: List<i32>,
+    open: List<i32>,
+    /// Row of the most recently closed node (`-1` before any). Backs
+    /// `$ctx.toStringTree()` in a left-recursive rule's `@after`: precedence
+    /// climbing folds each level shut before `@after` runs, so the current
+    /// context is the just-finished node, not anything still on `open`.
+    last_finished: i32,
+}
+
+impl TreeBuilder {
+    pub fn new() -> TreeBuilder {
+        return TreeBuilder { tag: [], a: [], b: [], alt: [], open: [], last_finished: -1 };
+    }
+
+    /// Pre-size the event columns to `rows`, avoiding the grow-from-empty
+    /// reallocations (each column would otherwise double `log2(rows)` times).
+    /// The parser passes ~`4 × tokens` — measured `rows ≈ 3.44 × tokens`, so this
+    /// sizes just above the final length: no grow, and only ~16% over-fill (a
+    /// doubling grow from under-sizing over-fills far more). Right-size, not big.
+    pub fn with_capacity(rows: i32) -> TreeBuilder {
+        return TreeBuilder {
+            tag: List::with_capacity(rows),
+            a: List::with_capacity(rows),
+            b: List::with_capacity(rows),
+            alt: List::with_capacity(rows),
+            open: [],
+            last_finished: -1,
+        };
+    }
+
+    fn push_row(&mut self, tag: EventTag, a: i32, b: i32) {
+        self.tag.push(tag);
+        self.a.push(a);
+        self.b.push(b);
+        self.alt.push(-1);
+    }
+
+    /// Open a rule node of `kind` starting at byte offset `start`.
+    pub fn start_node(&mut self, kind: NodeKind, start: i32) {
+        let row = self.tag.len();
+        self.push_row(EventTag::Open, kind as i32, start);
+        self.open.push(row);
+    }
+
+    /// Open a `<error>` region node (kind `K_ERROR`) at byte offset `start`.
+    pub fn start_error(&mut self, start: i32) {
+        let row = self.tag.len();
+        self.push_row(EventTag::Open, K_ERROR as i32, start);
+        self.open.push(row);
+    }
+
+    /// Stamp the matched labeled-alternative index on the innermost currently
+    /// open node. The generated parser calls this once it commits to a labeled
+    /// alternative; it is a no-op shape for unlabeled rules (never emitted).
+    pub fn set_alt(&mut self, alt: i32) {
+        self.alt[self.open[self.open.len() - 1]] = alt;
+    }
+
+    /// A position in the event stream to retro-open a node at. Used for
+    /// left-associative wrapping (precedence climbing): capture a checkpoint
+    /// before the first operand, then `start_node_at` to make a new node whose
+    /// first child is everything recorded since the checkpoint.
+    pub fn checkpoint(&self) -> i32 {
+        return self.tag.len();
+    }
+
+    /// Retro-open a node of `kind` (starting at byte offset `start`) at a
+    /// previously captured `checkpoint`, so all events recorded since wrap
+    /// inside it. Close it with the matching `finish_node`. Re-using the same
+    /// checkpoint across loop iterations nests left-associatively. At the call
+    /// site every row in `[checkpoint, len)` is balanced and the open stack
+    /// holds only ancestors with index `< checkpoint`, so the insert never
+    /// shifts a live open index and pushing `checkpoint` keeps `open` monotonic.
+    pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+        self.tag.insert(checkpoint, EventTag::Open);
+        self.a.insert(checkpoint, kind as i32);
+        self.b.insert(checkpoint, start);
+        self.alt.insert(checkpoint, -1);
+        self.open.push(checkpoint);
+    }
+
+    /// Discard every event recorded since `checkpoint`, rolling the builder
+    /// back to that point. Used by a *speculative* parse that runs only to
+    /// localise a deep error (and then restores the cursor): under the emitter
+    /// the speculative subtree must not leak into the real tree, so the caller
+    /// brackets it with `checkpoint()` / `truncate()`.
+    pub fn truncate(&mut self, checkpoint: i32) {
+        while self.tag.len() > checkpoint {
+            let _ = self.tag.pop();
+            let _ = self.a.pop();
+            let _ = self.b.pop();
+            let _ = self.alt.pop();
+        }
+        while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
+            let _ = self.open.pop();
+        }
+    }
+
+    /// Close the innermost open node at byte offset `end`.
+    pub fn finish_node(&mut self, end: i32) {
+        self.push_row(EventTag::Close, end, 0);
+        self.last_finished = self.open[self.open.len() - 1];
+        let _ = self.open.pop();
+    }
+
+    /// Append a real terminal (`idx` into the stream) to the open node.
+    pub fn token(&mut self, idx: i32) {
+        self.push_row(EventTag::Tok, idx, 0);
+    }
+
+    /// Append an inserted synthetic terminal. `syn_idx` is the index returned
+    /// by `TokenStream::push_synthetic`.
+    pub fn missing(&mut self, syn_idx: i32) {
+        self.push_row(EventTag::Miss, syn_idx, 0);
+    }
+
+    /// Append a skipped real terminal. The caller marks `idx` with
+    /// `TokenStream::mark_skipped` first.
+    pub fn skip(&mut self, idx: i32) {
+        self.push_row(EventTag::Skip, idx, 0);
+    }
+
+    /// Finalise the store: one linear pass that fills `end` / `flags` / `next`
+    /// and stamps each `Close` row with its open's kind. Deferring all
+    /// aggregation to here (rather than patching in `finish_node`) is what makes
+    /// the retro-open `start_node_at` correct: the pass sees the final structure,
+    /// so a wrapped subtree's error bit bubbles into the wrap node even though
+    /// the wrap was inserted after its children closed. Valid once the root node
+    /// has been closed; an open left unterminated by a truncated stream is folded
+    /// to the stream end (its `next` never stays 0), so traversal terminates.
+    pub fn finish(&self) -> CstStore {
+        let n = self.tag.len();
+        let mut b: List<i32> = List::with_capacity(n);
+        let mut end: List<i32> = List::with_capacity(n);
+        let mut flags: List<NodeFlags> = List::with_capacity(n);
+        let mut next: List<i32> = List::with_capacity(n);
+        for let mut r = 0; r < n; r += 1 {
+            b.push(self.b[r]);
+            end.push(0);
+            flags.push(NodeFlags::none());
+            next.push(0);
+        }
+        let mut stack: List<i32> = [];
+        for let mut r = 0; r < n; r += 1 {
+            match self.tag[r] {
+                Open => {
+                    flags[r] = if self.a[r] == K_ERROR as i32 { NodeFlags::Error } else { NodeFlags::none() };
+                    end[r] = self.b[r];
+                    stack.push(r);
+                },
+                Miss => {
+                    let oi = stack[stack.len() - 1];
+                    flags[oi] = flags[oi] | NodeFlags::Incomplete | NodeFlags::Error;
+                },
+                Skip => {
+                    let oi = stack[stack.len() - 1];
+                    flags[oi] = flags[oi] | NodeFlags::Error;
+                },
+                Close => {
+                    let oi = stack[stack.len() - 1];
+                    let _ = stack.pop();
+                    if self.a[r] > end[oi] {
+                        end[oi] = self.a[r];
+                    }
+                    b[r] = self.a[oi];
+                    next[oi] = r + 1;
+                    bubble_to_parent(&stack, &mut end, &mut flags, oi);
+                },
+                Tok => {
+                },
+            }
+        }
+        while stack.len() > 0 {
+            let oi = stack[stack.len() - 1];
+            let _ = stack.pop();
+            next[oi] = n;
+            bubble_to_parent(&stack, &mut end, &mut flags, oi);
+        }
+        return CstStore { tag: self.tag, a: self.a, b, alt: self.alt, end, flags, next };
+    }
+
+    /// Render the S-expression of the innermost currently-open node — the rule
+    /// under construction — from the raw (not-yet-finalised) events. Backs
+    /// `$ctx.toStringTree()` in a non-LR rule's `@after`, which runs after the
+    /// body but before `finish_node`, so the node is still open and its children
+    /// are complete.
+    pub fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+        if self.open.len() == 0 {
+            return String::new();
+        }
+        return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
+    }
+
+    /// Render the most recently closed node. Backs `$ctx.toStringTree()` in a
+    /// left-recursive rule's `@after`, where the level's node is already folded
+    /// shut (see `last_finished`).
+    pub fn render_last_finished(
+        &self,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        if self.last_finished < 0 {
+            return String::new();
+        }
+        return self.render_from(self.last_finished, toks, rule_names, token_names);
+    }
+
+    fn render_from(
+        &self,
+        root: i32,
+        toks: &TokenStream,
+        rule_names: &List<String>,
+        token_names: &List<String>,
+    ) -> String {
+        let mut out = String::with_capacity(128);
+        let _ = render_builder_node(&mut out, &self.tag, &self.a, root, toks, rule_names, token_names);
+        return out;
+    }
+}
+
+/// Render the subtree rooted at the `Open` row `i`, returning the row after
+/// its `Close`. Events are balanced (`start_node` / `finish_node` pair), so a
+/// linear walk with recursion at each child `Open` stands in for the finalised
+/// `next` column. Works for a closed root (stops at its `Close`) and for a
+/// still-open root (no `Close`, so the walk closes it at the event end) —
+/// mirrors `cst_to_string_tree_impl`.
+fn render_builder_node(
+    out: &mut String,
+    tag: &List<EventTag>,
+    a: &List<i32>,
+    i: i32,
+    toks: &TokenStream,
+    rule_names: &List<String>,
+    token_names: &List<String>,
+) -> i32 {
+    let name = if a[i] == K_ERROR as i32 { "<error>" } else { rule_names[a[i]] };
+    if i + 1 >= tag.len() || tag[i + 1] matches { Close } {
+        out.push_str(&name);
+        if i + 1 < tag.len() {
+            return i + 2;
+        }
+        return i + 1;
+    }
+    out.push_str(&"(");
+    out.push_str(&name);
+    let mut c = i + 1;
+    while c < tag.len() {
+        match tag[c] {
+            Open => {
+                out.push_str(&" ");
+                c = render_builder_node(out, tag, a, c, toks, rule_names, token_names);
+            },
+            Close => {
+                out.push_str(&")");
+                return c + 1;
+            },
+            Tok => {
+                if !toks.is_empty_text(a[c]) {
+                    out.push_str(&" ");
+                    toks.push_token_text_escaped(out, a[c]);
+                }
+                c += 1;
+            },
+            Miss => {
+                out.push_str(&` <missing ${token_names[toks.kind_at(a[c])]}>`);
+                c += 1;
+            },
+            Skip => {
+                out.push_str(&" <skip ");
+                toks.push_token_text_escaped(out, a[c]);
+                out.push_str(&">");
+                c += 1;
+            },
+        }
+    }
+    out.push_str(&")");
+    return c;
+}
+//! Consumer-facing tree / token utilities exposed by every generated
+//! parser: S-expression normalisation (`normalize_tree`) and the
+//! ANTLR4-format token-stream dump (`to_lexer_string`) used by the
+//! compatibility suite. Always emitted. The generated parser code never calls
+//! these itself; consumers (driver tests, the ANTLR4-compat suite) import them
+//! from the generated module. The `./lex.wado` import is stripped at
+//! `#include_str` time.
+
+
+/// Normalize a multi-line S-expression string for comparison.
+/// Collapses whitespace runs to single spaces and trims, while preserving
+/// whitespace inside double-quoted strings.
+pub fn normalize_tree(s: &String) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_string = false;
+    let mut space_pending = false;
+    for let c of s.chars() {
+        if in_string {
+            out.push(c);
+            if c == '"' {
+                in_string = false;
+            }
+        } else if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
+            if out.len() > 0 {
+                space_pending = true;
+            }
+        } else {
+            if space_pending {
+                out.push(' ');
+                space_pending = false;
+            }
+            if c == '"' {
+                in_string = true;
+            }
+            out.push(c);
+        }
+    }
+    return out;
+}
+
+/// Produce an ANTLR4-style `Token.toString()` dump of the token stream:
+///
+///   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]\n  (per token)
+///
+/// Used by Stage L (token-stream equivalence) tests against the upstream
+/// `LexerExec` / etc. `[output]` blocks.
+///
+/// - `tokens` is the `TokenStream` returned by the generated
+///   `tokenize(input)`. Skip-channel trivia (channel 0) is discarded; only
+///   non-default-channel trivia is interleaved.
+/// - `eof_kind` is the value of the generated `TK_EOF` constant; EOF
+///   tokens print as `<EOF>` text with type id `-1`.
+///
+/// Type IDs are remapped from Gale's 0-based numbering to ANTLR4's
+/// 1-based: `kind + 1` for explicit lexer rules, `-1` for EOF. Lexer-only
+/// grammars never introduce implicit literals, so the contiguous
+/// `0..num_lexer_rules` range maps directly onto ANTLR4's
+/// `1..num_lexer_rules+1`.
+///
+/// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
+/// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
+/// escaped; backslashes and quotes pass through unchanged.
+///
+/// Whatever the lexer's actions printed precedes the dump, as it does on
+/// ANTLR4's stdout.
+pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
+    let chars = tokens.chars;
+    // Char index where each line begins; built once so each token's `line:col`
+    // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
+    let mut line_starts: List<i32> = [0];
+    for let mut i = 0; i < chars.len(); i += 1 {
+        if chars[i] == '\n' {
+            line_starts.push(i + 1);
+        }
+    }
+    let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
+    out.push_str(&tokens.output);
+    let mut index = 0;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        // Non-default-channel trivia (`-> channel(HIDDEN)`) is parked in this
+        // token's trivia range; ANTLR4 still dumps it in source order with a
+        // `channel=N` attribute, so interleave it ahead of the host token.
+        // Skip trivia (channel 0) is discarded — neither printed nor indexed
+        // (matching ANTLR4's `Lexer.skip()`).
+        let lo = tokens.triv_lo[i];
+        let hi = tokens.triv_hi[i];
+        for let mut t = lo; t < hi; t += 1 {
+            if tokens.triv_chans[t] != 0 {
+                emit_lexer_token(
+                    &mut out,
+                    tokens,
+                    tokens.triv_kinds[t],
+                    tokens.triv_starts[t],
+                    tokens.triv_ends[t],
+                    tokens.triv_chans[t],
+                    &line_starts,
+                    index,
+                    eof_kind,
+                );
+                index += 1;
+            }
+        }
+        emit_lexer_token(
+            &mut out,
+            tokens,
+            tokens.kinds[i],
+            tokens.starts[i],
+            tokens.ends[i],
+            0,
+            &line_starts,
+            index,
+            eof_kind,
+        );
+        index += 1;
+    }
+    return out;
+}
+
+/// Renders a single token in ANTLR4's `CommonToken.toString` format, used by
+/// `to_lexer_string` for both main-stream tokens and interleaved
+/// non-default-channel trivia. `channel=N` is printed only for non-default
+/// channels, matching ANTLR4.
+fn emit_lexer_token(
+    out: &mut String,
+    tokens: &TokenStream,
+    kind: i32,
+    start: i32,
+    end: i32,
+    channel: i32,
+    line_starts: &List<i32>,
+    index: i32,
+    eof_kind: i32,
+) {
+    let is_eof = kind == eof_kind;
+    let mut text_buf = String::with_capacity(16);
+    if is_eof {
+        text_buf.push_str(&"<EOF>");
+    } else {
+        for let mut j = start; j < end; j += 1 {
+            let c = tokens.chars[j];
+            match c {
+                '\n' => text_buf.push_str(&"\\n"),
+                '\r' => text_buf.push_str(&"\\r"),
+                '\t' => text_buf.push_str(&"\\t"),
+                _ => text_buf.push(c),
+            }
+        }
+    }
+    let type_id = if is_eof { -1 } else { kind + 1 };
+    let line_col = line_col_from_starts(line_starts, start);
+    let line = line_col.0;
+    let col = line_col.1;
+    let end_inclusive = end - 1;
+    let channel_attr = if channel != 0 { `channel=${channel},` } else { String::from("") };
+    out.push_str(&`[@${index},${start}:${end_inclusive}='${text_buf}',<${type_id}>,${channel_attr}${line}:${col}]\n`);
+}
+
+/// Compute (line, column) from the precomputed `line_starts` table (char
+/// index where each line begins). Binary search for the greatest
+/// `line_starts[j] <= pos`: that line is `j + 1` and the column is the
+/// offset past its start. O(log lines) per call.
+fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let mut lo = 0;
+    let mut hi = line_starts.len() - 1;
+    while lo < hi {
+        let mid = (lo + hi + 1) / 2;
+        if line_starts[mid] <= pos {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return [lo + 1, pos - line_starts[lo]];
+}
+//! Runtime ATN simulator (hybrid ALL(*)) — full-context SLL prediction.
+//!
+//! Emitted into a generated parser only when lowering saw a construct that
+//! needs it (`GenContext::needs_atn`: a non-greedy `??` or an ATN-class LR
+//! rule). Each `??` calls `atn_predict_with_stack` with its own compile-time
+//! decision number (`Atn.decision_sites`), so several `??` in one rule no
+//! longer collide. The compiled fast path handles everything else, so this
+//! never runs on the hot path.
+//!
+//! Full context without a per-call-site GIR<->ATN mapping: the caller passes
+//! its current *rule-invocation stack* (a list of rule indices, cheaply
+//! maintained by the rule-entry wrapper). When a config exhausts a rule it
+//! branches into every ATN return-state where the caller rule invokes the
+//! callee (rule-context precision). The bottom of a real stack is the start
+//! rule, whose follow is EOF — so a config that returns past it accepts only
+//! EOF (`ATN_ACCEPT_EOF`), not any token. An empty stack falls back to plain
+//! SLL (rule-stop = wildcard follow).
+//!
+//! Clean-room: follows the published ALL(*) description, not ANTLR4 sources
+//! (License hygiene, AGENTS.md). The wire-format constants below are the
+//! single source of truth; the builder/serializer in `src/atn.wado` `use`s
+//! them.
+//!
+//! Prediction reads token kinds only, so the simulator takes the flat
+//! `&Array<i32>` kinds array rather than the full `TokenStream` (or the
+//! `List` wrapper) — this keeps scan frames a slot smaller, which matters
+//! for deeply recursive grammars.
+
+use { TreeMap } from "core:collections";
+
+// ATN wire-format constants — the single source of truth for the serialized
+// blob layout, shared with the builder/serializer in `src/atn.wado`. They
+// live here, not in `atn.wado`, because this runtime is `#include_str`'d into
+// every generated parser and so cannot import from the compiler crate.
+
+// State kinds. `atn_decode` copies every state's kind through verbatim and
+// the simulator only interprets `RULE_STOP` / `BLOCK_START` / `BLOCK_END`,
+// but the builder writes the full enumeration, so the whole set lives here
+// to keep one numbering authority (no split-numbering hazard across files).
+pub global ATN_BASIC: i32 = 1;
+pub global ATN_RULE_START: i32 = 2;
+pub global ATN_RULE_STOP: i32 = 3;
+pub global ATN_BLOCK_START: i32 = 4;
+pub global ATN_BLOCK_END: i32 = 5;
+pub global ATN_STAR_LOOP_ENTRY: i32 = 6;
+pub global ATN_STAR_LOOP_BACK: i32 = 7;
+pub global ATN_PLUS_LOOP_BACK: i32 = 8;
+pub global ATN_LOOP_END: i32 = 9;
+
+// Transition kinds. `label`/`follow`/`prec` carry kind-specific data
+// (see `AtnTransition` in `atn.wado`).
+pub global ATN_TR_EPSILON: i32 = 0;
+pub global ATN_TR_ATOM: i32 = 1;
+pub global ATN_TR_NOT_ATOM: i32 = 2;
+pub global ATN_TR_WILDCARD: i32 = 3;
+pub global ATN_TR_RULE: i32 = 4;
+// Precedence-predicate edge `{prec_i >= pr}?`, emitted on a
+// left-recursive rule's loop-entry decision (one per LR alt). `prec`
+// carries the alt's own precedence (`prec_i`); the simulator compares it
+// against the current min-prec context `pr` and prunes the edge when the
+// predicate is false. Traversed like epsilon otherwise. Precedence
+// evaluation itself lands in P4.3; until then closure walks it
+// unconditionally (no LR grammar routes through the simulator yet).
+pub global ATN_TR_PRECEDENCE: i32 = 5;
+
+/// Sentinel "state": a config that has returned past the real stack bottom
+/// and is viable only if the next token is EOF (the start rule's follow).
+#[allow(dead_code)]
+global ATN_ACCEPT_EOF: i32 = -2;
+
+/// Safety caps for the merged closure. With graph-merged contexts the work is
+/// polynomial for any finite input, so these are only tripped by pathological
+/// epsilon-cycle grammars; on overflow the predictor bails to the lowest
+/// viable alt (the same conservative answer as a true conflict). Generous so
+/// realistic deep recursion never approximates.
+#[allow(dead_code)]
+global ATN_CLOSURE_GUARD: i32 = 2000000;
+#[allow(dead_code)]
+global ATN_ARENA_CAP: i32 = 400000;
+
+/// Stride for `CtxArena::merge`'s pair-key packing (`lo * stride + hi`).
+/// Must exceed `ATN_ARENA_CAP` so two distinct arena ids can never alias
+/// onto the same key; kept comfortably above it.
+global ATN_MERGE_CACHE_STRIDE: i64 = 1000000;
+
+/// The decoded ATN, in struct-of-arrays form. Decoded once from the
+/// serialized blob (into the module-level `ATN_SIM` in a generated
+/// parser) and read (never mutated) during prediction. Carries only the
+/// fields prediction reads: `num_tokens` and per-state `rule`/`decision`
+/// are compile-time-only (dump/debug, token-kind numbering) on the
+/// codegen-side `Atn`/`AtnState`, and a rule's stop state is identified by
+/// `state_kind == ATN_RULE_STOP` rather than a stored `rule_stop` — none of
+/// the four are in the blob. See `atn.wado::atn_blob_bytes` for the layout.
+pub struct AtnSim {
+    pub state_kind: List<i32>,
+    pub state_tr_start: List<i32>,
+    pub state_tr_count: List<i32>,
+    pub tr_kind: List<i32>,
+    pub tr_target: List<i32>,
+    pub tr_label: List<i32>,
+    pub tr_follow: List<i32>,
+    pub tr_prec: List<i32>,
+    pub decision_state: List<i32>,
+    pub rule_start: List<i32>,
+    /// Per-rule FIRST / nullability, computed once from the decoded ATN (not
+    /// from the blob). `rule_nullable[r]` — can rule `r` derive empty;
+    /// `rule_first[r]` — the explicit token kinds rule `r` can start with;
+    /// `rule_first_neg[r]` — labels EXCLUDED by `~X` edges in rule `r`'s FIRST
+    /// (a `~X` start admits any token but `X`); `rule_first_open[r]` — rule
+    /// `r`'s FIRST admits a true wildcard `.`. Together these answer
+    /// `atn_first_admits`. They drive the LR loop-entry decision's
+    /// caller-mandatory check (`atn_lr_loop_decision`).
+    pub rule_nullable: List<bool>,
+    pub rule_first: List<List<i32>>,
+    pub rule_first_neg: List<List<i32>>,
+    pub rule_first_open: List<bool>,
+    /// Per-state continuation FIRST / nullability: the per-state analogue of
+    /// `rule_*`, cached at decode so the LR loop-entry decision is array
+    /// lookups, not a DFS per call. Empty unless the ATN has precedence edges.
+    pub state_cont_nullable: List<bool>,
+    pub state_cont_first_start: List<i32>,
+    pub state_cont_first_count: List<i32>,
+    pub state_cont_neg_start: List<i32>,
+    pub state_cont_neg_count: List<i32>,
+    pub cont_first_label: List<i32>,
+    pub cont_neg_label: List<i32>,
+    pub state_cont_first_open: List<bool>,
+}
+
+/// Sentinel return state inside a `PredictionContext`: this branch's
+/// during-prediction stack is empty, so a rule-stop reaching it falls back to
+/// the caller stack (`rs` / `rule_stack`). Distinct from real ATN state ids
+/// (>= 0) and from the -1 start-frame / -2 EOF markers used on `rule_stack`.
+#[allow(dead_code)]
+global CTX_BOUNDARY: i32 = -3;
+
+/// The empty during-prediction context (no frames entered yet). A config with
+/// `pctx == CTX_EMPTY` pops straight to the caller stack.
+#[allow(dead_code)]
+global CTX_EMPTY: i32 = 0;
+
+/// Graph-structured during-prediction stack ("PredictionContext" DAG). Each
+/// node is a *set* of edges `[return_state, restore_pr, parent]`; identical
+/// edge-sets are hash-consed to one id, and configs reaching the same
+/// `(state, alt, rs, pr)` via different stacks are merged by unioning their
+/// contexts here. This collapses what would otherwise be an exponential number
+/// of distinct list-stacks under deep left recursion into a polynomial DAG —
+/// the core of the ALL(*) tractability guarantee. Built fresh per prediction.
+///
+/// `edges[id]` is the node's edge list; `edges[CTX_EMPTY]` is empty. `intern`
+/// maps a canonical edge-set key to its id; `merge_cache` memoizes `merge`.
+struct CtxArena {
+    edges: List<List<[i32, i32, i32]>>,
+    // Hash -> candidate node ids (collision buckets; edges compared on lookup).
+    intern: TreeMap<i64, List<i32>>,
+    merge_cache: TreeMap<i64, i32>,
+}
+
+/// One ATN configuration. `pctx` is the graph-structured during-prediction
+/// stack (a `CtxArena` node id); `rs` indexes the caller's pre-existing parse
+/// stack (the next outer frame to return into once `pctx` empties, or -1 for
+/// SLL / exhausted). `pr` is the current min-precedence context.
+struct AtnConfig {
+    state: i32,
+    alt: i32,
+    pctx: i32,
+    rs: i32,
+    pr: i32,
+}
+
+
+impl CtxArena {
+    fn new() -> CtxArena {
+        // Node 0 = CTX_EMPTY (no edges).
+        let empty: List<[i32, i32, i32]> = [];
+        return CtxArena {
+            edges: [empty],
+            intern: TreeMap::<i64, List<i32>>::new(),
+            merge_cache: TreeMap::<i64, i32>::new(),
+        };
+    }
+
+    /// FNV-style hash of a sorted edge set (the interning key).
+    fn hash_of(edges: &List<[i32, i32, i32]>) -> i64 {
+        let mut h: i64 = 1469598103934665603;
+        for let e of edges {
+            h = (h ^ e.0 as i64 + 1) * 1099511628211;
+            h = (h ^ e.1 as i64 + 1) * 1099511628211;
+            h = (h ^ e.2 as i64 + 1) * 1099511628211;
+        }
+        return h & 4611686018427387903;
+    }
+
+    /// Intern a (already sorted, deduped) edge set, returning its node id.
+    /// Collisions on the i64 hash are resolved by comparing edge lists.
+    fn intern_edges(&mut self, sorted: &List<[i32, i32, i32]>) -> i32 {
+        if sorted.is_empty() {
+            return CTX_EMPTY;
+        }
+        let h = CtxArena::hash_of(sorted);
+        if let Some(cands) = self.intern.get(h) {
+            for let id of &cands {
+                if edge_lists_eq(&self.edges[*id], sorted) {
+                    return *id;
+                }
+            }
+        }
+        let id = self.edges.len();
+        self.edges.push(*sorted);
+        let mut cands = if let Some(c) = self.intern.get(h) {
+            c;
+        } else {
+            [] as List<i32>;
+        };
+        cands.push(id);
+        self.intern[h] = cands;
+        return id;
+    }
+
+    /// Push a frame: a context with the single edge `(return_state, restore_pr,
+    /// parent)`.
+    fn push(&mut self, return_state: i32, restore_pr: i32, parent: i32) -> i32 {
+        let one: List<[i32, i32, i32]> = [
+            [return_state, restore_pr, parent],
+        ];
+        return self.intern_edges(&one);
+    }
+
+    /// The edge view of a node, treating `CTX_EMPTY` as a single boundary edge
+    /// so it can be unioned with real frames during a merge.
+    fn edges_view(&self, id: i32) -> List<[i32, i32, i32]> {
+        if id == CTX_EMPTY {
+            return [
+                [CTX_BOUNDARY, 0, CTX_EMPTY],
+            ];
+        }
+        return self.edges[id];
+    }
+
+    /// Merge two contexts into one whose branch-set is their union. Edges with
+    /// the same `(return_state, restore_pr)` collapse, their parents merged
+    /// recursively; memoized so the whole operation stays polynomial.
+    fn merge(&mut self, a: i32, b: i32) -> i32 {
+        if a == b {
+            return a;
+        }
+        let lo = if a < b { a } else { b };
+        let hi = if a < b { b } else { a };
+        let ck = lo as i64 * ATN_MERGE_CACHE_STRIDE + hi as i64;
+        if let Some(id) = self.merge_cache.get(ck) {
+            return id;
+        }
+        let ea = self.edges_view(a);
+        let eb = self.edges_view(b);
+        // Group edges by (return_state, restore_pr), merging parents.
+        let mut keys: List<[i32, i32]> = [];
+        let mut parents: List<i32> = [];
+        for let src of [&ea, &eb] {
+            for let e of *src {
+                let rk = [e.0, e.1];
+                let mut found = -1;
+                for let mut i = 0; i < keys.len(); i += 1 {
+                    if keys[i].0 == rk.0 && keys[i].1 == rk.1 {
+                        found = i;
+                        break;
+                    }
+                }
+                if found < 0 {
+                    keys.push(rk);
+                    parents.push(e.2);
+                } else {
+                    parents[found] = self.merge(parents[found], e.2);
+                }
+            }
+        }
+        let mut merged: List<[i32, i32, i32]> = [];
+        for let mut i = 0; i < keys.len(); i += 1 {
+            merged.push([keys[i].0, keys[i].1, parents[i]]);
+        }
+        sort_ctx_edges(&mut merged);
+        let id = self.intern_edges(&merged);
+        self.merge_cache[ck] = id;
+        return id;
+    }
+}
+
+/// Sort an edge list by (return_state, restore_pr, parent) so interning keys
+/// are canonical regardless of insertion order.
+#[allow(dead_code)]
+fn sort_ctx_edges(edges: &mut List<[i32, i32, i32]>) {
+    let n = edges.len();
+    for let mut i = 1; i < n; i += 1 {
+        let cur = edges[i];
+        let mut j = i - 1;
+        while j >= 0 && ctx_edge_gt(&edges[j], &cur) {
+            edges[j + 1] = edges[j];
+            j -= 1;
+        }
+        edges[j + 1] = cur;
+    }
+}
+
+#[allow(dead_code)]
+fn ctx_edge_gt(a: &[i32, i32, i32], b: &[i32, i32, i32]) -> bool {
+    if a.0 != b.0 {
+        return a.0 > b.0;
+    }
+    if a.1 != b.1 {
+        return a.1 > b.1;
+    }
+    return a.2 > b.2;
+}
+
+/// Structural equality of two (sorted) edge lists, for interning-collision
+/// disambiguation.
+#[allow(dead_code)]
+fn edge_lists_eq(a: &List<[i32, i32, i32]>, b: &List<[i32, i32, i32]>) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    for let mut i = 0; i < a.len(); i += 1 {
+        if a[i].0 != b[i].0 || a[i].1 != b[i].1 || a[i].2 != b[i].2 {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Unsigned byte at `pos` (0..=255). `atn_decode` is the sole caller and
+/// always derives `pos` from the blob's own layout, so this skips `List`'s
+/// bounds-checked `[]` for `get_byte_unchecked` — the underlying Wasm GC
+/// array still traps on a genuine out-of-bounds read, so a malformed blob
+/// still fails loudly.
+#[allow(dead_code)]
+fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
+    return bytes.get_byte_unchecked(pos) as i32;
+}
+
+/// Little-endian 2-byte value at `pos` (0..=65535).
+#[allow(dead_code)]
+fn atn_read_u16(bytes: &ByteList, pos: i32) -> i32 {
+    let b0 = bytes.get_byte_unchecked(pos) as i32;
+    let b1 = bytes.get_byte_unchecked(pos + 1) as i32;
+    return b0 | b1 << 8;
+}
+
+/// Little-endian 3-byte value at `pos` (0..=16777215). Used for
+/// `tr_label`/`tr_follow` only: the *lexer* ATN (`latn.wado`) reuses those
+/// fields for a Unicode scalar range (up to `CHAR_MAX` = `0x10FFFF`), wider
+/// than the *parser* ATN's small token-kind index, so the shared decoder
+/// must fit the wider case.
+#[allow(dead_code)]
+fn atn_read_u24(bytes: &ByteList, pos: i32) -> i32 {
+    let b0 = bytes.get_byte_unchecked(pos) as i32;
+    let b1 = bytes.get_byte_unchecked(pos + 1) as i32;
+    let b2 = bytes.get_byte_unchecked(pos + 2) as i32;
+    return b0 | b1 << 8 | b2 << 16;
+}
+
+/// Decode the serialized ATN blob into `AtnSim`, mirroring the column order
+/// `atn.wado::atn_blob_bytes` writes (header counts, `rule_start`,
+/// `decision_state`, then the per-state and per-transition columns — see
+/// that function's doc for the exact per-field widths and the -1 bias).
+/// `ntrans_total` isn't stored: it's the running sum of `state_tr_count`,
+/// which precedes the transition columns, so it (and `state_tr_start`, a
+/// running prefix sum) falls out while reading that column. Each column is
+/// read directly off the packed bytes into a `with_capacity`-presized
+/// `List`: one pass, no intermediate word array, nothing grows by doubling.
+#[allow(dead_code)]
+pub fn atn_decode(bytes: &ByteList, lr_tables: bool = true) -> AtnSim {
+    let mut p = 0;
+    let nrules = atn_read_u16(bytes, p);
+    p += 2;
+    let ndec = atn_read_u16(bytes, p);
+    p += 2;
+    let nstates = atn_read_u16(bytes, p);
+    p += 2;
+
+    let mut rule_start: List<i32> = List::with_capacity(nrules);
+    for let mut i = 0; i < nrules; i += 1 {
+        rule_start.push(atn_read_u16(bytes, p));
+        p += 2;
+    }
+    let mut decision_state: List<i32> = List::with_capacity(ndec);
+    for let mut i = 0; i < ndec; i += 1 {
+        decision_state.push(atn_read_u16(bytes, p));
+        p += 2;
+    }
+
+    let mut state_kind: List<i32> = List::with_capacity(nstates);
+    for let mut i = 0; i < nstates; i += 1 {
+        state_kind.push(atn_read_u8(bytes, p));
+        p += 1;
+    }
+    let mut state_tr_start: List<i32> = List::with_capacity(nstates);
+    let mut state_tr_count: List<i32> = List::with_capacity(nstates);
+    let mut ntrans_total = 0;
+    for let mut i = 0; i < nstates; i += 1 {
+        let count = atn_read_u16(bytes, p);
+        p += 2;
+        state_tr_start.push(ntrans_total);
+        state_tr_count.push(count);
+        ntrans_total += count;
+    }
+
+    let mut tr_kind: List<i32> = List::with_capacity(ntrans_total);
+    for let mut i = 0; i < ntrans_total; i += 1 {
+        tr_kind.push(atn_read_u8(bytes, p));
+        p += 1;
+    }
+    let mut tr_target: List<i32> = List::with_capacity(ntrans_total);
+    for let mut i = 0; i < ntrans_total; i += 1 {
+        tr_target.push(atn_read_u16(bytes, p) - 1);
+        p += 2;
+    }
+    let mut tr_label: List<i32> = List::with_capacity(ntrans_total);
+    for let mut i = 0; i < ntrans_total; i += 1 {
+        tr_label.push(atn_read_u24(bytes, p) - 1);
+        p += 3;
+    }
+    let mut tr_follow: List<i32> = List::with_capacity(ntrans_total);
+    for let mut i = 0; i < ntrans_total; i += 1 {
+        tr_follow.push(atn_read_u24(bytes, p) - 1);
+        p += 3;
+    }
+    let mut tr_prec: List<i32> = List::with_capacity(ntrans_total);
+    for let mut i = 0; i < ntrans_total; i += 1 {
+        tr_prec.push(atn_read_u16(bytes, p));
+        p += 2;
+    }
+
+    let nrules_count = rule_start.len();
+    let mut sim = AtnSim {
+        state_kind,
+        state_tr_start,
+        state_tr_count,
+        tr_kind,
+        tr_target,
+        tr_label,
+        tr_follow,
+        tr_prec,
+        decision_state,
+        rule_start,
+        rule_nullable: [],
+        rule_first: [],
+        rule_first_neg: [],
+        rule_first_open: [],
+        state_cont_nullable: [],
+        state_cont_first_start: [],
+        state_cont_first_count: [],
+        state_cont_neg_start: [],
+        state_cont_neg_count: [],
+        cont_first_label: [],
+        cont_neg_label: [],
+        state_cont_first_open: [],
+    };
+    for let mut r = 0; r < nrules_count; r += 1 {
+        sim.rule_nullable.push(false);
+        sim.rule_first.push([]);
+        sim.rule_first_neg.push([]);
+        sim.rule_first_open.push(false);
+    }
+    // The FIRST/nullable fixpoint feeds only the LR loop-entry decision
+    // (`atn_lr_loop_decision` / `atn_caller_mandates`), which exists solely
+    // for rules with precedence edges. A grammar without any precedence edge
+    // (e.g. one that needs the simulator only for a non-greedy `??`) never
+    // reads this data, so skip the whole fixpoint there.
+    let mut has_precedence = false;
+    for let k of &sim.tr_kind {
+        if *k == ATN_TR_PRECEDENCE {
+            has_precedence = true;
+            break;
+        }
+    }
+    if lr_tables && has_precedence {
+        atn_compute_first_nullable(&mut sim);
+        atn_compute_state_cont(&mut sim);
+    }
+    return sim;
+}
+
+/// Cache `state_cont_*` after the rule fixpoint converges (it reads
+/// `rule_first` / `rule_nullable`). Per-state analogue of
+/// `atn_compute_first_nullable`.
+#[allow(dead_code)]
+fn atn_compute_state_cont(sim: &mut AtnSim) {
+    let nstates = sim.state_kind.len();
+    for let mut st = 0; st < nstates; st += 1 {
+        let mut v1: List<i32> = [];
+        let nullable = atn_cont_nullable(sim, st, &mut v1);
+        let mut v2: List<i32> = [];
+        let mut f: List<i32> = [];
+        let mut fneg: List<i32> = [];
+        let open = atn_cont_first(sim, st, &mut v2, &mut f, &mut fneg);
+        sim.state_cont_nullable.push(nullable);
+        sim.state_cont_first_start.push(sim.cont_first_label.len());
+        sim.state_cont_first_count.push(f.len());
+        for let t of &f {
+            sim.cont_first_label.push(*t);
+        }
+        sim.state_cont_neg_start.push(sim.cont_neg_label.len());
+        sim.state_cont_neg_count.push(fneg.len());
+        for let x of &fneg {
+            sim.cont_neg_label.push(*x);
+        }
+        sim.state_cont_first_open.push(open);
+    }
+}
+
+/// Fill `rule_nullable` / `rule_first` / `rule_first_open` by a monotone
+/// fixpoint over the ATN: each pass recomputes every rule's FIRST/nullable
+/// from the current values (used for rule-ref edges), stopping when nothing
+/// grows. Runs once at decode, and only when the ATN has precedence edges
+/// (see `atn_decode`); the grammar (ATN) is constant so this is O(1) w.r.t.
+/// input.
+#[allow(dead_code)]
+fn atn_compute_first_nullable(sim: &mut AtnSim) {
+    let nrules = sim.rule_start.len();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for let mut r = 0; r < nrules; r += 1 {
+            let mut v1: List<i32> = [];
+            if atn_cont_nullable(sim, sim.rule_start[r], &mut v1) && !sim.rule_nullable[r] {
+                sim.rule_nullable[r] = true;
+                changed = true;
+            }
+            let mut v2: List<i32> = [];
+            let mut f: List<i32> = [];
+            let mut fneg: List<i32> = [];
+            if atn_cont_first(sim, sim.rule_start[r], &mut v2, &mut f, &mut fneg) && !sim.rule_first_open[r] {
+                sim.rule_first_open[r] = true;
+                changed = true;
+            }
+            for let t of &f {
+                if !sim.rule_first[r].contains(t) {
+                    sim.rule_first[r].push(*t);
+                    changed = true;
+                }
+            }
+            for let x of &fneg {
+                if !sim.rule_first_neg[r].contains(x) {
+                    sim.rule_first_neg[r].push(*x);
+                    changed = true;
+                }
+            }
+        }
+    }
+}
+
+/// True iff the continuation from `state` to its rule's `RULE_STOP` can be
+/// empty (derive no token). Uses `sim.rule_nullable` for rule-ref edges;
+/// `visited` breaks within-rule cycles (a re-entered state adds no new
+/// nullability).
+#[allow(dead_code)]
+fn atn_cont_nullable(sim: &AtnSim, state: i32, visited: &mut List<i32>) -> bool {
+    if visited.contains(&state) {
+        return false;
+    }
+    visited.push(state);
+    if sim.state_kind[state] == ATN_RULE_STOP {
+        return true;
+    }
+    let s = sim.state_tr_start[state];
+    let c = sim.state_tr_count[state];
+    for let mut j = 0; j < c; j += 1 {
+        let k = sim.tr_kind[s + j];
+        if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
+            if atn_cont_nullable(sim, sim.tr_target[s + j], visited) {
+                return true;
+            }
+        } else if k == ATN_TR_RULE {
+            let callee = sim.tr_label[s + j];
+            if callee >= 0 && sim.rule_nullable[callee] && atn_cont_nullable(sim, sim.tr_follow[s + j], visited) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// Collect the explicit FIRST token kinds of the continuation from `state`
+/// into `out`, and the labels EXCLUDED by `~X` (`NOT_ATOM`) edges into `neg`
+/// (a `~X` edge matches any token except `X`). Returns `open` (true only for
+/// a true wildcard `.`, which matches any token). A token `t` is admitted by
+/// this FIRST iff `atn_first_admits(out, open, neg, t, eof)`.
+/// Stops at consuming atoms (their label is the FIRST; no walk past them).
+/// Uses `sim.rule_first` / `rule_first_open` / `rule_first_neg` /
+/// `rule_nullable` for rule-ref edges; `visited` breaks within-rule cycles.
+///
+/// Precedence edges (an LR rule's loop entry) are walked like epsilon: when
+/// the rule's atom prefix is nullable the rule can begin with a loop operator,
+/// so those operator tokens belong in the rule's FIRST. (For the common
+/// non-nullable atom the walk stops at the atom before ever reaching the loop
+/// entry, so no operator enters FIRST.)
+#[allow(dead_code)]
+fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut List<i32>, neg: &mut List<i32>) -> bool {
+    if visited.contains(&state) {
+        return false;
+    }
+    visited.push(state);
+    if sim.state_kind[state] == ATN_RULE_STOP {
+        return false;
+    }
+    let mut open = false;
+    let s = sim.state_tr_start[state];
+    let c = sim.state_tr_count[state];
+    for let mut j = 0; j < c; j += 1 {
+        let k = sim.tr_kind[s + j];
+        if k == ATN_TR_ATOM {
+            if !out.contains(&sim.tr_label[s + j]) {
+                out.push(sim.tr_label[s + j]);
+            }
+        } else if k == ATN_TR_WILDCARD {
+            open = true;
+        } else if k == ATN_TR_NOT_ATOM {
+            if !neg.contains(&sim.tr_label[s + j]) {
+                neg.push(sim.tr_label[s + j]);
+            }
+        } else if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
+            if atn_cont_first(sim, sim.tr_target[s + j], visited, out, neg) {
+                open = true;
+            }
+        } else if k == ATN_TR_RULE {
+            let callee = sim.tr_label[s + j];
+            if callee >= 0 {
+                for let t of &sim.rule_first[callee] {
+                    if !out.contains(t) {
+                        out.push(*t);
+                    }
+                }
+                for let x of &sim.rule_first_neg[callee] {
+                    if !neg.contains(x) {
+                        neg.push(*x);
+                    }
+                }
+                if sim.rule_first_open[callee] {
+                    open = true;
+                }
+                if sim.rule_nullable[callee] && atn_cont_first(sim, sim.tr_follow[s + j], visited, out, neg) {
+                    open = true;
+                }
+            }
+        }
+    }
+    return open;
+}
+
+#[allow(dead_code)]
+fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
+    if sim.state_cont_first_open[state] && t != eof {
+        return true;
+    }
+    let fs = sim.state_cont_first_start[state];
+    let fc = sim.state_cont_first_count[state];
+    for let mut j = 0; j < fc; j += 1 {
+        if sim.cont_first_label[fs + j] == t {
+            return true;
+        }
+    }
+    if t != eof {
+        let ns = sim.state_cont_neg_start[state];
+        let nc = sim.state_cont_neg_count[state];
+        for let mut j = 0; j < nc; j += 1 {
+            if sim.cont_neg_label[ns + j] != t {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// True when `state`'s outgoing edges consume a token (atom / wildcard /
+/// not-atom). Such a state is a resting point: closure stops there and
+/// `atn_move` reads the edge. Epsilon / rule states are expanded instead.
+#[allow(dead_code)]
+fn atn_state_consumes(sim: &AtnSim, state: i32) -> bool {
+    let cnt = sim.state_tr_count[state];
+    if cnt == 0 {
+        return false;
+    }
+    let k = sim.tr_kind[sim.state_tr_start[state]];
+    return k == ATN_TR_ATOM || k == ATN_TR_NOT_ATOM || k == ATN_TR_WILDCARD;
+}
+
+/// A merged configuration set: at most one config per `(state, alt, rs, pr)`,
+/// its `pctx` the merged graph context of every path that reached it. This
+/// collapse is what bounds the closure to polynomial size under deep left
+/// recursion (instead of one config per distinct list-stack). Keyed by a
+/// string for O(log n) lookup.
+struct CfgSet {
+    state: List<i32>,
+    alt: List<i32>,
+    rs: List<i32>,
+    pr: List<i32>,
+    pctx: List<i32>,
+    index: TreeMap<i64, i32>,
+}
+
+
+impl CfgSet {
+    fn new() -> CfgSet {
+        return CfgSet {
+            state: [],
+            alt: [],
+            rs: [],
+            pr: [],
+            pctx: [],
+            index: TreeMap::<i64, i32>::new(),
+        };
+    }
+
+    /// Merge `(state, alt, rs, pr, pctx)` in. Returns `[index, changed]` where
+    /// `changed` is true iff the stored pctx grew (a fresh key always counts).
+    fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, rs: i32, pr: i32, pctx: i32) -> [i32, bool] {
+        // Packed i64 key (avoids per-config string allocation on the hot
+        // closure path). Each field gets a power-of-two bit slot, offset by
+        // its -2/-1 sentinel so the value stays non-negative:
+        //   pr    : bits [0,11)  (×1)            — precedence level
+        //   alt   : bits [11,22) (×2^11 = 2048)  — alternative index
+        //   rs    : bits [22,42) (×2^22)         — caller-stack depth
+        //   state : bits [42,62) (×2^42)         — ATN state id
+        // The slots are far wider than anything reachable: `pr`/`alt` admit
+        // ~2046 (a rule never has thousands of precedence levels or alts),
+        // `rs` ~1M caller frames (the wasm stack overflows in the low
+        // thousands first), `state` ~1M states. The asserts document the
+        // encoding capacity and fail loudly rather than let a field overflow
+        // its slot and alias a *different* config onto the same key.
+        assert pr + 2 < 2048, `ATN config precedence ${pr} exceeds packed-key slot`;
+        assert alt + 1 < 2048, `ATN config alt ${alt} exceeds packed-key slot`;
+        assert rs + 2 < 1048576, `ATN config caller-stack depth ${rs} exceeds packed-key slot`;
+        assert state + 2 < 1048576, `ATN config state ${state} exceeds packed-key slot`;
+        let k = (state + 2) as i64 * 4398046511104 + (rs + 2) as i64 * 4194304 + (alt + 1) as i64 * 2048 + (pr + 2) as i64;
+        if let Some(i) = self.index.get(k) {
+            let merged = arena.merge(self.pctx[i], pctx);
+            let changed = merged != self.pctx[i];
+            self.pctx[i] = merged;
+            return [i, changed];
+        }
+        let i = self.state.len();
+        self.state.push(state);
+        self.alt.push(alt);
+        self.rs.push(rs);
+        self.pr.push(pr);
+        self.pctx.push(pctx);
+        self.index[k] = i;
+        return [i, true];
+    }
+
+    fn to_list(&self) -> List<AtnConfig> {
+        let mut out: List<AtnConfig> = [];
+        for let mut i = 0; i < self.state.len(); i += 1 {
+            out.push(AtnConfig {
+                state: self.state[i],
+                alt: self.alt[i],
+                pctx: self.pctx[i],
+                rs: self.rs[i],
+                pr: self.pr[i],
+            });
+        }
+        return out;
+    }
+}
+
+/// Closure of a seed set with graph-merged contexts. Resting configs
+/// (consuming states; rule-stop "at-end"; `ATN_ACCEPT_EOF`) are returned;
+/// epsilon / precedence / rule-ref edges are followed, rule-stops pop the
+/// graph context (then the caller stack `rstk` once the context empties).
+/// Configs reaching the same `(state, alt, rs, pr)` are merged, so the work
+/// stays polynomial under deep left recursion (the recursion is input-driven
+/// — an LR operand is only reached after consuming its operator token — so
+/// the context depth is bounded by the input, no cyclic-context handling is
+/// needed; the guards below are a safety net for pathological epsilon cycles).
+#[allow(dead_code)]
+fn atn_closure(sim: &AtnSim, arena: &mut CtxArena, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<AtnConfig> {
+    let mut cset = CfgSet::new();
+    let mut expanded: List<i32> = [];
+    let mut rset = CfgSet::new();
+    let mut work: List<AtnConfig> = *seeds;
+    let mut guard = 0;
+    while let Some(c) = work.pop() {
+        guard += 1;
+        if guard > ATN_CLOSURE_GUARD {
+            break;
+        }
+        let res = cset.add(arena, c.state, c.alt, c.rs, c.pr, c.pctx);
+        let idx = res.0;
+        while expanded.len() <= idx {
+            expanded.push(-9);
+        }
+        let merged_pctx = cset.pctx[idx];
+        if expanded[idx] == merged_pctx {
+            continue;
+        }
+        expanded[idx] = merged_pctx;
+        let cur = AtnConfig { state: c.state, alt: c.alt, pctx: merged_pctx, rs: c.rs, pr: c.pr };
+        atn_expand(sim, arena, &cur, rstk, &mut work, &mut rset);
+    }
+    return rset.to_list();
+}
+
+/// Expand one (merged) config: rest it (consuming / at-end / EOF) or push its
+/// epsilon / precedence / rule-ref successors onto `work`.
+#[allow(dead_code)]
+fn atn_expand(
+    sim: &AtnSim,
+    arena: &mut CtxArena,
+    cur: &AtnConfig,
+    rstk: &List<i32>,
+    work: &mut List<AtnConfig>,
+    rset: &mut CfgSet,
+) {
+    if cur.state == ATN_ACCEPT_EOF {
+        rset.add(arena, cur.state, cur.alt, cur.rs, cur.pr, cur.pctx);
+        return;
+    }
+    if sim.state_kind[cur.state] == ATN_RULE_STOP {
+        atn_pop(sim, arena, cur, rstk, work, rset);
+        return;
+    }
+    if atn_state_consumes(sim, cur.state) {
+        rset.add(arena, cur.state, cur.alt, cur.rs, cur.pr, cur.pctx);
+        return;
+    }
+    let start = sim.state_tr_start[cur.state];
+    let cnt = sim.state_tr_count[cur.state];
+    for let mut j = 0; j < cnt; j += 1 {
+        let k = sim.tr_kind[start + j];
+        let target = sim.tr_target[start + j];
+        if k == ATN_TR_EPSILON {
+            work.push(AtnConfig { state: target, alt: cur.alt, pctx: cur.pctx, rs: cur.rs, pr: cur.pr });
+        } else if k == ATN_TR_PRECEDENCE {
+            // Loop-entry predicate `{prec_i >= pr}?`: prune below the context.
+            if sim.tr_prec[start + j] >= cur.pr {
+                work.push(AtnConfig { state: target, alt: cur.alt, pctx: cur.pctx, rs: cur.rs, pr: cur.pr });
+            }
+        } else if k == ATN_TR_RULE {
+            if target < 0 || arena.edges.len() >= ATN_ARENA_CAP {
+                continue;
+            }
+            // A recursive operand `expr[next_i]` carries its raised floor on
+            // the RuleRef `prec`; push a frame saving the current `pr`.
+            let npctx = arena.push(sim.tr_follow[start + j], cur.pr, cur.pctx);
+            work.push(AtnConfig { state: target, alt: cur.alt, pctx: npctx, rs: cur.rs, pr: sim.tr_prec[start + j] });
+        }
+    }
+}
+
+/// Pop a rule-stop: follow each graph-context edge back to its caller frame;
+/// a boundary edge (or an empty context) falls through to the pre-existing
+/// caller stack `rstk` via `atn_rs_pop`.
+#[allow(dead_code)]
+fn atn_pop(
+    sim: &AtnSim,
+    arena: &mut CtxArena,
+    cur: &AtnConfig,
+    rstk: &List<i32>,
+    work: &mut List<AtnConfig>,
+    rset: &mut CfgSet,
+) {
+    if cur.pctx == CTX_EMPTY {
+        atn_rs_pop(arena, cur.state, cur.alt, cur.rs, cur.pr, rstk, work, rset);
+        return;
+    }
+    let edges = arena.edges[cur.pctx];
+    for let e of &edges {
+        if e.0 == CTX_BOUNDARY {
+            atn_rs_pop(arena, cur.state, cur.alt, cur.rs, cur.pr, rstk, work, rset);
+        } else {
+            work.push(AtnConfig { state: e.0, alt: cur.alt, pctx: e.2, rs: cur.rs, pr: e.1 });
+        }
+    }
+}
+
+/// Return into the pre-existing caller stack once the during-prediction
+/// context is exhausted. Mirrors the exact-return-state semantics: continue
+/// at `rstk[rs]`; the bottom start frame's follow is EOF; an unstamped /
+/// SLL frame matches any follow (the rule-stop stays "at-end").
+#[allow(dead_code)]
+fn atn_rs_pop(
+    arena: &mut CtxArena,
+    stop_state: i32,
+    alt: i32,
+    rs: i32,
+    pr: i32,
+    rstk: &List<i32>,
+    work: &mut List<AtnConfig>,
+    rset: &mut CfgSet,
+) {
+    if rs >= 0 {
+        let ret = rstk[rs];
+        if ret >= 0 {
+            work.push(AtnConfig { state: ret, alt: alt, pctx: CTX_EMPTY, rs: rs - 1, pr: pr });
+        } else if rs == 0 {
+            rset.add(arena, ATN_ACCEPT_EOF, alt, -1, pr, CTX_EMPTY);
+        } else {
+            rset.add(arena, stop_state, alt, rs, pr, CTX_EMPTY);
+        }
+    } else if rstk.is_empty() {
+        rset.add(arena, stop_state, alt, rs, pr, CTX_EMPTY);
+    } else {
+        rset.add(arena, ATN_ACCEPT_EOF, alt, -1, pr, CTX_EMPTY);
+    }
+}
+
+/// Advance a resting config set by one input token. At-end and accept-EOF
+/// configs carry only when still viable; consuming configs follow whichever
+/// edge matches `token`.
+#[allow(dead_code)]
+fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> List<AtnConfig> {
+    let mut out: List<AtnConfig> = [];
+    for let c of configs {
+        if c.state == ATN_ACCEPT_EOF {
+            if token == eof {
+                out.push(*c);
+            }
+            continue;
+        }
+        if sim.state_kind[c.state] == ATN_RULE_STOP {
+            out.push(*c);
+            continue;
+        }
+        let start = sim.state_tr_start[c.state];
+        let cnt = sim.state_tr_count[c.state];
+        for let mut j = 0; j < cnt; j += 1 {
+            let k = sim.tr_kind[start + j];
+            let label = sim.tr_label[start + j];
+            let matched = if k == ATN_TR_ATOM {
+                label == token;
+            } else if k == ATN_TR_WILDCARD {
+                token != eof;
+            } else if k == ATN_TR_NOT_ATOM {
+                token != label && token != eof;
+            } else {
+                false;
+            };
+            if matched {
+                out.push(AtnConfig { state: sim.tr_target[start + j], alt: c.alt, pctx: c.pctx, rs: c.rs, pr: c.pr });
+            }
+        }
+    }
+    return out;
+}
+
+#[allow(dead_code)]
+fn atn_unique_alts(configs: &List<AtnConfig>) -> List<i32> {
+    let mut alts: List<i32> = [];
+    for let c of configs {
+        if !alts.contains(&c.alt) {
+            alts.push(c.alt);
+        }
+    }
+    alts.sort();
+    return alts;
+}
+
+#[allow(dead_code)]
+fn atn_min_alt(alts: &List<i32>) -> i32 {
+    if alts.is_empty() {
+        return -1;
+    }
+    let mut m = alts[0];
+    for let a of alts {
+        if *a < m {
+            m = *a;
+        }
+    }
+    return m;
+}
+
+#[allow(dead_code)]
+fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
+    if configs.is_empty() {
+        return false;
+    }
+    for let c of configs {
+        if c.state != ATN_ACCEPT_EOF && sim.state_kind[c.state] != ATN_RULE_STOP {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The empty disabled-alternative set — the default when a decision has no
+/// semantic-predicate exclusions (every current generated call site).
+#[allow(dead_code)]
+pub global ATN_NO_DISABLED: List<i32> = [];
+
+/// Predict the winning alternative at `decision` against `tokens` from
+/// `start_pos`, with full context: `rule_stack` is the caller's current
+/// chain of ATN return states (outermost — the start-rule frame — first).
+/// Pass an empty `rule_stack` for plain SLL. `min_prec` is the current
+/// precedence context `pr`: a loop-entry edge `{prec_i >= pr}?` whose
+/// `prec_i < min_prec` is pruned (left/right-associative precedence
+/// climbing). Returns the 0-based alternative index (the decision state's
+/// edge order), or -1 if no alternative is viable.
+///
+/// Resolution: simulate until one alt survives (return it), the config set
+/// empties (return the previous step's lowest alt), or all survivors are
+/// at-end together (a genuine conflict — return the lowest alt, matching
+/// ANTLR4's rule-order tie-break; non-greedy repeats order their exit edge
+/// first so this yields the exit).
+pub fn atn_predict_with_stack(
+    sim: &AtnSim,
+    decision: i32,
+    rule_stack: &List<i32>,
+    tokens: &Array<i32>,
+    start_pos: i32,
+    eof: i32,
+    min_prec: i32 = 0,
+    disabled_alts: &List<i32> = &ATN_NO_DISABLED,
+) -> i32 {
+    let dstate = sim.decision_state[decision];
+    let start = sim.state_tr_start[dstate];
+    let cnt = sim.state_tr_count[dstate];
+    let rs_init = rule_stack.len() - 1;
+    // Fresh context arena per prediction: a persistent per-Parser arena
+    // measured slower (it accumulates contexts, growing the intern buckets),
+    // and full-context LR results aren't memoizable (the context encodes the
+    // whole nesting depth).
+    let mut arena = CtxArena::new();
+    let mut seeds: List<AtnConfig> = [];
+    for let mut j = 0; j < cnt; j += 1 {
+        // Prune a precedence-guarded enter edge whose alt precedence is below
+        // the current context (the predicate `{prec_i >= min_prec}?` is false).
+        if sim.tr_kind[start + j] == ATN_TR_PRECEDENCE && sim.tr_prec[start + j] < min_prec {
+            continue;
+        }
+        // Exclude an alternative whose semantic predicate the caller evaluated
+        // to false (`{cond}?` at the decision). The alt index is the seed's
+        // `alt` (== the grammar alt index the dispatch maps back), so a false
+        // predicate makes that alt unseedable — it can never win. The
+        // `is_empty` guard keeps the common (no-predicate) decision to a length
+        // check instead of a full scan per transition.
+        if !disabled_alts.is_empty() && disabled_alts.contains(&j) {
+            continue;
+        }
+        seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, pctx: CTX_EMPTY, rs: rs_init, pr: min_prec });
+    }
+    let mut configs = atn_closure(sim, &mut arena, &seeds, rule_stack);
+    let mut pos = start_pos;
+    let mut prev = atn_unique_alts(&configs);
+    let limit = tokens.len() - start_pos + 8;
+    let mut guard = 0;
+    loop {
+        guard += 1;
+        if guard > limit {
+            return atn_min_alt(&prev);
+        }
+        let alts = atn_unique_alts(&configs);
+        if alts.is_empty() {
+            return atn_min_alt(&prev);
+        }
+        if alts.len() == 1 {
+            return alts[0];
+        }
+        if atn_all_at_end(sim, &configs) {
+            return atn_min_alt(&alts);
+        }
+        prev = alts;
+        let token = if pos < tokens.len() { tokens[pos] } else { eof };
+        let moved = atn_move(sim, &configs, token, eof);
+        pos += 1;
+        configs = atn_closure(sim, &mut arena, &moved, rule_stack);
+    }
+}
+
+/// Decide an LR rule's loop-entry: ENTER alt `j` (continue the loop with
+/// operator alt `j`) or EXIT (the trailing exit-edge index `c - 1`). This is
+/// the LR loop-entry's true semantics — precedence + yield-to-caller-mandatory
+/// — computed directly, not by general ALL(*) simulation (which is correct but
+/// O(n^2) here because the exit branch re-walks the whole enclosing-loop
+/// caller chain). O(caller-depth + grammar) per decision.
+///
+/// 1. If the current token is MANDATORY in the caller continuation (the first
+///    non-nullable level of the caller return-state stack), EXIT — the caller
+///    needs it (`between`'s mandatory `'and'`).
+/// 2. Else the lowest-index precedence-allowed (`prec >= min_prec`) enter edge
+///    whose suffix can start with the token wins (greedy; left-associativity
+///    falls out of the precedence prune).
+/// 3. Else EXIT.
+#[allow(dead_code)]
+pub fn atn_lr_loop_decision(
+    sim: &AtnSim,
+    rule_stack: &List<i32>,
+    decision: i32,
+    tokens: &Array<i32>,
+    pos: i32,
+    eof: i32,
+    min_prec: i32 = 0,
+) -> i32 {
+    let dstate = sim.decision_state[decision];
+    let t = if pos < tokens.len() { tokens[pos] } else { eof };
+    let s = sim.state_tr_start[dstate];
+    let c = sim.state_tr_count[dstate];
+    let exit_alt = c - 1;
+    if atn_caller_mandates(sim, rule_stack, t, eof) {
+        return exit_alt;
+    }
+    for let mut j = 0; j < c; j += 1 {
+        if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE {
+            if sim.tr_prec[s + j] < min_prec {
+                continue;
+            }
+            let tgt = sim.tr_target[s + j];
+            if atn_state_cont_admits(sim, tgt, t, eof) {
+                return j;
+            }
+        }
+    }
+    return exit_alt;
+}
+
+/// True iff the caller continuation MANDATES token `t`: walking the caller
+/// return-state stack from the top, pop nullable continuations (optional
+/// loops / nullable tails), and at the first non-nullable level test whether
+/// its FIRST admits `t`. The start frame (-1 at index 0) mandates EOF.
+#[allow(dead_code)]
+fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -> bool {
+    let mut i = rule_stack.len() - 1;
+    while i >= 0 {
+        let ret = rule_stack[i];
+        if ret < 0 {
+            return i == 0 && t == eof;
+        }
+        if sim.state_cont_nullable[ret] {
+            i -= 1;
+            continue;
+        }
+        return atn_state_cont_admits(sim, ret, t, eof);
+    }
+    return false;
+}
+
+/// SLL convenience wrapper: predict with an empty rule stack. Correct for
+/// top-level decisions; deeper decisions whose disambiguation depends on the
+/// caller's follow need `atn_predict_with_stack` with the real rule stack.
+#[allow(dead_code)]
+pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &Array<i32>, start_pos: i32, eof: i32) -> i32 {
+    let empty: List<i32> = [];
+    return atn_predict_with_stack(sim, decision, &empty, tokens, start_pos, eof);
+}
+pub enum TokenKind {
+    ID,
+    WS,
+    Eof,
+    Error,
+}
+
+pub global TK_ID: i32 = 0;
+pub global TK_WS: i32 = 1;
+pub global TK_EOF: i32 = 2;
+pub global TK_ERROR: i32 = 3;
+pub global TK_LIT_SEMI: i32 = 4;
+pub global TK_LIT_AND: i32 = 5;
+pub global TK_LIT_BETWEEN: i32 = 6;
+
+struct Lexer {
+    chars: List<char>,
+    pos: i32,
+}
+
+impl Lexer {
+    fn new(input: &String) -> Lexer {
+        return Lexer { chars: input.to_chars(), pos: 0 };
+    }
+
+    fn at_end(&self) -> bool {
+        return self.pos >= self.chars.len();
+    }
+
+    fn slice(&self, start: i32, end: i32) -> LexerSlice with stores[self] {
+        return LexerSlice::new(&self.chars, start, end);
+    }
+}
+
+fn try_ID(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' | '_' })) { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_0 = pos;
+        rep_0: {
+            if pos >= chars.len() { break rep_0; }
+            if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' | '_' | '0'..='9' })) { break rep_0; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_0;
+        break;
+    }
+    return pos;
+}
+
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_1 = pos;
+        rep_1: {
+            if pos >= chars.len() { break rep_1; }
+            if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { break rep_1; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_1;
+        break;
+    }
+    return pos;
+}
+
+fn try_lit_semi(chars: &List<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != ';' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_and(chars: &List<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'a' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != 'n' { return -1; }
+    if pos + 2 >= chars.len() || chars[pos + 2] != 'd' { return -1; }
+    return pos + 3;
+}
+
+fn try_lit_between(chars: &List<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'b' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != 'e' { return -1; }
+    if pos + 2 >= chars.len() || chars[pos + 2] != 't' { return -1; }
+    if pos + 3 >= chars.len() || chars[pos + 3] != 'w' { return -1; }
+    if pos + 4 >= chars.len() || chars[pos + 4] != 'e' { return -1; }
+    if pos + 5 >= chars.len() || chars[pos + 5] != 'e' { return -1; }
+    if pos + 6 >= chars.len() || chars[pos + 6] != 'n' { return -1; }
+    return pos + 7;
+}
+
+pub fn tokenize(input: &String) -> TokenStream {
+    let mut lexer = Lexer::new(input);
+    let mut ts = TokenStream::new(&lexer.chars);
+    let mut triv_lo = ts.trivia_mark();
+    while !lexer.at_end() {
+        let start = lexer.pos;
+        let mut best_end: i32 = -1;
+        let mut best_kind: i32 = TK_ERROR;
+        let mut end: i32 = -1;
+        let first_char = lexer.chars[start];
+        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+            end = try_WS(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WS; }
+        } else if first_char == ';' {
+            end = try_lit_semi(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; }
+        } else if first_char == '_' {
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else if first_char == 'a' {
+            end = try_lit_and(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_AND; }
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else if first_char == 'b' {
+            end = try_lit_between(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_BETWEEN; }
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else if 'a' <= first_char <= 'z' {
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else if 'A' <= first_char <= 'Z' {
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else {
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        }
+        if best_end <= start {
+            ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
+            triv_lo = ts.trivia_mark();
+            lexer.pos = start + 1;
+        } else {
+            let tok_start = start;
+            let is_skip = best_kind matches { TK_WS };
+            if is_skip {
+                ts.push_trivia(best_kind, tok_start, best_end, 0);
+            } else {
+                ts.push_token(best_kind, tok_start, best_end, triv_lo, ts.trivia_mark());
+                triv_lo = ts.trivia_mark();
+            }
+            lexer.pos = best_end;
+        }
+    }
+    ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());
+    return ts;
+}
+
+pub fn token_kind_name(kind: i32) -> String {
+    return match kind {
+        TK_ID => "ID",
+        TK_WS => "WS",
+        TK_EOF => "Eof",
+        TK_ERROR => "Error",
+        TK_LIT_SEMI => "TK_LIT_SEMI",
+        TK_LIT_AND => "TK_LIT_AND",
+        TK_LIT_BETWEEN => "TK_LIT_BETWEEN",
+        _ => "Unknown",
+    };
+}
+
+pub global RK_STAT: NodeKind = 0;
+pub global RK_EXPR: NodeKind = 1;
+
+global RULE_NAMES: List<String> = ["stat", "expr"];
+
+impl Display for NodeKind {
+    fn fmt(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&"<error>");
+        } else {
+            f.write_str(&RULE_NAMES[*self as i32]);
+        }
+    }
+}
+
+impl Inspect for NodeKind {
+    fn inspect(&self, f: &mut Formatter) {
+        self.fmt(f);
+        f.write_str(&`(${*self as i32})`);
+    }
+}
+
+struct Parser {
+    tokens: TokenStream,
+    kinds: Array<i32>,
+    pos: i32,
+    pending: Option<ParseError>,
+    recovering: bool,
+    pending_code: DiagnosticCode,
+    speculating: bool,
+    max_errors: i32,
+    atn_stack: List<i32>,
+    atn_ret_pending: i32,
+    b: TreeBuilder,
+    diagnostics: List<Diagnostic>,
+}
+
+impl Parser {
+    fn new(tokens: TokenStream) -> Parser {
+        let kinds = tokens.kinds.to_array();
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, atn_stack: [], atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
+    }
+
+    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
+        let lc = line_col(self.tokens.chars, span.start);
+        return ParseError::at(message, span, expected, lc.0, lc.1);
+    }
+
+    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
+        let e = self.error(message, span, expected);
+        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+        if take {
+            self.pending = Option::Some(e);
+            self.pending_code = code;
+        }
+        self.recovering = true;
+    }
+
+    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+        self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
+    }
+
+    fn push_rule_stack(&mut self, name: String) {
+        if let Some(e) = &mut self.pending {
+            e.rule_stack.push(name);
+        }
+    }
+
+    fn pending_message(&self) -> String {
+        if let Some(e) = &self.pending { return e.message; }
+        return String::from("");
+    }
+
+    fn in_set(&self, k: i32, set: &List<i32>) -> bool {
+        for let x of set { if *x == k { return true; } }
+        return false;
+    }
+
+    fn report_extra(&mut self, span: Span) {
+        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
+        let lc = line_col(self.tokens.chars, span.start);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
+    }
+
+    fn report_missing(&mut self, kind: i32, span: Span) {
+        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
+        let lc = line_col(self.tokens.chars, span.start);
+        let name = token_kind_name(kind);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing ${name}`, span, lc.0, lc.1));
+    }
+
+    fn report_unexpected(&mut self, span: Span) {
+        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
+        let lc = line_col(self.tokens.chars, span.start);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "${self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
+    }
+
+    fn peek_start(&self) -> i32 {
+        return self.tokens.starts[self.pos];
+    }
+
+    fn peek_span(&self) -> Span {
+        return self.tokens.span_at(self.pos);
+    }
+
+    fn peek_kind(&self) -> i32 {
+        return self.kinds[self.pos];
+    }
+
+    fn peek_at(&self, offset: i32) -> i32 {
+        let idx = self.pos + offset;
+        if idx >= self.kinds.len() { return TK_EOF; }
+        return self.kinds[idx];
+    }
+
+    fn advance(&mut self) -> i32 {
+        let i = self.pos;
+        self.pos += 1;
+        return i;
+    }
+
+    fn last_end(&self) -> i32 {
+        if self.pos == 0 { return 0; }
+        return self.tokens.ends[self.pos - 1];
+    }
+
+    fn expect(&mut self, kind: i32, sync: &List<i32>) -> i32 {
+        if self.recovering { return self.pos; }
+        if self.kinds[self.pos] == kind {
+            if kind == TK_EOF {
+                self.b.token(self.pos);
+                return self.pos;
+            }
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
+        }
+        if self.speculating {
+            let name = token_kind_name(kind);
+            self.fail(`expected ${name}, got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            return self.pos;
+        }
+        if self.peek_at(1) == kind {
+            self.report_extra(self.tokens.span_at(self.pos));
+            let _sk = self.advance();
+            self.tokens.mark_skipped(_sk);
+            self.b.skip(_sk);
+            if kind == TK_EOF {
+                self.b.token(self.pos);
+                return self.pos;
+            }
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
+        }
+        if self.in_set(self.kinds[self.pos], sync) {
+            self.report_missing(kind, self.tokens.span_at(self.pos));
+            let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
+            self.b.missing(_syn);
+            return _syn;
+        }
+        if !sync.is_empty() {
+            self.report_unexpected(self.tokens.span_at(self.pos));
+            if self.kinds[self.pos] != TK_EOF {
+                self.b.start_error(self.tokens.span_at(self.pos).start);
+                loop {
+                    let _k = self.kinds[self.pos];
+                    if _k == TK_EOF || _k == kind || self.in_set(_k, sync) { break; }
+                    let _sk = self.advance();
+                    self.tokens.mark_skipped(_sk);
+                    self.b.skip(_sk);
+                }
+                self.b.finish_node(self.last_end());
+            }
+            if self.kinds[self.pos] == kind {
+                if kind == TK_EOF {
+                    self.b.token(self.pos);
+                    return self.pos;
+                }
+                let _i = self.advance();
+                self.b.token(_i);
+                return _i;
+            }
+            let _syn2 = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
+            self.b.missing(_syn2);
+            return _syn2;
+        }
+        let name = token_kind_name(kind);
+        self.fail(
+            `expected ${name}, got "${self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
+            [name],
+            DiagnosticCode::UnexpectedToken,
+        );
+        return self.pos;
+    }
+
+    fn any(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        if self.kinds[self.pos] != TK_EOF {
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
+        }
+        self.fail(
+            `expected any token, got "${self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
+            ["any token"],
+            DiagnosticCode::UnexpectedToken,
+        );
+        return self.pos;
+    }
+
+    fn expect_not(&mut self, excluded: List<i32>) -> i32 {
+        if self.recovering { return self.pos; }
+        let k = self.kinds[self.pos];
+        if k != TK_EOF {
+            let mut blocked = false;
+            for let x of excluded {
+                if x == k {
+                    blocked = true;
+                    break;
+                }
+            }
+            if !blocked {
+                let _i = self.advance();
+                self.b.token(_i);
+                return _i;
+            }
+        }
+        self.fail(
+            `unexpected token "${self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
+            ["set complement"],
+            DiagnosticCode::UnexpectedToken,
+        );
+        return self.pos;
+    }
+
+    fn expect_set(&mut self, included: List<i32>) -> i32 {
+        if self.recovering { return self.pos; }
+        let k = self.kinds[self.pos];
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    self.b.token(self.pos);
+                    return self.pos;
+                }
+                let _i = self.advance();
+                self.b.token(_i);
+                return _i;
+            }
+        }
+        self.fail(
+            `unexpected token "${self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
+            ["token set"],
+            DiagnosticCode::UnexpectedToken,
+        );
+        return self.pos;
+    }
+}
+
+fn scan_stat(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    SCAN_STACK.push(8);
+    pos = scan_expr(tokens, pos, 0);
+    SCAN_STACK.pop();
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
+    let start = pos;
+    let mut pos = pos;
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    scan_alts: {
+        if alt_kind == TK_ID {
+            pos = start;
+            try_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_LIT_BETWEEN {
+            pos = start;
+            try_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_BETWEEN { break try_1; }
+                pos += 1;
+                SCAN_STACK.push(20);
+                pos = scan_expr(tokens, pos, 0);
+                SCAN_STACK.pop();
+                if pos < 0 { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_AND { break try_1; }
+                pos += 1;
+                SCAN_STACK.push(24);
+                pos = scan_expr(tokens, pos, 0);
+                SCAN_STACK.pop();
+                if pos < 0 { break try_1; }
+                break scan_alts;
+            }
+            return -1;
+        } else {
+            return -1;
+        }
+    }
+    return pos;
+}
+
+fn scan_expr_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_AND { return -1; }
+    pos += 1;
+    SCAN_STACK.push(32);
+    pos = scan_expr(tokens, pos, 3);
+    SCAN_STACK.pop();
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_expr_lr_2(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_BETWEEN { return -1; }
+    pos += 1;
+    SCAN_STACK.push(37);
+    pos = scan_expr(tokens, pos, 3);
+    SCAN_STACK.pop();
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_AND { return -1; }
+    pos += 1;
+    SCAN_STACK.push(41);
+    pos = scan_expr(tokens, pos, 3);
+    SCAN_STACK.pop();
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_expr_atom(tokens, pos);
+    if pos < 0 { return -1; }
+    loop {
+        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, 1, tokens, pos, TK_EOF, min_prec);
+        let _lr_pos0 = pos;
+        if _atn_alt == 0 {
+            pos = scan_expr_lr_1(tokens, pos);
+            if pos < 0 { return -1; }
+        } else if _atn_alt == 1 {
+            pos = scan_expr_lr_2(tokens, pos);
+            if pos < 0 { return -1; }
+        } else {
+            break;
+        }
+        if pos == _lr_pos0 {
+            break;
+        }
+    }
+    return pos;
+}
+
+fn _parse_stat__inner(p: &mut Parser) -> () {
+    let start = p.peek_start();
+    p.atn_ret_pending = 8;
+    let expr = _parse_expr(p);
+    let semicolon = p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_stat(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _atn_ret = p.atn_ret_pending;
+    p.atn_ret_pending = -1;
+    p.atn_stack.push(_atn_ret);
+    let _start = p.peek_start();
+    p.b.start_node(RK_STAT, _start);
+    _parse_stat__inner(p);
+    p.b.finish_node(p.last_end());
+    p.atn_stack.pop();
+    if p.recovering {
+        p.push_rule_stack("stat");
+    }
+}
+
+fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
+    let start = p.peek_start();
+    let kind = p.peek_kind();
+    if kind == TK_ID {
+        let id = p.expect(TK_ID, &EMPTY_SYNC);
+        return;
+    }
+    if kind == TK_LIT_BETWEEN {
+        let lit_between = p.expect(TK_LIT_BETWEEN, &SYNC_0);
+        p.atn_ret_pending = 20;
+        let expr = _parse_expr(p);
+        let lit_and = p.expect(TK_LIT_AND, &SYNC_0);
+        p.atn_ret_pending = 24;
+        let expr_2 = _parse_expr(p, 1);
+        return;
+    }
+    p.no_viable(
+        "expected expr",
+        p.peek_span(),
+        ["TK_ID", "TK_LIT_BETWEEN"],
+    );
+    return;
+}
+
+fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
+    let _cp = p.b.checkpoint();
+    let _start = p.peek_start();
+    p.b.start_node(RK_EXPR, _start);
+    _parse_expr__inner_atom(p, min_prec);
+    p.b.finish_node(p.last_end());
+    loop {
+        if p.recovering { break; }
+        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, 1, &p.kinds, p.pos, TK_EOF, min_prec);
+        let _lr_pos0 = p.pos;
+        if _atn_alt == 0 {
+            p.b.start_node_at(_cp, RK_EXPR, _start);
+            let lit_and = p.expect(TK_LIT_AND, &EMPTY_SYNC);
+            p.atn_ret_pending = 32;
+            let expr_2 = _parse_expr(p, 3);
+            p.b.finish_node(p.last_end());
+        } else if _atn_alt == 1 {
+            p.b.start_node_at(_cp, RK_EXPR, _start);
+            let lit_between = p.expect(TK_LIT_BETWEEN, &EMPTY_SYNC);
+            p.atn_ret_pending = 37;
+            let expr_2 = _parse_expr(p, 3);
+            let lit_and = p.expect(TK_LIT_AND, &EMPTY_SYNC);
+            p.atn_ret_pending = 41;
+            let expr_3 = _parse_expr(p, 3);
+            p.b.finish_node(p.last_end());
+        } else {
+            break;
+        }
+        if p.pos == _lr_pos0 {
+            break;
+        }
+    }
+    return;
+}
+
+fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> () {
+    if p.recovering { return; }
+    let _atn_ret = p.atn_ret_pending;
+    p.atn_ret_pending = -1;
+    p.atn_stack.push(_atn_ret);
+    _parse_expr__inner(p, min_prec);
+    p.atn_stack.pop();
+    if p.recovering {
+        p.push_rule_stack("expr");
+    }
+}
+
+fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
+    assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
+    let tokens = tokenize(input);
+    let mut p = Parser::new(tokens);
+    p.max_errors = max_errors;
+    entry(&mut p);
+    if p.recovering && p.diagnostics.len() < max_errors {
+        if let Some(e) = &p.pending {
+            let lc = line_col(p.tokens.chars, e.span.start);
+            let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);
+            d.rule_stack = e.rule_stack;
+            p.diagnostics.push(d);
+        }
+    }
+    return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+}
+
+pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return parse_stat(input, max_errors);
+}
+
+pub fn parse_stat(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_stat(p));
+}
+
+pub fn parse_expr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expr(p));
+}
+
+pub fn to_string_tree(result: &ParseResult) -> String {
+    let mut token_names: List<String> = List::with_capacity(7);
+    for let mut k = 0; k < 7; k += 1 {
+        token_names.push(token_kind_name(k));
+    }
+    return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
+}
+
+pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
+    let mut token_names: List<String> = List::with_capacity(7);
+    for let mut k = 0; k < 7; k += 1 {
+        token_names.push(token_kind_name(k));
+    }
+    let mut _kind: i32 = -1;
+    for let mut i = 0; i < RULE_NAMES.len(); i += 1 {
+        if RULE_NAMES[i] == *rule {
+            _kind = i;
+            break;
+        }
+    }
+    let _sub = result.cst.find_child(0, _kind as NodeKind);
+    if _sub >= 0 {
+        return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &token_names);
+    }
+    return String::new();
+}
+
+global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [TK_ID, TK_LIT_BETWEEN];
+
+global ATN_SIM: AtnSim = atn_decode(&b"\x02\x00\x02\x00\x2a\x00\x00\x00\x02\x00\x0b\x00\x19\x00\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x06\x09\x07\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x04\x00\x01\x00\x04\x00\x05\x05\x00\x00\x00\x00\x01\x00\x04\x00\x00\x01\x00\x04\x00\x01\x00\x04\x00\x05\x00\x0c\x00\x07\x00\x02\x00\x08\x00\x03\x00\x0a\x00\x0b\x00\x06\x00\x0e\x00\x11\x00\x1a\x00\x0f\x00\x10\x00\x0d\x00\x12\x00\x13\x00\x14\x00\x03\x00\x16\x00\x17\x00\x18\x00\x03\x00\x0d\x00\x1d\x00\x22\x00\x1b\x00\x04\x00\x1a\x00\x1e\x00\x1f\x00\x20\x00\x03\x00\x1c\x00\x23\x00\x24\x00\x25\x00\x03\x00\x27\x00\x28\x00\x29\x00\x03\x00\x1c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x21\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x26\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x2a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00", true);
+global SCAN_STACK: List<i32> = [];
+

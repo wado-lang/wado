@@ -2011,7 +2011,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
         let _sk = p.peek_kind();
         if _sk == TK_LIT_MINUSGT {
             if 1 >= min_prec {
-                if scan_expr_lr_1(&p.kinds, p.pos) < 0 {
+                if scan_expr_lr_1(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);

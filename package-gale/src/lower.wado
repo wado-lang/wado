@@ -525,8 +525,8 @@ fn lower_rule(rule: &ParserRule, ctx: &mut GenContext) -> Rule {
 fn lower_simple_rule(rule: &ParserRule, ctx: &mut GenContext) -> SimpleRule {
     let case_names = case_names_for_rule(&rule.alternatives);
     let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
-    let body = lower_alt_body(&rule.alternatives[0], 0, rule, ctx, &case_names, &alt_gc_starts);
-    let scan_body = lower_scan_body(&rule.alternatives[0], ctx);
+    let body = lower_alt_body(&rule.alternatives[0], 0, rule, ctx, &case_names, &alt_gc_starts, true);
+    let scan_body = lower_scan_body(&rule.alternatives[0], ctx, &rule.name, true);
     return SimpleRule {
         header: lower_header(rule),
         body,
@@ -555,8 +555,8 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
     let mut scan_alts: List<ScanBody> = [];
     let mut all_indices: List<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-        alts.push(lower_alt_body(&rule.alternatives[i], i, rule, ctx, &case_names, &alt_gc_starts));
-        scan_alts.push(lower_scan_body(&rule.alternatives[i], ctx));
+        alts.push(lower_alt_body(&rule.alternatives[i], i, rule, ctx, &case_names, &alt_gc_starts, true));
+        scan_alts.push(lower_scan_body(&rule.alternatives[i], ctx, &rule.name, true));
         all_indices.push(i);
     }
 
@@ -650,7 +650,10 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // lower time so emit consumes the suffix as a structural walk.
     // Stamps both `suffix.ops` (parse-side `RuleCallOp.min_prec_arg`)
     // and `scan_suffix.elements` (scan-side `ScanRuleCallElement.min_prec_arg`).
-    stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name);
+    let mid_operand_gated = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, ctx, atn_class);
+    if mid_operand_gated {
+        ctx.mark_caller_follow_gate();
+    }
 
     return LeftRecursiveRule {
         header,
@@ -658,6 +661,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
         lr_alts,
         lr_dispatch,
         atn_class,
+        mid_operand_gated,
     };
 }
 
@@ -735,8 +739,15 @@ fn fixed_token_const_name(elem: &Element) -> Option<String> {
 /// precedence is computed once from the parse-side ops (whose
 /// neighbour tokens drive the BETWEEN…AND decision) and then
 /// stamped onto whichever side carries a self-ref at that position.
-fn stamp_lr_self_ref_min_prec(lr_alts: &mut List<LrAlt>, rule_name: &String, rule_snake: &String) {
+fn stamp_lr_self_ref_min_prec(
+    lr_alts: &mut List<LrAlt>,
+    rule_name: &String,
+    rule_snake: &String,
+    ctx: &mut GenContext,
+    atn_class: bool,
+) -> bool {
     let lr_suffix_first_tokens = collect_lr_suffix_first_tokens_from_lowered(lr_alts);
+    let mut mid_operand_gated = false;
     for let mut i = 0; i < lr_alts.len(); i += 1 {
         let suffix_len = lr_alts[i].suffix.ops.len();
         let conflict_min = lr_alts[i].conflict_min;
@@ -757,14 +768,36 @@ fn stamp_lr_self_ref_min_prec(lr_alts: &mut List<LrAlt>, rule_name: &String, rul
             // by `lower_label_op`).
             let inner_rc_opt = find_self_ref_rule_call(op_ref, rule_name);
             if let Some(_) = inner_rc_opt {
-                let prec = compute_self_ref_prec_from_ops(
+                let mut prec = compute_self_ref_prec_from_ops(
                     &lr_alts[i].suffix.ops,
                     k,
                     conflict_min,
                     &lr_suffix_first_tokens,
                 );
-                new_ops.push(rebind_self_ref_min_prec(*op_ref, prec));
-                new_scan.push(rebind_scan_self_ref_min_prec(*se_ref, rule_snake, prec));
+                // A mid operand only borrowed the alternative's own precedence
+                // to keep the shared delimiter out of its reach. Let it climb
+                // like ANTLR4's `e[0]` and hand it the continuation it has to
+                // leave behind; the loop gate does the stopping. The gate is
+                // only emitted on the static LR dispatch — an ATN-class loop
+                // runs on `atn_lr_loop_decision`, so dropping `prec` there
+                // would let the operand climb with nothing to stop it.
+                let mut cont_mask = -1;
+                if !atn_class && prec == conflict_min && conflict_min > 0 && k + 1 < suffix_len {
+                    let cont = lr_suffix_continuation_mask(&lr_alts[i].suffix.ops, k + 1, ctx);
+                    if !cont.is_empty() {
+                        if let Some(id) = ctx.intern_follow_mask(&cont) {
+                            prec = 0;
+                            cont_mask = id;
+                            mid_operand_gated = true;
+                        }
+                    }
+                }
+                new_ops.push(rebind_self_ref_lr_cont(rebind_self_ref_min_prec(*op_ref, prec), cont_mask));
+                new_scan.push(rebind_scan_self_ref_lr_cont(
+                    rebind_scan_self_ref_min_prec(*se_ref, rule_snake, prec),
+                    rule_snake,
+                    cont_mask,
+                ));
             } else {
                 // Self-ref nested inside a container (`Repeat`, `Group`,
                 // scan-side `OptionalLookahead`). A nested self-ref is a
@@ -815,6 +848,76 @@ fn stamp_lr_self_ref_min_prec(lr_alts: &mut List<LrAlt>, rule_name: &String, rul
         lr_alts[i].suffix.ops = new_ops;
         lr_alts[i].scan_suffix = ScanBody { elements: new_scan };
     }
+    return mid_operand_gated;
+}
+
+/// Per-depth first sets of the LR suffix ops from `start` — the caller-side
+/// continuation a climbing mid operand must leave intact. Depth `n` of the
+/// mask must be the token `n` positions ahead, so the walk only continues
+/// past an op that consumes exactly one token; a rule call contributes its
+/// own FIRST and then ends the mask, since the op after it sits an unknown
+/// number of tokens away.
+fn lr_suffix_continuation_mask(ops: &List<Op>, start: i32, ctx: &mut GenContext) -> List<List<String>> {
+    let mut mask: List<List<String>> = [];
+    for let mut k = start; k < ops.len() && mask.len() < FOLLOW_MASK_MAX_K; k += 1 {
+        let depth = lr_op_first_set(&ops[k], ctx);
+        if depth.is_empty() {
+            break;
+        }
+        mask.push(depth);
+        if !op_consumes_one_token(&ops[k]) {
+            break;
+        }
+    }
+    return mask;
+}
+
+/// FIRST of a lowered op. Only the shapes an LR suffix puts after a mid
+/// operand need an answer; anything else ends the mask by returning empty.
+fn lr_op_first_set(op: &Op, ctx: &mut GenContext) -> List<String> {
+    return match op {
+        Token(t) => [t.kind],
+        Literal(l) => [l.kind],
+        RuleCall(rc) => {
+            let mut visiting: List<String> = [];
+            ctx.first_of_rule(&rc.target_name, &mut visiting);
+        },
+        Wildcard(_) | Excluded(_) | Repeat(_) | Group(_) | ListLabel(_) => [],
+    };
+}
+
+/// True iff the op advances the token stream by exactly one, so the next op's
+/// FIRST really is the next mask depth.
+fn op_consumes_one_token(op: &Op) -> bool {
+    return op matches { Token(_) | Literal(_) };
+}
+
+/// Set `lr_cont_mask` on a self-ref `RuleCall`, peeling the `ListLabel`
+/// wrapper `rebind_self_ref_min_prec` also handles.
+fn rebind_self_ref_lr_cont(op: Op, lr_cont_mask: i32) -> Op {
+    if lr_cont_mask < 0 {
+        return op;
+    }
+    if let RuleCall(rc) = op {
+        return Op::RuleCall(RuleCallOp { ..rc, lr_cont_mask });
+    }
+    if let ListLabel(ll) = op {
+        return Op::ListLabel(ListLabelOp { ..ll, inner: rebind_self_ref_lr_cont(ll.inner, lr_cont_mask) });
+    }
+    return op;
+}
+
+/// Scan mirror of `rebind_self_ref_lr_cont`.
+fn rebind_scan_self_ref_lr_cont(se: ScanElement, rule_snake: &String, lr_cont_mask: i32) -> ScanElement {
+    if lr_cont_mask < 0 {
+        return se;
+    }
+    if let RuleCall(rc) = se {
+        if rc.target_snake == *rule_snake {
+            return ScanElement::RuleCall(ScanRuleCallElement { ..rc, lr_cont_mask });
+        }
+    }
+    return se;
 }
 
 /// Scan-side counterpart to `rebind_self_ref_min_prec`. Stamps
@@ -1236,9 +1339,11 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
     let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
     let mut alts: List<AltBody> = [];
     let mut scan_alts: List<ScanBody> = [];
+    // An atom alt ends where the LR suffix loop begins, not at the rule's
+    // tail, so no probe here may ask the caller's FOLLOW.
     for let idx of non_lr_indices {
-        alts.push(lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx, &case_names, &alt_gc_starts));
-        scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx));
+        alts.push(lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx, &case_names, &alt_gc_starts, false));
+        scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx, &rule.name, false));
     }
 
     let owner_label = `LR rule '${rule.name}' atom`;
@@ -1357,7 +1462,16 @@ fn lower_lr_alt_suffix(
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second));
+            op = Op::Repeat(patch_repeat_op_caller_follow(
+                rep_op,
+                basic_follow,
+                basic_second,
+                &alt.elements,
+                i,
+                ctx,
+                false,
+                &rule.name,
+            ));
         }
         ops.push(op);
     }
@@ -1387,6 +1501,7 @@ fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_index: i32, ctx: &mut GenCont
             &alt.elements,
             i,
             ctx,
+            false,
         ));
     }
     return ScanBody { elements };
@@ -1762,13 +1877,16 @@ pub fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
 /// The scan side has no field bindings, no struct construction, and
 /// no name dedup — it only produces a token-stream walk that
 /// returns the new `pos`.
-fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext) -> ScanBody {
+fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, rule_name: &String, reaches_rule_tail: bool) -> ScanBody {
     let mut elements: List<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         elements.push(lower_alt_scan_element(
             &alt.elements,
             i,
             ctx,
+            reaches_rule_tail,
+            true,
+            rule_name,
         ));
     }
     return ScanBody { elements };
@@ -1844,7 +1962,7 @@ fn lower_scan_group(
             let alt = &alts[0];
             let mut elements: List<ScanElement> = [];
             for let mut i = 0; i < alt.elements.len(); i += 1 {
-                elements.push(lower_alt_scan_element(&alt.elements, i, ctx, enclosing_at_tail));
+                elements.push(lower_alt_scan_element(&alt.elements, i, ctx, false, enclosing_at_tail));
             }
             let mut visiting: List<String> = [];
             let alt_first = ctx.first_of_alt(alt, &mut visiting);
@@ -1881,7 +1999,7 @@ fn lower_scan_group(
             });
         },
         SimpleCst => {
-            return lower_simple_cst_scan_group(alts, ctx, outer_follow);
+            return lower_simple_cst_scan_group(alts, ctx);
         },
         General => {
             return lower_general_scan_group(alts, ctx, outer_follow, enclosing_at_tail);
@@ -1906,6 +2024,7 @@ fn lower_general_scan_group(
                 &alt.elements,
                 i,
                 ctx,
+                false,
                 enclosing_at_tail,
             ));
         }
@@ -2024,6 +2143,7 @@ fn lower_scan_repeat(
     if effective_gate {
         ctx.mark_caller_follow_gate();
     }
+    let mut body_visiting: List<String> = [];
     return ScanElement::Repeat(ScanRepeatElement {
         kind: rep.kind,
         body,
@@ -2031,6 +2151,7 @@ fn lower_scan_repeat(
         caller_follow_first: *outer_follow,
         gate_caller_follow: effective_gate,
         non_greedy: rep.non_greedy,
+        body_scannable: ctx.is_element_scannable(&rep.element, &mut body_visiting),
     });
 }
 
@@ -2040,8 +2161,33 @@ fn lower_scan_repeat(
 /// `lower_lr_alt_scan_suffix`, per-shape walks inside groups) to
 /// override the default that `lower_scan_repeat` seeded with
 /// `outer_follow`, matching the parse-side `RepeatOp` post-pass.
-fn rebind_scan_repeat_caller_follow(se: ScanElement, caller_follow_first: List<String>) -> ScanElement {
+fn rebind_scan_repeat_caller_follow(
+    se: ScanElement,
+    caller_follow_first: List<String>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+    reaches_rule_tail: bool,
+    rule_name: &String = &NO_PROBE_RULE,
+) -> ScanElement {
     if let Repeat(re) = se {
+        let mut continuation_scan: List<ScanElement> = [];
+        let mut continuation_scannable = false;
+        let mut probe_viable: List<String> = [];
+        let wants_probe = re.non_greedy || re.kind matches { Optional };
+        if wants_probe && reaches_rule_tail {
+            if let Some(scan) = lower_scan_continuation_elements(alt_elements, index, ctx) {
+                continuation_scan = scan;
+                continuation_scannable = true;
+                probe_viable = ctx.rule_follow_for_probe(rule_name);
+            }
+        }
+        let static_exit_undecided = non_greedy_static_undecided(
+            &re.inner_first,
+            &caller_follow_first,
+            &scan_repeat_body_second(&alt_elements[index], ctx),
+            &compute_caller_follow_second(alt_elements, index + 1, ctx),
+        );
         return ScanElement::Repeat(ScanRepeatElement {
             kind: re.kind,
             body: re.body,
@@ -2049,9 +2195,48 @@ fn rebind_scan_repeat_caller_follow(se: ScanElement, caller_follow_first: List<S
             caller_follow_first: caller_follow_first,
             gate_caller_follow: re.gate_caller_follow,
             non_greedy: re.non_greedy,
+            continuation_scan,
+            continuation_scannable,
+            static_exit_undecided,
+            probe_viable,
+            body_scannable: re.body_scannable,
         });
     }
     return se;
+}
+
+/// Default for scan walks with no enclosing rule to stamp from — group
+/// bodies and continuation walks, where `reaches_rule_tail` is false and
+/// the probe set is never read.
+global NO_PROBE_RULE: String = "";
+
+/// `body_second_position_first` for the Repeat at `elem`, matching what
+/// `lower_repeat_op` stamped on the parse-side op.
+fn scan_repeat_body_second(elem: &Element, ctx: &mut GenContext) -> List<String> {
+    return match elem {
+        Repeat(rep) => compute_body_second_position_first(&rep.element, ctx),
+        Label(lab) => scan_repeat_body_second(&lab.element, ctx),
+        TokenRef(_) | Literal(_) | RuleRef(_) | Group(_) | Wildcard(_) | Not(_) => [],
+    };
+}
+
+/// Scan mirror of the elements after `index`, or `null` when any of them is
+/// unscannable. Both probes lower their continuation through here so they
+/// scan the same tokens.
+fn lower_scan_continuation_elements(
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+) -> Option<List<ScanElement>> {
+    let mut out: List<ScanElement> = [];
+    for let mut k = index + 1; k < alt_elements.len(); k += 1 {
+        let mut visiting: List<String> = [];
+        if !ctx.is_element_scannable(&alt_elements[k], &mut visiting) {
+            return null;
+        }
+        out.push(lower_alt_scan_element(alt_elements, k, ctx, false, false));
+    }
+    return Option::Some(out);
 }
 
 /// Lower one element of `alt_elements` at index `i` to a `ScanElement`,
@@ -2064,11 +2249,19 @@ fn rebind_scan_repeat_caller_follow(se: ScanElement, caller_follow_first: List<S
 /// that emit parse-side ops alongside scan elements (`lower_single_alt_group`,
 /// `lower_general_group`) inline the post-pass so they can share
 /// `basic_follow` with the parse-side rebind.
+///
+/// `reaches_rule_tail` and `enclosing_at_tail` are different questions and
+/// must stay separate: the FOLLOW gate only needs the enclosing alt to be at
+/// its tail, while the probe ends by asking the caller's FOLLOW and is sound
+/// only where the walk really reaches the rule's tail. An LR atom alt and an
+/// LR suffix both end at the loop, not at the rule, so they answer `false`.
 fn lower_alt_scan_element(
     alt_elements: &List<Element>,
     i: i32,
     ctx: &mut GenContext,
+    reaches_rule_tail: bool,
     enclosing_at_tail: bool = true,
+    rule_name: &String = &NO_PROBE_RULE,
 ) -> ScanElement {
     let elem_follow = ctx.compute_call_site_follow(alt_elements, i);
     // Mirror the parse side: the per-position `FollowArg` and the tail
@@ -2086,7 +2279,7 @@ fn lower_alt_scan_element(
     );
     if let Repeat(_) = &se {
         let basic_follow = ctx.first_of_elements_from(alt_elements, i + 1);
-        se = rebind_scan_repeat_caller_follow(se, basic_follow);
+        se = rebind_scan_repeat_caller_follow(se, basic_follow, alt_elements, i, ctx, reaches_rule_tail, rule_name);
     }
     return se;
 }
@@ -2343,6 +2536,7 @@ fn lower_alt_body(
     ctx: &mut GenContext,
     case_names: &List<String>,
     alt_gc_starts: &List<i32>,
+    reaches_rule_tail: bool,
 ) -> AltBody {
     let type_name = rule.type_name;
     let mut case_name: String = "";
@@ -2391,7 +2585,16 @@ fn lower_alt_body(
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second));
+            op = Op::Repeat(patch_repeat_op_caller_follow(
+                rep_op,
+                basic_follow,
+                basic_second,
+                &alt.elements,
+                i,
+                ctx,
+                reaches_rule_tail,
+                &rule.name,
+            ));
         }
         ops.push(op);
     }
@@ -2717,10 +2920,19 @@ fn lower_single_alt_group(
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             if let Repeat(rep_op) = &op {
                 let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-                op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second));
+                op = Op::Repeat(patch_repeat_op_caller_follow(
+                    rep_op,
+                    basic_follow,
+                    basic_second,
+                    &alt.elements,
+                    i,
+                    ctx,
+                    false,
+                    rule_name,
+                ));
             }
             if se_is_repeat {
-                se = rebind_scan_repeat_caller_follow(se, basic_follow);
+                se = rebind_scan_repeat_caller_follow(se, basic_follow, &alt.elements, i, ctx, false);
             }
         }
         ops.push(op);
@@ -2875,16 +3087,12 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
             fields: [],
             prefix_self_ref_min_prec: 0,
         });
-        // SimpleCst alts are single `RuleRef`s — outer_follow does
-        // not propagate into the callee (whole-rule follow is the
-        // callee's concern, handled by the runtime caller-FOLLOW gate).
-        let empty_follow: List<String> = [];
         scan_bodies.push(ScanBody {
             elements: [
                 lower_scan_element(
                     elem,
                     ctx,
-                    &empty_follow,
+                    &SIMPLE_CST_NO_FOLLOW,
                     FollowArg::NoFollow,
                     false,
                 ),
@@ -2905,32 +3113,26 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
     });
 }
 
-fn lower_simple_cst_scan_group(
-    alts: &List<Alternative>,
-    ctx: &mut GenContext,
-    outer_follow: &List<String>,
-) -> ScanElement {
+/// `lower_scan_element`'s per-position follow is read only by its Label,
+/// Repeat and Group arms. `is_simple_cst_group` admits an alt only when it
+/// is one bare `RuleRef`, so a SimpleCst alt reaches none of them and the
+/// value here is unobservable — both lowering paths pass this rather than
+/// each arguing for a different one.
+global SIMPLE_CST_NO_FOLLOW: List<String> = [];
+
+fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
     let mut first_sets: List<List<String>> = [];
     let mut all_indices: List<i32> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
         let alt = &alts[i];
         let elem = &alt.elements[0];
-        // Pass `outer_follow` (not an empty per-position follow) here so
-        // any RuleRef call inside this group sees the correct caller
-        // continuation when `compute_call_site_follow` builds its FOLLOW
-        // mask. Cutting the follow to `[]` here would under-constrain the
-        // mask at this site.
-        // SimpleCst alts are single RuleRefs by construction
-        // (`is_simple_cst_group`), so `lower_scan_element` produces a
-        // `ScanRuleCall` here, never a Repeat — no caller-follow
-        // rebind is needed.
         bodies.push(ScanBody {
             elements: [
                 lower_scan_element(
                     elem,
                     ctx,
-                    outer_follow,
+                    &SIMPLE_CST_NO_FOLLOW,
                     FollowArg::NoFollow,
                     false,
                 ),
@@ -3055,10 +3257,19 @@ fn lower_general_group(
                 let basic_follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
                 if let Repeat(rep_op) = &op {
                     let basic_second = compute_caller_follow_second(&alt.elements, ei + 1, ctx);
-                    op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second));
+                    op = Op::Repeat(patch_repeat_op_caller_follow(
+                        rep_op,
+                        basic_follow,
+                        basic_second,
+                        &alt.elements,
+                        ei,
+                        ctx,
+                        false,
+                        rule_name,
+                    ));
                 }
                 if se_is_repeat {
-                    se = rebind_scan_repeat_caller_follow(se, basic_follow);
+                    se = rebind_scan_repeat_caller_follow(se, basic_follow, &alt.elements, ei, ctx, false);
                 }
             }
             ops.push(op);
@@ -3598,6 +3809,34 @@ fn compute_non_greedy_strategy(inner: &Element, outer_follow: &List<String>, ctx
     });
 }
 
+/// A first set larger than this is treated as "matches almost anything"
+/// (e.g. `name+?` where `name` covers every keyword): single-token lookahead
+/// cannot tell the inner from the continuation.
+pub global BROAD_FIRST_SET_THRESHOLD: i32 = 20;
+
+/// True when no lookahead separates a non-greedy loop's body from its
+/// continuation, so the static exit condition collapses to the minimum
+/// match. Stamped on the op and its scan mirror, and consumed by emit's
+/// `compute_non_greedy_condition`, so all three decide on one answer.
+pub fn non_greedy_static_undecided(
+    body_first: &List<String>,
+    follow_first: &List<String>,
+    body_second: &List<String>,
+    follow_second: &List<String>,
+) -> bool {
+    if body_first.is_empty() {
+        return false;
+    }
+    let continue_first = subtract_sets(body_first, follow_first);
+    if !continue_first.is_empty() {
+        return continue_first.len() > BROAD_FIRST_SET_THRESHOLD && body_first.len() > BROAD_FIRST_SET_THRESHOLD;
+    }
+    if !body_second.is_empty() && !follow_second.is_empty() {
+        return subtract_sets(body_second, follow_second).is_empty();
+    }
+    return true;
+}
+
 /// Rebuild a `RepeatOp` with fresh `caller_follow_first` /
 /// `caller_follow_second` while preserving every other field. Used by
 /// every alt-walker post-pass — `lower_alt_body`, `lower_lr_alt_suffix`,
@@ -3607,8 +3846,57 @@ fn patch_repeat_op_caller_follow(
     rep_op: &RepeatOp,
     caller_follow_first: List<String>,
     caller_follow_second: List<String>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+    reaches_rule_tail: bool,
+    rule_name: &String,
 ) -> RepeatOp {
-    return RepeatOp { ..*rep_op, caller_follow_first, caller_follow_second };
+    let mut continuation_scan: List<ScanElement> = [];
+    let mut continuation_scannable = false;
+    let mut probe_viable: List<String> = [];
+    if let Some(scan) = lower_continuation_scan(rep_op, alt_elements, index, ctx, reaches_rule_tail) {
+        continuation_scan = scan;
+        continuation_scannable = true;
+        probe_viable = ctx.rule_follow_for_probe(rule_name);
+    }
+    let static_exit_undecided = non_greedy_static_undecided(
+        &rep_op.body_first_set,
+        &caller_follow_first,
+        &rep_op.body_second_position_first,
+        &caller_follow_second,
+    );
+    return RepeatOp {
+        ..*rep_op,
+        caller_follow_first,
+        caller_follow_second,
+        continuation_scan,
+        continuation_scannable,
+        static_exit_undecided,
+        probe_viable,
+    };
+}
+
+/// The continuation for emit's probe, built only for the Repeat kinds whose
+/// decision can need it.
+///
+/// `reaches_rule_tail` is a precondition, not a hint: the probe ends by
+/// asking the caller's FOLLOW, which is the right question only at the
+/// rule's tail. Inside a group the walk stops at that group's end, so
+/// `useTree : (simplePath? PATHSEP)? (STAR | …)` would ask it on `*` and
+/// reject `use foo::*`.
+fn lower_continuation_scan(
+    rep_op: &RepeatOp,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+    reaches_rule_tail: bool,
+) -> Option<List<ScanElement>> {
+    let wants_probe = rep_op.non_greedy || rep_op.kind matches { Optional };
+    if !wants_probe || !reaches_rule_tail {
+        return null;
+    }
+    return lower_scan_continuation_elements(alt_elements, index, ctx);
 }
 
 /// True iff `elem` is a list-label (`+=`). Used by

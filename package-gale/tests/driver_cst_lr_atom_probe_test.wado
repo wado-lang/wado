@@ -1,0 +1,38 @@
+//! An LR rule's atom alternative ends at the precedence loop, not at the
+//! rule's tail, so a viability probe inside it must not ask the caller's
+//! FOLLOW: an operator that continues the loop is not in that FOLLOW, and the
+//! probe would read its own alternative as unviable. Expected trees are the
+//! published ANTLR4 jar's (black-box oracle).
+
+use g from "./grammars/lr_atom_probe.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_atom_probe" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "the atom's optional fires when an operator follows the atom" {
+    assert_tree(
+        &"( case a when b then c end + d )",
+        &"(s ( (e (e case (e (name a)) when (e (name b)) then (e (name c)) end) + (e (name d))) ) tail)",
+    );
+}
+
+test "the atom's optional fires when the caller's FOLLOW follows the atom" {
+    assert_tree(
+        &"( case a when b then c end )",
+        &"(s ( (e case (e (name a)) when (e (name b)) then (e (name c)) end) ) tail)",
+    );
+}
+
+test "the atom's optional yields to the mandatory when-clause" {
+    assert_tree(
+        &"( case when b then c end )",
+        &"(s ( (e case when (e (name b)) then (e (name c)) end) ) tail)",
+    );
+}
