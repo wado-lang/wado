@@ -1,0 +1,40 @@
+// A trait name in the receiver position of a static call (`Tag::<Point>::tag()`)
+// resolves to no type. Every lookup then missed silently and typed the call
+// `unknown`; an annotated binding swallowed that, lowering emitted nothing, and
+// the WIR pipeline built an invalid core module. It must report the same way the
+// bare `Point::tag()` spelling does.
+//
+// Static dispatch through a blanket impl is unbuilt (WEP 2026-06-13): when it
+// lands, this fixture asserts the call's result instead of the diagnostic.
+
+trait Marker {
+    fn marker() -> i32;
+}
+
+trait Tag {
+    fn tag() -> String;
+}
+
+impl<T: Marker> Tag for T {
+    fn tag() -> String {
+        return "tagged";
+    }
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Marker for Point {
+    fn marker() -> i32 {
+        return 1;
+    }
+}
+
+test "an annotated binding does not swallow the unresolved call" {
+    let s: String = Tag::<Point>::tag();
+    assert s.len() == 6;
+}
+
+__DATA__
+{"compile_error": "unknown function 'Tag::tag'"}

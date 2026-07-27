@@ -1132,6 +1132,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve the target type first to get struct name for parameter type lookup
         let target_type_id = self.resolve_type(&static_call.target_type);
 
+        // `Tag::<Point>::tag()` where `Tag` is a trait: the receiver resolves to
+        // no type, and every lookup below then misses silently, typing the call
+        // `unknown`. An annotated binding swallowed that, lowering emitted
+        // nothing, and the WIR pipeline built an invalid core module. Report it
+        // the way the bare `Point::tag()` spelling already does.
+        if target_type_id == TypeTable::UNKNOWN
+            && let ast::Type::Generic(g) = &static_call.target_type
+            && self.tysys.trait_env.find_trait_decl_key(&g.name).is_some()
+        {
+            let _ = self.emit(TypeError::UnknownFunction {
+                name: format!("{}::{}", g.name, static_call.method),
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        }
+
         // Extract struct name AND canonical decl key for parameter type
         // lookup (follow newtypes to base). The canonical key disambiguates
         // two modules' same-named structs whose static methods both live in
