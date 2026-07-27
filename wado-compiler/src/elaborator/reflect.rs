@@ -128,7 +128,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             member_types: field_types,
         } = subject;
 
-        let (reflect_trait_name, members_method, wire_name_policy_method) = {
+        let (reflect_trait_name, members_method, from_fields_method, wire_name_policy_method) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -139,12 +139,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .method_name(crate::compiler_item::CompilerItem::ReflectStructMembers)
                     .to_string(),
                 items
+                    .method_name(crate::compiler_item::CompilerItem::ReflectStructFromFields)
+                    .to_string(),
+                items
                     .method_name(crate::compiler_item::CompilerItem::ReflectStructWireNamePolicy)
                     .to_string(),
             )
         };
 
-        if !self.reject_reflect_metadata_args(static_call, ctx) {
+        let well_formed = if method == from_fields_method {
+            self.check_reflect_from_fields_arg(&field_types, static_call, ctx)
+        } else {
+            self.reject_reflect_metadata_args(static_call, ctx)
+        };
+        if !well_formed {
             return TypeTable::ERROR;
         }
 
@@ -153,7 +161,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .record_bound_driven_synth_request(&self_name, &module_source, &reflect_trait_name);
 
-        let return_type = if method == members_method {
+        let return_type = if method == from_fields_method {
+            self_ty
+        } else if method == members_method {
             let mut tt = self.tysys.type_table.borrow_mut();
             let (field_module, field_name) = {
                 let items = tt.compiler_items();
@@ -261,7 +271,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         use crate::compiler_item::CompilerItem;
         let method = static_call.method.clone();
-        let (reflect_trait_name, type_name_method, members_method, wire_name_policy_method) = {
+        let (
+            reflect_trait_name,
+            type_name_method,
+            members_method,
+            from_fields_method,
+            wire_name_policy_method,
+        ) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -273,10 +289,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .method_name(CompilerItem::ReflectStructMembers)
                     .to_string(),
                 items
+                    .method_name(CompilerItem::ReflectStructFromFields)
+                    .to_string(),
+                items
                     .method_name(CompilerItem::ReflectStructWireNamePolicy)
                     .to_string(),
             )
         };
+
+        if method == from_fields_method {
+            return self.resolve_generic_reflect_from_fields(
+                self_ty,
+                type_param_name,
+                &reflect_trait_name,
+                static_call,
+                ctx,
+            );
+        }
 
         let return_type = if method == type_name_method {
             self.tysys
@@ -313,6 +342,75 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
+        self.record_type_param_reflect_dispatch(
+            type_param_name,
+            reflect_trait_name,
+            method,
+            static_call,
+        );
+
+        return_type
+    }
+
+    /// Resolve `ReflectStruct::<T>::from_fields(fields)` on a generic subject: the
+    /// argument is checked against `T`'s `FieldTypes = [..F]` pack binding and the
+    /// call yields `T` itself.
+    fn resolve_generic_reflect_from_fields(
+        &mut self,
+        self_ty: TypeId,
+        type_param_name: &str,
+        reflect_trait_name: &str,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        let method = static_call.method.clone();
+        let Some(fields_ty) = self.reflect_pack_bound_ty(
+            type_param_name,
+            reflect_trait_name,
+            crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
+        ) else {
+            let _ = self.emit(TypeError::UnknownFunction {
+                name: format!(
+                    "ReflectStruct::<{type_param_name}>::{method} (no `FieldTypes = [..F]` bound on {type_param_name})"
+                ),
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        };
+
+        let arg_types: Vec<TypeId> = static_call
+            .args
+            .iter()
+            .map(|arg| self.resolve_expr(arg, ctx, Some(fields_ty)))
+            .collect();
+        if arg_types.len() != 1 {
+            let _ = self.emit(TypeError::ArgumentCountMismatch {
+                expected: 1,
+                found: arg_types.len(),
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        }
+
+        self.record_type_param_reflect_dispatch(
+            type_param_name,
+            reflect_trait_name.to_string(),
+            method,
+            static_call,
+        );
+
+        self_ty
+    }
+
+    /// Record a reflect call on a type-param receiver as a static dispatch that
+    /// monomorphization redirects to the concrete subject's synthesized method.
+    fn record_type_param_reflect_dispatch(
+        &mut self,
+        type_param_name: &str,
+        reflect_trait_name: String,
+        method: String,
+        static_call: &ast::StaticMethodCallExpr,
+    ) {
         let mut method_info = LocalMethodName::new(
             type_param_name.to_string(),
             Some(reflect_trait_name),
@@ -336,8 +434,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_defaults: Vec::new(),
             },
         );
-
-        return_type
     }
 
     /// The `Assoc = [..F]` pack binding on `T`'s bound of the given trait
@@ -507,6 +603,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         true
     }
 
+    /// Resolve the single field-value tuple argument of `ReflectStruct::from_fields`
+    /// against the subject's `FieldTypes`. Returns whether the call is well-formed.
+    fn check_reflect_from_fields_arg(
+        &mut self,
+        field_types: &[TypeId],
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> bool {
+        let fields_tuple_ty = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_tuple(field_types.to_vec());
+        let arg_types: Vec<TypeId> = static_call
+            .args
+            .iter()
+            .map(|arg| self.resolve_expr(arg, ctx, Some(fields_tuple_ty)))
+            .collect();
+        if arg_types.len() != 1 {
+            let _ = self.emit(TypeError::ArgumentCountMismatch {
+                expected: 1,
+                found: arg_types.len(),
+                span: static_call.span,
+            });
+            return false;
+        }
+        let arg_ty = arg_types[0];
+        if arg_ty != TypeTable::ERROR && arg_ty != fields_tuple_ty {
+            let (expected, found) = {
+                let tt = self.tysys.type_table.borrow();
+                (tt.type_name(fields_tuple_ty), tt.type_name(arg_ty))
+            };
+            let _ = self.emit(TypeError::TypeMismatch {
+                expected,
+                found,
+                span: static_call.span,
+            });
+            return false;
+        }
+        true
+    }
+
     /// Resolve the args of a no-argument `ReflectStruct` metadata call and reject any
     /// that were supplied. Returns whether the call is well-formed.
     fn reject_reflect_metadata_args(
@@ -546,6 +684,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let items = tt.compiler_items();
         method == items.method_name(crate::compiler_item::CompilerItem::ReflectStructTypeName)
             || method == items.method_name(crate::compiler_item::CompilerItem::ReflectStructMembers)
+            || method
+                == items.method_name(crate::compiler_item::CompilerItem::ReflectStructFromFields)
             || method
                 == items
                     .method_name(crate::compiler_item::CompilerItem::ReflectStructWireNamePolicy)

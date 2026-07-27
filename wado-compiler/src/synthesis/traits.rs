@@ -580,7 +580,7 @@ fn generate_struct_reflect_methods(
         span,
     );
 
-    let (struct_type, ref_struct_type, member_types, members_tuple_type) = {
+    let (struct_type, ref_struct_type, member_types, members_tuple_type, fields_tuple_type) = {
         let mut tt = type_table.borrow_mut();
         let struct_type = if is_generic {
             let param_ids = make_type_param_ids(type_params, &mut tt);
@@ -616,6 +616,7 @@ fn generate_struct_reflect_methods(
             ref_struct_type,
             member_types,
             members_tuple_type,
+            fields_tuple_type,
         )
     };
 
@@ -629,6 +630,15 @@ fn generate_struct_reflect_methods(
         members_tuple_type,
         span,
     );
+    let from_fields_fn = generate_struct_from_fields_fn(
+        env,
+        reflect_trait_name,
+        name,
+        struct_type,
+        fields,
+        fields_tuple_type,
+        span,
+    );
     let wire_name_policy_fn = generate_wire_name_policy_fn(
         name,
         env.case_style_type,
@@ -638,7 +648,12 @@ fn generate_struct_reflect_methods(
         span,
     );
 
-    let mut functions = vec![type_name_fn, members_fn, wire_name_policy_fn];
+    let mut functions = vec![
+        type_name_fn,
+        members_fn,
+        from_fields_fn,
+        wire_name_policy_fn,
+    ];
     for f in &mut functions {
         f.impl_type_params.clone_from(type_params);
     }
@@ -708,6 +723,7 @@ struct ReflectSynthEnv {
     member_struct_module: ModuleSource,
     type_name_method: String,
     members_method: String,
+    from_fields_method: String,
     wire_name_policy_method: String,
 }
 
@@ -730,6 +746,9 @@ impl ReflectSynthEnv {
                 .to_string(),
             members_method: items
                 .method_name(CompilerItem::ReflectStructMembers)
+                .to_string(),
+            from_fields_method: items
+                .method_name(CompilerItem::ReflectStructFromFields)
                 .to_string(),
             wire_name_policy_method: items
                 .method_name(CompilerItem::ReflectStructWireNamePolicy)
@@ -960,6 +979,75 @@ fn generate_struct_members_fn(
         method_info,
         vec![],
         members_tuple_type,
+        body,
+        vec![],
+    )
+}
+
+/// Build `S^ReflectStruct::from_fields(fields: [F_0, …]) -> S`:
+/// `return S { f_0: fields.0, … };`.
+fn generate_struct_from_fields_fn(
+    env: &ReflectSynthEnv,
+    reflect_trait_name: &str,
+    struct_name: &str,
+    struct_type: TypeId,
+    fields: &[ReflectFieldInfo],
+    fields_tuple_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(struct_name, reflect_trait_name, &env.from_fields_method);
+    let qualified_name = method_info.to_mangled_name();
+
+    let literal_fields = fields
+        .iter()
+        .enumerate()
+        .map(|(position, f)| TirStructField {
+            name: f.name.clone(),
+            value: TirExpr::new(
+                TirExprKind::FieldAccess {
+                    expr: Box::new(local_expr(0, "fields", fields_tuple_type, span)),
+                    field_index: position as u32,
+                    field_name: position.to_string(),
+                },
+                f.type_id,
+                span,
+            ),
+            field_index: f.index,
+        })
+        .collect();
+
+    let literal = TirExpr::new(
+        TirExprKind::StructLiteral {
+            struct_type,
+            struct_name: struct_name.to_string(),
+            fields: literal_fields,
+        },
+        struct_type,
+        span,
+    );
+
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(literal),
+            },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![TirParam {
+            name: "fields".to_string(),
+            type_id: fields_tuple_type,
+            local_index: 0,
+            is_mut: false,
+            is_mut_ref: false,
+            span,
+        }],
+        struct_type,
         body,
         vec![],
     )

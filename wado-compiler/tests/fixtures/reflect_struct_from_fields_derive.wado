@@ -1,0 +1,64 @@
+// A generic derivation that BUILDS a struct: the blanket impl maps a value-free
+// static over the field-type pack and feeds the resulting tuple to
+// `ReflectStruct::from_fields` (WEP 2026-06-13). This is the shape a library
+// `Default` derive takes — the inbound counterpart of the `members()` walk.
+
+trait Zero {
+    fn zero() -> Self;
+}
+
+impl Zero for i32 {
+    fn zero() -> i32 {
+        return 0;
+    }
+}
+
+impl Zero for bool {
+    fn zero() -> bool {
+        return false;
+    }
+}
+
+impl Zero for String {
+    fn zero() -> String {
+        return "";
+    }
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Zero> Zero for T {
+    fn zero() -> T {
+        return ReflectStruct::<T>::from_fields([..F::zero()]);
+    }
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Mixed {
+    a: i32,
+    flag: bool,
+    label: String,
+}
+
+test "a build derivation feeds a pack-map into from_fields" {
+    let p: Point = Zero::<Point>::zero();
+    assert p.x == 0;
+    assert p.y == 0;
+
+    let m: Mixed = Zero::<Mixed>::zero();
+    assert m.a == 0;
+    assert !m.flag;
+    assert m.label == "";
+}
+
+test "the built value round-trips through the members walk" {
+    let p: Point = Zero::<Point>::zero();
+    let rebuilt = ReflectStruct::<Point>::from_fields([p.x + 1, p.y + 2]);
+    assert rebuilt.x == 1;
+    assert rebuilt.y == 2;
+}
+
+__DATA__
+{"test": {}}
