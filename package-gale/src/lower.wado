@@ -1357,7 +1357,7 @@ fn lower_lr_alt_suffix(
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second));
+            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx));
         }
         ops.push(op);
     }
@@ -2391,7 +2391,7 @@ fn lower_alt_body(
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second));
+            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx));
         }
         ops.push(op);
     }
@@ -2717,7 +2717,7 @@ fn lower_single_alt_group(
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             if let Repeat(rep_op) = &op {
                 let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-                op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second));
+                op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx));
             }
             if se_is_repeat {
                 se = rebind_scan_repeat_caller_follow(se, basic_follow);
@@ -3055,7 +3055,7 @@ fn lower_general_group(
                 let basic_follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
                 if let Repeat(rep_op) = &op {
                     let basic_second = compute_caller_follow_second(&alt.elements, ei + 1, ctx);
-                    op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second));
+                    op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, ei, ctx));
                 }
                 if se_is_repeat {
                     se = rebind_scan_repeat_caller_follow(se, basic_follow);
@@ -3607,8 +3607,49 @@ fn patch_repeat_op_caller_follow(
     rep_op: &RepeatOp,
     caller_follow_first: List<String>,
     caller_follow_second: List<String>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
 ) -> RepeatOp {
-    return RepeatOp { ..*rep_op, caller_follow_first, caller_follow_second };
+    let mut continuation_scan: List<ScanElement> = [];
+    let mut continuation_scannable = false;
+    if let Some(scan) = lower_continuation_scan(rep_op, alt_elements, index, ctx) {
+        continuation_scan = scan;
+        continuation_scannable = true;
+    }
+    return RepeatOp {
+        ..*rep_op,
+        caller_follow_first,
+        caller_follow_second,
+        continuation_scan,
+        continuation_scannable,
+    };
+}
+
+/// Scan mirror of the elements after `index`, for emit's exit-viability
+/// probe. `null` when any of them is unscannable — emit then keeps the
+/// static condition. Built only for the Repeat kinds whose decision can
+/// need it (non-greedy loops and greedy optionals); every other Repeat
+/// would pay the walk for a probe emit never asks for.
+fn lower_continuation_scan(
+    rep_op: &RepeatOp,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+) -> Option<List<ScanElement>> {
+    let wants_probe = rep_op.non_greedy || rep_op.kind matches { Optional };
+    if !wants_probe {
+        return null;
+    }
+    let mut out: List<ScanElement> = [];
+    for let mut k = index + 1; k < alt_elements.len(); k += 1 {
+        let mut visiting: List<String> = [];
+        if !ctx.is_element_scannable(&alt_elements[k], &mut visiting) {
+            return null;
+        }
+        out.push(lower_alt_scan_element(alt_elements, k, ctx));
+    }
+    return Option::Some(out);
 }
 
 /// True iff `elem` is a list-label (`+=`). Used by

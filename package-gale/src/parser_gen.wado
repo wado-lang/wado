@@ -5065,6 +5065,15 @@ fn emit_lr_overlap(
 /// to `Plain` + `mark_needs_atn` and so never reaches here.
 fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     let cond = compute_non_greedy_condition(r, &r.caller_follow_first, &r.caller_follow_second, ctx);
+    if cond == "false" && non_greedy_probe_decides(r, ctx) {
+        if let Plus = r.kind {
+            gen_op(w, &r.body, ctx, nc);
+        }
+        begin_non_greedy_probe_loop(w, r, ctx, nc);
+        gen_op(w, &r.body, ctx, nc);
+        w.end();
+        return;
+    }
     let loops = cond != "false";
     match r.kind {
         Plus => {
@@ -5084,6 +5093,73 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCon
         },
         Optional => panic("gen_repeat_non_greedy_body: non-greedy `??` should be excluded by needs_atn"),
     }
+}
+
+/// True when the exit-viability probe can answer a non-greedy loop the
+/// static condition gave up on (`"false"` — the minimum match). It needs a
+/// lowered continuation, a body first set to gate the iteration on, and
+/// something to actually ask: with an empty continuation and no runtime
+/// FOLLOW, exiting is vacuously viable and the probe would only reproduce
+/// the minimum match at runtime cost.
+fn non_greedy_probe_decides(r: &RepeatOp, ctx: &mut GenContext) -> bool {
+    if !r.continuation_scannable || r.body_first_set.is_empty() {
+        return false;
+    }
+    if !(r.kind matches { Star | Plus }) {
+        return false;
+    }
+    return !r.continuation_scan.is_empty() || ctx.emit_follow();
+}
+
+/// Open the exit-viability loop for a non-greedy `*?` / `+?` no lookahead
+/// separates: each iteration asks whether exiting is viable — scan the
+/// continuation, then the caller's FOLLOW — and iterates only when it is
+/// not. This is "prefer the non-greedy reading, but only among readings
+/// that survive"; the static condition it replaces took the minimum
+/// unconditionally and rejected input the longer match would have parsed.
+/// The caller emits the body and closes the block, so both emit walkers
+/// share one decision.
+fn begin_non_greedy_probe_loop(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) {
+    w.begin(&"loop");
+    w.line(&"if p.recovering { break; }");
+    let verdict = gen_non_greedy_exit_probe(w, r, ctx, nc);
+    w.line(&`if ${verdict} \{ break; \}`);
+    w.line(&`if !(${ctx.first_check_str(&r.body_first_set)}) \{ break; \}`);
+}
+
+/// Emit the exit-viability probe and return the name of the `bool` holding
+/// its verdict. The continuation scan answers "does the rest of this alt
+/// still match from here"; the caller's FOLLOW answers the same question
+/// for everything past the rule. A tail loop has no continuation to scan,
+/// so the FOLLOW answers alone.
+fn gen_non_greedy_exit_probe(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) -> String {
+    let verdict = dedup_name(&"ng_exit", nc);
+    let label = dedup_name(&"ng_exit_scan", nc);
+    w.line(&`let mut ${verdict}: bool = false;`);
+    w.begin(&`${label}:`);
+    w.line(&"let tokens = &p.kinds;");
+    w.line(&"let mut pos: i32 = p.pos;");
+    let fail = `break ${label};`;
+    for let se of &r.continuation_scan {
+        gen_scan_op_element(w, se, ctx, &fail);
+    }
+    if ctx.emit_follow() {
+        w.line(&`if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) \{ ${verdict} = true; \}`);
+    } else {
+        w.line(&`${verdict} = true;`);
+    }
+    w.end();
+    return verdict;
 }
 
 /// Greedy `*` / `+` / `?` under the emitter: loop the body (which
@@ -6229,14 +6305,17 @@ fn gen_op_repeat_non_greedy_storable(
     if is_plus {
         let mut nc: List<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
-        if *while_cond != "false" {
-            w.begin(&`while !p.recovering && (${*while_cond})`);
-            let mut nc2: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc2, &empty_iter_follow);
-            w.end();
-        }
-    } else if *while_cond != "false" {
-        w.begin(&`while ${*while_cond}`);
+    }
+    if *while_cond == "false" && non_greedy_probe_decides(rep_op, ctx) {
+        begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
+        let mut nc: List<[String, i32]> = [];
+        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
+        w.end();
+        return;
+    }
+    if *while_cond != "false" {
+        let guard = if is_plus { `!p.recovering && (${*while_cond})` } else { *while_cond };
+        w.begin(&`while ${guard}`);
         let mut nc: List<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
         w.end();
@@ -6277,6 +6356,13 @@ fn gen_op_repeat_non_greedy_transparent(
     if is_plus {
         let mut nc: List<[String, i32]> = [];
         gen_op_group(w, g_op, inner, ctx, &mut nc);
+    }
+    if *while_cond == "false" && non_greedy_probe_decides(rep_op, ctx) {
+        begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
+        let mut nc: List<[String, i32]> = [];
+        gen_op_group(w, g_op, inner, ctx, &mut nc);
+        w.end();
+        return;
     }
     if *while_cond != "false" {
         w.begin(&`while ${*while_cond}`);

@@ -682,6 +682,18 @@ pub struct RepeatOp {
     /// `peek_at(1)` disambiguation arm so emit doesn't re-walk the
     /// surface inner.
     pub body_second_position_first: List<String>,
+    /// Scan-side mirror of the elements that follow this Repeat in the
+    /// enclosing alt. Emit runs it as the viability oracle for an exit
+    /// decision no lookahead separates: scan the continuation from the
+    /// current position, and when it matches, ask the caller's FOLLOW at
+    /// the position it ended on. Empty for a tail Repeat — then the
+    /// caller's FOLLOW answers alone.
+    pub continuation_scan: List<ScanElement> = [],
+    /// True iff `continuation_scan` represents every element after this
+    /// Repeat, so a successful scan really means "the continuation fits".
+    /// False when any following element is unscannable, which is what
+    /// keeps emit on the static condition there.
+    pub continuation_scannable: bool = false,
     /// Emit a runtime caller-FOLLOW yield gate
     /// (`if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break }`)
     /// at this iteration's entry. Set by lower when the Repeat sits at a

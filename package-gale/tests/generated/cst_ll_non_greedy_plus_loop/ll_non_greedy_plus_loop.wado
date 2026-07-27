@@ -1763,6 +1763,22 @@ fn scan_y(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn _parse_s__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let x = _parse_x(p);
+    loop {
+        if p.recovering { break; }
+        let mut ng_exit: bool = false;
+        ng_exit_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_y(tokens, pos, 0);
+            if pos < 0 { break ng_exit_scan; }
+            if pos >= tokens.len() || tokens[pos] != TK_EOF { break ng_exit_scan; }
+            pos += 1;
+            ng_exit = true;
+        }
+        if ng_exit { break; }
+        if !(p.peek_kind() == TK_A) { break; }
+        let x = _parse_x(p);
+    }
     let y = _parse_y(p);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
