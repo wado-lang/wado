@@ -61,7 +61,7 @@ A user type implements `LenientFromStr` directly, independently of `FromStr` (ei
 ## Consumers
 
 - Runtime CLI arguments / environment variables: `core:cli` gains a typed parse path, e.g. `i32::from_str_lenient(&args[1].trim())`. The ergonomic surface (a helper that trims and parses) is a `core:cli` follow-up.
-- Compile-time parameters v2: v1 converts built-in types natively with accepted forms matching these impls, so v2 — evaluating `LenientFromStr` for arbitrary types via wasm-CTFE ([niri Stage 5](./wep-2026-04-27-nir-interpreter.md)) — preserves built-in behavior.
+- Compile-time parameters v2: v1 converts built-in types natively with accepted forms matching these impls, so v2 — evaluating `LenientFromStr` for arbitrary types via [wasm-CTFE](./wep-2026-04-27-nir-interpreter.md) — preserves built-in behavior.
 
 ## Implementation Strategy
 

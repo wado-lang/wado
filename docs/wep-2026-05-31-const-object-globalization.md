@@ -201,8 +201,7 @@ loop, and a pure call building a heap value from literals.
 
 ## TODO
 
-- [ ] Fold user-immutable globals' reads from their initializers (`niri`
-      `GlobalEnv` keyed on `wado_mutable`) — overlaps
-      [niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md) (Stage 6).
-- [ ] `niri` folding `G.field` / `G[const]` on immutable aggregate globals —
-      see [niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md) (Stage 6).
+- [ ] Reads of a user-immutable global folding from its initializer, and
+      `G.field` / `G[const]` folding on an immutable aggregate global. Owned by
+      [niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md) — see its
+      aggregate globals and element projection TODO.
