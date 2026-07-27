@@ -13,8 +13,9 @@ GC work induced by the ~20 short-lived objects that request allocates is ~40 µs
 Allocation churn, not routing or serialization logic, is what separates
 `wado serve` from Axum on the guest side.
 
-Removing one constant expression from the per-request path (the `content-type`
-header value, 5 GC objects) raised throughput by 8-10%.
+Two changes applied here — a byte-string literal for the `content-type` value and
+`write_raw` for the body — remove 4 of those objects and measure +2 to +6%. The
+rest of the list is optimizer work.
 
 ## Method
 
@@ -89,14 +90,15 @@ Linear memory is touched separately: `cm_lower_string` / `cm_lower_list_u8` /
 CM out-pointers do roughly ten `malloc`/`free` pairs per request, which is why
 the freelist allocator's `fl_unlink` is the most-called guest function.
 
-Four of these are avoidable without changing what the benchmark measures:
+Four of these are avoidable without changing what the benchmark measures. Items 1
+and 4 are now applied to `app.wado`; 2 and 3 are compiler work.
 
-1. Constant `collect()` in the hot path: `"literal".bytes().collect()`
-   allocates a `List` and four arrays every evaluation: `FromIterator for List<T>`
-   starts at capacity 0 and pushes one element at a time, and the `Iterator` trait
-   has no size hint to reserve from. Options: give `FromIterator` a capacity
-   source, const-fold a literal-derived `collect()` to `array.new_data`, or at
-   minimum document `as_bytes().to_list()` (one allocation) as the idiom.
+1. Constant `collect()` in the hot path: `"literal".bytes().collect()` allocated
+   a `List` and four arrays every evaluation, because `FromIterator` for a list
+   starts at capacity 0 and pushes one element at a time and the `Iterator` trait
+   has no size hint to reserve from. The app now writes `b"application/json"`,
+   which lowers to one `struct.new` over `array.new_data`. The two objects left
+   per request are what constant globalization should remove; see below.
 2. Redundant clone when lifting a CM string: the generated binding calls
    `core:rt/memory_to_gc_array`, which allocates a fresh array and copies the
    bytes in, and then clones that fresh array into another one before wrapping it
@@ -106,23 +108,42 @@ Four of these are avoidable without changing what the benchmark measures:
 3. `resp.body` copied on last use: `body_tx.write(resp.body)` compiles to an
    `array_new` + `array_copy` of the body even though `resp` is dead afterwards;
    a last-use move would drop it.
-4. `Stream::write` takes `List<u8>` only, so `json::to_bytes`, which returns a
-   `ByteSlice` over the serializer's buffer, needs `.to_list()` — a copy of the
-   whole body to satisfy the signature. Accepting a `ByteSlice` would remove it.
+4. `StreamWritable::write` takes `List<u8>` by value, so the body was deep-copied
+   into the CM lowering. The app now calls `write_raw(resp.body.as_slice())`,
+   which lowers the slice directly. The value copy of `resp.body` itself (item 3)
+   survives it, because the field read copies before `as_slice()` sees anything.
 
-## Measured lever
+## Measured levers
 
-Hoisting only item 1 out of the request path (5 of ~20 objects), interleaved A/B,
-best of 5 rounds:
+Items 1 and 4 together, interleaved A/B against the previous `app.wado`, best of
+3 rounds (this run's machine state is faster than the ablation run above, so
+compare within the table only):
 
-| Request                        |   base | hoisted | delta |
-| ------------------------------ | -----: | ------: | ----: |
-| `GET /user`                    | 28,950 |  31,325 | +8.2% |
-| `GET /event/abcd1234/comments` | 25,207 |  27,651 | +9.7% |
+| Request                        |   base | `b"…"` + `write_raw` | delta |
+| ------------------------------ | -----: | -------------------: | ----: |
+| `GET /user`                    | 35,801 |               38,026 | +6.2% |
+| `GET /event/abcd1234/comments` | 31,953 |               32,683 | +2.3% |
+| `GET /static/index.html`       | 31,983 |               33,423 | +4.5% |
 
-~1 µs of compute disappears; the other ~5 µs of the win is GC that no longer
-runs. This is the shape of every remaining item on the list: the payoff is
-proportional to objects removed, not to instructions removed.
+Hoisting the byte literal further into a `global` — what constant globalization
+would do — adds another +1 to +8% on top (39,862 / 35,176 / 33,790 in the same
+run), for +6 to +11% over the base.
+
+The payoff is proportional to objects removed, not to instructions removed: an
+earlier A/B that removed all five header objects by hand measured +8.2% / +9.7%
+on the two routes, of which only ~1 µs was compute and the rest GC that no longer
+runs.
+
+## Why the constant is still rebuilt per request
+
+`const_object_globalization` (WEP 2026-05-31) matches a qualifying constant in a
+`let` binding or behind a `&`, not in a by-value argument position, which is
+where the header value sits. Rewriting it as `let ct = b"application/json" as
+FieldValue;` does trigger the pass — and then the value-copy pass clones the
+globalized object back out into `ct`, so the request pays an `array_new` +
+`array_copy` instead of an `array.new_data`. A hand-written `global` is passed
+straight through with no copy, so both halves are optimizer gaps rather than
+language limits.
 
 ## Profiler caveat
 
@@ -134,7 +155,9 @@ map; take timing from ablation A/Bs.
 
 ## Next steps, in payoff order
 
-1. Cut per-request GC objects: items 1-4 above, each independently measurable.
+1. Optimizer: globalize a constant aggregate in argument position, and stop the
+   value-copy pass from copying a read-only global back into a local. Then the
+   last-use copy of `resp.body` (item 3) and the CM-lift clone (item 2).
 2. Router: `match_dynamic` allocates `ranges`, `PathParams`, and `RouteMatch` per
    hit while `match_static` returns a pre-built shell. A `ranges` buffer owned by
    the router (or a fixed inline capacity) would make dynamic hits allocation-free
