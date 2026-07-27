@@ -1,0 +1,43 @@
+// `ReflectStruct::construct` (WEP 2026-06-13): assemble a struct from its
+// field-value tuple — the build direction that mirrors the `members()` walk.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Mixed {
+    a: i32,
+    flag: bool,
+    label: String,
+}
+
+struct Empty {}
+
+test "construct assembles a struct from its field tuple" {
+    let p = ReflectStruct::<Point>::construct([1, 2]);
+    assert p.x == 1;
+    assert p.y == 2;
+}
+
+test "construct carries heterogeneous field types" {
+    let m = ReflectStruct::<Mixed>::construct([7, true, "hi"]);
+    assert m.a == 7;
+    assert m.flag;
+    assert m.label == "hi";
+}
+
+test "construct round-trips a members() walk" {
+    let p = Point { x: 3, y: 4 };
+    let rebuilt = ReflectStruct::<Point>::construct([p.x, p.y]);
+    assert rebuilt.x == p.x;
+    assert rebuilt.y == p.y;
+}
+
+test "a memberless struct constructs from the empty tuple" {
+    let e = ReflectStruct::<Empty>::construct([]);
+    assert `${e:?}` == "Empty";
+}
+
+__DATA__
+{"test": {}}
