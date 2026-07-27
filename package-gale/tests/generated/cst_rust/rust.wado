@@ -20302,7 +20302,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             if _sk == TK_DOT {
                 if _kind_set_93(p.peek_at(1)) {
                     if 21 >= min_prec {
-                        if scan_expression_lr_3(&p.kinds, p.pos) < 0 {
+                        if scan_expression_lr_3(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20328,7 +20328,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     }
                 } else if _kind_set_4(p.peek_at(1)) {
                     if 20 >= min_prec {
-                        if scan_expression_lr_4(&p.kinds, p.pos) < 0 {
+                        if scan_expression_lr_4(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20341,7 +20341,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     }
                 } else if p.peek_at(1) == TK_INTEGER_LITERAL {
                     if 19 >= min_prec {
-                        if scan_expression_lr_5(&p.kinds, p.pos) < 0 {
+                        if scan_expression_lr_5(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20354,7 +20354,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     }
                 } else {
                     if 18 >= min_prec {
-                        if scan_expression_lr_6(&p.kinds, p.pos) < 0 {
+                        if scan_expression_lr_6(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20369,7 +20369,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _sk == TK_LPAREN {
             if 17 >= min_prec {
-                if scan_expression_lr_7(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_7(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20393,7 +20393,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _sk == TK_LSQUAREBRACKET {
             if 16 >= min_prec {
-                if scan_expression_lr_8(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_8(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20407,7 +20407,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _sk == TK_QUESTION {
             if 15 >= min_prec {
-                if scan_expression_lr_9(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_9(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20419,7 +20419,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _sk == TK_KW_AS {
             if 14 >= min_prec {
-                if scan_expression_lr_13(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_13(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20432,7 +20432,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _kind_set_51(_sk) {
             if 13 >= min_prec {
-                if scan_expression_lr_14(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_14(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20445,7 +20445,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _kind_set_52(_sk) {
             if 12 >= min_prec {
-                if scan_expression_lr_15(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_15(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20459,7 +20459,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         } else if _kind_set_94(_sk) {
             if _sk == TK_EQEQ {
                 if 7 >= min_prec {
-                    if scan_expression_lr_20(&p.kinds, p.pos) < 0 {
+                    if scan_expression_lr_20(&p.kinds, p.pos, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20472,7 +20472,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 }
             } else if _sk == TK_NE {
                 if 7 >= min_prec {
-                    if scan_expression_lr_20(&p.kinds, p.pos) < 0 {
+                    if scan_expression_lr_20(&p.kinds, p.pos, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20485,7 +20485,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 }
             } else if _sk == TK_GE {
                 if 7 >= min_prec {
-                    if scan_expression_lr_20(&p.kinds, p.pos) < 0 {
+                    if scan_expression_lr_20(&p.kinds, p.pos, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20498,7 +20498,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 }
             } else if _sk == TK_LE {
                 if 7 >= min_prec {
-                    if scan_expression_lr_20(&p.kinds, p.pos) < 0 {
+                    if scan_expression_lr_20(&p.kinds, p.pos, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20512,7 +20512,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             } else if _sk == TK_LT {
                 if _kind_set_50(p.peek_at(1)) {
                     if 11 >= min_prec {
-                        if scan_expression_lr_16(&p.kinds, p.pos) < 0 {
+                        if scan_expression_lr_16(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20532,7 +20532,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     }
                 } else {
                     if 7 >= min_prec {
-                        if scan_expression_lr_20(&p.kinds, p.pos) < 0 {
+                        if scan_expression_lr_20(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20547,7 +20547,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             } else if _sk == TK_GT {
                 if _kind_set_50(p.peek_at(1)) {
                     if 11 >= min_prec {
-                        if scan_expression_lr_16(&p.kinds, p.pos) < 0 {
+                        if scan_expression_lr_16(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20567,7 +20567,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     }
                 } else {
                     if 7 >= min_prec {
-                        if scan_expression_lr_20(&p.kinds, p.pos) < 0 {
+                        if scan_expression_lr_20(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20582,7 +20582,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _sk == TK_AND {
             if 10 >= min_prec {
-                if scan_expression_lr_17(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_17(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20595,7 +20595,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _sk == TK_CARET {
             if 9 >= min_prec {
-                if scan_expression_lr_18(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_18(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20608,7 +20608,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _sk == TK_OR {
             if 8 >= min_prec {
-                if scan_expression_lr_19(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_19(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20621,7 +20621,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _sk == TK_ANDAND {
             if 6 >= min_prec {
-                if scan_expression_lr_21(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_21(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20634,7 +20634,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _sk == TK_OROR {
             if 5 >= min_prec {
-                if scan_expression_lr_22(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_22(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20647,7 +20647,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _sk == TK_DOTDOT {
             if 4 >= min_prec {
-                if scan_expression_lr_23(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_23(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20670,7 +20670,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _sk == TK_DOTDOTEQ {
             if 3 >= min_prec {
-                if scan_expression_lr_26(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_26(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20683,7 +20683,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _sk == TK_EQ {
             if 2 >= min_prec {
-                if scan_expression_lr_27(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_27(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
@@ -20696,7 +20696,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             }
         } else if _kind_set_95(_sk) {
             if 1 >= min_prec {
-                if scan_expression_lr_28(&p.kinds, p.pos) < 0 {
+                if scan_expression_lr_28(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);

@@ -4994,7 +4994,7 @@ fn emit_lr_branch(
     nc: &mut List<[String, i32]>,
 ) {
     w.begin(&`if ${lr.own_prec} >= min_prec`);
-    w.begin(&`if ${*scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos) < 0`);
+    w.begin(&`if ${*scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())}) < 0`);
     w.line(&"break;");
     w.end();
     emit_lr_branch_body(w, lr, rule, rk, labeled, ctx, nc);
@@ -7871,7 +7871,7 @@ fn gen_lr_call_with_prec(
     // (mutating) parse when the scan confirms the suffix would succeed.
     if use_prec {
         w.begin(&`if ${prec} >= min_prec`);
-        w.begin(&`if ${*scan_suffix_fn}(&p.kinds, p.pos) < 0`);
+        w.begin(&`if ${*scan_suffix_fn}(&p.kinds, p.pos${follow_sep(emit_follow)}) < 0`);
         w.line(&"break;");
         w.end();
         w.line(&`result = ${*suffix_fn}(p, result, start${follow_sep(emit_follow)});`);
@@ -7879,7 +7879,7 @@ fn gen_lr_call_with_prec(
         w.line(&"break;");
         w.end();
     } else {
-        w.begin(&`if ${*scan_suffix_fn}(&p.kinds, p.pos) < 0`);
+        w.begin(&`if ${*scan_suffix_fn}(&p.kinds, p.pos${follow_sep(emit_follow)}) < 0`);
         w.line(&"break;");
         w.end();
         w.line(&`result = ${*suffix_fn}(p, result, start${follow_sep(emit_follow)});`);
@@ -8140,7 +8140,7 @@ fn gen_prediction_code_inner(
                                 let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
                                 if is_full {
                                     // Full scan: success guarantees parse success.
-                                    w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos) >= 0`);
+                                    w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())}) >= 0`);
                                     if ctx.is_trace() {
                                         w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
                                     }
@@ -8152,7 +8152,7 @@ fn gen_prediction_code_inner(
                                     w.end();
                                 } else if has_scan {
                                     // Partial scan: try parse, fall through on failure.
-                                    w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos) >= 0`);
+                                    w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())}) >= 0`);
                                     emit_spec_alt_try(
                                         w,
                                         &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,

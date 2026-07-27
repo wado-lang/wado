@@ -4930,7 +4930,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             if _sk == TK_LIT_DOT {
                 if p.peek_at(1) == TK_ID {
                     if 20 >= min_prec {
-                        if scan_e_lr_6(&p.kinds, p.pos) < 0 {
+                        if scan_e_lr_6(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_E, _start);
@@ -4942,7 +4942,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                     }
                 } else if p.peek_at(1) == TK_LIT_THIS {
                     if 19 >= min_prec {
-                        if scan_e_lr_7(&p.kinds, p.pos) < 0 {
+                        if scan_e_lr_7(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_E, _start);
@@ -4954,7 +4954,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                     }
                 } else if p.peek_at(1) == TK_LIT_SUPER {
                     if 18 >= min_prec {
-                        if scan_e_lr_8(&p.kinds, p.pos) < 0 {
+                        if scan_e_lr_8(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_E, _start);
@@ -4980,7 +4980,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                     }
                 } else {
                     if 17 >= min_prec {
-                        if scan_e_lr_9(&p.kinds, p.pos) < 0 {
+                        if scan_e_lr_9(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_E, _start);
@@ -5009,7 +5009,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _sk == TK_LIT_LBRACKET {
             if 16 >= min_prec {
-                if scan_e_lr_11(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_11(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5023,7 +5023,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _kind_set_4(_sk) {
             if 15 >= min_prec {
-                if scan_e_lr_13(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_13(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5034,7 +5034,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _sk == TK_LIT_LPAREN {
             if 14 >= min_prec {
-                if scan_e_lr_14(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_14(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5058,7 +5058,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _kind_set_5(_sk) {
             if 13 >= min_prec {
-                if scan_e_lr_17(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_17(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5071,7 +5071,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _kind_set_6(_sk) {
             if 12 >= min_prec {
-                if scan_e_lr_18(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_18(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5084,7 +5084,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _kind_set_7(_sk) {
             if 11 >= min_prec {
-                if scan_e_lr_19(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_19(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5097,7 +5097,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _kind_set_8(_sk) {
             if 10 >= min_prec {
-                if scan_e_lr_20(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_20(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5110,7 +5110,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _sk == TK_LIT_INSTANCEOF {
             if 9 >= min_prec {
-                if scan_e_lr_21(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_21(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5123,7 +5123,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _kind_set_9(_sk) {
             if 8 >= min_prec {
-                if scan_e_lr_22(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_22(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5136,7 +5136,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _sk == TK_LIT_AMP {
             if 7 >= min_prec {
-                if scan_e_lr_23(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_23(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5149,7 +5149,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _sk == TK_LIT_CARET {
             if 6 >= min_prec {
-                if scan_e_lr_24(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_24(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5162,7 +5162,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _sk == TK_LIT_PIPE {
             if 5 >= min_prec {
-                if scan_e_lr_25(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_25(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5175,7 +5175,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _sk == TK_LIT_AMPAMP {
             if 4 >= min_prec {
-                if scan_e_lr_26(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_26(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5188,7 +5188,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _sk == TK_LIT_PIPEPIPE {
             if 3 >= min_prec {
-                if scan_e_lr_27(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_27(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5201,7 +5201,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _sk == TK_LIT_QUESTION {
             if 2 >= min_prec {
-                if scan_e_lr_28(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_28(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -5217,7 +5217,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             }
         } else if _kind_set_10(_sk) {
             if 1 >= min_prec {
-                if scan_e_lr_29(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_29(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);

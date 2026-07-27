@@ -15474,7 +15474,7 @@ fn _parse_union_or_intersection_or_primary_type__inner(p: &mut Parser, follow: &
         let _sk = p.peek_kind();
         if _sk == TK_LIT_PIPE {
             if 2 >= min_prec {
-                if scan_union_or_intersection_or_primary_type_lr_0(&p.kinds, p.pos) < 0 {
+                if scan_union_or_intersection_or_primary_type_lr_0(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_UNIONORINTERSECTIONORPRIMARYTYPE, _start);
@@ -15488,7 +15488,7 @@ fn _parse_union_or_intersection_or_primary_type__inner(p: &mut Parser, follow: &
             }
         } else if _sk == TK_LIT_AMP {
             if 1 >= min_prec {
-                if scan_union_or_intersection_or_primary_type_lr_1(&p.kinds, p.pos) < 0 {
+                if scan_union_or_intersection_or_primary_type_lr_1(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_UNIONORINTERSECTIONORPRIMARYTYPE, _start);
@@ -15731,7 +15731,7 @@ fn _parse_primary_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         let _sk = p.peek_kind();
         if _sk == TK_LIT_LBRACKET {
             if 1 >= min_prec {
-                if scan_primary_type_lr_4(&p.kinds, p.pos) < 0 {
+                if scan_primary_type_lr_4(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_PRIMARYTYPE, _start);
@@ -17795,7 +17795,7 @@ fn _parse_decorator_member_expression__inner(p: &mut Parser, follow: &List<List<
         let _sk = p.peek_kind();
         if _sk == TK_LIT_DOT {
             if 1 >= min_prec {
-                if scan_decorator_member_expression_lr_1(&p.kinds, p.pos) < 0 {
+                if scan_decorator_member_expression_lr_1(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_DECORATORMEMBEREXPRESSION, _start);
@@ -24687,7 +24687,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         if _kind_set_73(_sk) {
             if _sk == TK_LIT_LBRACKET {
                 if 27 >= min_prec {
-                    if scan_single_expression_lr_2(&p.kinds, p.pos) < 0 {
+                    if scan_single_expression_lr_2(&p.kinds, p.pos, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24706,7 +24706,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             } else if _sk == TK_LIT_QUESTIONDOT {
                 if p.peek_at(1) == TK_LIT_LBRACKET {
                     if 27 >= min_prec {
-                        if scan_single_expression_lr_2(&p.kinds, p.pos) < 0 {
+                        if scan_single_expression_lr_2(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24724,7 +24724,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     }
                 } else {
                     if 26 >= min_prec {
-                        if scan_single_expression_lr_3(&p.kinds, p.pos) < 0 {
+                        if scan_single_expression_lr_3(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24742,7 +24742,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             if _sk == TK_LIT_BANG {
                 if p.peek_at(1) == TK_LIT_DOT {
                     if 25 >= min_prec {
-                        if scan_single_expression_lr_4(&p.kinds, p.pos) < 0 {
+                        if scan_single_expression_lr_4(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24774,7 +24774,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     }
                 } else {
                     if 1 >= min_prec {
-                        if scan_single_expression_lr_52(&p.kinds, p.pos) < 0 {
+                        if scan_single_expression_lr_52(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24788,7 +24788,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             } else if _sk == TK_LIT_DOT {
                 if _kind_set_75(p.peek_at(1)) {
                     if 25 >= min_prec {
-                        if scan_single_expression_lr_4(&p.kinds, p.pos) < 0 {
+                        if scan_single_expression_lr_4(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24820,7 +24820,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     }
                 } else {
                     if 24 >= min_prec {
-                        if scan_single_expression_lr_5(&p.kinds, p.pos) < 0 {
+                        if scan_single_expression_lr_5(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24854,7 +24854,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             } else if _sk == TK_LIT_QUESTION {
                 if p.peek_at(1) == TK_LIT_DOT {
                     if 24 >= min_prec {
-                        if scan_single_expression_lr_5(&p.kinds, p.pos) < 0 {
+                        if scan_single_expression_lr_5(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24886,7 +24886,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     }
                 } else {
                     if 6 >= min_prec {
-                        if scan_single_expression_lr_35(&p.kinds, p.pos) < 0 {
+                        if scan_single_expression_lr_35(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24905,7 +24905,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_LIT_LPAREN {
             if 23 >= min_prec {
-                if scan_single_expression_lr_8(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_8(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24918,7 +24918,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_LIT_PLUSPLUS {
             if 22 >= min_prec {
-                if scan_single_expression_lr_9(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_9(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24930,7 +24930,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_LIT_MINUSMINUS {
             if 21 >= min_prec {
-                if scan_single_expression_lr_10(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_10(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24942,7 +24942,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_LIT_STARSTAR {
             if 20 >= min_prec {
-                if scan_single_expression_lr_21(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_21(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24956,7 +24956,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _kind_set_37(_sk) {
             if 19 >= min_prec {
-                if scan_single_expression_lr_22(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_22(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24970,7 +24970,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _kind_set_38(_sk) {
             if 18 >= min_prec {
-                if scan_single_expression_lr_23(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_23(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24984,7 +24984,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_LIT_QUESTIONQUESTION {
             if 17 >= min_prec {
-                if scan_single_expression_lr_24(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_24(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -24999,7 +24999,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         } else if _kind_set_76(_sk) {
             if _sk == TK_LIT_LTLT {
                 if 16 >= min_prec {
-                    if scan_single_expression_lr_25(&p.kinds, p.pos) < 0 {
+                    if scan_single_expression_lr_25(&p.kinds, p.pos, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25077,7 +25077,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                 }
             } else if _sk == TK_LIT_LT {
                 if 15 >= min_prec {
-                    if scan_single_expression_lr_26(&p.kinds, p.pos) < 0 {
+                    if scan_single_expression_lr_26(&p.kinds, p.pos, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25091,7 +25091,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                 }
             } else if _sk == TK_LIT_LTEQ {
                 if 15 >= min_prec {
-                    if scan_single_expression_lr_26(&p.kinds, p.pos) < 0 {
+                    if scan_single_expression_lr_26(&p.kinds, p.pos, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25105,7 +25105,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                 }
             } else if _sk == TK_LIT_GTEQ {
                 if 15 >= min_prec {
-                    if scan_single_expression_lr_26(&p.kinds, p.pos) < 0 {
+                    if scan_single_expression_lr_26(&p.kinds, p.pos, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25120,7 +25120,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             } else if _sk == TK_LIT_GT {
                 if p.peek_at(1) == TK_LIT_GT {
                     if 16 >= min_prec {
-                        if scan_single_expression_lr_25(&p.kinds, p.pos) < 0 {
+                        if scan_single_expression_lr_25(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25198,7 +25198,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     }
                 } else {
                     if 15 >= min_prec {
-                        if scan_single_expression_lr_26(&p.kinds, p.pos) < 0 {
+                        if scan_single_expression_lr_26(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25214,7 +25214,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_Instanceof {
             if 14 >= min_prec {
-                if scan_single_expression_lr_27(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_27(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25228,7 +25228,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_In {
             if 13 >= min_prec {
-                if scan_single_expression_lr_28(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_28(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25242,7 +25242,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _kind_set_41(_sk) {
             if 12 >= min_prec {
-                if scan_single_expression_lr_29(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_29(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25256,7 +25256,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_LIT_AMP {
             if 11 >= min_prec {
-                if scan_single_expression_lr_30(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_30(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25270,7 +25270,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_LIT_CARET {
             if 10 >= min_prec {
-                if scan_single_expression_lr_31(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_31(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25284,7 +25284,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_LIT_PIPE {
             if 9 >= min_prec {
-                if scan_single_expression_lr_32(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_32(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25298,7 +25298,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_LIT_AMPAMP {
             if 8 >= min_prec {
-                if scan_single_expression_lr_33(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_33(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25312,7 +25312,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_LIT_PIPEPIPE {
             if 7 >= min_prec {
-                if scan_single_expression_lr_34(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_34(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25326,7 +25326,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_LIT_EQ {
             if 5 >= min_prec {
-                if scan_single_expression_lr_36(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_36(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25340,7 +25340,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _kind_set_77(_sk) {
             if 4 >= min_prec {
-                if scan_single_expression_lr_37(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_37(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25355,7 +25355,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_BackTick {
             if 3 >= min_prec {
-                if scan_single_expression_lr_38(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_38(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
@@ -25368,7 +25368,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             }
         } else if _sk == TK_As {
             if 2 >= min_prec {
-                if scan_single_expression_lr_51(&p.kinds, p.pos) < 0 {
+                if scan_single_expression_lr_51(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
