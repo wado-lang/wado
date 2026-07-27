@@ -3503,6 +3503,22 @@ fn block_expr_assigning_local(local_index: u32, type_id: TypeId, value: Build) -
     })
 }
 
+fn global_set(name: &str, type_id: TypeId, value: Build) -> Build {
+    let name = name.to_string();
+    Rc::new(move |b| {
+        let value = value(b);
+        Operand::Expr(pe(
+            b,
+            ExprKind::GlobalVarSet {
+                module_source: ModuleSource::default(),
+                name: name.clone(),
+                value,
+            },
+            type_id,
+        ))
+    })
+}
+
 fn mut_ref_of_local(index: u32, type_id: TypeId) -> Build {
     Rc::new(move |b| {
         let local = pe(
@@ -4063,6 +4079,47 @@ fn multi_stmt_mut_borrowed_local_blocks_fold() {
             let_mut_stmt_b("y", 0, TypeTable::I32, int_lit(1, TypeTable::I32, "1")),
             expr_stmt_b(call_expr(&sink, vec![mut_ref_of_local(0, TypeTable::I32)])),
             return_stmt(local_expr(0, TypeTable::I32)),
+        ],
+    );
+    assert_call_intact(&f, vec![]);
+}
+
+#[test]
+fn multi_stmt_global_write_blocks_fold() {
+    // fn bump() { COUNT = 1; return 0; }
+    // Writing a module global carries no effect in the effect system, so the
+    // callee is admitted — but the executor cannot perform the write, and
+    // folding the call to `0` would drop it.
+    let f = make_multi_stmt_fn(
+        "bump",
+        vec![],
+        TypeTable::I32,
+        &[],
+        vec![
+            expr_stmt_b(global_set(
+                "COUNT",
+                TypeTable::I32,
+                int_lit(1, TypeTable::I32, "1"),
+            )),
+            return_stmt(int_lit(0, TypeTable::I32, "0")),
+        ],
+    );
+    assert_call_intact(&f, vec![]);
+}
+
+#[test]
+fn multi_stmt_discarded_unfoldable_call_blocks_fold() {
+    // A statement the executor cannot evaluate is a statement it cannot skip:
+    // whatever the call does at run time must still happen.
+    let opaque = make_pure_fn("opaque", vec![], TypeTable::I32, return_none());
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[],
+        vec![
+            expr_stmt_b(call_expr(&opaque, vec![])),
+            return_stmt(int_lit(3, TypeTable::I32, "3")),
         ],
     );
     assert_call_intact(&f, vec![]);

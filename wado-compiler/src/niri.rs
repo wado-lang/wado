@@ -1868,6 +1868,12 @@ impl<'a> Interpreter<'a> {
 
     /// Execute one statement, charging the shared budget so a body cannot run
     /// unbounded.
+    ///
+    /// A statement only counts as executed when everything it evaluates lands
+    /// on a constant. Reducing an expression is not performing it: an
+    /// unfolded call, a global write, or an operation that would trap all
+    /// leave work the engine did not do, and stepping past them would drop
+    /// it. Such a statement abandons the evaluation instead.
     fn exec_stmt_a(&mut self, body: &mut Body, s: StmtId) -> Flow {
         if self.step_budget == 0 {
             return Flow::Bail;
@@ -1878,9 +1884,13 @@ impl<'a> Interpreter<'a> {
                 local_index, value, ..
             } => {
                 let (index, value) = (*local_index, *value);
-                let lattice = self.eval_operand_a(body, value);
-                self.bind_ctfe_local(index, lattice);
-                Flow::Fallthrough(Lattice::Unevaluated)
+                match self.eval_operand_a(body, value) {
+                    lattice @ Lattice::Const(_) => {
+                        self.bind_ctfe_local(index, lattice);
+                        Flow::Fallthrough(Lattice::Unevaluated)
+                    }
+                    Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
+                }
             }
             StmtKind::Expr(op) => {
                 let op = *op;
@@ -1946,11 +1956,16 @@ impl<'a> Interpreter<'a> {
             let Some(index) = assign_target_local(body, target) else {
                 return Flow::Bail;
             };
-            let lattice = self.eval_operand_a(body, value);
-            self.bind_ctfe_local(index, lattice);
+            let Lattice::Const(v) = self.eval_operand_a(body, value) else {
+                return Flow::Bail;
+            };
+            self.bind_ctfe_local(index, Lattice::Const(v));
             return Flow::Fallthrough(Lattice::Unevaluated);
         }
-        Flow::Fallthrough(self.eval_operand_a(body, op))
+        match self.eval_operand_a(body, op) {
+            lattice @ Lattice::Const(_) => Flow::Fallthrough(lattice),
+            Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
+        }
     }
 
     fn eval_optional_operand_a(&mut self, body: &mut Body, op: Option<Operand>) -> Lattice {
