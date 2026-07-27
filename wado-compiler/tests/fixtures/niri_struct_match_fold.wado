@@ -1,0 +1,27 @@
+// A constant struct scrutinee picks its match arm at compile time. The
+// elaborator moves a pattern's literal fields into the arm guard, so this
+// folds only if the engine evaluates the guard under the pattern's bindings.
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() with Stdout {
+    let p = Point { x: 10, y: 32 };
+    let n = match p {
+        { x: 10, y: 1 } => 1009,
+        { x: 10, y: 32 } => 1013,
+        _ => 1019,
+    };
+    println(`${n}`);
+}
+
+__DATA__
+{
+    "stdout": "1013\n",
+    "wir_expect:O2": ["1013"],
+    "wir_not_expect:O2": ["1009", "1019"]
+}

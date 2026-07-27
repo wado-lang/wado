@@ -1,0 +1,27 @@
+// Verify niri's aggregate CTFE: a pure function taking a struct folds at
+// compile time when the argument is a constant struct literal. `#[inline(never)]`
+// keeps the inliner (and with it the value graph's store-load forwarding) out of
+// the call, so the literal in the WIR is attributable to niri alone.
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+#[inline(never)]
+fn manhattan(p: Point) -> i32 {
+    return p.x + p.y;
+}
+
+export fn run() with Stdout {
+    println(`${manhattan(Point { x: 1009, y: 4 })}`);
+}
+
+__DATA__
+{
+    "stdout": "1013\n",
+    "wir_expect:O2": ["1013"],
+    "wir_not_expect:O2": ["manhattan", "1009"]
+}

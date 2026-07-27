@@ -164,6 +164,7 @@ fn fold_function(
     // Local indices are per-function; reset the interpreter env at each boundary.
     visitor.interpreter.enter_function();
     visitor.interpreter.record_ref_global_aliases(body);
+    visitor.interpreter.record_aggregate_locals(body);
     let mut engine = Engine::new(body, buffers, locals);
     let root = engine.body.root;
     visitor.visit_block(&mut engine, root)
@@ -621,10 +622,17 @@ impl ConstFoldVisitor<'_> {
             ExprShape::Match(scrutinee, arms) => {
                 let mut changed = self.visit_operand(engine, scrutinee);
                 for arm in &arms {
+                    // Under a constant scrutinee the arm's guard and body reduce
+                    // under the bindings its pattern makes.
+                    let binds = self
+                        .interpreter
+                        .arm_bindings(engine.body, scrutinee, arm.pattern);
+                    let scope = self.interpreter.enter_arm(&binds);
                     if let Some(g) = arm.guard {
                         changed |= self.visit_operand(engine, g);
                     }
                     changed |= self.visit_operand(engine, arm.body);
+                    self.interpreter.leave_arm(scope);
                 }
                 changed |= self.reduce_local(engine, e);
                 changed

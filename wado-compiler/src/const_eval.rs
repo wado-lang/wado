@@ -4,12 +4,14 @@
 //! functions over [`Value`] and `PrimitiveType`, kept in a lower module so the
 //! value-graph builder can fold arithmetic without depending on `niri`.
 
+use std::rc::Rc;
+
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::Body;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// A typed compile-time value produced by the interpreter.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     /// Integer value. `prim` carries the integer type (i8..i64, u8..u64);
     /// `value` is the raw bit pattern, sign-extended for signed types.
@@ -21,9 +23,54 @@ pub enum Value {
     Bool(bool),
     /// Unicode scalar value (`char`).
     Char(char),
+    /// A struct or tuple whose every field is itself a compile-time value.
+    ///
+    /// Fields are keyed by `field_index` — the key `FieldAccess`,
+    /// `StructLiteral`, and struct patterns all carry — and kept sorted by it,
+    /// so structural equality is independent of literal field order. A NIR
+    /// aggregate literal always lists every field (the elaborator fills
+    /// defaults and rejects omissions), so the field list is complete and
+    /// equality is exact.
+    ///
+    /// Aggregates exist only inside the interpreter: the value pool holds pure
+    /// *scalars*, so what reaches the IR is the scalars projected out of them.
+    Aggregate {
+        type_id: TypeId,
+        fields: Rc<[(u32, Value)]>,
+    },
 }
 
 impl Value {
+    /// An aggregate over `fields`, canonicalized to `field_index` order so two
+    /// literals listing the same fields in different order compare equal.
+    #[must_use]
+    pub fn aggregate(type_id: TypeId, mut fields: Vec<(u32, Value)>) -> Self {
+        fields.sort_by_key(|(index, _)| *index);
+        Self::Aggregate {
+            type_id,
+            fields: fields.into(),
+        }
+    }
+
+    /// The value of field `index`, or `None` for a scalar or an absent field.
+    #[must_use]
+    pub fn field(&self, index: u32) -> Option<&Self> {
+        let Self::Aggregate { fields, .. } = self else {
+            return None;
+        };
+        fields
+            .binary_search_by_key(&index, |(i, _)| *i)
+            .ok()
+            .map(|pos| &fields[pos].1)
+    }
+
+    /// Whether the value can be promoted into a pure-value operand. Aggregates
+    /// cannot: the pool models scalars only.
+    #[must_use]
+    pub fn is_scalar(&self) -> bool {
+        !matches!(self, Self::Aggregate { .. })
+    }
+
     /// Returns the raw integer bit pattern, or `None` if not an int.
     #[must_use]
     pub fn as_int(&self) -> Option<(u64, PrimitiveType)> {
@@ -61,6 +108,9 @@ impl Value {
     }
 
     /// Render the value as a NIR-compatible literal repr string.
+    ///
+    /// Scalars only: an aggregate has no literal form in NIR, and never
+    /// reaches the pool this renders from.
     #[must_use]
     pub fn format_repr(&self) -> String {
         match self {
@@ -68,6 +118,9 @@ impl Value {
             Self::Float { value, .. } => format_float_repr(*value),
             Self::Bool(b) => b.to_string(),
             Self::Char(c) => format_char_repr(*c),
+            Self::Aggregate { .. } => {
+                panic!("an aggregate value has no NIR literal repr; it never enters the value pool")
+            }
         }
     }
 
@@ -138,7 +191,7 @@ pub(crate) fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
                     prim,
                 })
             }
-            Value::Bool(_) | Value::Char(_) => None,
+            Value::Bool(_) | Value::Char(_) | Value::Aggregate { .. } => None,
         },
         NirUnaryOp::Not => match operand {
             Value::Bool(b) => Some(Value::Bool(!b)),

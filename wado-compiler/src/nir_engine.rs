@@ -803,8 +803,9 @@ impl<'a> Engine<'a> {
     /// slot to the promoted value. `id`'s node is left orphaned (later DCE'd); its
     /// own `Local` mention, if any, is dropped from the use index, matching
     /// [`Self::replace_expr_kind`]. Returns `false` (a no-op) when `id` has no
-    /// parent, or the parent references it through a non-operand slot — the caller
-    /// then keeps the skeleton form.
+    /// parent, the parent references it through a non-operand slot, or `value` is
+    /// an aggregate (the pool models pure scalars only) — the caller then keeps
+    /// the skeleton form.
     pub fn replace_expr_with_value(&mut self, id: ExprId, value: crate::const_eval::Value) -> bool {
         use crate::const_eval::Value;
         use crate::nir_value_graph::ValueKind;
@@ -814,6 +815,7 @@ impl<'a> Engine<'a> {
             Value::Float { value, .. } => ValueKind::Float(value.to_bits(), type_id),
             Value::Bool(b) => ValueKind::Bool(b),
             Value::Char(c) => ValueKind::Char(c),
+            Value::Aggregate { .. } => return false,
         };
         let vid = self.body.values.alloc_unshared(kind, type_id);
         self.redirect_expr(id, Operand::Value(vid))

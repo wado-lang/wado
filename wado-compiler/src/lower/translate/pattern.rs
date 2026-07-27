@@ -579,6 +579,27 @@ impl<'a> PatternLowerer<'a> {
                     type_id: elem_type,
                 };
             }
+            TirPattern::Range {
+                start,
+                end,
+                inclusive,
+                ..
+            } => {
+                let (start, end, inclusive) = (*start, *end, *inclusive);
+                let temp_index = self.alloc_local(elem_type);
+                let temp_name = format!("__range_{temp_index}");
+
+                let cond = self.range_condition(
+                    temp_index, &temp_name, elem_type, start, end, inclusive, span,
+                );
+                conditions.push(cond);
+
+                *sub = TirPattern::Binding {
+                    name: temp_name,
+                    local_index: temp_index,
+                    type_id: elem_type,
+                };
+            }
             TirPattern::Variant {
                 enum_type,
                 variant_name,
@@ -1198,12 +1219,177 @@ impl<'a> PatternLowerer<'a> {
                 );
                 TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)
             }
-            TirPattern::Or(_) | TirPattern::Range { .. } => {
-                // Nested Or/Range patterns are not currently supported by this path.
-                // They are handled at the top level via the existing match lowering.
-                panic!("unsupported nested pattern in refutable extraction: {pattern:?}");
+            TirPattern::Or(alternatives) => {
+                let temp_index = self.alloc_local(pattern_type);
+                let temp_name = format!("__or_{temp_index}");
+                let let_stmt = TirStmt::new(
+                    TirStmtKind::Let {
+                        name: temp_name.clone(),
+                        local_index: temp_index,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: pattern_type,
+                        value,
+                        skip_value_copy: false,
+                    },
+                    span,
+                );
+
+                // Alternatives are tried in order, first match wins, so each
+                // carries its own copy of the continuation — that is what
+                // re-tests the rest of the pattern per alternative.
+                let mut checks =
+                    TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, span);
+                for alternative in alternatives.iter().rev() {
+                    let bound = TirExpr::new(
+                        TirExprKind::Local {
+                            index: temp_index,
+                            name: temp_name.clone(),
+                        },
+                        pattern_type,
+                        span,
+                    );
+                    let check = self.build_pattern_check(
+                        alternative,
+                        bound,
+                        pattern_type,
+                        span,
+                        type_table,
+                        continuation.clone(),
+                    );
+                    checks = TirExpr::new(
+                        TirExprKind::Binary {
+                            op: TirBinaryOp::Or,
+                            left: Box::new(check),
+                            right: Box::new(checks),
+                        },
+                        TypeTable::BOOL,
+                        span,
+                    );
+                }
+
+                let block = TirBlock::new(
+                    vec![let_stmt, TirStmt::new(TirStmtKind::Expr(checks), span)],
+                    span,
+                );
+                TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)
+            }
+            TirPattern::Range {
+                start,
+                end,
+                inclusive,
+                ..
+            } => {
+                let temp_index = self.alloc_local(pattern_type);
+                let temp_name = format!("__range_{temp_index}");
+                let let_stmt = TirStmt::new(
+                    TirStmtKind::Let {
+                        name: temp_name.clone(),
+                        local_index: temp_index,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: pattern_type,
+                        value,
+                        skip_value_copy: false,
+                    },
+                    span,
+                );
+                let range_cond = self.range_condition(
+                    temp_index,
+                    &temp_name,
+                    pattern_type,
+                    *start,
+                    *end,
+                    *inclusive,
+                    span,
+                );
+                let and_expr = TirExpr::new(
+                    TirExprKind::Binary {
+                        op: TirBinaryOp::And,
+                        left: Box::new(range_cond),
+                        right: Box::new(continuation),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                );
+                let block = TirBlock::new(
+                    vec![let_stmt, TirStmt::new(TirStmtKind::Expr(and_expr), span)],
+                    span,
+                );
+                TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)
             }
         }
+    }
+
+    /// Build a range condition: `local >= start && local <(=) end`. A `char`
+    /// range carries its bounds as code points, so they go back to char
+    /// literals to keep the comparison well-typed.
+    #[allow(clippy::too_many_arguments)]
+    fn range_condition(
+        &self,
+        local_index: u32,
+        local_name: &str,
+        local_type: TypeId,
+        start: i128,
+        end: i128,
+        inclusive: bool,
+        span: Span,
+    ) -> TirExpr {
+        let local = || {
+            TirExpr::new(
+                TirExprKind::Local {
+                    index: local_index,
+                    name: local_name.to_string(),
+                },
+                local_type,
+                span,
+            )
+        };
+        let bound = |value: i128| {
+            if local_type == TypeTable::CHAR {
+                let code = u32::try_from(value).ok().and_then(char::from_u32);
+                TirExpr::new(
+                    TirExprKind::CharLiteral(code.expect("a char range bound is a code point")),
+                    TypeTable::CHAR,
+                    span,
+                )
+            } else {
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: value as u64,
+                        repr: value.to_string(),
+                    },
+                    local_type,
+                    span,
+                )
+            }
+        };
+        let compare = |op, right| {
+            TirExpr::new(
+                TirExprKind::Binary {
+                    op,
+                    left: Box::new(local()),
+                    right: Box::new(right),
+                },
+                TypeTable::BOOL,
+                span,
+            )
+        };
+        let upper = if inclusive {
+            TirBinaryOp::LtEq
+        } else {
+            TirBinaryOp::Lt
+        };
+        TirExpr::new(
+            TirExprKind::Binary {
+                op: TirBinaryOp::And,
+                left: Box::new(compare(TirBinaryOp::GtEq, bound(start))),
+                right: Box::new(compare(upper, bound(end))),
+            },
+            TypeTable::BOOL,
+            span,
+        )
     }
 
     /// Build an equality condition: `local == literal_value`
