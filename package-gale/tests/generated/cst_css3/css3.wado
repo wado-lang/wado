@@ -29554,7 +29554,8 @@ fn scan_type_selector(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
             opt_probe: {
                 pos = scan_element_name(tokens, pos, follow, 0);
                 if pos < 0 { break opt_probe; }
-                if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) { opt_ok = true; }
+                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if (follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF)) && (_kind_set_35(probe_kind)) { opt_ok = true; }
             }
             pos = if opt_ok { bp } else { sp };
         }
@@ -29619,7 +29620,8 @@ fn scan_universal(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
             opt_probe: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break opt_probe; }
                 pos += 1;
-                if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) { opt_ok = true; }
+                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if (follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF)) && (_kind_set_35(probe_kind)) { opt_ok = true; }
             }
             pos = if opt_ok { bp } else { sp };
         }
@@ -29737,7 +29739,8 @@ fn scan_attrib(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break opt_probe; }
                 pos += 1;
-                if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) { opt_ok = true; }
+                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if (follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF)) && (_kind_set_35(probe_kind)) { opt_ok = true; }
             }
             pos = if opt_ok { bp } else { sp };
         }
@@ -30183,7 +30186,7 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_35(alt_kind) {
+        if _kind_set_36(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
             try_1: {
@@ -30229,7 +30232,7 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
             }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
-        } else if _kind_set_36(alt_kind) {
+        } else if _kind_set_37(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_selector_group(tokens, pos, &FOLLOW_MASK_7, 0);
@@ -30250,7 +30253,7 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                 break scan_alts;
             }
             return -1;
-        } else if _kind_set_37(alt_kind) {
+        } else if _kind_set_38(alt_kind) {
             pos = start;
             try_1: {
                 while pos < tokens.len() && _kind_set_20(tokens[pos]) {
@@ -34110,7 +34113,8 @@ fn _parse_type_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if pos < 0 { break opt_enter_scan; }
             pos = scan_element_name(tokens, pos, follow, 0);
             if pos < 0 { break opt_enter_scan; }
-            if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) { opt_enter = true; }
+            let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if (follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF)) && (_kind_set_35(probe_kind)) { opt_enter = true; }
         }
     }
     if opt_enter {
@@ -34210,7 +34214,8 @@ fn _parse_universal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             if pos < 0 { break opt_enter_scan; }
             if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break opt_enter_scan; }
             pos += 1;
-            if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) { opt_enter = true; }
+            let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if (follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF)) && (_kind_set_35(probe_kind)) { opt_enter = true; }
         }
     }
     if opt_enter {
@@ -34344,7 +34349,8 @@ fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
             }
             if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break opt_enter_scan; }
             pos += 1;
-            if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) { opt_enter = true; }
+            let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if (follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF)) && (_kind_set_35(probe_kind)) { opt_enter = true; }
         }
     }
     if opt_enter {
@@ -34926,7 +34932,7 @@ fn _parse_ruleset__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 fn _parse_ruleset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if _kind_set_29(kind) {
-        if _kind_set_35(p.peek_kind()) {
+        if _kind_set_36(p.peek_kind()) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_1 = _parse_ruleset__inner_scan_1(_sd_tokens, _sd_pos);
@@ -34948,9 +34954,9 @@ fn _parse_ruleset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
                 return _parse_ruleset__inner_alt_0(p, follow);
             }
             return _parse_ruleset__inner_alt_0(p, follow);
-        } else if _kind_set_36(p.peek_kind()) {
-            return _parse_ruleset__inner_alt_0(p, follow);
         } else if _kind_set_37(p.peek_kind()) {
+            return _parse_ruleset__inner_alt_0(p, follow);
+        } else if _kind_set_38(p.peek_kind()) {
             return _parse_ruleset__inner_alt_1(p, follow);
         }
     }
@@ -35312,7 +35318,7 @@ fn _parse_term__inner_alt_11(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if _kind_set_38(kind) {
+    if _kind_set_39(kind) {
         if p.peek_kind() == TK_Plus {
             if p.peek_at(1) == TK_Number {
                 return _parse_term__inner_alt_0(p, follow);
@@ -35695,7 +35701,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         let ws = _parse_ws(p, follow);
         return;
     }
-    if _kind_set_38(kind) {
+    if _kind_set_39(kind) {
         if p.peek_kind() == TK_Plus {
             if p.peek_at(1) == TK_Number {
                 return _parse_any___inner_alt_1(p, follow);
@@ -37009,7 +37015,7 @@ fn _parse_calc_value__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EM
 fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if _kind_set_38(kind) {
+    if _kind_set_39(kind) {
         if p.peek_kind() == TK_Plus {
             if p.peek_at(1) == TK_Number {
                 return _parse_calc_value__inner_alt_0(p, follow);
@@ -38273,18 +38279,22 @@ fn _kind_set_34(k: i32) -> bool {
 }
 
 fn _kind_set_35(k: i32) -> bool {
-    return k matches { TK_And | TK_From | TK_Hash | TK_Ident | TK_LIT_COLON | TK_LIT_LBRACKET | TK_MediaOnly | TK_Not | TK_Or | TK_To };
+    return k matches { TK_Comma | TK_Comment | TK_Greater | TK_Hash | TK_LIT_COLON | TK_LIT_DOT | TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_RPAREN | TK_Plus | TK_PseudoNot | TK_Space | TK_Tilde };
 }
 
 fn _kind_set_36(k: i32) -> bool {
-    return k matches { TK_LIT_DOT | TK_LIT_PIPE | TK_LIT_STAR | TK_PseudoNot };
+    return k matches { TK_And | TK_From | TK_Hash | TK_Ident | TK_LIT_COLON | TK_LIT_LBRACKET | TK_MediaOnly | TK_Not | TK_Or | TK_To };
 }
 
 fn _kind_set_37(k: i32) -> bool {
-    return k matches { TK_DashMatch | TK_Dimension | TK_Function_ | TK_Includes | TK_LIT_LBRACE | TK_LIT_LPAREN | TK_Minus | TK_Number | TK_Percentage | TK_Plus | TK_String_ | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ };
+    return k matches { TK_LIT_DOT | TK_LIT_PIPE | TK_LIT_STAR | TK_PseudoNot };
 }
 
 fn _kind_set_38(k: i32) -> bool {
+    return k matches { TK_DashMatch | TK_Dimension | TK_Function_ | TK_Includes | TK_LIT_LBRACE | TK_LIT_LPAREN | TK_Minus | TK_Number | TK_Percentage | TK_Plus | TK_String_ | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ };
+}
+
+fn _kind_set_39(k: i32) -> bool {
     return k matches { TK_Dimension | TK_Minus | TK_Number | TK_Percentage | TK_Plus | TK_UnknownDimension };
 }
 

@@ -696,6 +696,11 @@ pub struct RepeatOp {
     /// recomputed so the two emit walkers and the scan side cannot answer
     /// it differently.
     pub static_exit_undecided: bool = false,
+    /// The enclosing rule's classical FOLLOW, conjoined into the probe's
+    /// verdict: its continuation scan ends at the rule's tail, and a token
+    /// outside this set cannot continue any caller from there. Empty leaves
+    /// the verdict as it was.
+    pub probe_viable: List<String> = [],
     /// Emit a runtime caller-FOLLOW yield gate
     /// (`if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break }`)
     /// at this iteration's entry. Set by lower when the Repeat sits at a
@@ -972,6 +977,7 @@ pub struct ScanRepeatElement {
     pub continuation_scan: List<ScanElement> = [],
     pub continuation_scannable: bool = false,
     pub static_exit_undecided: bool = false,
+    pub probe_viable: List<String> = [],
 }
 
 pub struct ScanGroupElement {

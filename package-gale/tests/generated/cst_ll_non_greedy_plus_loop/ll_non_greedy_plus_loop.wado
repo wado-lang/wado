@@ -1741,7 +1741,8 @@ fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
             if pos < 0 { break ng_exit_scan; }
             if pos >= tokens.len() || tokens[pos] != TK_EOF { break ng_exit_scan; }
             pos += 1;
-            ng_exit = true;
+            let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if probe_kind == TK_EOF { ng_exit = true; }
         }
         pos = ep;
         if ng_exit { break; }
@@ -1785,7 +1786,8 @@ fn _parse_s__inner(p: &mut Parser) -> () {
             if pos < 0 { break ng_exit_scan; }
             if pos >= tokens.len() || tokens[pos] != TK_EOF { break ng_exit_scan; }
             pos += 1;
-            ng_exit = true;
+            let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if probe_kind == TK_EOF { ng_exit = true; }
         }
         if ng_exit { break; }
         if !(p.peek_kind() == TK_A) { break; }

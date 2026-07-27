@@ -526,7 +526,7 @@ fn lower_simple_rule(rule: &ParserRule, ctx: &mut GenContext) -> SimpleRule {
     let case_names = case_names_for_rule(&rule.alternatives);
     let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
     let body = lower_alt_body(&rule.alternatives[0], 0, rule, ctx, &case_names, &alt_gc_starts);
-    let scan_body = lower_scan_body(&rule.alternatives[0], ctx);
+    let scan_body = lower_scan_body(&rule.alternatives[0], ctx, &rule.name);
     return SimpleRule {
         header: lower_header(rule),
         body,
@@ -556,7 +556,7 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
     let mut all_indices: List<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
         alts.push(lower_alt_body(&rule.alternatives[i], i, rule, ctx, &case_names, &alt_gc_starts));
-        scan_alts.push(lower_scan_body(&rule.alternatives[i], ctx));
+        scan_alts.push(lower_scan_body(&rule.alternatives[i], ctx, &rule.name));
         all_indices.push(i);
     }
 
@@ -1238,7 +1238,7 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
     let mut scan_alts: List<ScanBody> = [];
     for let idx of non_lr_indices {
         alts.push(lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx, &case_names, &alt_gc_starts));
-        scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx));
+        scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx, &rule.name));
     }
 
     let owner_label = `LR rule '${rule.name}' atom`;
@@ -1357,7 +1357,7 @@ fn lower_lr_alt_suffix(
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx, false));
+            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx, false, &rule.name));
         }
         ops.push(op);
     }
@@ -1762,13 +1762,15 @@ pub fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
 /// The scan side has no field bindings, no struct construction, and
 /// no name dedup — it only produces a token-stream walk that
 /// returns the new `pos`.
-fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext) -> ScanBody {
+fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, rule_name: &String = &NO_PROBE_RULE) -> ScanBody {
     let mut elements: List<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         elements.push(lower_alt_scan_element(
             &alt.elements,
             i,
             ctx,
+            true,
+            rule_name,
         ));
     }
     return ScanBody { elements };
@@ -2047,15 +2049,18 @@ fn rebind_scan_repeat_caller_follow(
     index: i32,
     ctx: &mut GenContext,
     reaches_rule_tail: bool,
+    rule_name: &String = &NO_PROBE_RULE,
 ) -> ScanElement {
     if let Repeat(re) = se {
         let mut continuation_scan: List<ScanElement> = [];
         let mut continuation_scannable = false;
+        let mut probe_viable: List<String> = [];
         let wants_probe = re.non_greedy || re.kind matches { Optional };
         if wants_probe && reaches_rule_tail {
             if let Some(scan) = lower_scan_continuation_elements(alt_elements, index, ctx) {
                 continuation_scan = scan;
                 continuation_scannable = true;
+                probe_viable = ctx.rule_follow_for_probe(rule_name);
             }
         }
         let static_exit_undecided = non_greedy_static_undecided(
@@ -2074,10 +2079,16 @@ fn rebind_scan_repeat_caller_follow(
             continuation_scan,
             continuation_scannable,
             static_exit_undecided,
+            probe_viable,
         });
     }
     return se;
 }
+
+/// Default for scan walks with no enclosing rule to stamp from — group
+/// bodies and continuation walks, where `reaches_rule_tail` is false and
+/// the probe set is never read.
+global NO_PROBE_RULE: String = "";
 
 /// `body_second_position_first` for the Repeat at `elem`, matching what
 /// `lower_repeat_op` stamped on the parse-side op.
@@ -2123,6 +2134,7 @@ fn lower_alt_scan_element(
     i: i32,
     ctx: &mut GenContext,
     enclosing_at_tail: bool = true,
+    rule_name: &String = &NO_PROBE_RULE,
 ) -> ScanElement {
     let elem_follow = ctx.compute_call_site_follow(alt_elements, i);
     // Mirror the parse side: the per-position `FollowArg` and the tail
@@ -2140,7 +2152,7 @@ fn lower_alt_scan_element(
     );
     if let Repeat(_) = &se {
         let basic_follow = ctx.first_of_elements_from(alt_elements, i + 1);
-        se = rebind_scan_repeat_caller_follow(se, basic_follow, alt_elements, i, ctx, enclosing_at_tail);
+        se = rebind_scan_repeat_caller_follow(se, basic_follow, alt_elements, i, ctx, enclosing_at_tail, rule_name);
     }
     return se;
 }
@@ -2445,7 +2457,7 @@ fn lower_alt_body(
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx, true));
+            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx, true, &rule.name));
         }
         ops.push(op);
     }
@@ -2771,7 +2783,7 @@ fn lower_single_alt_group(
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             if let Repeat(rep_op) = &op {
                 let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-                op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx, false));
+                op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx, false, rule_name));
             }
             if se_is_repeat {
                 se = rebind_scan_repeat_caller_follow(se, basic_follow, &alt.elements, i, ctx, false);
@@ -3099,7 +3111,7 @@ fn lower_general_group(
                 let basic_follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
                 if let Repeat(rep_op) = &op {
                     let basic_second = compute_caller_follow_second(&alt.elements, ei + 1, ctx);
-                    op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, ei, ctx, false));
+                    op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, ei, ctx, false, rule_name));
                 }
                 if se_is_repeat {
                     se = rebind_scan_repeat_caller_follow(se, basic_follow, &alt.elements, ei, ctx, false);
@@ -3684,12 +3696,15 @@ fn patch_repeat_op_caller_follow(
     index: i32,
     ctx: &mut GenContext,
     reaches_rule_tail: bool,
+    rule_name: &String,
 ) -> RepeatOp {
     let mut continuation_scan: List<ScanElement> = [];
     let mut continuation_scannable = false;
+    let mut probe_viable: List<String> = [];
     if let Some(scan) = lower_continuation_scan(rep_op, alt_elements, index, ctx, reaches_rule_tail) {
         continuation_scan = scan;
         continuation_scannable = true;
+        probe_viable = ctx.rule_follow_for_probe(rule_name);
     }
     let static_exit_undecided = non_greedy_static_undecided(
         &rep_op.body_first_set,
@@ -3704,6 +3719,7 @@ fn patch_repeat_op_caller_follow(
         continuation_scan,
         continuation_scannable,
         static_exit_undecided,
+        probe_viable,
     };
 }
 

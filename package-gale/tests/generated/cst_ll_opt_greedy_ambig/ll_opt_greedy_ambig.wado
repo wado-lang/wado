@@ -1786,7 +1786,8 @@ fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_EOF { break opt_probe; }
                 pos += 1;
-                opt_ok = true;
+                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if probe_kind == TK_EOF { opt_ok = true; }
             }
             pos = if opt_ok { bp } else { sp };
         }
@@ -1834,7 +1835,8 @@ fn _parse_s__inner(p: &mut Parser) -> () {
             }
             if pos >= tokens.len() || tokens[pos] != TK_EOF { break opt_enter_scan; }
             pos += 1;
-            opt_enter = true;
+            let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if probe_kind == TK_EOF { opt_enter = true; }
         }
     }
     if opt_enter {

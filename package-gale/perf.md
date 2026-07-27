@@ -422,10 +422,11 @@ gate.
   lookahead nor gating it brought that down. What shipped decides the ambiguity
   with the compiled scan instead — a greedy `?` scans its body then the
   continuation before entering, a non-greedy loop scans the continuation before
-  exiting. Release `sqlite_parse` is unchanged (best-of identical, each arm's
-  spread wider than the gap between them). What remains is a tail-position
-  loop, where the probe has nothing local to scan and falls back to the FOLLOW
-  mask; `TODO.md` has why the mask cannot answer it.
+  exiting. Where the scan runs out — the rule's tail — the verdict conjoins
+  the rule's classical FOLLOW, which cost one bug fix in `follow_env` (an
+  optional's callee was receiving the inner's own FIRST) rather than a second
+  runtime argument. Release `sqlite_parse` is unchanged (best-of identical,
+  each arm's spread wider than the gap between them).
 - **Recursive lexer rule with `.+?` / `.*?`**
   (`RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`): the static single-pass
   emitter over-consumes nested `/* … */` comments.

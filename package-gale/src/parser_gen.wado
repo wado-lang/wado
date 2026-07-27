@@ -2525,11 +2525,8 @@ fn gen_scan_optional_probe(
     for let se of &re.continuation_scan {
         gen_scan_op_element(w, se, ctx, &fail);
     }
-    if ctx.emit_follow() {
-        w.line(&"if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) { opt_ok = true; }");
-    } else {
-        w.line(&"opt_ok = true;");
-    }
+    let opt_ok = "opt_ok";
+    emit_probe_verdict(w, &re.probe_viable, &opt_ok, ctx);
     w.end();
     w.line(&"pos = if opt_ok { bp } else { sp };");
     w.end();
@@ -2549,11 +2546,8 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
     for let se of &re.continuation_scan {
         gen_scan_op_element(w, se, ctx, &fail);
     }
-    if ctx.emit_follow() {
-        w.line(&"if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) { ng_exit = true; }");
-    } else {
-        w.line(&"ng_exit = true;");
-    }
+    let ng_exit = "ng_exit";
+    emit_probe_verdict(w, &re.probe_viable, &ng_exit, ctx);
     w.end();
     w.line(&"pos = ep;");
     w.line(&"if ng_exit { break; }");
@@ -5215,7 +5209,7 @@ fn begin_non_greedy_probe_loop(
     w.line(&"if p.recovering { break; }");
     let verdict = dedup_name(&"ng_exit", nc);
     w.line(&`let mut ${verdict}: bool = false;`);
-    gen_viability_probe(w, &r.continuation_scan, &verdict, &"ng_exit_scan", ctx, nc);
+    gen_viability_probe(w, &r.continuation_scan, &verdict, &"ng_exit_scan", ctx, nc, null, &r.probe_viable);
     w.line(&`if ${verdict} \{ break; \}`);
     w.line(&`if !(${ctx.first_check_str(&r.body_first_set)}) \{ break; \}`);
 }
@@ -5232,6 +5226,7 @@ fn gen_viability_probe(
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
     prefix_scan: Option<ScanElement> = null,
+    probe_viable: &List<String> = &EMPTY_PROBE_VIABLE,
 ) {
     let label = dedup_name(label_base, nc);
     w.begin(&`${label}:`);
@@ -5244,12 +5239,35 @@ fn gen_viability_probe(
     for let se of continuation {
         gen_scan_op_element(w, se, ctx, &fail);
     }
-    if ctx.emit_follow() {
-        w.line(&`if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) \{ ${*verdict} = true; \}`);
-    } else {
-        w.line(&`${*verdict} = true;`);
-    }
+    emit_probe_verdict(w, probe_viable, verdict, ctx);
     w.end();
+}
+
+global EMPTY_PROBE_VIABLE: List<String> = [];
+
+/// The probe's verdict once its scan has reached the rule's tail: the
+/// threaded mask has to admit the position, and so does the rule's own
+/// FOLLOW when lowering stamped one. The mask answers "yes" wherever a call
+/// site left it empty; the FOLLOW conjunct is what still says no there, and
+/// conjoining can only move a verdict from "exit" to "iterate".
+fn emit_probe_verdict(w: &mut CodeWriter, probe_viable: &List<String>, verdict: &String, ctx: &mut GenContext) {
+    let mask = if ctx.emit_follow() {
+        "follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF)";
+    } else {
+        "true";
+    };
+    if probe_viable.is_empty() {
+        if mask == "true" {
+            w.line(&`${*verdict} = true;`);
+        } else {
+            w.line(&`if ${mask} \{ ${*verdict} = true; \}`);
+        }
+        return;
+    }
+    w.line(&"let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
+    let viable = ctx.kind_check_str(probe_viable, &"probe_kind");
+    let cond = if mask == "true" { viable } else { `(${mask}) && (${viable})` };
+    w.line(&`if ${cond} \{ ${*verdict} = true; \}`);
 }
 
 /// Greedy `*` / `+` / `?` under the emitter: loop the body (which
@@ -6611,7 +6629,16 @@ fn gen_optional_probe_entry(
     };
     w.line(&`let mut ${verdict}: bool = false;`);
     w.begin(&`if ${entry_gate}${ctx.first_check_str(raw_first)}`);
-    gen_viability_probe(w, &r.continuation_scan, &verdict, &"opt_enter_scan", ctx, nc, Option::Some(r.scan_body));
+    gen_viability_probe(
+        w,
+        &r.continuation_scan,
+        &verdict,
+        &"opt_enter_scan",
+        ctx,
+        nc,
+        Option::Some(r.scan_body),
+        &r.probe_viable,
+    );
     w.end();
     w.begin(&`if ${verdict}`);
     let mut body_nc: List<[String, i32]> = [];
