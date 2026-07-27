@@ -5047,7 +5047,10 @@ mod tests {
         };
         assert_eq!(param_id, receiver);
         assert_eq!(bounds, vec!["Default".to_string()]);
-        assert_eq!(assoc_type_bindings, vec![("Item".to_string(), TypeTable::I32)]);
+        assert_eq!(
+            assoc_type_bindings,
+            vec![("Item".to_string(), TypeTable::I32)]
+        );
     }
 
     /// A substitution that misses the base leaves the projection interned as

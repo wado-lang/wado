@@ -435,13 +435,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys.signatures.trait_sig(*decl_id)
     }
 
-    /// Find a trait declaration by name across all modules.
-    /// Returns the trait's methods (cloned) if found.
-    pub(super) fn find_trait_decl_methods(&self, trait_name: &str) -> Option<Vec<ast::Function>> {
-        self.find_trait_decl_methods_with_module(trait_name)
-            .map(|(methods, _)| methods)
-    }
-
     /// Like [`Self::find_trait_decl_methods`] but also returns the module that
     /// owns the trait declaration, for callers that need to attribute a trait
     /// *default* method body to its declaring module (e.g. diagnostics).

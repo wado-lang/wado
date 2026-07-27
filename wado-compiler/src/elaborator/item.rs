@@ -773,7 +773,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
     /// The type arguments a generic type reference writes, resolved in the
     /// current frame. A non-generic reference writes none.
-    fn resolve_written_type_args(&mut self, ty: &Type) -> Vec<TypeId> {
+    pub(super) fn resolve_written_type_args(&mut self, ty: &Type) -> Vec<TypeId> {
         let Type::Generic(generic) = ty else {
             return Vec::new();
         };

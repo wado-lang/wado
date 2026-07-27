@@ -2329,14 +2329,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // parameter name, instead of the impl's re-specified params.
             let trait_name_base = scope.get_type_name(&trait_type_for_name);
             let param_defaults: Vec<Option<ast::Expr>> = {
-                let trait_method_params: Option<Vec<ast::Param>> = scope
-                    .find_trait_decl_methods(&trait_name_base)
-                    .and_then(|methods| {
-                        methods
-                            .into_iter()
-                            .find(|m| m.name == method_name)
-                            .map(|m| m.params)
-                    });
+                let trait_method_params = scope
+                    .trait_sig_by_name(&trait_name_base)
+                    .and_then(|sig| sig.method(method_name))
+                    .map(|method| method.sig.params.clone());
                 param_names
                     .iter()
                     .map(|name| {
@@ -2379,126 +2375,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !method_found {
             let trait_name_base = scope.get_type_name(&trait_type_for_name);
             let trait_name_str = scope.get_type_name_full(&trait_type_for_name);
-            if let Some(trait_methods) = scope.find_trait_decl_methods(&trait_name_base) {
-                for default_method in &trait_methods {
-                    if default_method.name == method_name && default_method.body.is_some() {
-                        // Override `Self` so that `Self` in the default
-                        // method's return type resolves to the concrete
-                        // receiver type.
-                        let (
-                            return_type,
-                            self_kind,
-                            param_types,
-                            param_is_mut,
-                            param_defaults,
-                            param_names,
-                        ) = scope.with_self_type_if_known(receiver_type_id, |s| {
-                            // Bind the trait's own type parameters to the impl's
-                            // concrete trait args so that a default method's
-                            // return/param types written in terms of the trait's
-                            // `T` resolve to the concrete type at the call site
-                            // (e.g., `Maker<i32>::make_with_default` returns i32,
-                            // not the unresolved T).
-                            s.bind_trait_type_params_from_impl(&trait_type_for_name);
+            // The trait's frame numbers `Self` slot 0 and its own parameters
+            // after it, so the impl supplies its receiver and its trait
+            // arguments and the recorded signature yields this call's types.
+            // The method's own slots are left unfilled — inference solves
+            // them at the call site.
+            if let Some(default_method) = scope
+                .trait_sig_by_name(&trait_name_base)
+                .and_then(|sig| sig.method(method_name))
+                .filter(|m| m.default_body.is_some())
+                .cloned()
+            {
+                let trait_args = scope.resolve_written_type_args(&trait_type_for_name);
+                let mut declaring_args = vec![receiver_type_id.unwrap_or(TypeTable::UNKNOWN)];
+                declaring_args.extend(trait_args);
+                let instantiated = default_method.sig.instantiate_call(
+                    &scope.tysys.type_table,
+                    &declaring_args,
+                    &[],
+                );
 
-                            // Set up method-level type params (e.g., U in map<U>)
-                            let impl_offset = s.annotate_ctx.trait_ctx.type_params.len() as u32;
-                            for (i, type_param) in default_method.type_params.iter().enumerate() {
-                                let index = impl_offset + i as u32;
-                                let type_param_id = s.tysys.type_table.borrow_mut().intern(
-                                    ResolvedType::TypeParam {
-                                        name: type_param.name.clone(),
-                                        index,
-                                    },
-                                );
-                                s.annotate_ctx
-                                    .trait_ctx
-                                    .type_params
-                                    .insert(type_param.name.clone(), (index, type_param_id));
-                                if !type_param.bounds.is_empty() {
-                                    s.annotate_ctx
-                                        .trait_ctx
-                                        .type_param_bounds
-                                        .insert(type_param.name.clone(), type_param.bounds.clone());
-                                }
-                            }
-
-                            let return_type = default_method
-                                .return_type
-                                .as_ref()
-                                .map(|t| s.resolve_type(t))
-                                .unwrap_or(TypeTable::UNIT);
-                            let self_kind = default_method
-                                .params
-                                .first()
-                                .map(|p| p.self_kind)
-                                .unwrap_or(ast::SelfKind::None);
-                            let param_types = s.extract_param_types(&default_method.params);
-                            let param_is_mut: Vec<bool> = default_method
-                                .params
-                                .iter()
-                                .filter(|p| p.name != "self")
-                                .map(|p| p.is_mut)
-                                .collect();
-                            let param_defaults: Vec<Option<ast::Expr>> = default_method
-                                .params
-                                .iter()
-                                .filter(|p| p.name != "self")
-                                .map(|p| p.default.clone())
-                                .collect();
-                            let param_names: Vec<String> = default_method
-                                .params
-                                .iter()
-                                .filter(|p| p.name != "self")
-                                .map(|p| p.name.clone())
-                                .collect();
-
-                            // Remove method-level type params from scope
-                            for type_param in &default_method.type_params {
-                                s.annotate_ctx
-                                    .trait_ctx
-                                    .type_params
-                                    .shift_remove(&type_param.name);
-                                s.annotate_ctx
-                                    .trait_ctx
-                                    .type_param_bounds
-                                    .shift_remove(&type_param.name);
-                            }
-                            (
-                                return_type,
-                                self_kind,
-                                param_types,
-                                param_is_mut,
-                                param_defaults,
-                                param_names,
-                            )
-                        });
-
-                        found_traits.push(TraitMethodMatch {
-                            trait_name: trait_name_str.clone(),
-                            method_info: MethodInfo {
-                                impl_offset: None,
-                                return_type,
-                                self_kind,
-                                param_types,
-                                param_is_mut,
-                                inherited_from_base: None,
-                                cm_name: None,
-                                is_ref_impl: false,
-                                method_type_param_ids: vec![],
-                                impl_module: Some(impl_module_source.clone()),
-                                from_concrete_impl: impl_is_concrete,
-                                param_defaults,
-                                param_names,
-                                consumes_self: takes_self_by_value(&default_method.params),
-                            },
-                            impl_module_source: impl_module_source.clone(),
-                            blanket_type_param: blanket_type_param.clone(),
-                            impl_struct_name: impl_struct_name.clone(),
-                            is_blanket_ref_impl,
-                        });
-                    }
-                }
+                let self_kind = default_method.sig.self_kind;
+                let first_value_param = default_method.sig.first_value_param();
+                found_traits.push(TraitMethodMatch {
+                    trait_name: trait_name_str.clone(),
+                    method_info: MethodInfo {
+                        impl_offset: None,
+                        return_type: instantiated.return_type,
+                        self_kind,
+                        param_types: instantiated.param_types[first_value_param..].to_vec(),
+                        param_is_mut: crate::elaborator::sig::Param::is_mut_flags(
+                            &default_method.sig.params,
+                        ),
+                        inherited_from_base: None,
+                        cm_name: None,
+                        is_ref_impl: false,
+                        method_type_param_ids: vec![],
+                        impl_module: Some(impl_module_source.clone()),
+                        from_concrete_impl: impl_is_concrete,
+                        param_defaults: default_method
+                            .sig
+                            .params
+                            .iter()
+                            .map(|p| p.default.clone())
+                            .collect(),
+                        param_names: crate::elaborator::sig::Param::names(
+                            &default_method.sig.params,
+                        ),
+                        consumes_self: self_kind == ast::SelfKind::Value,
+                    },
+                    impl_module_source: impl_module_source.clone(),
+                    blanket_type_param: blanket_type_param.clone(),
+                    impl_struct_name: impl_struct_name.clone(),
+                    is_blanket_ref_impl,
+                });
             }
         }
 

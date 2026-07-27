@@ -181,12 +181,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let bound_names: Vec<String> =
                     assoc_bounds.iter().map(|b| b.name.clone()).collect();
                 let assoc_type_bindings = self.compute_assoc_type_bindings("Self", &assoc_bounds);
-                return self.tysys.type_table.borrow_mut().make_assoc_type_projection(
-                    self_type,
-                    namespaced.name.clone(),
-                    bound_names,
-                    assoc_type_bindings,
-                );
+                return self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_assoc_type_projection(
+                        self_type,
+                        namespaced.name.clone(),
+                        bound_names,
+                        assoc_type_bindings,
+                    );
             }
             // If not found, it's an unknown associated type
             let _ = self.emit(TypeError::UnknownType {
