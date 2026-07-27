@@ -916,22 +916,22 @@ fn "core:prelude/list.wado/List<char>::grow"(self) {
 }
 
 fn "core:prelude/list.wado/List<char>^FromIterator::from_iter<core:prelude/string.wado/StrCharIter>"(iter) {
-    let __b: ref "core:prelude//List<char>";
-    __b = struct.new "core:prelude//List<char>" { repr: builtin::array_new<char>(0), used: 0 };
+    let result: ref "core:prelude//List<char>";
+    result = struct.new "core:prelude//List<char>" { repr: builtin::array_new<char>(0), used: 0 };
     b85: block {
         l86: loop {
             let __sroa___match_4_discriminant: i32;
             let __sroa___match_4_payload_0: char;
             multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(iter);
             if __sroa___match_4_discriminant == 0 {
-                "core:prelude/list.wado/List<char>::push"(__b, __sroa___match_4_payload_0);
+                "core:prelude/list.wado/List<char>::push"(result, __sroa___match_4_payload_0);
             } else {
                 break b85;
             }
             continue l86;
         };
     };
-    return __b;
+    return result;
 }
 
 export fn "opt_hfs_immut_ref_method_reread.wado/__cm_export__run" as "run"

@@ -293,7 +293,7 @@ fn "parser_synth_id_collision_test.wado/is_known_section"(name) {
 }
 
 fn "parser_synth_id_collision_test.wado/parse_descriptor_text"(text) {
-    let __b_1: ref "core:prelude//List<parser_synth_id_collision_test.wado/DescriptorPair>";
+    let pairs: ref "core:prelude//List<parser_synth_id_collision_test.wado/DescriptorPair>";
     let current_name: ref "core:prelude/string.wado//String";
     let have_current: bool;
     let current_value: ref "core:prelude/string.wado//String";
@@ -302,7 +302,7 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text"(text) {
     let section_name: ref null "core:prelude/string.wado//String";
     let name: ref "core:prelude/string.wado//String";
     let grammar: ref "core:prelude/string.wado//String";
-    let __b_11: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let slaves: ref "core:prelude//List<core:prelude/string.wado/String>";
     let descriptor_type: ref "core:prelude/string.wado//String";
     let input: ref "core:prelude/string.wado//String";
     let output: ref "core:prelude/string.wado//String";
@@ -319,7 +319,7 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text"(text) {
     let __sroa_processed_repr: ref Array<u8>;
     let __sroa_processed_used: i32;
     let __sroa_v_repr: ref Array<u8>;
-    __b_1 = struct.new "core:prelude//List<parser_synth_id_collision_test.wado/DescriptorPair>" { repr: builtin::array_new<ref "parser_synth_id_collision_test.wado//DescriptorPair">(0), used: 0 };
+    pairs = struct.new "core:prelude//List<parser_synth_id_collision_test.wado/DescriptorPair>" { repr: builtin::array_new<ref "parser_synth_id_collision_test.wado//DescriptorPair">(0), used: 0 };
     current_name = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     have_current = 0;
     current_value = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(256), used: 0 };
@@ -334,7 +334,7 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text"(text) {
                 if ref.is_null(section_name) == 0 {
                     name = ref.as_non_null(section_name);
                     if have_current {
-                        "core:prelude/list.wado/List<parser_synth_id_collision_test.wado/DescriptorPair>::push"(__b_1, struct.new "parser_synth_id_collision_test.wado//DescriptorPair" { name: current_name, value: current_value });
+                        "core:prelude/list.wado/List<parser_synth_id_collision_test.wado/DescriptorPair>::push"(pairs, struct.new "parser_synth_id_collision_test.wado//DescriptorPair" { name: current_name, value: current_value });
                     }
                     current_name = name;
                     have_current = 1;
@@ -352,16 +352,16 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text"(text) {
         };
     };
     if have_current {
-        "core:prelude/list.wado/List<parser_synth_id_collision_test.wado/DescriptorPair>::push"(__b_1, struct.new "parser_synth_id_collision_test.wado//DescriptorPair" { name: current_name, value: current_value });
+        "core:prelude/list.wado/List<parser_synth_id_collision_test.wado/DescriptorPair>::push"(pairs, struct.new "parser_synth_id_collision_test.wado//DescriptorPair" { name: current_name, value: current_value });
     }
     grammar = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    __b_11 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
+    slaves = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
     descriptor_type = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     input = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     output = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     errors = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     start_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    __iter_18 = struct.new "core:prelude/slice.wado//ArrayIter<parser_synth_id_collision_test.wado/DescriptorPair>" { repr: __b_1.repr, index: 0, end: __b_1.used };
+    __iter_18 = struct.new "core:prelude/slice.wado//ArrayIter<parser_synth_id_collision_test.wado/DescriptorPair>" { repr: pairs.repr, index: 0, end: pairs.used };
     b15: block {
         l16: loop {
             __match_22 = "core:prelude/slice.wado/ArrayIter<parser_synth_id_collision_test.wado/DescriptorPair>^Iterator::next"(__iter_18);
@@ -381,7 +381,7 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text"(text) {
                 if "core:prelude/string.wado/String^Eq::eq"(__local_23, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = array.new_data<u8>("grammar"); let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: 7 }) {
                     grammar = "parser_synth_id_collision_test.wado/unescape_st_text"(struct.new "core:prelude/string.wado//String" { repr: __sroa_processed_repr, used: __sroa_processed_used });
                 } else if "core:prelude/string.wado/String^Eq::eq"(__local_23, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = array.new_data<u8>("slaveGrammar"); let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: 12 }) {
-                    "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b_11, "parser_synth_id_collision_test.wado/unescape_st_text"(struct.new "core:prelude/string.wado//String" { repr: __sroa_processed_repr, used: __sroa_processed_used }));
+                    "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(slaves, "parser_synth_id_collision_test.wado/unescape_st_text"(struct.new "core:prelude/string.wado//String" { repr: __sroa_processed_repr, used: __sroa_processed_used }));
                 } else if "core:prelude/string.wado/String^Eq::eq"(__local_23, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = array.new_fixed<u8>(116, 121, 112, 101); let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: 4 }) {
                     descriptor_type = "core:prelude/string.wado/String::trim_end"("core:prelude/string.wado/String::trim_start"(struct.new "core:prelude/string.wado//String" { repr: __sroa_processed_repr, used: __sroa_processed_used }));
                 } else if "core:prelude/string.wado/String^Eq::eq"(__local_23, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = array.new_data<u8>("input"); let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: 5 }) {
@@ -400,7 +400,7 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text"(text) {
             continue l16;
         };
     };
-    return struct.new "parser_synth_id_collision_test.wado//ParsedDescriptor" { grammar: grammar, slave_grammars: __b_11, descriptor_type: descriptor_type, input: input, output: output, errors: errors, start: start_17 };
+    return struct.new "parser_synth_id_collision_test.wado//ParsedDescriptor" { grammar: grammar, slave_grammars: slaves, descriptor_type: descriptor_type, input: input, output: output, errors: errors, start: start_17 };
 }
 
 fn "parser_synth_id_collision_test.wado/unescape_st_text"(s) {
@@ -1545,22 +1545,22 @@ fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
 }
 
 fn "core:prelude/list.wado/List<char>^FromIterator::from_iter<core:prelude/string.wado/StrCharIter>"(iter) {
-    let __b: ref "core:prelude//List<char>";
-    __b = struct.new "core:prelude//List<char>" { repr: builtin::array_new<char>(0), used: 0 };
+    let result: ref "core:prelude//List<char>";
+    result = struct.new "core:prelude//List<char>" { repr: builtin::array_new<char>(0), used: 0 };
     b176: block {
         l177: loop {
             let __sroa___match_4_discriminant: i32;
             let __sroa___match_4_payload_0: char;
             multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(iter);
             if __sroa___match_4_discriminant == 0 {
-                "core:prelude/list.wado/List<char>::push"(__b, __sroa___match_4_payload_0);
+                "core:prelude/list.wado/List<char>::push"(result, __sroa___match_4_payload_0);
             } else {
                 break b176;
             }
             continue l177;
         };
     };
-    return __b;
+    return result;
 }
 
 export fn "parser_synth_id_collision_test.wado/__cm_export__run" as "run"

@@ -157,8 +157,6 @@ global global:value_copy_share_root_escape.wado::__const_obj_70: ref null "core:
 global mut global:value_copy_share_root_escape.wado::__const_obj_72: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "value_copy_share_root_escape.wado/__test_0_share_must_copy_when_a_callee_mutates_the_source_through_the_reference"() {
-    let __b_0: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
-    let __b_1: ref "core:prelude//List<i32>";
     let __v0_5: i32;
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
@@ -167,10 +165,11 @@ fn "value_copy_share_root_escape.wado/__test_0_share_must_copy_when_a_callee_mut
     let v: ref "core:prelude//List<i32>";
     let self_46: ref "core:prelude//List<i32>";
     let __sroa_row_used: i32;
-    __b_0 = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(__b_1 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }; __b_1), used: 1 };
+    let __sroa_c_rows: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
+    __sroa_c_rows = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }), used: 1 };
     block {
     };
-    v = builtin::array_get<ref "core:prelude//List<i32>">(__b_0.repr, 0);
+    v = builtin::array_get<ref "core:prelude//List<i32>">(__sroa_c_rows.repr, 0);
     let __array_clone_src_7: ref Array<i32>;
     __array_clone_src_7 = v.repr;
     let __array_clone_len_7: i32;
@@ -181,7 +180,7 @@ fn "value_copy_share_root_escape.wado/__test_0_share_must_copy_when_a_callee_mut
     drop(__array_clone_dst_7);
     __sroa_row_used = v.used;
     "core:prelude/list.wado/List<i32>::push"(block {
-    }; builtin::array_get<ref "core:prelude//List<i32>">(__b_0.repr, 0), 99);
+    }; builtin::array_get<ref "core:prelude//List<i32>">(__sroa_c_rows.repr, 0), 99);
     if @unlikely(__sroa_row_used != 3) {
         cold_path;
         "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(148); "core:prelude/string.wado/String::push_str"(__local_7, global:value_copy_share_root_escape.wado::__const_obj_23); "core:prelude/string.wado/String::push_str"(__local_7, global:value_copy_share_root_escape.wado::__const_obj_44 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_share_must_copy_when_a_callee_mutates_the_source_through_the_reference"), used: 79 }; global:value_copy_share_root_escape.wado::__const_obj_44); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 116); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, global:value_copy_share_root_escape.wado::__const_obj_32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 33 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, global:value_copy_share_root_escape.wado::__const_obj_42); "core:prelude/string.wado/String::push_str"(__local_7, global:value_copy_share_root_escape.wado::__const_obj_41); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __sroa_row_used }, __local_8); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 10); __local_7);
@@ -189,7 +188,7 @@ fn "value_copy_share_root_escape.wado/__test_0_share_must_copy_when_a_callee_mut
     }
     block {
     };
-    self_46 = builtin::array_get<ref "core:prelude//List<i32>">(__b_0.repr, 0);
+    self_46 = builtin::array_get<ref "core:prelude//List<i32>">(__sroa_c_rows.repr, 0);
     __v0_5 = self_46.used;
     if @unlikely(__v0_5 != 4) {
         cold_path;
@@ -199,8 +198,6 @@ fn "value_copy_share_root_escape.wado/__test_0_share_must_copy_when_a_callee_mut
 }
 
 fn "value_copy_share_root_escape.wado/__test_1_share_must_copy_when_the_source_is_mutated_through_an_aliased_reference"() {
-    let __b_0: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
-    let __b_1: ref "core:prelude//List<i32>";
     let __v0_3: i32;
     let __v0_5: i32;
     let __local_7: ref "core:prelude/string.wado//String";
@@ -211,20 +208,21 @@ fn "value_copy_share_root_escape.wado/__test_1_share_must_copy_when_the_source_i
     let __v1: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    __b_0 = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(__b_1 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }; __b_1), used: 1 };
-    __v0_3 = "value_copy_share_root_escape.wado/Counter::read_via_alias"(__b_0);
+    let __sroa_c_rows: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
+    __sroa_c_rows = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }), used: 1 };
+    __v0_3 = "value_copy_share_root_escape.wado/Counter::read_via_alias"(__sroa_c_rows);
     if @unlikely(__v0_3 != 3) {
         cold_path;
         "core:rt/panic"(__local_7 = "core:prelude/string.wado/String::with_capacity"(146); "core:prelude/string.wado/String::push_str"(__local_7, global:value_copy_share_root_escape.wado::__const_obj_23); "core:prelude/string.wado/String::push_str"(__local_7, global:value_copy_share_root_escape.wado::__const_obj_72 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_share_must_copy_when_the_source_is_mutated_through_an_aliased_reference"), used: 80 }; global:value_copy_share_root_escape.wado::__const_obj_72); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 116); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, global:value_copy_share_root_escape.wado::__const_obj_32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 58); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 39 }, __local_8); "core:prelude/string.wado/String::push_str"(__local_7, global:value_copy_share_root_escape.wado::__const_obj_70); "core:prelude/string.wado/String::push_str"(__local_7, global:value_copy_share_root_escape.wado::__const_obj_69); __local_8 = "core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_3 }, __local_8); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 10); __local_7);
         unreachable;
     }
-    __v1 = __b_0.used;
+    __v1 = __sroa_c_rows.used;
     if @unlikely(0 >= __v1) {
         cold_path;
         "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5, global:value_copy_share_root_escape.wado::__const_obj_23); "core:prelude/string.wado/String::push_str"(__local_5, global:value_copy_share_root_escape.wado::__const_obj_22); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 116); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, global:value_copy_share_root_escape.wado::__const_obj_21); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 354 }, __local_6); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 58); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, global:value_copy_share_root_escape.wado::__const_obj_20); "core:prelude/string.wado/String::push_str"(__local_5, global:value_copy_share_root_escape.wado::__const_obj_19); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 105); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 110); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 100); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 101); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 120); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 58); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }, __local_6); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 10); "core:prelude/string.wado/String::push_str"(__local_5, global:value_copy_share_root_escape.wado::__const_obj_18); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v1 }, __local_6); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 10); __local_5);
         unreachable;
     }
-    self_25 = builtin::array_get<ref "core:prelude//List<i32>">(__b_0.repr, 0);
+    self_25 = builtin::array_get<ref "core:prelude//List<i32>">(__sroa_c_rows.repr, 0);
     __v0_5 = self_25.used;
     if @unlikely(__v0_5 != 4) {
         cold_path;

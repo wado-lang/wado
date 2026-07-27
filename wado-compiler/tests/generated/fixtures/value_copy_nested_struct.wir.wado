@@ -158,14 +158,10 @@ global global:value_copy_nested_struct.wado::__const_obj_42: ref null "core:prel
 global global:value_copy_nested_struct.wado::__const_obj_43: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 117, 116, 101, 114, 45, 115, 116, 114, 117, 99, 116, 32, 99, 111, 112, 121, 32, 100, 105, 100, 32, 110, 111, 116, 32, 100, 101, 101, 112, 45, 99, 111, 112, 121, 32, 116, 104, 101, 32, 105, 110, 110, 101, 114, 32, 76, 105, 115, 116), used: 50 };
 
 fn "value_copy_nested_struct.wado/run"() {
-    let __b_0: ref "core:prelude//List<i32>";
     let __v0_3: i32;
     let __v0_5: i32;
-    let __b_7: ref "core:prelude//List<i32>";
     let __v0_10: i32;
     let __v0_12: i32;
-    let __b_14: ref "core:prelude//List<value_copy_nested_struct.wado/Inner>";
-    let __b_15: ref "core:prelude//List<i32>";
     let __v0_18: i32;
     let __v0_20: i32;
     let __local_22: ref "core:prelude/string.wado//String";
@@ -182,20 +178,23 @@ fn "value_copy_nested_struct.wado/run"() {
     let __local_33: ref "core:prelude/format.wado//Formatter";
     let self_67: ref "core:prelude//List<i32>";
     let self_75: ref "core:prelude//List<i32>";
+    let __sroa_h_cells: ref "core:prelude//List<value_copy_nested_struct.wado/Inner>";
     let __sroa_b_items: ref "core:prelude//List<i32>";
+    let __sroa_a_items: ref "core:prelude//List<i32>";
     let __sroa___sroa_h2_cells_repr: ref "Array<value_copy_nested_struct.wado/Inner>";
     let __sroa___sroa_o2_mid_inner: ref "core:prelude//List<i32>";
+    let __sroa___sroa_o_mid_inner: ref "core:prelude//List<i32>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:value_copy_nested_struct.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:value_copy_nested_struct.wado::__modules_initialized = 1;
     };
-    __b_0 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    "core:prelude/list.wado/List<i32>::push"(__b_0, 1);
-    __sroa_b_items = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_11: ref Array<i32>; __array_clone_src_11 = __b_0.repr; let __array_clone_len_11: i32; __array_clone_len_11 = builtin::array_len(__array_clone_src_11); let __array_clone_dst_11: ref Array<i32>; __array_clone_dst_11 = builtin::array_new<i32>(__array_clone_len_11); builtin::array_copy<i32>(__array_clone_dst_11, 0, __array_clone_src_11, 0, __array_clone_len_11); __array_clone_dst_11), used: __b_0.used };
+    __sroa_a_items = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    "core:prelude/list.wado/List<i32>::push"(__sroa_a_items, 1);
+    __sroa_b_items = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_11: ref Array<i32>; __array_clone_src_11 = __sroa_a_items.repr; let __array_clone_len_11: i32; __array_clone_len_11 = builtin::array_len(__array_clone_src_11); let __array_clone_dst_11: ref Array<i32>; __array_clone_dst_11 = builtin::array_new<i32>(__array_clone_len_11); builtin::array_copy<i32>(__array_clone_dst_11, 0, __array_clone_src_11, 0, __array_clone_len_11); __array_clone_dst_11), used: __sroa_a_items.used };
     "core:prelude/list.wado/List<i32>::push"(__sroa_b_items, 2);
-    __v0_3 = __b_0.used;
+    __v0_3 = __sroa_a_items.used;
     if @unlikely(__v0_3 != 1) {
         cold_path;
         "core:rt/panic"(__local_22 = "core:prelude/string.wado/String::with_capacity"(154); "core:prelude/string.wado/String::push_str"(__local_22, global:value_copy_nested_struct.wado::__const_obj_3); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_22, 114); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_22, 117); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_22, 110); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_22, 32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_22, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_22, 116); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_22, 32); "core:prelude/string.wado/String::push_str"(__local_22, global:value_copy_nested_struct.wado::__const_obj_2); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_22, 58); __local_23 = "core:prelude/format.wado/Formatter::new"(__local_22); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 64 }, __local_23); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_22, 58); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_22, 32); "core:prelude/string.wado/String::push_str"(__local_22, global:value_copy_nested_struct.wado::__const_obj_43); "core:prelude/string.wado/String::push_str"(__local_22, global:value_copy_nested_struct.wado::__const_obj_42); "core:prelude/string.wado/String::push_str"(__local_22, global:value_copy_nested_struct.wado::__const_obj_41); __local_23 = "core:prelude/format.wado/Formatter::new"(__local_22); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_3 }, __local_23); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_22, 10); __local_22);
@@ -207,11 +206,11 @@ fn "value_copy_nested_struct.wado/run"() {
         "core:rt/panic"(__local_24 = "core:prelude/string.wado/String::with_capacity"(154); "core:prelude/string.wado/String::push_str"(__local_24, global:value_copy_nested_struct.wado::__const_obj_3); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_24, 114); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_24, 117); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_24, 110); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_24, 32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_24, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_24, 116); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_24, 32); "core:prelude/string.wado/String::push_str"(__local_24, global:value_copy_nested_struct.wado::__const_obj_2); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_24, 58); __local_25 = "core:prelude/format.wado/Formatter::new"(__local_24); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 65 }, __local_25); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_24, 58); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_24, 32); "core:prelude/string.wado/String::push_str"(__local_24, global:value_copy_nested_struct.wado::__const_obj_38); "core:prelude/string.wado/String::push_str"(__local_24, global:value_copy_nested_struct.wado::__const_obj_37); "core:prelude/string.wado/String::push_str"(__local_24, global:value_copy_nested_struct.wado::__const_obj_36); __local_25 = "core:prelude/format.wado/Formatter::new"(__local_24); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_5 }, __local_25); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_24, 10); __local_24);
         unreachable;
     }
-    __b_7 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    "core:prelude/list.wado/List<i32>::push"(__b_7, 10);
-    __sroa___sroa_o2_mid_inner = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_11: ref Array<i32>; __array_clone_src_11 = __b_7.repr; let __array_clone_len_11: i32; __array_clone_len_11 = builtin::array_len(__array_clone_src_11); let __array_clone_dst_11: ref Array<i32>; __array_clone_dst_11 = builtin::array_new<i32>(__array_clone_len_11); builtin::array_copy<i32>(__array_clone_dst_11, 0, __array_clone_src_11, 0, __array_clone_len_11); __array_clone_dst_11), used: __b_7.used };
+    __sroa___sroa_o_mid_inner = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    "core:prelude/list.wado/List<i32>::push"(__sroa___sroa_o_mid_inner, 10);
+    __sroa___sroa_o2_mid_inner = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_11: ref Array<i32>; __array_clone_src_11 = __sroa___sroa_o_mid_inner.repr; let __array_clone_len_11: i32; __array_clone_len_11 = builtin::array_len(__array_clone_src_11); let __array_clone_dst_11: ref Array<i32>; __array_clone_dst_11 = builtin::array_new<i32>(__array_clone_len_11); builtin::array_copy<i32>(__array_clone_dst_11, 0, __array_clone_src_11, 0, __array_clone_len_11); __array_clone_dst_11), used: __sroa___sroa_o_mid_inner.used };
     "core:prelude/list.wado/List<i32>::push"(__sroa___sroa_o2_mid_inner, 20);
-    __v0_10 = __b_7.used;
+    __v0_10 = __sroa___sroa_o_mid_inner.used;
     if @unlikely(__v0_10 != 1) {
         cold_path;
         "core:rt/panic"(__local_26 = "core:prelude/string.wado/String::with_capacity"(162); "core:prelude/string.wado/String::push_str"(__local_26, global:value_copy_nested_struct.wado::__const_obj_3); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_26, 114); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_26, 117); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_26, 110); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_26, 32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_26, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_26, 116); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_26, 32); "core:prelude/string.wado/String::push_str"(__local_26, global:value_copy_nested_struct.wado::__const_obj_2); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_26, 58); __local_27 = "core:prelude/format.wado/Formatter::new"(__local_26); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 72 }, __local_27); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_26, 58); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_26, 32); "core:prelude/string.wado/String::push_str"(__local_26, global:value_copy_nested_struct.wado::__const_obj_33); "core:prelude/string.wado/String::push_str"(__local_26, global:value_copy_nested_struct.wado::__const_obj_32); "core:prelude/string.wado/String::push_str"(__local_26, global:value_copy_nested_struct.wado::__const_obj_31); __local_27 = "core:prelude/format.wado/Formatter::new"(__local_26); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_10 }, __local_27); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_26, 10); __local_26);
@@ -223,12 +222,12 @@ fn "value_copy_nested_struct.wado/run"() {
         "core:rt/panic"(__local_28 = "core:prelude/string.wado/String::with_capacity"(146); "core:prelude/string.wado/String::push_str"(__local_28, global:value_copy_nested_struct.wado::__const_obj_3); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_28, 114); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_28, 117); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_28, 110); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_28, 32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_28, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_28, 116); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_28, 32); "core:prelude/string.wado/String::push_str"(__local_28, global:value_copy_nested_struct.wado::__const_obj_2); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_28, 58); __local_29 = "core:prelude/format.wado/Formatter::new"(__local_28); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 73 }, __local_29); "core:prelude/string.wado/String::push_str"(__local_28, global:value_copy_nested_struct.wado::__const_obj_28); "core:prelude/string.wado/String::push_str"(__local_28, global:value_copy_nested_struct.wado::__const_obj_27); __local_29 = "core:prelude/format.wado/Formatter::new"(__local_28); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_12 }, __local_29); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_28, 10); __local_28);
         unreachable;
     }
-    __b_14 = struct.new "core:prelude//List<value_copy_nested_struct.wado/Inner>" { repr: array.new_fixed<ref "value_copy_nested_struct.wado//Inner">(struct.new "value_copy_nested_struct.wado//Inner" { boxed: ref.as_non_null(__b_15 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(100), used: 1 }; __b_15) }), used: 1 };
-    __sroa___sroa_h2_cells_repr = builtin::array_clone_deep<ref "value_copy_nested_struct.wado//Inner">(__b_14.repr);
+    __sroa_h_cells = struct.new "core:prelude//List<value_copy_nested_struct.wado/Inner>" { repr: array.new_fixed<ref "value_copy_nested_struct.wado//Inner">(struct.new "value_copy_nested_struct.wado//Inner" { boxed: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(100), used: 1 } }), used: 1 };
+    __sroa___sroa_h2_cells_repr = builtin::array_clone_deep<ref "value_copy_nested_struct.wado//Inner">(__sroa_h_cells.repr);
     "core:prelude/list.wado/List<i32>::push"(block {
     }; builtin::array_get<ref "value_copy_nested_struct.wado//Inner">(__sroa___sroa_h2_cells_repr, 0).boxed, 200);
     self_67 = block {
-    }; builtin::array_get<ref "value_copy_nested_struct.wado//Inner">(__b_14.repr, 0).boxed;
+    }; builtin::array_get<ref "value_copy_nested_struct.wado//Inner">(__sroa_h_cells.repr, 0).boxed;
     __v0_18 = self_67.used;
     if @unlikely(__v0_18 != 1) {
         cold_path;

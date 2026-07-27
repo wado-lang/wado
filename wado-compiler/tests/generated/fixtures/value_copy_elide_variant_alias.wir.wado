@@ -166,7 +166,6 @@ global global:value_copy_elide_variant_alias.wado::__const_obj_35: ref null "cor
 global global:value_copy_elide_variant_alias.wado::__const_obj_37: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(95, 95, 116, 101, 115, 116, 95, 52, 95, 99, 97, 108, 108, 95, 97, 114, 103, 95, 99, 111, 112, 121, 95, 105, 115, 95, 105, 110, 100, 101, 112, 101, 110, 100, 101, 110, 116, 95, 111, 102, 95, 115, 105, 98, 108, 105, 110, 103, 95, 109, 117, 116, 95, 97, 108, 105, 97, 115), used: 58 };
 
 fn "value_copy_elide_variant_alias.wado/__test_0_copy_is_independent_of_mutation_through_boxed_receiver"() {
-    let __b: ref "core:prelude//List<i32>";
     let a: ref null "core:prelude//List<i32>";
     let b: ref null "core:prelude//List<i32>";
     let __v0_3: i32;
@@ -183,7 +182,7 @@ fn "value_copy_elide_variant_alias.wado/__test_0_copy_is_independent_of_mutation
     let v_29: ref "core:prelude//List<i32>";
     let __local_2_30: ref null "core:prelude//List<i32>";
     let __vc_payload_0_32: ref "core:prelude//List<i32>";
-    a = ref.as_non_null(__b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }; __b);
+    a = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
     b = (if ref.is_null(a) == 0 -> ref null "core:prelude//List<i32>" {
         __vc_payload_0_17 = ref.as_non_null(a);
         struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<i32>; __array_clone_src_9 = __vc_payload_0_17.repr; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<i32>; __array_clone_dst_9 = builtin::array_new<i32>(__array_clone_len_9); builtin::array_copy<i32>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: __vc_payload_0_17.used };
@@ -236,7 +235,6 @@ fn "value_copy_elide_variant_alias.wado/__test_0_copy_is_independent_of_mutation
 }
 
 fn "value_copy_elide_variant_alias.wado/__test_1_copy_is_independent_of_mutation_through_boxed_mut_argument"() {
-    let __b: ref "core:prelude//List<i32>";
     let base: ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>";
     let y: ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>";
     let v_3: ref "core:prelude//List<i32>";
@@ -251,7 +249,7 @@ fn "value_copy_elide_variant_alias.wado/__test_1_copy_is_independent_of_mutation
     let __vc_payload_0: ref "core:prelude//List<i32>";
     let slot: ref null "core:prelude//List<i32>";
     let v_23: ref "core:prelude//List<i32>";
-    base = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { value: __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }; __b };
+    base = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { value: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 } };
     y = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { value: v_20 = base.value; (if ref.is_null(v_20) == 0 -> ref null "core:prelude//List<i32>" {
         __vc_payload_0 = ref.as_non_null(v_20);
         struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<i32>; __array_clone_src_9 = __vc_payload_0.repr; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<i32>; __array_clone_dst_9 = builtin::array_new<i32>(__array_clone_len_9); builtin::array_copy<i32>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: __vc_payload_0.used };
@@ -291,7 +289,6 @@ fn "value_copy_elide_variant_alias.wado/__test_1_copy_is_independent_of_mutation
 }
 
 fn "value_copy_elide_variant_alias.wado/__test_2_target_copy_is_independent_of_source_mutated_through_boxed_mut_argument"() {
-    let __b: ref "core:prelude//List<i32>";
     let base: ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>";
     let y: ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>";
     let v_3: ref "core:prelude//List<i32>";
@@ -306,7 +303,7 @@ fn "value_copy_elide_variant_alias.wado/__test_2_target_copy_is_independent_of_s
     let __vc_payload_0: ref "core:prelude//List<i32>";
     let slot: ref null "core:prelude//List<i32>";
     let v_23: ref "core:prelude//List<i32>";
-    base = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { value: __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }; __b };
+    base = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { value: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 } };
     y = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { value: v_20 = base.value; (if ref.is_null(v_20) == 0 -> ref null "core:prelude//List<i32>" {
         __vc_payload_0 = ref.as_non_null(v_20);
         struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<i32>; __array_clone_src_9 = __vc_payload_0.repr; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<i32>; __array_clone_dst_9 = builtin::array_new<i32>(__array_clone_len_9); builtin::array_copy<i32>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: __vc_payload_0.used };
@@ -346,18 +343,15 @@ fn "value_copy_elide_variant_alias.wado/__test_2_target_copy_is_independent_of_s
 }
 
 fn "value_copy_elide_variant_alias.wado/__test_3_sibling_pattern_binding_copy_is_independent_of_root_mutation"() {
-    let __b_0: ref "core:prelude//List<i32>";
     let b: ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>";
-    let __b_2: ref "core:prelude//List<i32>";
     let c: ref "core:prelude//List<i32>";
     let t: ref "core:prelude//List<i32>";
     let u: ref "core:prelude//List<i32>";
     let __v0: i32;
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    b = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { value: __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }; __b_0 };
-    __b_2 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    c = __b_2;
+    b = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { value: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 } };
+    c = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     let __match_scrut_0: ref null "core:prelude//List<i32>";
     __match_scrut_0 = b.value;
     if ref.is_null(__match_scrut_0) == 0 {
@@ -381,7 +375,6 @@ fn "value_copy_elide_variant_alias.wado/__test_3_sibling_pattern_binding_copy_is
 }
 
 fn "value_copy_elide_variant_alias.wado/__test_4_call_arg_copy_is_independent_of_sibling_mut_alias"() {
-    let __b: ref "core:prelude//List<i32>";
     let n: i32;
     let t: ref "core:prelude//List<i32>";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -389,7 +382,7 @@ fn "value_copy_elide_variant_alias.wado/__test_4_call_arg_copy_is_independent_of
     let v_16: ref "core:prelude//List<i32>";
     let __sroa_b_value: ref null "core:prelude//List<i32>";
     let __sroa_x_used: i32;
-    __sroa_b_value = ref.as_non_null(__b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }; __b);
+    __sroa_b_value = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
     n = 0;
     if ref.is_null(__sroa_b_value) == 0 {
         t = ref.as_non_null(__sroa_b_value);

@@ -12,6 +12,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use wado_compiler::Span;
+use wado_compiler::compiler_item::SeqField;
 use wado_compiler::hashmap::IndexSet;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::nir::{
@@ -23,7 +24,6 @@ use wado_compiler::nir_arena::{
     ExprNode, Operand, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
 use wado_compiler::nir_value_graph::ValueKind;
-use wado_compiler::compiler_item::SeqField;
 use wado_compiler::niri::{
     CalleeMap, GlobalEnv, Interpreter, Lattice, MAX_SEQ_ELEMENTS, SeqBuiltin, SeqBuiltinMap, Value,
     is_ctfe_eligible,

@@ -129,7 +129,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:hfs_aliased_local_whole_read.wado::__modules_initialized: bool = 0;
 
 fn "hfs_aliased_local_whole_read.wado/run"() with Stdout {
-    let __b: ref "core:prelude//List<[bool,i32,core:prelude/string.wado/String]>";
+    let arr: ref "core:prelude//List<[bool,i32,core:prelude/string.wado/String]>";
     let __iter_2: ref "core:prelude/slice.wado//ArrayIter<[bool,i32,core:prelude/string.wado/String]>";
     let x: ref "tuple//[bool, i32, core:prelude/string.wado/String]";
     let __local_4: ref "core:prelude/string.wado//String";
@@ -147,11 +147,11 @@ fn "hfs_aliased_local_whole_read.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:hfs_aliased_local_whole_read.wado::__modules_initialized = 1;
     };
-    __b = struct.new "core:prelude//List<[bool,i32,core:prelude/string.wado/String]>" { repr: builtin::array_new<ref "tuple//[bool, i32, core:prelude/string.wado/String]">(0), used: 0 };
-    "core:prelude/list.wado/List<[bool,i32,core:prelude/string.wado/String]>::push"(__b, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 1, 1: 1, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 110, 101), used: 3 } });
-    "core:prelude/list.wado/List<[bool,i32,core:prelude/string.wado/String]>::push"(__b, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 0, 1: 2, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 119, 111), used: 3 } });
-    "core:prelude/list.wado/List<[bool,i32,core:prelude/string.wado/String]>::push"(__b, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 1, 1: 3, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("three"), used: 5 } });
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<[bool,i32,core:prelude/string.wado/String]>" { repr: __b.repr, index: 0, end: __b.used };
+    arr = struct.new "core:prelude//List<[bool,i32,core:prelude/string.wado/String]>" { repr: builtin::array_new<ref "tuple//[bool, i32, core:prelude/string.wado/String]">(0), used: 0 };
+    "core:prelude/list.wado/List<[bool,i32,core:prelude/string.wado/String]>::push"(arr, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 1, 1: 1, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 110, 101), used: 3 } });
+    "core:prelude/list.wado/List<[bool,i32,core:prelude/string.wado/String]>::push"(arr, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 0, 1: 2, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 119, 111), used: 3 } });
+    "core:prelude/list.wado/List<[bool,i32,core:prelude/string.wado/String]>::push"(arr, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 1, 1: 3, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("three"), used: 5 } });
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<[bool,i32,core:prelude/string.wado/String]>" { repr: arr.repr, index: 0, end: arr.used };
     b0: block {
         l1: loop {
             __match_6 = "core:prelude/slice.wado/ArrayIter<[bool,i32,core:prelude/string.wado/String]>^Iterator::next"(__iter_2);

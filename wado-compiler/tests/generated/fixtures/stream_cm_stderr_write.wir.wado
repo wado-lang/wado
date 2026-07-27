@@ -80,7 +80,7 @@ global mut global:stream_cm_stderr_write.wado::__modules_initialized: bool = 0;
 
 fn "stream_cm_stderr_write.wado/run"() with Stderr {
     let subtask: i32;
-    let __b: ref "core:prelude//List<u8>";
+    let data: ref "core:prelude//List<u8>";
     let packed: i64;
     let rx_7: i32;
     let tx_8: i32;
@@ -93,8 +93,8 @@ fn "stream_cm_stderr_write.wado/run"() with Stderr {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     subtask = "stream_cm_stderr_write.wado/__cm_binding__Stderr_write_via_stream"(rx_7);
-    __b = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(101, 114, 114, 32, 109, 115, 103, 10), used: 8 };
-    "core:rt/cm_stream_write_u8"(tx_8, __b);
+    data = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(101, 114, 114, 32, 109, 115, 103, 10), used: 8 };
+    "core:rt/cm_stream_write_u8"(tx_8, data);
     "wasi/stream-drop-writable"(tx_8);
     drop("stream_cm_stderr_write.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(subtask));
 }

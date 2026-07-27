@@ -337,10 +337,9 @@ global global:effect_handler_resource_stream_self_delegation.wado::__const_obj_1
 global global:effect_handler_resource_stream_self_delegation.wado::__const_obj_20: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 103, 111, 116, 46, 108, 101, 110, 40, 41, 32, 61, 61, 32, 50, 10), used: 27 };
 
 fn "effect_handler_resource_stream_self_delegation.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//List<u8>";
     let base: ref "effect_handler_resource_stream_self_delegation.wado//BaseStream";
     let logger: ref "effect_handler_resource_stream_self_delegation.wado//LoggingStream";
-    let __b_5: ref "core:prelude//List<u8>";
+    let payload: ref "core:prelude//List<u8>";
     let __v0_10: u8;
     let __v0_12: u8;
     let __local_14: ref "core:prelude/string.wado//String";
@@ -391,7 +390,7 @@ fn "effect_handler_resource_stream_self_delegation.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:effect_handler_resource_stream_self_delegation.wado::__modules_initialized = 1;
     };
-    base = struct.new "effect_handler_resource_stream_self_delegation.wado//BaseStream" { buf: ref.as_non_null(__b_0 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 }; __b_0) };
+    base = struct.new "effect_handler_resource_stream_self_delegation.wado//BaseStream" { buf: struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 } };
     logger = struct.new "effect_handler_resource_stream_self_delegation.wado//LoggingStream" { reads: 0, writes: 0 };
     __save_Stream<u8>_28 = global:effect_handler_resource_stream_self_delegation.wado::__effect_Stream<u8>;
     __d_Stream<u8>_29 = struct.new "effect_handler_resource_stream_self_delegation.wado//__Dispatch_Stream<u8>" { outer: __save_Stream<u8>_28, op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_resource_stream_self_delegation.wado//__Closure_2" { __capture_0: base }, func: ref.func "closure/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_0" }, op_read: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_resource_stream_self_delegation.wado//__Closure_3" { __capture_0: base }, func: ref.func "closure/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_1" }, op_cancel_read: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_stream_self_delegation.wado//__Closure_4" {  }, func: ref.func "closure/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_2" }, op_drop: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_stream_self_delegation.wado//__Closure_5" { __capture_0: base }, func: ref.func "closure/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_3" } };
@@ -408,8 +407,8 @@ fn "effect_handler_resource_stream_self_delegation.wado/run"() with Stdout {
     __save_StreamWritable<u8>_25 = global:effect_handler_resource_stream_self_delegation.wado::__effect_StreamWritable<u8>;
     __d_StreamWritable<u8>_26 = struct.new "effect_handler_resource_stream_self_delegation.wado//__Dispatch_StreamWritable<u8>" { outer: __save_StreamWritable<u8>_25, op_write: struct.new "canonical//CanonicalClosure_3" { env: struct.new "effect_handler_resource_stream_self_delegation.wado//__Closure_14" { __capture_0: logger }, func: ref.func "closure/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_12" }, op_write_raw: struct.new "canonical//CanonicalClosure_4" { env: struct.new "effect_handler_resource_stream_self_delegation.wado//__Closure_15" {  }, func: ref.func "closure/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_13" }, op_cancel_write: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_stream_self_delegation.wado//__Closure_16" {  }, func: ref.func "closure/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_14" }, op_drop: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_stream_self_delegation.wado//__Closure_17" {  }, func: ref.func "closure/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_15" } };
     global:effect_handler_resource_stream_self_delegation.wado::__effect_StreamWritable<u8> = __d_StreamWritable<u8>_26;
-    __b_5 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(104, 105), used: 2 };
-    "effect_handler_resource_stream_self_delegation.wado/__effect_dispatch__StreamWritable<u8>__write"(__sroa___pattern_temp_0_1, __b_5);
+    payload = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(104, 105), used: 2 };
+    "effect_handler_resource_stream_self_delegation.wado/__effect_dispatch__StreamWritable<u8>__write"(__sroa___pattern_temp_0_1, payload);
     v_44 = "effect_handler_resource_stream_self_delegation.wado/__effect_dispatch__Stream<u8>__read"(__sroa___pattern_temp_0_0, 16);
     let __array_clone_src_2: ref Array<u8>;
     __array_clone_src_2 = v_44.repr;
@@ -1069,8 +1068,7 @@ fn "effect_handler_resource_stream_self_delegation.wado/__Closure_2::__call"() {
 fn "effect_handler_resource_stream_self_delegation.wado/__Closure_3::__call"(self_0, self_1, max) {
     let self_3: ref "effect_handler_resource_stream_self_delegation.wado//BaseStream";
     let snapshot: ref "core:prelude//List<u8>";
-    let __b: ref "core:prelude//List<u8>";
-    return self_3 = self_0.__capture_0, snapshot = self_3.buf, self_3.buf = ref.as_non_null(__b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 }; __b), snapshot;
+    return self_3 = self_0.__capture_0, snapshot = self_3.buf, self_3.buf = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 }, snapshot;
 }
 
 fn "effect_handler_resource_stream_self_delegation.wado/__Closure_4::__call"() {

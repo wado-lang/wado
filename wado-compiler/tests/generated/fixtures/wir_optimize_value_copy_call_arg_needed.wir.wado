@@ -113,7 +113,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:wir_optimize_value_copy_call_arg_needed.wado::__modules_initialized: bool = 0;
 
 fn "wir_optimize_value_copy_call_arg_needed.wado/run"() with Stdout {
-    let __b: ref "core:prelude//List<i32>";
+    let a: ref "core:prelude//List<i32>";
     let new_len: i32;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
@@ -126,8 +126,8 @@ fn "wir_optimize_value_copy_call_arg_needed.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:wir_optimize_value_copy_call_arg_needed.wado::__modules_initialized = 1;
     };
-    __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    arr = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<i32>; __array_clone_src_5 = __b.repr; let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<i32>; __array_clone_dst_5 = builtin::array_new<i32>(__array_clone_len_5); builtin::array_copy<i32>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: 3 };
+    a = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    arr = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<i32>; __array_clone_src_5 = a.repr; let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<i32>; __array_clone_dst_5 = builtin::array_new<i32>(__array_clone_len_5); builtin::array_copy<i32>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: 3 };
     "core:prelude/list.wado/List<i32>::push"(arr, 0);
     new_len = arr.used;
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(3, __local_4); __local_3);

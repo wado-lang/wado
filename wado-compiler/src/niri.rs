@@ -115,8 +115,8 @@ use crate::const_eval::{
 };
 // `Value` lives in `const_eval`; re-export it so `niri::Value` resolves for
 // the public API and tests.
-pub use crate::const_eval::{MAX_SEQ_ELEMENTS, Value};
 use crate::compiler_item::SeqField;
+pub use crate::const_eval::{MAX_SEQ_ELEMENTS, Value};
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;

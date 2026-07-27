@@ -162,7 +162,6 @@ fn "licm_reloadable_hoist_alias.wado/probe"(sink, h, out) {
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let _licm_data_13: ref "core:prelude//List<i32>";
-    let __b: ref "core:prelude//List<i32>";
     n = h.data.used;
     i = 0;
     _licm_data_13 = h.data;
@@ -175,7 +174,7 @@ fn "licm_reloadable_hoist_alias.wado/probe"(sink, h, out) {
                 unreachable;
             }; builtin::array_get<i32>(_licm_data_13.repr, i));
             if i == 0 {
-                sink.data = ref.as_non_null(__b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(9, 9, 9), used: 3 }; __b);
+                sink.data = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(9, 9, 9), used: 3 };
                 _licm_data_13 = h.data;
             }
             i = i + 1;
@@ -185,9 +184,8 @@ fn "licm_reloadable_hoist_alias.wado/probe"(sink, h, out) {
 }
 
 fn "licm_reloadable_hoist_alias.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//List<i32>";
     let hh: ref "licm_reloadable_hoist_alias.wado//Holder";
-    let __b_2: ref "core:prelude//List<i32>";
+    let out: ref "core:prelude//List<i32>";
     let s: ref "core:prelude/string.wado//String";
     let __iter_5: ref "core:prelude/slice.wado//ArrayRefIter<i32>";
     let x: ref "core:prelude/types.wado//Box<i32>";
@@ -201,11 +199,11 @@ fn "licm_reloadable_hoist_alias.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:licm_reloadable_hoist_alias.wado::__modules_initialized = 1;
     };
-    hh = struct.new "licm_reloadable_hoist_alias.wado//Holder" { data: ref.as_non_null(__b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }; __b_0) };
-    __b_2 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    "licm_reloadable_hoist_alias.wado/probe"(hh, hh, __b_2);
+    hh = struct.new "licm_reloadable_hoist_alias.wado//Holder" { data: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 } };
+    out = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    "licm_reloadable_hoist_alias.wado/probe"(hh, hh, out);
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: __b_2.repr, index: 0, end: __b_2.used };
+    __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: out.repr, index: 0, end: out.used };
     b4: block {
         l5: loop {
             __match_9 = "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_5);

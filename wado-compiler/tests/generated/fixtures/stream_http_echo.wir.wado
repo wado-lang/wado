@@ -355,7 +355,7 @@ global mut global:stream_http_echo.wado::__modules_initialized: bool = 0;
 
 fn "stream_http_echo.wado/handle"(request) {
     let body_stream: i32;
-    let __b: ref "core:prelude//List<core:prelude/list.wado/List<u8>>";
+    let chunks: ref "core:prelude//List<core:prelude/list.wado/List<u8>>";
     let chunk_7: ref "core:prelude//List<u8>";
     let headers: i32;
     let response: i32;
@@ -507,12 +507,12 @@ fn "stream_http_echo.wado/handle"(request) {
     drop(local.tee tx_176(builtin::i32_wrap_i64(packed_174 >> 32_i64)));
     __pattern_temp_1 = "stream_http_echo.wado/__cm_binding__Request_consume_body"(request, rx_175);
     body_stream = __pattern_temp_1.0;
-    __b = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: builtin::array_new<ref "core:prelude//List<u8>">(0), used: 0 };
+    chunks = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: builtin::array_new<ref "core:prelude//List<u8>">(0), used: 0 };
     b0: block {
         l1: loop {
             chunk_7 = "core:rt/cm_stream_read_u8"(body_stream, 4096);
             break_if b0 chunk_7.used == 0;
-            "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(__b, chunk_7);
+            "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(chunks, chunk_7);
             continue l1;
         };
     };
@@ -820,7 +820,7 @@ fn "stream_http_echo.wado/handle"(request) {
         }
         "wasi/task-return:handle"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    __iter_15 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<u8>>" { repr: __b.repr, index: 0, end: __b.used };
+    __iter_15 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<u8>>" { repr: chunks.repr, index: 0, end: chunks.used };
     b64: block {
         l65: loop {
             __match_173 = "core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^Iterator::next"(__iter_15);

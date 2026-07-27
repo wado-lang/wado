@@ -121,12 +121,12 @@ fn "opt_const_forward_call_in_if_invalidates.wado/grow"(xs) {
 }
 
 fn "opt_const_forward_call_in_if_invalidates.wado/f"(c) {
-    let __b: ref "core:prelude//List<i32>";
-    __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
+    let a: ref "core:prelude//List<i32>";
+    a = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
     if c {
-        "opt_const_forward_call_in_if_invalidates.wado/grow"(__b);
+        "opt_const_forward_call_in_if_invalidates.wado/grow"(a);
     }
-    return __b.used;
+    return a.used;
 }
 
 fn "opt_const_forward_call_in_if_invalidates.wado/run"() with Stdout {

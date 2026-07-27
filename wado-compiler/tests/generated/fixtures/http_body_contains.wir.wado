@@ -317,7 +317,7 @@ global mut global:http_body_contains.wado::__modules_initialized: bool = 0;
 fn "http_body_contains.wado/handle"(request) {
     let headers: i32;
     let response: i32;
-    let __b: ref "core:prelude//List<u8>";
+    let data: ref "core:prelude//List<u8>";
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_1: i32;
     let __tv_2: i32;
@@ -758,8 +758,8 @@ fn "http_body_contains.wado/handle"(request) {
         }
         "wasi/task-return:handle"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    __b = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33), used: 13 };
-    "core:rt/cm_stream_write_u8"(tx_169, __b);
+    data = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33), used: 13 };
+    "core:rt/cm_stream_write_u8"(tx_169, data);
     "wasi/stream-drop-writable"(tx_169);
     "http_body_contains.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_166, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
     "wasi/resource-drop:request"(request);

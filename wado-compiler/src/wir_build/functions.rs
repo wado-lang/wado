@@ -798,9 +798,7 @@ fn translate_global_init(
         Value::Char(c) => u64::from(c),
         Value::Float { value, .. } => {
             return match type_table.get(type_id) {
-                ResolvedType::Primitive(PrimitiveType::F32) => {
-                    WirInstr::F32Const(value as f32)
-                }
+                ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(value as f32),
                 _ => WirInstr::F64Const(value),
             };
         }

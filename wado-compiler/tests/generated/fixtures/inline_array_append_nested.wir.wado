@@ -117,23 +117,23 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:inline_array_append_nested.wado::__modules_initialized: bool = 0;
 
 fn "inline_array_append_nested.wado/run"() with Stdout {
-    let __b: ref "core:prelude//List<i32>";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let start_10: i32;
     let start_19: i32;
     let start_28: i32;
     let start_37: i32;
+    let __sroa_c_items: ref "core:prelude//List<i32>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:inline_array_append_nested.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:inline_array_append_nested.wado::__modules_initialized = 1;
     };
-    __b = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    "inline_array_append_nested.wado/Container::add_items"(__b, 3);
-    "inline_array_append_nested.wado/Container::process"(__b);
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }; start_10 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_10, 108); start_19 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_19, 101); start_28 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_28, 110); start_37 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_37, 61); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(__b.used, __local_3); __local_2);
+    __sroa_c_items = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    "inline_array_append_nested.wado/Container::add_items"(__sroa_c_items, 3);
+    "inline_array_append_nested.wado/Container::process"(__sroa_c_items);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }; start_10 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_10, 108); start_19 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_19, 101); start_28 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_28, 110); start_37 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_37, 61); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_c_items.used, __local_3); __local_2);
 }
 
 fn "inline_array_append_nested.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -401,7 +401,7 @@ fn "inline_array_append_nested.wado/Container::add_items"(self, count) {
 }
 
 fn "inline_array_append_nested.wado/Container::process"(self) {
-    let __b: ref "core:prelude//List<i32>";
+    let temp: ref "core:prelude//List<i32>";
     let i: i32;
     let val: i32;
     let j: i32;
@@ -409,7 +409,7 @@ fn "inline_array_append_nested.wado/Container::process"(self) {
     let _licm_repr_28: ref Array<i32>;
     let _licm_used_29: i32;
     let _licm_repr_30: ref Array<i32>;
-    __b = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    temp = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     i = 0;
     _licm_used_27 = self.used;
     _licm_repr_28 = self.repr;
@@ -418,15 +418,15 @@ fn "inline_array_append_nested.wado/Container::process"(self) {
             break_if b23 i >= _licm_used_27;
             val = builtin::array_get<i32>(_licm_repr_28, i);
             if (val % 2) == 0 {
-                "core:prelude/list.wado/List<i32>::push"(__b, val);
+                "core:prelude/list.wado/List<i32>::push"(temp, val);
             }
             i = i + 1;
             continue l24;
         };
     };
     j = 0;
-    _licm_used_29 = __b.used;
-    _licm_repr_30 = __b.repr;
+    _licm_used_29 = temp.used;
+    _licm_repr_30 = temp.repr;
     b26: block {
         l27: loop {
             break_if b26 j >= _licm_used_29;

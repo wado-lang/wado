@@ -894,7 +894,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:serde/split_words"(s) {
     let chars: ref "core:prelude//List<char>";
     let n: i32;
-    let __b: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let words: ref "core:prelude//List<core:prelude/string.wado/String>";
     let current: ref "core:prelude/string.wado//String";
     let prev: char;
     let i: i32;
@@ -908,7 +908,7 @@ fn "core:serde/split_words"(s) {
     let _licm_repr_42: ref Array<char>;
     chars = "core:prelude/string.wado/String::to_chars"(s);
     n = chars.used;
-    __b = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
+    words = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
     current = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     prev = 0;
     i = 0;
@@ -929,7 +929,7 @@ fn "core:serde/split_words"(s) {
                     c_8 == 32;
                 }) {
                     if current.used > 0 {
-                        "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b, current);
+                        "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(words, current);
                         current = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
                     }
                     break __for_0_body;
@@ -962,7 +962,7 @@ fn "core:serde/split_words"(s) {
                         boundary = 1;
                     }
                     if boundary {
-                        "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b, current);
+                        "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(words, current);
                         current = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
                     }
                 }
@@ -974,9 +974,9 @@ fn "core:serde/split_words"(s) {
         };
     };
     if current.used > 0 {
-        "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b, current);
+        "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(words, current);
     }
-    return __b;
+    return words;
 }
 
 fn "core:serde/capitalize_word"(w) {

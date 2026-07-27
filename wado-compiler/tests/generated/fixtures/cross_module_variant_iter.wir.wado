@@ -368,11 +368,11 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "./sub/cross_module_variant_iter_helper.wado/make_tree"() {
     let leaf1: ref "./sub/cross_module_variant_iter_helper.wado//Choice";
     let leaf2: ref "./sub/cross_module_variant_iter_helper.wado//Choice";
-    let __b: ref "core:prelude//List<./sub/cross_module_variant_iter_helper.wado/Choice>";
+    let children: ref "core:prelude//List<./sub/cross_module_variant_iter_helper.wado/Choice>";
     leaf1 = struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//BData" { value: 10 } };
     leaf2 = struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//BData" { value: 20 } };
-    __b = struct.new "core:prelude//List<./sub/cross_module_variant_iter_helper.wado/Choice>" { repr: array.new_fixed<ref "./sub/cross_module_variant_iter_helper.wado//Choice">(leaf1, leaf2), used: 2 };
-    return struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::A" { discriminant: 0, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 111, 111, 116), used: 4 }, children: __b } };
+    children = struct.new "core:prelude//List<./sub/cross_module_variant_iter_helper.wado/Choice>" { repr: array.new_fixed<ref "./sub/cross_module_variant_iter_helper.wado//Choice">(leaf1, leaf2), used: 2 };
+    return struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::A" { discriminant: 0, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 111, 111, 116), used: 4 }, children: children } };
 }
 
 fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>"(h, c) {
