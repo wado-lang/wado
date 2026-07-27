@@ -18,6 +18,10 @@ Wado has no super trait mechanism at any layer:
   elaboration step: `T: Ord` never yields `T: Eq`.
 - `impl Trait for Type` carries no obligation beyond the trait's own methods.
 
+[WEP: Trait Bounds Enforcement](./wep-2026-02-07-trait-bounds.md) is the closest
+prior art: it established call-site and impl-site bound checking, but treats each
+bound as an independent name with no relation to any other.
+
 Two consequences are observable today.
 
 ### 1. Bounds must be spelled out redundantly
