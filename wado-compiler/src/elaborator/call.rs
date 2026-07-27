@@ -901,6 +901,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // If prefix is a known type (struct/enum/newtype/flags) with no matching
             // static method, emit a compile error.
             else if self.tysys.is_known_type_name(prefix) {
+                // A value blanket (`impl<T: Bound> Trait for T`) indexes its
+                // statics under the receiver param name, so `prefix`'s own
+                // bucket never sees them. Retry through the blanket before
+                // calling the method unknown.
+                let receiver_ty = self.resolve_named_type(prefix, call.span, false);
+                if let Some(return_type) = self.resolve_blanket_static_method(
+                    receiver_ty,
+                    prefix,
+                    suffix,
+                    call.id,
+                    &[],
+                    &[],
+                ) {
+                    return return_type;
+                }
                 let _ = self.emit(TypeError::UnknownFunction {
                     name: format!("{prefix}::{suffix}"),
                     span: call.span,

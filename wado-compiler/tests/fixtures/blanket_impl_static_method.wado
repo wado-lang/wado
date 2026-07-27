@@ -1,11 +1,8 @@
-// A trait name in the receiver position of a static call (`Tag::<Point>::tag()`)
-// resolves to no type. Every lookup then missed silently and typed the call
-// `unknown`; an annotated binding swallowed that, lowering emitted nothing, and
-// the WIR pipeline built an invalid core module. It must report the same way the
-// bare `Point::tag()` spelling does.
-//
-// Static dispatch through a blanket impl is unbuilt (WEP 2026-06-13): when it
-// lands, this fixture asserts the call's result instead of the diagnostic.
+// A value blanket's statics are indexed under its receiver param name, so the
+// concrete receiver's own bucket never saw them: `Point::tag()` was unknown and
+// `Tag::<Point>::tag()` typed `unknown`, which an annotated binding swallowed
+// into an invalid core module. A static trait method must dispatch through a
+// blanket impl the way an instance method already does (WEP 2026-06-13).
 
 trait Marker {
     fn marker() -> i32;
@@ -31,10 +28,32 @@ impl Marker for Point {
     }
 }
 
-test "an annotated binding does not swallow the unresolved call" {
-    let s: String = Tag::<Point>::tag();
+struct Line {
+    len: i32,
+}
+
+impl Marker for Line {
+    fn marker() -> i32 {
+        return 2;
+    }
+}
+
+struct Unmarked {
+    y: i32,
+}
+
+test "a static trait method dispatches through a blanket impl" {
+    assert Point::tag() == "tagged";
+}
+
+test "an annotated binding does not swallow the call" {
+    let s: String = Point::tag();
     assert s.len() == 6;
 }
 
+test "every receiver satisfying the bound reaches the same blanket" {
+    assert Point::tag() == Line::tag();
+}
+
 __DATA__
-{"compile_error": "unknown function 'Tag::tag'"}
+{"test": {}}

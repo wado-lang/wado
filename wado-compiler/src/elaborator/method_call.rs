@@ -1732,6 +1732,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut return_type =
             self.lookup_static_method_return_type(&method_ref, &mangled_func_name);
 
+        // A value blanket's statics are indexed under its receiver *param*
+        // name, so the concrete receiver's own bucket misses. Retry through
+        // the blanket before calling the method unknown.
+        if return_type == TypeTable::UNKNOWN
+            && let Some(resolved) = self.resolve_blanket_static_method(
+                target_type_id,
+                &struct_name,
+                &static_call.method,
+                static_call.id,
+                &method_type_args,
+                &static_method_defaults,
+            )
+        {
+            return resolved;
+        }
+
         // Emit a compile error if the static method was not found anywhere
         if return_type == TypeTable::UNKNOWN {
             let _ = self.emit(TypeError::UnknownFunction {
@@ -1838,6 +1854,130 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // walk projects only the result type. `args` was resolved above for
         // its fact-recording side effects.
         return_type
+    }
+
+    /// Resolve a `static` trait method reached through a value blanket impl
+    /// (`impl<T: Bound> Trait for T`). The blanket has no per-type home, so its
+    /// statics are indexed under the receiver param name (`T`) and the concrete
+    /// receiver's bucket never sees them. Select the blanket whose bounds the
+    /// receiver satisfies and dispatch to its template, the way an instance
+    /// method reached through the same impl already does.
+    pub(super) fn resolve_blanket_static_method(
+        &mut self,
+        receiver_type_id: TypeId,
+        receiver_name: &str,
+        method: &str,
+        call_id: AstId,
+        method_type_args: &[TypeId],
+        static_method_defaults: &[(String, Option<ast::Expr>)],
+    ) -> Option<TypeId> {
+        let (trait_name, blanket_param, blanket_module) =
+            self.find_blanket_static_method(receiver_type_id, method)?;
+
+        let template_name = MethodName::format_local(&blanket_param, Some(&trait_name), method);
+        let method_ref = StaticMethodRef::new(
+            blanket_module.clone(),
+            blanket_param.clone(),
+            method.to_string(),
+            Some(trait_name.clone()),
+        );
+        let template_return = self.lookup_static_method_return_type(&method_ref, &template_name);
+        if template_return == TypeTable::UNKNOWN {
+            return None;
+        }
+        // The template is written against the blanket param, so `-> Self` /
+        // `-> T` lands on the receiver at the call site.
+        let return_type = SubstitutionContext::new()
+            .with_impl_args(&[receiver_type_id])
+            .substitute(template_return, &mut self.tysys.type_table.borrow_mut());
+
+        let receiver_arg_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .mangle_type_name(receiver_type_id);
+        let method_type_arg_names: Vec<String> = method_type_args
+            .iter()
+            .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+            .collect();
+        let method_info = LocalMethodName::new(
+            receiver_name.to_string(),
+            Some(trait_name.clone()),
+            method.to_string(),
+        )
+        .with_type_args(&[receiver_arg_name], &method_type_arg_names);
+
+        let func_ref = FunctionRef {
+            module_source: blanket_module,
+            name: method_info.to_mangled_name(),
+            monomorph_info: Some(MonomorphInfo {
+                generic_name: template_name,
+                impl_type_args: vec![receiver_type_id],
+                method_type_args: method_type_args.to_vec(),
+                is_blanket: true,
+            }),
+            method_info: Some(method_info),
+        };
+        self.sem.types.static_method_dispatch.insert(
+            call_id,
+            super::sem::types::StaticMethodDispatch {
+                function_ref: func_ref,
+                param_is_mut: Vec::new(),
+                type_args: method_type_args.to_vec(),
+                param_defaults: static_method_defaults.to_vec(),
+            },
+        );
+
+        Some(return_type)
+    }
+
+    /// The value blanket impl carrying a static `method_name` whose receiver
+    /// bounds `receiver_type_id` satisfies, as `(trait, receiver param, module)`.
+    fn find_blanket_static_method(
+        &mut self,
+        receiver_type_id: TypeId,
+        method_name: &str,
+    ) -> Option<(String, String, ModuleSource)> {
+        let candidates: Vec<(String, String, ModuleSource, Vec<String>)> = self
+            .tysys
+            .trait_env
+            .blanket_impls
+            .iter()
+            .flat_map(|(trait_name, impls)| impls.iter().map(move |b| (trait_name, b)))
+            .filter(|(_, b)| b.receiver == super::trait_env::BlanketReceiver::Value)
+            // The blanket's *statics* are exactly its bucket under the receiver
+            // param name. Reading the impl header instead would also match an
+            // instance method of the same name and mis-resolve it here.
+            .filter(|(_, b)| {
+                self.tysys
+                    .trait_env
+                    .static_method_index
+                    .get(&(b.module.clone(), b.param.clone()))
+                    .is_some_and(|entries| entries.iter().any(|e| e.name == method_name))
+            })
+            .map(|(trait_name, b)| {
+                (
+                    trait_name.clone(),
+                    b.param.clone(),
+                    b.module.clone(),
+                    b.bounds.clone(),
+                )
+            })
+            .collect();
+
+        candidates
+            .into_iter()
+            .find(|(_, _, _, bounds)| {
+                bounds.iter().all(|bound| {
+                    self.tysys.type_implements_trait(
+                        &self.annotate_ctx,
+                        &self.type_lookup(),
+                        receiver_type_id,
+                        bound,
+                    )
+                })
+            })
+            .map(|(trait_name, param, module, _)| (trait_name, param, module))
     }
 
     /// Look up `#[cm("...")]` for a static (no-self) method on a resource type in a module.

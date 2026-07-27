@@ -421,10 +421,10 @@ where T: ReflectStruct<FieldTypes = [..F]>
       comparisons; enables `<..T: Eq>` trait bounds on variadic functions
 - [ ] Standard library: add variadic impls for `Default`, `Clone`
 - [x] Remove compiler-magic struct `Inspect`; replace with the `ReflectStruct`-based impl
-- [ ] Dispatch a `static` trait method through a blanket impl. Only instance
-      methods resolve today, so a build-direction derivation
-      (`impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Default> Default for T`)
-      cannot be written — its entry point is `T::default()`.
+- [x] Dispatch a `static` trait method through a blanket impl, so a
+      build-direction derivation
+      (`impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Zero> Zero for T`)
+      resolves at its `T::zero()` entry point
 
 ---
 
