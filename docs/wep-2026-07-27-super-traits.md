@@ -74,10 +74,16 @@ A trait that reaches itself through supertraits is an error at its declaration.
 
 ### Name collisions
 
-A subtrait method whose name collides with a supertrait method is an error at
-the subtrait declaration. Rust instead defers to the use site and requires
-`<T as Trait>::m`; Wado has no qualified form, so rejecting at the declaration
-keeps the rule total. It can be relaxed once such syntax exists.
+A method reachable through more than one of a receiver's bounds is an error
+where it is called, not where the traits are declared — Rust's E0034. One rule
+covers all three shapes: a subtrait shadowing a supertrait method, two
+supertraits of a diamond sharing one, and a `<T: Left + Right>` written by hand.
+Rejecting at the declaration would cover only the first, and leave the other two
+resolving silently to whichever bound came first.
+
+Unlike Rust, Wado offers no escape: `Base::name(&x)` needs a qualified call form
+that does not exist yet, so today the only fix is to rename. Still better than a
+silent wrong dispatch.
 
 ### Standard library
 
@@ -109,7 +115,7 @@ Front-end only: no NIR, WIR, codegen, runtime, or code-size effect.
 - [x] Supertrait closure and cycle detection
 - [x] Impl-site obligation check with a reason chain
 - [x] Bound elaboration
-- [x] Subtrait / supertrait method-name collision error
+- [x] Ambiguous-method error at the call site
 - [x] `trait Ord: Eq`; drop the redundant `Eq` from `impl<T: Eq + Ord>` sites
 - [x] `wado doc` / `query hover` surface the clause
 

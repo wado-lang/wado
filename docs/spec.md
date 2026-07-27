@@ -2557,8 +2557,9 @@ trait Circle: Shape + Display {
 fn dedup_sorted<T: Ord>(items: List<T>) -> List<T> { ... }
 ```
 
-A trait that reaches itself through supertraits is an error, as is a trait
-method whose name a supertrait already uses.
+A trait that reaches itself through supertraits is an error. A method name
+reachable through more than one of a receiver's bounds is ambiguous at the call
+site and must be renamed — Wado has no qualified call form to disambiguate one.
 
 #### Multiple Traits
 

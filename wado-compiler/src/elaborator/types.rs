@@ -289,13 +289,14 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A subtrait redeclares a method its supertrait already has. Rust defers
-    /// this to the use site and requires `<T as Trait>::m`; Wado has no
-    /// qualified form, so the declaration is rejected instead.
-    SupertraitMethodCollision {
-        trait_name: String,
-        supertrait: String,
+    /// A method name reachable through more than one of a type parameter's
+    /// bounds. Reported where it is called, not where the traits are
+    /// declared: the same two traits are unambiguous on a receiver whose
+    /// bounds name only one of them.
+    AmbiguousTraitMethod {
         method: String,
+        /// The bounds that declare it, in bound-list order.
+        traits: Vec<String>,
         span: Span,
     },
 
@@ -791,15 +792,19 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::SupertraitMethodCollision {
-                trait_name,
-                supertrait,
+            TypeError::AmbiguousTraitMethod {
                 method,
+                traits,
                 span,
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "method '{method}' of trait '{trait_name}' collides with the same method of its supertrait '{supertrait}'"
+                    "ambiguous method '{method}': declared by {}",
+                    traits
+                        .iter()
+                        .map(|t| format!("'{t}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and ")
                 ),
                 *span,
             ),

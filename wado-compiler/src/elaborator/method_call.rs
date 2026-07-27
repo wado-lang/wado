@@ -349,7 +349,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .cloned()
                 && let Some((found_trait, info)) = {
                     let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
-                    self.find_method_in_trait_bounds(&bound_names, method_name, base_type_id)
+                    self.find_method_in_trait_bounds(&bound_names, method_name, base_type_id, span)
                 }
             {
                 trait_name = Some(found_trait);
@@ -374,7 +374,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if let Some(bounds) = assoc_bounds
                 && let Some((found_trait, info)) =
-                    self.find_method_in_trait_bounds(&bounds, method_name, base_type_id)
+                    self.find_method_in_trait_bounds(&bounds, method_name, base_type_id, span)
             {
                 trait_name = Some(found_trait);
                 method_info = Some(info);

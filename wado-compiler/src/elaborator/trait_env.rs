@@ -1070,11 +1070,6 @@ impl TraitEnv {
         let (supertrait_closures, cycles) =
             build_supertrait_closures(&trait_decl_headers, &resolve_trait);
         violations.extend(cycles);
-        violations.extend(check_supertrait_method_collisions(
-            &trait_decl_headers,
-            &supertrait_closures,
-            &resolve_trait,
-        ));
 
         (
             Arc::new(Self {
@@ -1701,43 +1696,6 @@ fn index_closures_by_name(
         .into_iter()
         .filter_map(|(name, closure)| closure.map(|c| (name, c)))
         .collect()
-}
-
-/// Reject a subtrait method that redeclares a supertrait's. Method lookup on a
-/// bound picks the first trait that has the name, so a shadowed method would
-/// resolve silently to one of the two with no way to ask for the other.
-fn check_supertrait_method_collisions(
-    headers: &IndexMap<TraitDeclLoc, TraitDeclHeader>,
-    closures: &SupertraitClosureIndex,
-    resolve: ResolveTrait<'_>,
-) -> Vec<(ModuleSource, TypeError)> {
-    let mut collisions = Vec::new();
-    for (loc, header) in headers {
-        let Some(closure) = closures.get(loc).filter(|c| !c.is_empty()) else {
-            continue;
-        };
-        for supertrait in closure {
-            let Some(super_header) =
-                resolve(&loc.0, &supertrait.name).and_then(|l| headers.get(&l))
-            else {
-                continue;
-            };
-            for method in &header.methods {
-                if super_header.methods.iter().any(|m| m.name == method.name) {
-                    collisions.push((
-                        loc.0.clone(),
-                        TypeError::SupertraitMethodCollision {
-                            trait_name: header.name.clone(),
-                            supertrait: super_header.name.clone(),
-                            method: method.name.clone(),
-                            span: header.span,
-                        },
-                    ));
-                }
-            }
-        }
-    }
-    collisions
 }
 
 /// Report the cycle closed by the edge back to `stack[pos]`, attributing it to

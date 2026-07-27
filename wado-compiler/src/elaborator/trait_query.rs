@@ -1497,65 +1497,67 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// For example, if T: Ord, look up the "cmp" method in the Ord trait declaration.
     /// Returns (`trait_name`, `MethodInfo`) with the method's return type, `self_kind`, and `param_types`,
     /// where Self is substituted with the `TypeParam`'s type.
+    /// The declaration of `method_name` in the trait named `trait_name`, with
+    /// the trait's associated types and declaring module. Loaded modules first,
+    /// then the current one — the search order [`Self::find_method_in_trait_bounds`]
+    /// resolves *and* counts candidates by, so the two cannot disagree.
+    fn find_trait_decl_method(
+        &self,
+        trait_name: &str,
+        method_name: &str,
+    ) -> Option<(ast::Function, Vec<ast::AssociatedTypeDecl>, ModuleSource)> {
+        let search = |items: &[Item], module: &ModuleSource| {
+            items.iter().find_map(|item| {
+                let Item::Trait(trait_decl) = item else {
+                    return None;
+                };
+                if trait_decl.name != trait_name {
+                    return None;
+                }
+                trait_decl
+                    .methods
+                    .iter()
+                    .find(|m| m.name == method_name)
+                    .map(|m| {
+                        (
+                            m.clone(),
+                            trait_decl.associated_types.clone(),
+                            module.clone(),
+                        )
+                    })
+            })
+        };
+        self.loaded_modules
+            .iter()
+            .find_map(|(module_src, module)| search(&module.items, module_src))
+            .or_else(|| search(self.current_module_items, &self.current_module_source))
+    }
+
     pub(super) fn find_method_in_trait_bounds(
         &mut self,
         bounds: &[String],
         method_name: &str,
         self_type_id: TypeId,
+        span: Span,
     ) -> Option<(String, MethodInfo)> {
         let bounds = self.elaborate_bound_names(bounds);
-        // Collect trait declarations from all modules
+        let candidates: Vec<String> = bounds
+            .iter()
+            .filter(|t| self.find_trait_decl_method(t, method_name).is_some())
+            .cloned()
+            .collect();
+        if candidates.len() > 1 {
+            let _ = self.emit(TypeError::AmbiguousTraitMethod {
+                method: method_name.to_string(),
+                traits: candidates,
+                span,
+            });
+            return None;
+        }
         for trait_name in &bounds {
-            // Search all loaded modules for the trait declaration
-            let mut found_trait_method: Option<(
-                ast::Function,
-                Vec<ast::AssociatedTypeDecl>,
-                ModuleSource,
-            )> = None;
-
-            for (module_src, module) in self.loaded_modules {
-                for item in &module.items {
-                    if let Item::Trait(trait_decl) = item
-                        && trait_decl.name == *trait_name
-                    {
-                        for method in &trait_decl.methods {
-                            if method.name == method_name {
-                                found_trait_method = Some((
-                                    method.clone(),
-                                    trait_decl.associated_types.clone(),
-                                    module_src.clone(),
-                                ));
-                                break;
-                            }
-                        }
-                    }
-                }
-                if found_trait_method.is_some() {
-                    break;
-                }
-            }
-
-            // Also check current module items
-            if found_trait_method.is_none() {
-                for item in self.current_module_items {
-                    if let Item::Trait(trait_decl) = item
-                        && trait_decl.name == *trait_name
-                    {
-                        for method in &trait_decl.methods {
-                            if method.name == method_name {
-                                found_trait_method = Some((
-                                    method.clone(),
-                                    trait_decl.associated_types.clone(),
-                                    self.current_module_source.clone(),
-                                ));
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if let Some((method, trait_assoc_types, _module_source)) = found_trait_method {
+            if let Some((method, trait_assoc_types, _module_source)) =
+                self.find_trait_decl_method(trait_name, method_name)
+            {
                 // Save the entire trait context; we'll modify self_type, assoc_type_bindings,
                 // type_params, and type_param_bounds during this resolution scope.
                 let mut scope = self.enter_inherited_type_param_scope();

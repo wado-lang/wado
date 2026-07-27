@@ -949,7 +949,8 @@ fn has_duplicate<T: Ord>(a: T, b: T) -> bool { return a == b; }
 ```
 
 There is no `where` form. A trait that reaches itself through supertraits is an
-error, as is a trait method whose name a supertrait already uses.
+error. A method name reachable through two of a receiver's bounds is ambiguous
+where it is called — rename one, there is no qualified call form yet.
 
 ### Auto-Derived Traits
 

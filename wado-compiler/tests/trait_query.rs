@@ -569,9 +569,12 @@ export fn run() {
     );
 }
 
+// A method name reachable through two bounds is ambiguous where it is called,
+// not where the traits are declared — the shape Rust reports as E0034.
+
 #[test]
-fn a_subtrait_may_not_shadow_a_supertrait_method() {
-    compile_err_contains(
+fn shadowing_a_supertrait_method_is_fine_until_it_is_called() {
+    compile_ok(
         r"
 trait Base {
     fn name(&self) -> i32;
@@ -584,6 +587,82 @@ trait Derived: Base {
 export fn run() {
 }
 ",
-        "collides",
+    );
+}
+
+#[test]
+fn calling_a_shadowed_supertrait_method_is_ambiguous() {
+    let msg = compile_err_contains(
+        r"
+trait Base {
+    fn name(&self) -> i32;
+}
+
+trait Derived: Base {
+    fn name(&self) -> i32;
+}
+
+fn call<T: Derived>(x: &T) -> i32 {
+    return x.name();
+}
+
+export fn run() {
+}
+",
+        "ambiguous method",
+    );
+    assert!(
+        msg.contains("Base") && msg.contains("Derived"),
+        "both candidates named: {msg}"
+    );
+}
+
+#[test]
+fn calling_a_diamond_supertrait_method_is_ambiguous() {
+    compile_err_contains(
+        r"
+trait Left {
+    fn f(&self) -> i32;
+}
+
+trait Right {
+    fn f(&self) -> i32;
+}
+
+trait Bottom: Left + Right {
+    fn b(&self) -> i32;
+}
+
+fn call<T: Bottom>(x: &T) -> i32 {
+    return x.f();
+}
+
+export fn run() {
+}
+",
+        "ambiguous method",
+    );
+}
+
+#[test]
+fn two_bounds_sharing_a_method_are_ambiguous_without_supertraits() {
+    compile_err_contains(
+        r"
+trait Left {
+    fn f(&self) -> i32;
+}
+
+trait Right {
+    fn f(&self) -> i32;
+}
+
+fn call<T: Left + Right>(x: &T) -> i32 {
+    return x.f();
+}
+
+export fn run() {
+}
+",
+        "ambiguous method",
     );
 }
