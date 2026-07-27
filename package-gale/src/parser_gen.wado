@@ -2633,7 +2633,11 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
             return;
         }
         let body_is_rulecall = re.body matches { RuleCall(_) };
+        // `body_scannable` mirrors the parse-side `optional_probe_decides`
+        // conjunct — without it the scan probes a body the parse walks
+        // token-led, and the tournament measures a length parse won't consume.
         if body_is_rulecall
+            && re.body_scannable
             && probe_decides(&loop_first, &re.caller_follow_first, &re.continuation_scan, re.continuation_scannable, ctx)
         {
             gen_scan_optional_probe(w, re, ctx, &caller_follow_gate);

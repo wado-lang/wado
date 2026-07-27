@@ -525,8 +525,8 @@ fn lower_rule(rule: &ParserRule, ctx: &mut GenContext) -> Rule {
 fn lower_simple_rule(rule: &ParserRule, ctx: &mut GenContext) -> SimpleRule {
     let case_names = case_names_for_rule(&rule.alternatives);
     let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
-    let body = lower_alt_body(&rule.alternatives[0], 0, rule, ctx, &case_names, &alt_gc_starts);
-    let scan_body = lower_scan_body(&rule.alternatives[0], ctx, &rule.name);
+    let body = lower_alt_body(&rule.alternatives[0], 0, rule, ctx, &case_names, &alt_gc_starts, true);
+    let scan_body = lower_scan_body(&rule.alternatives[0], ctx, &rule.name, true);
     return SimpleRule {
         header: lower_header(rule),
         body,
@@ -555,8 +555,8 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
     let mut scan_alts: List<ScanBody> = [];
     let mut all_indices: List<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-        alts.push(lower_alt_body(&rule.alternatives[i], i, rule, ctx, &case_names, &alt_gc_starts));
-        scan_alts.push(lower_scan_body(&rule.alternatives[i], ctx, &rule.name));
+        alts.push(lower_alt_body(&rule.alternatives[i], i, rule, ctx, &case_names, &alt_gc_starts, true));
+        scan_alts.push(lower_scan_body(&rule.alternatives[i], ctx, &rule.name, true));
         all_indices.push(i);
     }
 
@@ -650,7 +650,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // lower time so emit consumes the suffix as a structural walk.
     // Stamps both `suffix.ops` (parse-side `RuleCallOp.min_prec_arg`)
     // and `scan_suffix.elements` (scan-side `ScanRuleCallElement.min_prec_arg`).
-    let mid_operand_gated = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, ctx);
+    let mid_operand_gated = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, ctx, atn_class);
     if mid_operand_gated {
         ctx.mark_caller_follow_gate();
     }
@@ -744,6 +744,7 @@ fn stamp_lr_self_ref_min_prec(
     rule_name: &String,
     rule_snake: &String,
     ctx: &mut GenContext,
+    atn_class: bool,
 ) -> bool {
     let lr_suffix_first_tokens = collect_lr_suffix_first_tokens_from_lowered(lr_alts);
     let mut mid_operand_gated = false;
@@ -776,9 +777,12 @@ fn stamp_lr_self_ref_min_prec(
                 // A mid operand only borrowed the alternative's own precedence
                 // to keep the shared delimiter out of its reach. Let it climb
                 // like ANTLR4's `e[0]` and hand it the continuation it has to
-                // leave behind; the loop gate does the stopping.
+                // leave behind; the loop gate does the stopping. The gate is
+                // only emitted on the static LR dispatch — an ATN-class loop
+                // runs on `atn_lr_loop_decision`, so dropping `prec` there
+                // would let the operand climb with nothing to stop it.
                 let mut cont_mask = -1;
-                if prec == conflict_min && conflict_min > 0 && k + 1 < suffix_len {
+                if !atn_class && prec == conflict_min && conflict_min > 0 && k + 1 < suffix_len {
                     let cont = lr_suffix_continuation_mask(&lr_alts[i].suffix.ops, k + 1, ctx);
                     if !cont.is_empty() {
                         if let Some(id) = ctx.intern_follow_mask(&cont) {
@@ -848,7 +852,11 @@ fn stamp_lr_self_ref_min_prec(
 }
 
 /// Per-depth first sets of the LR suffix ops from `start` — the caller-side
-/// continuation a climbing mid operand must leave intact.
+/// continuation a climbing mid operand must leave intact. Depth `n` of the
+/// mask must be the token `n` positions ahead, so the walk only continues
+/// past an op that consumes exactly one token; a rule call contributes its
+/// own FIRST and then ends the mask, since the op after it sits an unknown
+/// number of tokens away.
 fn lr_suffix_continuation_mask(ops: &List<Op>, start: i32, ctx: &mut GenContext) -> List<List<String>> {
     let mut mask: List<List<String>> = [];
     for let mut k = start; k < ops.len() && mask.len() < FOLLOW_MASK_MAX_K; k += 1 {
@@ -857,6 +865,9 @@ fn lr_suffix_continuation_mask(ops: &List<Op>, start: i32, ctx: &mut GenContext)
             break;
         }
         mask.push(depth);
+        if !op_consumes_one_token(&ops[k]) {
+            break;
+        }
     }
     return mask;
 }
@@ -873,6 +884,12 @@ fn lr_op_first_set(op: &Op, ctx: &mut GenContext) -> List<String> {
         },
         Wildcard(_) | Excluded(_) | Repeat(_) | Group(_) | ListLabel(_) => [],
     };
+}
+
+/// True iff the op advances the token stream by exactly one, so the next op's
+/// FIRST really is the next mask depth.
+fn op_consumes_one_token(op: &Op) -> bool {
+    return op matches { Token(_) | Literal(_) };
 }
 
 /// Set `lr_cont_mask` on a self-ref `RuleCall`, peeling the `ListLabel`
@@ -1322,9 +1339,11 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
     let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
     let mut alts: List<AltBody> = [];
     let mut scan_alts: List<ScanBody> = [];
+    // An atom alt ends where the LR suffix loop begins, not at the rule's
+    // tail, so no probe here may ask the caller's FOLLOW.
     for let idx of non_lr_indices {
-        alts.push(lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx, &case_names, &alt_gc_starts));
-        scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx, &rule.name));
+        alts.push(lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx, &case_names, &alt_gc_starts, false));
+        scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx, &rule.name, false));
     }
 
     let owner_label = `LR rule '${rule.name}' atom`;
@@ -1473,6 +1492,7 @@ fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_index: i32, ctx: &mut GenCont
             &alt.elements,
             i,
             ctx,
+            false,
         ));
     }
     return ScanBody { elements };
@@ -1848,13 +1868,14 @@ pub fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
 /// The scan side has no field bindings, no struct construction, and
 /// no name dedup — it only produces a token-stream walk that
 /// returns the new `pos`.
-fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, rule_name: &String = &NO_PROBE_RULE) -> ScanBody {
+fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, rule_name: &String, reaches_rule_tail: bool) -> ScanBody {
     let mut elements: List<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         elements.push(lower_alt_scan_element(
             &alt.elements,
             i,
             ctx,
+            reaches_rule_tail,
             true,
             rule_name,
         ));
@@ -1932,7 +1953,7 @@ fn lower_scan_group(
             let alt = &alts[0];
             let mut elements: List<ScanElement> = [];
             for let mut i = 0; i < alt.elements.len(); i += 1 {
-                elements.push(lower_alt_scan_element(&alt.elements, i, ctx, enclosing_at_tail));
+                elements.push(lower_alt_scan_element(&alt.elements, i, ctx, false, enclosing_at_tail));
             }
             let mut visiting: List<String> = [];
             let alt_first = ctx.first_of_alt(alt, &mut visiting);
@@ -1994,6 +2015,7 @@ fn lower_general_scan_group(
                 &alt.elements,
                 i,
                 ctx,
+                false,
                 enclosing_at_tail,
             ));
         }
@@ -2112,6 +2134,7 @@ fn lower_scan_repeat(
     if effective_gate {
         ctx.mark_caller_follow_gate();
     }
+    let mut body_visiting: List<String> = [];
     return ScanElement::Repeat(ScanRepeatElement {
         kind: rep.kind,
         body,
@@ -2119,6 +2142,7 @@ fn lower_scan_repeat(
         caller_follow_first: *outer_follow,
         gate_caller_follow: effective_gate,
         non_greedy: rep.non_greedy,
+        body_scannable: ctx.is_element_scannable(&rep.element, &mut body_visiting),
     });
 }
 
@@ -2166,6 +2190,7 @@ fn rebind_scan_repeat_caller_follow(
             continuation_scannable,
             static_exit_undecided,
             probe_viable,
+            body_scannable: re.body_scannable,
         });
     }
     return se;
@@ -2200,7 +2225,7 @@ fn lower_scan_continuation_elements(
         if !ctx.is_element_scannable(&alt_elements[k], &mut visiting) {
             return null;
         }
-        out.push(lower_alt_scan_element(alt_elements, k, ctx, false));
+        out.push(lower_alt_scan_element(alt_elements, k, ctx, false, false));
     }
     return Option::Some(out);
 }
@@ -2215,10 +2240,17 @@ fn lower_scan_continuation_elements(
 /// that emit parse-side ops alongside scan elements (`lower_single_alt_group`,
 /// `lower_general_group`) inline the post-pass so they can share
 /// `basic_follow` with the parse-side rebind.
+///
+/// `reaches_rule_tail` and `enclosing_at_tail` are different questions and
+/// must stay separate: the FOLLOW gate only needs the enclosing alt to be at
+/// its tail, while the probe ends by asking the caller's FOLLOW and is sound
+/// only where the walk really reaches the rule's tail. An LR atom alt and an
+/// LR suffix both end at the loop, not at the rule, so they answer `false`.
 fn lower_alt_scan_element(
     alt_elements: &List<Element>,
     i: i32,
     ctx: &mut GenContext,
+    reaches_rule_tail: bool,
     enclosing_at_tail: bool = true,
     rule_name: &String = &NO_PROBE_RULE,
 ) -> ScanElement {
@@ -2238,7 +2270,7 @@ fn lower_alt_scan_element(
     );
     if let Repeat(_) = &se {
         let basic_follow = ctx.first_of_elements_from(alt_elements, i + 1);
-        se = rebind_scan_repeat_caller_follow(se, basic_follow, alt_elements, i, ctx, enclosing_at_tail, rule_name);
+        se = rebind_scan_repeat_caller_follow(se, basic_follow, alt_elements, i, ctx, reaches_rule_tail, rule_name);
     }
     return se;
 }
@@ -2495,6 +2527,7 @@ fn lower_alt_body(
     ctx: &mut GenContext,
     case_names: &List<String>,
     alt_gc_starts: &List<i32>,
+    reaches_rule_tail: bool,
 ) -> AltBody {
     let type_name = rule.type_name;
     let mut case_name: String = "";
@@ -2543,7 +2576,7 @@ fn lower_alt_body(
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx, true, &rule.name));
+            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx, reaches_rule_tail, &rule.name));
         }
         ops.push(op);
     }
