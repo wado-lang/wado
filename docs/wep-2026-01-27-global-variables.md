@@ -99,10 +99,15 @@ is not a literal, but it evaluates to a sequence of constants, which is exactly
 an `array.new_fixed`. Deciding syntactically would defer it; deciding on the
 value does not.
 
-The compile-time interpreter ([niri](./wep-2026-04-27-nir-interpreter.md))
-already models the values this needs — scalars, aggregates, and sequences — so
-the predicate is a mapping from its value model onto the instruction set, not a
-separate evaluator.
+Deferral is therefore provisional: lowering defers anything that is not
+syntactically constant, and a single classifier later promotes back everything
+the optimizer reduced to a constant expression. It runs once the value is
+lowered to its Wasm shape, because that is where variant representation and
+non-null field wrapping are settled and the constant-instruction test is exact.
+
+The cost of deciding there is that the normalized IR never learns the answer, so
+the compile-time interpreter cannot read a constant global's value — see the
+value-snapshot entry below.
 
 ### The declared initializer is never replaced
 
@@ -164,17 +169,18 @@ there rather than reasoning about it.
 
 ## TODO
 
-- [ ] Keep the declared initializer and carry the placeholder separately, so the
-      recorded initializer is never a lie.
+- [ ] Record what a Wado-immutable deferred global is assigned, so the
+      interpreter can fold its reads without waiting for the Wasm-level
+      classifier. Decline inside the initialization functions, whose reads may
+      precede the assignment.
+- [ ] Represent the two initialization kinds as one choice rather than a
+      placeholder standing in for the initializer, so a deferred global's
+      recorded initializer can never be mistaken for its value.
 - [ ] Derive slot mutability, nullability, and read narrowing when building the
       Wasm module; drop them from the typed and normalized IRs.
-- [ ] Decide direct-versus-deferred from the folded value against the
-      constant-instruction set, replacing the syntactic literal test.
-- [ ] Retire the Wasm-level pass that promotes a deferred global back to a
-      constant one, which exists only because the decision is currently made too
-      early to be right.
-- [ ] Fold reads of a directly initialized immutable global in the interpreter,
-      and decline inside the initialization functions.
+- [ ] Widen the syntactic test lowering uses to defer, so a global that is
+      already a constant expression never becomes a deferred one it has to be
+      promoted back from.
 
 ## Future work
 
