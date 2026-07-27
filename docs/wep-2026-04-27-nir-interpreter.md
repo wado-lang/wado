@@ -101,10 +101,17 @@ Calls:
 - A free call whose arguments are all constant and whose callee is pure,
   non-async and monomorphic runs at compile time. The body executes statement
   by statement, so a `let` sequence, assignment to a local, an `if` whose
-  condition decides, an early `return`, and a labeled block completed by its
-  `break` all reach a value. Recursion and total work are bounded. A body that
-  does not produce a constant leaves the call in place, so a runtime trap
-  inside it stays observable.
+  condition decides, an early `return`, a labeled block completed by its
+  `break`, and a loop all reach a value. Recursion and total work are bounded.
+  A body that does not produce a constant leaves the call in place, so a
+  runtime trap inside it stays observable.
+- A statement counts as executed only when everything it evaluates lands on a
+  constant. Reducing an expression is not performing it: an unfolded call, a
+  global write, or an operation that would trap all leave work undone, and
+  stepping past them would drop it.
+- A loop needs no constant trip count. The work budget bounds it, so one that
+  does not finish in time abandons the evaluation rather than guessing, and
+  what an iteration derived does not survive into the next.
 - A local the frame cannot track — one a borrow, a mutable argument, a method
   receiver, a store through a projection, or an assignment buried inside a
   larger expression can write — carries no value, so a stale constant cannot
@@ -142,13 +149,9 @@ Calls:
 - A `switch` with a constant scrutinee is not folded, although `if` and
   `match` are. Since a switch is formed before inlining, a scrutinee that
   inlining makes constant survives to the end untouched.
-- Loops, which abandon a compile-time evaluation today. Running one inside a
-  call needs no constant trip count — the work budget already bounds it, and a
-  loop that outruns the budget simply leaves the call in place. What the
-  executor does need is to stop a value derived in one iteration from leaking
-  into the next.
-- Unrolling a loop in place in the caller, which is a separate question: a
-  code-size trade needing a cost model, not an evaluation capability.
+- Unrolling a loop in place in the caller. Distinct from running one during a
+  compile-time call, which is done: this is a code-size trade needing a cost
+  model, not an evaluation capability.
 - Guards decided when the engine is only asked what an expression denotes;
   today an arm's bindings are only in scope on the rewriting path.
 

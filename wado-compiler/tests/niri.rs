@@ -3452,6 +3452,10 @@ fn loop_stmt_b(stmts: Vec<StmtBuild>) -> StmtBuild {
     })
 }
 
+fn continue_stmt_b() -> StmtBuild {
+    Rc::new(|b| ps(b, StmtKind::Continue))
+}
+
 fn labeled_block_stmt_b(label: &str, stmts: Vec<StmtBuild>) -> StmtBuild {
     let label = label.to_string();
     Rc::new(move |b| {
@@ -4028,8 +4032,8 @@ fn multi_stmt_undecidable_condition_bails() {
 }
 
 #[test]
-fn multi_stmt_loop_bails() {
-    // Loops are not executed yet; the call must survive rather than skip one.
+fn loop_runs_to_its_break() {
+    // fn f() { loop { break; } return 7; }
     let f = make_multi_stmt_fn(
         "f",
         vec![],
@@ -4040,7 +4044,237 @@ fn multi_stmt_loop_bails() {
             return_stmt(int_lit(7, TypeTable::I32, "7")),
         ],
     );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(7));
+}
+
+/// `fn f() { let mut i = 0; let mut acc = 0;
+///           loop { if i >= 3 { break; } acc = acc + i * 2; i = i + 1; }
+///           return acc; }` → 0 + 2 + 4 = 6.
+///
+/// `i * 2` and `acc + …` take a different value each time round, so this only
+/// reaches 6 if an iteration's folds do not survive into the next one.
+fn accumulating_loop_fn() -> NirFunction {
+    make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("i", TypeTable::I32, true), ("acc", TypeTable::I32, true)],
+        vec![
+            let_mut_stmt_b("i", 0, TypeTable::I32, int_lit(0, TypeTable::I32, "0")),
+            let_mut_stmt_b("acc", 1, TypeTable::I32, int_lit(0, TypeTable::I32, "0")),
+            loop_stmt_b(vec![
+                if_stmt_b(
+                    binary(
+                        NirBinaryOp::GtEq,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(3, TypeTable::I32, "3"),
+                        TypeTable::BOOL,
+                    ),
+                    vec![break_stmt_b(None, None)],
+                    vec![],
+                ),
+                assign_local_stmt_b(
+                    1,
+                    TypeTable::I32,
+                    binary(
+                        NirBinaryOp::Add,
+                        local_expr(1, TypeTable::I32),
+                        binary(
+                            NirBinaryOp::Mul,
+                            local_expr(0, TypeTable::I32),
+                            int_lit(2, TypeTable::I32, "2"),
+                            TypeTable::I32,
+                        ),
+                        TypeTable::I32,
+                    ),
+                ),
+                assign_local_stmt_b(
+                    0,
+                    TypeTable::I32,
+                    binary(
+                        NirBinaryOp::Add,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(1, TypeTable::I32, "1"),
+                        TypeTable::I32,
+                    ),
+                ),
+            ]),
+            return_stmt(local_expr(1, TypeTable::I32)),
+        ],
+    )
+}
+
+#[test]
+fn loop_accumulates_across_iterations() {
+    assert_eq!(fold_call_of(&accumulating_loop_fn(), vec![]), i32_of(6));
+}
+
+#[test]
+fn loop_iterations_do_not_reuse_an_earlier_fold() {
+    // The same body under a budget that comfortably covers it: reaching 6
+    // rather than a first-iteration value proves each iteration re-evaluates.
+    let f = accumulating_loop_fn();
+    let callees = build_callee_map_test(std::slice::from_ref(&f));
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.set_step_budget(200);
+    assert_eq!(flow_fold(&mut interp, &call_expr(&f, vec![])), i32_of(6));
+}
+
+#[test]
+fn loop_iteration_does_not_keep_an_earlier_structural_rewrite() {
+    // fn f() { let mut i = 0; let mut acc = 0;
+    //          loop { if i >= 3 { break; }
+    //                 acc = acc + (if i == 0 { 10 } else { 1 });
+    //                 i = i + 1; }
+    //          return acc; }  → 10 + 1 + 1 = 12
+    //
+    // The inner `if` is an *expression*, so a constant condition collapses it
+    // to the chosen arm in the body itself. That rewrite is only right for the
+    // iteration that made it: keeping it would add 10 every time round.
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("i", TypeTable::I32, true), ("acc", TypeTable::I32, true)],
+        vec![
+            let_mut_stmt_b("i", 0, TypeTable::I32, int_lit(0, TypeTable::I32, "0")),
+            let_mut_stmt_b("acc", 1, TypeTable::I32, int_lit(0, TypeTable::I32, "0")),
+            loop_stmt_b(vec![
+                if_stmt_b(
+                    binary(
+                        NirBinaryOp::GtEq,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(3, TypeTable::I32, "3"),
+                        TypeTable::BOOL,
+                    ),
+                    vec![break_stmt_b(None, None)],
+                    vec![],
+                ),
+                assign_local_stmt_b(
+                    1,
+                    TypeTable::I32,
+                    binary(
+                        NirBinaryOp::Add,
+                        local_expr(1, TypeTable::I32),
+                        if_expr(
+                            binary(
+                                NirBinaryOp::Eq,
+                                local_expr(0, TypeTable::I32),
+                                int_lit(0, TypeTable::I32, "0"),
+                                TypeTable::BOOL,
+                            ),
+                            block_with_tail_expr(int_lit(10, TypeTable::I32, "10")),
+                            Some(block_with_tail_expr(int_lit(1, TypeTable::I32, "1"))),
+                            TypeTable::I32,
+                        ),
+                        TypeTable::I32,
+                    ),
+                ),
+                assign_local_stmt_b(
+                    0,
+                    TypeTable::I32,
+                    binary(
+                        NirBinaryOp::Add,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(1, TypeTable::I32, "1"),
+                        TypeTable::I32,
+                    ),
+                ),
+            ]),
+            return_stmt(local_expr(1, TypeTable::I32)),
+        ],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(12));
+}
+
+#[test]
+fn loop_without_an_exit_exhausts_the_budget() {
+    // `loop {}` — an empty body charges nothing per statement, so the loop
+    // itself must charge or the engine would spin forever.
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[],
+        vec![
+            loop_stmt_b(vec![]),
+            return_stmt(int_lit(7, TypeTable::I32, "7")),
+        ],
+    );
     assert_call_intact(&f, vec![]);
+}
+
+#[test]
+fn loop_return_leaves_the_function() {
+    // fn f() { loop { return 5; } }
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[],
+        vec![loop_stmt_b(vec![return_stmt(int_lit(5, TypeTable::I32, "5"))])],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(5));
+}
+
+#[test]
+fn loop_labeled_break_escapes_to_its_block() {
+    // fn f() { L: { loop { break L; } } return 7; }
+    // A labeled break belongs to the enclosing labeled block, not the loop.
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[],
+        vec![
+            labeled_block_stmt_b("L", vec![loop_stmt_b(vec![break_stmt_b(Some("L"), None)])]),
+            return_stmt(int_lit(7, TypeTable::I32, "7")),
+        ],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(7));
+}
+
+#[test]
+fn loop_continue_starts_the_next_iteration() {
+    // fn f() { let mut i = 0;
+    //          loop { i = i + 1; if i >= 2 { break; } continue; }
+    //          return i; }  → 2
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("i", TypeTable::I32, true)],
+        vec![
+            let_mut_stmt_b("i", 0, TypeTable::I32, int_lit(0, TypeTable::I32, "0")),
+            loop_stmt_b(vec![
+                assign_local_stmt_b(
+                    0,
+                    TypeTable::I32,
+                    binary(
+                        NirBinaryOp::Add,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(1, TypeTable::I32, "1"),
+                        TypeTable::I32,
+                    ),
+                ),
+                if_stmt_b(
+                    binary(
+                        NirBinaryOp::GtEq,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(2, TypeTable::I32, "2"),
+                        TypeTable::BOOL,
+                    ),
+                    vec![break_stmt_b(None, None)],
+                    vec![],
+                ),
+                continue_stmt_b(),
+            ]),
+            return_stmt(local_expr(0, TypeTable::I32)),
+        ],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(2));
 }
 
 #[test]

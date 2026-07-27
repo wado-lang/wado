@@ -85,11 +85,13 @@
 //!   callee's body with the args bound into a fresh local environment.
 //!   The body is executed statement by statement — `let` bindings,
 //!   assignment to a local, an `if` whose condition decides, an early
-//!   `return`, a labeled block completed by its `break`. A loop, a
-//!   destructuring `let`, an undecidable `if`, or a store the frame
-//!   does not own abandons the evaluation. The `call_stack` of
+//!   `return`, a labeled block completed by its `break`, and a loop
+//!   run until it breaks. A destructuring `let`, an undecidable `if`,
+//!   or a store the frame does not own abandons the evaluation. The
+//!   `call_stack` of
 //!   in-flight callees blocks recursive re-entry; a per-pass step
-//!   budget charged per statement caps total work; the dynamic borrow
+//!   budget charged per statement and per loop iteration caps total
+//!   work, so a loop needs no constant trip count; the dynamic borrow
 //!   on the shared callee `RefCell` blocks the visitor's outer
 //!   `borrow_mut`. A body that does not produce a constant (e.g. it
 //!   contains a runtime div-by-zero) leaves the original Call in place
@@ -1930,6 +1932,10 @@ impl<'a> Interpreter<'a> {
                 Flow::Break { label, value }
             }
             StmtKind::Continue => Flow::Continue,
+            StmtKind::Loop { body: block } => {
+                let block = *block;
+                self.exec_loop_a(body, block)
+            }
             StmtKind::LabeledBlock { label, block } => {
                 let (label, block) = (label.clone(), *block);
                 match self.exec_block_a(body, block) {
@@ -1940,9 +1946,37 @@ impl<'a> Interpreter<'a> {
                     other => other,
                 }
             }
-            // Executing a loop, and binding a destructuring `let`'s pattern,
-            // are both future work.
-            StmtKind::Loop { .. } | StmtKind::LetDestructure { .. } => Flow::Bail,
+            // Binding a destructuring `let`'s pattern is future work.
+            StmtKind::LetDestructure { .. } => Flow::Bail,
+        }
+    }
+
+    /// Run a loop until it breaks, control leaves the function, or the budget
+    /// runs out.
+    ///
+    /// Termination rests on the budget alone — no constant trip count is
+    /// needed, because a loop that does not finish in time simply abandons
+    /// the evaluation and leaves the call in place. The iteration charge is
+    /// what makes that true of an empty body too.
+    fn exec_loop_a(&mut self, body: &mut Body, block: BlockId) -> Flow {
+        let snapshot = LoopSnapshot::capture(body, block);
+        loop {
+            if self.step_budget == 0 {
+                return Flow::Bail;
+            }
+            self.step_budget -= 1;
+            match self.exec_block_a(body, block) {
+                Flow::Fallthrough(_) | Flow::Continue => {}
+                // A bare `break` completes this loop; a labeled one belongs to
+                // an enclosing labeled block. The loop is a statement, so the
+                // value a `break` carries is discarded either way.
+                Flow::Break { label: None, .. } => {
+                    return Flow::Fallthrough(Lattice::Unevaluated);
+                }
+                other => return other,
+            }
+            snapshot.restore(body);
+            self.scratch_folds.clear();
         }
     }
 
@@ -2189,6 +2223,76 @@ enum Flow {
     /// abandoned and the original call survives, so anything the body would
     /// have done at run time still happens.
     Bail,
+}
+
+/// The loop-body nodes one iteration may rewrite, kept so the next iteration
+/// starts from the same program.
+///
+/// Reduction rewrites an expression toward the value it took *this* time
+/// round — `acc + 1` becomes the literal `1` on the first pass — so without
+/// restoring, later iterations would read the first one's results. Capturing
+/// the loop body rather than the whole body keeps the per-iteration cost
+/// proportional to the iteration's own work.
+struct LoopSnapshot {
+    exprs: Vec<(ExprId, ExprNode)>,
+    stmts: Vec<(StmtId, StmtNode)>,
+    blocks: Vec<(BlockId, Vec<StmtId>)>,
+}
+
+impl LoopSnapshot {
+    fn capture(body: &Body, block: BlockId) -> Self {
+        #[derive(Default)]
+        struct Collect {
+            exprs: Vec<ExprId>,
+            stmts: Vec<StmtId>,
+            blocks: Vec<BlockId>,
+        }
+        impl NirRefVisitor for Collect {
+            fn visit_node(&mut self, body: &Body, node: NodeRef) {
+                match node {
+                    NodeRef::Expr(e) => self.exprs.push(e),
+                    NodeRef::Stmt(s) => self.stmts.push(s),
+                    NodeRef::Block(b) => self.blocks.push(b),
+                    // Patterns are matched, never rewritten.
+                    NodeRef::Pat(_) => {}
+                }
+                self.walk_node(body, node);
+            }
+        }
+        let mut collect = Collect::default();
+        collect.visit_node(body, NodeRef::Block(block));
+        Self {
+            exprs: collect
+                .exprs
+                .into_iter()
+                .map(|e| (e, body.exprs[e].clone()))
+                .collect(),
+            stmts: collect
+                .stmts
+                .into_iter()
+                .map(|s| (s, body.stmts[s].clone()))
+                .collect(),
+            blocks: collect
+                .blocks
+                .into_iter()
+                .map(|b| (b, body.blocks[b].stmts.clone()))
+                .collect(),
+        }
+    }
+
+    /// Put the captured nodes back. Nodes an iteration allocated are left
+    /// behind unreferenced, which costs arena space and nothing else.
+    fn restore(&self, body: &mut Body) {
+        for (e, node) in &self.exprs {
+            body.exprs[*e] = node.clone();
+        }
+        for (s, node) in &self.stmts {
+            body.stmts[*s] = node.clone();
+        }
+        for (b, stmts) in &self.blocks {
+            body.blocks[*b].stmts.clone_from(stmts);
+        }
+    }
 }
 
 /// Locals of `body` that a compile-time frame cannot track, because something
