@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785113620897,
+  "lastUpdate": 1785119166846,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44233,6 +44233,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/139904abe623fd52ced1710477fa8572e6b9cac4"
         },
         "date": 1785113620109,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8225,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273073,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cb9fdfcbcee4a7ca2e4999c48a999ad9835cb7a0",
+          "message": "Merge pull request #1700 from wado-lang/claude/reflection-api-impl-44lu7v\n\nfeat(compiler): reflect generic structs and variants",
+          "timestamp": "2026-07-27T11:15:11+09:00",
+          "tree_id": "1bde4f899f9599c7ee7181284c2fe8f03a239095",
+          "url": "https://github.com/wado-lang/wado/commit/cb9fdfcbcee4a7ca2e4999c48a999ad9835cb7a0"
+        },
+        "date": 1785119166354,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
