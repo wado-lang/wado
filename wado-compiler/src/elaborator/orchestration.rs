@@ -1548,8 +1548,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 signatures
                     .effect_op_sigs
                     .insert(module_source.clone(), sem.decls.effect_op_sigs.clone());
-                for (ast_id, sig) in &sem.decls.impl_method_sigs {
-                    signatures.impl_method_sigs.insert(*ast_id, sig.clone());
+                for (ast_id, sig) in &sem.decls.method_sigs {
+                    signatures.method_sigs.insert(*ast_id, sig.clone());
+                }
+                for (key, method_id) in &sem.decls.resource_method_ids {
+                    signatures
+                        .resource_method_ids
+                        .insert(key.clone(), *method_id);
                 }
                 for (ast_id, sig) in &sem.decls.impl_sigs {
                     signatures.impl_sigs.insert(*ast_id, sig.clone());

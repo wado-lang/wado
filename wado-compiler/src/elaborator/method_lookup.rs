@@ -967,21 +967,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // directly — no global scan. `None`-module receivers (primitives,
         // `Array`, `()`, tuples) are never resources, so nothing falls through
         // to a scan (issue #1416).
-        if let Some(ref module_source) = struct_module_source
-            && let Some(module) = self.loaded_modules.get(module_source)
-        {
-            for item in &module.items {
-                if let Item::Resource(resource) = item
-                    && resource.name == struct_name
-                    && let Some(info) = self.find_resource_method_info(
-                        resource,
-                        module_source,
-                        method_name,
-                        receiver_type_args.as_deref(),
-                    )
-                {
-                    return Some(info);
-                }
+        if let Some(ref module_source) = struct_module_source {
+            if let Some(info) = self.find_resource_method_info(
+                &struct_name,
+                module_source,
+                method_name,
+                receiver_type_args.as_deref(),
+            ) {
+                return Some(info);
             }
         }
 
@@ -1005,118 +998,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Find a method in a resource declaration, with proper type parameter setup.
+    /// The signature of `method_name` as an instance method on the resource
+    /// `struct_name` declared in `resource_module`.
+    ///
+    /// The decl pass resolved it in the resource's own frame — the
+    /// resource's type parameters in slots 0.., `Self` built over them, the
+    /// declaring module's imports in scope — so a receiver's type arguments
+    /// only have to fill the slots. Resolving it here would name types as
+    /// the *caller* sees them, which is how a caller that does not import
+    /// the interface's types used to get `unknown` (issue #1416).
     fn find_resource_method_info(
         &mut self,
-        resource: &ast::ResourceDecl,
+        struct_name: &str,
         resource_module: &ModuleSource,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<MethodInfo> {
-        for method in &resource.methods {
-            if method.name != method_name {
-                continue;
-            }
-            let has_self = method.params.iter().any(|p| {
-                matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
-                    if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == resource.name))
-                    || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == resource.name)
-            });
-            if !has_self {
-                continue;
-            }
-
-            // Set up type params for generic resources (e.g., resource Stream<T>).
-            // Inherited scope; only `type_params` is replaced.
-            let mut scope = self.enter_inherited_type_param_scope();
-            scope.annotate_ctx.trait_ctx.type_params.clear();
-            if let Some(type_args) = receiver_type_args {
-                for (i, param) in resource.type_params.iter().enumerate() {
-                    if i < type_args.len() {
-                        scope
-                            .annotate_ctx
-                            .trait_ctx
-                            .type_params
-                            .insert(param.name.clone(), (i as u32, type_args[i]));
-                    }
-                }
-            }
-
-            // Resolve the signature in the resource's defining module so its
-            // return/param types (`AsyncCall<Result<DescriptorStat, ErrorCode>>`,
-            // `Stream<DirectoryEntry>`) name types as that interface sees them,
-            // not as the caller does — otherwise a caller that does not import
-            // those types resolves them to `unknown` (issue #1416).
-            let (return_type, param_types, param_is_mut, param_defaults, param_names) = scope
-                .with_module_perspective_for(resource_module, |s| {
-                    let return_type = method
-                        .return_type
-                        .as_ref()
-                        .map(|t| s.resolve_type(t))
-                        .unwrap_or(TypeTable::UNIT);
-                    let param_types = s.extract_param_types(&method.params);
-                    let param_is_mut: Vec<bool> = method
-                        .params
-                        .iter()
-                        .filter(|p| p.name != "self")
-                        .map(|p| p.is_mut)
-                        .collect();
-                    let param_defaults: Vec<Option<ast::Expr>> = method
-                        .params
-                        .iter()
-                        .filter(|p| p.name != "self")
-                        .map(|p| p.default.clone())
-                        .collect();
-                    let param_names: Vec<String> = method
-                        .params
-                        .iter()
-                        .filter(|p| p.name != "self")
-                        .map(|p| p.name.clone())
-                        .collect();
-                    (
-                        return_type,
-                        param_types,
-                        param_is_mut,
-                        param_defaults,
-                        param_names,
-                    )
-                });
-
-            drop(scope);
-
-            // Extract CM canonical name from #[cm("...")] attribute
-            let cm_name = method
-                .attrs
-                .iter()
-                .find_map(crate::ast::Attribute::cm_identifier);
-
-            // Honor the receiver spelling: bare `self` transfers (`Value`),
-            // `&mut self` mutably borrows, and everything else (`&self`,
-            // `self: &R`) is a shared borrow.
-            let self_kind = match method.params.first().map(|p| p.self_kind) {
-                Some(ast::SelfKind::Value) => ast::SelfKind::Value,
-                Some(ast::SelfKind::MutRef) => ast::SelfKind::MutRef,
-                _ => ast::SelfKind::Ref,
-            };
-
-            return Some(MethodInfo {
-                impl_offset: None,
-                return_type,
-                self_kind,
-                param_types,
-                param_is_mut,
-                inherited_from_base: None,
-                cm_name,
-                is_ref_impl: false,
-                method_type_param_ids: vec![],
-                impl_module: None,
-                from_concrete_impl: false,
-                param_defaults,
-                param_names,
-                consumes_self: takes_self_by_value(&method.params),
-            });
+        let decl_id = self
+            .tysys
+            .all_resource_types
+            .get(resource_module)?
+            .get(struct_name)?
+            .defined_at;
+        let sig = self
+            .tysys
+            .signatures
+            .resource_method_sig(decl_id, method_name)?
+            .clone();
+        if sig.self_kind == ast::SelfKind::None {
+            return None;
         }
-        None
+
+        let instantiated = sig
+            .decl
+            .instantiate(&self.tysys.type_table, receiver_type_args.unwrap_or(&[]));
+        let first_value = sig.first_value_param().min(instantiated.param_types.len());
+
+        Some(MethodInfo {
+            impl_offset: None,
+            return_type: instantiated.return_type,
+            self_kind: sig.self_kind,
+            param_types: instantiated.param_types[first_value..].to_vec(),
+            param_is_mut: super::sig::Param::is_mut_flags(&sig.params),
+            inherited_from_base: None,
+            cm_name: sig.cm_name,
+            is_ref_impl: false,
+            method_type_param_ids: vec![],
+            impl_module: None,
+            from_concrete_impl: false,
+            param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
+            param_names: super::sig::Param::names(&sig.params),
+            consumes_self: sig.self_kind == ast::SelfKind::Value,
+        })
     }
 
     /// Extract parameter types (excluding self) from method parameters
@@ -2505,7 +2438,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let sig = scope
                     .tysys
                     .signatures
-                    .impl_method_sig(m.ast_id)
+                    .method_sig(m.ast_id)
                     .expect("the decl pass records every impl-declared method's signature")
                     .clone();
                 (sig, m.type_params.clone())
@@ -3160,7 +3093,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // type arguments is what the by-name re-resolution below used
                 // to approximate.
                 let method_header = header.methods.iter().find(|m| m.name == method_name)?;
-                let method_sig = s.tysys.signatures.impl_method_sig(method_header.ast_id)?;
+                let method_sig = s.tysys.signatures.method_sig(method_header.ast_id)?;
                 let self_kind = method_sig.self_kind;
                 let rhs_index = usize::from(self_kind != ast::SelfKind::None);
                 let rhs_type = method_sig
@@ -3298,7 +3231,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = s
                     .tysys
                     .signatures
-                    .impl_method_sig(method_header.ast_id)?
+                    .method_sig(method_header.ast_id)?
                     .self_kind;
                 let impl_source = s.impl_block_module_source(impl_ref);
 

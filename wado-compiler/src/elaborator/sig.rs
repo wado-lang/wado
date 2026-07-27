@@ -34,11 +34,19 @@ pub(crate) struct Signatures {
     /// Canonical free-function signatures, declaring module → name.
     pub(crate) function_sigs: IndexMap<ModuleSource, Rc<IndexMap<String, FunctionSig>>>,
 
-    /// Canonical signatures of `impl`-block methods, keyed by the method's
-    /// globally-unique `AstId`. `TraitEnv::impl_headers` carries each
-    /// method's `ast_id`, so a dispatch query goes header → signature
-    /// without ever reaching for the impl AST.
-    pub(crate) impl_method_sigs: IndexMap<AstId, MethodSig>,
+    /// Canonical method signatures, keyed by the method's globally-unique
+    /// `AstId` — `impl`-block methods and `interface` / `resource`
+    /// operations alike. `TraitEnv::impl_headers` carries each impl
+    /// method's `ast_id` and [`Self::resource_method_ids`] names the
+    /// operations, so a dispatch query goes index → signature without ever
+    /// reaching for a declaration's AST.
+    pub(crate) method_sigs: IndexMap<AstId, MethodSig>,
+
+    /// `(declaration `AstId`, operation name)` → the operation's own
+    /// `AstId`. The name-keyed index over [`Self::method_sigs`] for
+    /// `interface` / `resource` operations, which callers reach by name
+    /// rather than by node.
+    pub(crate) resource_method_ids: IndexMap<(AstId, String), AstId>,
 
     /// Per-`impl`-block facts shared by the block's methods, keyed by the
     /// block's `AstId`.
@@ -76,9 +84,16 @@ impl Signatures {
         self.function_sigs.get(module)?.get(name)
     }
 
-    /// Canonical signature of the impl method declared at `ast_id`.
-    pub(crate) fn impl_method_sig(&self, ast_id: AstId) -> Option<&MethodSig> {
-        self.impl_method_sigs.get(&ast_id)
+    /// Canonical signature of the method declared at `ast_id`.
+    pub(crate) fn method_sig(&self, ast_id: AstId) -> Option<&MethodSig> {
+        self.method_sigs.get(&ast_id)
+    }
+
+    /// Canonical signature of the operation `name` on the `interface` /
+    /// `resource` declared at `decl_id`.
+    pub(crate) fn resource_method_sig(&self, decl_id: AstId, name: &str) -> Option<&MethodSig> {
+        let method_id = self.resource_method_ids.get(&(decl_id, name.to_string()))?;
+        self.method_sig(*method_id)
     }
 
     /// Declaration facts of the `impl` block at `ast_id`.
@@ -143,10 +158,13 @@ pub(crate) struct DeclSig {
     pub(crate) return_type: Option<TypeId>,
 }
 
-/// An impl method's canonical signature: the frame, plus the receiver shape
-/// that dispatch needs before it can adjust a receiver expression. The shape
-/// is not part of [`DeclSig`] because it is not a type and nothing
-/// substitutes into it.
+/// A method's canonical signature: the frame, plus what dispatch needs
+/// about the method that is not a type. Those extras are not part of
+/// [`DeclSig`] because nothing substitutes into them.
+///
+/// One record for both kinds of method declaration — an `impl` block's, in
+/// the block's frame, and an `interface` / `resource` declaration's, in the
+/// declaration's — because dispatch asks them the same questions.
 #[derive(Clone, Debug)]
 pub(crate) struct MethodSig {
     pub(crate) decl: DeclSig,
@@ -155,6 +173,9 @@ pub(crate) struct MethodSig {
     /// the receiver at index 0 when there is one, so these are offset by
     /// [`Self::first_value_param`].
     pub(crate) params: Vec<Param>,
+    /// Canonical name from `#[cm("…")]`, resolved at the declaration.
+    pub(crate) cm_name: Option<String>,
+    pub(crate) is_async: bool,
 }
 
 /// What a declaration says about one parameter beyond its type. One record

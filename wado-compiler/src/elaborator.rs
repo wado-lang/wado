@@ -1636,6 +1636,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // and `Self`. The body pass reads these back rather than repeating
         // the work.
         self.sem.decls.effect_ops.clear();
+        self.sem.decls.resource_method_ids.clear();
         let decl_ops: Vec<(
             crate::ast::AstId,
             Vec<ast::GenericParam>,
@@ -1660,6 +1661,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .as_deref()
                 .map(|name| (name, module_source.clone()));
             let ops = self.resolve_effect_ops(&type_params, &methods, resource_self);
+            for method in &methods {
+                self.sem
+                    .decls
+                    .resource_method_ids
+                    .insert((decl_id, method.name.clone()), method.id);
+            }
             self.sem.decls.effect_ops.insert(decl_id, ops);
         }
 
@@ -1710,7 +1717,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         for item in &module.items {
             if let Item::Impl(impl_block) = item {
-                self.record_impl_method_sigs(impl_block);
+                self.record_impl_decls(impl_block);
             }
         }
         self.sem.decls.function_sigs = Rc::new(function_sigs);
@@ -1960,7 +1967,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let recorded_sig = scope
                 .tysys
                 .signatures
-                .impl_method_sig(method.id)
+                .method_sig(method.id)
                 .cloned()
                 .expect("the decl pass records every impl-declared method's canonical signature");
             scope.resolve_method(

@@ -932,7 +932,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The decl pass runs this for every impl block so a dispatch query
     /// instantiates a recorded signature instead of re-resolving the method
     /// AST under the *caller's* perspective (WEP 2026-07-10).
-    pub(super) fn record_impl_method_sigs(&mut self, impl_block: &ast::ImplBlock) {
+    pub(super) fn record_impl_decls(&mut self, impl_block: &ast::ImplBlock) {
         let mut block = self.enter_inherited_type_param_scope();
         block.annotate_ctx.trait_ctx.type_params.clear();
         block.annotate_ctx.trait_ctx.type_param_bounds.clear();
@@ -1008,7 +1008,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .first()
                 .map(|p| p.self_kind)
                 .unwrap_or(ast::SelfKind::None);
-            frame_scope.sem.decls.impl_method_sigs.insert(
+            frame_scope.sem.decls.method_sigs.insert(
                 method.id,
                 MethodSig {
                     decl: DeclSig {
@@ -1027,6 +1027,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             default: p.default.clone(),
                         })
                         .collect(),
+                    cm_name: method
+                        .attrs
+                        .iter()
+                        .find_map(crate::ast::Attribute::cm_identifier),
+                    is_async: method.is_async,
                 },
             );
         }
@@ -1249,9 +1254,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         });
 
+        // The declaration's own slots, in the order `register_generic_params`
+        // numbered them. Fn-bound parameters consume no slot, so only the
+        // real ones are listed — the density [`DeclSig`] documents.
+        let decl_slots: Vec<(String, TypeId)> = scope
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .iter()
+            .filter(|(_, (_, id))| {
+                let table = scope.tysys.type_table.borrow();
+                matches!(
+                    table.get(*id),
+                    crate::tir::ResolvedType::TypeParam { .. }
+                        | crate::tir::ResolvedType::TypePack { .. }
+                )
+            })
+            .map(|(name, (_, id))| (name.clone(), *id))
+            .collect();
+
         let mut ops = Vec::with_capacity(methods.len());
         for method in methods {
             let mut params = Vec::with_capacity(method.params.len());
+            let mut sig_params = Vec::with_capacity(method.params.len());
             let mut next_local: u32 = 0;
             for p in &method.params {
                 let type_id = match (p.self_kind, self_type) {
@@ -1280,6 +1305,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => continue,
                 };
                 let name = if matches!(p.self_kind, SelfKind::None) {
+                    sig_params.push(super::sig::Param {
+                        name: p.name.clone(),
+                        is_mut: p.is_mut,
+                        default: p.default.clone(),
+                    });
                     p.name.clone()
                 } else {
                     // The AST `&self`/`&mut self` shorthand has an
@@ -1329,6 +1359,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .attrs
                 .iter()
                 .find_map(crate::ast::Attribute::cm_identifier);
+
+            // The same resolution, recorded as a method signature so
+            // dispatch reads it instead of re-resolving the declaration.
+            // An effect operation takes no receiver, so its `self_kind` is
+            // `None` however the AST spelled it — the receiver parameter
+            // above was dropped for exactly that reason.
+            let self_kind = if self_type.is_some() {
+                method
+                    .params
+                    .first()
+                    .map_or(SelfKind::None, |p| p.self_kind)
+            } else {
+                SelfKind::None
+            };
+            scope.sem.decls.method_sigs.insert(
+                method.id,
+                MethodSig {
+                    decl: DeclSig {
+                        type_params: decl_slots.clone(),
+                        param_types: params.iter().map(|p| p.type_id).collect(),
+                        return_type: method.return_type.as_ref().map(|_| return_type),
+                    },
+                    self_kind,
+                    params: sig_params,
+                    cm_name: cm_name.clone(),
+                    is_async: method.is_async,
+                },
+            );
+
             ops.push(TirEffectOp {
                 name: method.name.clone(),
                 params,
@@ -2033,8 +2092,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 scope
                     .tysys
                     .signatures
-                    .effect_ops(decl_id)
-                    .and_then(|ops| ops.iter().find(|op| op.name == func.name))
+                    .resource_method_sig(decl_id, &func.name)
                     .filter(|op| op.is_async)
                     .map(|op| op.cm_name.is_some())
             });

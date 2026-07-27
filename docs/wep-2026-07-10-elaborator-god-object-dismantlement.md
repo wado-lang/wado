@@ -357,26 +357,32 @@ declaration rather than at whichever use site reaches it first.
       method's own frame rather than one scope out; `MethodInfo` carries
       the offset the digest used instead of letting consumers count
       receiver arguments.
-- [ ] S5b-6 `MethodInfo` becomes `instantiate(sig, receiver_args)`
-      throughout, and `StaticMethodSig` is deleted.
+- [x] S5b-6a One `MethodSig` for both kinds of method declaration.
+      `resolve_effect_ops` already resolved an `interface` / `resource`
+      operation in its canonical frame — the declaration's type parameters
+      in slots 0.., `Self` built over them, the receiver synthesised as
+      parameter 0 — but recorded only a `TirEffectOp`, which drops
+      `self_kind`, per-parameter defaults, and the method's own `AstId`.
+      Dispatch therefore re-resolved the same declaration from AST under a
+      scope fabricated from the receiver's arguments.
 
-      The blocker is not the impl side: `StaticMethodEntry.method_id`
-      already reaches a `MethodSig`, whose `decl.type_params` is the flat
-      impl-then-method slot list `infer_static_method_type_args` builds by
-      hand. It is the resource side. `resolve_effect_ops` already resolves
-      a resource method in its canonical frame — the resource's type
-      parameters in slots 0.., `Self` constructed over them, the receiver
-      synthesised as parameter 0 — but records it as a `TirEffectOp`, which
-      drops `self_kind`, per-parameter defaults, and the method's own
-      `AstId`. So dispatch re-resolves the same method from AST
-      (`find_resource_method_info`), under a scope fabricated from the
-      receiver's arguments.
+      Now the one resolution records both: `MethodSig` (grown a `cm_name`
+      and an `is_async`) keyed by the operation's `AstId`, plus the
+      `TirEffectOp` the effect system reads. `impl_method_sigs` becomes
+      `method_sigs` because both kinds live in it, and
+      `resource_method_ids` is the name-keyed index over it for callers
+      holding an operation name.
 
-      The fix is one resolution, two views: `resolve_effect_ops` records a
-      `MethodSig` per method keyed by the method's `AstId`, carrying
-      `cm_name` and `is_async`, and the `TirEffectOp` the effect system
-      reads is derived from it. That removes a duplicate resolution instead
-      of adding a duplicate digest.
+      The `has_self` check the old path used — does any parameter's written
+      type name `Self` or the resource — is gone with it. The parser
+      rejects `self: T`, so a receiver is always `self` / `&self` /
+      `&mut self` and `self_kind` is the whole answer.
+- [ ] S5b-6b `StaticMethodSig` is deleted and `MethodInfo` becomes
+      `instantiate(sig, receiver_args)` throughout.
+      `StaticMethodEntry.method_id` already reaches a `MethodSig` whose
+      `decl.type_params` is the flat impl-then-method slot list
+      `infer_static_method_type_args` builds by hand; what it still lacks is
+      where the impl's slots end and the method's begin.
 
 **What the remaining `loaded_modules` reads are waiting on.** The
 trait-bound path (`find_method_in_trait_bounds`) is the one place a
@@ -444,20 +450,20 @@ a time rather than as a single cut. S8–S9 are last.
 
 Progress metric:
 
-| Metric                                           | S4 | S5c | Target |
-| ------------------------------------------------ | -- | --- | ------ |
-| `loaded_modules` reads outside reify / decl pass | 25 | 12  | 0      |
-| AST-level type-param substitution helpers        | 2  | 0   | 0      |
-| `get_impl_block` + callers                       | 15 | 0   | 0      |
-| `with_module_perspective` call sites             | 16 | 7   | 1      |
-| `suppress_reference_recording` call sites        | 7  | 2   | 0      |
-| Manual scope save/restore clusters               | 0  | 0   | 0      |
-| `Elaborator` fields                              | 13 | 13  | 6      |
+| Metric                                           | S4 | S5b-6a | Target |
+| ------------------------------------------------ | -- | ------ | ------ |
+| `loaded_modules` reads outside reify / decl pass | 25 | 11     | 0      |
+| AST-level type-param substitution helpers        | 2  | 0      | 0      |
+| `get_impl_block` + callers                       | 15 | 0      | 0      |
+| `with_module_perspective` call sites             | 16 | 6      | 1      |
+| `suppress_reference_recording` call sites        | 7  | 2      | 0      |
+| Manual scope save/restore clusters               | 0  | 0      | 0      |
+| `Elaborator` fields                              | 13 | 13     | 6      |
 
-S5c removed no `loaded_modules` read: the associated-type queries reached
-the impl AST through `TraitEnv::impl_headers`, not through the module map.
-The twelve that remain are the resource / static-method sites S5b-6 takes
-and the trait-declaration sites S6 takes.
+S5c removed no `loaded_modules` read of its own: the associated-type
+queries reached the impl AST through `TraitEnv::impl_headers`, not through
+the module map. The eleven that remain are the static-method sites S5b-6b
+takes and the trait-declaration sites S6 takes.
 
 Compile-time is a stated benefit (one signature resolution per declaration
 instead of per use site), so the baseline is captured before S5 rather than
