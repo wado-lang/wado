@@ -1881,7 +1881,7 @@ fn lower_scan_group(
             });
         },
         SimpleCst => {
-            return lower_simple_cst_scan_group(alts, ctx, outer_follow);
+            return lower_simple_cst_scan_group(alts, ctx);
         },
         General => {
             return lower_general_scan_group(alts, ctx, outer_follow, enclosing_at_tail);
@@ -2929,16 +2929,12 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
             fields: [],
             prefix_self_ref_min_prec: 0,
         });
-        // SimpleCst alts are single `RuleRef`s — outer_follow does
-        // not propagate into the callee (whole-rule follow is the
-        // callee's concern, handled by the runtime caller-FOLLOW gate).
-        let empty_follow: List<String> = [];
         scan_bodies.push(ScanBody {
             elements: [
                 lower_scan_element(
                     elem,
                     ctx,
-                    &empty_follow,
+                    &SIMPLE_CST_NO_FOLLOW,
                     FollowArg::NoFollow,
                     false,
                 ),
@@ -2959,32 +2955,26 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
     });
 }
 
-fn lower_simple_cst_scan_group(
-    alts: &List<Alternative>,
-    ctx: &mut GenContext,
-    outer_follow: &List<String>,
-) -> ScanElement {
+/// `lower_scan_element`'s per-position follow is read only by its Label,
+/// Repeat and Group arms. `is_simple_cst_group` admits an alt only when it
+/// is one bare `RuleRef`, so a SimpleCst alt reaches none of them and the
+/// value here is unobservable — both lowering paths pass this rather than
+/// each arguing for a different one.
+global SIMPLE_CST_NO_FOLLOW: List<String> = [];
+
+fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
     let mut first_sets: List<List<String>> = [];
     let mut all_indices: List<i32> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
         let alt = &alts[i];
         let elem = &alt.elements[0];
-        // Pass `outer_follow` (not an empty per-position follow) here so
-        // any RuleRef call inside this group sees the correct caller
-        // continuation when `compute_call_site_follow` builds its FOLLOW
-        // mask. Cutting the follow to `[]` here would under-constrain the
-        // mask at this site.
-        // SimpleCst alts are single RuleRefs by construction
-        // (`is_simple_cst_group`), so `lower_scan_element` produces a
-        // `ScanRuleCall` here, never a Repeat — no caller-follow
-        // rebind is needed.
         bodies.push(ScanBody {
             elements: [
                 lower_scan_element(
                     elem,
                     ctx,
-                    outer_follow,
+                    &SIMPLE_CST_NO_FOLLOW,
                     FollowArg::NoFollow,
                     false,
                 ),
