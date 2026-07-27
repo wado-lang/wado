@@ -1,0 +1,16 @@
+// A trait that reaches itself through supertraits can never be implemented,
+// so the cycle is an error at the declaration rather than a hang or a
+// post-monomorphization failure.
+trait A: B {
+    fn a(&self) -> i32;
+}
+
+trait B: A {
+    fn b(&self) -> i32;
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": "circular supertrait"}

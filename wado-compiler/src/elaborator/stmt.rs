@@ -232,12 +232,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
             .type_params
             .iter()
-            .map(|p| {
-                (
-                    p.name.clone(),
-                    p.bounds.iter().map(|b| b.name.clone()).collect(),
-                )
-            })
+            .map(|p| (p.name.clone(), scope.elaborate_bound_names(&p.bounds)))
             .collect();
         let type_param_type_ids: Vec<TypeId> = struct_decl
             .type_params

@@ -107,12 +107,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
                         .type_params
                         .iter()
-                        .map(|p| {
-                            (
-                                p.name.clone(),
-                                p.bounds.iter().map(|b| b.name.clone()).collect(),
-                            )
-                        })
+                        .map(|p| (p.name.clone(), scope.elaborate_bound_names(&p.bounds)))
                         .collect();
                     // Collect TypeIds for struct's own type params in declaration order.
                     let type_param_type_ids: Vec<TypeId> = struct_decl
@@ -432,11 +427,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_param_decls
                         .insert(param.name.clone(), param.id);
                     if !param.bounds.is_empty() {
+                        let bounds = scope.elaborate_bounds(&param.bounds);
                         scope
                             .annotate_ctx
                             .trait_ctx
                             .type_param_bounds
-                            .insert(param.name.clone(), param.bounds.clone());
+                            .insert(param.name.clone(), bounds);
                     }
                     actual_idx += 1;
                 }
@@ -547,11 +543,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .type_param_decls
                             .insert(param.name.clone(), param.id);
                         if !param.bounds.is_empty() {
+                            let bounds = scope.elaborate_bounds(&param.bounds);
                             scope
                                 .annotate_ctx
                                 .trait_ctx
                                 .type_param_bounds
-                                .insert(param.name.clone(), param.bounds.clone());
+                                .insert(param.name.clone(), bounds);
                         }
                         method_type_param_names.push(param.name.clone());
                     }

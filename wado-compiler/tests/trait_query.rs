@@ -373,3 +373,130 @@ export fn run() {
 ",
     );
 }
+
+// ---------------------------------------------------------------------------
+// Supertrait declarations
+// ---------------------------------------------------------------------------
+
+#[test]
+fn supertrait_chain_is_accepted() {
+    compile_ok(
+        r"
+trait Base {
+    fn base(&self) -> i32;
+}
+
+trait Middle: Base {
+    fn middle(&self) -> i32;
+}
+
+trait Top: Middle {
+    fn top(&self) -> i32;
+}
+
+export fn run() {
+}
+",
+    );
+}
+
+#[test]
+fn supertrait_diamond_is_accepted() {
+    compile_ok(
+        r"
+trait Root {
+    fn root(&self) -> i32;
+}
+
+trait Left: Root {
+    fn left(&self) -> i32;
+}
+
+trait Right: Root {
+    fn right(&self) -> i32;
+}
+
+trait Bottom: Left + Right {
+    fn bottom(&self) -> i32;
+}
+
+export fn run() {
+}
+",
+    );
+}
+
+#[test]
+fn direct_supertrait_cycle_is_rejected() {
+    compile_err_contains(
+        r"
+trait A: B {
+    fn a(&self) -> i32;
+}
+
+trait B: A {
+    fn b(&self) -> i32;
+}
+
+export fn run() {
+}
+",
+        "circular supertrait",
+    );
+}
+
+#[test]
+fn self_supertrait_is_rejected() {
+    compile_err_contains(
+        r"
+trait Loop: Loop {
+    fn go(&self) -> i32;
+}
+
+export fn run() {
+}
+",
+        "circular supertrait",
+    );
+}
+
+#[test]
+fn supertrait_method_is_reachable_through_a_bound() {
+    // `x.base()` resolves only if `T: Derived` elaborated to carry `Base`.
+    compile_ok(
+        r"
+trait Base {
+    fn base(&self) -> i32;
+}
+
+trait Derived: Base {
+    fn derived(&self) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl Base for S {
+    fn base(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Derived for S {
+    fn derived(&self) -> i32 {
+        return self.v * 2;
+    }
+}
+
+fn total<T: Derived>(x: &T) -> i32 {
+    return x.base() + x.derived();
+}
+
+export fn run() {
+    let s = S { v: 3 };
+    assert total(&s) == 9;
+}
+",
+    );
+}

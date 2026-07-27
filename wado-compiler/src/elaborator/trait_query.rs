@@ -1789,7 +1789,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 vec![type_arg]
             };
-            for bound in &param.bounds {
+            for bound in self.elaborate_bounds(&param.bounds) {
                 if bound.fn_signature.is_some() {
                     continue;
                 }

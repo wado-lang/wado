@@ -277,6 +277,15 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A trait reaches itself through its supertrait clause, so no type could
+    /// ever satisfy the obligation. `chain` is the path back to the trait,
+    /// starting and ending at it (`A -> B -> A`).
+    CircularSupertrait {
+        trait_name: String,
+        chain: Vec<String>,
+        span: Span,
+    },
+
     /// Invalid pattern in context
     InvalidPattern {
         message: String,
@@ -741,6 +750,18 @@ impl TypeError {
                         "type '{type_name}' does not implement trait '{trait_name}' required by bound on '{param_name}'"
                     ),
                     reason,
+                ),
+                *span,
+            ),
+            TypeError::CircularSupertrait {
+                trait_name,
+                chain,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "circular supertrait: trait '{trait_name}' is its own supertrait via {}",
+                    chain.join(" -> ")
                 ),
                 *span,
             ),
