@@ -43,7 +43,7 @@ invalidation, field store-to-load seeding.
 The boundary is load-bearing. `niri` once carried its own per-local map of
 known fields, with branch-merge and loop-invalidation logic; it was built and
 then retired once the `ValueGraph` covered the same ground. Anything that
-needs to know *which* definition reaches a use belongs to the `ValueGraph`,
+needs to know _which_ definition reaches a use belongs to the `ValueGraph`,
 and a proposal to teach `niri` about control flow between statements should be
 read as a sign the fact belongs on the other side of this line.
 
