@@ -291,7 +291,7 @@ declaration rather than at whichever use site reaches it first.
 - [x] S4 Signatures stage A: `FunctionSig`, globals, effect-op signatures,
       data sections. `clone_digests_from` is the one snapshot-seeding field
       list, and `Signatures` is the one program-wide struct they assemble
-      into. Associated-type *bounds* stayed on `TraitEnv`: they are
+      into. Associated-type _bounds_ stayed on `TraitEnv`: they are
       `ast::TraitBound`s indexed by name, which is `TraitEnv`'s alphabet,
       not a resolved declaration fact.
 - [x] S4.5 Header-only consumers → `ImplHeader`. `impl_header` borrows
@@ -429,7 +429,7 @@ ways:
 - The trait method's `DeclSig`, with `Self` as slot 0 and the method's own
   parameters after it. A declaration fact — S6.
 - The associated-type projections' `assoc_type_bindings`, computed from the
-  *caller's* where clause (`I: IntoIterator<Item = u8>` gives
+  _caller's_ where clause (`I: IntoIterator<Item = u8>` gives
   `[("Item", u8)]`). Use-site data, so it becomes an explicit substitution
   input, never a re-resolution.
 - The `ast::TraitBound` lists those projections are built from. Declaration

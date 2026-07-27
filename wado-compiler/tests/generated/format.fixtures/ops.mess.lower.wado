@@ -1318,7 +1318,15 @@ pub struct "Box<Fn<2,Ordering>>" {
 }
 
 pub struct "Box<Fn<1,()>>" {
-    value: fn mut(&T) -> (),
+    value: fn mut(Self::Item) -> (),
+}
+
+pub struct "Box<Fn<2,Self::Item>>" {
+    value: fn mut(Self::Item, Self::Item) -> Self::Item,
+}
+
+pub struct "Box<Fn<2,ArrayIter<T>::Item>>" {
+    value: fn mut(ArrayIter<T>::Item, ArrayIter<T>::Item) -> ArrayIter<T>::Item,
 }
 
 pub struct "Box<Fn<2,T>>" {
@@ -1399,6 +1407,10 @@ pub struct "Box<core:prelude/traits.wado/CaseStyle>" {
 
 pub struct "Box<Fn<1,U>>" {
     value: fn mut(I::Item) -> U,
+}
+
+pub struct "Box<Fn<1,bool>>" {
+    value: fn mut(I::Item) -> bool,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<f64>>" {
@@ -1919,26 +1931,6 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
     return (block + 8);
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -1960,6 +1952,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Form
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
+
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
 pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
@@ -1980,22 +1976,6 @@ pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f:
 
 pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -2013,6 +1993,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -2700,26 +2684,6 @@ fn i16x8_relaxed_dot_i8x16_i7x16_s(a: v128, b: v128) -> v128;
 
 fn i32x4_relaxed_dot_i8x16_i7x16_add_s(a: v128, b: v128, c: v128) -> v128;
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -2741,6 +2705,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Form
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
+
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
 pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
@@ -2761,22 +2729,6 @@ pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f:
 
 pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -2794,6 +2746,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -2911,26 +2867,6 @@ pub fn libm_tanh(arg0: f64) -> f64;
 
 pub fn libm_tanhf(arg0: f32) -> f32;
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -2952,6 +2888,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Form
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
+
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
 pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
@@ -2972,22 +2912,6 @@ pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f:
 
 pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -3005,6 +2929,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -3157,26 +3085,6 @@ fn __test_0() {
     }
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -3198,6 +3106,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Form
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
+
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
 pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
@@ -3218,22 +3130,6 @@ pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f:
 
 pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -3251,6 +3147,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -3272,26 +3172,6 @@ pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item
 
 pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -3313,6 +3193,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Form
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
+
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
 pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
@@ -3333,22 +3217,6 @@ pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f:
 
 pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -3366,6 +3234,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -3443,26 +3315,6 @@ pub fn "ByteSlice^Inspect::inspect"(self: &ArraySlice<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed" as ByteSlice", used: 13 });
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -3483,6 +3335,10 @@ pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -3516,22 +3372,6 @@ pub fn "ByteSlice^InspectAlt::inspect_alt"(self: &ArraySlice<u8>, f: &mut Format
     self."ByteSlice^Inspect::inspect"(f);
 }
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -3549,6 +3389,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -4486,26 +4330,6 @@ pub fn "SpecialKind^Inspect::inspect"(self: Box<core:prelude/fpfmt.wado/SpecialK
     };
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -4526,6 +4350,10 @@ pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -4594,22 +4422,6 @@ pub fn "FormatResult^InspectAlt::inspect_alt"(self: &FormatResult, f: &mut Forma
     f.Formatter::close_brace(String { repr: packed"}", used: 1 });
 }
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -4627,6 +4439,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -5779,26 +5595,6 @@ fn "i128^Step::next_step"(self: &i128) -> Option<i128> {
     return Option<i128>::Some(*self."i128^Add::add"(&"core::prelude/int128.wado::i128::from_i64"(1)));
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -5820,6 +5616,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Form
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
+
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
 pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
@@ -5840,22 +5640,6 @@ pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f:
 
 pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -5873,6 +5657,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -6304,26 +6092,6 @@ pub fn "FloatErrorKind^Inspect::inspect"(self: Box<core:prelude/intparse.wado/Fl
     };
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -6344,6 +6112,10 @@ pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -6391,22 +6163,6 @@ pub fn "ParseFloatError^InspectAlt::inspect_alt"(self: &ParseFloatError, f: &mut
     f.Formatter::close_brace(String { repr: packed"}", used: 1 });
 }
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -6424,6 +6180,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -6577,26 +6337,6 @@ pub fn "FloatErrorKind^ReflectEnum::wire_name_policy"() -> CaseStyle {
     return CaseStyle::Identity;
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -6618,6 +6358,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Form
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
+
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
 pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
@@ -6638,22 +6382,6 @@ pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f:
 
 pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -6671,6 +6399,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -9240,26 +8972,6 @@ pub fn "f32^TryFrom<u64>::try_from"(value: u64) -> Result<f32, ConvertError> {
     return Result<f32, ConvertError>::Ok(value as f32);
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -9281,6 +8993,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Form
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
+
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
 pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
@@ -9301,22 +9017,6 @@ pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f:
 
 pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -9334,6 +9034,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -9416,26 +9120,6 @@ fn "char^Step::next_step"(self: Box<char>) -> Option<char> {
     return "core::prelude/primitive.wado::char::from_u32"(code);
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -9457,6 +9141,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Form
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
+
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
 pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
@@ -9477,22 +9165,6 @@ pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f:
 
 pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -9510,6 +9182,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -9531,26 +9207,6 @@ pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item
 
 pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -9572,6 +9228,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Form
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
+
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
 pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
@@ -9592,22 +9252,6 @@ pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f:
 
 pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -9625,6 +9269,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -12154,26 +11802,6 @@ pub fn "String^From<char>::from"(value: char) -> String {
     return s;
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -12194,6 +11822,10 @@ pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -12383,22 +12015,6 @@ pub fn "StrLinesIter^InspectAlt::inspect_alt"(self: &StrLinesIter, f: &mut Forma
     f.Formatter::close_brace(String { repr: packed"}", used: 1 });
 }
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -12416,6 +12032,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -12723,26 +12343,6 @@ pub fn "$field_get$core:prelude/string.wado/StrLinesIter$bool"(v: &StrLinesIter,
     };
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -12764,6 +12364,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Form
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
+
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
 pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
@@ -12784,22 +12388,6 @@ pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f:
 
 pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -12817,6 +12405,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -12841,26 +12433,6 @@ pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item
 pub fn "Waitable^Inspect::inspect"(self: Box<i32>, f: &mut Formatter) {
     Box<i32> { value: self.value as i32 }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&String { repr: packed" as Waitable", used: 12 });
-}
-
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -12924,6 +12496,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Form
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
+
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
 pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
@@ -12965,22 +12541,6 @@ pub fn "Waitable^InspectAlt::inspect_alt"(self: Box<i32>, f: &mut Formatter) {
     self."Waitable^Inspect::inspect"(f);
 }
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -12998,6 +12558,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -13356,26 +12920,6 @@ fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
     return Option<WaitEvent>::Some(WaitEvent { code: code, handle: evt_handle as i32, payload: payload as u32 });
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -13397,6 +12941,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Form
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
+
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
 pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
@@ -13417,22 +12965,6 @@ pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f:
 
 pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -13450,6 +12982,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -14235,26 +13771,6 @@ pub export fn run() {
     "ops.mess_dirty.wado::__initialize_modules"();
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -14276,6 +13792,10 @@ pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Form
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
+
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
 pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
@@ -14296,22 +13816,6 @@ pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f:
 
 pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -14329,6 +13833,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -14370,26 +13878,6 @@ pub fn "ErrorCode^Inspect::inspect"(self: Box<wasi:cli/types.wado/ErrorCode>, f:
     };
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -14410,6 +13898,10 @@ pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -14435,22 +13927,6 @@ pub fn "ErrorCode^InspectAlt::inspect_alt"(self: Box<wasi:cli/types.wado/ErrorCo
     self."ErrorCode^Inspect::inspect"(f);
 }
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -14468,6 +13944,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -14902,26 +14382,6 @@ pub fn "Alignment^Inspect::inspect"(self: Box<core:prelude/format.wado/Alignment
     };
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -14942,6 +14402,10 @@ pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -14967,22 +14431,6 @@ pub fn "Alignment^InspectAlt::inspect_alt"(self: Box<core:prelude/format.wado/Al
     self."Alignment^Inspect::inspect"(f);
 }
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -15000,6 +14448,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -15187,26 +14639,6 @@ pub fn "CaseStyle^Inspect::inspect"(self: Box<core:prelude/traits.wado/CaseStyle
     };
 }
 
-pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "FutureWritable<unknown>^Inspect::inspect"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"FutureWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "Stream<unknown>^Inspect::inspect"(self: &Stream<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"Stream<unknown>#0x", used: 18 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
-pub fn "StreamWritable<unknown>^Inspect::inspect"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StreamWritable<unknown>#0x", used: 26 });
-    Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
-}
-
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StreamWritable<u8>#0x", used: 21 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -15227,6 +14659,10 @@ pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^Inspect::inspect"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^Inspect::inspect"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
@@ -15274,22 +14710,6 @@ pub fn "LenientParseError^InspectAlt::inspect_alt"(self: &LenientParseError, f: 
     f.Formatter::close_brace(String { repr: packed"}", used: 1 });
 }
 
-pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
-    self."Future<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "FutureWritable<unknown>^InspectAlt::inspect_alt"(self: &FutureWritable<unknown>, f: &mut Formatter) {
-    self."FutureWritable<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<unknown>^InspectAlt::inspect_alt"(self: &Stream<unknown>, f: &mut Formatter) {
-    self."Stream<unknown>^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<unknown>^InspectAlt::inspect_alt"(self: &StreamWritable<unknown>, f: &mut Formatter) {
-    self."StreamWritable<unknown>^Inspect::inspect"(f);
-}
-
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -15307,6 +14727,10 @@ pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Forma
 pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
 
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,Self::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,Self::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArrayIter<T>::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArrayIter<T>::Item>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 

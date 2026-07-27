@@ -2364,7 +2364,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = default_method.sig.self_kind;
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
-                    trait_name: trait_name_str.clone(),
+                    trait_name: trait_name_str,
                     method_info: MethodInfo {
                         impl_offset: Some(default_method.sig.declaring_slot_count),
                         return_type: instantiated.return_type,
@@ -2395,9 +2395,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ),
                         consumes_self: self_kind == ast::SelfKind::Value,
                     },
-                    impl_module_source: impl_module_source.clone(),
-                    blanket_type_param: blanket_type_param.clone(),
-                    impl_struct_name: impl_struct_name.clone(),
+                    impl_module_source,
+                    blanket_type_param,
+                    impl_struct_name,
                     is_blanket_ref_impl,
                 });
             }
