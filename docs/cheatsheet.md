@@ -874,8 +874,8 @@ Traits use static dispatch. Use `Self::TypeName` to refer to associated types.
 // For == and != operators
 trait Eq { fn eq(&self, other: &Self) -> bool; }
 
-// For <, <=, >, >= operators
-trait Ord { fn cmp(&self, other: &Self) -> Ordering; }
+// For <, <=, >, >= operators. `Eq` is a supertrait, so `T: Ord` gives `==` too
+trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }
 
 // For default value (implemented for primitives, String, List<T>,
 // Option<T>, TreeMap<K, V>; not Result)
@@ -934,6 +934,22 @@ impl<T: Eq> Eq for Pair<T> {
     }
 }
 ```
+
+### Supertraits
+
+See [WEP: Super Traits](./wep-2026-07-27-super-traits.md).
+
+```wado
+// Every implementor of Ord must implement Eq
+trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }
+trait Circle: Shape + Display { fn radius(&self) -> i32; }
+
+// `T: Ord` implies `T: Eq`, so `==` works without spelling both
+fn has_duplicate<T: Ord>(a: T, b: T) -> bool { return a == b; }
+```
+
+There is no `where` form. A trait that reaches itself through supertraits is an
+error, as is a trait method whose name a supertrait already uses.
 
 ### Auto-Derived Traits
 

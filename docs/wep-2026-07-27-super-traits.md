@@ -104,12 +104,16 @@ Front-end only: no NIR, WIR, codegen, runtime, or code-size effect.
 
 ## Tasks
 
-- [ ] Parse the clause onto `ast::TraitDecl`; reject `fn` bounds in it
-- [ ] `unparse` and the formatter round-trip it; formatter fixtures
-- [ ] Supertrait closure and cycle detection
-- [ ] Impl-site obligation check with a reason chain
-- [ ] Bound elaboration
-- [ ] Subtrait / supertrait method-name collision error
-- [ ] `trait Ord: Eq`; drop the redundant `Eq` from `impl<T: Eq + Ord>` sites
-- [ ] `wado doc` / `query hover` surface the clause
-- [ ] VS Code grammar regenerated if the syntax module changes
+- [x] Parse the clause onto `ast::TraitDecl`; reject `fn` bounds in it
+- [x] `unparse` and the formatter round-trip it; formatter fixtures
+- [x] Supertrait closure and cycle detection
+- [x] Impl-site obligation check with a reason chain
+- [x] Bound elaboration
+- [x] Subtrait / supertrait method-name collision error
+- [x] `trait Ord: Eq`; drop the redundant `Eq` from `impl<T: Eq + Ord>` sites
+- [x] `wado doc` / `query hover` surface the clause
+
+Bounds elaborate where they are read, not where they are registered: a type
+parameter's declared bounds stay as written, and the question "does `T`
+implement `Eq`?" expands through the closure. The requirement side is left
+alone — the impl obligation already carries supertraits transitively.
