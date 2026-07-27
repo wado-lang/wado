@@ -411,23 +411,25 @@ gate.
   position, precedence, caller depth) is the lever that would make it
   affordable — the tournament re-asks the same question at the same positions.
   Details in `TODO.md`.
-- **Ambiguous greedy `rule?` and non-greedy `*?` / `+?` min-match** — the other
-  two ambiguity divergences (`TODO.md`), and the price that keeps the simulator
-  out of both. Implemented and reverted: release `sqlite_parse` **2.604 →
-  402.372 ms/iter (155×)**, because **one prediction is a full closure over the
-  grammar** — ~4–8 ms release for SQLite, ~50 of them in a 13 KB DDL script.
-  The fixed per-call setup is the cost, not the window: a 6- and a 12-token
-  budget measured the same, while gating the prediction behind the ambiguous
-  lookahead — asking only where the static check cannot answer — cut 734 ms →
-  6 ms over 40 statements (dev; 90 ms unfixed baseline). What survives gating is
-  one prediction per ambiguous occurrence: `a UNSIGNED BIG INT, b VARCHAR(10)
-  NOT NULL`, which the static path rejects outright, went 1.48 s → 776 ms — one
-  per `name+?` iteration. So the lever is a cheaper prediction (memoise per
-  decision / position / caller stack like ANTLR4's lookahead DFA, plus arena
-  reuse), or none at all: thread the caller's FOLLOW through rule calls and the
-  runtime gate answers these statically. **Measure the next attempt on release
-  `sqlite_parse`** — the 155× was invisible in the per-case dev timings that
-  guided the work.
+- **Ambiguous greedy `rule?` and non-greedy `*?` / `+?` min-match — closed on
+  the scan, not the simulator (2026-07).** The simulator answer was implemented
+  and reverted at release `sqlite_parse` **2.604 → 402.372 ms/iter (155×)**,
+  because **one prediction is a full closure over the grammar** — ~4–8 ms
+  release for SQLite, ~50 of them in a 13 KB DDL script. The fixed per-call
+  setup was the cost, not the window: a 6- and a 12-token budget measured the
+  same, and gating the prediction behind the ambiguous lookahead still left one
+  prediction per ambiguous occurrence. What shipped instead takes the second
+  lever this entry named — decide the ambiguity with the compiled scan, which
+  is already the tournament's viability oracle. A greedy `?` scans its body and
+  then the continuation before entering; a non-greedy loop scans the
+  continuation before exiting. Cost is proportional to the tokens scanned, with
+  no closure, no allocation, and nothing resident for the collector. The probe
+  is emitted only where the two readings compete, so a grammar whose optional
+  does not overlap its continuation keeps its previous emit. **Measure the next
+  change here on release `sqlite_parse`** — the 155× was invisible in the
+  per-case dev timings that guided the reverted attempt. What remains is a
+  tail-position loop, where the probe has nothing local to scan and falls back
+  to the FOLLOW mask; `TODO.md` has why the mask cannot answer it.
 - **Recursive lexer rule with `.+?` / `.*?`**
   (`RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`): the static single-pass
   emitter over-consumes nested `/* … */` comments.
