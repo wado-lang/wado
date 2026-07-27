@@ -273,12 +273,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let assoc_type_bindings =
                 self.compute_assoc_type_bindings(&namespaced.namespace.clone(), &assoc_bounds);
 
+            // Which of the parameter's bounds declares this name. `T::Err`
+            // under `T: FromStr` is `<T as FromStr>::Err`, and recording the
+            // qualifier is what lets resolution pick `FromStr`'s `Err` over
+            // another trait's on a type that implements both.
+            let owning_trait = self
+                .annotate_ctx
+                .trait_ctx
+                .type_param_bounds
+                .get(namespaced.namespace.as_str())
+                .into_iter()
+                .flatten()
+                .map(|bound| bound.name.clone())
+                .find(|trait_name| {
+                    self.find_trait_decl_assoc_type_decls(trait_name)
+                        .is_some_and(|decls| decls.iter().any(|d| d.name == namespaced.name))
+                });
             return self
                 .tysys
                 .type_table
                 .borrow_mut()
-                .make_assoc_type_projection(
+                .make_assoc_type_projection_of_trait(
                     param_type_id,
+                    owning_trait,
                     namespaced.name.clone(),
                     bound_names,
                     assoc_type_bindings,
