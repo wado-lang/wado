@@ -28,6 +28,12 @@
 //!   assignment to it or a projection, and any by-value consuming use
 //!   disqualify it. See the per-arm comments in [`expr_readonly`].
 //!
+//! A constant handed to a call *by value* ([`CandidateKind::ValueArg`]) runs the
+//! read-only gate over the *callee's* parameter instead
+//! ([`Gate::callee_param_readonly`]): the value crosses into the callee
+//! uncopied — the value-copy planner skipped the copy because the literal is
+//! fresh — so the callee is the only party that could write the shared object.
+//!
 //! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
 //! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): a project-level pass
 //! whose analysis (read-only gate, const check) and mutation (read rewrite,
@@ -88,6 +94,16 @@ enum CandidateKind {
         /// The `Unary { op: Ref, .. }` node whose inner operand is hoisted.
         ref_expr: ExprId,
     },
+    /// A constant aggregate handed to a call *by value* — `append(name,
+    /// b"application/json")`. The value-copy planner leaves such an argument
+    /// uncopied because the literal is fresh, so hoisting it is sound only
+    /// when the callee cannot write the value it receives; see
+    /// [`Gate::callee_param_readonly`]. Hoisted in place like [`Self::InlineRef`],
+    /// wrapping the argument itself instead of a `&`'s operand.
+    ValueArg {
+        /// The argument node whose value is hoisted.
+        arg_expr: ExprId,
+    },
 }
 
 pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
@@ -146,7 +162,13 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             kind,
             guarded,
         } = cand;
-        let is_inline_ref = matches!(kind, CandidateKind::InlineRef { .. });
+        // An in-place hoist keeps the value at its original call site, where a
+        // lazy `array.new_data` global would cost a guard branch per call; the
+        // fixed repr lets `wir_optimize::const_global` promote it to eager.
+        let prefer_fixed_repr = matches!(
+            kind,
+            CandidateKind::InlineRef { .. } | CandidateKind::ValueArg { .. }
+        );
 
         let mut func = project.functions[func_idx].borrow_mut();
         let body = func.body.as_mut().expect("candidate function has a body");
@@ -183,6 +205,16 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
                     guarded.then_some(is_uninitialized),
                 );
             }
+            CandidateKind::ValueArg { arg_expr } => {
+                hoist_value_arg(
+                    body,
+                    arg_expr,
+                    &module_source,
+                    &name,
+                    ty,
+                    guarded.then_some(is_uninitialized),
+                );
+            }
         }
         drop(func);
 
@@ -201,7 +233,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             module_source,
             span: crate::token::Span::new(0, 0, 1, 1),
             locals: Vec::new(),
-            prefer_fixed_string_repr: is_inline_ref,
+            prefer_fixed_string_repr: prefer_fixed_repr,
         });
     }
     true
@@ -264,8 +296,143 @@ fn collect_candidates(
                 continue;
             }
         }
+        if let NodeRef::Expr(id) = node {
+            let hoisted = value_arg_candidates(body, id, gate);
+            if !hoisted.is_empty() {
+                for &arg in &hoisted {
+                    out.push(Candidate {
+                        func_idx,
+                        ty: body.exprs[arg].type_id,
+                        module_source: module_source.clone(),
+                        kind: CandidateKind::ValueArg { arg_expr: arg },
+                        guarded: expr_contains_call(body, arg),
+                    });
+                }
+                // The hoisted arguments keep their subtrees verbatim inside the
+                // global's initializer, so a nested candidate there would nest
+                // one global's `GlobalVarSet` inside another's — the shape the
+                // `let`/`&` cases avoid by not recursing either.
+                body.for_each_child(node, |c| {
+                    if !matches!(c, NodeRef::Expr(e) if hoisted.contains(&e)) {
+                        stack.push(c);
+                    }
+                });
+                continue;
+            }
+        }
         body.for_each_child(node, |c| stack.push(c));
     }
+}
+
+/// The arguments of the call at `expr` that qualify for by-value hoisting.
+///
+/// An argument qualifies when it is a closed constant aggregate (the gate the
+/// `let` and `&` cases use) *and* the callee's matching parameter is read-only
+/// in the callee's own body. That second gate is what makes sharing sound: a
+/// fresh literal is handed over uncopied, so a callee that writes its parameter
+/// would write the shared global.
+fn value_arg_candidates(body: &Body, expr: ExprId, gate: &Gate<'_>) -> Vec<ExprId> {
+    // `self` occupies parameter 0 of a method, so its explicit arguments start
+    // one position later.
+    let (func_id, args, first_param) = match &body.exprs[expr].kind {
+        ExprKind::Call { func_id, args, .. } => (*func_id, args, 0),
+        ExprKind::MethodCall { func_id, args, .. } => (*func_id, args, 1),
+        _ => return Vec::new(),
+    };
+    args.iter()
+        .enumerate()
+        .filter(|(_, arg)| !arg.is_mut)
+        .filter_map(|(pos, arg)| Some((pos, arg.expr.as_expr()?)))
+        .filter(|&(_, arg)| {
+            // A `&`-wrapped literal is the `InlineRef` case; leave it there.
+            !matches!(
+                body.exprs[arg].kind,
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                    ..
+                }
+            )
+        })
+        .filter(|&(pos, arg)| {
+            let ty = body.exprs[arg].type_id;
+            gate.is_reference_type(ty)
+                && is_globalizable_const(body, arg, gate, &mut IndexSet::default())
+                && contains_aggregate(body, arg, gate)
+                && gate.callee_param_readonly(func_id, first_param + pos)
+        })
+        .map(|(_, arg)| arg)
+        .collect()
+}
+
+/// Rewrite a `ValueArg` candidate in place: the argument node `E` becomes
+/// `{ GlobalVarSet(name, E); GlobalVarGet(name) }`. The original subtree moves
+/// into the set, keeping its evaluation position, and the call now reads the
+/// named global — which `wir_optimize::const_global` promotes to a Wasm
+/// instantiation-time constant when `E` is const-expressible.
+fn hoist_value_arg(
+    body: &mut Body,
+    arg_expr: ExprId,
+    module_source: &ModuleSource,
+    name: &str,
+    ty: TypeId,
+    guarded: Option<crate::nir::FuncId>,
+) {
+    let span = body.exprs[arg_expr].span;
+    let inner_kind = std::mem::replace(
+        &mut body.exprs[arg_expr].kind,
+        ExprKind::GlobalVarGet {
+            module_source: module_source.clone(),
+            name: name.to_string(),
+        },
+    );
+    let inner = body.exprs.push(ExprNode {
+        kind: inner_kind,
+        type_id: ty,
+        span,
+    });
+
+    let set_expr = body.exprs.push(ExprNode {
+        kind: ExprKind::GlobalVarSet {
+            module_source: module_source.clone(),
+            name: name.to_string(),
+            value: Operand::Expr(inner),
+        },
+        type_id: TypeTable::UNIT,
+        span,
+    });
+    let set_stmt = if let Some(is_uninitialized) = guarded {
+        guard_set_on_uninit(
+            body,
+            set_expr,
+            module_source,
+            name,
+            ty,
+            is_uninitialized,
+            span,
+        )
+    } else {
+        body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Expr(set_expr)),
+            span,
+        })
+    };
+    let get_expr = body.exprs.push(ExprNode {
+        kind: ExprKind::GlobalVarGet {
+            module_source: module_source.clone(),
+            name: name.to_string(),
+        },
+        type_id: ty,
+        span,
+    });
+    let get_stmt = body.stmts.push(StmtNode {
+        kind: StmtKind::Expr(Operand::Expr(get_expr)),
+        span,
+    });
+    let wrap_block = body.blocks.push(BlockNode {
+        stmts: vec![set_stmt, get_stmt],
+        span,
+    });
+    body.exprs[arg_expr].kind = ExprKind::Block(wrap_block);
 }
 
 /// Local indices declared by exactly one `let` statement in `body`.
@@ -854,6 +1021,34 @@ impl Gate<'_> {
             self.type_table.borrow().get(p0.type_id),
             ResolvedType::MutRef(_)
         ))
+    }
+
+    /// Whether parameter `param_pos` is taken by value and never written or
+    /// consumed inside the callee — the precondition for handing it a shared
+    /// global instead of a fresh object.
+    ///
+    /// A bodyless callee (an import, an unresolved id) answers `false`: nothing
+    /// here can prove what it does with the value. A `&` / `&mut` parameter
+    /// answers `false` too — a by-value argument never lands there, and `&mut`
+    /// writes the caller's storage outright.
+    fn callee_param_readonly(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
+        use cranelift_entity::EntityRef;
+        let Some(f) = self.funcs.get(func_id.index()) else {
+            return false;
+        };
+        let f = f.borrow();
+        let Some(param) = f.params.get(param_pos) else {
+            return false;
+        };
+        if matches!(
+            self.type_table.borrow().get(param.type_id),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) {
+            return false;
+        }
+        f.body
+            .as_ref()
+            .is_some_and(|body| is_readonly_body(body, param.local_index, self))
     }
 }
 

@@ -134,16 +134,23 @@ earlier A/B that removed all five header objects by hand measured +8.2% / +9.7%
 on the two routes, of which only ~1 µs was compute and the rest GC that no longer
 runs.
 
-## Why the constant is still rebuilt per request
+## The constant is no longer rebuilt per request
 
-`const_object_globalization` (WEP 2026-05-31) matches a qualifying constant in a
-`let` binding or behind a `&`, not in a by-value argument position, which is
-where the header value sits. Rewriting it as `let ct = b"application/json" as
-FieldValue;` does trigger the pass — and then the value-copy pass clones the
-globalized object back out into `ct`, so the request pays an `array_new` +
-`array_copy` instead of an `array.new_data`. A hand-written `global` is passed
-straight through with no copy, so both halves are optimizer gaps rather than
-language limits.
+`const_object_globalization` (WEP 2026-05-31) matched a qualifying constant in a
+`let` binding or behind a `&`, but not in a by-value argument position — which is
+where the header value sits, so it was rebuilt per request. The pass now matches
+that shape too, gated on the callee's parameter being read-only in the callee's
+own body, and the header value compiles to an eager `array.new_fixed` global read
+straight into `Fields::append`: zero per-request allocations for the header.
+
+Two related copies remain, both in the WIR:
+
+- The body still goes through `resp.body`'s last-use copy (item 3 above).
+- A constant handed to a callee that writes its parameter still gets a
+  caller-side defensive copy of a value that was already fresh — an
+  `array.new_data` cloned into another array. That copy is also what currently
+  blocks hoisting for such callees, which is why the callee gate above has to
+  stand on its own.
 
 ## Profiler caveat
 
