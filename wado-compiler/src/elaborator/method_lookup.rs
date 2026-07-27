@@ -2400,7 +2400,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 found_traits.push(TraitMethodMatch {
                     trait_name: trait_name_str.clone(),
                     method_info: MethodInfo {
-                        impl_offset: None,
+                        // Where the method's own slots start. The trait frame
+                        // numbers `Self` and the trait's parameters ahead of
+                        // them, so this is not 0 as it is for a receiver whose
+                        // impl declares nothing.
+                        impl_offset: Some(default_method.sig.declaring_slot_count),
                         return_type: instantiated.return_type,
                         self_kind,
                         param_types: instantiated.param_types[first_value_param..].to_vec(),
@@ -2410,7 +2414,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         inherited_from_base: None,
                         cm_name: None,
                         is_ref_impl: false,
-                        method_type_param_ids: vec![],
+                        // The method's own slots, which `declaring_slot_count`
+                        // separates from the trait's. Inference solves these;
+                        // leaving them unnamed is why `U` in
+                        // `Iterator::map<U>` had no handle to be solved by.
+                        method_type_param_ids: default_method.sig.decl.type_params
+                            [(default_method.sig.declaring_slot_count as usize)
+                                .min(default_method.sig.decl.type_params.len())..]
+                            .iter()
+                            .map(|(_, id)| *id)
+                            .collect(),
                         impl_module: Some(impl_module_source.clone()),
                         from_concrete_impl: impl_is_concrete,
                         param_defaults: default_method
