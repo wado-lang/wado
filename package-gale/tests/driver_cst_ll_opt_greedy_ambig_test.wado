@@ -23,8 +23,6 @@ fn assert_parses(input: &String) {
     assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
 }
 
-// The divergence is which node the shared token lands under, not acceptance
-// (see lr_between).
 test "the ambiguous inputs parse" {
     assert_parses(&"x null");
     assert_parses(&"x null null");

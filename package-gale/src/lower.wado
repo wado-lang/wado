@@ -2072,8 +2072,8 @@ fn rebind_scan_repeat_caller_follow(
     return se;
 }
 
-/// The scan mirror of the elements after `index`. Shared by the parse-side
-/// `lower_continuation_scan` and its scan-side counterpart so the two probes
+/// Scan mirror of the elements after `index`, or `null` when any of them is
+/// unscannable. Both probes lower their continuation through here so they
 /// scan the same tokens.
 fn lower_scan_continuation_elements(
     alt_elements: &List<Element>,
@@ -3664,11 +3664,14 @@ fn patch_repeat_op_caller_follow(
     };
 }
 
-/// Scan mirror of the elements after `index`, for emit's exit-viability
-/// probe. `null` when any of them is unscannable — emit then keeps the
-/// static condition. Built only for the Repeat kinds whose decision can
-/// need it (non-greedy loops and greedy optionals); every other Repeat
-/// would pay the walk for a probe emit never asks for.
+/// The continuation for emit's probe, built only for the Repeat kinds whose
+/// decision can need it.
+///
+/// `reaches_rule_tail` is a precondition, not a hint: the probe ends by
+/// asking the caller's FOLLOW, which is the right question only at the
+/// rule's tail. Inside a group the walk stops at that group's end, so
+/// `useTree : (simplePath? PATHSEP)? (STAR | …)` would ask it on `*` and
+/// reject `use foo::*`.
 fn lower_continuation_scan(
     rep_op: &RepeatOp,
     alt_elements: &List<Element>,
@@ -3677,16 +3680,7 @@ fn lower_continuation_scan(
     reaches_rule_tail: bool,
 ) -> Option<List<ScanElement>> {
     let wants_probe = rep_op.non_greedy || rep_op.kind matches { Optional };
-    if !wants_probe {
-        return null;
-    }
-    // The probe ends its scan by asking the caller's FOLLOW, which is only
-    // the right question at the rule's tail. Walking `alt_elements` inside a
-    // group stops at that group's end, so everything after the group would
-    // be missing and the FOLLOW would be asked at a position the rule has
-    // not reached — `useTree : (simplePath? PATHSEP)? (STAR | …)` lands on
-    // `*` and rejects `use foo::*`. Only a rule-level alt may claim it.
-    if !reaches_rule_tail {
+    if !wants_probe || !reaches_rule_tail {
         return null;
     }
     return lower_scan_continuation_elements(alt_elements, index, ctx);

@@ -682,17 +682,14 @@ pub struct RepeatOp {
     /// `peek_at(1)` disambiguation arm so emit doesn't re-walk the
     /// surface inner.
     pub body_second_position_first: List<String>,
-    /// Scan-side mirror of the elements that follow this Repeat in the
-    /// enclosing alt. Emit runs it as the viability oracle for an exit
-    /// decision no lookahead separates: scan the continuation from the
-    /// current position, and when it matches, ask the caller's FOLLOW at
-    /// the position it ended on. Empty for a tail Repeat — then the
-    /// caller's FOLLOW answers alone.
+    /// Scan mirror of what follows this Repeat, run as emit's viability
+    /// oracle where no lookahead separates the two readings. Empty for a
+    /// tail Repeat — the caller's FOLLOW answers alone.
     pub continuation_scan: List<ScanElement> = [],
-    /// True iff `continuation_scan` represents every element after this
-    /// Repeat, so a successful scan really means "the continuation fits".
-    /// False when any following element is unscannable, which is what
-    /// keeps emit on the static condition there.
+    /// True iff `continuation_scan` runs to the rule's tail, so a match
+    /// really means the continuation fits and the caller's FOLLOW is the
+    /// right question at the position it ended on. False keeps emit on the
+    /// static condition.
     pub continuation_scannable: bool = false,
     /// Emit a runtime caller-FOLLOW yield gate
     /// (`if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break }`)
@@ -963,12 +960,10 @@ pub struct ScanRepeatElement {
     /// tokens until the exit set (`caller_follow_first`) or EOF, mirroring
     /// the parse-side `compute_non_greedy_condition`.
     pub non_greedy: bool,
-    /// Scan-side mirror of `RepeatOp.continuation_scan`, so the scan decides
-    /// a probed Repeat exactly as the parse side does. The tournament
-    /// measures scan lengths, so a scan that answered this differently could
-    /// pick an alternative the parse then does not consume.
+    /// Mirrors `RepeatOp.continuation_scan` / `continuation_scannable`, so a
+    /// probed Repeat decides the same on both sides — the tournament measures
+    /// scan lengths against what the parse consumes.
     pub continuation_scan: List<ScanElement> = [],
-    /// Scan-side mirror of `RepeatOp.continuation_scannable`.
     pub continuation_scannable: bool = false,
 }
 
