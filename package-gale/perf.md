@@ -411,9 +411,11 @@ gate.
   its own alternative's later delimiter drops to `min_prec = 0` and carries the
   suffix continuation as a mask, so each loop entry scans the operator's suffix
   and then checks the continuation still stands. The gate rides the static LR
-  dispatch, so a rule already routed to the simulator keeps its precedence
-  instead. The simulator answer had been priced out — on the dev profile over 40
-  statements it took `SELECT … BETWEEN 1 AND 10 AND y = 2` from 41 ms to 2.3 s.
+  dispatch, so a rule already routed to the simulator keeps its precedence and
+  still diverges on the climbing cases — `lr_atn_mid_operand.g4` pins that half,
+  two cases `#[TODO]`. The simulator answer had been priced out for the static
+  half — on the dev profile over 40 statements it took `SELECT … BETWEEN 1 AND
+  10 AND y = 2` from 41 ms to 2.3 s.
 - **`lr_between.g4` is still ATN-class and may not need to be.** Its shared-delimiter
   competition sits in an _atom_ alternative (`'between' expr 'and' expr` — no leading
   self-reference), so the continuation gate above does not reach it. The question it

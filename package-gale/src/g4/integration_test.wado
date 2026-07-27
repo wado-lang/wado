@@ -679,6 +679,19 @@ test "parse lr_mid_operand.g4" {
     assert g.parser_rules[1].alternatives[2].elements.len() == 5;
 }
 
+test "parse lr_atn_mid_operand.g4" {
+    let input = #include_str("../../tests/grammars/lr_atn_mid_operand.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "LrAtnMidOperand";
+    // stat, expr
+    assert g.parser_rules.len() == 2;
+    // `expr`: atom, `expr 'and' expr`, the mid-operand alt, the between atom.
+    assert g.parser_rules[1].name == "expr";
+    assert g.parser_rules[1].alternatives.len() == 4;
+    assert g.parser_rules[1].alternatives[2].elements.len() == 5;
+    assert g.parser_rules[1].alternatives[3].elements.len() == 4;
+}
+
 test "parse lr_atom_probe.g4" {
     let input = #include_str("../../tests/grammars/lr_atom_probe.g4");
     let g = parse(input).unwrap();
