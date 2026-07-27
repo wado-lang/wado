@@ -1,6 +1,7 @@
 //! Method lookup, operator resolution, and indexing trait dispatch.
 
 use super::trait_env::ImplTargetKey;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -16,6 +17,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::infer::InferCtx;
+use super::sig::InstantiatedImplSig;
 use super::trait_env::{ImplHeader, TraitEnv};
 use super::types::{
     ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
@@ -231,11 +233,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Shared scan-and-map prologue behind `find_indexing_trait_impl`,
     /// `find_assoc_type_in_trait_impl`, and `find_arithmetic_trait_impl`: walk
     /// the trait impls on `struct_name` whose name satisfies `trait_matches`
-    /// (prefix for indexing / assoc, exact for arithmetic), build each
-    /// candidate's type-parameter mapping from `concrete_type_args`, and return
-    /// the first non-`None` `project`. Per-candidate filtering, `Self` handling,
-    /// and projection live in `project` (which also receives the impl's declared
-    /// type params); returning `None` skips the candidate.
+    /// (prefix for indexing / assoc, exact for arithmetic), align each
+    /// candidate's slots against `concrete_type_args`, and return the first
+    /// non-`None` `project`. Per-candidate filtering and projection live in
+    /// `project` (which also receives the impl's declared type params);
+    /// returning `None` skips the candidate.
+    ///
+    /// `project` reads the candidate's declaration facts off its
+    /// instantiated [`ImplSig`]. It never resolves the impl's AST: the decl
+    /// pass already did that, in the impl's own frame and its own module's
+    /// perspective, and instantiation is all a use site adds.
     fn probe_trait_impls<R>(
         &mut self,
         struct_name: &str,
@@ -244,11 +251,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         mut project: impl FnMut(
             &mut Self,
             &ImplBlockRef,
-            &IndexMap<String, TypeId>,
+            &InstantiatedImplSig,
             &IndexSet<String>,
         ) -> Option<R>,
     ) -> Option<R> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
+        let signatures = Rc::clone(&self.tysys.signatures);
         let impl_refs = self.collect_trait_impl_refs(&self.impl_target(struct_name));
         for impl_ref in &impl_refs {
             let header = impl_header(&trait_env, impl_ref);
@@ -256,12 +264,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !trait_matches(&trait_name) {
                 continue;
             }
+            let impl_sig = signatures
+                .impl_sig(impl_ref.1)
+                .expect("the decl pass records every impl block's declaration facts")
+                .instantiate(&self.tysys.type_table, concrete_type_args);
             let declared = self
                 .tysys
                 .build_declared_type_params(&header.ty, &header.type_params);
-            let mapping =
-                TypeSystem::build_type_param_mapping(&header.ty, concrete_type_args, &declared);
-            if let Some(result) = project(self, impl_ref, &mapping, &declared) {
+            if let Some(result) = project(self, impl_ref, &impl_sig, &declared) {
                 return Some(result);
             }
         }
@@ -2494,6 +2504,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|m| {
                 let sig = scope
                     .tysys
+                    .signatures
                     .impl_method_sig(m.ast_id)
                     .expect("the decl pass records every impl-declared method's signature")
                     .clone();
@@ -2926,15 +2937,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             struct_name,
             &concrete_type_args,
             |trait_name| trait_name.starts_with(trait_base_name),
-            |s, impl_ref, mapping, declared| {
+            |s, impl_ref, impl_sig, declared| {
                 let trait_env = Arc::clone(&s.tysys.trait_env);
                 let header = impl_header(&trait_env, impl_ref);
-                let binding_ty = header
-                    .associated_types
-                    .iter()
-                    .find(|b| b.name == assoc_name)?
-                    .ty
-                    .clone();
+                // The binding was resolved in the impl's own module: an
+                // associated type (`type Output = f32x4`, `type Item =
+                // IterMap<…>`) names types as the defining impl sees them,
+                // not as the caller does.
+                let binding = *impl_sig.associated_types.get(assoc_name)?;
                 if !s.tysys.verify_impl_type_compatibility(
                     &header.ty,
                     &concrete_type_args,
@@ -2942,19 +2952,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ) {
                     return None;
                 }
-                // Resolve the binding's named types in the impl module's
-                // perspective: an associated type (`type Output = f32x4`,
-                // `type Item = IterMap<…>`) names types as the defining impl
-                // sees them, not as the caller does. Type parameters still
-                // substitute through `mapping`. Without this, a bare
-                // `[a, b, c, d]` coerced to `f32x4` at a call site that does
-                // not import the builder's types resolves the binding to an
-                // unrelated module (issue #1416 in reverse).
-                let impl_module = impl_ref.0.clone();
-                let mapping = mapping.clone();
-                Some(s.with_module_perspective_for(&impl_module, move |s| {
-                    s.resolve_type_with_param_mapping(&binding_ty, &mapping)
-                }))
+                Some(binding)
             },
         )
     }
@@ -3140,7 +3138,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             struct_name,
             &concrete_type_args,
             |found_trait_name| found_trait_name == trait_name,
-            |s, impl_ref, mapping, _declared| {
+            |s, impl_ref, impl_sig, _declared| {
                 // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>).
                 // Shared with `lookup_method_info_uncached` and
                 // `find_trait_impl_for_type_with_args`, so a bound-checking
@@ -3157,23 +3155,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
 
-                // Gather everything we need from the impl block up front, then
-                // drop the borrow on `self` before touching `trait_ctx.self_type`
-                // (which requires a mutable borrow). `Self` is NOT inserted into
-                // `mapping` — it is substituted through `trait_ctx.self_type`
-                // (set just below) via the `resolve_type_with_param_mapping`
-                // fallback, shared with `find_trait_method_for_type`.
-                let assoc_types: Vec<(String, ast::Type)> = header
-                    .associated_types
-                    .iter()
-                    .map(|a| (a.name.clone(), a.ty.clone()))
-                    .collect();
                 // The method's signature comes from the decl pass, resolved
                 // in the impl's frame; instantiating it with the receiver's
                 // type arguments is what the by-name re-resolution below used
                 // to approximate.
                 let method_header = header.methods.iter().find(|m| m.name == method_name)?;
-                let method_sig = s.tysys.impl_method_sig(method_header.ast_id)?;
+                let method_sig = s.tysys.signatures.impl_method_sig(method_header.ast_id)?;
                 let self_kind = method_sig.self_kind;
                 let rhs_index = usize::from(self_kind != ast::SelfKind::None);
                 let rhs_type = method_sig
@@ -3183,19 +3170,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(rhs_index)
                     .copied();
 
-                // Associated types are still AST here — the impl's own
-                // bindings become digest facts in S5c.
-                let output_type = s.with_self_type(base_type_id, |s| {
-                    let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::default();
-                    for (name, ty) in &assoc_types {
-                        let resolved_type = s.resolve_type_with_param_mapping(ty, mapping);
-                        assoc_type_map.insert(name.clone(), resolved_type);
-                    }
-                    assoc_type_map
-                        .get("Output")
-                        .copied()
-                        .unwrap_or(base_type_id)
-                });
+                // `Self` needs no binding: the impl's frame resolved it to
+                // the impl target, so instantiation yields the receiver.
+                let output_type = impl_sig
+                    .associated_types
+                    .get("Output")
+                    .copied()
+                    .unwrap_or(base_type_id);
 
                 Some(ArithmeticTraitInfo {
                     output_type,
@@ -3273,23 +3254,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             struct_name,
             &concrete_type_args,
             |trait_base| trait_base.starts_with(trait_base_name),
-            |s, impl_ref, mapping, declared| {
+            |s, impl_ref, impl_sig, declared| {
                 // The trait's index-type argument (`List<i32>` in `impl
                 // Index<List<i32>>`), returned for subscript coercion and used
                 // to disambiguate overlapping impls when `expected_index_type`
                 // is set.
                 let trait_env = Arc::clone(&s.tysys.trait_env);
                 let header = impl_header(&trait_env, impl_ref);
-                let index_type = {
-                    let trait_index_arg = header.trait_type.as_ref().and_then(|t| {
-                        if let ast::Type::Generic(g) = t {
-                            g.args.first().cloned()
-                        } else {
-                            None
-                        }
-                    });
-                    trait_index_arg.map(|arg| s.resolve_type_with_param_mapping(&arg, mapping))
-                };
+                let index_type = impl_sig.trait_type_args.first().copied();
                 if let Some(expected_idx_type) = expected_index_type
                     && let Some(resolved_trait_idx) = index_type
                     && resolved_trait_idx != expected_idx_type
@@ -3318,190 +3290,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
 
-                // Clone just the lightweight associated type bindings (not methods)
-                let assoc_bindings: Vec<(String, ast::Type)> = header
-                    .associated_types
-                    .iter()
-                    .map(|b| (b.name.clone(), b.ty.clone()))
-                    .collect();
                 let trait_name = s.get_type_name_full(header.trait_type.as_ref().unwrap());
                 // Find the method. Only its receiver shape is needed here —
                 // the indexing types come from the impl's associated-type
-                // bindings, which are still AST until S5c.
+                // bindings.
                 let method_header = header.methods.iter().find(|m| m.name == method_name)?;
-                let self_kind = s.tysys.impl_method_sig(method_header.ast_id)?.self_kind;
+                let self_kind = s
+                    .tysys
+                    .signatures
+                    .impl_method_sig(method_header.ast_id)?
+                    .self_kind;
                 let impl_source = s.impl_block_module_source(impl_ref);
 
-                // Set up associated type bindings (auto-restored on scope drop)
-                let mut scope = s.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
-                for (name, ty) in &assoc_bindings {
-                    let type_id = scope.resolve_type_with_param_mapping(ty, mapping);
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .assoc_type_bindings
-                        .insert(name.clone(), type_id);
-                }
-
-                // Get the associated type (Output or Input)
-                let assoc_type = scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .assoc_type_bindings
+                // The associated type (`Output` or `Input`) as the impl
+                // declared it, with this receiver's arguments in its slots.
+                let assoc_type = impl_sig
+                    .associated_types
                     .get(assoc_type_name)
                     .copied()
                     .unwrap_or(TypeTable::UNKNOWN);
 
-                drop(scope);
-
                 Some((assoc_type, self_kind, trait_name, impl_source, index_type))
             },
         )
-    }
-
-    /// Resolve a type, substituting type parameters using the provided mapping.
-    pub(super) fn resolve_type_with_param_mapping(
-        &mut self,
-        ty: &Type,
-        type_param_mapping: &IndexMap<String, TypeId>,
-    ) -> TypeId {
-        match ty {
-            Type::Named(n) => {
-                // Check if this is a type parameter that should be substituted
-                if let Some(&type_id) = type_param_mapping.get(&n.name) {
-                    return type_id;
-                }
-                // `Self` is the single cross-site substitution key: both this
-                // mapping-based elaborator and `resolve_type` (via
-                // `resolve_named_type`) read it from `trait_ctx.self_type`.
-                // Previously `find_arithmetic_trait_impl` eagerly inserted
-                // "Self" into the mapping and `find_trait_method_for_type`
-                // went through `trait_ctx.self_type`, which meant the two
-                // lookup families had parallel Self-substitution mechanisms
-                // that could drift.  Channeling Self through `trait_ctx`
-                // here closes that gap.
-                if n.name == "Self"
-                    && let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
-                {
-                    return self_type;
-                }
-                // Otherwise, resolve normally
-                self.resolve_type(ty)
-            }
-            Type::Generic(g) => {
-                // Resolve generic type with substituted arguments
-                let resolved_args: Vec<TypeId> = g
-                    .args
-                    .iter()
-                    .map(|arg| self.resolve_type_with_param_mapping(arg, type_param_mapping))
-                    .collect();
-
-                // Special-case Option to use its dedicated type
-                let base_name = &g.name;
-                if base_name == "Option" {
-                    let inner = resolved_args.first().copied().unwrap_or(TypeTable::UNKNOWN);
-                    self.tysys.type_table.borrow_mut().make_option(inner)
-                } else {
-                    // For generic types, create a generic instance.
-                    // Use the defining module source of the struct/variant to ensure the
-                    // resulting TypeId matches what resolve_type produces for the same type.
-                    // Falling back to current_module_source causes type identity mismatches when
-                    // the struct is defined in a different module.
-                    let module_source = self
-                        .lookup_variant_case(base_name.as_str())
-                        .map(|info| info.module_source.clone())
-                        .or_else(|| {
-                            self.lookup_struct_fields(base_name.as_str())
-                                .map(|info| info.module_source.clone())
-                        })
-                        .unwrap_or_else(|| self.current_module_source.clone());
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::GenericInstance {
-                            name: base_name.clone(),
-                            module_source,
-                            type_args: resolved_args,
-                        })
-                }
-            }
-            Type::Reference(inner) => {
-                let inner_id = self.resolve_type_with_param_mapping(inner, type_param_mapping);
-                self.tysys.type_table.borrow_mut().make_ref(inner_id)
-            }
-            Type::MutReference(inner) => {
-                let inner_id = self.resolve_type_with_param_mapping(inner, type_param_mapping);
-                self.tysys.type_table.borrow_mut().make_mut_ref(inner_id)
-            }
-            Type::NamespacedGeneric(n) => {
-                // T::AssocType where T maps to a concrete type → resolve the assoc type
-                if let Some(&concrete_type_id) = type_param_mapping.get(&n.namespace)
-                    && let Some(assoc_id) =
-                        self.resolve_assoc_type_from_concrete(concrete_type_id, &n.name)
-                {
-                    return assoc_id;
-                }
-                self.resolve_type(ty)
-            }
-            // For other types, fall back to normal resolution
-            _ => self.resolve_type(ty),
-        }
-    }
-
-    /// Resolve an associated type name from a concrete type's trait implementations.
-    /// Searches all trait impls for the struct and returns the `TypeId` of the associated type
-    /// binding with the given name, with type parameters substituted.
-    pub(super) fn resolve_assoc_type_from_concrete(
-        &mut self,
-        type_id: TypeId,
-        assoc_name: &str,
-    ) -> Option<TypeId> {
-        let struct_name = self.tysys.struct_name_for_type(type_id)?;
-        let concrete_type_args: Vec<TypeId> =
-            if let ResolvedType::GenericInstance { type_args, .. } =
-                self.tysys.type_table.borrow().get(type_id).clone()
-            {
-                type_args
-            } else {
-                Vec::new()
-            };
-
-        let impl_refs = self.collect_trait_impl_refs(&self.impl_target(&struct_name));
-
-        let trait_env = Arc::clone(&self.tysys.trait_env);
-        for impl_ref in &impl_refs {
-            let header = impl_header(&trait_env, impl_ref);
-            let binding_ty = match header
-                .associated_types
-                .iter()
-                .find(|b| b.name == assoc_name)
-            {
-                Some(b) => b.ty.clone(),
-                None => continue,
-            };
-
-            let declared_type_params = self
-                .tysys
-                .build_declared_type_params(&header.ty, &header.type_params);
-            let type_param_mapping = TypeSystem::build_type_param_mapping(
-                &header.ty,
-                &concrete_type_args,
-                &declared_type_params,
-            );
-
-            if !self.tysys.verify_impl_type_compatibility(
-                &header.ty,
-                &concrete_type_args,
-                &declared_type_params,
-            ) {
-                continue;
-            }
-
-            return Some(self.resolve_type_with_param_mapping(&binding_ty, &type_param_mapping));
-        }
-
-        None
     }
 
     /// Try to resolve a method call on an index expression using `IndexMut`.

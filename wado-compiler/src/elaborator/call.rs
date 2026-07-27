@@ -1206,7 +1206,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // defining module too.
         else if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
             && fallback != self.current_module_source
-            && self.tysys.function_sig(&fallback, effective_name).is_some()
+            && self
+                .tysys
+                .signatures
+                .function_sig(&fallback, effective_name)
+                .is_some()
         {
             (
                 Some(CalleeRef::new(fallback, effective_name.to_string())),
@@ -1474,7 +1478,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if !callee_module.is_entry_point()
-            && let Some(sig) = self.tysys.function_sig(callee_module, func_name)
+            && let Some(sig) = self.tysys.signatures.function_sig(callee_module, func_name)
             && let Some(return_type) = sig.decl.return_type
         {
             return return_type;
@@ -1504,9 +1508,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .or_else(|| self.tysys.trait_env.resource_decl_index.get(&canonical_key))?
             .clone();
         self.tysys
-            .all_effect_op_sigs
-            .get(&module_source)?
-            .get(&(canonical_key.1, operation.to_string()))
+            .signatures
+            .effect_op_sig(&module_source, canonical_key.1, operation.to_string())
             .cloned()
     }
 
@@ -1545,7 +1548,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Builtin functions: look up param types from core:builtin module
             if prefix == "builtin"
-                && let Some(sig) = self.tysys.function_sig(&ModuleSource::builtin(), suffix)
+                && let Some(sig) = self
+                    .tysys
+                    .signatures
+                    .function_sig(&ModuleSource::builtin(), suffix)
             {
                 return sig.decl.param_types.clone();
             }
@@ -1556,7 +1562,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         }
 
-        if let Some(sig) = self.tysys.function_sig(&self.current_module_source, name) {
+        if let Some(sig) = self
+            .tysys
+            .signatures
+            .function_sig(&self.current_module_source, name)
+        {
             return sig.decl.param_types.clone();
         }
 
@@ -1566,7 +1576,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(symbol) = self.symbols.lookup(&self.current_module_source, name) {
             let src = symbol.module_source().clone();
             let sym_name = symbol.name.clone();
-            if let Some(sig) = self.tysys.function_sig(&src, &sym_name) {
+            if let Some(sig) = self.tysys.signatures.function_sig(&src, &sym_name) {
                 return sig.decl.param_types.clone();
             }
         }
@@ -1575,7 +1585,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // declaring module (`default_scope_module`).
         if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
             && fallback != self.current_module_source
-            && let Some(sig) = self.tysys.function_sig(&fallback, name)
+            && let Some(sig) = self.tysys.signatures.function_sig(&fallback, name)
         {
             return sig.decl.param_types.clone();
         }
@@ -1670,6 +1680,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if let Some(sig) = self
             .tysys
+            .signatures
             .function_sig(&self.current_module_source, &ident.name)
         {
             return (
@@ -1683,7 +1694,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
-            if let Some(sig) = self.tysys.function_sig(&src, &name) {
+            if let Some(sig) = self.tysys.signatures.function_sig(&src, &name) {
                 return (
                     crate::elaborator::sig::Param::named_defaults(&sig.params),
                     Some(src),
@@ -1707,6 +1718,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let Some(sig) = self
             .tysys
+            .signatures
             .function_sig(&self.current_module_source, &ident.name)
         {
             return crate::elaborator::sig::Param::is_mut_flags(&sig.params);
@@ -1719,7 +1731,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
-            if let Some(sig) = self.tysys.function_sig(&src, &name) {
+            if let Some(sig) = self.tysys.signatures.function_sig(&src, &name) {
                 return crate::elaborator::sig::Param::is_mut_flags(&sig.params);
             }
         }
@@ -2355,7 +2367,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         callee: &CalleeRef,
     ) -> Option<(Vec<(String, TypeId)>, Vec<TypeId>, Option<TypeId>)> {
-        let sig = self.tysys.function_sig(&callee.module, &callee.name)?;
+        let sig = self
+            .tysys
+            .signatures
+            .function_sig(&callee.module, &callee.name)?;
         if sig.type_param_ids.is_empty() {
             return Some((vec![], vec![], None));
         }
@@ -2548,6 +2563,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             match self
                 .tysys
+                .signatures
                 .function_sig(&self.current_module_source, &ident.name)
             {
                 Some(sig) => sig.decl.param_types.clone(),
@@ -2559,7 +2575,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
-            match self.tysys.function_sig(&src, &name) {
+            match self.tysys.signatures.function_sig(&src, &name) {
                 Some(sig) => sig.decl.param_types.clone(),
                 None => return Vec::new(),
             }

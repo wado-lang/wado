@@ -340,8 +340,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &self.tysys.trait_env,
         )?;
         self.tysys
-            .all_associated_constants
-            .get(&(type_module, canon_key))
+            .signatures
+            .associated_constant(&type_module, canon_key)
             .cloned()
     }
 

@@ -140,13 +140,17 @@ What this deletes, structurally:
 - `&mut self` on the dispatch-query cluster: `lookup_method_info` and its
   callees become `impl TypeSystem` operations over `(ctx, scope, ids)`.
 
-Placement: `Signatures` is one struct, a field on `TypeSystem` (`Rc`, seeded
-from the stdlib snapshot like the `all_*` tables), keyed by the declaring
-node's globally-unique `AstId` with name-keyed indices layered on top.
-Membership rule: "the `TypeId`-level signature of a source declaration" —
-anything else is rejected. The existing flat `all_function_sigs` /
-`all_effect_op_sigs` / `all_globals` / `all_associated_constants` tables move
-into it, so the rule lives in one place instead of four.
+Placement: `Signatures` is one struct (`elaborator/sig.rs`, next to the
+`DeclSig` / `MethodSig` shapes it stores), a field on `TypeSystem` (`Rc`,
+assembled once from the per-module `ModuleDecls` digests between the decl and
+body passes), keyed by the declaring node's globally-unique `AstId` with
+name-keyed indices layered on top.
+
+Membership rule: one entry per source declaration, holding what that
+declaration says — its signature, or the declaration-level datum it is.
+Nothing computed from a use site, and nothing a later phase recomputes. AST
+survives inside an entry only where the value is irreducibly AST and the
+consumer is the walker or reify, never a query.
 
 `Signatures` deliberately does _not_ extend `TraitEnv`. The two are built in
 different phases over different alphabets: `TraitEnv::build` runs before any
@@ -180,12 +184,11 @@ The two genuinely AST-level helpers are
 count is the sharper completion metric: `loaded_modules` measures what was
 unplugged, AST-level substitution measures what was actually lowered.
 
-They outlive S5, though. Of their nine call sites only one resolves a method's
-parameter type; the other eight resolve an impl block's **associated-type
-bindings** (`type Item = …`) and the type arguments of its trait reference.
-Those are declaration facts too, and they belong in the digest as `TypeId`s —
-but as the impl's own bindings, not as method signatures. Digesting them is
-its own slice (S5c), and until it lands these two helpers stay.
+Of their nine call sites only one resolved a method's parameter type; the
+other eight resolved an impl block's **associated-type bindings**
+(`type Item = …`) and the type arguments of its trait reference. Those are
+declaration facts too, so they became the impl's own digest entry
+([`ImplSig`], S5c) rather than method signatures, and both helpers are gone.
 
 ### Scope — transient walk state with RAII-only mutation
 
@@ -285,9 +288,12 @@ declaration rather than at whichever use site reaches it first.
 - [x] S3 Decl work → decl pass: `resolve_module` split into
       `annotate_module_decls` / `annotate_module_bodies`, every decl pass
       running before any body walk.
-- [x] S4 Signatures stage A: `FunctionSig`, `all_globals`,
-      `all_effect_op_sigs`, `data_sections`, `assoc_type_bound_index`.
-      `clone_digests_from` is the one snapshot-seeding field list.
+- [x] S4 Signatures stage A: `FunctionSig`, globals, effect-op signatures,
+      data sections. `clone_digests_from` is the one snapshot-seeding field
+      list, and `Signatures` is the one program-wide struct they assemble
+      into. Associated-type *bounds* stayed on `TraitEnv`: they are
+      `ast::TraitBound`s indexed by name, which is `TraitEnv`'s alphabet,
+      not a resolved declaration fact.
 - [x] S4.5 Header-only consumers → `ImplHeader`. `impl_header` borrows
       through an `Arc<TraitEnv>` handle, so a header outlives the
       `&mut self` calls a lookup makes.
@@ -352,32 +358,70 @@ declaration rather than at whichever use site reaches it first.
       the offset the digest used instead of letting consumers count
       receiver arguments.
 - [ ] S5b-6 `MethodInfo` becomes `instantiate(sig, receiver_args)`
-      throughout.
+      throughout, and `StaticMethodSig` is deleted.
 
-**Where the easy conversions stop.** Every `loaded_modules` read still
-standing was probed and each is gated behind one of two structural changes,
-not behind more of the same work:
+      The blocker is not the impl side: `StaticMethodEntry.method_id`
+      already reaches a `MethodSig`, whose `decl.type_params` is the flat
+      impl-then-method slot list `infer_static_method_type_args` builds by
+      hand. It is the resource side. `resolve_effect_ops` already resolves
+      a resource method in its canonical frame — the resource's type
+      parameters in slots 0.., `Self` constructed over them, the receiver
+      synthesised as parameter 0 — but records it as a `TirEffectOp`, which
+      drops `self_kind`, per-parameter defaults, and the method's own
+      `AstId`. So dispatch re-resolves the same method from AST
+      (`find_resource_method_info`), under a scope fabricated from the
+      receiver's arguments.
 
-- _Bare-name keying._ `impl_index` / `all_impl_index` bucket by bare type
-  name, so `find_impl_assoc_types`, the trait-static lookup, and
-  `handlers.rs`'s handler discovery cannot drop their current-module scans
-  without changing which module wins. Gated on re-keying those indexes.
-- _Inference input, not signatures._ `StaticMethodSig` and the trait-method
-  resolution in `trait_query` consume type-param bounds, effect flags and
-  associated-type declarations to drive inference and build projections. A
-  signature digest does not answer those questions; absorbing them means
-  deciding whether bound metadata belongs in a digest at all.
+      The fix is one resolution, two views: `resolve_effect_ops` records a
+      `MethodSig` per method keyed by the method's `AstId`, carrying
+      `cm_name` and `is_async`, and the `TirEffectOp` the effect system
+      reads is derived from it. That removes a duplicate resolution instead
+      of adding a duplicate digest.
 
-So the next step is a decision about those two, not another conversion
-pass. Both guard fixtures (`static_method_same_name_priority`,
-`trait_impl_same_name_priority`) are in place for the first.
+**What the remaining `loaded_modules` reads are waiting on.** The
+trait-bound path (`find_method_in_trait_bounds`) is the one place a
+declaration-keyed digest genuinely cannot answer alone, and it splits three
+ways:
 
-- [ ] S5c Impl associated-type bindings and trait-reference type
-      arguments as `TypeId` facts on the impl entry, plus
-      `is_synthesize_request`. Deletes
-      `resolve_type_with_param_mapping` / `build_type_param_mapping`,
-      which S5a/S5b do not reach: eight of their nine call sites resolve
-      these bindings, not method signatures.
+- The trait method's `DeclSig`, with `Self` as slot 0 and the method's own
+  parameters after it. A declaration fact — S6.
+- The associated-type projections' `assoc_type_bindings`, computed from the
+  *caller's* where clause (`I: IntoIterator<Item = u8>` gives
+  `[("Item", u8)]`). Use-site data, so it becomes an explicit substitution
+  input, never a re-resolution.
+- The `ast::TraitBound` lists those projections are built from. Declaration
+  facts, but name-keyed and AST-shaped — `TraitEnv`'s alphabet, where
+  `assoc_type_bound_index` already keeps them.
+
+Binding `Self` to a slot needs one fix first:
+`TypeTable::substitute_type_params` returns an `AssocTypeProjection`
+unchanged when the substituted base is still a type parameter, so
+`Self::Item` with `Self := I` stays `Self::Item` instead of becoming
+`I::Item`. It must re-intern the projection over the new base.
+
+- [x] S5c `ImplSig` — a block's target and trait type arguments and its
+      associated-type bindings, resolved once in the block's own frame and
+      keyed by the block's `AstId`. `ImplSig::instantiate` is its one frame
+      exit, mirroring `DeclSig::instantiate`.
+      `resolve_type_with_param_mapping` / `build_type_param_mapping` are
+      deleted, so no query resolves an impl's AST.
+
+      `enter_impl_frame` splits out of `enter_impl_method_frame`: the impl's
+      slot numbering had no name of its own, and the bindings are numbered
+      against it, not against any one method's frame.
+
+      Two things fell out of removing the name-keyed mapping. A binding
+      naming `Self` needs no substitution key — the impl frame resolved
+      `Self` to the target, so instantiation yields the receiver. And the
+      mapping's "no declared params, so treat every `Named` argument as a
+      parameter" fallback is gone: whether a target position is a slot is
+      decided once, by the decl pass.
+
+      `is_synthesize_request` stays on `ImplHeader`. It is a syntactic
+      property of the block, readable before any type is interned, which is
+      exactly `TraitEnv`'s alphabet. An `ImplSig` *is* recorded for such a
+      block, so the digest is total over `impl_headers` and dispatch reads
+      it with `.expect` rather than a fallback.
 - [ ] S6 `Signatures` stage C — trait decls: method signatures + `has_body` +
       `Rc` bodies; convert `find_trait_decl_methods_with_module` /
       `find_method_in_trait_bounds`; reify reads default bodies from the
@@ -398,18 +442,22 @@ both passes resolve method parameter types, and that duplication is exactly
 what the digest exists to remove. S7 requires S4–S6, and converts one query at
 a time rather than as a single cut. S8–S9 are last.
 
-Progress metric, measured at S4's completion:
+Progress metric:
 
-| Metric                                           | S4 | Target |
-| ------------------------------------------------ | -- | ------ |
-| `loaded_modules` reads outside reify / decl pass | 25 | 0      |
-| AST-level type-param substitution helpers        | 2  | 0      |
-| — of which S5c (not S5a/S5b) removes             | 2  | 0      |
-| `get_impl_block` + callers                       | 15 | 0      |
-| `with_module_perspective` sites                  | 16 | 1      |
-| `suppress_reference_recording` sites             | 7  | 0      |
-| Manual scope save/restore clusters               | 0  | 0      |
-| `Elaborator` fields                              | 13 | 6      |
+| Metric                                           | S4 | S5c | Target |
+| ------------------------------------------------ | -- | --- | ------ |
+| `loaded_modules` reads outside reify / decl pass | 25 | 12  | 0      |
+| AST-level type-param substitution helpers        | 2  | 0   | 0      |
+| `get_impl_block` + callers                       | 15 | 0   | 0      |
+| `with_module_perspective` call sites             | 16 | 7   | 1      |
+| `suppress_reference_recording` call sites        | 7  | 2   | 0      |
+| Manual scope save/restore clusters               | 0  | 0   | 0      |
+| `Elaborator` fields                              | 13 | 13  | 6      |
+
+S5c removed no `loaded_modules` read: the associated-type queries reached
+the impl AST through `TraitEnv::impl_headers`, not through the module map.
+The twelve that remain are the resource / static-method sites S5b-6 takes
+and the trait-declaration sites S6 takes.
 
 Compile-time is a stated benefit (one signature resolution per declaration
 instead of per use site), so the baseline is captured before S5 rather than

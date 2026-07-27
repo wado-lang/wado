@@ -103,72 +103,13 @@ pub(crate) struct TypeSystem {
     /// afterwards.
     pub(crate) loaded_module_func_indices: Rc<IndexMap<ModuleSource, IndexMap<String, usize>>>,
 
-    /// Program-wide impl-associated constants, keyed by canonical identity
-    /// `(type-declaring module, "Type::CONST")` → `(impl-declaring module,
-    /// declared type, value expr)`. Canonical keys cannot collide across
-    /// modules; `lookup_associated_constant` on the walkers canonicalizes
-    /// the queried prefix the same way the decl pass did.
-    pub(crate) all_associated_constants:
-        Rc<IndexMap<(ModuleSource, String), (ModuleSource, TypeId, Expr)>>,
-
-    /// Program-wide interface / resource operation signatures, declaring
-    /// module → `(decl name, op name)` → `(param types, return type)`.
-    /// Read by `resolve_effect_op_signature`.
-    pub(crate) all_effect_op_sigs:
-        Rc<IndexMap<ModuleSource, IndexMap<(String, String), (Vec<TypeId>, Option<TypeId>)>>>,
-
-    /// Program-wide canonical free-function signatures
-    /// ([`super::sem::decls::FunctionSig`]), declaring module → name.
-    pub(crate) all_function_sigs:
-        Rc<IndexMap<ModuleSource, Rc<IndexMap<String, super::sem::decls::FunctionSig>>>>,
-
-    /// Program-wide global-variable declarations, declaring module →
-    /// name → `(declared type, is_mut)`.
-    pub(crate) all_globals: Rc<IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>>>,
-
-    /// Program-wide canonical signatures of `impl`-block methods, keyed by
-    /// the method's globally-unique `AstId`. `TraitEnv::impl_headers`
-    /// carries each method's `ast_id`, so a dispatch query goes header →
-    /// signature without ever reaching for the impl AST.
-    pub(crate) all_impl_method_sigs: Rc<IndexMap<crate::ast::AstId, super::sig::MethodSig>>,
-    /// Every module's `interface` / `resource` operation signatures, keyed by
-    /// the declaration's `AstId`. A decl-pass product, so a module's
-    /// operations are readable before its bodies are walked.
-    pub(crate) all_effect_ops: Rc<IndexMap<crate::ast::AstId, Vec<crate::tir::TirEffectOp>>>,
-
-    /// Per-module `__DATA__` section contents; modules without one have
-    /// no entry.
-    pub(crate) data_sections: Rc<IndexMap<ModuleSource, String>>,
+    /// Every source declaration's decl-pass facts — signatures, globals,
+    /// associated constants, data sections. See [`super::sig::Signatures`]
+    /// for the membership rule.
+    pub(crate) signatures: Rc<super::sig::Signatures>,
 }
 
 impl TypeSystem {
-    /// Canonical signature of the impl method declared at `ast_id`.
-    pub(crate) fn impl_method_sig(
-        &self,
-        ast_id: crate::ast::AstId,
-    ) -> Option<&super::sig::MethodSig> {
-        self.all_impl_method_sigs.get(&ast_id)
-    }
-
-    /// Operation signatures of the `interface` / `resource` declared at
-    /// `ast_id`, in any loaded module.
-    pub(crate) fn effect_ops(
-        &self,
-        ast_id: crate::ast::AstId,
-    ) -> Option<&[crate::tir::TirEffectOp]> {
-        self.all_effect_ops.get(&ast_id).map(Vec::as_slice)
-    }
-
-    /// Canonical signature of the free function `name` declared in
-    /// `module`.
-    pub(crate) fn function_sig(
-        &self,
-        module: &ModuleSource,
-        name: &str,
-    ) -> Option<&super::sem::decls::FunctionSig> {
-        self.all_function_sigs.get(module)?.get(name)
-    }
-
     /// Check if a name refers to a known type (struct, variant, enum,
     /// flags, newtype, or primitive). Uses the pre-built cache for O(1)
     /// lookup instead of scanning all module maps.

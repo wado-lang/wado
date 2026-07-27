@@ -285,36 +285,6 @@ pub(crate) fn find_trait_decl_assoc_types_with(
 }
 
 impl TypeSystem {
-    /// Build the mapping from an impl block's declared type-parameter names to
-    /// the concrete type arguments at a use site, by position. Pure over the
-    /// AST impl type and the concrete arg list — needs no type table.
-    pub(crate) fn build_type_param_mapping(
-        impl_ty: &Type,
-        concrete_type_args: &[TypeId],
-        declared_type_params: &IndexSet<String>,
-    ) -> IndexMap<String, TypeId> {
-        let mut mapping = IndexMap::default();
-
-        // Extract type parameter names from impl_ty, tracking positions
-        // Position tracking is needed to map type params to the correct concrete arg
-        if let Type::Generic(g) = impl_ty {
-            for (concrete_idx, arg) in g.args.iter().enumerate() {
-                if let Type::Named(n) = arg {
-                    let is_type_param = if declared_type_params.is_empty() {
-                        true // legacy: treat all Named as type params
-                    } else {
-                        declared_type_params.contains(&n.name)
-                    };
-                    if is_type_param && let Some(&type_id) = concrete_type_args.get(concrete_idx) {
-                        mapping.insert(n.name.clone(), type_id);
-                    }
-                }
-            }
-        }
-
-        mapping
-    }
-
     /// The traits the compiler auto-derives for eligible aggregate types
     /// (`struct` / `variant` / `enum` / generic instance) and exposes through
     /// method-call and operator dispatch, each paired with the method it

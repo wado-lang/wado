@@ -55,6 +55,7 @@ impl ModuleDecls {
         self.effect_op_sigs.clone_from(&other.effect_op_sigs);
         self.effect_ops.clone_from(&other.effect_ops);
         self.impl_method_sigs.clone_from(&other.impl_method_sigs);
+        self.impl_sigs.clone_from(&other.impl_sigs);
         self.function_sigs = std::rc::Rc::clone(&other.function_sigs);
         self.current_module_globals
             .clone_from(&other.current_module_globals);
@@ -97,6 +98,11 @@ pub(crate) struct ModuleDecls {
     /// method's own after them, `Self` bound to the impl target — so a use
     /// site instantiates instead of re-resolving the method AST.
     pub(crate) impl_method_sigs: IndexMap<crate::ast::AstId, MethodSig>,
+    /// Facts of this module's `impl` blocks that belong to the block rather
+    /// than to one method — its target and trait type arguments and its
+    /// associated-type bindings — resolved once in the block's own frame and
+    /// keyed by the block's `AstId`.
+    pub(crate) impl_sigs: IndexMap<crate::ast::AstId, super::super::sig::ImplSig>,
     /// Resolved operation signatures of this module's `interface` and
     /// `resource` declarations, keyed by the declaration's `AstId`.
     ///

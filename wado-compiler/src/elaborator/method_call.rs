@@ -1877,6 +1877,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .find(|(name, ..)| name == method_name)?;
         self.tysys
+            .signatures
             .effect_ops(*decl_id)?
             .iter()
             .find(|op| op.name == method_name)?
@@ -2146,7 +2147,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .static_method_index
             .get(&static_key)
             .and_then(|methods| methods.iter().find(|e| e.name == method_name))
-            .and_then(|e| self.tysys.impl_method_sig(e.method_id))
+            .and_then(|e| self.tysys.signatures.impl_method_sig(e.method_id))
             .map(|sig| sig.decl.return_type.unwrap_or(TypeTable::UNIT));
         if let Some(return_type) = indexed_return {
             return return_type;
@@ -2167,6 +2168,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .find(|(name, ..)| name == method_name)
                     .and_then(|(name, _, item_id, _)| {
                         self.tysys
+                            .signatures
                             .effect_ops(*item_id)?
                             .iter()
                             .find(|op| op.name == *name)
@@ -2310,7 +2312,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .static_method_index
             .get(&static_key)
             .and_then(|methods| methods.iter().find(|e| e.name == method_name))
-            .and_then(|e| self.tysys.impl_method_sig(e.method_id))
+            .and_then(|e| self.tysys.signatures.impl_method_sig(e.method_id))
             .map(|sig| sig.decl.param_types[sig.first_value_param()..].to_vec());
         if let Some(param_types) = indexed {
             return param_types;
@@ -2382,7 +2384,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .static_method_index
             .get(&static_key)
             .and_then(|methods| methods.iter().find(|e| e.name == method_name))
-            .and_then(|e| self.tysys.impl_method_sig(e.method_id))
+            .and_then(|e| self.tysys.signatures.impl_method_sig(e.method_id))
             .map(|sig| crate::elaborator::sig::Param::named_defaults(&sig.params));
         if let Some(defaults) = indexed {
             return defaults;

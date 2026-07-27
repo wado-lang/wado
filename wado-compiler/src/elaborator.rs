@@ -1098,8 +1098,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             &self.tysys.trait_env,
         )?;
         self.tysys
-            .all_associated_constants
-            .get(&(type_module, canon_key))
+            .signatures
+            .associated_constant(&type_module, canon_key)
             .cloned()
     }
 
@@ -1957,10 +1957,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for method in &impl_block.methods {
             // Records-only: reify emits the method `TirFunction`
             // from the recorded signature facts + the AST.
-            let recorded_sig =
-                scope.tysys.impl_method_sig(method.id).cloned().expect(
-                    "the decl pass records every impl-declared method's canonical signature",
-                );
+            let recorded_sig = scope
+                .tysys
+                .signatures
+                .impl_method_sig(method.id)
+                .cloned()
+                .expect("the decl pass records every impl-declared method's canonical signature");
             scope.resolve_method(
                 method,
                 &struct_name,

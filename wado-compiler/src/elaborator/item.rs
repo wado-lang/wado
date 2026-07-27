@@ -669,16 +669,21 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         params
     }
 
-    pub(super) fn enter_impl_method_frame(
+    /// Enter an `impl` block's own frame: its target type parameters bound
+    /// into the positional slots the block is abstract over, the enclosing
+    /// bounds restored, the trait reference's parameters bound to the impl's
+    /// arguments, and `Self` set to the impl target.
+    ///
+    /// The one definition of an impl's slot numbering. A method frame is this
+    /// plus the method's own parameters, numbered past these slots.
+    pub(super) fn enter_impl_frame(
         &mut self,
-        func: &Function,
         impl_type: &Type,
         trait_type: Option<&Type>,
         impl_is_concrete: bool,
         impl_declared_params: &[ast::GenericParam],
-    ) -> MethodFrame {
+    ) -> Vec<crate::tir::TirTypeParam> {
         let saved = &self.saved().clone();
-        let mut type_param_list = Vec::new();
         let impl_type_inner = match impl_type {
             ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
             other => other,
@@ -712,6 +717,89 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         if let Some(trait_t) = trait_type {
             self.bind_trait_type_params_from_impl(trait_t);
         }
+
+        let resolved_self_type = self.resolve_type(impl_type);
+        self.annotate_ctx.trait_ctx.self_type = Some(resolved_self_type);
+        impl_type_params
+    }
+
+    /// Resolve and record the `impl` block's own declaration facts — its
+    /// target and trait type arguments and its `type X = …;` bindings — in
+    /// the block's frame.
+    ///
+    /// Numbered against the same slots the block's method signatures are, so
+    /// a use site substitutes both through one alignment
+    /// ([`super::sig::ImplSig::slots`]).
+    fn record_impl_sig(&mut self, impl_block: &ast::ImplBlock, impl_is_concrete: bool) {
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.enter_impl_frame(
+            &impl_block.ty,
+            impl_block.trait_type.as_ref(),
+            impl_is_concrete,
+            &impl_block.type_params,
+        );
+        scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
+
+        let target_type_args = scope.resolve_written_type_args(&impl_block.ty);
+        let trait_type_args = impl_block
+            .trait_type
+            .as_ref()
+            .map(|t| scope.resolve_written_type_args(t))
+            .unwrap_or_default();
+
+        // In declaration order, and inserted into scope as we go, so a later
+        // `type B = Self::A` sees the earlier binding.
+        let mut associated_types = crate::hashmap::IndexMap::default();
+        for binding in &impl_block.associated_types {
+            let type_id = scope.resolve_type(&binding.ty);
+            scope
+                .annotate_ctx
+                .trait_ctx
+                .assoc_type_bindings
+                .insert(binding.name.clone(), type_id);
+            associated_types.insert(binding.name.clone(), type_id);
+        }
+
+        scope.sem.decls.impl_sigs.insert(
+            impl_block.id,
+            super::sig::ImplSig {
+                target_type_args,
+                trait_type_args,
+                associated_types,
+            },
+        );
+    }
+
+    /// The type arguments a generic type reference writes, resolved in the
+    /// current frame. A non-generic reference writes none.
+    fn resolve_written_type_args(&mut self, ty: &Type) -> Vec<TypeId> {
+        let Type::Generic(generic) = ty else {
+            return Vec::new();
+        };
+        generic
+            .args
+            .clone()
+            .iter()
+            .map(|arg| self.resolve_type(arg))
+            .collect()
+    }
+
+    pub(super) fn enter_impl_method_frame(
+        &mut self,
+        func: &Function,
+        impl_type: &Type,
+        trait_type: Option<&Type>,
+        impl_is_concrete: bool,
+        impl_declared_params: &[ast::GenericParam],
+    ) -> MethodFrame {
+        let mut type_param_list = Vec::new();
+        let impl_type_params = self.enter_impl_frame(
+            impl_type,
+            trait_type,
+            impl_is_concrete,
+            impl_declared_params,
+        );
 
         let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
         if effect_params.len() > 1 {
@@ -784,8 +872,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             }
         }
 
-        let resolved_self_type = self.resolve_type(impl_type);
-        self.annotate_ctx.trait_ctx.self_type = Some(resolved_self_type);
         MethodFrame {
             impl_type_params,
             method_type_params: type_param_list,
@@ -847,9 +933,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// instantiates a recorded signature instead of re-resolving the method
     /// AST under the *caller's* perspective (WEP 2026-07-10).
     pub(super) fn record_impl_method_sigs(&mut self, impl_block: &ast::ImplBlock) {
-        if impl_block.is_synthesize_request {
-            return;
-        }
         let mut block = self.enter_inherited_type_param_scope();
         block.annotate_ctx.trait_ctx.type_params.clear();
         block.annotate_ctx.trait_ctx.type_param_bounds.clear();
@@ -862,6 +945,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &impl_block.type_params,
             &block.current_module_source.clone(),
         );
+
+        // Recorded for a synthesis request too: it declares a target and a
+        // trait reference like any other block, and a total digest lets
+        // dispatch read one without a fallback. Its *methods* do not exist
+        // yet, so only the loop below is skipped.
+        block.record_impl_sig(impl_block, impl_is_concrete);
+        if impl_block.is_synthesize_request {
+            return;
+        }
 
         for method in &impl_block.methods {
             let mut frame_scope = block.enter_inherited_type_param_scope();
@@ -1940,6 +2032,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let async_op = decl_ref.and_then(|(_, decl_id)| {
                 scope
                     .tysys
+                    .signatures
                     .effect_ops(decl_id)
                     .and_then(|ops| ops.iter().find(|op| op.name == func.name))
                     .filter(|op| op.is_async)
