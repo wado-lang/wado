@@ -202,11 +202,6 @@ pub(crate) fn canonical_decl_key_with(
     (current_module_source.clone(), name.to_string())
 }
 
-/// Free-function form of
-/// [`Elaborator::find_trait_decl_methods_with_module`], callable from any
-/// module that has the inputs in hand. Used by reify's
-/// `reify_impl_default_methods` to enumerate the trait's default methods
-/// for an impl block.
 /// Resolve a trait declaration by name to its `TraitDecl` and owning module,
 /// local-first (a local trait shadows a same-named one elsewhere, issue #1298).
 fn find_trait_decl_with<'a>(
@@ -241,25 +236,27 @@ fn find_trait_decl_with<'a>(
     None
 }
 
-pub(crate) fn find_trait_decl_methods_with_module_with(
+/// The recorded declaration facts of the trait named `trait_name`, for a
+/// caller holding the inputs rather than an `Elaborator` — reify's
+/// default-method pass. Resolves the name through the declaration index and
+/// reads the digest, never the declaring module's AST.
+pub(crate) fn trait_sig_by_name_with<'a>(
     trait_name: &str,
     current_module_source: &ModuleSource,
-    current_module_items: &[ast::Item],
     imports: &super::sem::ModuleImports,
     symbols: &crate::symbol::SymbolTable,
     trait_env: &super::trait_env::TraitEnv,
-    loaded_modules: &IndexMap<ModuleSource, ast::Module>,
-) -> Option<(Vec<ast::Function>, ModuleSource)> {
-    find_trait_decl_with(
+    signatures: &'a super::sig::Signatures,
+) -> Option<&'a super::sig::TraitSig> {
+    let canonical_key = canonical_decl_key_with(
         trait_name,
         current_module_source,
-        current_module_items,
         imports,
         symbols,
         trait_env,
-        loaded_modules,
-    )
-    .map(|(decl, module)| (decl.methods.clone(), module))
+    );
+    let (_, decl_id) = trait_env.decl_index.get(&canonical_key)?;
+    signatures.trait_sig(*decl_id)
 }
 
 /// A trait declaration's associated-type declarations, resolved by name.
@@ -424,34 +421,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the digest the decl pass recorded rather than the declaring module's
     /// AST.
     pub(super) fn trait_sig_by_name(&self, trait_name: &str) -> Option<&super::sig::TraitSig> {
-        let canonical_key = canonical_decl_key_with(
+        trait_sig_by_name_with(
             trait_name,
             &self.current_module_source,
             &self.sem.imports,
             self.symbols,
             &self.tysys.trait_env,
-        );
-        let (_, decl_id) = self.tysys.trait_env.decl_index.get(&canonical_key)?;
-        self.tysys.signatures.trait_sig(*decl_id)
-    }
-
-    /// Like [`Self::find_trait_decl_methods`] but also returns the module that
-    /// owns the trait declaration, for callers that need to attribute a trait
-    /// *default* method body to its declaring module (e.g. diagnostics).
-    /// Fact keying needs no module qualifier: the body's nodes carry their
-    /// own globally-unique `AstId`s.
-    pub(super) fn find_trait_decl_methods_with_module(
-        &self,
-        trait_name: &str,
-    ) -> Option<(Vec<ast::Function>, ModuleSource)> {
-        find_trait_decl_methods_with_module_with(
-            trait_name,
-            &self.current_module_source,
-            self.current_module_items,
-            &self.sem.imports,
-            self.symbols,
-            &self.tysys.trait_env,
-            self.loaded_modules,
+            &self.tysys.signatures,
         )
     }
 

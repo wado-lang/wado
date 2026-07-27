@@ -250,11 +250,6 @@ impl MethodSig {
 pub(crate) struct TraitSig {
     /// The declaring module, for the call sites that name the trait's owner.
     pub(crate) module: ModuleSource,
-    /// The trait's slots in frame order, `Self` first.
-    pub(crate) type_params: Vec<(String, TypeId)>,
-    /// The trait's `type X;` declarations, in declaration order. Irreducibly
-    /// AST: a bound is re-resolved against each impl's bindings.
-    pub(crate) assoc_types: Vec<crate::ast::AssociatedTypeDecl>,
     /// The trait's methods, in declaration order, by name.
     pub(crate) methods: IndexMap<String, TraitMethod>,
 }

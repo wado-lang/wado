@@ -1979,14 +1979,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             (trait_name.as_ref(), impl_block.trait_type.as_ref())
         {
             let trait_decl_name = scope.get_type_name(trait_ast);
-            let (trait_methods, _) = scope
-                .find_trait_decl_methods_with_module(&trait_decl_name)
-                .unzip();
-            let default_methods: Vec<ast::Function> = trait_methods
-                .unwrap_or_default()
-                .into_iter()
-                .filter(|m| m.body.is_some() && !provided_method_names.contains(&m.name))
-                .collect();
+            let default_methods: Vec<std::rc::Rc<ast::Function>> = scope
+                .trait_sig_by_name(&trait_decl_name)
+                .map(|trait_sig| {
+                    trait_sig
+                        .default_methods()
+                        .filter(|(name, _)| {
+                            !provided_method_names
+                                .iter()
+                                .any(|provided| provided == name)
+                        })
+                        .map(|(_, body)| std::rc::Rc::clone(body))
+                        .collect()
+                })
+                .unwrap_or_default();
 
             // A default method's body is *foreign* AST owned by
             // the trait module; its nodes carry the trait

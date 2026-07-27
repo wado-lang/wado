@@ -1342,15 +1342,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let module = scope.current_module_source.clone();
-        scope.sem.decls.trait_sigs.insert(
-            trait_decl.id,
-            super::sig::TraitSig {
-                module,
-                type_params: decl_slots,
-                assoc_types: trait_decl.associated_types.clone(),
-                methods,
-            },
-        );
+        scope
+            .sem
+            .decls
+            .trait_sigs
+            .insert(trait_decl.id, super::sig::TraitSig { module, methods });
     }
 
     pub(super) fn resolve_effect_ops(
