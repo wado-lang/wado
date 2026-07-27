@@ -1462,7 +1462,16 @@ fn lower_lr_alt_suffix(
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx, false, &rule.name));
+            op = Op::Repeat(patch_repeat_op_caller_follow(
+                rep_op,
+                basic_follow,
+                basic_second,
+                &alt.elements,
+                i,
+                ctx,
+                false,
+                &rule.name,
+            ));
         }
         ops.push(op);
     }
@@ -2576,7 +2585,16 @@ fn lower_alt_body(
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx, reaches_rule_tail, &rule.name));
+            op = Op::Repeat(patch_repeat_op_caller_follow(
+                rep_op,
+                basic_follow,
+                basic_second,
+                &alt.elements,
+                i,
+                ctx,
+                reaches_rule_tail,
+                &rule.name,
+            ));
         }
         ops.push(op);
     }
@@ -2902,7 +2920,16 @@ fn lower_single_alt_group(
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             if let Repeat(rep_op) = &op {
                 let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-                op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx, false, rule_name));
+                op = Op::Repeat(patch_repeat_op_caller_follow(
+                    rep_op,
+                    basic_follow,
+                    basic_second,
+                    &alt.elements,
+                    i,
+                    ctx,
+                    false,
+                    rule_name,
+                ));
             }
             if se_is_repeat {
                 se = rebind_scan_repeat_caller_follow(se, basic_follow, &alt.elements, i, ctx, false);
@@ -3230,7 +3257,16 @@ fn lower_general_group(
                 let basic_follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
                 if let Repeat(rep_op) = &op {
                     let basic_second = compute_caller_follow_second(&alt.elements, ei + 1, ctx);
-                    op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, ei, ctx, false, rule_name));
+                    op = Op::Repeat(patch_repeat_op_caller_follow(
+                        rep_op,
+                        basic_follow,
+                        basic_second,
+                        &alt.elements,
+                        ei,
+                        ctx,
+                        false,
+                        rule_name,
+                    ));
                 }
                 if se_is_repeat {
                     se = rebind_scan_repeat_caller_follow(se, basic_follow, &alt.elements, ei, ctx, false);
@@ -3793,8 +3829,7 @@ pub fn non_greedy_static_undecided(
     }
     let continue_first = subtract_sets(body_first, follow_first);
     if !continue_first.is_empty() {
-        return continue_first.len() > BROAD_FIRST_SET_THRESHOLD
-            && body_first.len() > BROAD_FIRST_SET_THRESHOLD;
+        return continue_first.len() > BROAD_FIRST_SET_THRESHOLD && body_first.len() > BROAD_FIRST_SET_THRESHOLD;
     }
     if !body_second.is_empty() && !follow_second.is_empty() {
         return subtract_sets(body_second, follow_second).is_empty();

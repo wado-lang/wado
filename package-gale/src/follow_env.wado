@@ -243,7 +243,7 @@ fn contribute_for_element(
             let mut inner_outer = *local;
             // A `*` / `+` iteration can be followed by another, so the
             // inner also sees its own FIRST. An `?` cannot iterate.
-            if !(rep.kind matches { Optional }) {
+            if !rep.kind matches { Optional } {
                 accumulate_first_bits(ctx, &rep.element, intern, &mut inner_outer.bits);
             }
             contribute_for_element(&rep.element, ctx, &inner_outer, intern, env, changed);

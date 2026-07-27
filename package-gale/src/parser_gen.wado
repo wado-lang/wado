@@ -2005,7 +2005,9 @@ fn gen_scan_lr_call_with_prec(
     if mid_operand_gated {
         // Lockstep with the parse loop: the tournament must measure the same
         // climb the parse will take.
-        w.line(&"if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }");
+        w.line(
+            &"if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }",
+        );
     }
     w.else_begin(&"else");
     w.line(&"break;");
@@ -2618,7 +2620,13 @@ fn scan_non_greedy_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -
 fn scan_optional_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> bool {
     return re.body matches { RuleCall(_) }
         && re.body_scannable
-        && probe_decides(&re.inner_first, &re.caller_follow_first, &re.continuation_scan, re.continuation_scannable, ctx);
+        && probe_decides(
+        &re.inner_first,
+        &re.caller_follow_first,
+        &re.continuation_scan,
+        re.continuation_scannable,
+        ctx,
+    );
 }
 
 fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
@@ -3643,7 +3651,9 @@ fn gen_parse_fn_named(
             false;
         };
         let h_loop_dec = if h_atn_class { ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name)) } else { -1 };
-        gen_lr_fn(w, rule, lr_alts, lr_dispatch, ctx, fn_name, h_atn_class, h_loop_dec, lr_mid_operand_gated(lowered_rule));
+        gen_lr_fn(w, rule, lr_alts, lr_dispatch, ctx, fn_name, h_atn_class, h_loop_dec, lr_mid_operand_gated(
+            lowered_rule,
+        ));
         return;
     } else {
         let mut f = FnSpec::new(fn_name);
@@ -5173,7 +5183,17 @@ fn emit_lr_overlap(
                 } else {
                     w.else_begin(&`else if _sk == ${*tk}`);
                 }
-                emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rule, rk, scan_fn, labeled, ctx, nc, mid_operand_gated);
+                emit_lr_branch(
+                    w,
+                    &lr_alts[lr_dispatch.valid_lr_alts[group[k]]],
+                    rule,
+                    rk,
+                    scan_fn,
+                    labeled,
+                    ctx,
+                    nc,
+                    mid_operand_gated,
+                );
                 emitted.push(*tk);
             }
         }
@@ -5283,12 +5303,7 @@ fn non_greedy_probe_decides(r: &RepeatOp, ctx: &mut GenContext) -> bool {
 /// Open a non-greedy loop that exits only when exiting is viable. The caller
 /// emits the body and closes the block, so both emit walkers share one
 /// decision.
-fn begin_non_greedy_probe_loop(
-    w: &mut CodeWriter,
-    r: &RepeatOp,
-    ctx: &mut GenContext,
-    nc: &mut List<[String, i32]>,
-) {
+fn begin_non_greedy_probe_loop(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     w.begin(&"loop");
     w.line(&"if p.recovering { break; }");
     let verdict = dedup_name(&"ng_exit", nc);
@@ -6673,7 +6688,8 @@ fn gen_op_repeat_optional_rulecall(
 }
 
 fn optional_probe_decides(r: &RepeatOp, follow: &List<String>, ctx: &mut GenContext) -> bool {
-    return r.body_scannable && probe_decides(&r.body_first_set, follow, &r.continuation_scan, r.continuation_scannable, ctx);
+    return r.body_scannable
+        && probe_decides(&r.body_first_set, follow, &r.continuation_scan, r.continuation_scannable, ctx);
 }
 
 /// Whether a probe can decide this Repeat, from the parts the parse-side
@@ -6689,9 +6705,7 @@ fn probe_decides(
     continuation_scannable: bool,
     ctx: &mut GenContext,
 ) -> bool {
-    return continuation_scannable
-        && sets_overlap(body_first, follow)
-        && (!continuation.is_empty() || ctx.emit_follow());
+    return continuation_scannable && sets_overlap(body_first, follow) && (!continuation.is_empty() || ctx.emit_follow());
 }
 
 /// Greedy Optional that enters when entering stays viable. The cheap
@@ -8251,7 +8265,9 @@ fn gen_prediction_code_inner(
                                 let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
                                 if is_full {
                                     // Full scan: success guarantees parse success.
-                                    w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())}) >= 0`);
+                                    w.begin(
+                                        &`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())}) >= 0`,
+                                    );
                                     if ctx.is_trace() {
                                         w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
                                     }
@@ -8263,7 +8279,9 @@ fn gen_prediction_code_inner(
                                     w.end();
                                 } else if has_scan {
                                     // Partial scan: try parse, fall through on failure.
-                                    w.begin(&`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())}) >= 0`);
+                                    w.begin(
+                                        &`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())}) >= 0`,
+                                    );
                                     emit_spec_alt_try(
                                         w,
                                         &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
