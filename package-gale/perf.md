@@ -393,6 +393,12 @@ These are ATN-class prediction gaps tracked for compatibility, but each is
 about the scan/predict hot path. Full context in `TODO.md` ("Soundness and compatibility divergence") and
 `antlr4-compatibility.md` (prediction design, soundness invariants).
 
+**A memoised ATN / lookahead DFA is a last resort.** Two bullets below name it
+as the lever. It is unmeasured in Gale, but ANTLR4's lookahead DFA _is_ that
+cache and still parses this grammar and input at 216.991 ms/iter against Gale's
+2.535 (`benchmark/README.md`). Prefer the compiled scan and the runtime FOLLOW
+gate.
+
 - **LR operator-precedence chain** (`DropLoopEntryBranchInLRRule_4`):
   `scan_expr_lr_*` sees `and X` match and commits where ANTLR4 resolves the
   precedence via full-context prediction at the LR loop entry. The mid-operand
