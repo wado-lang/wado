@@ -1405,7 +1405,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // concrete functions. Recorded AST-side by the elaborator.
         let concrete_owner: Option<String> = facts.concrete_owner.clone();
 
-        // Same trait-decl lookup the combined walk does, off the digest.
         let trait_decl_name = super::Elaborator::<H>::get_type_name_static(trait_ast);
         let Some(trait_sig) = super::trait_query::trait_sig_by_name_with(
             &trait_decl_name,
@@ -1426,9 +1425,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect();
         let trait_module = trait_sig.module.clone();
 
-        // The declaring module's items, for the perspective the body is
-        // walked under. A module fact rather than a declaration one, and
-        // reify is the phase the membership rule lets read AST.
+        // The perspective a foreign default body is walked under: a module
+        // fact, so it stays on the AST rather than in a per-trait digest.
         let trait_items: &'a [ast::Item] = self
             .loaded_modules
             .get(&trait_module)

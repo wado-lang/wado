@@ -1212,13 +1212,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|ty| self.resolve_type(ty))
             .collect();
 
-        // Instantiate the recorded signature with the call site's type
-        // arguments, so a literal argument coerces to the parameter type the
-        // callee actually declares. `lookup_static_method_param_types`
-        // answered without any type arguments, leaving generic parameters
-        // (`T`, `List<T>`) abstract; it cannot be changed to fill them
-        // because variant-constructor param types must stay empty for the
-        // payload substitution path.
+        // `lookup_static_method_param_types` must keep answering without type
+        // arguments — variant-constructor param types stay empty for the
+        // payload substitution path — so the coercion target is built here.
         {
             let has_type_args = matches!(&static_call.target_type, ast::Type::Generic(_))
                 || !method_type_args.is_empty();
@@ -2164,11 +2160,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .filter(|m| m.default_body.is_some() && m.sig.self_kind == ast::SelfKind::None)
                 .cloned()
         {
-            // `Self` is the trait frame's slot 0, so filling it with the
-            // concrete receiver is what turns a default's declared return
-            // type into this call's. A `Self::Assoc` projection in that type
-            // resolves through the substitution against the impl's registered
-            // binding — no scope seeding needed.
+            // `Self` is the trait frame's slot 0; filling it with the
+            // concrete receiver also resolves any `Self::Assoc` in the type.
             let mut scope = self.enter_inherited_type_param_scope();
             let self_type_id = scope.resolve_named_type(struct_name, Span::default(), false);
             let result = default_method

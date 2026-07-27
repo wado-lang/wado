@@ -946,10 +946,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &block.current_module_source.clone(),
         );
 
-        // Recorded for a synthesis request too: it declares a target and a
-        // trait reference like any other block, and a total digest lets
-        // dispatch read one without a fallback. Its *methods* do not exist
-        // yet, so only the loop below is skipped.
+        // Recorded for a synthesis request too — it declares a target and a
+        // trait like any block — but its methods do not exist yet.
         block.record_impl_sig(impl_block, impl_is_concrete);
         if impl_block.is_synthesize_request {
             return;
@@ -1223,10 +1221,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
 
-        // `Self` is a slot, not a known type: a trait declaration says
-        // nothing about what implements it. Registering it as slot 0 is what
-        // turns `Self::Assoc` in a signature into a projection over that
-        // slot rather than an unresolved-type error.
         let self_slot = scope
             .tysys
             .type_table
@@ -1237,12 +1231,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ctx
             .type_params
             .insert("Self".to_string(), (0, self_slot));
-        // The slot is bounded by the trait being declared — that is what
-        // makes `Self` usable where the trait is required, as in
-        // `Iterator::map` returning `IterMap<Self, U>` against
-        // `struct IterMap<I: Iterator, U>`. Without the bound `Self` is a
-        // parameter that satisfies nothing and every such signature in the
-        // declaration fails its own well-formedness check.
+        // Bounded by the trait being declared, so `Self` satisfies it where
+        // a signature requires it (`Iterator::map` → `IterMap<Self, U>`).
         scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
             "Self".to_string(),
             vec![ast::TraitBound {
@@ -1395,9 +1385,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         });
 
-        // The declaration's own slots, in the order `register_generic_params`
-        // numbered them. Fn-bound parameters consume no slot, so only the
-        // real ones are listed — the density [`DeclSig`] documents.
+        // Fn-bound parameters consume no slot, so only real ones are listed
+        // — the density [`DeclSig`] documents.
         let decl_slots: Vec<(String, TypeId)> = scope
             .annotate_ctx
             .trait_ctx
@@ -1501,11 +1490,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .find_map(crate::ast::Attribute::cm_identifier);
 
-            // The same resolution, recorded as a method signature so
-            // dispatch reads it instead of re-resolving the declaration.
             // An effect operation takes no receiver, so its `self_kind` is
-            // `None` however the AST spelled it — the receiver parameter
-            // above was dropped for exactly that reason.
+            // `None` however the AST spelled it.
             let self_kind = if self_type.is_some() {
                 method
                     .params

@@ -620,12 +620,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => return None,
         };
 
-        // Inherent impls on the receiver's own declaration. A user-owned
-        // type may receive them from any same-package module, not just its
-        // declaring one (coherence permits it), so every module that hosts
-        // an `impl <struct_name>` is a candidate — disambiguated by type
-        // identity below so a same-named type elsewhere is never matched.
-        // Trait impls are handled separately.
+        // Coherence lets any same-package module host an `impl <struct_name>`,
+        // so every such module is a candidate; the identity guard below is
+        // what keeps a same-named type elsewhere from matching.
         if let Some(ref module_source) = struct_module_source {
             let entries: Vec<(ModuleSource, AstId)> = self
                 .tysys
@@ -638,11 +635,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if self.get_type_name(&header.ty) != struct_name {
                     continue;
                 }
-                // Identity guard: the impl's target type must be the
-                // receiver's own declaration. An impl in the receiver's home
-                // module declares it; otherwise the impl must import that
-                // same declaration, so its bare target name resolves to
-                // `module_source`.
+                // The impl's target must be the receiver's own declaration:
+                // its home module declares it, any other must import it.
                 let targets_receiver = impl_module == module_source
                     || self
                         .tysys
@@ -2376,10 +2370,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let trait_name_base = scope.get_type_name(&trait_type_for_name);
             let trait_name_str = scope.get_type_name_full(&trait_type_for_name);
             // The trait's frame numbers `Self` slot 0 and its own parameters
-            // after it, so the impl supplies its receiver and its trait
-            // arguments and the recorded signature yields this call's types.
-            // The method's own slots are left unfilled — inference solves
-            // them at the call site.
+            // after it, so the impl supplies its receiver then its trait
+            // arguments. The method's own slots are left for inference.
             if let Some(default_method) = scope
                 .trait_sig_by_name(&trait_name_base)
                 .and_then(|sig| sig.method(method_name))
@@ -2400,10 +2392,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 found_traits.push(TraitMethodMatch {
                     trait_name: trait_name_str.clone(),
                     method_info: MethodInfo {
-                        // Where the method's own slots start. The trait frame
-                        // numbers `Self` and the trait's parameters ahead of
-                        // them, so this is not 0 as it is for a receiver whose
-                        // impl declares nothing.
+                        // Where the method's own slots start — not 0, since
+                        // the trait frame numbers its own ahead of them.
                         impl_offset: Some(default_method.sig.declaring_slot_count),
                         return_type: instantiated.return_type,
                         self_kind,
@@ -2414,10 +2404,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         inherited_from_base: None,
                         cm_name: None,
                         is_ref_impl: false,
-                        // The method's own slots, which `declaring_slot_count`
-                        // separates from the trait's. Inference solves these;
-                        // leaving them unnamed is why `U` in
-                        // `Iterator::map<U>` had no handle to be solved by.
+                        // The method's own slots, for inference to solve.
                         method_type_param_ids: default_method.sig.decl.type_params
                             [(default_method.sig.declaring_slot_count as usize)
                                 .min(default_method.sig.decl.type_params.len())..]

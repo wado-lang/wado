@@ -25,10 +25,9 @@ use super::sem::decls::FunctionSig;
 /// (re-resolved per call site under the callee's scope, WEP 2026-04-11),
 /// associated-const value expressions, `__DATA__` contents.
 ///
-/// Everything here is assembled from the per-module
-/// [`super::sem::decls::ModuleDecls`] digests once every module's decl pass
-/// has run, so a body walk reads any module's declarations — its own
-/// included — without reaching for an AST.
+/// Assembled from the per-module [`super::sem::decls::ModuleDecls`] digests
+/// once every module's decl pass has run, so a body walk reads any module's
+/// declarations without reaching for an AST.
 #[derive(Default)]
 pub(crate) struct Signatures {
     /// Canonical free-function signatures, declaring module → name.
@@ -36,16 +35,11 @@ pub(crate) struct Signatures {
 
     /// Canonical method signatures, keyed by the method's globally-unique
     /// `AstId` — `impl`-block methods and `interface` / `resource`
-    /// operations alike. `TraitEnv::impl_headers` carries each impl
-    /// method's `ast_id` and [`Self::resource_method_ids`] names the
-    /// operations, so a dispatch query goes index → signature without ever
-    /// reaching for a declaration's AST.
+    /// operations alike. Dispatch goes index → signature, never AST.
     pub(crate) method_sigs: IndexMap<AstId, MethodSig>,
 
-    /// A declaration's `AstId` paired with an operation name → the
-    /// `AstId`. The name-keyed index over [`Self::method_sigs`] for
-    /// `interface` / `resource` operations, which callers reach by name
-    /// rather than by node.
+    /// The name-keyed index over [`Self::method_sigs`] for `interface` /
+    /// `resource` operations, which callers reach by name, not by node.
     pub(crate) resource_method_ids: IndexMap<(AstId, String), AstId>,
 
     /// Per-`impl`-block facts shared by the block's methods, keyed by the
@@ -241,11 +235,8 @@ impl MethodSig {
 /// What a `trait` declaration says, resolved once in the trait's own frame.
 ///
 /// The frame numbers `Self` as slot 0 and the trait's own type parameters
-/// from 1, so a method written in terms of `Self`, `Self::Assoc` or the
-/// trait's `T` instantiates by filling those slots — the same
-/// [`DeclSig::instantiate`] every other declaration uses. An `impl` reads a
-/// trait method by supplying its target as slot 0 and its trait arguments
-/// after it.
+/// from 1, so an `impl` reads a method back by supplying its target as slot
+/// 0 and its trait arguments after it.
 #[derive(Clone, Debug)]
 pub(crate) struct TraitSig {
     /// The declaring module, for the call sites that name the trait's owner.
@@ -260,9 +251,8 @@ pub(crate) struct TraitMethod {
     /// The signature in the trait's frame — [`TraitSig::type_params`] are its
     /// leading slots, the method's own follow.
     pub(crate) sig: MethodSig,
-    /// The default body, when the trait declares one. Irreducibly AST: it is
-    /// walked once per implementing block and reified per instantiation.
-    /// `None` marks a required method.
+    /// Irreducibly AST: walked once per implementing block and reified per
+    /// instantiation. `None` marks a required method.
     pub(crate) default_body: Option<Rc<crate::ast::Function>>,
 }
 
@@ -273,8 +263,7 @@ impl TraitSig {
     }
 
     /// The methods this trait provides a default body for, in declaration
-    /// order — what an `impl` block inherits for every name it does not
-    /// itself provide.
+    /// order.
     pub(crate) fn default_methods(
         &self,
     ) -> impl Iterator<Item = (&str, &Rc<crate::ast::Function>)> {

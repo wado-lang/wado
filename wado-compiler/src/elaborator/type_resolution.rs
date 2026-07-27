@@ -126,6 +126,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Which of `param_name`'s trait bounds declares `assoc_name`, making
+    /// `param_name::assoc_name` mean `<param_name as ThatTrait>::assoc_name`.
+    /// Resolution needs the qualifier: one type may implement two traits that
+    /// declare the same associated-type name.
+    fn bound_declaring_assoc_type(&self, param_name: &str, assoc_name: &str) -> Option<String> {
+        self.annotate_ctx
+            .trait_ctx
+            .type_param_bounds
+            .get(param_name)
+            .into_iter()
+            .flatten()
+            .map(|bound| bound.name.clone())
+            .find(|trait_name| {
+                self.find_trait_decl_assoc_type_decls(trait_name)
+                    .is_some_and(|decls| decls.iter().any(|d| d.name == assoc_name))
+            })
+    }
+
     /// Resolve a namespaced generic type like `ns::Type<T>` or `Self::Output`
     pub(super) fn resolve_namespaced_generic_type(
         &mut self,
@@ -166,11 +184,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return resolved;
                 }
             }
-            // In a `trait` declaration's own frame `Self` is a slot, not a
-            // known type, so `Self::Assoc` is a projection over that slot —
-            // exactly what `T::Assoc` becomes for any other parameter below.
-            // Instantiating the frame substitutes the slot, and the
-            // projection resolves against whatever filled it.
+            // In a trait's own frame `Self` is a slot, so `Self::Assoc` is a
+            // projection over it — what `T::Assoc` becomes for any parameter.
             if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
                 && matches!(
                     self.tysys.type_table.borrow().get(self_type),
@@ -181,17 +196,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let bound_names: Vec<String> =
                     assoc_bounds.iter().map(|b| b.name.clone()).collect();
                 let assoc_type_bindings = self.compute_assoc_type_bindings("Self", &assoc_bounds);
-                // The trait whose frame this is declares the associated type,
-                // so the projection is `<Self as ThatTrait>::Name` — the
-                // qualifier that tells it apart from a same-named associated
-                // type on another trait the eventual `Self` also implements.
-                let owning_trait = self
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_param_bounds
-                    .get("Self")
-                    .and_then(|bounds| bounds.first())
-                    .map(|bound| bound.name.clone());
+                let owning_trait = self.bound_declaring_assoc_type("Self", &namespaced.name);
                 return self
                     .tysys
                     .type_table
@@ -273,22 +278,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let assoc_type_bindings =
                 self.compute_assoc_type_bindings(&namespaced.namespace.clone(), &assoc_bounds);
 
-            // Which of the parameter's bounds declares this name. `T::Err`
-            // under `T: FromStr` is `<T as FromStr>::Err`, and recording the
-            // qualifier is what lets resolution pick `FromStr`'s `Err` over
-            // another trait's on a type that implements both.
-            let owning_trait = self
-                .annotate_ctx
-                .trait_ctx
-                .type_param_bounds
-                .get(namespaced.namespace.as_str())
-                .into_iter()
-                .flatten()
-                .map(|bound| bound.name.clone())
-                .find(|trait_name| {
-                    self.find_trait_decl_assoc_type_decls(trait_name)
-                        .is_some_and(|decls| decls.iter().any(|d| d.name == namespaced.name))
-                });
+            let owning_trait =
+                self.bound_declaring_assoc_type(&namespaced.namespace, &namespaced.name);
             return self
                 .tysys
                 .type_table

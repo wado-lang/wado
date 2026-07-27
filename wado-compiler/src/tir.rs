@@ -152,9 +152,6 @@ impl SubstitutionContext {
             } => {
                 // Substitute the underlying type param to get the concrete type
                 let concrete_id = self.substitute(param_id, type_table);
-                // Direct lookup first, qualified by the declaring trait when
-                // the projection recorded one — two traits may declare the
-                // same associated-type name on this type.
                 if let Some(resolved) =
                     type_table.resolve_assoc_type_qualified(concrete_id, &owning_trait, &assoc_name)
                 {
@@ -446,13 +443,10 @@ pub enum ResolvedType {
         param_id: TypeId,
         /// Name of the associated type (e.g., `"Value"` in `T::Value`)
         assoc_name: String,
-        /// The trait that declares `assoc_name`, when the projection was
-        /// built somewhere that knew it — `Self::Err` inside `trait FromStr`
-        /// is `<Self as FromStr>::Err`. Resolution qualifies by this, which
-        /// is the only way to tell two traits' same-named associated types
-        /// apart on a type that implements both. `None` where the builder
-        /// had no trait in hand; resolution then requires the name to be
-        /// unambiguous.
+        /// The trait declaring `assoc_name`: `Self::Err` inside
+        /// `trait FromStr` is `<Self as FromStr>::Err`. `None` where the
+        /// builder had no trait, which makes resolution require the name to
+        /// be unambiguous.
         owning_trait: Option<String>,
         /// Trait bounds on this associated type (from the trait declaration)
         bounds: Vec<String>,
@@ -633,11 +627,8 @@ pub struct TypeTable {
     /// `(concrete_type_id, declaring trait, assoc_name)` → `resolved_type_id`.
     /// Populated when impl blocks with associated type bindings are processed.
     ///
-    /// The trait is part of the key because one type may implement several
-    /// traits declaring the same associated-type name — `f32` has both
-    /// `FromStr::Err` and `LenientFromStr::Err`. Keyed without it, the later
-    /// registration answers for the earlier and the wrong type reaches the
-    /// call site with no diagnostic.
+    /// Keyed by trait because one type may implement several declaring the
+    /// same name — `f32` has both `FromStr::Err` and `LenientFromStr::Err`.
     assoc_type_resolutions: IndexMap<(TypeId, String, String), TypeId>,
     /// Generic associated type definitions:
     /// `(base decl, declaring trait, assoc_name)` → `TypeId`.
@@ -1976,10 +1967,9 @@ impl TypeTable {
     /// Resolve an associated type named `assoc_name` on `concrete_id`
     /// without naming a trait.
     ///
-    /// Answers only when exactly one implemented trait declares the name.
-    /// Two would make the answer a coin flip, and a silently wrong type is
-    /// worse than an unresolved one — the caller is expected to fall back to
-    /// [`Self::resolve_assoc_type_of_trait`] with the trait it knows.
+    /// Answers only when exactly one implemented trait declares the name;
+    /// two make it a coin flip, so the caller must qualify with
+    /// [`Self::resolve_assoc_type_of_trait`] instead.
     pub fn resolve_assoc_type(&self, concrete_id: TypeId, assoc_name: &str) -> Option<TypeId> {
         let mut found = None;
         for ((type_id, _, name), &resolved) in &self.assoc_type_resolutions {
@@ -2383,12 +2373,8 @@ impl TypeTable {
                         return resolved;
                     }
                 }
-                // The base is still parametric (or names no binding yet), so
-                // the projection stands — but over the substituted base.
-                // `Self::Item` under `Self := I` is `I::Item`; keeping the old
-                // base would silently project through the caller's parameter.
-                // `bounds` and `assoc_type_bindings` describe the associated
-                // type, not the base, so they carry over unchanged.
+                // Unresolved: the projection stands over the *substituted*
+                // base — `Self::Item` under `Self := I` is `I::Item`.
                 if substituted_base == param_id {
                     type_id
                 } else {
