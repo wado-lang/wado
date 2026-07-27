@@ -2058,6 +2058,12 @@ fn rebind_scan_repeat_caller_follow(
                 continuation_scannable = true;
             }
         }
+        let static_exit_undecided = non_greedy_static_undecided(
+            &re.inner_first,
+            &caller_follow_first,
+            &scan_repeat_body_second(&alt_elements[index], ctx),
+            &compute_caller_follow_second(alt_elements, index + 1, ctx),
+        );
         return ScanElement::Repeat(ScanRepeatElement {
             kind: re.kind,
             body: re.body,
@@ -2067,9 +2073,20 @@ fn rebind_scan_repeat_caller_follow(
             non_greedy: re.non_greedy,
             continuation_scan,
             continuation_scannable,
+            static_exit_undecided,
         });
     }
     return se;
+}
+
+/// `body_second_position_first` for the Repeat at `elem`, matching what
+/// `lower_repeat_op` stamped on the parse-side op.
+fn scan_repeat_body_second(elem: &Element, ctx: &mut GenContext) -> List<String> {
+    return match elem {
+        Repeat(rep) => compute_body_second_position_first(&rep.element, ctx),
+        Label(lab) => scan_repeat_body_second(&lab.element, ctx),
+        TokenRef(_) | Literal(_) | RuleRef(_) | Group(_) | Wildcard(_) | Not(_) => [],
+    };
 }
 
 /// Scan mirror of the elements after `index`, or `null` when any of them is
@@ -3635,6 +3652,35 @@ fn compute_non_greedy_strategy(inner: &Element, outer_follow: &List<String>, ctx
     });
 }
 
+/// A first set larger than this is treated as "matches almost anything"
+/// (e.g. `name+?` where `name` covers every keyword): single-token lookahead
+/// cannot tell the inner from the continuation.
+pub global BROAD_FIRST_SET_THRESHOLD: i32 = 20;
+
+/// True when no lookahead separates a non-greedy loop's body from its
+/// continuation, so the static exit condition collapses to the minimum
+/// match. Stamped on the op and its scan mirror, and consumed by emit's
+/// `compute_non_greedy_condition`, so all three decide on one answer.
+pub fn non_greedy_static_undecided(
+    body_first: &List<String>,
+    follow_first: &List<String>,
+    body_second: &List<String>,
+    follow_second: &List<String>,
+) -> bool {
+    if body_first.is_empty() {
+        return false;
+    }
+    let continue_first = subtract_sets(body_first, follow_first);
+    if !continue_first.is_empty() {
+        return continue_first.len() > BROAD_FIRST_SET_THRESHOLD
+            && body_first.len() > BROAD_FIRST_SET_THRESHOLD;
+    }
+    if !body_second.is_empty() && !follow_second.is_empty() {
+        return subtract_sets(body_second, follow_second).is_empty();
+    }
+    return true;
+}
+
 /// Rebuild a `RepeatOp` with fresh `caller_follow_first` /
 /// `caller_follow_second` while preserving every other field. Used by
 /// every alt-walker post-pass — `lower_alt_body`, `lower_lr_alt_suffix`,
@@ -3655,12 +3701,19 @@ fn patch_repeat_op_caller_follow(
         continuation_scan = scan;
         continuation_scannable = true;
     }
+    let static_exit_undecided = non_greedy_static_undecided(
+        &rep_op.body_first_set,
+        &caller_follow_first,
+        &rep_op.body_second_position_first,
+        &caller_follow_second,
+    );
     return RepeatOp {
         ..*rep_op,
         caller_follow_first,
         caller_follow_second,
         continuation_scan,
         continuation_scannable,
+        static_exit_undecided,
     };
 }
 

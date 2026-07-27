@@ -1733,7 +1733,19 @@ fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_x(tokens, pos, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_A {
+    loop {
+        let ep = pos;
+        let mut ng_exit: bool = false;
+        ng_exit_scan: {
+            pos = scan_y(tokens, pos, 0);
+            if pos < 0 { break ng_exit_scan; }
+            if pos >= tokens.len() || tokens[pos] != TK_EOF { break ng_exit_scan; }
+            pos += 1;
+            ng_exit = true;
+        }
+        pos = ep;
+        if ng_exit { break; }
+        if !(pos < tokens.len() && tokens[pos] == TK_A) { break; }
         let sp = pos;
         pos = scan_x(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }

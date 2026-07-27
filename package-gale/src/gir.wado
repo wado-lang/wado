@@ -691,6 +691,11 @@ pub struct RepeatOp {
     /// right question at the position it ended on. False keeps emit on the
     /// static condition.
     pub continuation_scannable: bool = false,
+    /// `non_greedy_static_undecided` for this Repeat — no lookahead
+    /// separates the loop body from the continuation. Stamped rather than
+    /// recomputed so the two emit walkers and the scan side cannot answer
+    /// it differently.
+    pub static_exit_undecided: bool = false,
     /// Emit a runtime caller-FOLLOW yield gate
     /// (`if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break }`)
     /// at this iteration's entry. Set by lower when the Repeat sits at a
@@ -960,11 +965,13 @@ pub struct ScanRepeatElement {
     /// tokens until the exit set (`caller_follow_first`) or EOF, mirroring
     /// the parse-side `compute_non_greedy_condition`.
     pub non_greedy: bool,
-    /// Mirrors `RepeatOp.continuation_scan` / `continuation_scannable`, so a
-    /// probed Repeat decides the same on both sides — the tournament measures
-    /// scan lengths against what the parse consumes.
+    /// Mirrors `RepeatOp.continuation_scan` / `continuation_scannable` /
+    /// `static_exit_undecided`, so a probed Repeat decides the same on both
+    /// sides — the tournament measures scan lengths against what the parse
+    /// consumes.
     pub continuation_scan: List<ScanElement> = [],
     pub continuation_scannable: bool = false,
+    pub static_exit_undecided: bool = false,
 }
 
 pub struct ScanGroupElement {
