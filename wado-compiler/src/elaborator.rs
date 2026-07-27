@@ -1855,15 +1855,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 } else {
                     // For generic impls, register the definition so the monomorphizer
                     // can resolve associated types for GenericInstance types.
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .register_generic_assoc_type_def(
-                            struct_name.clone(),
-                            binding.name.clone(),
-                            type_id,
-                        );
+                    let base_decl = scope.tysys.type_table.borrow().decl_of_type(target_type_id);
+                    if let Some(base_decl) = base_decl {
+                        scope
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .register_generic_assoc_type_def(
+                                base_decl,
+                                binding.name.clone(),
+                                type_id,
+                            );
+                    }
                 }
             }
         }

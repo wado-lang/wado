@@ -410,6 +410,11 @@ where T: ReflectStruct<FieldTypes = [..F]>
 - [x] `ReflectStruct` trait: synthesize per-struct impl (`type_name`, `members`,
       `wire_name_policy`, and the `FieldTypes` / `Members` associated tuples) in the
       synthesis pass
+- [x] `ReflectStruct` over a generic struct: one generic impl over `S<T, …>`,
+      substituted per instantiation; value bridges minted post-monomorphize
+- [x] `ReflectVariant` over a generic variant: the case bridges and the tag read
+      are minted per instantiation, since a generic variant is never
+      instantiated into its own declaration
 - [ ] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
 - [ ] Error messages: show call site, element index, and body location
 - [x] Tuple `Eq`: monomorphizer expands `==`/`!=` on concrete tuples to element-wise

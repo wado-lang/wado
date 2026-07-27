@@ -432,11 +432,11 @@ impl Monomorphizer {
             for mut concrete in batch {
                 self.rewrite_types_in_function(&mut concrete, &mut module.type_table.borrow_mut());
                 if let Some(body) = &concrete.body {
-                    let type_table = module.type_table.borrow();
+                    let mut type_table = module.type_table.borrow_mut();
                     let mut collector = func_inst::InstantiationCollector {
                         mono: self,
                         generic_functions: &scannable_generic_functions,
-                        type_table: &type_table,
+                        type_table: &mut type_table,
                     };
                     use crate::tir_visitor::TirRefVisitor;
                     collector.visit_block(body);

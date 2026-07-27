@@ -1,0 +1,16 @@
+struct Pair<T> { l: T, r: T }
+
+variant Holder { One(Pair<i32>), None }
+
+test "a variant with a generic-struct payload inspects" {
+    let h = Holder::One(Pair { l: 1, r: 2 });
+    assert `${h:?}` == "Holder::One(Pair { l: 1, r: 2 })";
+}
+
+test "a bare generic struct inspects" {
+    let p = Pair { l: "a", r: "b" };
+    assert `${p:?}` == `Pair { l: "a", r: "b" }`;
+}
+
+__DATA__
+{"test": {}}

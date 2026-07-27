@@ -1,0 +1,19 @@
+use { make } from "./sub/reflect_factory_dep.wado";
+
+trait Tagged {
+    fn tag(&self) -> String;
+}
+
+impl<T: ReflectStruct> Tagged for T {
+    fn tag(&self) -> String {
+        return "struct";
+    }
+}
+
+test "a struct reached only through a factory satisfies the bound" {
+    let v = make();
+    assert v.tag() == "struct";
+}
+
+__DATA__
+{"test": {}}

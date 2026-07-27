@@ -921,11 +921,78 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // Pre-pass: register generic associated type defs from ALL modules before any module
-        // is resolved. This ensures that when resolving module X, it can look up associated
-        // types from module Y's impl blocks even if Y hasn't been processed yet in the main
-        // second pass (e.g., user module is sorted before prelude modules).
-        Self::register_all_generic_assoc_type_defs(modules, &type_table, &stdlib_set);
+        // An `impl` method whose parameter count differs from the trait's is
+        // never rejected downstream — the call is built to the trait's arity
+        // and only fails Wasm validation — so compare the two here, where every
+        // declaration and impl is in hand.
+        //
+        // Resolving the impl's trait name through imports needs machinery this
+        // pre-pass lacks. Take the declaration the impl's own module provides,
+        // else the only one bearing the name; a name several modules declare is
+        // left alone rather than matched against the wrong trait.
+        let mut trait_decls: IndexMap<(&ModuleSource, &str), &ast::TraitDecl> = IndexMap::default();
+        let mut decls_named: IndexMap<&str, usize> = IndexMap::default();
+        for (module_source, module) in modules {
+            for item in &module.items {
+                if let Item::Trait(t) = item {
+                    trait_decls.insert((module_source, t.name.as_str()), t);
+                    *decls_named.entry(t.name.as_str()).or_insert(0) += 1;
+                }
+            }
+        }
+        for (module_source, module) in modules {
+            if !super::trait_env::is_user_local(module_source) {
+                continue;
+            }
+            for item in &module.items {
+                let Item::Impl(impl_block) = item else {
+                    continue;
+                };
+                let Some(trait_type) = &impl_block.trait_type else {
+                    continue;
+                };
+                let trait_name = super::trait_env::get_type_name_static(trait_type);
+                let decl = trait_decls
+                    .get(&(module_source, trait_name.as_str()))
+                    .or_else(|| {
+                        (decls_named.get(trait_name.as_str()) == Some(&1))
+                            .then(|| {
+                                trait_decls
+                                    .iter()
+                                    .find(|((_, n), _)| *n == trait_name.as_str())
+                                    .map(|(_, d)| d)
+                            })
+                            .flatten()
+                    });
+                let Some(decl) = decl else {
+                    continue;
+                };
+                for method in &impl_block.methods {
+                    let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
+                        continue;
+                    };
+                    let arity = |f: &ast::Function| {
+                        f.params
+                            .iter()
+                            .filter(|p| p.self_kind == ast::SelfKind::None)
+                            .count()
+                    };
+                    let (expected, found) = (arity(declared), arity(method));
+                    if expected != found {
+                        let _ = logger.error_in(
+                            module_source,
+                            TypeError::TraitMethodArityMismatch {
+                                trait_name: trait_name.clone(),
+                                method_name: method.name.clone(),
+                                expected,
+                                found,
+                                span: method.name_span,
+                            },
+                        );
+                    }
+                }
+            }
+        }
 
         // Wrap all_* maps in Rc for cheap sharing across per-module elaborators
         let all_newtypes = Rc::new(all_newtypes);
@@ -1106,6 +1173,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // can resolve a `AstId` to a decl-backed type without running the
         // lower phase.
         Self::register_symbol_key_type_indices(symbols, &type_table);
+
+        // Register generic associated type defs from ALL modules before any
+        // module is resolved, so resolving module X can look up an associated
+        // type from module Y's impl even when Y is processed later. Keyed by
+        // the declaring `AstId`, so it must follow the index above.
+        Self::register_all_generic_assoc_type_defs(modules, &type_table, &stdlib_set);
 
         // Seed per-module semantics with the snapshot's pre-resolved stdlib
         // entries so the LSP edges remain consistent and the body walk on
@@ -3475,11 +3548,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         _ => continue,
                     };
 
-                    type_table.borrow_mut().register_generic_assoc_type_def(
-                        struct_name.clone(),
-                        binding.name.clone(),
-                        type_param_id,
-                    );
+                    // The impl need not live in the type's module, so fall
+                    // back to every loaded module before giving up.
+                    let base_decl = {
+                        let tt = type_table.borrow();
+                        tt.decl_by_name(&struct_name, module_source).or_else(|| {
+                            modules
+                                .keys()
+                                .find_map(|ms| tt.decl_by_name(&struct_name, ms))
+                        })
+                    };
+                    if let Some(base_decl) = base_decl {
+                        type_table.borrow_mut().register_generic_assoc_type_def(
+                            base_decl,
+                            binding.name.clone(),
+                            type_param_id,
+                        );
+                    }
                 }
             }
         }

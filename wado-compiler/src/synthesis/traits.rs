@@ -112,18 +112,18 @@ struct TraitPair {
     target_trait: String,
     /// e.g. `"fmt"` or `"fmt_alt"`.
     target_method: String,
-    /// Trait the fallback delegates to (`"Inspect"` or `"InspectAlt"`).
+    /// Trait the fallback delegates to (`"Display"`).
     delegate_trait: String,
-    /// Method on the delegate trait (`"inspect"` or `"inspect_alt"`).
+    /// Method on the delegate trait (`"fmt"`).
     delegate_method: String,
 }
 
 impl TraitPair {
     fn display_alt(names: &TraitsStdlibNames) -> Self {
-        // `DisplayAlt` delegates to `Display` (which in turn delegates to
-        // `Inspect`), not to `InspectAlt`: the alternate *display* of a value
-        // defaults to its plain display, mirroring Rust's `{:#}` vs `{:#?}`.
-        // Pretty-printing stays on the inspect side via `InspectAlt`.
+        // The alternate *display* of a value defaults to its plain display,
+        // mirroring Rust's `{:#}` vs `{:#?}`; pretty-printing stays on
+        // `InspectAlt`. `Display` itself has no fallback — a type without an
+        // `impl Display` is a `${x}` error pointing at `${x:?}`.
         Self {
             target_trait: names.display_alt.clone(),
             target_method: names.display_alt_method.clone(),
@@ -434,12 +434,9 @@ pub fn synthesize_reflect(project: &mut Package) {
         .compiler_items()
         .trait_name(CompilerItem::ReflectStruct)
         .to_string();
-    let requested: IndexSet<(String, ModuleSource, String)> = first_module
-        .type_table
-        .borrow()
-        .bound_driven_synth_requests(|trait_name| trait_name == reflect_trait_name)
-        .into_iter()
-        .collect();
+    // Not demand-driven: `TypeTable::is_reflect_eligible` decides coverage, and
+    // the bound check reads the same predicate.
+    let requested: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
 
     let mut pending: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
     for module in project.tir_modules.values_mut() {
@@ -479,6 +476,14 @@ fn generate_struct_reflect_impls(
 
     let mut generated = Vec::new();
     for target in &targets {
+        let tt = module.type_table.borrow();
+        let eligible = tt
+            .find_decl_type_by_name(&target.name, &module_source)
+            .is_some_and(|type_id| tt.is_reflect_eligible(type_id));
+        drop(tt);
+        if !eligible {
+            continue;
+        }
         let methods = generate_struct_reflect_methods(
             &module.type_table,
             &env,
@@ -487,7 +492,7 @@ fn generate_struct_reflect_impls(
             target,
         );
         generated.extend(methods.into_iter().map(|f| Rc::new(RefCell::new(f))));
-        ctx.record_impl(&target.0, reflect_trait_name);
+        ctx.record_impl(&target.name, reflect_trait_name);
     }
 
     module.functions.extend(generated);
@@ -504,35 +509,41 @@ struct ReflectFieldInfo {
     has_default: bool,
 }
 
-/// A struct selected for `ReflectStruct` synthesis: its name, per-field info, the
-/// struct's `#[wire(name_policy)]`, and declaration span.
-type ReflectTarget = (String, Vec<ReflectFieldInfo>, Option<String>, Span);
+/// A struct selected for `ReflectStruct` synthesis. `type_params` is empty for
+/// a plain struct; a generic one gets a single impl over `S<T, …>`.
+struct ReflectTarget {
+    name: String,
+    type_params: Vec<TirTypeParam>,
+    fields: Vec<ReflectFieldInfo>,
+    wire_name_policy: Option<String>,
+    span: Span,
+}
 
 /// Select the structs in `module` that need a synthesized `ReflectStruct` impl:
-/// every non-generic, non-monomorphized struct (all are unconditionally
-/// `ReflectStruct`-derived).
+/// every declared struct, generic or not. Monomorphized instances inherit the
+/// generic impl through substitution.
 fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
     module
         .structs
         .iter()
-        .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
-        .map(|s| {
-            (
-                s.name.clone(),
-                s.fields
-                    .iter()
-                    .map(|f| ReflectFieldInfo {
-                        name: f.name.clone(),
-                        type_id: f.type_id,
-                        index: f.index,
-                        wire_name_override: f.wire_name_override.clone(),
-                        is_secret: f.is_secret,
-                        has_default: f.default_expr.is_some(),
-                    })
-                    .collect(),
-                s.wire_name_policy.clone(),
-                s.span,
-            )
+        .filter(|s| s.monomorph_info.is_none())
+        .map(|s| ReflectTarget {
+            name: s.name.clone(),
+            type_params: s.type_params.clone(),
+            fields: s
+                .fields
+                .iter()
+                .map(|f| ReflectFieldInfo {
+                    name: f.name.clone(),
+                    type_id: f.type_id,
+                    index: f.index,
+                    wire_name_override: f.wire_name_override.clone(),
+                    is_secret: f.is_secret,
+                    has_default: f.default_expr.is_some(),
+                })
+                .collect(),
+            wire_name_policy: s.wire_name_policy.clone(),
+            span: s.span,
         })
         .collect()
 }
@@ -547,8 +558,15 @@ fn generate_struct_reflect_methods(
     reflect_trait_name: &str,
     target: &ReflectTarget,
 ) -> Vec<TirFunction> {
-    let (name, fields, name_policy, span) = target;
+    let ReflectTarget {
+        name,
+        type_params,
+        fields,
+        wire_name_policy: name_policy,
+        span,
+    } = target;
     let span = *span;
+    let is_generic = !type_params.is_empty();
     let field_infos: Vec<FieldInfo> = fields
         .iter()
         .map(|f| (f.name.clone(), f.type_id, f.index))
@@ -564,14 +582,14 @@ fn generate_struct_reflect_methods(
 
     let (struct_type, ref_struct_type, member_types, members_tuple_type) = {
         let mut tt = type_table.borrow_mut();
-        let struct_type = tt.make_struct(name.clone(), module_source.clone());
+        let struct_type = if is_generic {
+            let param_ids = make_type_param_ids(type_params, &mut tt);
+            tt.make_generic_instance(name.clone(), module_source.clone(), param_ids)
+        } else {
+            tt.make_struct(name.clone(), module_source.clone())
+        };
         let ref_struct_type = tt.make_ref(struct_type);
         let fields_tuple_type = tt.make_tuple(fields.iter().map(|f| f.type_id).collect());
-        tt.register_assoc_type_resolution(
-            struct_type,
-            REFLECT_FIELD_TYPES_ASSOC.to_string(),
-            fields_tuple_type,
-        );
         let member_types: Vec<TypeId> = fields
             .iter()
             .map(|f| {
@@ -583,10 +601,14 @@ fn generate_struct_reflect_methods(
             })
             .collect();
         let members_tuple_type = tt.make_tuple(member_types.clone());
-        tt.register_assoc_type_resolution(
+        register_reflect_assoc_types(
+            &mut tt,
             struct_type,
-            REFLECT_MEMBERS_ASSOC.to_string(),
-            members_tuple_type,
+            is_generic,
+            &[
+                (REFLECT_FIELD_TYPES_ASSOC, fields_tuple_type),
+                (REFLECT_MEMBERS_ASSOC, members_tuple_type),
+            ],
         );
         (
             struct_type,
@@ -616,14 +638,41 @@ fn generate_struct_reflect_methods(
     );
 
     let mut functions = vec![type_name_fn, members_fn, wire_name_policy_fn];
-    functions.extend(generate_field_bridge_helpers(
-        type_table,
-        &field_infos,
-        struct_type,
-        ref_struct_type,
-        span,
-    ));
+    for f in &mut functions {
+        f.impl_type_params.clone_from(type_params);
+    }
+    // A generic struct's bridges are keyed by concrete field types, so
+    // `synthesize_monomorphized_reflect_bridges` mints them per instantiation.
+    if !is_generic {
+        functions.extend(generate_field_bridge_helpers(
+            type_table,
+            &field_infos,
+            struct_type,
+            ref_struct_type,
+            span,
+        ));
+    }
     functions
+}
+
+/// Record a reflect kind's associated tuple types for `self_type`: resolved
+/// directly for a non-generic type, registered as generic definitions keyed by
+/// the declaring `AstId` for a generic one.
+fn register_reflect_assoc_types(
+    tt: &mut TypeTable,
+    self_type: TypeId,
+    is_generic: bool,
+    assocs: &[(&str, TypeId)],
+) {
+    let base_decl = tt.decl_of_type(self_type);
+    for (assoc_name, resolved) in assocs {
+        if is_generic {
+            let Some(base_decl) = base_decl else { continue };
+            tt.register_generic_assoc_type_def(base_decl, (*assoc_name).to_string(), *resolved);
+        } else {
+            tt.register_assoc_type_resolution(self_type, (*assoc_name).to_string(), *resolved);
+        }
+    }
 }
 
 /// The member-tuple associated type, spelled `Members` on every reflect trait.
@@ -969,7 +1018,7 @@ fn generate_wire_name_policy_fn(
 /// marker; lowering rewrites each monomorphized marker to its helper
 /// (WEP 2026-06-13 §2). Extract-only and guard-free — every struct field is
 /// always present.
-fn generate_field_bridge_helpers(
+pub(super) fn generate_field_bridge_helpers(
     type_table: &RefCell<TypeTable>,
     fields: &[FieldInfo],
     struct_type: TypeId,
@@ -1124,7 +1173,7 @@ fn generate_variant_reflect_impls(
         return;
     }
 
-    let targets = collect_reflect_variant_targets(module, ctx, variant_trait_name);
+    let targets = collect_reflect_variant_targets(module);
     if targets.is_empty() {
         return;
     }
@@ -1148,9 +1197,11 @@ fn generate_variant_reflect_impls(
     module.functions.extend(generated);
 }
 
-/// A variant selected for `ReflectVariant` synthesis.
+/// A variant selected for `ReflectVariant` synthesis. `type_params` is empty
+/// for a plain variant; a generic one gets a single impl over `V<T, …>`.
 struct ReflectVariantTarget {
     name: String,
+    type_params: Vec<TirTypeParam>,
     /// Per-case `(name, index, payload type, #[wire(name)])`; unit cases
     /// carry `()` as their payload.
     cases: Vec<(String, u32, TypeId, Option<String>)>,
@@ -1159,19 +1210,19 @@ struct ReflectVariantTarget {
 }
 
 /// Select the variants in `module` that need a synthesized `ReflectVariant`
-/// impl: non-generic and actually requested by a bound.
-fn collect_reflect_variant_targets(
-    module: &TirModule,
-    ctx: &SynthesisCtx<'_, '_, '_>,
-    variant_trait_name: &str,
-) -> Vec<ReflectVariantTarget> {
+/// impl: every eligible declaration, generic or not.
+fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarget> {
     module
         .variants
         .iter()
-        .filter(|v| v.type_params.is_empty())
-        .filter(|v| ctx.should_synthesize(&v.name, variant_trait_name))
+        .filter(|v| {
+            let tt = module.type_table.borrow();
+            tt.find_decl_type_by_name(&v.name, &v.module_source)
+                .is_some_and(|type_id| tt.is_reflect_eligible(type_id))
+        })
         .map(|v| ReflectVariantTarget {
             name: v.name.clone(),
+            type_params: v.type_params.clone(),
             cases: v
                 .cases
                 .iter()
@@ -1258,9 +1309,16 @@ fn generate_variant_reflect_methods(
         span,
     );
 
+    let is_generic = !target.type_params.is_empty();
+
     let (variant_type, ref_variant_type, member_types, members_tuple_type) = {
         let mut tt = type_table.borrow_mut();
-        let variant_type = tt.make_variant(target.name.clone(), module_source.clone());
+        let variant_type = if is_generic {
+            let param_ids = make_type_param_ids(&target.type_params, &mut tt);
+            tt.make_generic_instance(target.name.clone(), module_source.clone(), param_ids)
+        } else {
+            tt.make_variant(target.name.clone(), module_source.clone())
+        };
         let ref_variant_type = tt.make_ref(variant_type);
         let member_types: Vec<TypeId> = target
             .cases
@@ -1276,15 +1334,14 @@ fn generate_variant_reflect_methods(
         let members_tuple_type = tt.make_tuple(member_types.clone());
         let payloads_tuple_type =
             tt.make_tuple(target.cases.iter().map(|(_, _, p, _)| *p).collect());
-        tt.register_assoc_type_resolution(
+        register_reflect_assoc_types(
+            &mut tt,
             variant_type,
-            REFLECT_CASE_PAYLOADS_ASSOC.to_string(),
-            payloads_tuple_type,
-        );
-        tt.register_assoc_type_resolution(
-            variant_type,
-            REFLECT_MEMBERS_ASSOC.to_string(),
-            members_tuple_type,
+            is_generic,
+            &[
+                (REFLECT_CASE_PAYLOADS_ASSOC, payloads_tuple_type),
+                (REFLECT_MEMBERS_ASSOC, members_tuple_type),
+            ],
         );
         (
             variant_type,
@@ -1322,13 +1379,20 @@ fn generate_variant_reflect_methods(
     );
 
     let mut functions = vec![type_name_fn, discriminant_fn, cases_fn, wire_name_policy_fn];
-    functions.extend(generate_case_bridge_helpers(
-        type_table,
-        target,
-        variant_type,
-        ref_variant_type,
-        span,
-    ));
+    for f in &mut functions {
+        f.impl_type_params.clone_from(&target.type_params);
+    }
+    // A generic variant's bridges are keyed by concrete payload types, so
+    // `synthesize_monomorphized_reflect_bridges` mints them per instantiation.
+    if !is_generic {
+        functions.extend(generate_case_bridge_helpers(
+            type_table,
+            &target.cases,
+            variant_type,
+            ref_variant_type,
+            span,
+        ));
+    }
     functions
 }
 
@@ -1438,21 +1502,22 @@ fn generate_variant_cases_fn(
 /// every distinct payload type of `target`. `Case::<V, P>::extract` and
 /// `::construct` bodies carry `builtin::variant_case_*` markers; lowering
 /// rewrites each monomorphized marker to its helper (WEP 2026-06-13 §3e).
-fn generate_case_bridge_helpers(
+pub(super) fn generate_case_bridge_helpers(
     type_table: &RefCell<TypeTable>,
-    target: &ReflectVariantTarget,
+    cases: &[(String, u32, TypeId, Option<String>)],
     variant_type: TypeId,
     ref_variant_type: TypeId,
     span: Span,
 ) -> Vec<TirFunction> {
-    let mangled_variant = type_table
-        .borrow()
-        .mangle_type_arg_for_generic(variant_type);
+    // Both mangles must match the post-erasure call site: lowering reads the
+    // subject and payload through the erasure redirect map, so a `flags` or
+    // newtype spelled here would mint a name nothing calls.
+    let mangled_variant = type_table.borrow().mangle_type_arg_erased(variant_type);
 
     let mut by_payload: crate::hashmap::IndexMap<String, (TypeId, Vec<(String, u32)>)> =
         crate::hashmap::IndexMap::default();
-    for (case_name, index, payload, _) in &target.cases {
-        let mangled = type_table.borrow().mangle_type_arg_for_generic(*payload);
+    for (case_name, index, payload, _) in cases {
+        let mangled = type_table.borrow().mangle_type_arg_erased(*payload);
         by_payload
             .entry(mangled)
             .or_insert_with(|| (*payload, Vec::new()))
@@ -1725,7 +1790,20 @@ fn generate_variant_discriminant_fn(
 ) -> TirFunction {
     let method_info = trait_method_info(variant_name, variant_trait_name, discriminant_method);
     let qualified_name = method_info.to_mangled_name();
+    let mut function = make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![self_param(ref_variant_type, span)],
+        TypeTable::I32,
+        variant_tag_body(ref_variant_type, variant_type, span),
+        vec![param_local("self", ref_variant_type, false)],
+    );
+    function.locals = vec![param_local("self", ref_variant_type, false)];
+    function
+}
 
+/// `return <tag of *self>;` — the body every `discriminant` shares.
+fn variant_tag_body(ref_variant_type: TypeId, variant_type: TypeId, span: Span) -> TirBlock {
     let tag = TirExpr::new(
         TirExprKind::VariantTag {
             expr: Box::new(deref_local(0, "self", ref_variant_type, variant_type, span)),
@@ -1733,17 +1811,27 @@ fn generate_variant_discriminant_fn(
         TypeTable::I32,
         span,
     );
-    let body = TirBlock::new(
+    TirBlock::new(
         vec![TirStmt::new(TirStmtKind::Return { value: Some(tag) }, span)],
         span,
-    );
+    )
+}
 
-    make_synthetic_method(
+/// The `discriminant` of one instantiated generic variant, as a free function
+/// under the tag-helper name lowering builds from the instance
+/// (`$variant_tag$<mangle>`). Not a method: the method-name machinery rejects
+/// type arguments in a base struct name.
+pub(super) fn generate_variant_instance_discriminant_fn(
+    qualified_name: String,
+    ref_variant_type: TypeId,
+    variant_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    crate::synthesis::common::make_synthetic_free_function(
         qualified_name,
-        method_info,
         vec![self_param(ref_variant_type, span)],
         TypeTable::I32,
-        body,
+        variant_tag_body(ref_variant_type, variant_type, span),
         vec![param_local("self", ref_variant_type, false)],
     )
 }
@@ -1773,7 +1861,6 @@ fn generate_enum_reflect_impls(
         .enums
         .iter()
         .filter(|e| e.type_params.is_empty())
-        .filter(|e| ctx.should_synthesize(&e.name, enum_trait_name))
         .map(|e| ReflectEnumTarget {
             name: e.name.clone(),
             cases: e
@@ -2184,7 +2271,6 @@ fn generate_flags_reflect_impls(
     let targets: Vec<ReflectFlagsTarget> = module
         .flags
         .iter()
-        .filter(|f| ctx.should_synthesize(&f.name, flags_trait_name))
         .filter_map(|f| {
             let flags_type = module
                 .type_table
@@ -2590,7 +2676,7 @@ impl SynthesisCtx<'_, '_, '_> {
     ///
     /// - The AST-layer check is module-agnostic. A user-written
     ///   `impl Display for String` in `core:prelude/format` must suppress
-    ///   `synthesize_traits`'s Display-delegates-to-Inspect fallback even
+    ///   `synthesize_traits`'s DisplayAlt-delegates-to-Display fallback even
     ///   when this pass is currently synthesising `core:prelude/string`
     ///   (String's defining module). Restricting the check to
     ///   `self.module` would silently shadow the user's impl with the
@@ -3246,39 +3332,9 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         ctx.record_impl(name, &inspect_name);
     }
 
-    // Non-generic structs derive Inspect via the `impl<T: ReflectStruct<FieldTypes =
-    // [..F]>, ..F: Inspect> Inspect for T` blanket in `core:prelude/traits`
-    // (WEP 2026-06-13 item 5); the monomorphizer routes each `Struct^Inspect`
-    // call to it, so synthesis emits nothing for non-generic structs here.
-
-    let generic_struct_infos = collect_generic_struct_visible_fields(module);
-    for (name, type_params, fields, has_secret, sspan) in &generic_struct_infos {
-        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
-            continue;
-        }
-        let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let struct_type =
-            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
-        let ref_type = tt.make_ref(struct_type);
-        generated.push(Rc::new(RefCell::new(generate_struct_inspect_fn(
-            name,
-            type_params,
-            fields,
-            *has_secret,
-            ref_type,
-            fmt_type,
-            string_type,
-            ref_string_type,
-            ctx.trait_env,
-            &module_source,
-            &mut tt,
-            *sspan,
-            &inspect_name,
-            &inspect_method,
-            &formatter_name,
-        ))));
-        ctx.record_impl(name, &inspect_name);
-    }
+    // Structs derive Inspect via the `ReflectStruct` blanket in
+    // `core:prelude/traits`, so nothing is emitted for them here. The sealed
+    // member handles carry their own impls in the prelude.
 
     let variant_infos = collect_variant_cases(module);
     for (name, cases, vspan) in &variant_infos {
@@ -3726,131 +3782,6 @@ fn generate_enum_display_fn(
         inspect_locals(ref_enum_type, fmt_type),
     )
 }
-
-/// Generate `StructName^Inspect::inspect(&self, &mut Formatter)`.
-///
-/// Body:
-/// ```text
-/// f.write_str("StructName { ");
-/// f.write_str("field1: "); self.field1.inspect(f);
-/// f.write_str(", field2: "); self.field2.inspect(f);
-/// f.write_str(" }");
-/// ```
-///
-/// Pass an empty `impl_type_params` slice for non-generic structs.
-fn generate_struct_inspect_fn(
-    struct_name: &str,
-    impl_type_params: &[TirTypeParam],
-    fields: &[(String, TypeId, u32)],
-    has_secret: bool,
-    ref_struct_type: TypeId,
-    fmt_type: TypeId,
-    string_type: TypeId,
-    ref_string_type: TypeId,
-    trait_env: &TraitEnv,
-    module_source: &ModuleSource,
-    tt: &mut TypeTable,
-    span: Span,
-    inspect_trait: &str,
-    inspect_method: &str,
-    formatter_name: &str,
-) -> TirFunction {
-    let method_info = trait_method_info(struct_name, inspect_trait, inspect_method);
-    let qualified_name = method_info.to_mangled_name();
-
-    let stmts = build_struct_inspect_body(
-        struct_name,
-        fields,
-        has_secret,
-        ref_struct_type,
-        fmt_type,
-        string_type,
-        ref_string_type,
-        trait_env,
-        module_source,
-        tt,
-        span,
-        inspect_trait,
-        inspect_method,
-        formatter_name,
-    );
-    let body = TirBlock::new(stmts, span);
-
-    make_trait_method(
-        qualified_name,
-        method_info,
-        impl_type_params.to_vec(),
-        inspect_params(ref_struct_type, fmt_type, span),
-        TypeTable::UNIT,
-        body,
-        inspect_locals(ref_struct_type, fmt_type),
-        span,
-    )
-}
-
-/// Build the body statements for a struct `Inspect::inspect`: writes the type name,
-/// each visible field via `inspect`, plus a trailing `, ..` when secret fields are present.
-fn build_struct_inspect_body(
-    struct_name: &str,
-    fields: &[(String, TypeId, u32)],
-    has_secret: bool,
-    ref_struct_type: TypeId,
-    fmt_type: TypeId,
-    string_type: TypeId,
-    ref_string_type: TypeId,
-    trait_env: &TraitEnv,
-    module_source: &ModuleSource,
-    tt: &mut TypeTable,
-    span: Span,
-    inspect_trait: &str,
-    inspect_method: &str,
-    formatter_name: &str,
-) -> Vec<TirStmt> {
-    let fmt = || local_expr(1, "f", fmt_type, span);
-    let write =
-        |s: String| write_str_stmt(s, fmt(), string_type, ref_string_type, span, formatter_name);
-    let mut stmts = Vec::new();
-
-    if fields.is_empty() {
-        let suffix = if has_secret { " { .. }" } else { " {}" };
-        stmts.push(write(format!("{struct_name}{suffix}")));
-        return stmts;
-    }
-
-    stmts.push(write(format!("{struct_name} {{ ")));
-    for (i, (field_name, field_type, field_index)) in fields.iter().enumerate() {
-        if i > 0 {
-            stmts.push(write(", ".to_string()));
-        }
-        stmts.push(write(format!("{field_name}: ")));
-        let field_access = field_access_local(
-            0,
-            "self",
-            ref_struct_type,
-            *field_index,
-            field_name,
-            *field_type,
-            span,
-        );
-        stmts.push(inspect_call(
-            field_access,
-            *field_type,
-            fmt(),
-            trait_env,
-            module_source,
-            tt,
-            span,
-            inspect_trait,
-            inspect_method,
-        ));
-    }
-    if has_secret {
-        stmts.push(write(", ..".to_string()));
-    }
-    stmts.push(write(" }".to_string()));
-    stmts
-}
-
 /// Generate `VariantName^Inspect::inspect(&self, &mut Formatter)`.
 ///
 /// Body: TIR `Match` over `*self` with one arm per case. Each arm writes

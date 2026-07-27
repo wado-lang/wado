@@ -622,7 +622,7 @@ pub struct TypeTable {
     /// `GenericInstance`'s `type_args`. Populated when processing generic impl blocks
     /// (e.g., `impl Iterator for ListIter<T> { type Item = T; }`).
     /// Used by the monomorphizer to resolve associated types for `GenericInstance` types.
-    generic_assoc_type_defs: IndexMap<(String, String), TypeId>,
+    generic_assoc_type_defs: IndexMap<(crate::ast::AstId, String), TypeId>,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
@@ -963,6 +963,59 @@ impl TypeTable {
     /// declaring [`AstId`](crate::ast::AstId).
     pub fn symbol_of_type(&self, type_id: TypeId) -> Option<&crate::ast::AstId> {
         self.symbol_by_type.get(type_id)
+    }
+
+    /// The declaring [`AstId`](crate::ast::AstId) behind `type_id`, whether it
+    /// is a plain declaration, a monomorphization, or a `GenericInstance`.
+    ///
+    /// `Node<i32>` and `Node<String>` answer with the one `Node` they were
+    /// spelled from; a `Node` in another module answers with a different id.
+    pub fn decl_of_type(&self, type_id: TypeId) -> Option<crate::ast::AstId> {
+        let type_id = self.peel_refs(type_id);
+        if let Some(key) = self.symbol_by_type.get(type_id) {
+            return Some(*key);
+        }
+        let ResolvedType::GenericInstance {
+            name,
+            module_source,
+            ..
+        } = self.get(type_id)
+        else {
+            return None;
+        };
+        let base = self.find_decl_type_by_name(name, module_source)?;
+        self.symbol_by_type.get(base).copied()
+    }
+
+    /// The declaring [`AstId`](crate::ast::AstId) of the type named `name` in
+    /// `module_source`.
+    pub fn decl_by_name(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<crate::ast::AstId> {
+        let type_id = self.find_decl_type_by_name(name, module_source)?;
+        self.symbol_by_type.get(type_id).copied()
+    }
+
+    /// Whether `decl` is one of the four reflection member handles, whose own
+    /// `Members` would mention `StructField<Self, …>` and grow `Self` without
+    /// bound (WEP 2026-06-13).
+    ///
+    /// Matched by declaration, so a user type spelled `StructField` stays
+    /// reflectable.
+    pub fn is_sealed_reflect_member(&self, decl: crate::ast::AstId) -> bool {
+        use crate::compiler_item::CompilerItem;
+        [
+            CompilerItem::ReflectStructField,
+            CompilerItem::ReflectVariantCase,
+            CompilerItem::ReflectEnumCase,
+            CompilerItem::ReflectFlagsBit,
+        ]
+        .into_iter()
+        .filter_map(|item| self.compiler_items().struct_owned_opt(item))
+        .filter_map(|(module_source, name)| self.find_struct_by_name(&name, &module_source))
+        .any(|sealed| self.symbol_by_type.get(sealed) == Some(&decl))
     }
 
     /// Find the `TypeId` of a user-declared type (struct, enum, variant, flags,
@@ -1852,15 +1905,19 @@ impl TypeTable {
 
     /// Register a generic associated type definition.
     /// E.g., for `impl Iterator for ListIter<T> { type Item = T; }`,
-    /// register `("ListIter", "Item") → TypeParam(0, "T")`.
+    /// register `(ListIter's ``AstId``, "Item") → TypeParam(0, "T")`.
+    ///
+    /// Keyed by the declaring [`AstId`](crate::ast::AstId): two modules may
+    /// each declare a `Node<T>`, and their definitions must not overwrite one
+    /// another.
     pub fn register_generic_assoc_type_def(
         &mut self,
-        base_struct_name: String,
+        base_decl: crate::ast::AstId,
         assoc_name: String,
         type_param_id: TypeId,
     ) {
         self.generic_assoc_type_defs
-            .insert((base_struct_name, assoc_name), type_param_id);
+            .insert((base_decl, assoc_name), type_param_id);
     }
 
     /// Register associated-type resolutions for a freshly monomorphized struct.
@@ -1871,19 +1928,19 @@ impl TypeTable {
     /// `Foo<…>::Item` can no longer be resolved through
     /// [`Self::resolve_generic_assoc_type`] (that path only handles
     /// `GenericInstance`). We therefore eagerly resolve each associated-type
-    /// definition registered for `base_name` against the instantiation
+    /// definition registered for `base_decl` against the instantiation
     /// `substitution` and record the result keyed by `concrete_id`, so later
     /// [`Self::resolve_assoc_type`] lookups succeed.
     pub fn register_monomorphized_assoc_types(
         &mut self,
         concrete_id: TypeId,
-        base_name: &str,
+        base_decl: crate::ast::AstId,
         substitution: &IndexMap<u32, TypeId>,
     ) {
         let defs: Vec<(String, TypeId)> = self
             .generic_assoc_type_defs
             .iter()
-            .filter(|((name, _), _)| name == base_name)
+            .filter(|((decl, _), _)| *decl == base_decl)
             .map(|((_, assoc_name), &def_id)| (assoc_name.clone(), def_id))
             .collect();
         for (assoc_name, def_id) in defs {
@@ -1902,15 +1959,13 @@ impl TypeTable {
         concrete_id: TypeId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let (base_name, type_args) = match self.get(concrete_id).clone() {
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => (name, type_args),
+        let type_args = match self.get(concrete_id).clone() {
+            ResolvedType::GenericInstance { type_args, .. } => type_args,
             _ => return None,
         };
         let def_type_id = *self
             .generic_assoc_type_defs
-            .get(&(base_name, assoc_name.to_string()))?;
+            .get(&(self.decl_of_type(concrete_id)?, assoc_name.to_string()))?;
         match self.get(def_type_id).clone() {
             ResolvedType::TypeParam { index, .. } => type_args.get(index as usize).copied(),
             ResolvedType::AssocTypeProjection {
@@ -1964,21 +2019,67 @@ impl TypeTable {
         concrete_id: TypeId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let (base_name, type_args) = match self.get(concrete_id).clone() {
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => (name, type_args),
+        let type_args = match self.get(concrete_id).clone() {
+            ResolvedType::GenericInstance { type_args, .. } => type_args,
             _ => return None,
         };
         let def_type_id = *self
             .generic_assoc_type_defs
-            .get(&(base_name, assoc_name.to_string()))?;
+            .get(&(self.decl_of_type(concrete_id)?, assoc_name.to_string()))?;
         let subst: IndexMap<u32, TypeId> = type_args
             .iter()
             .enumerate()
             .map(|(i, &a)| (i as u32, a))
             .collect();
         Some(self.substitute_type_params(def_type_id, &subst))
+    }
+
+    /// Whether the declaration behind `type_id` can be reflected — every
+    /// declaration but a sealed member handle.
+    ///
+    /// The bound check and reflect synthesis both read this, so synthesis
+    /// covers exactly what the bound accepts without a demand channel between
+    /// them.
+    pub fn is_reflect_eligible(&self, type_id: TypeId) -> bool {
+        !self
+            .decl_of_type(type_id)
+            .is_some_and(|decl| self.is_sealed_reflect_member(decl))
+    }
+
+    /// Whether a generic definition of `assoc_name` is registered for the
+    /// declaration behind `type_id` — i.e. the generic type carries a
+    /// synthesized impl binding that associated type.
+    pub fn has_generic_assoc_type_def(&self, type_id: TypeId, assoc_name: &str) -> bool {
+        self.decl_of_type(type_id)
+            .is_some_and(|decl| self.has_generic_assoc_type_def_for_decl(decl, assoc_name))
+    }
+
+    /// [`Self::has_generic_assoc_type_def`] for a caller that already holds the
+    /// declaring [`AstId`](crate::ast::AstId).
+    pub fn has_generic_assoc_type_def_for_decl(
+        &self,
+        decl: crate::ast::AstId,
+        assoc_name: &str,
+    ) -> bool {
+        self.generic_assoc_type_defs
+            .contains_key(&(decl, assoc_name.to_string()))
+    }
+
+    /// Resolve an associated type for whatever form the subject currently has:
+    /// a registered resolution for a plain or monomorphized type, substitution
+    /// of the generic definition for a `GenericInstance`.
+    ///
+    /// Reflection projections hit both forms — the same receiver reads as an
+    /// instance before monomorphization and as a struct after.
+    pub fn resolve_assoc_type_of_instance(
+        &mut self,
+        concrete_id: TypeId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        if let Some(resolved) = self.resolve_assoc_type(concrete_id, assoc_name) {
+            return Some(resolved);
+        }
+        self.resolve_generic_assoc_type_mono(concrete_id, assoc_name)
     }
 
     /// Substitute `TypeParam` and `TypePack` indices in `type_id` using `substitution`.
@@ -2360,6 +2461,33 @@ impl TypeTable {
             | ResolvedType::GenericResource { type_args, .. } => {
                 type_args.iter().any(|t| self.contains_type_param(*t))
             }
+            _ => false,
+        }
+    }
+
+    /// Whether `id` (recursively) mentions an associated-type projection
+    /// (`I::Item`), i.e. still needs a bound's impl to become concrete.
+    pub fn contains_assoc_type_projection(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::AssocTypeProjection { .. } => true,
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.contains_assoc_type_projection(*inner),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params
+                    .iter()
+                    .any(|p| self.contains_assoc_type_projection(*p))
+                    || self.contains_assoc_type_projection(*return_type)
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => type_args
+                .iter()
+                .any(|t| self.contains_assoc_type_projection(*t)),
             _ => false,
         }
     }

@@ -1,0 +1,47 @@
+// A generic struct's `Inspect` comes from the `ReflectStruct` blanket in
+// `core:prelude/traits`, not from a per-type synthesized impl (WEP 2026-06-13).
+// The template's `:?` records the `ReflectStruct` demand at annotate time, so
+// the demand-driven reflect synthesis has the instance ready.
+
+struct Pair<T> {
+    a: T,
+    b: T,
+}
+
+struct Wrap<A, B> {
+    first: A,
+    second: B,
+}
+
+struct Outer<T> {
+    inner: Pair<T>,
+    tag: String,
+}
+
+test "a generic struct inspects through the blanket" {
+    let p: Pair<i32> = Pair { a: 1, b: 2 };
+    assert `${p:?}` == "Pair { a: 1, b: 2 }";
+}
+
+test "two instantiations inspect independently" {
+    let i: Pair<i32> = Pair { a: 1, b: 2 };
+    let s: Pair<String> = Pair { a: "x", b: "y" };
+    assert `${i:?}` == "Pair { a: 1, b: 2 }";
+    assert `${s:?}` == "Pair { a: \"x\", b: \"y\" }";
+}
+
+test "a multi-param generic struct keeps field order" {
+    let w: Wrap<i32, String> = Wrap { first: 5, second: "n" };
+    assert `${w:?}` == "Wrap { first: 5, second: \"n\" }";
+}
+
+test "a nested generic struct recurses through the blanket" {
+    let o: Outer<i32> = Outer {
+        inner: Pair { a: 1, b: 2 },
+        tag: "t",
+    };
+    assert `${o:?}` == "Outer { inner: Pair { a: 1, b: 2 }, tag: \"t\" }";
+}
+
+__DATA__
+{"test": {}}

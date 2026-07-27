@@ -17,7 +17,7 @@ Source (.wado)
   → Effect Check → Stores Check
   → Effect Dispatch (post-check: WithHandler / Resume desugaring)
   → Link (Package → FlatPackage)
-  → Monomorphize → Erase Newtypes & Flags
+  → Monomorphize → Erase Newtypes & Flags → Reflect Bridges
   → Lower
   → Optimize
   → WIR Build → WIR Optimize → Codegen
@@ -38,6 +38,8 @@ The driver is `compile_after_load` in `src/lib.rs`.
 | Effect Dispatch (post) | TIR             | `synthesis/effect_dispatch.rs`                   |
 | Link                   | `FlatPackage`   | `link.rs`                                        |
 | Monomorphize           | `FlatPackage`   | `monomorphize/`                                  |
+| Erase Newtypes & Flags | `FlatPackage`   | `tir.rs`                                         |
+| Reflect Bridges (post) | `FlatPackage`   | `synthesis/reflect_bridge.rs`                    |
 | Lower                  | `NirPackage`    | `lower/`                                         |
 | Optimize               | `NirPackage`    | `optimize/`                                      |
 | WIR Build              | `WirPackage`    | `wir_build/`                                     |
@@ -87,8 +89,14 @@ The elaborator covers trait selection, generic inference, method dispatch, coerc
 | Template strings   | `synthesis/template.rs`        | Expands template strings into `Display::fmt` / `Inspect::inspect` calls                                                                                                                                                                                                                                                                                                                         |
 | Effect dispatch    | `synthesis/effect_dispatch.rs` | Per-effect dispatch infrastructure for handler resolution                                                                                                                                                                                                                                                                                                                                       |
 | CM bindings        | `synthesis/cm_binding/`        | Component Model boundary adapters (lift / lower / async export)                                                                                                                                                                                                                                                                                                                                 |
+| Reflect metadata   | `synthesis/traits.rs`          | `ReflectStruct` / `ReflectVariant` / `ReflectEnum` / `ReflectFlags` impls: `type_name`, `members`, `wire_name_policy`, the payload / member associated tuples, and the value bridges ([WEP 2026-06-13](./wep-2026-06-13-reflect-derivation.md))                                                                                                                                                 |
 
 Synthesized impls are recorded back into the shared `TraitEnv` so subsequent phases query a single source of truth.
+
+`synthesis/reflect_bridge.rs` is the one exception to synthesis running before
+monomorphize: a generic type's value bridges are named after the concrete
+subject and member types, so they exist only per instantiation
+([WEP 2026-06-13](./wep-2026-06-13-reflect-derivation.md)).
 
 Bound-driven requests ([WEP 2026-06-25-trait-derivation](./wep-2026-06-25-trait-derivation.md)) originate during Annotate, from two funnels into the shared `TypeTable::bound_driven_synth_requests` set (one per `TypeTable`, project-wide, since each module gets a fresh `Elaborator`):
 

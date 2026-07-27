@@ -808,16 +808,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .borrow()
                             .type_id_of_decl(variant_info.defined_at)
                     } else {
-                        self.tysys.infer_variant_type_args(
-                            &self.annotate_ctx,
-                            &prefix_owned,
-                            &variant_info,
-                            &case_data,
-                            payload.as_deref(),
-                            expected_type,
-                            &[],
-                            &[],
-                        )
+                        {
+                            let inferred = self.tysys.infer_variant_type_args(
+                                &self.annotate_ctx,
+                                &prefix_owned,
+                                &variant_info,
+                                &case_data,
+                                payload.as_deref(),
+                                expected_type,
+                                &[],
+                                &[],
+                            );
+                            self.defer_uninferable_variant(
+                                inferred,
+                                &prefix_owned,
+                                &variant_info,
+                                call.span,
+                            )
+                        }
                     };
 
                     // Stage 5 (Gap 1 of WEP 2026-05-26): record generic
@@ -950,16 +958,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .borrow()
                                     .type_id_of_decl(variant_info.defined_at)
                             } else {
-                                self.tysys.infer_variant_type_args(
-                                    &self.annotate_ctx,
-                                    type_name,
-                                    &variant_info,
-                                    &case_data,
-                                    payload.as_deref(),
-                                    expected_type,
-                                    &[],
-                                    &[],
-                                )
+                                {
+                                    let inferred = self.tysys.infer_variant_type_args(
+                                        &self.annotate_ctx,
+                                        type_name,
+                                        &variant_info,
+                                        &case_data,
+                                        payload.as_deref(),
+                                        expected_type,
+                                        &[],
+                                        &[],
+                                    );
+                                    self.defer_uninferable_variant(
+                                        inferred,
+                                        type_name,
+                                        &variant_info,
+                                        call.span,
+                                    )
+                                }
                             };
 
                             // Stage 5 (Gap 1): record generic type args

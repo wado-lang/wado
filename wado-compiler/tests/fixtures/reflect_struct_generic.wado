@@ -1,0 +1,80 @@
+// Blanket derivation over `ReflectStruct` for a generic struct: the synthesized
+// impl is generic, so `FieldTypes` binds the struct's own type params and each
+// instantiation substitutes them (WEP 2026-06-13).
+
+trait Row {
+    fn row(&self) -> String;
+}
+
+impl Row for i32 {
+    fn row(&self) -> String {
+        return `${*self}`;
+    }
+}
+
+impl Row for String {
+    fn row(&self) -> String {
+        return *self;
+    }
+}
+
+impl Row for bool {
+    fn row(&self) -> String {
+        return `${*self}`;
+    }
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Row> Row for T {
+    fn row(&self) -> String {
+        let mut out = "";
+        for let f of ReflectStruct::<T>::members() {
+            out = `${out}${f.name()}=${f.get(self).row()};`;
+        }
+        return out;
+    }
+}
+
+struct Pair<T> {
+    left: T,
+    right: i32,
+}
+
+struct Wrap<A, B> {
+    #[wire(name = "first")]
+    a: A,
+    b: B,
+}
+
+test "a generic struct walks its members with the type arg substituted" {
+    let p: Pair<String> = Pair { left: "ada", right: 7 };
+    assert p.row() == "left=ada;right=7;";
+}
+
+test "two instantiations of one generic struct walk independently" {
+    let s: Pair<String> = Pair { left: "ada", right: 1 };
+    let b: Pair<bool> = Pair { left: true, right: 2 };
+    assert s.row() == "left=ada;right=1;";
+    assert b.row() == "left=true;right=2;";
+}
+
+test "a multi-param generic struct keeps field order and metadata" {
+    let w: Wrap<i32, String> = Wrap { a: 5, b: "x" };
+    assert w.row() == "a=5;b=x;";
+    assert ReflectStruct::<Wrap<i32, String>>::type_name() == "Wrap";
+    for let f of ReflectStruct::<Wrap<i32, String>>::members() {
+        if f.index() == 0 {
+            assert f.wire_name_override() == Option::Some("first");
+        }
+    }
+}
+
+test "a nested generic struct recurses through the same blanket" {
+    let n: Pair<Pair<i32>> = Pair {
+        left: Pair { left: 1, right: 2 },
+        right: 3,
+    };
+    assert n.row() == "left=left=1;right=2;;right=3;";
+}
+
+__DATA__
+{"test": {}}

@@ -2530,7 +2530,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let block_tir = s.reify_block_value(block, ctx, expected_type);
                 TirExpr::new(TirExprKind::Block(block_tir), recorded_type, span)
             }),
-            ast::Expr::Ident(ident) => self.reify_ident(ident, recorded_type, ctx),
+            ast::Expr::Ident(ident) => self.reify_ident(ident, recorded_type, expected_type, ctx),
             ast::Expr::TupleLiteral(tuple_lit) => {
                 // SequenceLiteralBuilder coercion: when the elaborator
                 // recorded `sequence_coercions[tuple.id]`, the literal
@@ -8692,6 +8692,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         result
     }
 
+    /// The concrete stand-in for an unresolved generic variant type: the
+    /// caller's expected type, when it names the same variant with its type
+    /// params filled in.
+    fn resolved_variant_type(&self, recorded: TypeId, expected: Option<TypeId>) -> Option<TypeId> {
+        let expected = expected?;
+        let table = self.tysys.type_table.borrow();
+        if table.contains_type_param(expected) {
+            return None;
+        }
+        let recorded_is_concrete =
+            matches!(table.get(recorded), ResolvedType::GenericInstance { .. })
+                && !table.contains_type_param(recorded);
+        if recorded_is_concrete {
+            return None;
+        }
+        (table.base_type_name(recorded) == table.base_type_name(expected)).then_some(expected)
+    }
+
     /// Reify a bare identifier reference. Local lookup goes through
     /// the per-function context (`FunctionContext::lookup`, walk-order
     /// invariant — Gap 7). Non-local idents (globals, function refs,
@@ -8701,6 +8719,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         ident: &ast::IdentExpr,
         recorded_type: TypeId,
+        expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         use crate::tir::TirExprKind;
@@ -9024,10 +9043,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // variants leave no record and the bare
                     // `recorded_type` already names the right
                     // `Variant` TypeId.
-                    let variant_type = self
+                    // A payload-less case carries no value to infer from, so
+                    // annotate can only record the decl's own `V<T>`. In a
+                    // struct-literal field the caller knows the substituted
+                    // `V<i32>`; prefer it over the unresolved record.
+                    let recorded_variant_type = self
                         .ann_generic_instantiations(ident.id)
                         .map(|gi| gi.instance_type)
                         .unwrap_or(recorded_type);
+                    let variant_type = self
+                        .resolved_variant_type(recorded_variant_type, expected_type)
+                        .unwrap_or(recorded_variant_type);
                     return TirExpr::new(
                         TirExprKind::VariantConstruct {
                             variant_type,

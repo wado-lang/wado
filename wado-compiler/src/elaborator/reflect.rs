@@ -23,6 +23,19 @@ enum ScalarReflectKind {
     Flags,
 }
 
+/// A resolved reflection subject: the declared type name, the instantiation's
+/// type args (empty for a plain type), and its members' types with those args
+/// substituted.
+struct ReflectSubject {
+    base_name: String,
+    /// The declaring module, carried from the resolved subject. Re-deriving it
+    /// from `base_name` picks whichever same-named declaration a name lookup
+    /// reaches first, so `P2<i32>` would reflect `p1`'s `Pair`.
+    module_source: crate::module_source::ModuleSource,
+    type_args: Vec<TypeId>,
+    member_types: Vec<TypeId>,
+}
+
 #[derive(Clone, Copy)]
 pub(super) struct ScalarReflectSpec {
     kind: ScalarReflectKind,
@@ -101,15 +114,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let self_name = self.tysys.type_table.borrow().type_name(self_ty);
 
-        let Some(field_types) = self.reflect_subject_field_types(&self_name) else {
+        let Some(subject) = self.reflect_struct_subject(self_ty) else {
             let _ = self.emit(TypeError::UnknownFunction {
                 name: format!("ReflectStruct::<{self_name}>::{method}"),
                 span: static_call.span,
             });
             return TypeTable::ERROR;
         };
+        let ReflectSubject {
+            base_name: self_name,
+            module_source,
+            type_args,
+            member_types: field_types,
+        } = subject;
 
-        let (reflect_trait_name, members_method, wire_name_policy_method, module_source) = {
+        let (reflect_trait_name, members_method, wire_name_policy_method) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -122,7 +141,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 items
                     .method_name(crate::compiler_item::CompilerItem::ReflectStructWireNamePolicy)
                     .to_string(),
-                self.find_struct_module_source(&self_name),
             )
         };
 
@@ -166,16 +184,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .make_compiler_struct(crate::compiler_item::CompilerItem::String)
         };
 
-        let func_ref = FunctionRef {
+        let func_ref = self.reflect_func_ref(
+            &self_name,
+            &type_args,
+            &reflect_trait_name,
+            &method,
             module_source,
-            name: MethodName::format_local(&self_name, Some(&reflect_trait_name), &method),
-            monomorph_info: None,
-            method_info: Some(LocalMethodName::new(
-                self_name.clone(),
-                Some(reflect_trait_name.clone()),
-                method.clone(),
-            )),
-        };
+        );
         self.sem.types.static_method_dispatch.insert(
             static_call.id,
             super::sem::types::StaticMethodDispatch {
@@ -187,6 +202,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         return_type
+    }
+
+    /// Build the `FunctionRef` targeting a reflect subject's synthesized
+    /// `Base^Trait::method`. A generic instance carries the instantiation in
+    /// `monomorph_info` and in the mangled name, so monomorphization picks the
+    /// instance whose type args match; `type_args` is empty for a plain type.
+    fn reflect_func_ref(
+        &self,
+        base_name: &str,
+        type_args: &[TypeId],
+        trait_name: &str,
+        method: &str,
+        module_source: crate::module_source::ModuleSource,
+    ) -> FunctionRef {
+        let mut method_info = LocalMethodName::new(
+            base_name.to_string(),
+            Some(trait_name.to_string()),
+            method.to_string(),
+        );
+        let monomorph_info = if type_args.is_empty() {
+            None
+        } else {
+            let arg_names: Vec<String> = type_args
+                .iter()
+                .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+                .collect();
+            method_info = method_info.with_type_args(&arg_names, &[]);
+            Some(crate::tir::MonomorphInfo {
+                generic_name: base_name.to_string(),
+                impl_type_args: type_args.to_vec(),
+                method_type_args: Vec::new(),
+                is_blanket: false,
+            })
+        };
+        FunctionRef {
+            module_source,
+            name: method_info.to_mangled_name(),
+            monomorph_info,
+            method_info: Some(method_info),
+        }
     }
 
     /// Resolve `ReflectStruct::<T>::method()` where `T` is a generic type parameter
@@ -317,12 +372,99 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(self.resolve_type(&pack_ast))
     }
 
-    /// Field types of the struct `ReflectStruct::<T>` targets, in declaration order;
-    /// `None` when `T` is not a struct (the only reflectable kind).
-    fn reflect_subject_field_types(&self, self_name: &str) -> Option<Vec<TypeId>> {
-        self.type_lookup()
-            .struct_fields(self_name)
-            .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
+    /// The struct `ReflectStruct::<T>` targets: its declared name, the
+    /// instantiation's type args (empty for a plain struct), and its field types
+    /// in declaration order with those args substituted. `None` when `T` is not
+    /// a struct (the only reflectable kind).
+    fn reflect_struct_subject(&self, self_ty: TypeId) -> Option<ReflectSubject> {
+        let (base_name, module_source, type_args) =
+            match self.tysys.type_table.borrow().get(self_ty).clone() {
+                ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    type_args,
+                } => (name, module_source, type_args),
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    ..
+                } => (name, module_source, Vec::new()),
+                _ => {
+                    let name = self.tysys.type_table.borrow().type_name(self_ty);
+                    let module_source = self.find_struct_module_source(&name);
+                    (name, module_source, Vec::new())
+                }
+            };
+        let info = self
+            .type_lookup()
+            .struct_fields_in(&base_name, &module_source)?;
+        let declared: Vec<TypeId> = info.fields.iter().map(|(_, ty, _)| *ty).collect();
+        let param_ids = info.type_param_type_ids.clone();
+        Some(ReflectSubject {
+            member_types: self.substitute_declared_params(&declared, &param_ids, &type_args),
+            base_name,
+            module_source,
+            type_args,
+        })
+    }
+
+    /// The variant `ReflectVariant::<T>` targets: its declared name, the
+    /// instantiation's type args (empty for a plain variant), and its case
+    /// payloads in declaration order with those args substituted. `None` when
+    /// `T` is not a variant.
+    fn reflect_variant_subject(&self, self_ty: TypeId) -> Option<ReflectSubject> {
+        let (base_name, module_source, type_args) =
+            match self.tysys.type_table.borrow().get(self_ty).clone() {
+                ResolvedType::Variant {
+                    name,
+                    module_source,
+                    ..
+                } => (name, module_source, Vec::new()),
+                ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    type_args,
+                } => (name, module_source, type_args),
+                _ => return None,
+            };
+        let info = self
+            .type_lookup()
+            .variant_case_in(&base_name, &module_source)?;
+        let declared: Vec<TypeId> = info.cases.iter().map(|c| c.payload).collect();
+        let param_ids = info.type_param_type_ids.clone();
+        Some(ReflectSubject {
+            member_types: self.substitute_declared_params(&declared, &param_ids, &type_args),
+            base_name,
+            module_source,
+            type_args,
+        })
+    }
+
+    /// Substitute an instantiation's `type_args` into member types written
+    /// against the declaration's own parameters. A no-op for a plain type
+    /// (`type_args` empty), which carries no parameters to substitute.
+    fn substitute_declared_params(
+        &self,
+        declared: &[TypeId],
+        param_ids: &[TypeId],
+        type_args: &[TypeId],
+    ) -> Vec<TypeId> {
+        if type_args.is_empty() {
+            return declared.to_vec();
+        }
+        let mut tt = self.tysys.type_table.borrow_mut();
+        let substitution: crate::hashmap::IndexMap<u32, TypeId> = param_ids
+            .iter()
+            .zip(type_args)
+            .filter_map(|(param, &arg)| match tt.get(*param) {
+                ResolvedType::TypeParam { index, .. } => Some((*index, arg)),
+                _ => None,
+            })
+            .collect();
+        declared
+            .iter()
+            .map(|&ty| tt.substitute_type_params(ty, &substitution))
+            .collect()
     }
 
     /// Resolve and type-check the sole receiver of a value-reading reflection
@@ -456,15 +598,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let self_name = self.tysys.type_table.borrow().type_name(self_ty);
-        if !matches!(subject, crate::tir::ResolvedType::Variant { .. }) {
+        let Some(subject) = self.reflect_variant_subject(self_ty) else {
             let _ = self.emit(TypeError::UnknownFunction {
                 name: format!("ReflectVariant::<{self_name}>::{method}"),
                 span: static_call.span,
             });
             return TypeTable::ERROR;
-        }
+        };
+        let ReflectSubject {
+            base_name: self_name,
+            module_source,
+            type_args,
+            member_types: payloads,
+        } = subject;
 
-        let (trait_name, discriminant_method, cases_method, wire_name_policy_method, module_source) = {
+        let (trait_name, discriminant_method, cases_method, wire_name_policy_method) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -478,7 +626,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 items
                     .method_name(CompilerItem::ReflectVariantWireNamePolicy)
                     .to_string(),
-                self.find_struct_module_source(&self_name),
             )
         };
 
@@ -505,10 +652,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow_mut()
                 .make_compiler_enum(CompilerItem::CaseStyle)
         } else if method == cases_method {
-            let payloads: Vec<TypeId> = self
-                .lookup_variant_case(&self_name)
-                .map(|info| info.cases.iter().map(|c| c.payload).collect())
-                .unwrap_or_default();
             let mut tt = self.tysys.type_table.borrow_mut();
             let (case_module, case_name) = {
                 let items = tt.compiler_items();
@@ -533,16 +676,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .make_compiler_struct(CompilerItem::String)
         };
 
-        let func_ref = FunctionRef {
-            module_source,
-            name: MethodName::format_local(&self_name, Some(&trait_name), &method),
-            monomorph_info: None,
-            method_info: Some(LocalMethodName::new(
-                self_name.clone(),
-                Some(trait_name.clone()),
-                method.clone(),
-            )),
-        };
+        let func_ref =
+            self.reflect_func_ref(&self_name, &type_args, &trait_name, &method, module_source);
         self.sem.types.static_method_dispatch.insert(
             static_call.id,
             super::sem::types::StaticMethodDispatch {

@@ -909,6 +909,15 @@ fn function_id_for(func: &NirFunction) -> FunctionId {
                 func.name.clone(),
                 monomorph_info.generic_name.clone(),
             ))
+        } else if let Some((struct_name, trait_name, method_name)) =
+            crate::name::split_local_method_name(&func.name)
+        {
+            FunctionId::Method(MethodName::new(
+                module_source.clone(),
+                struct_name.to_string(),
+                trait_name.map(String::from),
+                method_name.to_string(),
+            ))
         } else {
             FunctionId::Method(MethodName::new(
                 module_source.clone(),
@@ -1084,12 +1093,10 @@ impl<'a> DceWalker<'a> {
                     .insert((resource_name.to_string(), method_name.to_string()));
             }
         } else {
-            // Free function call.
-            debug_assert!(
-                !func_name.contains("::") || func_name.starts_with("builtin::"),
-                "ExprKind::Call should not have method-style names: {func_name}"
-            );
-
+            // Free function call. `method_info` is the discriminator — a name
+            // is not one: a synthesized helper embeds a type mangle, which
+            // carries `::` for an associated-type projection
+            // (`$value_copy$S::MapSerializer`).
             let callee_module = original_callee_module.clone();
             let callee_id = FunctionId::Free(FreeFunctionName::from_module_source(
                 &callee_module,

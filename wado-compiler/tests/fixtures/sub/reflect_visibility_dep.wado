@@ -1,0 +1,43 @@
+pub struct Opaque {
+    root: i32,
+    size: i32,
+}
+
+pub fn make_opaque() -> Opaque {
+    return Opaque { root: 0, size: 0 };
+}
+
+pub struct Open {
+    pub a: i32,
+}
+
+pub struct Mixed {
+    pub a: i32,
+    secret: i32,
+}
+
+pub fn make_mixed() -> Mixed {
+    return Mixed { a: 1, secret: 2 };
+}
+
+pub struct Nothing {}
+
+pub struct HandWritten {
+    pub a: i32,
+}
+
+impl Inspect for HandWritten {
+    fn inspect(&self, f: &mut Formatter) {
+        f.write_str(&"hand");
+    }
+}
+
+pub struct HandWrittenGeneric<T> {
+    pub a: T,
+}
+
+impl<T: Inspect> Inspect for HandWrittenGeneric<T> {
+    fn inspect(&self, f: &mut Formatter) {
+        f.write_str(&"generic");
+    }
+}

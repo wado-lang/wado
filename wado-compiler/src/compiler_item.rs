@@ -1408,6 +1408,19 @@ impl CompilerItems {
         (module.clone(), name.to_string())
     }
 
+    /// Owned `(module, name)` for a struct item, or `None` when the item has
+    /// not been registered yet — for callers that run before the declaring
+    /// stdlib module is elaborated.
+    pub fn struct_owned_opt(&self, item: CompilerItem) -> Option<(ModuleSource, String)> {
+        match self.get(item)? {
+            Resolved::Struct {
+                module_source,
+                name,
+            } => Some((module_source.clone(), name.clone())),
+            _ => None,
+        }
+    }
+
     /// Module + variant name of a [`CompilerItemKind::Variant`] item
     /// (`Option`, `Result`).
     pub fn require_variant(&self, item: CompilerItem) -> (&ModuleSource, &str) {

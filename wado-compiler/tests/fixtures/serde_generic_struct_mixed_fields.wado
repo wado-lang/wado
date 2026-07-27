@@ -1,0 +1,12 @@
+use { to_string } from "core:json";
+
+struct Envelope<T> { id: i32, body: T }
+
+test "a generic struct mixing a concrete and a parameter field serializes" {
+    let e = Envelope { id: 7, body: "hi" };
+    let encoded = to_string::<Envelope<String>>(&e);
+    assert match encoded { Ok(s) => s, Err(_) => "" } == `{"id":7,"body":"hi"}`;
+}
+
+__DATA__
+{"test": {}}

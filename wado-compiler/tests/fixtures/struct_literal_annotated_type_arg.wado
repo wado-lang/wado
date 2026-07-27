@@ -1,0 +1,24 @@
+struct P<T> {
+    left: T,
+    right: u32,
+}
+
+struct Q<T, U> {
+    a: T,
+    b: U,
+}
+
+test "a numeric literal field takes the annotation's type argument" {
+    let c: P<u32> = P { left: 8, right: 5 };
+    assert c.left == 8;
+    assert c.right == 5;
+}
+
+test "each parameter substitutes independently" {
+    let q: Q<u64, i8> = Q { a: 7, b: 3 };
+    assert q.a == 7;
+    assert q.b == 3;
+}
+
+__DATA__
+{"test": {}}

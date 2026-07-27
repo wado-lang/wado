@@ -600,7 +600,7 @@ impl TypeSystem {
             .borrow_mut()
             .push((type_id, trait_name.to_string()));
 
-        let result = self.type_implements_trait_inner(ctx, scope, &resolved, trait_name);
+        let result = self.type_implements_trait_inner(ctx, scope, type_id, &resolved, trait_name);
 
         ctx.trait_check_stack.borrow_mut().pop();
 
@@ -666,6 +666,32 @@ impl TypeSystem {
             ));
             self.collect_trait_unimpl_reason(ctx, scope, member_tid, trait_name, chain);
         }
+    }
+
+    /// Whether a reflection written at `scope`'s module can enumerate `info`'s
+    /// fields (WEP 2026-06-13, Visibility).
+    ///
+    /// Every field must be reachable, not merely one: a declaration carries a
+    /// single synthesized impl whose `members()` is fixed, so admitting the
+    /// struct on one public field would enumerate its private ones alongside
+    /// it.
+    ///
+    /// Visibility decides only this. Eligibility is a property of the
+    /// declaration, so [`Self::is_reflect_eligible`] always sees every field.
+    fn has_visible_fields(&self, scope: &TypeLookup, info: &super::types::StructFieldInfo) -> bool {
+        if info.fields.is_empty() || &info.module_source == scope.current_module_source {
+            return true;
+        }
+        let same_package = info.module_source.same_package(scope.current_module_source);
+        info.fields
+            .iter()
+            .all(|(_, _, vis)| vis.reachable_from(same_package))
+    }
+
+    /// Whether a declaration can be reflected, via the shared eligibility
+    /// predicate reflect synthesis reads.
+    fn is_reflect_eligible(&self, type_id: TypeId) -> bool {
+        self.type_table.borrow().is_reflect_eligible(type_id)
     }
 
     pub(super) fn classify_on_bound_trait(
@@ -952,6 +978,7 @@ impl TypeSystem {
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
+        type_id: TypeId,
         resolved: &ResolvedType,
         trait_name: &str,
     ) -> bool {
@@ -1067,56 +1094,57 @@ impl TypeSystem {
             return true;
         }
 
-        // `ReflectStruct` is synthesized for every struct: eligibility is "is a
-        // struct", not a field-recursive check.
-        if let ResolvedType::Struct {
-            name,
-            module_source,
-            ..
-        } = &resolved
-            && on_bound == Some(OnBoundTrait::ReflectStruct)
-        {
-            self.type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(name, module_source, trait_name);
+        // A plain declaration satisfies its kind's reflection bound when the
+        // shared eligibility predicate accepts it, so nothing needs recording
+        // for synthesis to find later.
+        let plain_reflect_subject = match (&resolved, on_bound) {
+            (
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    ..
+                },
+                Some(OnBoundTrait::ReflectStruct),
+            ) => scope
+                .struct_fields_in(name, module_source)
+                .is_some_and(|info| self.has_visible_fields(scope, info)),
+            (
+                ResolvedType::Variant {
+                    name,
+                    module_source,
+                    ..
+                },
+                Some(OnBoundTrait::ReflectVariant),
+            ) => scope.variant_case_in(name, module_source).is_some(),
+            (ResolvedType::Enum { .. }, Some(OnBoundTrait::ReflectEnum))
+            | (ResolvedType::Flags { .. }, Some(OnBoundTrait::ReflectFlags)) => true,
+            _ => false,
+        };
+        if plain_reflect_subject && self.is_reflect_eligible(type_id) {
             return true;
         }
 
-        // `ReflectVariant` likewise: every variant is eligible.
-        if let ResolvedType::Variant {
+        // A generic instance reflects through its base declaration:
+        // `Pair<String>` is a struct because `Pair` is, and inherits the
+        // declaration's impl by substitution.
+        if let ResolvedType::GenericInstance {
             name,
             module_source,
             ..
         } = &resolved
-            && on_bound == Some(OnBoundTrait::ReflectVariant)
-        {
-            self.type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(name, module_source, trait_name);
-            return true;
-        }
-
-        // `ReflectEnum` likewise: every enum is eligible.
-        if let ResolvedType::Enum {
-            name,
-            module_source,
-            ..
-        } = &resolved
-            && on_bound == Some(OnBoundTrait::ReflectEnum)
-        {
-            self.type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(name, module_source, trait_name);
-            return true;
-        }
-
-        // `ReflectFlags` likewise: every flags type is eligible.
-        if let ResolvedType::Flags {
-            name,
-            module_source,
-            ..
-        } = &resolved
-            && on_bound == Some(OnBoundTrait::ReflectFlags)
+            && match on_bound {
+                Some(OnBoundTrait::ReflectStruct) => {
+                    scope
+                        .struct_fields_in(name, module_source)
+                        .is_some_and(|info| self.has_visible_fields(scope, info))
+                        && self.is_reflect_eligible(type_id)
+                }
+                Some(OnBoundTrait::ReflectVariant) => {
+                    scope.variant_case_in(name, module_source).is_some()
+                        && self.is_reflect_eligible(type_id)
+                }
+                _ => false,
+            }
         {
             self.type_table
                 .borrow_mut()
@@ -1137,23 +1165,14 @@ impl TypeSystem {
             }
             ResolvedType::GenericInstance {
                 name, type_args, ..
-            } => {
-                if TypeTable::is_tuple_type(name) {
-                    // Tuples implement a trait when all elements implement it
-                    let elems = type_args.clone();
-                    return elems
-                        .iter()
-                        .all(|e| self.type_implements_trait(ctx, scope, *e, trait_name));
-                }
-                (
-                    name.clone(),
-                    if type_args.is_empty() {
-                        None
-                    } else {
-                        Some(type_args.clone())
-                    },
-                )
-            }
+            } => (
+                name.clone(),
+                if type_args.is_empty() {
+                    None
+                } else {
+                    Some(type_args.clone())
+                },
+            ),
             ResolvedType::Ref(inner) => {
                 // References always implement Eq via ref.eq (identity comparison)
                 if is_eq {
@@ -1654,6 +1673,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
+    /// The types a pack parameter's bound actually falls on.
+    ///
+    /// A pack is instantiated with the tuple that carries its elements, so the
+    /// bound is checked element-wise. A non-tuple argument is a pack of one.
+    pub(super) fn pack_elements(&self, type_arg: TypeId) -> Vec<TypeId> {
+        match self.type_table.borrow().get(type_arg) {
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } if TypeTable::is_tuple_type(name) => type_args.clone(),
+            _ => vec![type_arg],
+        }
+    }
     /// Check if an impl block's type parameter bounds are satisfied by the given type args.
     /// For `impl<T: Ord> List<T>`, checks that the concrete type substituted for T implements Ord.
     pub(super) fn check_impl_block_bounds(
@@ -1791,11 +1822,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Also covers holes (reserved-index params), re-checked at finalize.
                 continue;
             }
+            // `..T: Foo` binds every element of the pack, not the tuple that
+            // carries them: `f<..T: Foo>([1, "x"])` asks `i32: Foo` and
+            // `String: Foo`, never `[i32, String]: Foo` — which would be a
+            // question about a variadic impl of `Foo` for tuples.
+            let subjects = if param.is_pack {
+                self.tysys.pack_elements(type_arg)
+            } else {
+                vec![type_arg]
+            };
             for bound in &param.bounds {
                 if bound.fn_signature.is_some() {
                     continue;
                 }
-                self.enforce_single_bound(type_arg, &bound.name, &param.name, span);
+                for &subject in &subjects {
+                    self.enforce_single_bound(subject, &bound.name, &param.name, span);
+                }
             }
         }
     }

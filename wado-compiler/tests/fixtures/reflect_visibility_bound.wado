@@ -1,0 +1,36 @@
+use { Open, Nothing, HandWritten, HandWrittenGeneric } from "./sub/reflect_visibility_dep.wado";
+
+trait Tagged {
+    fn tag(&self) -> String;
+}
+
+impl<T: ReflectStruct> Tagged for T {
+    fn tag(&self) -> String {
+        return "struct";
+    }
+}
+
+test "a public field satisfies the bound across modules" {
+    let v = Open { a: 1 };
+    assert v.tag() == "struct";
+}
+
+test "a memberless struct satisfies the bound across modules" {
+    let v = Nothing {};
+    assert v.tag() == "struct";
+}
+
+test "a hand-written derived trait does not revoke the structural bound" {
+    let v = HandWritten { a: 1 };
+    assert v.tag() == "struct";
+    assert `${v:?}` == "hand";
+}
+
+test "a generic type's hand-written derived trait does not revoke the bound" {
+    let v = HandWrittenGeneric { a: 1 };
+    assert v.tag() == "struct";
+    assert `${v:?}` == "generic";
+}
+
+__DATA__
+{"test": {}}

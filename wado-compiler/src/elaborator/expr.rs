@@ -770,16 +770,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow()
                         .type_id_of_decl(variant_info.defined_at)
                 } else {
-                    self.tysys.infer_variant_type_args(
-                        &self.annotate_ctx,
-                        prefix,
-                        &variant_info,
-                        &case_data,
-                        None,
-                        expected_type,
-                        &[],
-                        &[],
-                    )
+                    {
+                        let inferred = self.tysys.infer_variant_type_args(
+                            &self.annotate_ctx,
+                            prefix,
+                            &variant_info,
+                            &case_data,
+                            None,
+                            expected_type,
+                            &[],
+                            &[],
+                        );
+                        self.defer_uninferable_variant(inferred, prefix, &variant_info, ident.span)
+                    }
                 };
 
                 // Stage 5 (Gap 1): record generic type args for
@@ -3174,12 +3177,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or(struct_name);
 
         // Get expected field types using (name, module_source) lookup.
+        //
+        // An annotation naming this struct's instantiation pins the declared
+        // parameters, so substitute them: `let c: P<u32> = P { left: 8, … }`
+        // must expect `u32` for `left`, not the bare `T` a literal cannot be
+        // typed by — it would settle on the default `i32` and then mismatch.
+        let expected_args =
+            expected_type.and_then(|ty| match self.tysys.type_table.borrow().get(ty) {
+                ResolvedType::GenericInstance {
+                    name, type_args, ..
+                } if *name == struct_name => Some(type_args.clone()),
+                _ => None,
+            });
         let struct_field_types: Vec<(String, TypeId)> = self
             .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .map(|info| {
-                info.fields
+                let params = info.type_param_type_ids.clone();
+                let fields: Vec<(String, TypeId)> = info
+                    .fields
                     .iter()
                     .map(|(name, type_id, _)| (name.clone(), *type_id))
+                    .collect();
+                let Some(args) = expected_args.filter(|a| a.len() == params.len()) else {
+                    return fields;
+                };
+                let mut tt = self.tysys.type_table.borrow_mut();
+                let substitution: crate::hashmap::IndexMap<u32, TypeId> = params
+                    .iter()
+                    .zip(args.iter())
+                    .filter_map(|(param, arg)| match tt.get(*param) {
+                        ResolvedType::TypeParam { index, .. }
+                        | ResolvedType::TypePack { index, .. } => Some((*index, *arg)),
+                        _ => None,
+                    })
+                    .collect();
+                fields
+                    .into_iter()
+                    .map(|(name, type_id)| {
+                        (name, tt.substitute_type_params(type_id, &substitution))
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -3248,50 +3284,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .enumerate()
             .map(|(provided_idx, field)| {
-                // Find expected field type for literal coercion
-                // We use expected type for numeric literals (including negated ones)
-                // and null literals to avoid interfering with tuple-to-array coercion
-                // for generic struct fields
-                let is_numeric_literal = self.tysys.is_numeric_literal(&field.value);
-
-                let is_null_literal = matches!(
-                    &field.value,
-                    ast::Expr::Literal(lit) if matches!(&lit.value, ast::Literal::Null)
-                );
-
-                let is_anonymous_struct_literal = matches!(
-                    &field.value,
-                    ast::Expr::StructLiteral(s) if s.name.is_none()
-                );
-
                 let is_tuple_literal = matches!(&field.value, ast::Expr::TupleLiteral(_));
 
-                let is_bytes_literal = matches!(
-                    &field.value,
-                    ast::Expr::Literal(lit)
-                        if matches!(&lit.value, ast::Literal::Bytes(_) | ast::Literal::IncludeBytes(_))
-                );
-
-                // Generic call expressions (e.g. `List::filled(n, 0)` inside
-                // a struct literal field) need the expected field type so the
-                // call's type-parameter inference can back-infer from it. Without
-                // this, the call falls back to literal defaults.
-                let is_call = matches!(&field.value, ast::Expr::Call(_));
-
-                let expected_field_type = if is_numeric_literal
-                    || is_null_literal
-                    || is_anonymous_struct_literal
-                    || is_tuple_literal
-                    || is_bytes_literal
-                    || is_call
-                {
-                    struct_field_types
-                        .iter()
-                        .find(|(name, _)| name == &field.name)
-                        .map(|(_, type_id)| *type_id)
-                } else {
-                    None
-                };
+                let expected_field_type = struct_field_types
+                    .iter()
+                    .find(|(name, _)| name == &field.name)
+                    .map(|(_, type_id)| *type_id);
 
                 // For tuple literals in generic struct fields where the field type
                 // contains type params (e.g., List<T>), skip providing the expected

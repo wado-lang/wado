@@ -1,0 +1,21 @@
+use { make_opaque, make_mixed } from "./sub/reflect_visibility_dep.wado";
+
+trait Tagged {
+    fn tag(&self) -> String;
+}
+
+impl<T: ReflectStruct> Tagged for T {
+    fn tag(&self) -> String {
+        return "struct";
+    }
+}
+
+export fn run() {
+    let v = make_opaque();
+    let _ = v.tag();
+    let m = make_mixed();
+    let _ = m.tag();
+}
+
+__DATA__
+{"compile_error": "tag"}

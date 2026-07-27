@@ -128,6 +128,83 @@ The value bridges (`get` / `extract` / `construct` / `make` / `set`) lower to a
 discriminant-keyed access, so a forged member can trap but never misread a payload;
 after inlining they fold to the code a hand-written impl would emit.
 
+Reflection stops at these four handles: they are themselves generic structs, and
+a handle's own `Members` would mention `StructField<Self, …>`, growing `Self`
+without bound. They are not reflectable, by the same seal that rejects a user
+`impl`.
+
+## Visibility
+
+A type satisfies a `T: Reflect*` bound only where every one of its members is
+visible. A declaration carries a single synthesized impl, so `members()` is
+fixed and cannot be shortened for a caller that sees less; admitting a type on
+one public member would enumerate its private ones alongside it. The shape is
+observable as a whole or not at all. A type declaring no member is genuinely
+memberless and always satisfies.
+
+This gates reflection written _about_ a type, not the impls derived _for_ it. A
+derived impl is synthesized at the declaration, where every member is visible,
+so `${v:?}` and serde keep rendering a foreign type in full — that is the
+declaring module's own choice of representation, the same as deriving it by
+hand. What visibility withholds is a third party enumerating a shape its owner
+did not expose.
+
+This is what keeps an abstraction like `TreeMap` out of a downstream
+`T: ReflectStruct` without naming it: its fields are private, so nothing outside
+its module can enumerate them.
+
+## Generic types
+
+A generic type reflects through one generic impl over `S<T, …>`, not through a
+per-instantiation impl. `FieldTypes` / `CasePayloads` / `Members` bind the
+declaration's own parameters and each instantiation substitutes them:
+
+```wado
+struct Pair<T> { left: T, right: i32 }
+// FieldTypes = [T, i32]   →   Pair<String>: FieldTypes = [String, i32]
+```
+
+The trait shape is unchanged, so no reflection API is generic-specific. The
+alternative — synthesizing a concrete impl once `Pair<String>` exists — is
+circular: a derivation needs `Pair<String>: ReflectStruct` _while_
+monomorphizing, which is exactly when the instance appears.
+
+`type_name()` is the declared name (`"Pair"`, not `"Pair<String>"`), matching
+the plain-struct case and Rust's `{:?}`. Open: a schema library keying `$defs`
+per instantiation needs an identity that separates `Pair<String>` from
+`Pair<i32>`. That is a distinct fact (the instance's type arguments), not a
+different spelling of `type_name`, and waits for a consumer.
+
+Two rules bound what is reflectable:
+
+- A member's own type never disqualifies its owner. An associated-type
+  projection looks like an exception — an iterator adapter's
+  `pub f: fn mut(I::Item) -> U` does not substitute the declaration's own
+  parameters — but the synthesized impl carries the declaration's bounds, so
+  `I::Item` resolves at the instantiation like any other projection.
+- A type whose members are not all visible at the use site is not reflectable
+  there (see [Visibility](#visibility)). This is what leaves `TreeMap`'s
+  hand-written `Inspect` as the only candidate: a generic instance's mangled
+  name (`TreeMap<String, i32>`) does not match the impl written for `TreeMap`,
+  so the derivation would otherwise take it.
+
+### Value bridges
+
+A generic type's value bridges (`$field_get$S$F`, `$case_extract$V$P`,
+`$case_construct$V$P`) are minted _after_ monomorphization — the only synthesis
+that is. Lowering names a bridge by the concrete subject and member mangles, and
+members sharing a mangled member type share one index-dispatched bridge:
+`Pair<i32>` merges `left: T` with `right: i32`, `Pair<String>` keeps them apart.
+The grouping exists only per instantiation, and the two call sites are
+indistinguishable, so a generic bridge could not be selected.
+
+A generic struct becomes its own monomorphized declaration, so its bridges are
+minted off the declaration list. A generic variant never does (WEP 2026-02-09),
+so its instantiations are the `GenericInstance` types naming it, read off the
+type table. Its tag read is minted per instantiation too (`$variant_tag$V`): no
+shared declaration exists to host one, and the base variant type has no GC
+layout, so the receiver must be the instance.
+
 ## Wire naming
 
 The reflection layer exposes only the authored facts — a member's `rename`

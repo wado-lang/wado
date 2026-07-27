@@ -1455,16 +1455,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
                             _ => Vec::new(),
                         };
-                        self.tysys.infer_variant_type_args(
-                            &self.annotate_ctx,
-                            &name,
-                            &variant_info,
-                            &case_data,
-                            args.first(),
-                            None,
-                            &explicit_args,
-                            &target_holes,
-                        )
+                        {
+                            let inferred = self.tysys.infer_variant_type_args(
+                                &self.annotate_ctx,
+                                &name,
+                                &variant_info,
+                                &case_data,
+                                args.first(),
+                                None,
+                                &explicit_args,
+                                &target_holes,
+                            );
+                            self.defer_uninferable_variant(
+                                inferred,
+                                &name,
+                                &variant_info,
+                                static_call.span,
+                            )
+                        }
                     } else {
                         target_type_id
                     };

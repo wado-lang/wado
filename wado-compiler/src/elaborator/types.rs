@@ -363,6 +363,17 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl` method takes a different number of parameters than the trait
+    /// declares. Left unreported it reaches codegen as a call built to the
+    /// trait's arity against a body of another.
+    TraitMethodArityMismatch {
+        trait_name: String,
+        method_name: String,
+        expected: usize,
+        found: usize,
+        span: Span,
+    },
+
     /// Invalid stores declaration
     InvalidStores {
         message: String,
@@ -833,6 +844,19 @@ impl TypeError {
                 Code::OrphanRule,
                 format!(
                     "cannot implement `{trait_name}`: it is a sealed, compiler-synthesized trait provided automatically for every eligible type"
+                ),
+                *span,
+            ),
+            TypeError::TraitMethodArityMismatch {
+                trait_name,
+                method_name,
+                expected,
+                found,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "method `{method_name}` takes {found} parameter(s) but `{trait_name}` declares {expected}"
                 ),
                 *span,
             ),
