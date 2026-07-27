@@ -1527,8 +1527,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .tysys
                             .type_table
                             .borrow_mut()
-                            .make_assoc_type_projection(
+                            .make_assoc_type_projection_of_trait(
                                 self_type_id,
+                                Some(trait_name.clone()),
                                 assoc_decl.name.clone(),
                                 bound_names,
                                 atb,

@@ -1,0 +1,20 @@
+use { println, Stdout } from "core:cli";
+
+fn parse_scalar<T: FromStr>(s: &String) -> Result<T, i32> {
+    return match T::from_str_range(s, 0, 3) {
+        Ok(v) => Result::Ok(v),
+        Err(_) => Result::Err(-1),
+    };
+}
+
+export fn run() with Stdout {
+    let r = parse_scalar::<u64>(&"123");
+    if let Ok(v) = r {
+        println(`${v}`);
+    } else {
+        println("err");
+    }
+}
+
+__DATA__
+{"stdout": "123\n"}
