@@ -1678,7 +1678,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
                 _ => {
-                    // Unknown type - return error expression
+                    // The target names no struct-like type (a trait, an
+                    // undeclared name, a turbofish on a non-generic). Returning
+                    // a bare error type here left the call undiagnosed, so
+                    // codegen received an expression that pushed nothing. Report
+                    // it the same way the not-found guard below does.
+                    let _ = self.emit(TypeError::UnknownFunction {
+                        name: format!(
+                            "{}::{}",
+                            super::trait_env::get_type_name_static(&static_call.target_type),
+                            static_call.method
+                        ),
+                        span: static_call.span,
+                    });
                     return TypeTable::ERROR;
                 }
             };

@@ -1,0 +1,22 @@
+// A turbofish static call whose target does not name a struct-like type
+// (here a trait) must be diagnosed. It used to return a silent error type,
+// so codegen received an expression that pushed nothing and the WIR pipeline
+// panicked on an invalid module.
+trait Shape { fn area(&self) -> i32; }
+
+struct Sq { s: i32 }
+
+impl Shape for Sq {
+    fn area(&self) -> i32 { return self.s * self.s; }
+}
+
+fn use_it(v: i32) -> i32 { return v; }
+
+export fn run() {
+    let q = Sq { s: 3 };
+    let a: i32 = Shape::<Sq>::area(&q);
+    assert use_it(a) == 9;
+}
+
+__DATA__
+{"compile_error": "unknown function"}
