@@ -1,0 +1,19 @@
+//! Two alternatives matching the same single token, one of them reaching
+//! `EOF`. Expected tree is the published ANTLR4 jar's (black-box oracle):
+//! ANTLR4 picks the `EOF` alternative, not the lower-numbered one.
+
+use g from "./grammars/ll_eof_tie.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_eof_tie" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "the EOF alternative wins the tie" {
+    assert_tree(&"a", &"(s (t a))");
+}
