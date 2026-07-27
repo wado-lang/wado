@@ -146,19 +146,25 @@ impl SubstitutionContext {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                owning_trait,
                 bounds,
                 assoc_type_bindings,
             } => {
                 // Substitute the underlying type param to get the concrete type
                 let concrete_id = self.substitute(param_id, type_table);
-                // Direct lookup first
-                if let Some(resolved) = type_table.resolve_assoc_type(concrete_id, &assoc_name) {
+                // Direct lookup first, qualified by the declaring trait when
+                // the projection recorded one — two traits may declare the
+                // same associated-type name on this type.
+                if let Some(resolved) =
+                    type_table.resolve_assoc_type_qualified(concrete_id, &owning_trait, &assoc_name)
+                {
                     return resolved;
                 }
                 // Newtype fallback: newtypes inherit associated types from their base type.
                 let base_id = type_table.get_ultimate_base_type(concrete_id);
                 if base_id != concrete_id
-                    && let Some(resolved) = type_table.resolve_assoc_type(base_id, &assoc_name)
+                    && let Some(resolved) =
+                        type_table.resolve_assoc_type_qualified(base_id, &owning_trait, &assoc_name)
                 {
                     return resolved;
                 }
@@ -183,6 +189,7 @@ impl SubstitutionContext {
                     type_table.intern(ResolvedType::AssocTypeProjection {
                         param_id: concrete_id,
                         assoc_name,
+                        owning_trait,
                         bounds,
                         assoc_type_bindings,
                     })
@@ -439,6 +446,14 @@ pub enum ResolvedType {
         param_id: TypeId,
         /// Name of the associated type (e.g., `"Value"` in `T::Value`)
         assoc_name: String,
+        /// The trait that declares `assoc_name`, when the projection was
+        /// built somewhere that knew it — `Self::Err` inside `trait FromStr`
+        /// is `<Self as FromStr>::Err`. Resolution qualifies by this, which
+        /// is the only way to tell two traits' same-named associated types
+        /// apart on a type that implements both. `None` where the builder
+        /// had no trait in hand; resolution then requires the name to be
+        /// unambiguous.
+        owning_trait: Option<String>,
         /// Trait bounds on this associated type (from the trait declaration)
         bounds: Vec<String>,
         /// Resolved associated type bindings (e.g., [("Item", `u8_typeid`)] for `I::Iter`
@@ -614,15 +629,23 @@ pub struct TypeTable {
     /// annotate pass from `#[compiler_item("...")]` attributes; see
     /// [`crate::compiler_item`].
     compiler_items: crate::compiler_item::CompilerItems,
-    /// Associated type resolutions: `(concrete_type_id, assoc_name)` → `resolved_type_id`.
+    /// Associated type resolutions:
+    /// `(concrete_type_id, declaring trait, assoc_name)` → `resolved_type_id`.
     /// Populated when impl blocks with associated type bindings are processed.
-    assoc_type_resolutions: IndexMap<(TypeId, String), TypeId>,
-    /// Generic associated type definitions: `(base_struct_name, assoc_name)` → `TypeId`.
+    ///
+    /// The trait is part of the key because one type may implement several
+    /// traits declaring the same associated-type name — `f32` has both
+    /// `FromStr::Err` and `LenientFromStr::Err`. Keyed without it, the later
+    /// registration answers for the earlier and the wrong type reaches the
+    /// call site with no diagnostic.
+    assoc_type_resolutions: IndexMap<(TypeId, String, String), TypeId>,
+    /// Generic associated type definitions:
+    /// `(base decl, declaring trait, assoc_name)` → `TypeId`.
     /// The `TypeId` is typically a `TypeParam` that can be substituted using the
     /// `GenericInstance`'s `type_args`. Populated when processing generic impl blocks
     /// (e.g., `impl Iterator for ListIter<T> { type Item = T; }`).
     /// Used by the monomorphizer to resolve associated types for `GenericInstance` types.
-    generic_assoc_type_defs: IndexMap<(crate::ast::AstId, String), TypeId>,
+    generic_assoc_type_defs: IndexMap<(crate::ast::AstId, String, String), TypeId>,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
@@ -1861,6 +1884,7 @@ impl TypeTable {
         self.intern(ResolvedType::AssocTypeProjection {
             param_id,
             assoc_name,
+            owning_trait: None,
             bounds: vec![],
             assoc_type_bindings: vec![],
         })
@@ -1874,9 +1898,29 @@ impl TypeTable {
         bounds: Vec<String>,
         assoc_type_bindings: Vec<(String, TypeId)>,
     ) -> TypeId {
+        self.make_assoc_type_projection_of_trait(
+            param_id,
+            None,
+            assoc_name,
+            bounds,
+            assoc_type_bindings,
+        )
+    }
+
+    /// [`Self::make_assoc_type_projection`] for a builder that knows which
+    /// trait declares the associated type.
+    pub fn make_assoc_type_projection_of_trait(
+        &mut self,
+        param_id: TypeId,
+        owning_trait: Option<String>,
+        assoc_name: String,
+        bounds: Vec<String>,
+        assoc_type_bindings: Vec<(String, TypeId)>,
+    ) -> TypeId {
         self.intern(ResolvedType::AssocTypeProjection {
             param_id,
             assoc_name,
+            owning_trait,
             bounds,
             assoc_type_bindings,
         })
@@ -1888,19 +1932,66 @@ impl TypeTable {
     pub fn register_assoc_type_resolution(
         &mut self,
         concrete_id: TypeId,
+        trait_name: String,
         assoc_name: String,
         resolved_id: TypeId,
     ) {
         self.assoc_type_resolutions
-            .insert((concrete_id, assoc_name), resolved_id);
+            .insert((concrete_id, trait_name, assoc_name), resolved_id);
     }
 
-    /// Resolve an associated type for a concrete type.
-    /// Returns `Some(resolved_id)` if a resolution is registered.
-    pub fn resolve_assoc_type(&self, concrete_id: TypeId, assoc_name: &str) -> Option<TypeId> {
+    /// Resolve `<concrete_id as trait_name>::assoc_name` — the exact form,
+    /// for callers that know which trait the projection came from.
+    pub fn resolve_assoc_type_of_trait(
+        &self,
+        concrete_id: TypeId,
+        trait_name: &str,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
         self.assoc_type_resolutions
-            .get(&(concrete_id, assoc_name.to_string()))
+            .get(&(concrete_id, trait_name.to_string(), assoc_name.to_string()))
             .copied()
+    }
+
+    /// Resolve `assoc_name` on `concrete_id`, qualified by `owning_trait`
+    /// when the caller has one. Falls back to the unqualified rule when it
+    /// does not, or when the named trait registered nothing for this type —
+    /// a projection built under a bound can name the trait that *declared*
+    /// the associated type while the impl registered it under a subtrait.
+    pub fn resolve_assoc_type_qualified(
+        &self,
+        concrete_id: TypeId,
+        owning_trait: &Option<String>,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        if let Some(trait_name) = owning_trait
+            && let Some(resolved) =
+                self.resolve_assoc_type_of_trait(concrete_id, trait_name, assoc_name)
+        {
+            return Some(resolved);
+        }
+        self.resolve_assoc_type(concrete_id, assoc_name)
+    }
+
+    /// Resolve an associated type named `assoc_name` on `concrete_id`
+    /// without naming a trait.
+    ///
+    /// Answers only when exactly one implemented trait declares the name.
+    /// Two would make the answer a coin flip, and a silently wrong type is
+    /// worse than an unresolved one — the caller is expected to fall back to
+    /// [`Self::resolve_assoc_type_of_trait`] with the trait it knows.
+    pub fn resolve_assoc_type(&self, concrete_id: TypeId, assoc_name: &str) -> Option<TypeId> {
+        let mut found = None;
+        for ((type_id, _, name), &resolved) in &self.assoc_type_resolutions {
+            if *type_id != concrete_id || name != assoc_name {
+                continue;
+            }
+            if found.is_some_and(|prior| prior != resolved) {
+                return None;
+            }
+            found = Some(resolved);
+        }
+        found
     }
 
     /// Register a generic associated type definition.
@@ -1913,11 +2004,34 @@ impl TypeTable {
     pub fn register_generic_assoc_type_def(
         &mut self,
         base_decl: crate::ast::AstId,
+        trait_name: String,
         assoc_name: String,
         type_param_id: TypeId,
     ) {
         self.generic_assoc_type_defs
-            .insert((base_decl, assoc_name), type_param_id);
+            .insert((base_decl, trait_name, assoc_name), type_param_id);
+    }
+
+    /// The generic definition of `assoc_name` on `base_decl`, together with
+    /// the trait that declares it. `None` when no trait declares the name, or
+    /// when two disagree — the same unambiguity rule
+    /// [`Self::resolve_assoc_type`] applies to resolved types.
+    fn generic_assoc_type_def(
+        &self,
+        base_decl: crate::ast::AstId,
+        assoc_name: &str,
+    ) -> Option<(String, TypeId)> {
+        let mut found: Option<(String, TypeId)> = None;
+        for ((decl, trait_name, name), &def_id) in &self.generic_assoc_type_defs {
+            if *decl != base_decl || name != assoc_name {
+                continue;
+            }
+            if found.as_ref().is_some_and(|(_, prior)| *prior != def_id) {
+                return None;
+            }
+            found = Some((trait_name.clone(), def_id));
+        }
+        found
     }
 
     /// Register associated-type resolutions for a freshly monomorphized struct.
@@ -1937,16 +2051,18 @@ impl TypeTable {
         base_decl: crate::ast::AstId,
         substitution: &IndexMap<u32, TypeId>,
     ) {
-        let defs: Vec<(String, TypeId)> = self
+        let defs: Vec<(String, String, TypeId)> = self
             .generic_assoc_type_defs
             .iter()
-            .filter(|((decl, _), _)| *decl == base_decl)
-            .map(|((_, assoc_name), &def_id)| (assoc_name.clone(), def_id))
+            .filter(|((decl, _, _), _)| *decl == base_decl)
+            .map(|((_, trait_name, assoc_name), &def_id)| {
+                (trait_name.clone(), assoc_name.clone(), def_id)
+            })
             .collect();
-        for (assoc_name, def_id) in defs {
+        for (trait_name, assoc_name, def_id) in defs {
             let resolved = self.substitute_type_params(def_id, substitution);
             if !self.contains_type_param(resolved) {
-                self.register_assoc_type_resolution(concrete_id, assoc_name, resolved);
+                self.register_assoc_type_resolution(concrete_id, trait_name, assoc_name, resolved);
             }
         }
     }
@@ -1963,9 +2079,8 @@ impl TypeTable {
             ResolvedType::GenericInstance { type_args, .. } => type_args,
             _ => return None,
         };
-        let def_type_id = *self
-            .generic_assoc_type_defs
-            .get(&(self.decl_of_type(concrete_id)?, assoc_name.to_string()))?;
+        let (_, def_type_id) =
+            self.generic_assoc_type_def(self.decl_of_type(concrete_id)?, assoc_name)?;
         match self.get(def_type_id).clone() {
             ResolvedType::TypeParam { index, .. } => type_args.get(index as usize).copied(),
             ResolvedType::AssocTypeProjection {
@@ -2023,9 +2138,8 @@ impl TypeTable {
             ResolvedType::GenericInstance { type_args, .. } => type_args,
             _ => return None,
         };
-        let def_type_id = *self
-            .generic_assoc_type_defs
-            .get(&(self.decl_of_type(concrete_id)?, assoc_name.to_string()))?;
+        let (_, def_type_id) =
+            self.generic_assoc_type_def(self.decl_of_type(concrete_id)?, assoc_name)?;
         let subst: IndexMap<u32, TypeId> = type_args
             .iter()
             .enumerate()
@@ -2061,8 +2175,7 @@ impl TypeTable {
         decl: crate::ast::AstId,
         assoc_name: &str,
     ) -> bool {
-        self.generic_assoc_type_defs
-            .contains_key(&(decl, assoc_name.to_string()))
+        self.generic_assoc_type_def(decl, assoc_name).is_some()
     }
 
     /// Resolve an associated type for whatever form the subject currently has:
@@ -2246,6 +2359,7 @@ impl TypeTable {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                owning_trait,
                 bounds,
                 assoc_type_bindings,
             } => {
@@ -2258,7 +2372,9 @@ impl TypeTable {
                     // projecting: a `D` inferred as `&mut MyDe` still projects
                     // `D::Acc` to `MyDe`'s associated type.
                     let concrete = self.peel_refs(substituted_base);
-                    if let Some(resolved) = self.resolve_assoc_type(concrete, &assoc_name) {
+                    if let Some(resolved) =
+                        self.resolve_assoc_type_qualified(concrete, &owning_trait, &assoc_name)
+                    {
                         return resolved;
                     }
                     if let Some(resolved) =
@@ -2276,8 +2392,9 @@ impl TypeTable {
                 if substituted_base == param_id {
                     type_id
                 } else {
-                    self.make_assoc_type_projection(
+                    self.make_assoc_type_projection_of_trait(
                         substituted_base,
+                        owning_trait,
                         assoc_name,
                         bounds,
                         assoc_type_bindings,
@@ -5051,6 +5168,66 @@ mod tests {
             assoc_type_bindings,
             vec![("Item".to_string(), TypeTable::I32)]
         );
+    }
+
+    /// Two traits may declare the same associated-type name for one type
+    /// (`f32` has `FromStr::Err` and `LenientFromStr::Err`). Keying by the
+    /// declaring trait is what keeps them apart; without it the later
+    /// registration silently answers for the earlier.
+    #[test]
+    fn assoc_type_resolution_is_keyed_by_declaring_trait() {
+        let mut table = TypeTable::new();
+        let target = TypeTable::F32;
+        table.register_assoc_type_resolution(
+            target,
+            "FromStr".to_string(),
+            "Err".to_string(),
+            TypeTable::I32,
+        );
+        table.register_assoc_type_resolution(
+            target,
+            "LenientFromStr".to_string(),
+            "Err".to_string(),
+            TypeTable::I64,
+        );
+
+        assert_eq!(
+            table.resolve_assoc_type_of_trait(target, "FromStr", "Err"),
+            Some(TypeTable::I32)
+        );
+        assert_eq!(
+            table.resolve_assoc_type_of_trait(target, "LenientFromStr", "Err"),
+            Some(TypeTable::I64)
+        );
+    }
+
+    /// An unqualified lookup answers only when the name is unambiguous.
+    /// Guessing between two traits is how the wrong type reaches a call
+    /// site with no diagnostic; `None` sends the caller to a qualified
+    /// lookup instead.
+    #[test]
+    fn unqualified_assoc_type_resolution_declines_when_ambiguous() {
+        let mut table = TypeTable::new();
+        let target = TypeTable::F32;
+        table.register_assoc_type_resolution(
+            target,
+            "FromStr".to_string(),
+            "Err".to_string(),
+            TypeTable::I32,
+        );
+        assert_eq!(
+            table.resolve_assoc_type(target, "Err"),
+            Some(TypeTable::I32),
+            "a single declaring trait is unambiguous"
+        );
+
+        table.register_assoc_type_resolution(
+            target,
+            "LenientFromStr".to_string(),
+            "Err".to_string(),
+            TypeTable::I64,
+        );
+        assert_eq!(table.resolve_assoc_type(target, "Err"), None);
     }
 
     /// A substitution that misses the base leaves the projection interned as

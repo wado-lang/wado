@@ -3488,6 +3488,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 // Determine the struct name (base name without type args)
                 let struct_name = Self::get_type_name_static(&impl_block.ty);
+                let trait_name = impl_block
+                    .trait_type
+                    .as_ref()
+                    .map(Self::get_type_name_static)
+                    .unwrap_or_default();
 
                 // Build a mapping from type param name to index from the explicit `impl<...>` header.
                 let type_param_idx: IndexMap<String, u32> = impl_block
@@ -3545,6 +3550,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(
                             base_decl,
+                            trait_name.clone(),
                             binding.name.clone(),
                             type_param_id,
                         );

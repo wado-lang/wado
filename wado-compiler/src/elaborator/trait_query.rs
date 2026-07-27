@@ -1982,6 +1982,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
+                            trait_name.to_string(),
                             binding.name.clone(),
                             resolved_id,
                         );
@@ -2075,6 +2076,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
+                            trait_name.to_string(),
                             binding.name.clone(),
                             resolved_id,
                         );

@@ -181,12 +181,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let bound_names: Vec<String> =
                     assoc_bounds.iter().map(|b| b.name.clone()).collect();
                 let assoc_type_bindings = self.compute_assoc_type_bindings("Self", &assoc_bounds);
+                // The trait whose frame this is declares the associated type,
+                // so the projection is `<Self as ThatTrait>::Name` — the
+                // qualifier that tells it apart from a same-named associated
+                // type on another trait the eventual `Self` also implements.
+                let owning_trait = self
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_param_bounds
+                    .get("Self")
+                    .and_then(|bounds| bounds.first())
+                    .map(|bound| bound.name.clone());
                 return self
                     .tysys
                     .type_table
                     .borrow_mut()
-                    .make_assoc_type_projection(
+                    .make_assoc_type_projection_of_trait(
                         self_type,
+                        owning_trait,
                         namespaced.name.clone(),
                         bound_names,
                         assoc_type_bindings,

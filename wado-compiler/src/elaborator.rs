@@ -1842,6 +1842,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             target_type_id,
+                            trait_name.clone().unwrap_or_default(),
                             binding.name.clone(),
                             type_id,
                         );
@@ -1856,6 +1857,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .borrow_mut()
                             .register_generic_assoc_type_def(
                                 base_decl,
+                                trait_name.clone().unwrap_or_default(),
                                 binding.name.clone(),
                                 type_id,
                             );
