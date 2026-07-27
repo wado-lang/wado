@@ -2373,8 +2373,6 @@ impl TypeTable {
                         return resolved;
                     }
                 }
-                // Unresolved: the projection stands over the *substituted*
-                // base — `Self::Item` under `Self := I` is `I::Item`.
                 if substituted_base == param_id {
                     type_id
                 } else {

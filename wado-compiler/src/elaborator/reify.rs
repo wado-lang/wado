@@ -1425,8 +1425,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect();
         let trait_module = trait_sig.module.clone();
 
-        // The perspective a foreign default body is walked under: a module
-        // fact, so it stays on the AST rather than in a per-trait digest.
         let trait_items: &'a [ast::Item] = self
             .loaded_modules
             .get(&trait_module)

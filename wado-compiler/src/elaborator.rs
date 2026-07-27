@@ -1631,9 +1631,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
         }
 
-        // Must stay in the decl pass: `Signatures` is assembled from these
-        // digests once every module's decl pass has run, so anything recorded
-        // in the body pass is invisible to every query.
+        // Must stay in the decl pass: `Signatures` is assembled once every
+        // module's has run, so a body-pass record is invisible to every query.
         self.sem.decls.trait_sigs.clear();
         let trait_decls: Vec<ast::TraitDecl> = module
             .items
@@ -1735,8 +1734,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Item::Impl(impl_block) => {
                     self.resolve_impl_item(impl_block);
                 }
-                // A trait declares, it does not define: no TIR, and its
-                // signatures were recorded by the decl pass.
                 Item::Trait(_trait_decl) => {}
                 Item::Variant(variant_decl) => {
                     self.resolve_variant_decl(variant_decl);

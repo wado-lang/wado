@@ -184,8 +184,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return resolved;
                 }
             }
-            // In a trait's own frame `Self` is a slot, so `Self::Assoc` is a
-            // projection over it — what `T::Assoc` becomes for any parameter.
             if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
                 && matches!(
                     self.tysys.type_table.borrow().get(self_type),

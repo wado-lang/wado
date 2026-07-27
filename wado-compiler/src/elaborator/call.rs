@@ -2430,8 +2430,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return self.tysys.signatures.method_sig(entry.method_id).cloned();
         }
-        // The resource index already holds only the receiver-less
-        // operations, so no second `self`-detection pass is needed.
         let (_, _, decl_id, _) = trait_env
             .resource_static_method_index
             .get(&key)?

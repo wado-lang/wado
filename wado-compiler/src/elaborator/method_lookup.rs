@@ -238,11 +238,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// non-`None` `project`. Per-candidate filtering and projection live in
     /// `project` (which also receives the impl's declared type params);
     /// returning `None` skips the candidate.
-    ///
-    /// `project` reads the candidate's declaration facts off its
-    /// instantiated [`ImplSig`]. It never resolves the impl's AST: the decl
-    /// pass already did that, in the impl's own frame and its own module's
-    /// perspective, and instantiation is all a use site adds.
     fn probe_trait_impls<R>(
         &mut self,
         struct_name: &str,
@@ -620,9 +615,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => return None,
         };
 
-        // Coherence lets any same-package module host an `impl <struct_name>`,
-        // so every such module is a candidate; the identity guard below is
-        // what keeps a same-named type elsewhere from matching.
+        // Coherence lets any same-package module host an `impl <struct_name>`.
         if let Some(ref module_source) = struct_module_source {
             let entries: Vec<(ModuleSource, AstId)> = self
                 .tysys
@@ -635,8 +628,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if self.get_type_name(&header.ty) != struct_name {
                     continue;
                 }
-                // The impl's target must be the receiver's own declaration:
-                // its home module declares it, any other must import it.
                 let targets_receiver = impl_module == module_source
                     || self
                         .tysys
@@ -659,8 +650,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // No specific module (prelude types): every inherent impl
-        // registered for this type name, from the same index.
         if struct_module_source.is_none() {
             let entries: Vec<(ModuleSource, AstId)> = self
                 .tysys
@@ -750,11 +739,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `MethodInfo` for `method_name` on the inherent `impl` block at
     /// `impl_ref`, or `None` when the block declares no such method.
-    ///
-    /// The decl pass resolved the signature in the impl's own frame and its
-    /// own module's perspective — which is what kept a same-named type from
-    /// another module out of it — so the receiver's type arguments only fill
-    /// the block's slots.
     fn inherent_method_info(
         &mut self,
         impl_ref: &ImplBlockRef,
@@ -798,13 +782,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The signature of `method_name` as an instance method on the resource
     /// `struct_name` declared in `resource_module`.
-    ///
-    /// The decl pass resolved it in the resource's own frame — the
-    /// resource's type parameters in slots 0.., `Self` built over them, the
-    /// declaring module's imports in scope — so a receiver's type arguments
-    /// only have to fill the slots. Resolving it here would name types as
-    /// the *caller* sees them, which is how a caller that does not import
-    /// the interface's types used to get `unknown` (issue #1416).
     fn find_resource_method_info(
         &mut self,
         struct_name: &str,
@@ -2369,9 +2346,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !method_found {
             let trait_name_base = scope.get_type_name(&trait_type_for_name);
             let trait_name_str = scope.get_type_name_full(&trait_type_for_name);
-            // The trait's frame numbers `Self` slot 0 and its own parameters
-            // after it, so the impl supplies its receiver then its trait
-            // arguments. The method's own slots are left for inference.
             if let Some(default_method) = scope
                 .trait_sig_by_name(&trait_name_base)
                 .and_then(|sig| sig.method(method_name))
@@ -2392,8 +2366,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 found_traits.push(TraitMethodMatch {
                     trait_name: trait_name_str.clone(),
                     method_info: MethodInfo {
-                        // Where the method's own slots start — not 0, since
-                        // the trait frame numbers its own ahead of them.
                         impl_offset: Some(default_method.sig.declaring_slot_count),
                         return_type: instantiated.return_type,
                         self_kind,
@@ -2404,7 +2376,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         inherited_from_base: None,
                         cm_name: None,
                         is_ref_impl: false,
-                        // The method's own slots, for inference to solve.
                         method_type_param_ids: default_method.sig.decl.type_params
                             [(default_method.sig.declaring_slot_count as usize)
                                 .min(default_method.sig.decl.type_params.len())..]
@@ -2607,10 +2578,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             |s, impl_ref, impl_sig, declared| {
                 let trait_env = Arc::clone(&s.tysys.trait_env);
                 let header = impl_header(&trait_env, impl_ref);
-                // The binding was resolved in the impl's own module: an
-                // associated type (`type Output = f32x4`, `type Item =
-                // IterMap<…>`) names types as the defining impl sees them,
-                // not as the caller does.
                 let binding = *impl_sig.associated_types.get(assoc_name)?;
                 if !s.tysys.verify_impl_type_compatibility(
                     &header.ty,
@@ -2837,8 +2804,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(rhs_index)
                     .copied();
 
-                // `Self` needs no binding: the impl's frame resolved it to
-                // the impl target, so instantiation yields the receiver.
                 let output_type = impl_sig
                     .associated_types
                     .get("Output")
@@ -2969,8 +2934,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .self_kind;
                 let impl_source = s.impl_block_module_source(impl_ref);
 
-                // The associated type (`Output` or `Input`) as the impl
-                // declared it, with this receiver's arguments in its slots.
                 let assoc_type = impl_sig
                     .associated_types
                     .get(assoc_type_name)

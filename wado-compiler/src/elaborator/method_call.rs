@@ -1212,9 +1212,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|ty| self.resolve_type(ty))
             .collect();
 
-        // `lookup_static_method_param_types` must keep answering without type
-        // arguments — variant-constructor param types stay empty for the
-        // payload substitution path — so the coercion target is built here.
+        // Not folded into `lookup_static_method_param_types`: variant
+        // constructors need its answer to stay empty.
         {
             let has_type_args = matches!(&static_call.target_type, ast::Type::Generic(_))
                 || !method_type_args.is_empty();
@@ -1832,8 +1831,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_module: &ModuleSource,
         method_name: &str,
     ) -> Option<String> {
-        // The index already holds only the receiver-less methods, so the
-        // caller needs no second `self`-detection pass over the AST.
         let (_, _, decl_id, _) = self
             .tysys
             .trait_env
@@ -2160,8 +2157,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .filter(|m| m.default_body.is_some() && m.sig.self_kind == ast::SelfKind::None)
                 .cloned()
         {
-            // `Self` is the trait frame's slot 0; filling it with the
-            // concrete receiver also resolves any `Self::Assoc` in the type.
             let mut scope = self.enter_inherited_type_param_scope();
             let self_type_id = scope.resolve_named_type(struct_name, Span::default(), false);
             let result = default_method

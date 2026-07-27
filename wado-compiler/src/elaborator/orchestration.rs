@@ -1525,9 +1525,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .insert(module_source.clone(), saved_sem);
         }
 
-        // Merge every module's decl digests into the program-wide
-        // `Signatures` — the same field set `ModuleDecls::clone_digests_from`
-        // seeds from the stdlib snapshot.
         {
             let mut signatures = super::sig::Signatures {
                 data_sections: modules

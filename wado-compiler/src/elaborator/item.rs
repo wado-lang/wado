@@ -748,8 +748,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .map(|t| scope.resolve_written_type_args(t))
             .unwrap_or_default();
 
-        // In declaration order, and inserted into scope as we go, so a later
-        // `type B = Self::A` sees the earlier binding.
         let mut associated_types = crate::hashmap::IndexMap::default();
         for binding in &impl_block.associated_types {
             let type_id = scope.resolve_type(&binding.ty);
@@ -946,8 +944,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &block.current_module_source.clone(),
         );
 
-        // Recorded for a synthesis request too — it declares a target and a
-        // trait like any block — but its methods do not exist yet.
         block.record_impl_sig(impl_block, impl_is_concrete);
         if impl_block.is_synthesize_request {
             return;
@@ -1231,8 +1227,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ctx
             .type_params
             .insert("Self".to_string(), (0, self_slot));
-        // Bounded by the trait being declared, so `Self` satisfies it where
-        // a signature requires it (`Iterator::map` → `IterMap<Self, U>`).
         scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
             "Self".to_string(),
             vec![ast::TraitBound {
@@ -1385,8 +1379,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         });
 
-        // Fn-bound parameters consume no slot, so only real ones are listed
-        // — the density [`DeclSig`] documents.
         let decl_slots: Vec<(String, TypeId)> = scope
             .annotate_ctx
             .trait_ctx
@@ -1490,8 +1482,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .find_map(crate::ast::Attribute::cm_identifier);
 
-            // An effect operation takes no receiver, so its `self_kind` is
-            // `None` however the AST spelled it.
             let self_kind = if self_type.is_some() {
                 method
                     .params
@@ -1510,8 +1500,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                     self_kind,
                     params: sig_params,
-                    // An operation declares no type parameters of its own,
-                    // so every slot belongs to the declaration.
                     declaring_slot_count: decl_slots.len() as u32,
                     cm_name: cm_name.clone(),
                     is_async: method.is_async,
