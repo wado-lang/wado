@@ -2246,17 +2246,18 @@ impl TypeTable {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
-                ..
+                bounds,
+                assoc_type_bindings,
             } => {
                 // Substitute the parameter first; only attempt projection
                 // resolution once the underlying type is fully concrete.
-                let concrete = self.substitute_type_params(param_id, substitution);
-                if !self.contains_type_param(concrete) {
+                let substituted_base = self.substitute_type_params(param_id, substitution);
+                if !self.contains_type_param(substituted_base) {
                     // Associated types are inherited through references (mirrors
                     // method-call auto-deref), so peel `&`/`&mut` before
                     // projecting: a `D` inferred as `&mut MyDe` still projects
                     // `D::Acc` to `MyDe`'s associated type.
-                    let concrete = self.peel_refs(concrete);
+                    let concrete = self.peel_refs(substituted_base);
                     if let Some(resolved) = self.resolve_assoc_type(concrete, &assoc_name) {
                         return resolved;
                     }
@@ -2266,7 +2267,22 @@ impl TypeTable {
                         return resolved;
                     }
                 }
-                type_id
+                // The base is still parametric (or names no binding yet), so
+                // the projection stands — but over the substituted base.
+                // `Self::Item` under `Self := I` is `I::Item`; keeping the old
+                // base would silently project through the caller's parameter.
+                // `bounds` and `assoc_type_bindings` describe the associated
+                // type, not the base, so they carry over unchanged.
+                if substituted_base == param_id {
+                    type_id
+                } else {
+                    self.make_assoc_type_projection(
+                        substituted_base,
+                        assoc_name,
+                        bounds,
+                        assoc_type_bindings,
+                    )
+                }
             }
             // `Reactive` wraps an inner type, so substitute it recursively.
             // Defensive: reactive bindings are typed with the underlying value
@@ -4975,5 +4991,77 @@ mod tests {
         let table = TypeTable::new();
         let unregistered = crate::ast::AstId::new(crate::ast::AstIdSpace::next(), 0);
         let _ = table.type_id_of_decl(unregistered);
+    }
+
+    /// Substituting a projection's base rewrites the projection even when the
+    /// replacement is itself a parameter. `Self::Item` under `Self := I` is
+    /// `I::Item`, not `Self::Item` — a trait signature instantiated for an
+    /// impl's receiver slot is the case that needs it.
+    #[test]
+    fn substitute_rewrites_projection_base_to_another_param() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let projection = table.make_assoc_type_projection_simple(self_param, "Item".to_string());
+
+        let receiver = table.make_type_param("I".to_string(), 1);
+        let substitution = IndexMap::from_iter([(0, receiver)]);
+        let substituted = table.substitute_type_params(projection, &substitution);
+
+        let ResolvedType::AssocTypeProjection {
+            param_id,
+            assoc_name,
+            ..
+        } = table.get(substituted).clone()
+        else {
+            panic!("expected a projection, got {:?}", table.get(substituted));
+        };
+        assert_eq!(param_id, receiver);
+        assert_eq!(assoc_name, "Item");
+    }
+
+    /// The projection's own metadata survives a base rewrite: bounds and
+    /// bindings describe the associated type, not the base.
+    #[test]
+    fn substitute_preserves_projection_metadata() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let projection = table.make_assoc_type_projection(
+            self_param,
+            "Acc".to_string(),
+            vec!["Default".to_string()],
+            vec![("Item".to_string(), TypeTable::I32)],
+        );
+
+        let receiver = table.make_type_param("D".to_string(), 3);
+        let substitution = IndexMap::from_iter([(0, receiver)]);
+        let substituted = table.substitute_type_params(projection, &substitution);
+
+        let ResolvedType::AssocTypeProjection {
+            param_id,
+            bounds,
+            assoc_type_bindings,
+            ..
+        } = table.get(substituted).clone()
+        else {
+            panic!("expected a projection");
+        };
+        assert_eq!(param_id, receiver);
+        assert_eq!(bounds, vec!["Default".to_string()]);
+        assert_eq!(assoc_type_bindings, vec![("Item".to_string(), TypeTable::I32)]);
+    }
+
+    /// A substitution that misses the base leaves the projection interned as
+    /// it was, so callers keeping `TypeId` identity are unaffected.
+    #[test]
+    fn substitute_leaves_unrelated_projection_untouched() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let projection = table.make_assoc_type_projection_simple(self_param, "Item".to_string());
+
+        let substitution = IndexMap::from_iter([(7, TypeTable::I32)]);
+        assert_eq!(
+            table.substitute_type_params(projection, &substitution),
+            projection
+        );
     }
 }
