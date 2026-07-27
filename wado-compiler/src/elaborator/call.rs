@@ -1486,25 +1486,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// source of truth shared by `lookup_function_param_types` and
     /// `lookup_function_return_type` (issue #1371). An operation is a method on
     /// an `interface` (WASI/user effect) or a `resource` (WASI handle); both
-    /// store methods as `InterfaceMethod`s. Types resolve in the declaring
-    /// module's import scope so they share identity with the call site.
+    /// store methods as `InterfaceMethod`s, and the decl pass recorded both
+    /// kinds as a [`MethodSig`] in the declaration's own frame.
     fn resolve_effect_op_signature(
         &self,
         effect: &str,
         operation: &str,
     ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
         let canonical_key = self.canonical_decl_key(effect);
-        let (module_source, _item_id) = self
+        let (_, decl_id) = self
             .tysys
             .trait_env
             .effect_decl_index
             .get(&canonical_key)
-            .or_else(|| self.tysys.trait_env.resource_decl_index.get(&canonical_key))?
-            .clone();
-        self.tysys
+            .or_else(|| self.tysys.trait_env.resource_decl_index.get(&canonical_key))?;
+        let sig = self
+            .tysys
             .signatures
-            .effect_op_sig(&module_source, canonical_key.1, operation.to_string())
-            .cloned()
+            .resource_method_sig(*decl_id, operation)?;
+        Some((sig.decl.param_types.clone(), sig.decl.return_type))
     }
 
     /// Get the String struct type (from core:prelude/string.wado)

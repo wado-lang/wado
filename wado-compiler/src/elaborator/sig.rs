@@ -6,7 +6,7 @@ use std::rc::Rc;
 use crate::ast::AstId;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{TirEffectOp, TypeId, TypeTable};
+use crate::tir::{TypeId, TypeTable};
 
 use super::sem::decls::FunctionSig;
 
@@ -52,15 +52,6 @@ pub(crate) struct Signatures {
     /// block's `AstId`.
     pub(crate) impl_sigs: IndexMap<AstId, ImplSig>,
 
-    /// `interface` / `resource` operation signatures, keyed by the
-    /// declaration's `AstId`.
-    pub(crate) effect_ops: IndexMap<AstId, Vec<TirEffectOp>>,
-
-    /// The same operations keyed by name for the lookups that have only a
-    /// name: declaring module → `(decl name, op name)`.
-    pub(crate) effect_op_sigs:
-        IndexMap<ModuleSource, IndexMap<(String, String), (Vec<TypeId>, Option<TypeId>)>>,
-
     /// Global-variable declarations, declaring module → name →
     /// `(declared type, is_mut)`.
     pub(crate) globals: IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>>,
@@ -99,23 +90,6 @@ impl Signatures {
     /// Declaration facts of the `impl` block at `ast_id`.
     pub(crate) fn impl_sig(&self, ast_id: AstId) -> Option<&ImplSig> {
         self.impl_sigs.get(&ast_id)
-    }
-
-    /// Operation signatures of the `interface` / `resource` declared at
-    /// `ast_id`, in any loaded module.
-    pub(crate) fn effect_ops(&self, ast_id: AstId) -> Option<&[TirEffectOp]> {
-        self.effect_ops.get(&ast_id).map(Vec::as_slice)
-    }
-
-    /// Signature of operation `op` on the `interface` / `resource` named
-    /// `decl` in `module`.
-    pub(crate) fn effect_op_sig(
-        &self,
-        module: &ModuleSource,
-        decl: String,
-        op: String,
-    ) -> Option<&(Vec<TypeId>, Option<TypeId>)> {
-        self.effect_op_sigs.get(module)?.get(&(decl, op))
     }
 
     /// Declared type and mutability of the global `name` in `module`.

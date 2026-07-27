@@ -52,7 +52,6 @@ impl ModuleDecls {
     pub(crate) fn clone_digests_from(&mut self, other: &ModuleDecls) {
         self.associated_constants
             .clone_from(&other.associated_constants);
-        self.effect_op_sigs.clone_from(&other.effect_op_sigs);
         self.effect_ops.clone_from(&other.effect_ops);
         self.method_sigs.clone_from(&other.method_sigs);
         self.resource_method_ids
@@ -91,9 +90,6 @@ pub(crate) struct ModuleDecls {
     /// driver-merged view needs no shadowing rules.
     pub(crate) associated_constants:
         IndexMap<(ModuleSource, String), (ModuleSource, TypeId, ast::Expr)>,
-    /// This module's own interface / resource operation signatures, keyed
-    /// `(decl name, op name)`, resolved once in the declaring perspective.
-    pub(crate) effect_op_sigs: IndexMap<(String, String), (Vec<TypeId>, Option<TypeId>)>,
     /// Canonical signatures of this module's method declarations, keyed by
     /// the method's globally-unique `AstId`.
     ///

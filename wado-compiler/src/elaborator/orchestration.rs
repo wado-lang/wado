@@ -1545,9 +1545,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .associated_constants
                         .insert(key.clone(), value.clone());
                 }
-                signatures
-                    .effect_op_sigs
-                    .insert(module_source.clone(), sem.decls.effect_op_sigs.clone());
                 for (ast_id, sig) in &sem.decls.method_sigs {
                     signatures.method_sigs.insert(*ast_id, sig.clone());
                 }
@@ -1558,9 +1555,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 for (ast_id, sig) in &sem.decls.impl_sigs {
                     signatures.impl_sigs.insert(*ast_id, sig.clone());
-                }
-                for (ast_id, ops) in &sem.decls.effect_ops {
-                    signatures.effect_ops.insert(*ast_id, ops.clone());
                 }
                 signatures
                     .function_sigs

@@ -1670,38 +1670,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.sem.decls.effect_ops.insert(decl_id, ops);
         }
 
-        self.sem.decls.effect_op_sigs.clear();
-        let op_inputs: Vec<(String, String, Vec<ast::Type>, Option<ast::Type>)> = module
-            .items
-            .iter()
-            .filter_map(|item| match item {
-                Item::Interface(decl) => Some((decl.name.clone(), &decl.methods)),
-                Item::Resource(decl) => Some((decl.name.clone(), &decl.methods)),
-                _ => None,
-            })
-            .flat_map(|(name, methods)| {
-                methods
-                    .iter()
-                    .map(move |m| {
-                        (
-                            name.clone(),
-                            m.name.clone(),
-                            m.params.iter().map(|p| p.ty.clone()).collect(),
-                            m.return_type.clone(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        for (effect, op, param_asts, return_ast) in op_inputs {
-            let params = param_asts.iter().map(|ty| self.resolve_type(ty)).collect();
-            let ret = return_ast.as_ref().map(|ty| self.resolve_type(ty));
-            self.sem
-                .decls
-                .effect_op_sigs
-                .insert((effect, op), (params, ret));
-        }
-
         // Pre-populate the generic-function inference caches for every
         // generic function in the current module. This allows same-module
         // forward references (e.g. `outer<T>` calling `inner<T>` defined
@@ -2079,10 +2047,5 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .insert((impl_block.id, default_method.id), populated);
             }
         }
-    }
-
-    /// Get the type table (after resolution)
-    pub fn into_type_table(self) -> Rc<RefCell<TypeTable>> {
-        self.tysys.type_table
     }
 }

@@ -2134,12 +2134,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .find(|(name, ..)| name == method_name)
                     .and_then(|(name, _, item_id, _)| {
-                        self.tysys
-                            .signatures
-                            .effect_ops(*item_id)?
-                            .iter()
-                            .find(|op| op.name == *name)
-                            .map(|op| op.return_type)
+                        let sig = self.tysys.signatures.resource_method_sig(*item_id, name)?;
+                        Some(sig.decl.return_type.unwrap_or(TypeTable::UNIT))
                     })
             });
         if let Some(return_type) = indexed_resource_return {

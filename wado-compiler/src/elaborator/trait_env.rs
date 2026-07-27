@@ -1370,21 +1370,6 @@ impl TraitEnv {
             .cloned()
     }
 
-    /// Convenience for synthesis sites: build a `(declaring module, name)`
-    /// pair for use as [`crate::name::LocalMethodName::base_trait`]. Falls
-    /// back to [`ModuleSource::prelude`] when no module declares a trait
-    /// by this name — that covers the compiler-internal `Fn` family and
-    /// any future trait that synthesis references before its prelude
-    /// declaration is registered. The fallback's module is acceptable
-    /// because the only code that consumes `base_trait_module` to
-    /// disambiguate is dispatch synthesis, which keys the effect /
-    /// resource indices by `(module, name)` and treats a non-match as
-    /// "not an effect / resource".
-    pub fn trait_ref_for(&self, trait_name: &str) -> DeclKey {
-        self.find_trait_decl_key(trait_name)
-            .unwrap_or_else(|| (ModuleSource::prelude(), trait_name.to_string()))
-    }
-
     /// Find any canonical receiver [`DeclKey`] currently registered in
     /// the static-method index whose bare name matches `name`. Used as a
     /// final fallback in [`crate::elaborator::Elaborator::canonical_decl_key`]
