@@ -126,6 +126,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Which of `param_name`'s trait bounds declares `assoc_name`, making
+    /// `param_name::assoc_name` mean `<param_name as ThatTrait>::assoc_name`.
+    /// Resolution needs the qualifier: one type may implement two traits that
+    /// declare the same associated-type name.
+    fn bound_declaring_assoc_type(&self, param_name: &str, assoc_name: &str) -> Option<String> {
+        self.annotate_ctx
+            .trait_ctx
+            .type_param_bounds
+            .get(param_name)
+            .into_iter()
+            .flatten()
+            .map(|bound| bound.name.clone())
+            .find(|trait_name| {
+                self.find_trait_decl_assoc_type_decls(trait_name)
+                    .is_some_and(|decls| decls.iter().any(|d| d.name == assoc_name))
+            })
+    }
+
     /// Resolve a namespaced generic type like `ns::Type<T>` or `Self::Output`
     pub(super) fn resolve_namespaced_generic_type(
         &mut self,
@@ -165,6 +183,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return resolved;
                 }
+            }
+            if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
+                && matches!(
+                    self.tysys.type_table.borrow().get(self_type),
+                    ResolvedType::TypeParam { .. }
+                )
+            {
+                let assoc_bounds = self.find_assoc_type_bounds(self_type, &namespaced.name);
+                let bound_names: Vec<String> =
+                    assoc_bounds.iter().map(|b| b.name.clone()).collect();
+                let assoc_type_bindings = self.compute_assoc_type_bindings("Self", &assoc_bounds);
+                let owning_trait = self.bound_declaring_assoc_type("Self", &namespaced.name);
+                return self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_assoc_type_projection_of_trait(
+                        self_type,
+                        owning_trait,
+                        namespaced.name.clone(),
+                        bound_names,
+                        assoc_type_bindings,
+                    );
             }
             // If not found, it's an unknown associated type
             let _ = self.emit(TypeError::UnknownType {
@@ -235,12 +276,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let assoc_type_bindings =
                 self.compute_assoc_type_bindings(&namespaced.namespace.clone(), &assoc_bounds);
 
+            let owning_trait =
+                self.bound_declaring_assoc_type(&namespaced.namespace, &namespaced.name);
             return self
                 .tysys
                 .type_table
                 .borrow_mut()
-                .make_assoc_type_projection(
+                .make_assoc_type_projection_of_trait(
                     param_type_id,
+                    owning_trait,
                     namespaced.name.clone(),
                     bound_names,
                     assoc_type_bindings,

@@ -1319,19 +1319,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             module_visible_types: Rc::new(module_visible_types),
             loaded_module_func_indices: Rc::new(loaded_module_func_indices),
             // Assembled by `build_tir_from_state` between the decl and body
-            // passes, once every module's own constants are resolved.
-            all_associated_constants: Rc::new(IndexMap::default()),
-            all_effect_op_sigs: Rc::new(IndexMap::default()),
-            all_function_sigs: Rc::new(IndexMap::default()),
-            all_globals: Rc::new(IndexMap::default()),
-            all_impl_method_sigs: Rc::new(IndexMap::default()),
-            all_effect_ops: Rc::new(IndexMap::default()),
-            data_sections: Rc::new(
-                modules
-                    .iter()
-                    .filter_map(|(ms, m)| m.data_section().map(|d| (ms.clone(), d.to_owned())))
-                    .collect(),
-            ),
+            // passes, once every module's own declarations are resolved.
+            signatures: Rc::new(super::sig::Signatures::default()),
         };
         Ok(AnnotateState {
             tysys,
@@ -1536,54 +1525,46 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .insert(module_source.clone(), saved_sem);
         }
 
-        // Merge every module's decl digests into the program-wide maps —
-        // the same field set `ModuleDecls::clone_digests_from` seeds from
-        // the stdlib snapshot.
         {
-            let mut all_consts: IndexMap<
-                (ModuleSource, String),
-                (ModuleSource, TypeId, crate::ast::Expr),
-            > = IndexMap::default();
-            let mut all_ops: IndexMap<
-                ModuleSource,
-                IndexMap<(String, String), (Vec<TypeId>, Option<TypeId>)>,
-            > = IndexMap::default();
-            let mut all_fn_sigs: IndexMap<
-                ModuleSource,
-                Rc<IndexMap<String, super::sem::decls::FunctionSig>>,
-            > = IndexMap::default();
-            let mut all_globals: IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>> =
-                IndexMap::default();
-            let mut all_impl_method_sigs: IndexMap<crate::ast::AstId, super::sig::MethodSig> =
-                IndexMap::default();
-            let mut all_effect_ops: IndexMap<crate::ast::AstId, Vec<crate::tir::TirEffectOp>> =
-                IndexMap::default();
+            let mut signatures = super::sig::Signatures {
+                data_sections: modules
+                    .iter()
+                    .filter_map(|(ms, m)| m.data_section().map(|d| (ms.clone(), d.to_owned())))
+                    .collect(),
+                ..Default::default()
+            };
             for module_source in &sorted_sources {
                 let Some(sem) = state.module_semantics.get(module_source) else {
                     continue;
                 };
                 for (key, value) in &sem.decls.associated_constants {
-                    all_consts.insert(key.clone(), value.clone());
+                    signatures
+                        .associated_constants
+                        .insert(key.clone(), value.clone());
                 }
-                all_ops.insert(module_source.clone(), sem.decls.effect_op_sigs.clone());
-                for (ast_id, sig) in &sem.decls.impl_method_sigs {
-                    all_impl_method_sigs.insert(*ast_id, sig.clone());
+                for (ast_id, sig) in &sem.decls.method_sigs {
+                    signatures.method_sigs.insert(*ast_id, sig.clone());
                 }
-                for (ast_id, ops) in &sem.decls.effect_ops {
-                    all_effect_ops.insert(*ast_id, ops.clone());
+                for (key, method_id) in &sem.decls.resource_method_ids {
+                    signatures
+                        .resource_method_ids
+                        .insert(key.clone(), *method_id);
                 }
-                all_fn_sigs.insert(module_source.clone(), Rc::clone(&sem.decls.function_sigs));
-                all_globals.insert(
+                for (ast_id, sig) in &sem.decls.impl_sigs {
+                    signatures.impl_sigs.insert(*ast_id, sig.clone());
+                }
+                for (ast_id, sig) in &sem.decls.trait_sigs {
+                    signatures.trait_sigs.insert(*ast_id, sig.clone());
+                }
+                signatures
+                    .function_sigs
+                    .insert(module_source.clone(), Rc::clone(&sem.decls.function_sigs));
+                signatures.globals.insert(
                     module_source.clone(),
                     sem.decls.current_module_globals.clone(),
                 );
             }
-            state.tysys.all_effect_ops = Rc::new(all_effect_ops);
-            state.tysys.all_associated_constants = Rc::new(all_consts);
-            state.tysys.all_effect_op_sigs = Rc::new(all_ops);
-            state.tysys.all_function_sigs = Rc::new(all_fn_sigs);
-            state.tysys.all_globals = Rc::new(all_globals);
-            state.tysys.all_impl_method_sigs = Rc::new(all_impl_method_sigs);
+            state.tysys.signatures = Rc::new(signatures);
         }
 
         // Phase 1b — `annotate_bodies`: run the body walk over every user
@@ -3504,6 +3485,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 // Determine the struct name (base name without type args)
                 let struct_name = Self::get_type_name_static(&impl_block.ty);
+                let trait_name = impl_block
+                    .trait_type
+                    .as_ref()
+                    .map(Self::get_type_name_static)
+                    .unwrap_or_default();
 
                 // Build a mapping from type param name to index from the explicit `impl<...>` header.
                 let type_param_idx: IndexMap<String, u32> = impl_block
@@ -3561,6 +3547,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(
                             base_decl,
+                            trait_name.clone(),
                             binding.name.clone(),
                             type_param_id,
                         );

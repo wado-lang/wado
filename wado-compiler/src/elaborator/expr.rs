@@ -431,9 +431,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // #data - returns the __DATA__ section content as a String
                 let data = self
                     .tysys
-                    .data_sections
-                    .get(&self.current_module_source)
-                    .cloned();
+                    .signatures
+                    .data_section(&self.current_module_source)
+                    .map(str::to_owned);
                 let string_type = self.get_string_struct_type();
                 if data.is_none() {
                     let _ = self.emit(TypeError::InvalidLiteral {
@@ -669,15 +669,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reify resolves the fallback-module global / `FuncRef` its own
         // way; project the type only. This default-expr path is never an
         // assignment target, so no place is recorded.
-        if let Some(&(ty, _)) = self
-            .tysys
-            .all_globals
-            .get(fallback)
-            .and_then(|m| m.get(name))
-        {
+        if let Some((ty, _)) = self.tysys.signatures.global(fallback, name) {
             return Some(ty);
         }
-        let sig = self.tysys.function_sig(fallback, name)?.clone();
+        let sig = self.tysys.signatures.function_sig(fallback, name)?.clone();
         Some(
             self.compute_func_ref_type_from_sig(&sig, &[])
                 .unwrap_or(TypeTable::UNKNOWN),
@@ -999,7 +994,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         name: &str,
     ) -> Option<(super::sem::decls::FunctionSig, ModuleSource, String)> {
-        if let Some(sig) = self.tysys.function_sig(&self.current_module_source, name) {
+        if let Some(sig) = self
+            .tysys
+            .signatures
+            .function_sig(&self.current_module_source, name)
+        {
             return Some((
                 sig.clone(),
                 self.current_module_source.clone(),
@@ -1009,7 +1008,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let symbol = self.symbols.lookup(&self.current_module_source, name)?;
         let src = symbol.module_source().clone();
         let original = symbol.name.clone();
-        let sig = self.tysys.function_sig(&src, &original)?.clone();
+        let sig = self.tysys.signatures.function_sig(&src, &original)?.clone();
         Some((sig, src, original))
     }
 

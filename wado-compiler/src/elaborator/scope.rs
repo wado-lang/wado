@@ -178,20 +178,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
-    /// Run `body` with `Self` overridden when `self_type` is known;
-    /// `None` keeps the current `Self` in place — this helper never clears
-    /// it. For dispatch paths whose receiver type may be unresolved.
-    pub(super) fn with_self_type_if_known<R>(
-        &mut self,
-        self_type: Option<TypeId>,
-        body: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        match self_type {
-            Some(ty) => self.with_self_type(ty, body),
-            None => body(self),
-        }
-    }
-
     /// Run `body` with [`Scope::default_scope_module`] replaced by
     /// `module`. Unlike [`Self::with_self_type_if_known`], `None` here is
     /// a value: it clears the fallback.

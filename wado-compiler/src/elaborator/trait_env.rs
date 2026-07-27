@@ -432,12 +432,9 @@ pub(super) type ResourceDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 #[derive(Clone, Debug)]
 pub(super) struct StaticMethodEntry {
     pub(super) name: String,
-    /// The module defining the impl — a static method's signature names types
-    /// that module imports, not the caller's.
-    pub(super) module: ModuleSource,
-    /// The impl block, for its [`ImplHeader`].
-    pub(super) impl_id: AstId,
-    /// The method itself: the key into the signature digest.
+    /// The method itself: the key into the signature digest, which carries
+    /// everything a lookup needs — resolved in the impl's own frame and its
+    /// own module's perspective.
     pub(super) method_id: AstId,
 }
 
@@ -1013,8 +1010,6 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
-                                    module: module_source.clone(),
-                                    impl_id: impl_block.id,
                                     method_id: method.id,
                                 });
                         }
@@ -1034,8 +1029,6 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
-                                    module: module_source.clone(),
-                                    impl_id: impl_block.id,
                                     method_id: method.id,
                                 });
                         }
@@ -1375,21 +1368,6 @@ impl TraitEnv {
             .chain(self.resource_decl_index.keys())
             .find(|(_, n)| n == name)
             .cloned()
-    }
-
-    /// Convenience for synthesis sites: build a `(declaring module, name)`
-    /// pair for use as [`crate::name::LocalMethodName::base_trait`]. Falls
-    /// back to [`ModuleSource::prelude`] when no module declares a trait
-    /// by this name — that covers the compiler-internal `Fn` family and
-    /// any future trait that synthesis references before its prelude
-    /// declaration is registered. The fallback's module is acceptable
-    /// because the only code that consumes `base_trait_module` to
-    /// disambiguate is dispatch synthesis, which keys the effect /
-    /// resource indices by `(module, name)` and treats a non-match as
-    /// "not an effect / resource".
-    pub fn trait_ref_for(&self, trait_name: &str) -> DeclKey {
-        self.find_trait_decl_key(trait_name)
-            .unwrap_or_else(|| (ModuleSource::prelude(), trait_name.to_string()))
     }
 
     /// Find any canonical receiver [`DeclKey`] currently registered in

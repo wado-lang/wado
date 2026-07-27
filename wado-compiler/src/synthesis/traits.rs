@@ -604,6 +604,7 @@ fn generate_struct_reflect_methods(
         register_reflect_assoc_types(
             &mut tt,
             struct_type,
+            CompilerItem::ReflectStruct,
             is_generic,
             &[
                 (REFLECT_FIELD_TYPES_ASSOC, fields_tuple_type),
@@ -661,16 +662,28 @@ fn generate_struct_reflect_methods(
 fn register_reflect_assoc_types(
     tt: &mut TypeTable,
     self_type: TypeId,
+    owning_trait: CompilerItem,
     is_generic: bool,
     assocs: &[(&str, TypeId)],
 ) {
     let base_decl = tt.decl_of_type(self_type);
+    let trait_name = tt.compiler_items().trait_name(owning_trait).to_string();
     for (assoc_name, resolved) in assocs {
         if is_generic {
             let Some(base_decl) = base_decl else { continue };
-            tt.register_generic_assoc_type_def(base_decl, (*assoc_name).to_string(), *resolved);
+            tt.register_generic_assoc_type_def(
+                base_decl,
+                trait_name.clone(),
+                (*assoc_name).to_string(),
+                *resolved,
+            );
         } else {
-            tt.register_assoc_type_resolution(self_type, (*assoc_name).to_string(), *resolved);
+            tt.register_assoc_type_resolution(
+                self_type,
+                trait_name.clone(),
+                (*assoc_name).to_string(),
+                *resolved,
+            );
         }
     }
 }
@@ -1337,6 +1350,7 @@ fn generate_variant_reflect_methods(
         register_reflect_assoc_types(
             &mut tt,
             variant_type,
+            CompilerItem::ReflectVariant,
             is_generic,
             &[
                 (REFLECT_CASE_PAYLOADS_ASSOC, payloads_tuple_type),
@@ -1983,8 +1997,13 @@ fn generate_enum_reflect_methods(
         );
         let members_tuple_type =
             tt.make_tuple(std::iter::repeat_n(member_type, target.cases.len()).collect());
+        let reflect_enum = tt
+            .compiler_items()
+            .trait_name(CompilerItem::ReflectEnum)
+            .to_string();
         tt.register_assoc_type_resolution(
             enum_type,
+            reflect_enum,
             REFLECT_MEMBERS_ASSOC.to_string(),
             members_tuple_type,
         );
@@ -2392,8 +2411,13 @@ fn generate_flags_reflect_methods(
         );
         let members_tuple_type =
             tt.make_tuple(std::iter::repeat_n(member_type, target.members.len()).collect());
+        let reflect_flags = tt
+            .compiler_items()
+            .trait_name(CompilerItem::ReflectFlags)
+            .to_string();
         tt.register_assoc_type_resolution(
             target.flags_type,
+            reflect_flags,
             REFLECT_MEMBERS_ASSOC.to_string(),
             members_tuple_type,
         );

@@ -340,8 +340,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &self.tysys.trait_env,
         )?;
         self.tysys
-            .all_associated_constants
-            .get(&(type_module, canon_key))
+            .signatures
+            .associated_constant(&type_module, canon_key)
             .cloned()
     }
 
@@ -1405,27 +1405,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // concrete functions. Recorded AST-side by the elaborator.
         let concrete_owner: Option<String> = facts.concrete_owner.clone();
 
-        // Same trait-decl lookup the combined walk does.
         let trait_decl_name = super::Elaborator::<H>::get_type_name_static(trait_ast);
-        let Some((trait_methods, trait_module)) =
-            super::trait_query::find_trait_decl_methods_with_module_with(
-                &trait_decl_name,
-                &self.current_module_source,
-                self.current_module_items,
-                &self.sem.imports,
-                self.symbols,
-                &self.tysys.trait_env,
-                self.loaded_modules,
-            )
-        else {
+        let Some(trait_sig) = super::trait_query::trait_sig_by_name_with(
+            &trait_decl_name,
+            &self.current_module_source,
+            &self.sem.imports,
+            self.symbols,
+            &self.tysys.trait_env,
+            &self.tysys.signatures,
+        ) else {
             return Vec::new();
         };
         let provided: crate::hashmap::IndexSet<&str> =
             impl_block.methods.iter().map(|m| m.name.as_str()).collect();
-        let default_methods: Vec<ast::Function> = trait_methods
-            .into_iter()
-            .filter(|m| m.body.is_some() && !provided.contains(m.name.as_str()))
+        let default_methods: Vec<std::rc::Rc<ast::Function>> = trait_sig
+            .default_methods()
+            .filter(|(name, _)| !provided.contains(name))
+            .map(|(_, body)| std::rc::Rc::clone(body))
             .collect();
+        let trait_module = trait_sig.module.clone();
 
         let trait_items: &'a [ast::Item] = self
             .loaded_modules
