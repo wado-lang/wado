@@ -432,12 +432,9 @@ pub(super) type ResourceDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 #[derive(Clone, Debug)]
 pub(super) struct StaticMethodEntry {
     pub(super) name: String,
-    /// The module defining the impl — a static method's signature names types
-    /// that module imports, not the caller's.
-    pub(super) module: ModuleSource,
-    /// The impl block, for its [`ImplHeader`].
-    pub(super) impl_id: AstId,
-    /// The method itself: the key into the signature digest.
+    /// The method itself: the key into the signature digest, which carries
+    /// everything a lookup needs — resolved in the impl's own frame and its
+    /// own module's perspective.
     pub(super) method_id: AstId,
 }
 
@@ -1013,8 +1010,6 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
-                                    module: module_source.clone(),
-                                    impl_id: impl_block.id,
                                     method_id: method.id,
                                 });
                         }
@@ -1034,8 +1029,6 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
-                                    module: module_source.clone(),
-                                    impl_id: impl_block.id,
                                     method_id: method.id,
                                 });
                         }

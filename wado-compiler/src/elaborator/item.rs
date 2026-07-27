@@ -1002,6 +1002,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .map(|&(_, id)| (tp.name.clone(), id))
                 })
                 .collect();
+            let declaring_slot_count = type_params.len() as u32;
             type_params.extend(frame.method_type_params.iter().cloned());
             let self_kind = method
                 .params
@@ -1027,6 +1028,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             default: p.default.clone(),
                         })
                         .collect(),
+                    declaring_slot_count,
                     cm_name: method
                         .attrs
                         .iter()
@@ -1383,6 +1385,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                     self_kind,
                     params: sig_params,
+                    // An operation declares no type parameters of its own,
+                    // so every slot belongs to the declaration.
+                    declaring_slot_count: decl_slots.len() as u32,
                     cm_name: cm_name.clone(),
                     is_async: method.is_async,
                 },

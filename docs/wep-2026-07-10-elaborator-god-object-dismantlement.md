@@ -377,12 +377,30 @@ declaration rather than at whichever use site reaches it first.
       type name `Self` or the resource — is gone with it. The parser
       rejects `self: T`, so a receiver is always `self` / `&self` /
       `&mut self` and `self_kind` is the whole answer.
-- [ ] S5b-6b `StaticMethodSig` is deleted and `MethodInfo` becomes
-      `instantiate(sig, receiver_args)` throughout.
-      `StaticMethodEntry.method_id` already reaches a `MethodSig` whose
-      `decl.type_params` is the flat impl-then-method slot list
-      `infer_static_method_type_args` builds by hand; what it still lacks is
-      where the impl's slots end and the method's begin.
+- [x] S5b-6b `StaticMethodSig`, `find_static_method_def` and
+      `find_resource_decl` are deleted: a static-method lookup goes
+      index → `MethodSig` for both kinds of declaration.
+
+      A call site spells the declaring block's type arguments and the
+      method's own separately (`Type<A>::method<B>()`), so `MethodSig`
+      records `declaring_slot_count` — where the first list stops and the
+      second begins — and `instantiate_call` is the one operation that
+      fills both. It fills each slot by the slot's *own* index rather than
+      by position, because a generic, `&`-target, blanket or
+      variadic-tuple impl numbers its slots differently and a
+      partially-concrete target leaves gaps.
+
+      Inference reads the canonical types directly, as the WEP reserves for
+      it: `infer_static_method_type_args` no longer rebuilds the slot scope
+      and re-resolves the parameter AST inside it, it feeds
+      `decl.param_types` to `InferCtx` and splits the solution at
+      `declaring_slot_count`.
+
+      `StaticMethodEntry` loses `module` and `impl_id`. They existed to
+      re-resolve the method under the impl's module; the signature already
+      is that resolution, so the method's own `AstId` is the whole entry.
+- [ ] S5b-6c The remaining `MethodInfo` producers in `method_lookup` and
+      `trait_query` become `instantiate(sig, receiver_args)`.
 
 **What the remaining `loaded_modules` reads are waiting on.** The
 trait-bound path (`find_method_in_trait_bounds`) is the one place a

@@ -42,7 +42,7 @@ pub(crate) struct Signatures {
     /// reaching for a declaration's AST.
     pub(crate) method_sigs: IndexMap<AstId, MethodSig>,
 
-    /// `(declaration `AstId`, operation name)` → the operation's own
+    /// A declaration's `AstId` paired with an operation name → the
     /// `AstId`. The name-keyed index over [`Self::method_sigs`] for
     /// `interface` / `resource` operations, which callers reach by name
     /// rather than by node.
@@ -173,6 +173,12 @@ pub(crate) struct MethodSig {
     /// the receiver at index 0 when there is one, so these are offset by
     /// [`Self::first_value_param`].
     pub(crate) params: Vec<Param>,
+    /// How many leading entries of `decl.type_params` the *declaration*
+    /// contributes — the `impl` block's, or the `interface` / `resource`
+    /// declaration's. The method's own follow. A call site numbers the two
+    /// separately (`Type<A>::method<B>()`), so it needs the split; nothing
+    /// else does, because a slot carries its own index.
+    pub(crate) declaring_slot_count: u32,
     /// Canonical name from `#[cm("…")]`, resolved at the declaration.
     pub(crate) cm_name: Option<String>,
     pub(crate) is_async: bool,
@@ -211,6 +217,39 @@ impl MethodSig {
     /// Index of the first non-receiver parameter in `decl.param_types`.
     pub(crate) fn first_value_param(&self) -> usize {
         usize::from(self.self_kind != crate::ast::SelfKind::None)
+    }
+
+    /// Fill the declaring block's slots from `declaring_args` and the
+    /// method's own from `method_args` — how a call site that spells both
+    /// (`Type<A>::method<B>()`) reads the signature.
+    ///
+    /// Each slot is filled by its own index, not by its position in the
+    /// list: a generic, `&`-target, blanket or variadic-tuple impl numbers
+    /// its slots differently, and a partially-concrete target leaves gaps a
+    /// positional list cannot express.
+    pub(crate) fn instantiate_call(
+        &self,
+        type_table: &RefCell<TypeTable>,
+        declaring_args: &[TypeId],
+        method_args: &[TypeId],
+    ) -> InstantiatedSig {
+        let split = (self.declaring_slot_count as usize).min(self.decl.type_params.len());
+        let mut substitution = IndexMap::default();
+        {
+            let table = type_table.borrow();
+            let pairs = self.decl.type_params[..split]
+                .iter()
+                .zip(declaring_args)
+                .chain(self.decl.type_params[split..].iter().zip(method_args));
+            for ((_, slot), &arg) in pairs {
+                if let crate::tir::ResolvedType::TypeParam { index, .. }
+                | crate::tir::ResolvedType::TypePack { index, .. } = table.get(*slot)
+                {
+                    substitution.insert(*index, arg);
+                }
+            }
+        }
+        self.decl.instantiate_slots(type_table, &substitution)
     }
 }
 

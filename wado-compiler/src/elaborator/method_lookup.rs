@@ -967,15 +967,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // directly — no global scan. `None`-module receivers (primitives,
         // `Array`, `()`, tuples) are never resources, so nothing falls through
         // to a scan (issue #1416).
-        if let Some(ref module_source) = struct_module_source {
-            if let Some(info) = self.find_resource_method_info(
+        if let Some(ref module_source) = struct_module_source
+            && let Some(info) = self.find_resource_method_info(
                 &struct_name,
                 module_source,
                 method_name,
                 receiver_type_args.as_deref(),
-            ) {
-                return Some(info);
-            }
+            )
+        {
+            return Some(info);
         }
 
         // For newtypes: if method not found on the newtype itself, try the base type

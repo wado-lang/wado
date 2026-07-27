@@ -103,7 +103,7 @@ pub(crate) struct ModuleDecls {
     /// in the declaration's frame. Either way a use site instantiates
     /// instead of re-resolving the method AST.
     pub(crate) method_sigs: IndexMap<crate::ast::AstId, MethodSig>,
-    /// `(declaration `AstId`, operation name)` → the operation's own
+    /// A declaration's `AstId` paired with an operation name → the
     /// `AstId`, so a caller holding only a name reaches its `method_sigs`
     /// entry.
     pub(crate) resource_method_ids: IndexMap<(crate::ast::AstId, String), crate::ast::AstId>,

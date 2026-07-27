@@ -1212,67 +1212,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|ty| self.resolve_type(ty))
             .collect();
 
-        // Re-resolve param types with concrete type args in scope for literal coercion.
-        // lookup_static_method_param_types resolves without type params in scope, so
-        // generic params (T, U, List<T>, etc.) resolve to UNKNOWN or contain UNKNOWN.
-        // We re-resolve them by temporarily mapping type param names directly to concrete
-        // types from the call-site turbofish, then resolving the AST param types.
-        // NOTE: We cannot change lookup_static_method_param_types itself to add type params,
-        // because that would cause variant constructor param types to become non-empty,
-        // bypassing the variant payload substitution path (line ~494).
+        // Instantiate the recorded signature with the call site's type
+        // arguments, so a literal argument coerces to the parameter type the
+        // callee actually declares. `lookup_static_method_param_types`
+        // answered without any type arguments, leaving generic parameters
+        // (`T`, `List<T>`) abstract; it cannot be changed to fill them
+        // because variant-constructor param types must stay empty for the
+        // payload substitution path.
         {
             let has_type_args = matches!(&static_call.target_type, ast::Type::Generic(_))
                 || !method_type_args.is_empty();
-            if has_type_args && !param_types.is_empty() {
-                let method_def = self.find_static_method_def(
-                    struct_name_for_lookup.as_deref().unwrap_or(""),
-                    &static_call.method,
+            if has_type_args
+                && !param_types.is_empty()
+                && let Some(name) = struct_name_for_lookup.as_deref()
+                && let Some(sig) = self.static_method_sig(name, &static_call.method)
+            {
+                let declaring_args: Vec<TypeId> = match &static_call.target_type {
+                    ast::Type::Generic(g) => g.args.iter().map(|t| self.resolve_type(t)).collect(),
+                    _ => vec![],
+                };
+                let instantiated = sig.instantiate_call(
+                    &self.tysys.type_table,
+                    &declaring_args,
+                    &method_type_args,
                 );
-                if let Some((impl_type_param_names, method_def)) = method_def {
-                    let call_site_impl_args: Vec<TypeId> = match &static_call.target_type {
-                        ast::Type::Generic(g) => {
-                            g.args.iter().map(|t| self.resolve_type(t)).collect()
-                        }
-                        _ => vec![],
-                    };
-
-                    // Temporarily map type param names directly to concrete types
-                    // (inherited scope; only `type_params` is replaced).
-                    let mut scope = self.enter_inherited_type_param_scope();
-                    scope.annotate_ctx.trait_ctx.type_params.clear();
-                    for (i, name) in impl_type_param_names.iter().enumerate() {
-                        if let Some(&concrete) = call_site_impl_args.get(i) {
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_params
-                                .insert(name.clone(), (i as u32, concrete));
-                        }
-                    }
-                    let impl_offset = impl_type_param_names.len();
-                    for (i, tp) in method_def.type_params.iter().enumerate() {
-                        if let Some(&concrete) = method_type_args.get(i) {
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_params
-                                .insert(tp.name.clone(), ((impl_offset + i) as u32, concrete));
-                        }
-                    }
-
-                    // Re-resolve all param types from AST with concrete type mappings
-                    let non_self_params: Vec<_> = method_def
-                        .params
-                        .iter()
-                        .filter(|p| p.self_kind == ast::SelfKind::None)
-                        .collect();
-                    for (i, param_type) in param_types.iter_mut().enumerate() {
-                        if let Some(param) = non_self_params.get(i) {
-                            *param_type = scope.resolve_type(&param.ty);
-                        }
-                    }
-
-                    drop(scope);
+                let first_value = sig.first_value_param().min(instantiated.param_types.len());
+                for (param_type, &instantiated_type) in param_types
+                    .iter_mut()
+                    .zip(&instantiated.param_types[first_value..])
+                {
+                    *param_type = instantiated_type;
                 }
             }
         }
@@ -2389,49 +2358,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         Vec::new()
-    }
-
-    /// Find the AST definition of a static method for a given struct.
-    /// Returns the impl block's type param names and the method definition.
-    pub(super) fn find_static_method_def(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-    ) -> Option<(Vec<String>, ast::Function)> {
-        let extract_impl_type_param_names = |ty: &ast::Type| -> Vec<String> {
-            match ty {
-                ast::Type::Generic(g) => g
-                    .args
-                    .iter()
-                    .filter_map(|arg| match arg {
-                        ast::Type::Named(n) => Some(n.name.clone()),
-                        _ => None,
-                    })
-                    .collect(),
-                _ => vec![],
-            }
-        };
-
-        // The index covers every module, the entry module included, and is
-        // keyed by canonical decl key.
-        let static_key = self.canonical_decl_key(struct_name);
-        if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key) {
-            // Still on the AST: this feeds `StaticMethodSig`, which unifies
-            // impl methods with resource methods, and resource declarations
-            // have no signature digest yet.
-            for entry in methods {
-                if entry.name == method_name
-                    && let Some(module) = self.loaded_modules.get(&entry.module)
-                    && let Some(Item::Impl(impl_block)) = module.item_by_id(entry.impl_id)
-                    && let Some(method) =
-                        impl_block.methods.iter().find(|m| m.id == entry.method_id)
-                {
-                    let names = extract_impl_type_param_names(&impl_block.ty);
-                    return Some((names, method.clone()));
-                }
-            }
-        }
-        None
     }
 
     /// Impl blocks on `struct_name`, current-module-first. `all_impl_index` is

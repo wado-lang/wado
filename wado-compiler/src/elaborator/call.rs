@@ -12,16 +12,10 @@ use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
 use super::scope::Scope;
+use super::sig::MethodSig;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util::placeholder;
-
-struct StaticMethodSig {
-    type_level_names: Vec<String>,
-    method_type_params: Vec<ast::GenericParam>,
-    value_params: Vec<ast::Param>,
-    return_type: Option<ast::Type>,
-}
 
 /// Per-position `_` mask for a turbofish: `holes[i]` is true when argument `i`
 /// was written `_`. Slots past the end count as holes too (omitted trailing
@@ -1969,49 +1963,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    fn find_resource_decl(&self, name: &str) -> Option<&ast::ResourceDecl> {
-        let canonical = self.canonical_decl_key(name).1;
-        for resources in self.tysys.all_resource_types.values() {
-            if let Some(info) = resources.get(name).or_else(|| resources.get(&canonical))
-                && let Some(ast::Item::Resource(decl)) = self
-                    .loaded_modules
-                    .get(&info.module_source)
-                    .and_then(|m| m.item_by_id(info.defined_at))
-            {
-                return Some(decl);
-            }
-        }
-        None
-    }
-
-    fn static_method_sig(&self, struct_name: &str, method_name: &str) -> Option<StaticMethodSig> {
-        if let Some((type_level_names, method)) =
-            self.find_static_method_def(struct_name, method_name)
-        {
-            return Some(StaticMethodSig {
-                type_level_names,
-                method_type_params: method.type_params,
-                value_params: method.params,
-                return_type: method.return_type,
-            });
-        }
-        let decl = self.find_resource_decl(struct_name)?;
-        let method = decl.methods.iter().find(|m| {
-            m.name == method_name && m.params.iter().all(|p| p.self_kind == ast::SelfKind::None)
-        })?;
-        Some(StaticMethodSig {
-            type_level_names: decl
-                .type_params
-                .iter()
-                .filter(|p| p.is_real_type_param())
-                .map(|p| p.name.clone())
-                .collect(),
-            method_type_params: Vec::new(),
-            value_params: method.params.clone(),
-            return_type: method.return_type.clone(),
-        })
-    }
-
     fn report_uninferred_static_method_type_args(
         &mut self,
         prefix: &str,
@@ -2023,12 +1974,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(sig) = self.static_method_sig(prefix, suffix) else {
             return;
         };
-        let method_params: Vec<&ast::GenericParam> = sig
-            .method_type_params
-            .iter()
-            .filter(|p| !p.is_effect)
-            .collect();
-        if sig.type_level_names.is_empty() && method_params.is_empty() {
+        let split = (sig.declaring_slot_count as usize).min(sig.decl.type_params.len());
+        let (declaring_slots, method_slots) = sig.decl.type_params.split_at(split);
+        if declaring_slots.is_empty() && method_slots.is_empty() {
             return;
         }
 
@@ -2046,24 +1994,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        let mut names: Vec<String> = sig
-            .type_level_names
+        let mut names: Vec<String> = declaring_slots
             .iter()
             .enumerate()
             .filter(|&(i, _)| unresolved(self, impl_type_args.get(i)))
-            .map(|(_, n)| n.clone())
+            .map(|(_, (name, _))| name.clone())
             .collect();
         let type_level_unresolved = !names.is_empty();
         names.extend(
-            method_params
+            method_slots
                 .iter()
                 .enumerate()
-                .filter(|&(i, p)| {
-                    p.default.is_none()
-                        && !p.has_fn_bound()
-                        && unresolved(self, method_type_args.get(i))
-                })
-                .map(|(_, p)| p.name.clone()),
+                .filter(|&(i, _)| unresolved(self, method_type_args.get(i)))
+                .map(|(_, (name, _))| name.clone()),
         );
         if names.is_empty() {
             return;
@@ -2416,18 +2359,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.infer_static_method_type_args(prefix, suffix, raw_args, args, expected_type)
     }
 
-    /// Infer impl-level and method-level type arguments for a generic static method
-    /// by looking up the method in loaded modules. Works cross-module unlike
-    /// `infer_fn_type_args` (which requires same-module data).
+    /// Infer the declaring block's and the method's own type arguments for a
+    /// generic static method.
     ///
     /// Shares the three-tier constraint model with [`Self::infer_fn_type_args`]
     /// via [`InferCtx`]: typed args, then literal-number args, then
     /// expected-return back-inference.
     ///
-    /// Returns `(impl_args, method_args)` with the inferred type arguments
-    /// split into impl-level (from `impl Container<T>` / `impl<T> Container<T>`)
-    /// and method-level (from `fn make<U>()`). Either side may be empty if
-    /// nothing on that level was inferable.
+    /// Returns `(declaring_args, method_args)` — the first from
+    /// `impl Container<T>` / `resource Stream<T>`, the second from
+    /// `fn make<U>()`. Either may be empty if nothing on that level was
+    /// inferable. Inference reads the signature's canonical types directly:
+    /// it is solving *for* the arguments an instantiation would need.
     fn infer_static_method_type_args(
         &mut self,
         struct_name: &str,
@@ -2436,85 +2379,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TirExpr],
         expected_type: Option<TypeId>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        let Some(StaticMethodSig {
-            type_level_names: impl_type_param_names,
-            method_type_params,
-            value_params: params,
-            return_type: return_type_ast,
-        }) = self.static_method_sig(struct_name, method_name)
-        else {
+        let Some(sig) = self.static_method_sig(struct_name, method_name) else {
             return (vec![], vec![]);
         };
-
-        // Nothing generic to infer.
-        if impl_type_param_names.is_empty() && method_type_params.is_empty() {
+        if sig.decl.type_params.is_empty() {
             return (vec![], vec![]);
         }
 
-        // Set up scope: impl params at indices 0..impl_count, method params
-        // at indices impl_count..(impl_count + method_count). This matches the
-        // layout used by `lookup_static_method_return_type` and
-        // `resolve_static_method_params_in_scope`, so substitution by a single
-        // flat `[impl_args.., method_args..]` list lines up correctly.
-        let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
-
-        let mut impl_param_ids: Vec<TypeId> = Vec::with_capacity(impl_type_param_names.len());
-        for (i, name) in impl_type_param_names.iter().enumerate() {
-            let type_id = scope
-                .tysys
-                .type_table
-                .borrow_mut()
-                .make_type_param(name.clone(), i as u32);
-            scope
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .insert(name.clone(), (i as u32, type_id));
-            impl_param_ids.push(type_id);
-        }
-
-        let m_offset = impl_type_param_names.len();
-        let mut method_param_ids: Vec<TypeId> = Vec::with_capacity(method_type_params.len());
-        for (i, tp) in method_type_params
-            .iter()
-            .filter(|p| !p.is_effect)
-            .enumerate()
-        {
-            let idx = (m_offset + i) as u32;
-            let type_id = if tp.is_pack {
-                scope
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_type_pack(tp.name.clone(), idx)
-            } else {
-                scope
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_type_param(tp.name.clone(), idx)
-            };
-            scope
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .insert(tp.name.clone(), (idx, type_id));
-            method_param_ids.push(type_id);
-        }
-
-        let resolved_param_types: Vec<TypeId> = params
-            .iter()
-            .filter(|p| p.self_kind == ast::SelfKind::None)
-            .map(|p| scope.resolve_type(&p.ty))
-            .collect();
-
-        let decl_return_type = return_type_ast.as_ref().map(|t| scope.resolve_type(t));
-
-        drop(scope);
-
-        let mut all_param_ids = impl_param_ids.clone();
-        all_param_ids.extend_from_slice(&method_param_ids);
+        let all_param_ids: Vec<TypeId> = sig.decl.type_params.iter().map(|(_, id)| *id).collect();
+        let first_value = sig.first_value_param().min(sig.decl.param_types.len());
+        let resolved_param_types = &sig.decl.param_types[first_value..];
+        let decl_return_type = sig.decl.return_type;
 
         let mut infer = InferCtx::new(&self.tysys.type_table, all_param_ids.clone());
         for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
@@ -2531,15 +2406,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Permissive solve — see `infer_fn_type_args` for the
         // TypeParam-forwarding rationale.
         let (inferred, bindings) = infer.solve_with_bindings();
-        let any_bound = all_param_ids.iter().any(|p| bindings.contains_key(p));
-        if !any_bound {
+        if !all_param_ids.iter().any(|p| bindings.contains_key(p)) {
             return (vec![], vec![]);
         }
 
-        let impl_count = impl_param_ids.len();
-        let impl_args = inferred[..impl_count].to_vec();
-        let method_args = inferred[impl_count..].to_vec();
-        (impl_args, method_args)
+        let split = (sig.declaring_slot_count as usize).min(inferred.len());
+        (inferred[..split].to_vec(), inferred[split..].to_vec())
+    }
+
+    /// The canonical signature of the receiver-less method `method_name` on
+    /// `struct_name` — declared by an `impl` block or by a `resource`.
+    pub(super) fn static_method_sig(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Option<MethodSig> {
+        let key = self.canonical_decl_key(struct_name);
+        let trait_env = &self.tysys.trait_env;
+        if let Some(entry) = trait_env
+            .static_method_index
+            .get(&key)
+            .and_then(|methods| methods.iter().find(|e| e.name == method_name))
+        {
+            return self.tysys.signatures.method_sig(entry.method_id).cloned();
+        }
+        // The resource index already holds only the receiver-less
+        // operations, so no second `self`-detection pass is needed.
+        let (_, _, decl_id, _) = trait_env
+            .resource_static_method_index
+            .get(&key)?
+            .iter()
+            .find(|(name, ..)| name == method_name)?;
+        self.tysys
+            .signatures
+            .resource_method_sig(*decl_id, method_name)
+            .cloned()
     }
 
     /// Look up function parameter types with type args substituted.
