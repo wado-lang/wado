@@ -697,10 +697,11 @@ pub struct RepeatOp {
     /// oracle where no lookahead separates the two readings. Empty for a
     /// tail Repeat — the caller's FOLLOW answers alone.
     pub continuation_scan: List<ScanElement> = [],
-    /// True iff `continuation_scan` runs to the rule's tail, so a match
-    /// really means the continuation fits and the caller's FOLLOW is the
-    /// right question at the position it ended on. False keeps emit on the
-    /// static condition.
+    /// True iff `continuation_scan` was built, which lowering only does for
+    /// a walk that reaches the rule's tail (soundness invariant 10) and whose
+    /// every remaining element is scannable — so a match really means the
+    /// continuation fits and the caller's FOLLOW is the right question at the
+    /// position it ended on. False keeps emit on the static condition.
     pub continuation_scannable: bool = false,
     /// `non_greedy_static_undecided` for this Repeat — no lookahead
     /// separates the loop body from the continuation. Stamped rather than
@@ -984,10 +985,9 @@ pub struct ScanRepeatElement {
     /// tokens until the exit set (`caller_follow_first`) or EOF, mirroring
     /// the parse-side `compute_non_greedy_condition`.
     pub non_greedy: bool,
-    /// Mirrors `RepeatOp.continuation_scan` / `continuation_scannable` /
-    /// `static_exit_undecided`, so a probed Repeat decides the same on both
-    /// sides — the tournament measures scan lengths against what the parse
-    /// consumes.
+    /// Mirrors the four `RepeatOp` probe stamps below, so a probed Repeat
+    /// decides the same on both sides — the tournament measures scan lengths
+    /// against what the parse consumes.
     pub continuation_scan: List<ScanElement> = [],
     pub continuation_scannable: bool = false,
     pub static_exit_undecided: bool = false,
