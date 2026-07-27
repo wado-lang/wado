@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785119166846,
+  "lastUpdate": 1785157600715,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44297,6 +44297,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 273073,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5d7c93e290bceb62bb5bf724d247cbc5d6667a4f",
+          "message": "Merge pull request #1701 from wado-lang/claude/sqlite-performance-issue-0ydjd1\n\nfix(gale): decide the ambiguity gaps on the compiled scan",
+          "timestamp": "2026-07-27T21:55:52+09:00",
+          "tree_id": "ff838867ee607c51a22436c29ddde873c84863a0",
+          "url": "https://github.com/wado-lang/wado/commit/5d7c93e290bceb62bb5bf724d247cbc5d6667a4f"
+        },
+        "date": 1785157599910,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8225,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 277354,
             "unit": "bytes"
           }
         ]
