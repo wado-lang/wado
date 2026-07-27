@@ -1,0 +1,36 @@
+// Arithmetic over literals is a Wasm constant expression, so a global
+// declared with one holds its value directly instead of being assigned by an
+// initialization function.
+//
+// The `-O0` run is the load-bearing one: with no optimizer to fold `1 + 2`
+// first, the value has to survive lowering and reach the Wasm slot on its own.
+// A global that claimed to be directly initialized but could not be emitted
+// would read back as a null/zero placeholder, which the asserts below catch.
+//
+// Narrower integers are deliberately excluded — they share the `i32`
+// representation but must wrap at their own width — so `SMALL` is expected to
+// go the deferred route and still hold the right value.
+
+use { println, Stdout } from "core:cli";
+
+global SUM: i32 = 1 + 2;
+global PRODUCT: i64 = 100000 * 100000;
+global MIXED: i32 = 2 * 3 - 1;
+global UNSIGNED: u32 = 4000000000 + 300000000;
+global SMALL: u8 = 200 as u8 + 100 as u8;
+
+export fn run() with Stdout {
+    assert SUM == 3;
+    assert PRODUCT == 10000000000;
+    assert MIXED == 5;
+    // Wraps mod 2^32, as Wasm's i32.add does.
+    assert UNSIGNED == 5032704 as u32;
+    // Wraps at 8 bits, which is why it is not a constant expression.
+    assert SMALL == 44 as u8;
+    println(`${SUM} ${PRODUCT} ${MIXED} ${UNSIGNED} ${SMALL}`);
+}
+
+__DATA__
+{
+    "stdout": "3 10000000000 5 5032704 44\n"
+}

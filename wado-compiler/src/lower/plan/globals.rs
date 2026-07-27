@@ -8,9 +8,9 @@ use crate::flat_package::FlatPackage;
 use crate::module_source::ModuleSource;
 use crate::tir::FunctionRef;
 use crate::tir::{
-    FunctionKind, GlobalInit, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirGlobal, TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
-    TypeTable,
+    FunctionKind, GlobalInit, InlineHint, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirGlobal, TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -24,8 +24,17 @@ use crate::lower::wide_int_literal::{create_i128_literal, create_u128_literal};
 // `build_initialize_modules` half combines them into the top-level
 // `__initialize_modules` aggregator.
 
-/// Check if an expression is a constant initializer (can be evaluated at Wasm instantiation time)
-fn is_constant_initializer(expr: &TirExpr) -> bool {
+/// Whether the Wasm slot can hold this value directly, so the global needs no
+/// assignment from an initialization function.
+///
+/// This is a syntactic under-approximation of what a Wasm constant expression
+/// can express, and deliberately so: an aggregate or a sequence only becomes a
+/// `struct.new` / `array.new_fixed` once the optimizer has collapsed the
+/// builder sequence that produces it, and whether it did is not knowable here.
+/// Those are left to the classifier that runs on the lowered Wasm value, which
+/// promotes back everything this defers. What is decidable here is what is
+/// already a value: a literal, and arithmetic over literals.
+fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
     match &expr.kind {
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -33,15 +42,38 @@ fn is_constant_initializer(expr: &TirExpr) -> bool {
         | TirExprKind::CharLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit => true,
-        TirExprKind::Cast { expr: inner, .. } => is_constant_initializer(inner),
+        TirExprKind::Cast { expr: inner, .. } => is_constant_initializer(inner, type_table),
         TirExprKind::Unary { op, expr: inner } => {
             // Negation of literals is constant
-            matches!(op, TirUnaryOp::Neg) && is_constant_initializer(inner)
+            matches!(op, TirUnaryOp::Neg) && is_constant_initializer(inner, type_table)
+        }
+        // Wasm admits `add` / `sub` / `mul` on `i32` and `i64` in a constant
+        // expression. Narrower integers are not among them: they share the
+        // `i32` representation but must wrap at their own width, which no
+        // constant expression does. Floats are not among them at all.
+        TirExprKind::Binary { op, left, right } => {
+            matches!(op, TirBinaryOp::Add | TirBinaryOp::Sub | TirBinaryOp::Mul)
+                && is_wasm_width_int(expr.type_id, type_table)
+                && is_constant_initializer(left, type_table)
+                && is_constant_initializer(right, type_table)
         }
         _ => false,
     }
 }
 
+/// Whether the type is an integer whose Wado width matches the Wasm operand it
+/// lowers to, so wrapping arithmetic needs no masking.
+fn is_wasm_width_int(type_id: TypeId, type_table: &TypeTable) -> bool {
+    matches!(
+        type_table.get(type_id),
+        ResolvedType::Primitive(
+            crate::tir::PrimitiveType::I32
+                | crate::tir::PrimitiveType::U32
+                | crate::tir::PrimitiveType::I64
+                | crate::tir::PrimitiveType::U64
+        )
+    )
+}
 
 /// Create a default value expression for a type (used for lazy-initialized globals)
 fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
@@ -113,7 +145,6 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
     }
 }
 
-
 /// Extract non-constant global initializers into a per-module
 /// `__initialize_module` function (one per source module; the
 /// functions share a name and are disambiguated by their
@@ -134,7 +165,7 @@ pub fn extract(flat: &mut FlatPackage) {
         Vec::new();
 
     for (idx, global) in flat.globals.iter_mut().enumerate() {
-        if is_constant_initializer(global.init.slot_expr()) {
+        if is_constant_initializer(global.init.slot_expr(), &type_table) {
             continue;
         }
         // The declared value needs code to produce, so it moves into the

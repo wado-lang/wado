@@ -173,14 +173,16 @@ there rather than reasoning about it.
       interpreter can fold its reads without waiting for the Wasm-level
       classifier. Decline inside the initialization functions, whose reads may
       precede the assignment.
-- [ ] Represent the two initialization kinds as one choice rather than a
+- [x] Represent the two initialization kinds as one choice rather than a
       placeholder standing in for the initializer, so a deferred global's
       recorded initializer can never be mistaken for its value.
-- [ ] Derive slot mutability, nullability, and read narrowing when building the
+- [x] Derive slot mutability, nullability, and read narrowing when building the
       Wasm module; drop them from the typed and normalized IRs.
-- [ ] Widen the syntactic test lowering uses to defer, so a global that is
-      already a constant expression never becomes a deferred one it has to be
-      promoted back from.
+- [x] Widen the syntactic test lowering uses to defer, as far as it can honestly
+      go: a literal, and `add` / `sub` / `mul` over literals at the widths Wasm
+      admits. An aggregate or a sequence stays with the classifier that runs on
+      the lowered Wasm value, because whether the builder sequence producing it
+      collapsed is not knowable before the optimizer runs.
 
 ## Future work
 

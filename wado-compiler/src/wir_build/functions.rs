@@ -774,12 +774,53 @@ fn translate_global_init(
                 _ => ref_null(),
             }
         }
+        // `add` / `sub` / `mul` on `i32` / `i64` is a Wasm constant expression,
+        // and both operands are constants here, so emit the result rather than
+        // the instruction: a single const is smaller and needs no extended-const
+        // support from the engine. Only reachable when the optimizer did not
+        // already fold it, which is to say at `-O0`.
+        ExprKind::Binary { op, left, right } => {
+            let (op, left, right) = (*op, *left, *right);
+            let l = translate_global_init(body, left, type_id, type_table);
+            let r = translate_global_init(body, right, type_id, type_table);
+            match (l, r) {
+                (WirInstr::I32Const(a), WirInstr::I32Const(b)) => {
+                    WirInstr::I32Const(wrapping_i32(op, a, b))
+                }
+                (WirInstr::I64Const(a), WirInstr::I64Const(b)) => {
+                    WirInstr::I64Const(wrapping_i64(op, a, b))
+                }
+                _ => ref_null(),
+            }
+        }
         _ => {
             // Non-constant initializers use null placeholder (lazy init at runtime)
             WirInstr::RefNull {
                 heap_type: crate::wir::WirAbstractHeapType::None,
             }
         }
+    }
+}
+
+/// The `i32` constant-expression operators, wrapping as Wasm does.
+fn wrapping_i32(op: crate::nir::NirBinaryOp, a: i32, b: i32) -> i32 {
+    use crate::nir::NirBinaryOp;
+    match op {
+        NirBinaryOp::Add => a.wrapping_add(b),
+        NirBinaryOp::Sub => a.wrapping_sub(b),
+        NirBinaryOp::Mul => a.wrapping_mul(b),
+        other => panic!("{other:?} is not a Wasm constant-expression operator"),
+    }
+}
+
+/// The `i64` constant-expression operators, wrapping as Wasm does.
+fn wrapping_i64(op: crate::nir::NirBinaryOp, a: i64, b: i64) -> i64 {
+    use crate::nir::NirBinaryOp;
+    match op {
+        NirBinaryOp::Add => a.wrapping_add(b),
+        NirBinaryOp::Sub => a.wrapping_sub(b),
+        NirBinaryOp::Mul => a.wrapping_mul(b),
+        other => panic!("{other:?} is not a Wasm constant-expression operator"),
     }
 }
 

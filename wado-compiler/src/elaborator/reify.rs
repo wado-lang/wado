@@ -71,8 +71,7 @@ use crate::name::{Receiver, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, ResolvedType, TirBinaryOp, TirBlock, TirEnum, TirEnumCase,
-    TirExpr,
-    TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirModule, TirNewtype,
+    TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirModule, TirNewtype,
     TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl, TypeId,
     TypeTable,
 };

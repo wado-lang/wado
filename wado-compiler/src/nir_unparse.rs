@@ -198,8 +198,11 @@ impl<'a> NirUnparser<'a> {
         // A deferred global's expression is the placeholder its storage
         // starts at, not the value it holds; say so rather than render it
         // as an initializer.
-        self.output
-            .push_str(if g.init.is_deferred() { " = deferred " } else { " = " });
+        self.output.push_str(if g.init.is_deferred() {
+            " = deferred "
+        } else {
+            " = "
+        });
         let slot = g.init.slot_expr();
         self.unparse_operand(slot.body(), slot.expr());
         self.output.push_str(";\n");

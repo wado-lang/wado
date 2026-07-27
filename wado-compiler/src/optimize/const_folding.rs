@@ -328,7 +328,9 @@ fn build_global_env(
         // holds a placeholder rather than its value — neither is something to
         // read a constant out of. `NonConst` rather than absent, so a parent
         // fold like `GLOBAL + 1` reports non-constant instead of unevaluated.
-        let declared = (!global.wado_mutable).then(|| global.init.declared()).flatten();
+        let declared = (!global.wado_mutable)
+            .then(|| global.init.declared())
+            .flatten();
         let lattice = match declared {
             None => Lattice::NonConst,
             Some(declared) => {
