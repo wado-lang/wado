@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785168704869,
+  "lastUpdate": 1785187341642,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44385,6 +44385,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 277354,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2738e686c5938ad7523d3cb142bced4a9de5a7d7",
+          "message": "Merge pull request #1703 from wado-lang/claude/niri-next-tasks-c5xz1b\n\nfeat(niri): run statement bodies, loops and constant sequences at compile time",
+          "timestamp": "2026-07-28T06:11:52+09:00",
+          "tree_id": "dd30c281594210c0e2feacc13c7b7c018e6b5fe1",
+          "url": "https://github.com/wado-lang/wado/commit/2738e686c5938ad7523d3cb142bced4a9de5a7d7"
+        },
+        "date": 1785187340841,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8225,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276421,
             "unit": "bytes"
           }
         ]
