@@ -117,10 +117,15 @@ share); no over-fill regression.
   nested lists, and don't decode/build what the grammar never reads.** The
   residual cost of even flat resident data is a Wado-runtime GC characteristic,
   tracked outside Gale.
-- **Benchmark on an idle host.** An A/B of the continuation probe run beside a
-  compiling test suite put both arms at 4.65–4.97 MB/s; idle, the same two
-  commits measured 4.83–5.36 and their ranking flipped. Concurrent load moves
-  the number further than most changes worth measuring.
+- **Benchmark on an idle host, and only against an arm measured in the same
+  window.** An A/B of the continuation probe run beside a compiling test suite
+  put both arms at 4.65–4.97 MB/s; idle, the same two commits measured 4.83–5.36
+  and their ranking flipped. Worse, one commit measured `sqlite_parse` at 2.302
+  and 2.918 ms/iter a few hours apart on the same idle host — a 27% swing for
+  identical code, while the `sqlparser-rs` reference row stayed at its baseline,
+  so the reference does not certify the window either. A number in this file is
+  evidence about the commits it was taken beside, not an absolute to compare a
+  later run against; re-measure both arms rather than one.
 - **A GC-bound win measured on the dev host overstates the release win.** The
   dev-profile runtime / GC / allocator run unoptimized (~4–5× slower, the
   measurement note above), so GC is a far larger share of dev wall-clock than
@@ -431,9 +436,10 @@ gate.
   exiting. Where the scan runs out — the rule's tail — the verdict conjoins
   the rule's classical FOLLOW, which cost one bug fix in `follow_env` (an
   optional's callee was receiving the inner's own FIRST) rather than a second
-  runtime argument. Release `sqlite_parse` measured unchanged at both steps:
-  each arm's own spread — and the `sqlparser-rs` reference row — moved more
-  than any gap between the arms.
+  runtime argument. That last conjunct is why a probe may only be stamped where
+  the walk really reaches the rule's tail (soundness invariant 10). Release
+  `sqlite_parse` measured unchanged at every step, each arm's own spread moving
+  further than any gap between the arms.
 - **Recursive lexer rule with `.+?` / `.*?`**
   (`RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`): the static single-pass
   emitter over-consumes nested `/* … */` comments.
