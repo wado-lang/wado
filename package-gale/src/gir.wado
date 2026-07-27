@@ -255,6 +255,12 @@ pub struct LeftRecursiveRule {
     /// also flips `GenContext.needs_atn`. False for the common LR rule,
     /// whose static `scan_X_lr_*` fast path stays byte-identical.
     pub atn_class: bool = false,
+    /// True when an alternative's mid-operand self-reference climbs a
+    /// delimiter the alternative itself needs (`e 'between' e 'and' e`).
+    /// ANTLR4 parses that operand as `e[0]` and stops it by prediction; the
+    /// equivalent here lets it climb and gates each loop iteration on the
+    /// caller's continuation surviving, which this flag turns on. No ATN.
+    pub mid_operand_gated: bool = false,
 }
 
 /// One left-recursive alternative, with the prefix self-reference
@@ -548,6 +554,11 @@ pub struct RuleCallOp {
     /// `parse_<rule>(p)` / `scan_<rule>(tokens, pos)` (both signatures
     /// accept a defaulted `min_prec = 0`).
     pub min_prec_arg: Option<i32>,
+    /// Follow-mask id for the continuation a mid-operand self-reference must
+    /// leave behind. Passed as the callee's own `lr_cont` argument, never as
+    /// `follow_arg` — every caller sets that one, and the LR loop must not
+    /// read a caller's continuation as this. -1 for every other call.
+    pub lr_cont_mask: i32 = -1,
     /// Dedupped field name in the enclosing alt's struct.
     pub field: String,
     /// Pre-dedup base name (the surface RuleRef's `field_name`).
@@ -682,6 +693,26 @@ pub struct RepeatOp {
     /// `peek_at(1)` disambiguation arm so emit doesn't re-walk the
     /// surface inner.
     pub body_second_position_first: List<String>,
+    /// Scan mirror of what follows this Repeat, run as emit's viability
+    /// oracle where no lookahead separates the two readings. Empty for a
+    /// tail Repeat — the caller's FOLLOW answers alone.
+    pub continuation_scan: List<ScanElement> = [],
+    /// True iff `continuation_scan` was built, which lowering only does for
+    /// a walk that reaches the rule's tail (soundness invariant 10) and whose
+    /// every remaining element is scannable — so a match really means the
+    /// continuation fits and the caller's FOLLOW is the right question at the
+    /// position it ended on. False keeps emit on the static condition.
+    pub continuation_scannable: bool = false,
+    /// `non_greedy_static_undecided` for this Repeat — no lookahead
+    /// separates the loop body from the continuation. Stamped rather than
+    /// recomputed so the two emit walkers and the scan side cannot answer
+    /// it differently.
+    pub static_exit_undecided: bool = false,
+    /// The enclosing rule's classical FOLLOW, conjoined into the probe's
+    /// verdict: its continuation scan ends at the rule's tail, and a token
+    /// outside this set cannot continue any caller from there. Empty leaves
+    /// the verdict as it was.
+    pub probe_viable: List<String> = [],
     /// Emit a runtime caller-FOLLOW yield gate
     /// (`if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break }`)
     /// at this iteration's entry. Set by lower when the Repeat sits at a
@@ -903,6 +934,9 @@ pub struct ScanRuleCallElement {
     pub target_snake: String,
     /// Scan-side mirror of `RuleCallOp.follow_arg`. See `FollowArg`.
     pub follow_arg: FollowArg,
+    /// Scan-side mirror of `RuleCallOp.lr_cont_mask`, so the scan's LR loop
+    /// climbs exactly as far as the parse's does.
+    pub lr_cont_mask: i32 = -1,
     /// Scan-side mirror of `RuleCallOp.min_prec_arg`. `Some(p)` when
     /// the call should pass `p` as the `min_prec` argument — set by
     /// `stamp_lr_self_ref_min_prec` for self-recursive RuleCalls
@@ -951,6 +985,16 @@ pub struct ScanRepeatElement {
     /// tokens until the exit set (`caller_follow_first`) or EOF, mirroring
     /// the parse-side `compute_non_greedy_condition`.
     pub non_greedy: bool,
+    /// Mirrors the four `RepeatOp` probe stamps below, so a probed Repeat
+    /// decides the same on both sides — the tournament measures scan lengths
+    /// against what the parse consumes.
+    pub continuation_scan: List<ScanElement> = [],
+    pub continuation_scannable: bool = false,
+    pub static_exit_undecided: bool = false,
+    pub probe_viable: List<String> = [],
+    /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on
+    /// both sides, so an unscannable body cannot probe on the scan alone.
+    pub body_scannable: bool = false,
 }
 
 pub struct ScanGroupElement {

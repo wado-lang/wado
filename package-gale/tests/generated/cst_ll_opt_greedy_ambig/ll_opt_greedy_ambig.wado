@@ -1769,10 +1769,28 @@ fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos] == TK_ID {
+    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
         pos = scan_t(tokens, pos, 0);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+        } else {
+            let bp = pos;
+            let mut opt_ok: bool = false;
+            opt_probe: {
+                while pos < tokens.len() && tokens[pos] == TK_NULL {
+                    let sp = pos;
+                    pos = scan_c(tokens, pos, 0);
+                    if pos < 0 { pos = sp; break; }
+                    if pos == sp { break; }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break opt_probe; }
+                pos += 1;
+                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if probe_kind == TK_EOF { opt_ok = true; }
+            }
+            pos = if opt_ok { bp } else { sp };
+        }
     }
     while pos < tokens.len() && tokens[pos] == TK_NULL {
         let sp = pos;
@@ -1802,7 +1820,26 @@ fn scan_c(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn _parse_s__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let id = p.expect(TK_ID, &SYNC_0);
-    if p.peek_kind() == TK_ID {
+    let mut opt_enter: bool = false;
+    if _kind_set_0(p.peek_kind()) {
+        opt_enter_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_t(tokens, pos, 0);
+            if pos < 0 { break opt_enter_scan; }
+            while pos < tokens.len() && tokens[pos] == TK_NULL {
+                let sp = pos;
+                pos = scan_c(tokens, pos, 0);
+                if pos < 0 { pos = sp; break; }
+                if pos == sp { break; }
+            }
+            if pos >= tokens.len() || tokens[pos] != TK_EOF { break opt_enter_scan; }
+            pos += 1;
+            let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if probe_kind == TK_EOF { opt_enter = true; }
+        }
+    }
+    if opt_enter {
         let t = _parse_t(p);
     }
     loop {

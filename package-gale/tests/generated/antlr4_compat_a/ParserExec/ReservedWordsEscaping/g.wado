@@ -2242,7 +2242,7 @@ fn _parse_continue__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         let _sk = p.peek_kind();
         if _sk == TK_CONTINUE_ {
             if 1 >= min_prec {
-                if scan_continue_lr_3(&p.kinds, p.pos) < 0 {
+                if scan_continue_lr_3(&p.kinds, p.pos, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_CONTINUE, _start);

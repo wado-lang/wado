@@ -52,9 +52,12 @@ impl ModuleDecls {
     pub(crate) fn clone_digests_from(&mut self, other: &ModuleDecls) {
         self.associated_constants
             .clone_from(&other.associated_constants);
-        self.effect_op_sigs.clone_from(&other.effect_op_sigs);
         self.effect_ops.clone_from(&other.effect_ops);
-        self.impl_method_sigs.clone_from(&other.impl_method_sigs);
+        self.method_sigs.clone_from(&other.method_sigs);
+        self.resource_method_ids
+            .clone_from(&other.resource_method_ids);
+        self.impl_sigs.clone_from(&other.impl_sigs);
+        self.trait_sigs.clone_from(&other.trait_sigs);
         self.function_sigs = std::rc::Rc::clone(&other.function_sigs);
         self.current_module_globals
             .clone_from(&other.current_module_globals);
@@ -88,15 +91,29 @@ pub(crate) struct ModuleDecls {
     /// driver-merged view needs no shadowing rules.
     pub(crate) associated_constants:
         IndexMap<(ModuleSource, String), (ModuleSource, TypeId, ast::Expr)>,
-    /// This module's own interface / resource operation signatures, keyed
-    /// `(decl name, op name)`, resolved once in the declaring perspective.
-    pub(crate) effect_op_sigs: IndexMap<(String, String), (Vec<TypeId>, Option<TypeId>)>,
-    /// Canonical signatures of the methods in this module's `impl` blocks,
-    /// keyed by the method's globally-unique `AstId`. Resolved once in the
-    /// impl's frame — impl type params in their positional slots, the
-    /// method's own after them, `Self` bound to the impl target — so a use
-    /// site instantiates instead of re-resolving the method AST.
-    pub(crate) impl_method_sigs: IndexMap<crate::ast::AstId, MethodSig>,
+    /// Canonical signatures of this module's method declarations, keyed by
+    /// the method's globally-unique `AstId`.
+    ///
+    /// An `impl` method is resolved in the impl's frame — impl type params
+    /// in their positional slots, the method's own after them, `Self` bound
+    /// to the impl target. An `interface` / `resource` operation is resolved
+    /// in the declaration's frame. Either way a use site instantiates
+    /// instead of re-resolving the method AST.
+    pub(crate) method_sigs: IndexMap<crate::ast::AstId, MethodSig>,
+    /// A declaration's `AstId` paired with an operation name → the
+    /// `AstId`, so a caller holding only a name reaches its `method_sigs`
+    /// entry.
+    pub(crate) resource_method_ids: IndexMap<(crate::ast::AstId, String), crate::ast::AstId>,
+    /// Facts of this module's `impl` blocks that belong to the block rather
+    /// than to one method — its target and trait type arguments and its
+    /// associated-type bindings — resolved once in the block's own frame and
+    /// keyed by the block's `AstId`.
+    pub(crate) impl_sigs: IndexMap<crate::ast::AstId, super::super::sig::ImplSig>,
+    /// Facts of this module's `trait` declarations, resolved once in each
+    /// trait's own frame (`Self` at slot 0) and keyed by the declaration's
+    /// `AstId`, so a use site instantiates instead of re-resolving the trait
+    /// method AST.
+    pub(crate) trait_sigs: IndexMap<crate::ast::AstId, super::super::sig::TraitSig>,
     /// Resolved operation signatures of this module's `interface` and
     /// `resource` declarations, keyed by the declaration's `AstId`.
     ///

@@ -1098,8 +1098,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             &self.tysys.trait_env,
         )?;
         self.tysys
-            .all_associated_constants
-            .get(&(type_module, canon_key))
+            .signatures
+            .associated_constant(&type_module, canon_key)
             .cloned()
     }
 
@@ -1631,11 +1631,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
         }
 
+        // Must stay in the decl pass: `Signatures` is assembled once every
+        // module's has run, so a body-pass record is invisible to every query.
+        self.sem.decls.trait_sigs.clear();
+        let trait_decls: Vec<ast::TraitDecl> = module
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Trait(decl) => Some(decl.clone()),
+                _ => None,
+            })
+            .collect();
+        for trait_decl in &trait_decls {
+            self.resolve_trait_decl(trait_decl);
+        }
+
         // Resolve each `interface` / `resource` declaration's operations in
         // its own frame, so a generic resource's methods see its type params
         // and `Self`. The body pass reads these back rather than repeating
         // the work.
         self.sem.decls.effect_ops.clear();
+        self.sem.decls.resource_method_ids.clear();
         let decl_ops: Vec<(
             crate::ast::AstId,
             Vec<ast::GenericParam>,
@@ -1660,39 +1676,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .as_deref()
                 .map(|name| (name, module_source.clone()));
             let ops = self.resolve_effect_ops(&type_params, &methods, resource_self);
+            for method in &methods {
+                self.sem
+                    .decls
+                    .resource_method_ids
+                    .insert((decl_id, method.name.clone()), method.id);
+            }
             self.sem.decls.effect_ops.insert(decl_id, ops);
-        }
-
-        self.sem.decls.effect_op_sigs.clear();
-        let op_inputs: Vec<(String, String, Vec<ast::Type>, Option<ast::Type>)> = module
-            .items
-            .iter()
-            .filter_map(|item| match item {
-                Item::Interface(decl) => Some((decl.name.clone(), &decl.methods)),
-                Item::Resource(decl) => Some((decl.name.clone(), &decl.methods)),
-                _ => None,
-            })
-            .flat_map(|(name, methods)| {
-                methods
-                    .iter()
-                    .map(move |m| {
-                        (
-                            name.clone(),
-                            m.name.clone(),
-                            m.params.iter().map(|p| p.ty.clone()).collect(),
-                            m.return_type.clone(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        for (effect, op, param_asts, return_ast) in op_inputs {
-            let params = param_asts.iter().map(|ty| self.resolve_type(ty)).collect();
-            let ret = return_ast.as_ref().map(|ty| self.resolve_type(ty));
-            self.sem
-                .decls
-                .effect_op_sigs
-                .insert((effect, op), (params, ret));
         }
 
         // Pre-populate the generic-function inference caches for every
@@ -1710,7 +1700,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         for item in &module.items {
             if let Item::Impl(impl_block) = item {
-                self.record_impl_method_sigs(impl_block);
+                self.record_impl_decls(impl_block);
             }
         }
         self.sem.decls.function_sigs = Rc::new(function_sigs);
@@ -1744,10 +1734,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Item::Impl(impl_block) => {
                     self.resolve_impl_item(impl_block);
                 }
-                Item::Trait(_trait_decl) => {
-                    // Trait declarations are handled in the first pass (signature registration)
-                    // No TIR output needed for trait declarations themselves
-                }
+                Item::Trait(_trait_decl) => {}
                 Item::Variant(variant_decl) => {
                     self.resolve_variant_decl(variant_decl);
                 }
@@ -1849,6 +1836,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             target_type_id,
+                            trait_name.clone().unwrap_or_default(),
                             binding.name.clone(),
                             type_id,
                         );
@@ -1863,6 +1851,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .borrow_mut()
                             .register_generic_assoc_type_def(
                                 base_decl,
+                                trait_name.clone().unwrap_or_default(),
                                 binding.name.clone(),
                                 type_id,
                             );
@@ -1957,10 +1946,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for method in &impl_block.methods {
             // Records-only: reify emits the method `TirFunction`
             // from the recorded signature facts + the AST.
-            let recorded_sig =
-                scope.tysys.impl_method_sig(method.id).cloned().expect(
-                    "the decl pass records every impl-declared method's canonical signature",
-                );
+            let recorded_sig = scope
+                .tysys
+                .signatures
+                .method_sig(method.id)
+                .cloned()
+                .expect("the decl pass records every impl-declared method's canonical signature");
             scope.resolve_method(
                 method,
                 &struct_name,
@@ -1982,14 +1973,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             (trait_name.as_ref(), impl_block.trait_type.as_ref())
         {
             let trait_decl_name = scope.get_type_name(trait_ast);
-            let (trait_methods, _) = scope
-                .find_trait_decl_methods_with_module(&trait_decl_name)
-                .unzip();
-            let default_methods: Vec<ast::Function> = trait_methods
-                .unwrap_or_default()
-                .into_iter()
-                .filter(|m| m.body.is_some() && !provided_method_names.contains(&m.name))
-                .collect();
+            let default_methods: Vec<std::rc::Rc<ast::Function>> = scope
+                .trait_sig_by_name(&trait_decl_name)
+                .map(|trait_sig| {
+                    trait_sig
+                        .default_methods()
+                        .filter(|(name, _)| {
+                            !provided_method_names
+                                .iter()
+                                .any(|provided| provided == name)
+                        })
+                        .map(|(_, body)| std::rc::Rc::clone(body))
+                        .collect()
+                })
+                .unwrap_or_default();
 
             // A default method's body is *foreign* AST owned by
             // the trait module; its nodes carry the trait
@@ -2070,10 +2067,5 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .insert((impl_block.id, default_method.id), populated);
             }
         }
-    }
-
-    /// Get the type table (after resolution)
-    pub fn into_type_table(self) -> Rc<RefCell<TypeTable>> {
-        self.tysys.type_table
     }
 }

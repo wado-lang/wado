@@ -2000,7 +2000,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
             if _sk == TK_AT {
                 if p.peek_at(1) == TK_X {
                     if 2 >= min_prec {
-                        if scan_expr_lr_1(&p.kinds, p.pos) < 0 {
+                        if scan_expr_lr_1(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_EXPR, _start);
@@ -2012,7 +2012,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     }
                 } else {
                     if 1 >= min_prec {
-                        if scan_expr_lr_2(&p.kinds, p.pos) < 0 {
+                        if scan_expr_lr_2(&p.kinds, p.pos, follow) < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_EXPR, _start);

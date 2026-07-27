@@ -325,6 +325,19 @@ impl GenContext {
         self.rule_follow_exact = exact;
     }
 
+    /// The rule's classical FOLLOW, for a probe whose scan ends at the
+    /// rule's tail — there, "can the caller continue" is exactly membership
+    /// in this set. Empty when the fixed point is not exact, which keeps the
+    /// probe on its previous answer. The set over-approximates (a union over
+    /// every call site), so conjoining it can only move a verdict from
+    /// "exit" to "iterate": a token it excludes cannot continue any caller.
+    pub fn rule_follow_for_probe(&self, rule_name: &String) -> List<String> {
+        if !self.rule_follow_exact || !self.rule_follow_kinds.contains_key(*rule_name) {
+            return [];
+        }
+        return self.rule_follow_kinds[*rule_name];
+    }
+
     pub fn at_end_conflict_routes(&self, rule_name: &String, branch_tokens: &List<String>) -> bool {
         if !self.rule_follow_exact {
             return true;

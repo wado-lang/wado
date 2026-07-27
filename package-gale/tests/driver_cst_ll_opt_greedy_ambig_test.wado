@@ -2,10 +2,9 @@
 //! alternative-order ambiguity resolution. Expected trees are the published
 //! ANTLR4 jar's (black-box oracle).
 //!
-//! The ambiguous cases are `#[TODO]`: Gale yields the shared token instead.
-//! Preferring to enter is only correct with a viability check, and that check is
-//! a full prediction — priced out, and coupled with the non-greedy loop
-//! divergence (TODO.md).
+//! Preferring to enter is only correct with a viability check: the entry probe
+//! scans the body, then the continuation from where the body ended, and enters
+//! only when both still match.
 
 use g from "./grammars/ll_opt_greedy_ambig.g4"
     with {
@@ -24,19 +23,15 @@ fn assert_parses(input: &String) {
     assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
 }
 
-// The divergence is which node the shared token lands under, not acceptance
-// (see lr_between).
 test "the ambiguous inputs parse" {
     assert_parses(&"x null");
     assert_parses(&"x null null");
 }
 
-#[TODO]
 test "ambiguous optional takes the shared token" {
     assert_tree(&"x null", &"(s x (t null))");
 }
 
-#[TODO]
 test "ambiguous optional takes the first shared token, the loop the rest" {
     assert_tree(&"x null null", &"(s x (t null) (c null))");
 }

@@ -185,12 +185,15 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         }
     }
     ctx.precompute_scannability();
+    // Before lowering: a tail-position viability probe stamps the enclosing
+    // rule's FOLLOW onto its op, so the fixed point has to be in place by
+    // then. It reads only the surface rules.
+    install_rule_follow(grammar, &mut ctx);
     let lowered = lower(grammar, &lit_tokens, &mut ctx);
     // Build the ATN up front when the grammar needs the simulator, so parser
     // emit can push each rule call's exact return state (`call_site_returns`)
     // and `gen_atn_data_global` can serialize the very same ATN. Gate-free
     // grammars skip this entirely.
-    install_rule_follow(grammar, &mut ctx);
     if !ctx.needs_atn() && grammar_has_at_end_conflict(grammar, &lowered, &mut ctx) {
         ctx.mark_needs_atn();
     }

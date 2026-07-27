@@ -117,6 +117,15 @@ share); no over-fill regression.
   nested lists, and don't decode/build what the grammar never reads.** The
   residual cost of even flat resident data is a Wado-runtime GC characteristic,
   tracked outside Gale.
+- **Benchmark on an idle host, and only against an arm measured in the same
+  window.** An A/B of the continuation probe run beside a compiling test suite
+  put both arms at 4.65–4.97 MB/s; idle, the same two commits measured 4.83–5.36
+  and their ranking flipped. Worse, one commit measured `sqlite_parse` at 2.302
+  and 2.918 ms/iter a few hours apart on the same idle host — a 27% swing for
+  identical code, while the `sqlparser-rs` reference row stayed at its baseline,
+  so the reference does not certify the window either. A number in this file is
+  evidence about the commits it was taken beside, not an absolute to compare a
+  later run against; re-measure both arms rather than one.
 - **A GC-bound win measured on the dev host overstates the release win.** The
   dev-profile runtime / GC / allocator run unoptimized (~4–5× slower, the
   measurement note above), so GC is a far larger share of dev wall-clock than
@@ -393,35 +402,44 @@ These are ATN-class prediction gaps tracked for compatibility, but each is
 about the scan/predict hot path. Full context in `TODO.md` ("Soundness and compatibility divergence") and
 `antlr4-compatibility.md` (prediction design, soundness invariants).
 
+**A memoised ATN / lookahead DFA is a last resort.** It was the named lever for
+the two entries below before each closed on the compiled scan instead. It is
+unmeasured in Gale, but ANTLR4's lookahead DFA _is_ that cache and still parses
+this grammar and input at 216.991 ms/iter against Gale's 2.535
+(`benchmark/README.md`). Reach for the scan and the runtime FOLLOW gate first.
+
 - **LR operator-precedence chain** (`DropLoopEntryBranchInLRRule_4`):
   `scan_expr_lr_*` sees `and X` match and commits where ANTLR4 resolves the
   precedence via full-context prediction at the LR loop entry. The mid-operand
-  half of this (`expr BETWEEN expr AND expr` against `expr AND expr`) has a known
-  correct fix that is **priced out for now**: making the rule ATN-class puts the
-  simulator on every loop entry, parse-side and once per tournament re-scan.
-  Measured on the dev profile over 40 statements: `SELECT … BETWEEN 1 AND 10 AND
-  y = 2` 41 ms → 2.3 s, expression input without any `BETWEEN` still 11x, the
-  scan side ~6x of the total. Memoising the loop-entry decision per (decision,
-  position, precedence, caller depth) is the lever that would make it
-  affordable — the tournament re-asks the same question at the same positions.
-  Details in `TODO.md`.
-- **Ambiguous greedy `rule?` and non-greedy `*?` / `+?` min-match** — the other
-  two ambiguity divergences (`TODO.md`), and the price that keeps the simulator
-  out of both. Implemented and reverted: release `sqlite_parse` **2.604 →
-  402.372 ms/iter (155×)**, because **one prediction is a full closure over the
-  grammar** — ~4–8 ms release for SQLite, ~50 of them in a 13 KB DDL script.
-  The fixed per-call setup is the cost, not the window: a 6- and a 12-token
-  budget measured the same, while gating the prediction behind the ambiguous
-  lookahead — asking only where the static check cannot answer — cut 734 ms →
-  6 ms over 40 statements (dev; 90 ms unfixed baseline). What survives gating is
-  one prediction per ambiguous occurrence: `a UNSIGNED BIG INT, b VARCHAR(10)
-  NOT NULL`, which the static path rejects outright, went 1.48 s → 776 ms — one
-  per `name+?` iteration. So the lever is a cheaper prediction (memoise per
-  decision / position / caller stack like ANTLR4's lookahead DFA, plus arena
-  reuse), or none at all: thread the caller's FOLLOW through rule calls and the
-  runtime gate answers these statically. **Measure the next attempt on release
-  `sqlite_parse`** — the 155× was invisible in the per-case dev timings that
-  guided the work.
+  half (`expr BETWEEN expr AND expr` against `expr AND expr`) is **closed on the
+  scan, not the simulator (2026-07)**: an LR self-reference that competes with
+  its own alternative's later delimiter drops to `min_prec = 0` and carries the
+  suffix continuation as a mask, so each loop entry scans the operator's suffix
+  and then checks the continuation still stands. The gate rides the static LR
+  dispatch, so a rule already routed to the simulator keeps its precedence and
+  still diverges on the climbing cases — `lr_atn_mid_operand.g4` pins that half,
+  two cases `#[TODO]`. The simulator answer had been priced out for the static
+  half — on the dev profile over 40 statements it took `SELECT … BETWEEN 1 AND
+  10 AND y = 2` from 41 ms to 2.3 s.
+- **`lr_between.g4` is still ATN-class and may not need to be.** Its shared-delimiter
+  competition sits in an _atom_ alternative (`'between' expr 'and' expr` — no leading
+  self-reference), so the continuation gate above does not reach it. The question it
+  asks is the same one, so the same gate may apply; if it does, the simulator comes
+  out of grammars that embed it today. Untried.
+- **Ambiguous greedy `rule?` and non-greedy `*?` / `+?` min-match — closed on
+  the scan, not the simulator (2026-07).** The simulator answer was implemented
+  and reverted at release `sqlite_parse` **2.604 → 402.372 ms/iter (155×)**:
+  one prediction is a full closure over the grammar, and neither bounding the
+  lookahead nor gating it brought that down. What shipped decides the ambiguity
+  with the compiled scan instead — a greedy `?` scans its body then the
+  continuation before entering, a non-greedy loop scans the continuation before
+  exiting. Where the scan runs out — the rule's tail — the verdict conjoins
+  the rule's classical FOLLOW, which cost one bug fix in `follow_env` (an
+  optional's callee was receiving the inner's own FIRST) rather than a second
+  runtime argument. That last conjunct is why a probe may only be stamped where
+  the walk really reaches the rule's tail (soundness invariant 10). Release
+  `sqlite_parse` measured unchanged at every step, each arm's own spread moving
+  further than any gap between the arms.
 - **Recursive lexer rule with `.+?` / `.*?`**
   (`RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`): the static single-pass
   emitter over-consumes nested `/* … */` comments.

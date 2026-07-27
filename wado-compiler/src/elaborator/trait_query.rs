@@ -202,11 +202,6 @@ pub(crate) fn canonical_decl_key_with(
     (current_module_source.clone(), name.to_string())
 }
 
-/// Free-function form of
-/// [`Elaborator::find_trait_decl_methods_with_module`], callable from any
-/// module that has the inputs in hand. Used by reify's
-/// `reify_impl_default_methods` to enumerate the trait's default methods
-/// for an impl block.
 /// Resolve a trait declaration by name to its `TraitDecl` and owning module,
 /// local-first (a local trait shadows a same-named one elsewhere, issue #1298).
 fn find_trait_decl_with<'a>(
@@ -241,25 +236,27 @@ fn find_trait_decl_with<'a>(
     None
 }
 
-pub(crate) fn find_trait_decl_methods_with_module_with(
+/// The recorded declaration facts of the trait named `trait_name`, for a
+/// caller holding the inputs rather than an `Elaborator` — reify's
+/// default-method pass. Resolves the name through the declaration index and
+/// reads the digest, never the declaring module's AST.
+pub(crate) fn trait_sig_by_name_with<'a>(
     trait_name: &str,
     current_module_source: &ModuleSource,
-    current_module_items: &[ast::Item],
     imports: &super::sem::ModuleImports,
     symbols: &crate::symbol::SymbolTable,
     trait_env: &super::trait_env::TraitEnv,
-    loaded_modules: &IndexMap<ModuleSource, ast::Module>,
-) -> Option<(Vec<ast::Function>, ModuleSource)> {
-    find_trait_decl_with(
+    signatures: &'a super::sig::Signatures,
+) -> Option<&'a super::sig::TraitSig> {
+    let canonical_key = canonical_decl_key_with(
         trait_name,
         current_module_source,
-        current_module_items,
         imports,
         symbols,
         trait_env,
-        loaded_modules,
-    )
-    .map(|(decl, module)| (decl.methods.clone(), module))
+    );
+    let (_, decl_id) = trait_env.decl_index.get(&canonical_key)?;
+    signatures.trait_sig(*decl_id)
 }
 
 /// A trait declaration's associated-type declarations, resolved by name.
@@ -285,36 +282,6 @@ pub(crate) fn find_trait_decl_assoc_types_with(
 }
 
 impl TypeSystem {
-    /// Build the mapping from an impl block's declared type-parameter names to
-    /// the concrete type arguments at a use site, by position. Pure over the
-    /// AST impl type and the concrete arg list — needs no type table.
-    pub(crate) fn build_type_param_mapping(
-        impl_ty: &Type,
-        concrete_type_args: &[TypeId],
-        declared_type_params: &IndexSet<String>,
-    ) -> IndexMap<String, TypeId> {
-        let mut mapping = IndexMap::default();
-
-        // Extract type parameter names from impl_ty, tracking positions
-        // Position tracking is needed to map type params to the correct concrete arg
-        if let Type::Generic(g) = impl_ty {
-            for (concrete_idx, arg) in g.args.iter().enumerate() {
-                if let Type::Named(n) = arg {
-                    let is_type_param = if declared_type_params.is_empty() {
-                        true // legacy: treat all Named as type params
-                    } else {
-                        declared_type_params.contains(&n.name)
-                    };
-                    if is_type_param && let Some(&type_id) = concrete_type_args.get(concrete_idx) {
-                        mapping.insert(n.name.clone(), type_id);
-                    }
-                }
-            }
-        }
-
-        mapping
-    }
-
     /// The traits the compiler auto-derives for eligible aggregate types
     /// (`struct` / `variant` / `enum` / generic instance) and exposes through
     /// method-call and operator dispatch, each paired with the method it
@@ -447,30 +414,20 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Find a trait declaration by name across all modules.
-    /// Returns the trait's methods (cloned) if found.
-    pub(super) fn find_trait_decl_methods(&self, trait_name: &str) -> Option<Vec<ast::Function>> {
-        self.find_trait_decl_methods_with_module(trait_name)
-            .map(|(methods, _)| methods)
-    }
-
-    /// Like [`Self::find_trait_decl_methods`] but also returns the module that
-    /// owns the trait declaration, for callers that need to attribute a trait
-    /// *default* method body to its declaring module (e.g. diagnostics).
-    /// Fact keying needs no module qualifier: the body's nodes carry their
-    /// own globally-unique `AstId`s.
-    pub(super) fn find_trait_decl_methods_with_module(
-        &self,
-        trait_name: &str,
-    ) -> Option<(Vec<ast::Function>, ModuleSource)> {
-        find_trait_decl_methods_with_module_with(
+    /// The recorded declaration facts of the trait named `trait_name`.
+    ///
+    /// Resolves the name the same way [`Self::find_trait_decl_methods`]
+    /// does — canonicalise, then consult the declaration index — but reaches
+    /// the digest the decl pass recorded rather than the declaring module's
+    /// AST.
+    pub(super) fn trait_sig_by_name(&self, trait_name: &str) -> Option<&super::sig::TraitSig> {
+        trait_sig_by_name_with(
             trait_name,
             &self.current_module_source,
-            self.current_module_items,
             &self.sem.imports,
             self.symbols,
             &self.tysys.trait_env,
-            self.loaded_modules,
+            &self.tysys.signatures,
         )
     }
 
@@ -1570,8 +1527,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .tysys
                             .type_table
                             .borrow_mut()
-                            .make_assoc_type_projection(
+                            .make_assoc_type_projection_of_trait(
                                 self_type_id,
+                                Some(trait_name.clone()),
                                 assoc_decl.name.clone(),
                                 bound_names,
                                 atb,
@@ -2001,6 +1959,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
+                            trait_name.to_string(),
                             binding.name.clone(),
                             resolved_id,
                         );
@@ -2094,6 +2053,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
+                            trait_name.to_string(),
                             binding.name.clone(),
                             resolved_id,
                         );

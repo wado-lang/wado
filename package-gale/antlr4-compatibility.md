@@ -475,6 +475,17 @@ relevant sites.
    surface element. Fixtures `lr_opt_two_token.g4`, `lr_suffix_opt_shape.g4`,
    `lr_suffix_non_greedy_opt.g4` — pair any new decision input with one like
    them.
+10. A viability probe is stamped only where the walk reaches the rule's tail.
+    The probe scans the continuation and, when that runs out, conjoins the
+    rule's FOLLOW — an answer that is only about the caller if nothing else
+    follows inside the rule. A group body, an LR suffix, and an LR rule's atom
+    alternative all end short of the rule (the LR atom ends where the
+    precedence loop begins), so each answers `reaches_rule_tail = false`.
+    Stamping the atom `true` rejected `CASE a WHEN 1 THEN 2 END + 1`: the probe
+    asked the caller's FOLLOW at a position where the `+` loop would continue.
+    Keep it separate from `enclosing_at_tail`, which the FOLLOW gate uses and
+    which asks a weaker question — conflating the two is what put the probe
+    there. Fixture `tests/grammars/lr_atom_probe.g4`.
 
 Termination is a checked property, not only inline conservatism:
 `check_left_recursion` (grammar-check phase) rejects hidden (`a : x? a`, a
