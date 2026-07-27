@@ -57,6 +57,7 @@ impl ModuleDecls {
         self.resource_method_ids
             .clone_from(&other.resource_method_ids);
         self.impl_sigs.clone_from(&other.impl_sigs);
+        self.trait_sigs.clone_from(&other.trait_sigs);
         self.function_sigs = std::rc::Rc::clone(&other.function_sigs);
         self.current_module_globals
             .clone_from(&other.current_module_globals);
@@ -108,6 +109,11 @@ pub(crate) struct ModuleDecls {
     /// associated-type bindings — resolved once in the block's own frame and
     /// keyed by the block's `AstId`.
     pub(crate) impl_sigs: IndexMap<crate::ast::AstId, super::super::sig::ImplSig>,
+    /// Facts of this module's `trait` declarations, resolved once in each
+    /// trait's own frame (`Self` at slot 0) and keyed by the declaration's
+    /// `AstId`, so a use site instantiates instead of re-resolving the trait
+    /// method AST.
+    pub(crate) trait_sigs: IndexMap<crate::ast::AstId, super::super::sig::TraitSig>,
     /// Resolved operation signatures of this module's `interface` and
     /// `resource` declarations, keyed by the declaration's `AstId`.
     ///

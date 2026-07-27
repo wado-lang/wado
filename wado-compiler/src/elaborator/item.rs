@@ -1210,6 +1210,134 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("the decl pass records every interface / resource declaration's operations")
     }
 
+    /// Resolve a `trait` declaration in its own frame and record it.
+    ///
+    /// `Self` takes slot 0 and the trait's own type parameters follow, so a
+    /// method signature naming `Self`, `Self::Assoc` or the trait's `T` is
+    /// abstract over exactly those slots. An `impl` reads a method back by
+    /// filling slot 0 with its target and the rest with its trait arguments
+    /// — the same instantiation every other declaration uses, instead of
+    /// re-resolving the trait's method AST in the impl's perspective.
+    pub(super) fn resolve_trait_decl(&mut self, trait_decl: &ast::TraitDecl) {
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
+
+        // `Self` is a slot, not a known type: a trait declaration says
+        // nothing about what implements it. Registering it as slot 0 is what
+        // turns `Self::Assoc` in a signature into a projection over that
+        // slot rather than an unresolved-type error.
+        let self_slot = scope
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_type_param("Self".to_string(), 0);
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .insert("Self".to_string(), (0, self_slot));
+        scope.annotate_ctx.trait_ctx.self_type = Some(self_slot);
+        let next_slot = scope.register_generic_params(&trait_decl.type_params, 1);
+
+        let decl_slots: Vec<(String, TypeId)> = std::iter::once(("Self".to_string(), self_slot))
+            .chain(trait_decl.type_params.iter().filter_map(|tp| {
+                scope
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_params
+                    .get(&tp.name)
+                    .map(|&(_, id)| (tp.name.clone(), id))
+            }))
+            .collect();
+
+        let mut methods: crate::hashmap::IndexMap<String, super::sig::TraitMethod> =
+            crate::hashmap::IndexMap::default();
+        for method in &trait_decl.methods {
+            let mut method_scope = scope.enter_inherited_type_param_scope();
+            method_scope
+                .annotate_ctx
+                .trait_ctx
+                .install_effect_params(&method.type_params);
+            method_scope.register_generic_params(&method.type_params, next_slot);
+            let method_slots: Vec<(String, TypeId)> = method
+                .type_params
+                .iter()
+                .filter(|p| !p.is_effect)
+                .filter_map(|tp| {
+                    method_scope
+                        .annotate_ctx
+                        .trait_ctx
+                        .type_params
+                        .get(&tp.name)
+                        .map(|&(_, id)| (tp.name.clone(), id))
+                })
+                .collect();
+
+            let param_types: Vec<TypeId> = method
+                .params
+                .iter()
+                .map(|p| method_scope.resolve_type(&p.ty))
+                .collect();
+            let return_type = method
+                .return_type
+                .as_ref()
+                .map(|t| method_scope.resolve_type(t));
+
+            let mut type_params = decl_slots.clone();
+            type_params.extend(method_slots);
+
+            methods.insert(
+                method.name.clone(),
+                super::sig::TraitMethod {
+                    sig: MethodSig {
+                        decl: DeclSig {
+                            type_params,
+                            param_types,
+                            return_type,
+                        },
+                        self_kind: method
+                            .params
+                            .first()
+                            .map(|p| p.self_kind)
+                            .unwrap_or(SelfKind::None),
+                        params: method
+                            .params
+                            .iter()
+                            .filter(|p| p.self_kind == SelfKind::None)
+                            .map(|p| super::sig::Param {
+                                name: p.name.clone(),
+                                is_mut: p.is_mut,
+                                default: p.default.clone(),
+                            })
+                            .collect(),
+                        declaring_slot_count: decl_slots.len() as u32,
+                        cm_name: method
+                            .attrs
+                            .iter()
+                            .find_map(crate::ast::Attribute::cm_identifier),
+                        is_async: method.is_async,
+                    },
+                    default_body: method
+                        .body
+                        .as_ref()
+                        .map(|_| std::rc::Rc::new(method.clone())),
+                },
+            );
+        }
+
+        let module = scope.current_module_source.clone();
+        scope.sem.decls.trait_sigs.insert(
+            trait_decl.id,
+            super::sig::TraitSig {
+                module,
+                type_params: decl_slots,
+                assoc_types: trait_decl.associated_types.clone(),
+                methods,
+            },
+        );
+    }
+
     pub(super) fn resolve_effect_ops(
         &mut self,
         type_params: &[ast::GenericParam],

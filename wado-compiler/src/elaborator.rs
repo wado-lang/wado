@@ -1719,9 +1719,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Item::Impl(impl_block) => {
                     self.resolve_impl_item(impl_block);
                 }
-                Item::Trait(_trait_decl) => {
-                    // Trait declarations are handled in the first pass (signature registration)
-                    // No TIR output needed for trait declarations themselves
+                Item::Trait(trait_decl) => {
+                    // No TIR output — a trait declares, it does not define.
+                    // Its signatures are recorded so dispatch instantiates
+                    // them instead of re-resolving this AST per impl.
+                    self.resolve_trait_decl(trait_decl);
                 }
                 Item::Variant(variant_decl) => {
                     self.resolve_variant_decl(variant_decl);

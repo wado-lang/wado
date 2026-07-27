@@ -166,6 +166,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return resolved;
                 }
             }
+            // In a `trait` declaration's own frame `Self` is a slot, not a
+            // known type, so `Self::Assoc` is a projection over that slot —
+            // exactly what `T::Assoc` becomes for any other parameter below.
+            // Instantiating the frame substitutes the slot, and the
+            // projection resolves against whatever filled it.
+            if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
+                && matches!(
+                    self.tysys.type_table.borrow().get(self_type),
+                    ResolvedType::TypeParam { .. }
+                )
+            {
+                let assoc_bounds = self.find_assoc_type_bounds(self_type, &namespaced.name);
+                let bound_names: Vec<String> =
+                    assoc_bounds.iter().map(|b| b.name.clone()).collect();
+                let assoc_type_bindings = self.compute_assoc_type_bindings("Self", &assoc_bounds);
+                return self.tysys.type_table.borrow_mut().make_assoc_type_projection(
+                    self_type,
+                    namespaced.name.clone(),
+                    bound_names,
+                    assoc_type_bindings,
+                );
+            }
             // If not found, it's an unknown associated type
             let _ = self.emit(TypeError::UnknownType {
                 name: format!("Self::{}", namespaced.name),

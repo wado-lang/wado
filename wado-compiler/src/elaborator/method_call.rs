@@ -2158,73 +2158,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (`T::method()`) already reaches the trait default via
         // `find_method_type_param_names`.
         if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name)
-            && let Some(trait_methods) = self.find_trait_decl_methods(&trait_name)
+            && let Some(default_method) = self
+                .trait_sig_by_name(&trait_name)
+                .and_then(|sig| sig.method(method_name))
+                .filter(|m| m.default_body.is_some() && m.sig.self_kind == ast::SelfKind::None)
+                .cloned()
         {
-            for default_method in &trait_methods {
-                if default_method.name != method_name || default_method.body.is_none() {
-                    continue;
-                }
-                let has_self = default_method
-                    .params
-                    .iter()
-                    .any(|p| p.self_kind != ast::SelfKind::None);
-                if has_self {
-                    continue;
-                }
-                let mut scope = self.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.type_params.clear();
-                scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
-                // Bind `Self::AssocName` projections that may appear in the
-                // trait default body's return type (e.g. FromStr's
-                // `Result<Self, Self::Err>`). Pull the bindings from the
-                // impl block that connects this trait to this type.
-                let impl_assoc_types = scope.find_impl_assoc_types(struct_name, &trait_name);
-                for binding in &impl_assoc_types {
-                    let type_id = scope.resolve_type(&binding.ty);
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .assoc_type_bindings
-                        .insert(binding.name.clone(), type_id);
-                }
-                // Resolve `Self` to the concrete type at the call site.
-                // `resolve_named_type` maps primitives to their canonical
-                // TypeTable id rather than a struct wrapper.
-                let self_type_id = scope.resolve_named_type(struct_name, Span::default(), false);
-                scope.annotate_ctx.trait_ctx.self_type = Some(self_type_id);
-                let result = default_method
-                    .return_type
-                    .as_ref()
-                    .map(|t| scope.resolve_type(t))
-                    .unwrap_or(TypeTable::UNIT);
-                drop(scope);
-                return result;
-            }
+            // `Self` is the trait frame's slot 0, so filling it with the
+            // concrete receiver is what turns a default's declared return
+            // type into this call's. A `Self::Assoc` projection in that type
+            // resolves through the substitution against the impl's registered
+            // binding — no scope seeding needed.
+            let mut scope = self.enter_inherited_type_param_scope();
+            let self_type_id = scope.resolve_named_type(struct_name, Span::default(), false);
+            let result = default_method
+                .sig
+                .instantiate_call(&scope.tysys.type_table, &[self_type_id], &[])
+                .return_type;
+            drop(scope);
+            return result;
         }
 
         TypeTable::UNKNOWN
-    }
-
-    /// Look up the associated-type bindings on the impl block that
-    /// connects `trait_name` to `struct_name`. Returns an empty vec when
-    /// the impl is auto-derived or otherwise has no bindings.
-    fn find_impl_assoc_types(
-        &self,
-        struct_name: &str,
-        trait_name: &str,
-    ) -> Vec<ast::AssociatedTypeBinding> {
-        // The key identifies the type, so the bucket holds only this type's
-        // impls — the trait name is the only thing left to match.
-        self.tysys
-            .trait_env
-            .impl_index
-            .get(&self.impl_target(struct_name))
-            .into_iter()
-            .flatten()
-            .filter_map(|key| self.tysys.trait_env.impl_headers.get(key))
-            .find(|header| header.trait_name.as_deref() == Some(trait_name))
-            .map(|header| header.associated_types.clone())
-            .unwrap_or_default()
     }
 
     /// Look up static method parameter types for coercion.
@@ -2589,19 +2544,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // (`T::method()`) already finds default methods in
                 // `find_method_type_param_names`.
                 let trait_name_base = Self::get_type_name_static(trait_type);
-                if let Some(trait_methods) = self.find_trait_decl_methods(&trait_name_base) {
-                    for default_method in &trait_methods {
-                        if default_method.name != method_name || default_method.body.is_none() {
-                            continue;
-                        }
-                        let has_self = default_method
-                            .params
-                            .iter()
-                            .any(|p| p.self_kind != ast::SelfKind::None);
-                        if !has_self {
-                            return Some(resolve_trait_name(trait_type));
-                        }
-                    }
+                if let Some(method) = self
+                    .trait_sig_by_name(&trait_name_base)
+                    .and_then(|sig| sig.method(method_name))
+                    && method.default_body.is_some()
+                    && method.sig.self_kind == ast::SelfKind::None
+                {
+                    return Some(resolve_trait_name(trait_type));
                 }
                 None
             };

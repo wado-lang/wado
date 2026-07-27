@@ -52,6 +52,12 @@ pub(crate) struct Signatures {
     /// block's `AstId`.
     pub(crate) impl_sigs: IndexMap<AstId, ImplSig>,
 
+    /// Per-`trait`-declaration facts, keyed by the declaration's `AstId`.
+    /// `TraitEnv::decl_index` maps a canonical trait name to that `AstId`,
+    /// so a query reaches a trait's methods by name without loading the
+    /// declaring module's AST.
+    pub(crate) trait_sigs: IndexMap<AstId, TraitSig>,
+
     /// Global-variable declarations, declaring module → name →
     /// `(declared type, is_mut)`.
     pub(crate) globals: IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>>,
@@ -90,6 +96,11 @@ impl Signatures {
     /// Declaration facts of the `impl` block at `ast_id`.
     pub(crate) fn impl_sig(&self, ast_id: AstId) -> Option<&ImplSig> {
         self.impl_sigs.get(&ast_id)
+    }
+
+    /// Declaration facts of the `trait` declared at `ast_id`.
+    pub(crate) fn trait_sig(&self, ast_id: AstId) -> Option<&TraitSig> {
+        self.trait_sigs.get(&ast_id)
     }
 
     /// Declared type and mutability of the global `name` in `module`.
@@ -224,6 +235,60 @@ impl MethodSig {
             }
         }
         self.decl.instantiate_slots(type_table, &substitution)
+    }
+}
+
+/// What a `trait` declaration says, resolved once in the trait's own frame.
+///
+/// The frame numbers `Self` as slot 0 and the trait's own type parameters
+/// from 1, so a method written in terms of `Self`, `Self::Assoc` or the
+/// trait's `T` instantiates by filling those slots — the same
+/// [`DeclSig::instantiate`] every other declaration uses. An `impl` reads a
+/// trait method by supplying its target as slot 0 and its trait arguments
+/// after it.
+#[derive(Clone, Debug)]
+pub(crate) struct TraitSig {
+    /// The declaring module, for the call sites that name the trait's owner.
+    pub(crate) module: ModuleSource,
+    /// The trait's slots in frame order, `Self` first.
+    pub(crate) type_params: Vec<(String, TypeId)>,
+    /// The trait's `type X;` declarations, in declaration order. Irreducibly
+    /// AST: a bound is re-resolved against each impl's bindings.
+    pub(crate) assoc_types: Vec<crate::ast::AssociatedTypeDecl>,
+    /// The trait's methods, in declaration order, by name.
+    pub(crate) methods: IndexMap<String, TraitMethod>,
+}
+
+/// One method of a `trait` declaration.
+#[derive(Clone, Debug)]
+pub(crate) struct TraitMethod {
+    /// The signature in the trait's frame — [`TraitSig::type_params`] are its
+    /// leading slots, the method's own follow.
+    pub(crate) sig: MethodSig,
+    /// The default body, when the trait declares one. Irreducibly AST: it is
+    /// walked once per implementing block and reified per instantiation.
+    /// `None` marks a required method.
+    pub(crate) default_body: Option<Rc<crate::ast::Function>>,
+}
+
+impl TraitSig {
+    /// The method named `name`, if the trait declares one.
+    pub(crate) fn method(&self, name: &str) -> Option<&TraitMethod> {
+        self.methods.get(name)
+    }
+
+    /// The methods this trait provides a default body for, in declaration
+    /// order — what an `impl` block inherits for every name it does not
+    /// itself provide.
+    pub(crate) fn default_methods(
+        &self,
+    ) -> impl Iterator<Item = (&str, &Rc<crate::ast::Function>)> {
+        self.methods.iter().filter_map(|(name, method)| {
+            method
+                .default_body
+                .as_ref()
+                .map(|body| (name.as_str(), body))
+        })
     }
 }
 

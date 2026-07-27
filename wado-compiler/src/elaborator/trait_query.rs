@@ -417,6 +417,24 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// The recorded declaration facts of the trait named `trait_name`.
+    ///
+    /// Resolves the name the same way [`Self::find_trait_decl_methods`]
+    /// does — canonicalise, then consult the declaration index — but reaches
+    /// the digest the decl pass recorded rather than the declaring module's
+    /// AST.
+    pub(super) fn trait_sig_by_name(&self, trait_name: &str) -> Option<&super::sig::TraitSig> {
+        let canonical_key = canonical_decl_key_with(
+            trait_name,
+            &self.current_module_source,
+            &self.sem.imports,
+            self.symbols,
+            &self.tysys.trait_env,
+        );
+        let (_, decl_id) = self.tysys.trait_env.decl_index.get(&canonical_key)?;
+        self.tysys.signatures.trait_sig(*decl_id)
+    }
+
     /// Find a trait declaration by name across all modules.
     /// Returns the trait's methods (cloned) if found.
     pub(super) fn find_trait_decl_methods(&self, trait_name: &str) -> Option<Vec<ast::Function>> {

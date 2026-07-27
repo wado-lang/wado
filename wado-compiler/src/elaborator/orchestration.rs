@@ -1556,6 +1556,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 for (ast_id, sig) in &sem.decls.impl_sigs {
                     signatures.impl_sigs.insert(*ast_id, sig.clone());
                 }
+                for (ast_id, sig) in &sem.decls.trait_sigs {
+                    signatures.trait_sigs.insert(*ast_id, sig.clone());
+                }
                 signatures
                     .function_sigs
                     .insert(module_source.clone(), Rc::clone(&sem.decls.function_sigs));
