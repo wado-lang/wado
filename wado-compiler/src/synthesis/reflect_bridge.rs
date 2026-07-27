@@ -1,18 +1,9 @@
 //! Post-monomorphize reflect bridge synthesis.
 //!
-//! Every other synthesis phase runs before monomorphization. The reflect value
-//! bridges cannot: lowering names each one after the *concrete* subject and
-//! member type, and members sharing a mangled member type share one
-//! index-dispatched bridge. For a generic type that grouping is knowable only
-//! per instantiation — `Pair<i32>` merges `left: T` with `right: i32` where
-//! `Pair<String>` keeps them apart — and the two call sites are
-//! indistinguishable, so a single generic bridge could not be selected
-//! (WEP 2026-06-13).
-//!
-//! The two kinds are found differently. A generic struct is instantiated into
-//! its own monomorphized declaration, so its instances are read off the
-//! declaration list. A generic variant never is (WEP 2026-02-09), so its
-//! instances are read off the type table.
+//! The one synthesis phase that runs after monomorphize: lowering names a value
+//! bridge after the *concrete* subject and member type, and members sharing a
+//! mangled member type share one index-dispatched bridge, so a generic type's
+//! bridges exist only per instantiation (WEP 2026-06-13).
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -86,8 +77,8 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
 /// `ReflectVariant`-derived generic variant. A generic variant keeps a single
 /// declaration, so the instantiations are the `GenericInstance` types naming it.
 fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<TirFunction>>>) {
-    // The subject's mangle is the bridge's identity, so a type interned more
-    // than once collapses onto one helper rather than minting a duplicate.
+    // The subject's mangle is the bridge's identity, so a type interned twice
+    // collapses onto one helper.
     let mut seen_subjects: crate::hashmap::IndexSet<String> = crate::hashmap::IndexSet::default();
     let instances: Vec<(TypeId, String, ModuleSource, Vec<TypeId>)> = {
         let tt = flat.type_table.borrow();
@@ -101,10 +92,9 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
                 else {
                     return None;
                 };
-                // A bridge is minted per *concrete* instantiation. An
-                // unsubstituted parameter or projection prints as itself
-                // (`Option<V>`, `Option<I::Item>`), so instances from different
-                // callers would collide on one name.
+                // An unsubstituted parameter or projection prints as itself
+                // (`Option<V>`), so instances from different callers would
+                // collide on one bridge name.
                 let concrete = !type_args.iter().any(|&arg| {
                     tt.contains_type_param(arg) || tt.contains_assoc_type_projection(arg)
                 });
@@ -153,10 +143,9 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
         let ref_subject = flat.type_table.borrow_mut().make_ref(subject);
         let mut helpers =
             generate_case_bridge_helpers(&flat.type_table, &cases, subject, ref_subject, span);
-        // The tag read is named after the subject, so an instantiated generic
-        // variant needs its own `discriminant`: the generic declaration's is a
-        // template that nothing instantiates, because lowering mints this call
-        // after monomorphization has finished.
+        // The tag read is named after the subject, and lowering mints the call
+        // after monomorphization, so the generic declaration's `discriminant`
+        // is a template nothing instantiates.
         let discriminant_name = crate::name::variant_tag_helper_name(
             &flat.type_table.borrow().mangle_type_arg_erased(subject),
         );

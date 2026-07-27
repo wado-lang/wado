@@ -155,9 +155,8 @@ pub fn case_construct_helper_name(mangled_variant: &str, mangled_payload: &str) 
 }
 
 /// The `discriminant` of one instantiated generic variant, identified by the
-/// instance's structural mangle. A generic variant has no declaration of its
-/// own to carry a shared tag read, and the method-name form cannot spell an
-/// instance, so this is a free helper like the value bridges.
+/// instance's structural mangle. A free helper like the value bridges: the
+/// method-name form cannot spell an instance.
 pub fn variant_tag_helper_name(mangled_variant: &str) -> String {
     format!("$variant_tag${mangled_variant}")
 }

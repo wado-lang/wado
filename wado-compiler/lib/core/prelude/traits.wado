@@ -366,17 +366,13 @@ impl<T, F> Member for StructField<T, F> {
     }
 }
 
-// The four member handles format themselves. The derivations below are written
-// over `ReflectStruct`, and a handle is sealed against reflection — its own
-// `Members` would mention `StructField<Self, …>` and grow `Self` without bound —
-// so a handle takes the escape hatch any undrivable type has and writes its own
-// impl. The output matches what a derived struct produces.
+// The four member handles are sealed against reflection (WEP 2026-06-13), so
+// they cannot use the `ReflectStruct` derivations above and write their own
+// impls instead. The output matches what a derived struct produces.
 
-// `Option<String>`'s own `Inspect` is synthesized for the variant in
-// `prelude/types.wado`, which is not yet resolvable while this module is
-// elaborated — the derivations above reach field types through a bound, this
-// module reaches a concrete one. Render the two cases directly, matching what
-// the variant derive emits.
+// `Option<String>`'s own `Inspect` is synthesized in `prelude/types.wado`,
+// which is not yet resolvable while this module is elaborated. Render the two
+// cases directly, matching what the variant derive emits.
 internal fn inspect_wire_override(v: &Option<String>, f: &mut Formatter) {
     match v {
         Option::Some(s) => {

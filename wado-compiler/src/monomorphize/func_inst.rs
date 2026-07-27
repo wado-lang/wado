@@ -3126,11 +3126,10 @@ impl Monomorphizer {
                 } if !args.is_empty()
             ) || matches!(type_table.get(resolved), ResolvedType::BuiltinArray(_))
         };
-        // A generic-instance receiver normally reaches a generic impl on its own
-        // type, which the receiver scan instantiates — but when it reaches a
-        // blanket instead (`blanket_module` is set only when the type has no
-        // impl of its own), nothing else queues that instance, so it still
-        // needs `monomorph_info`.
+        // A generic-instance receiver normally reaches a generic impl on its
+        // own type, which the receiver scan instantiates. Reaching a blanket
+        // instead means the type has no impl of its own, so nothing else queues
+        // that instance.
         let served_by_receiver_scan = receiver_has_type_args && blanket_module.is_none();
         let monomorph_info = if self.functions.has_impl(&new_info) || served_by_receiver_scan {
             None

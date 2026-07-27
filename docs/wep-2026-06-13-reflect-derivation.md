@@ -142,7 +142,7 @@ one public member would enumerate its private ones alongside it. The shape is
 observable as a whole or not at all. A type declaring no member is genuinely
 memberless and always satisfies.
 
-This gates reflection written *about* a type, not the impls derived *for* it. A
+This gates reflection written _about_ a type, not the impls derived _for_ it. A
 derived impl is synthesized at the declaration, where every member is visible,
 so `${v:?}` and serde keep rendering a foreign type in full — that is the
 declaring module's own choice of representation, the same as deriving it by
@@ -151,9 +151,7 @@ did not expose.
 
 This is what keeps an abstraction like `TreeMap` out of a downstream
 `T: ReflectStruct` without naming it: its fields are private, so nothing outside
-its module can enumerate them. This is what keeps an abstraction like `TreeMap` out
-of a downstream `T: ReflectStruct` without naming it: its fields are private, so
-nothing outside its module can enumerate them.
+its module can enumerate them.
 
 ## Generic types
 
@@ -180,36 +178,32 @@ different spelling of `type_name`, and waits for a consumer.
 Two rules bound what is reflectable:
 
 - A member's own type never disqualifies its owner. An associated-type
-  projection reads like an exception — an iterator adapter's
-  `pub f: fn mut(I::Item) -> U` is not a substitution of the declaration's
+  projection looks like an exception — an iterator adapter's
+  `pub f: fn mut(I::Item) -> U` does not substitute the declaration's own
   parameters — but the synthesized impl carries the declaration's bounds, so
-  `I::Item` is as nameable there as on the declaration and the instantiation
-  resolves it like any other projection.
+  `I::Item` resolves at the instantiation like any other projection.
 - A type whose members are not all visible at the use site is not reflectable
   there (see [Visibility](#visibility)). This is what leaves `TreeMap`'s
   hand-written `Inspect` as the only candidate: a generic instance's mangled
   name (`TreeMap<String, i32>`) does not match the impl written for `TreeMap`,
   so the derivation would otherwise take it.
 
-One further consequence follows from a generic type's members being generic
-structs themselves:
+### Value bridges
 
-- A generic type's value bridges (`$field_get$S$F`, `$case_extract$V$P`,
-  `$case_construct$V$P`) are minted _after_ monomorphization — the only synthesis
-  that is. Lowering names a bridge by the concrete subject and member mangles,
-  and members sharing a mangled member type share one index-dispatched bridge:
-  `Pair<i32>` merges `left: T` with `right: i32`, `Pair<String>` keeps them
-  apart. The grouping exists only per instantiation, and the two call sites are
-  indistinguishable, so a generic bridge could not be selected.
+A generic type's value bridges (`$field_get$S$F`, `$case_extract$V$P`,
+`$case_construct$V$P`) are minted _after_ monomorphization — the only synthesis
+that is. Lowering names a bridge by the concrete subject and member mangles, and
+members sharing a mangled member type share one index-dispatched bridge:
+`Pair<i32>` merges `left: T` with `right: i32`, `Pair<String>` keeps them apart.
+The grouping exists only per instantiation, and the two call sites are
+indistinguishable, so a generic bridge could not be selected.
 
-The two kinds reach their instantiations differently. A generic struct becomes
-its own monomorphized declaration, so its bridges are minted off the declaration
-list. A generic variant never does (WEP 2026-02-09), so its instantiations are
-the `GenericInstance` types naming it, read off the type table — and its tag read
-is minted per instantiation too (`$variant_tag$V`), because the declaration that
-would host a shared one does not exist. Its receiver must be the instance: the
-base variant type has no GC layout of its own, so a shared tag read would misread
-the value.
+A generic struct becomes its own monomorphized declaration, so its bridges are
+minted off the declaration list. A generic variant never does (WEP 2026-02-09),
+so its instantiations are the `GenericInstance` types naming it, read off the
+type table. Its tag read is minted per instantiation too (`$variant_tag$V`): no
+shared declaration exists to host one, and the base variant type has no GC
+layout, so the receiver must be the instance.
 
 ## Wire naming
 

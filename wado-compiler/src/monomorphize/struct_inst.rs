@@ -78,9 +78,8 @@ impl Monomorphizer {
         }
 
         // Register them on the `GenericInstance` spelling too: a reflect
-        // projection (`FieldTypes` / `Members`) is read off receivers that are
-        // still spelled as instances at the call sites this pass has not yet
-        // substituted, and those readers hold the table immutably.
+        // projection is read off receivers this pass has not yet substituted,
+        // by readers that hold the table immutably.
         if let Some(base_decl) = base_decl {
             for id in instance_ids {
                 type_table.register_monomorphized_assoc_types(id, base_decl, &substitution);

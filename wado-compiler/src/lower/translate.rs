@@ -1736,9 +1736,9 @@ impl FunctionTranslator<'_, '_> {
                     })
                     .unwrap_or(peeled);
                 let variant_ty = tt.peel_refs(unboxed);
-                // An instantiated generic variant keeps the instance spelling —
-                // `discriminant` is minted per instantiation, since a generic
-                // variant has no declaration of its own to carry a shared one.
+                // A plain variant carries the tag read as a trait method on its
+                // declaration. A generic one has no instantiated declaration,
+                // so it uses the per-instance helper minted post-monomorphize.
                 let module = match tt.get(variant_ty) {
                     tir::ResolvedType::Variant { module_source, .. }
                     | tir::ResolvedType::GenericInstance { module_source, .. } => {
@@ -1747,9 +1747,6 @@ impl FunctionTranslator<'_, '_> {
                     other => panic!("variant_tag marker on non-variant type: {other:?}"),
                 };
                 let items = tt.compiler_items();
-                // A plain variant's declaration carries the tag read as a trait
-                // method; an instantiated generic one has no such declaration,
-                // so it uses the per-instance helper minted post-monomorphize.
                 let name = match tt.get(variant_ty) {
                     tir::ResolvedType::GenericInstance { .. } => {
                         crate::name::variant_tag_helper_name(
@@ -1867,9 +1864,9 @@ impl FunctionTranslator<'_, '_> {
                 &tt.mangle_type_arg_for_generic(variant_ty),
                 &tt.mangle_type_arg_for_generic(payload_ty),
             );
-            // A generic variant keeps one declaration, so an instantiated
-            // subject stays spelled as a `GenericInstance`; its bridges are
-            // minted per instantiation and homed in the declaration's module.
+            // An instantiated generic variant stays spelled as a
+            // `GenericInstance`; its bridges are homed in the declaration's
+            // module.
             let module = match tt.get(variant_ty) {
                 tir::ResolvedType::Variant { module_source, .. }
                 | tir::ResolvedType::GenericInstance { module_source, .. } => module_source.clone(),

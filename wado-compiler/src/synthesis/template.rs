@@ -1221,9 +1221,8 @@ fn type_is_reflect(type_id: TypeId, tt: &TypeTable, allow_pre_reflect_struct: bo
 
 /// Whether `type_id` is spelled from a struct declaration that reflection will
 /// cover — the stand-in the pre-reflect window accepts. A `GenericInstance`
-/// counts: `Pair<i32>` is a struct because `Pair` is, and the impl synthesized
-/// for `Pair` reaches the instance by substitution. The seal is subtracted
-/// because a member handle is the one struct reflection never covers.
+/// counts: `Pair<i32>` is a struct because `Pair` is. Sealed member handles are
+/// the one struct reflection never covers.
 fn is_unsealed_declared_struct(type_id: TypeId, tt: &TypeTable) -> bool {
     let declared = match tt.get(type_id) {
         ResolvedType::Struct { .. } => true,

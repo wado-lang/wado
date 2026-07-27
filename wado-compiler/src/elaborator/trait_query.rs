@@ -671,15 +671,13 @@ impl TypeSystem {
     /// Whether a reflection written at `scope`'s module can enumerate `info`'s
     /// fields (WEP 2026-06-13, Visibility).
     ///
-    /// Every field must be reachable, not merely one. A declaration carries a
-    /// single synthesized impl whose `members()` is fixed, so it cannot hand a
-    /// shortened list to a caller that may see less — admitting the struct on
-    /// one public field would enumerate the private ones alongside it. The
-    /// shape is observable as a whole or not at all.
+    /// Every field must be reachable, not merely one: a declaration carries a
+    /// single synthesized impl whose `members()` is fixed, so admitting the
+    /// struct on one public field would enumerate its private ones alongside
+    /// it.
     ///
-    /// Visibility decides only this. Eligibility itself is a property of the
-    /// declaration, so [`Self::is_reflect_eligible`] always sees every field —
-    /// the predicate synthesis reads, over the input synthesis gives it.
+    /// Visibility decides only this. Eligibility is a property of the
+    /// declaration, so [`Self::is_reflect_eligible`] always sees every field.
     fn has_visible_fields(&self, scope: &TypeLookup, info: &super::types::StructFieldInfo) -> bool {
         if info.fields.is_empty() || &info.module_source == scope.current_module_source {
             return true;
@@ -1097,9 +1095,8 @@ impl TypeSystem {
         }
 
         // A plain declaration satisfies its kind's reflection bound when the
-        // shared eligibility predicate accepts it — the same predicate reflect
-        // synthesis reads, so the two cannot disagree and nothing needs to be
-        // recorded for synthesis to find later.
+        // shared eligibility predicate accepts it, so nothing needs recording
+        // for synthesis to find later.
         let plain_reflect_subject = match (&resolved, on_bound) {
             (
                 ResolvedType::Struct {
@@ -1127,10 +1124,9 @@ impl TypeSystem {
             return true;
         }
 
-        // A generic instance reflects through its base declaration: `Pair<String>`
-        // is a struct because `Pair` is. The synthesized impl is generic over the
-        // declared parameters, so the instance inherits it by substitution. Only
-        // structs and variants can be generic.
+        // A generic instance reflects through its base declaration:
+        // `Pair<String>` is a struct because `Pair` is, and inherits the
+        // declaration's impl by substitution.
         if let ResolvedType::GenericInstance {
             name,
             module_source,

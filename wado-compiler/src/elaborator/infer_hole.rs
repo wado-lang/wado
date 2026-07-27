@@ -75,13 +75,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Defer a variant constructor whose type arguments did not resolve here.
     ///
-    /// `infer_variant_type_args` answers a generic variant with its bare
-    /// declaration type when nothing pinned the parameters. That type has no
-    /// case types registered, so leaving it in concrete code reaches WIR and
-    /// dies there — yet the arguments are not necessarily uninferable: a
-    /// sibling field (`Paired { v: Option::None, k: 1 }`), an annotation, or a
-    /// later use can still pin them. Mint a hole per parameter so a real sink
-    /// may solve it and `finalize_infer_holes` reports only what never was.
+    /// `infer_variant_type_args` answers with the bare declaration type when
+    /// nothing pinned the parameters. That type has no case types registered,
+    /// so it dies in WIR build — yet a sibling field
+    /// (`Paired { v: Option::None, k: 1 }`), an annotation, or a later use can
+    /// still pin it. Mint a hole per parameter so a real sink may solve it and
+    /// `finalize_infer_holes` reports only what never was.
     pub(super) fn defer_uninferable_variant(
         &mut self,
         type_id: TypeId,

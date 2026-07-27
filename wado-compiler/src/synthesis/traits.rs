@@ -120,14 +120,10 @@ struct TraitPair {
 
 impl TraitPair {
     fn display_alt(names: &TraitsStdlibNames) -> Self {
-        // `DisplayAlt` delegates to `Display`, not to `InspectAlt`: the
-        // alternate *display* of a value defaults to its plain display,
-        // mirroring Rust's `{:#}` vs `{:#?}`. Pretty-printing stays on the
-        // inspect side via `InspectAlt`.
-        //
-        // `Display` itself has no fallback — a type without an `impl Display`
-        // is a `${x}` error directing the author to `${x:?}`, so nothing here
-        // delegates to `Inspect`.
+        // The alternate *display* of a value defaults to its plain display,
+        // mirroring Rust's `{:#}` vs `{:#?}`; pretty-printing stays on
+        // `InspectAlt`. `Display` itself has no fallback — a type without an
+        // `impl Display` is a `${x}` error pointing at `${x:?}`.
         Self {
             target_trait: names.display_alt.clone(),
             target_method: names.display_alt_method.clone(),
@@ -438,9 +434,8 @@ pub fn synthesize_reflect(project: &mut Package) {
         .compiler_items()
         .trait_name(CompilerItem::ReflectStruct)
         .to_string();
-    // Reflection is not demand-driven: `TypeTable::is_reflect_eligible` decides
-    // coverage, and the bound check reads the same predicate, so there is
-    // nothing to request.
+    // Not demand-driven: `TypeTable::is_reflect_eligible` decides coverage, and
+    // the bound check reads the same predicate.
     let requested: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
 
     let mut pending: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
@@ -481,9 +476,6 @@ fn generate_struct_reflect_impls(
 
     let mut generated = Vec::new();
     for target in &targets {
-        // Every eligible declaration is reflected, generic or not — the same
-        // predicate the bound check reads, so no demand channel is needed
-        // between them.
         let tt = module.type_table.borrow();
         let eligible = tt
             .find_decl_type_by_name(&target.name, &module_source)
@@ -517,9 +509,8 @@ struct ReflectFieldInfo {
     has_default: bool,
 }
 
-/// A struct selected for `ReflectStruct` synthesis. `type_params` is empty for a
-/// plain struct and carries the declared parameters for a generic one, whose
-/// impl is synthesized once over `S<T, …>` and substituted per instantiation.
+/// A struct selected for `ReflectStruct` synthesis. `type_params` is empty for
+/// a plain struct; a generic one gets a single impl over `S<T, …>`.
 struct ReflectTarget {
     name: String,
     type_params: Vec<TirTypeParam>,
@@ -529,9 +520,8 @@ struct ReflectTarget {
 }
 
 /// Select the structs in `module` that need a synthesized `ReflectStruct` impl:
-/// every declared struct, generic or not (all are unconditionally
-/// `ReflectStruct`-derived). Monomorphized instances are skipped — they inherit
-/// the generic impl through substitution.
+/// every declared struct, generic or not. Monomorphized instances inherit the
+/// generic impl through substitution.
 fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
     module
         .structs
@@ -651,9 +641,8 @@ fn generate_struct_reflect_methods(
     for f in &mut functions {
         f.impl_type_params.clone_from(type_params);
     }
-    // A generic struct's field-get bridges are keyed by the *concrete* field
-    // types, which only exist per instantiation, so they are minted post-
-    // monomorphize by `synthesize_monomorphized_reflect_bridges`.
+    // A generic struct's bridges are keyed by concrete field types, so
+    // `synthesize_monomorphized_reflect_bridges` mints them per instantiation.
     if !is_generic {
         functions.extend(generate_field_bridge_helpers(
             type_table,
@@ -666,13 +655,9 @@ fn generate_struct_reflect_methods(
     functions
 }
 
-/// Record a reflect kind's associated tuple types for `self_type`.
-///
-/// A non-generic type resolves them directly by its `TypeId`. A generic one
-/// registers them as generic definitions keyed by the declaring `AstId`, so
-/// `resolve_generic_assoc_type_mono` substitutes the instance's type args and
-/// `register_monomorphized_assoc_types` re-keys the result onto each
-/// monomorphized struct.
+/// Record a reflect kind's associated tuple types for `self_type`: resolved
+/// directly for a non-generic type, registered as generic definitions keyed by
+/// the declaring `AstId` for a generic one.
 fn register_reflect_assoc_types(
     tt: &mut TypeTable,
     self_type: TypeId,
@@ -1212,9 +1197,8 @@ fn generate_variant_reflect_impls(
     module.functions.extend(generated);
 }
 
-/// A variant selected for `ReflectVariant` synthesis. `type_params` is empty for
-/// a plain variant and carries the declared parameters for a generic one, whose
-/// impl is synthesized once over `V<T, …>` and substituted per instantiation.
+/// A variant selected for `ReflectVariant` synthesis. `type_params` is empty
+/// for a plain variant; a generic one gets a single impl over `V<T, …>`.
 struct ReflectVariantTarget {
     name: String,
     type_params: Vec<TirTypeParam>,
@@ -1398,9 +1382,8 @@ fn generate_variant_reflect_methods(
     for f in &mut functions {
         f.impl_type_params.clone_from(&target.type_params);
     }
-    // A generic variant's case bridges are keyed by the *concrete* payload
-    // types, which only exist per instantiation, so they are minted post-
-    // monomorphize by `synthesize_monomorphized_reflect_bridges`.
+    // A generic variant's bridges are keyed by concrete payload types, so
+    // `synthesize_monomorphized_reflect_bridges` mints them per instantiation.
     if !is_generic {
         functions.extend(generate_case_bridge_helpers(
             type_table,
@@ -1836,10 +1819,8 @@ fn variant_tag_body(ref_variant_type: TypeId, variant_type: TypeId, span: Span) 
 
 /// The `discriminant` of one instantiated generic variant, as a free function
 /// under the tag-helper name lowering builds from the instance
-/// (`$variant_tag$<mangle>`).
-///
-/// It cannot be a method: the method-name machinery rejects type arguments in a
-/// base struct name, the same reason the value bridges are free functions.
+/// (`$variant_tag$<mangle>`). Not a method: the method-name machinery rejects
+/// type arguments in a base struct name.
 pub(super) fn generate_variant_instance_discriminant_fn(
     qualified_name: String,
     ref_variant_type: TypeId,
@@ -3351,12 +3332,9 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         ctx.record_impl(name, &inspect_name);
     }
 
-    // Structs — generic and plain alike — derive Inspect via the
-    // `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for T`
-    // blanket in `core:prelude/traits`; the monomorphizer routes each
-    // `Struct^Inspect` call to it, so synthesis emits nothing for a struct here.
-    // The member handles are sealed against reflection and carry their own
-    // impls in the prelude.
+    // Structs derive Inspect via the `ReflectStruct` blanket in
+    // `core:prelude/traits`, so nothing is emitted for them here. The sealed
+    // member handles carry their own impls in the prelude.
 
     let variant_infos = collect_variant_cases(module);
     for (name, cases, vspan) in &variant_infos {

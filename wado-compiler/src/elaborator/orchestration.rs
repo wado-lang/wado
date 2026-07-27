@@ -922,15 +922,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         // An `impl` method whose parameter count differs from the trait's is
-        // never rejected downstream: the call is built to the trait's arity and
-        // only fails Wasm validation. Compare the two here, where every trait
-        // declaration and every impl is in hand.
+        // never rejected downstream — the call is built to the trait's arity
+        // and only fails Wasm validation — so compare the two here, where every
+        // declaration and impl is in hand.
         //
-        // The impl names its trait in its own module's scope, and resolving that
-        // through imports needs machinery this pre-pass does not have. Take the
-        // declaration the impl's own module provides, else the only one bearing
-        // the name; a name several modules declare is left alone rather than
-        // matched against the wrong trait.
+        // Resolving the impl's trait name through imports needs machinery this
+        // pre-pass lacks. Take the declaration the impl's own module provides,
+        // else the only one bearing the name; a name several modules declare is
+        // left alone rather than matched against the wrong trait.
         let mut trait_decls: IndexMap<(&ModuleSource, &str), &ast::TraitDecl> = IndexMap::default();
         let mut decls_named: IndexMap<&str, usize> = IndexMap::default();
         for (module_source, module) in modules {

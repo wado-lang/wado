@@ -965,14 +965,11 @@ impl TypeTable {
         self.symbol_by_type.get(type_id)
     }
 
-    /// The declaring [`AstId`](crate::ast::AstId) behind `type_id` in whatever
-    /// form it currently has: a plain declaration, a monomorphization, or a
-    /// `GenericInstance` still carrying its type args.
+    /// The declaring [`AstId`](crate::ast::AstId) behind `type_id`, whether it
+    /// is a plain declaration, a monomorphization, or a `GenericInstance`.
     ///
-    /// This is the identity to key a declaration-scoped registry by. A
-    /// `GenericInstance` shares its base declaration's `AstId`, so `Node<i32>`
-    /// and `Node<String>` answer with the one `Node` they were both spelled
-    /// from, while a `Node` in another module answers with a different id.
+    /// `Node<i32>` and `Node<String>` answer with the one `Node` they were
+    /// spelled from; a `Node` in another module answers with a different id.
     pub fn decl_of_type(&self, type_id: TypeId) -> Option<crate::ast::AstId> {
         let type_id = self.peel_refs(type_id);
         if let Some(key) = self.symbol_by_type.get(type_id) {
@@ -1001,16 +998,12 @@ impl TypeTable {
         self.symbol_by_type.get(type_id).copied()
     }
 
-    /// Whether `decl` is one of the four reflection member handles.
+    /// Whether `decl` is one of the four reflection member handles, whose own
+    /// `Members` would mention `StructField<Self, …>` and grow `Self` without
+    /// bound (WEP 2026-06-13).
     ///
-    /// They are generic structs whose own `Members` would mention
-    /// `StructField<Self, …>`, growing `Self` without bound, so they are not
-    /// reflectable. This is the seal that keeps reflection terminating, and both
-    /// the bound check and reflect synthesis read it — synthesis covers every
-    /// declaration except these, so nothing has to be demanded first.
-    ///
-    /// Matched by declaration, not by name: a user type spelled `StructField`
-    /// is a different declaration and stays reflectable.
+    /// Matched by declaration, so a user type spelled `StructField` stays
+    /// reflectable.
     pub fn is_sealed_reflect_member(&self, decl: crate::ast::AstId) -> bool {
         use crate::compiler_item::CompilerItem;
         [
@@ -2041,20 +2034,12 @@ impl TypeTable {
         Some(self.substitute_type_params(def_type_id, &subst))
     }
 
-    /// Whether the declaration behind `type_id` can be reflected. The single
-    /// eligibility predicate: the bound check and reflect synthesis both read
-    /// it, so synthesis covers exactly what the bound accepts without a demand
-    /// channel between them.
+    /// Whether the declaration behind `type_id` can be reflected — every
+    /// declaration but a sealed member handle.
     ///
-    /// One exclusion. A member handle is sealed — its own `Members` would
-    /// mention `StructField<Self, …>` and grow `Self` without bound.
-    ///
-    /// A member's own type never disqualifies its owner. An associated-type
-    /// projection reads like an exception — an iterator adapter's
-    /// `fn mut(I::Item) -> U` is not a substitution of the declaration's
-    /// parameters — but the synthesized impl carries the declaration's bounds,
-    /// so `I::Item` is as nameable there as it is on the declaration, and the
-    /// instantiation resolves it like any other projection.
+    /// The bound check and reflect synthesis both read this, so synthesis
+    /// covers exactly what the bound accepts without a demand channel between
+    /// them.
     pub fn is_reflect_eligible(&self, type_id: TypeId) -> bool {
         !self
             .decl_of_type(type_id)
@@ -2080,14 +2065,12 @@ impl TypeTable {
             .contains_key(&(decl, assoc_name.to_string()))
     }
 
-    /// Resolve an associated type for whatever form the subject currently has.
+    /// Resolve an associated type for whatever form the subject currently has:
+    /// a registered resolution for a plain or monomorphized type, substitution
+    /// of the generic definition for a `GenericInstance`.
     ///
-    /// A plain or already-monomorphized type has its resolutions registered
-    /// directly; a `GenericInstance` still carries its type args, so the generic
-    /// definition is substituted on demand. Reflection projections
-    /// (`FieldTypes` / `Members` / `CasePayloads`) hit both forms — the same
-    /// receiver reads as an instance before monomorphization substitutes it and
-    /// as a struct after.
+    /// Reflection projections hit both forms — the same receiver reads as an
+    /// instance before monomorphization and as a struct after.
     pub fn resolve_assoc_type_of_instance(
         &mut self,
         concrete_id: TypeId,
@@ -2483,12 +2466,7 @@ impl TypeTable {
     }
 
     /// Whether `id` (recursively) mentions an associated-type projection
-    /// (`I::Item`).
-    ///
-    /// Reflection requires every member's type to be determined by substituting
-    /// the declaration's own parameters. A projection is not: resolving it needs
-    /// the bound's impl, which positional substitution does not consult, so a
-    /// type carrying one is not reflectable.
+    /// (`I::Item`), i.e. still needs a bound's impl to become concrete.
     pub fn contains_assoc_type_projection(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::AssocTypeProjection { .. } => true,
