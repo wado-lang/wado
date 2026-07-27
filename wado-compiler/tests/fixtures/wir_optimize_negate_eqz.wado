@@ -5,6 +5,10 @@
 //
 // At O0: `(x <= limit) == 0` (eqz wrapping comparison)
 // At O1: `x > limit` (negated comparison, no eqz)
+//
+// `black_box` keeps the arguments off the constant path: with constant ones
+// the loop runs at compile time, the call folds to its result, and the
+// function this fixture inspects is gone.
 
 fn count_up_to(limit: i32) -> i32 {
     let mut x = 0;
@@ -15,9 +19,9 @@ fn count_up_to(limit: i32) -> i32 {
 }
 
 test {
-    assert count_up_to(5) == 6;
-    assert count_up_to(0) == 1;
-    assert count_up_to(-1) == 0;
+    assert count_up_to(builtin::black_box(5)) == 6;
+    assert count_up_to(builtin::black_box(0)) == 1;
+    assert count_up_to(builtin::black_box(-1)) == 0;
 }
 
 __DATA__

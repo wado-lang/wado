@@ -16,9 +16,15 @@ fn read_point(p: &Point) -> i32 {
 }
 
 // Case: &p passed to non-stores function — struct should be SROA'd.
-// After SROA + constant propagation, p.x resolves to the literal 10.
+//
+// `black_box` keeps the fields off the constant path: with constant ones the
+// whole struct is a compile-time value, `read_point` folds to its result, and
+// there is no struct left for SROA to decompose.
 export fn run() {
-    let p = Point { x: 10, y: 20 };
+    let p = Point {
+        x: builtin::black_box(10),
+        y: builtin::black_box(20),
+    };
     let r = read_point(&p);
     assert p.x + r == 40;
 }

@@ -58,15 +58,15 @@ fn use_large_match(i: i32) -> u64 {
 
 export fn run() {
     // Test small match
-    assert use_small_match(0) == 30;
-    assert use_small_match(1) == 70;
-    assert use_small_match(2) == 110;
+    assert use_small_match(builtin::black_box(0)) == 30;
+    assert use_small_match(builtin::black_box(1)) == 70;
+    assert use_small_match(builtin::black_box(2)) == 110;
 
     // Test large match
-    assert use_large_match(0) == 300;
-    assert use_large_match(5) == 2300;
-    assert use_large_match(9) == 3900;
-    assert use_large_match(99) == 0;
+    assert use_large_match(builtin::black_box(0)) == 300;
+    assert use_large_match(builtin::black_box(5)) == 2300;
+    assert use_large_match(builtin::black_box(9)) == 3900;
+    assert use_large_match(builtin::black_box(99)) == 0;
 }
 
 __DATA__

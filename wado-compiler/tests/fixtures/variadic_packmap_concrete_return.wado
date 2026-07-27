@@ -28,10 +28,16 @@ fn tag_sum<..T: Tag>(xs: [..T]) -> i32 {
     return sum;
 }
 
+// `black_box` keeps the arguments off the constant path, so the expansion this
+// fixture exercises reaches the golden instead of folding to its result.
 test "pack-map with a pack-independent return expands per element" {
-    assert tag_sum([1, true]) == 3;
-    assert tag_sum([1, 2, 3]) == 3;
-    assert tag_sum([true]) == 2;
+    assert tag_sum([builtin::black_box(1), builtin::black_box(true)]) == 3;
+    assert tag_sum([
+        builtin::black_box(1),
+        builtin::black_box(2),
+        builtin::black_box(3),
+    ]) == 3;
+    assert tag_sum([builtin::black_box(true)]) == 2;
 }
 
 __DATA__
