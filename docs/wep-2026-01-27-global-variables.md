@@ -2,194 +2,181 @@
 
 ## Context
 
-Wado needs module-level state for various use cases: configuration values, counters, caches, and singleton patterns. WebAssembly provides a native mechanism for this: **global variables**.
+Wado needs module-level state: configuration values, counters, caches, singletons.
+WebAssembly provides globals for exactly this, and Wado's philosophy is that the
+Wasm concept should stay visible rather than being wrapped.
 
-### WebAssembly Globals
+### Wasm globals
 
-Wasm globals are a distinct concept from local variables:
+| Aspect         | Local variable    | Wasm global                 |
+| -------------- | ----------------- | --------------------------- |
+| Scope          | Function          | Module                      |
+| Lifetime       | Stack frame       | Module                      |
+| Access         | Stack slot        | `global.get` / `global.set` |
+| Initialization | On function entry | On module instantiation     |
+| Mutability     | Always mutable    | Declared                    |
 
-| Aspect         | Local Variables     | Wasm Globals                               |
-| -------------- | ------------------- | ------------------------------------------ |
-| Scope          | Function-scoped     | Module-scoped                              |
-| Lifetime       | Stack frame         | Module lifetime                            |
-| Access         | Direct (stack slot) | Indexed (`global.get`/`global.set`)        |
-| Initialization | On function entry   | On module instantiation                    |
-| Mutability     | Always mutable      | Explicitly declared                        |
-| Types          | All Wasm types      | Restricted (no `funcref` in some contexts) |
+A Wasm global's initializer must be a _constant expression_ — a subset of Wasm
+evaluable at instantiation without running code.
 
-Wasm globals are initialized with **constant expressions** - a limited subset of Wasm that can be evaluated at instantiation time without executing arbitrary code.
+### Keyword choice
 
-### Keyword Choice: Why `global` Instead of `let` or `static`
-
-Several alternatives were considered:
-
-| Keyword  | Precedent        | Issue                                                   |
-| -------- | ---------------- | ------------------------------------------------------- |
-| `let`    | JavaScript, Rust | Conflates two fundamentally different concepts          |
-| `static` | Rust, C          | Implies memory model semantics that don't apply to Wasm |
-| `const`  | Many languages   | Already reserved for compile-time constants             |
-| `global` | WebAssembly      | Directly reflects the underlying Wasm concept           |
-
-**Decision**: Use `global` to make the Wasm semantics visible.
-
-**Rationale**:
-
-1. **Wasm-visible design**: Wado's philosophy is that Wasm concepts should be apparent in the source language. A `global` in Wado compiles directly to a Wasm global - no abstraction layers, no hidden complexity.
-
-2. **Semantic distinction**: Local variables and globals have fundamentally different initialization, lifetime, and access semantics. Using `let` for both would hide this distinction, leading to confusion when:
-   - Initialization expressions are rejected (non-constant)
-   - Performance differs (global access is slower than local)
-   - Debugging shows different variable kinds
-
-3. **Teachability**: When learning Wado, understanding that `global` maps to Wasm globals helps developers build accurate mental models of the compilation target.
+`global`, not `let` / `static` / `const`. `let` would conflate two concepts with
+different initialization, lifetime, and access semantics; `static` implies a
+memory model that does not apply; `const` is reserved for compile-time
+constants. `global` names the Wasm concept it compiles to, which keeps the
+initialization restriction and the access cost visible at the declaration site.
 
 ## Decision
 
 ### Syntax
 
 ```wado
-// Immutable global
 global PI: f64 = 3.14159;
-
-// Mutable global
 global mut counter: i32 = 0;
 
-// With visibility
 pub global VERSION: i32 = 1;
 pub global mut state: bool = false;
 ```
 
-### Supported Types
+Every type is allowed, including `String`, `List<T>`, and structs.
 
-Global variables support all types:
+### Assignment
 
-- Integers: `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `i128`, `u128`
-- Floats: `f32`, `f64`
-- Boolean: `bool`
-- Character: `char`
-- Object types: `String`, `List<T>`, structs
-
-Object type globals use lazy initialization (see below).
-
-### Initialization
-
-Globals support arbitrary initialization expressions:
-
-#### Constant Initialization
-
-For literals and constant expressions, globals are initialized at Wasm instantiation time:
-
-```wado
-global ANSWER: i32 = 42;        // integer literal
-global PI: f64 = 3.14159;       // float literal
-global FLAG: bool = true;       // boolean literal
-global DOUBLED: i32 = 21 * 2;   // arithmetic expression
-global NEGATIVE: i32 = -42;     // negation
-```
-
-#### Lazy Initialization
-
-For non-constant expressions (function calls, object construction), the compiler uses lazy initialization:
-
-```wado
-global mut MESSAGE: String = "Hello, World!";
-global mut ITEMS: List<i32> = [1, 2, 3];
-global mut ORIGIN: Point = Point { x: 0, y: 0 };
-```
-
-Implementation details:
-
-1. Non-constant globals are initialized to a default value (0 for primitives, null for references) in the Wasm global section
-2. Wasm declares them as mutable internally (Wado still enforces immutability at the language level for non-`mut` globals)
-
-### Multi-Module Initialization
-
-When a program consists of multiple modules, global initialization is coordinated through a two-level system:
-
-#### Per-Module: `__initialize_module`
-
-Each module with lazy-initialized globals generates a `pub fn __initialize_module()` function:
-
-- Contains initialization statements for that module's non-constant globals only
-- Always `pub` so it can be called from the entry module
-- Initializers are topologically sorted based on dependencies (globals that depend on other globals are initialized after their dependencies)
-- Future: Users will be able to hook into this with `#[module_init]` attribute
-
-#### Entry Module: `__initialize_modules`
-
-The entry module generates a `fn __initialize_modules()` function:
-
-- **Not** `pub` (internal to entry module)
-- Uses an initialization flag (`__modules_initialized: bool`) to prevent re-initialization
-- Checks flag at start, returns early if already initialized (for handlers like `wasi:http` that may be called multiple times on the same instance)
-- Calls each linked module's `__initialize_module` in topological order (modules are initialized before modules that depend on them)
-- Sets the flag to `true` after all modules are initialized
-
-Entry point functions (`run`, test functions) call `__initialize_modules()` at start.
-
-#### Initialization Order
-
-##### Within a Module
-
-Global initializers within `__initialize_module` are topologically sorted:
-
-```wado
-// These are reordered so B is initialized before A
-global A: i32 = B + 1;   // depends on B
-global B: i32 = 10;      // no dependencies
-// Lowered to: B = 10; A = B + 1;
-```
-
-##### Across Modules
-
-Module initialization order follows import dependencies:
-
-```wado
-// main.wado
-use { helper_global } from "./helper.wado";
-global MAIN_GLOBAL: i32 = helper_global + 1;
-
-// helper.wado
-pub global helper_global: i32 = compute();
-```
-
-`helper.wado`'s `__initialize_module` is called before `main.wado`'s.
-
-#### Edge Cases
-
-1. **Circular dependencies**: Detected at compile time and reported as an error
-2. **No lazy globals**: Modules without lazy-initialized globals don't generate `__initialize_module`
-3. **Multiple entry points**: Each entry point calls `__initialize_modules`, but the flag ensures initialization happens only once
-
-### Mutability Checking
-
-Assignment to globals is only allowed for `global mut` declarations:
+Only a `global mut` may be assigned. Immutability is a Wado-level property and
+is enforced regardless of how the global is represented in Wasm.
 
 ```wado
 global CONSTANT: i32 = 42;
 global mut variable: i32 = 0;
 
 fn example() {
-    variable = 10;    // OK: mutable global
+    variable = 10;    // OK
     CONSTANT = 10;    // Error: cannot assign to immutable global
 }
 ```
 
+### What a constant expression can hold
+
+Wado targets Wasm 3.0, so the GC and extended-const instructions are available.
+The constant instructions are:
+
+- `i32.const` / `i64.const` / `f32.const` / `f64.const` / `v128.const`
+- `i32.add` / `sub` / `mul` and the `i64` forms
+- `ref.null`, `ref.i31`, `ref.func`
+- `struct.new`, `struct.new_default`
+- `array.new`, `array.new_default`, `array.new_fixed`
+- `any.convert_extern`, `extern.convert_any`
+- `global.get` of an imported or previously declared global
+
+This is much wider than a literal. A struct of constants is a `struct.new`; a
+list or a short string is an `array.new_fixed` wrapped in the `{ repr, used }`
+`struct.new`; a global derived from an earlier one is a `global.get` plus
+arithmetic. Nearly every global a program declares is expressible directly.
+
+### Direct and deferred initialization
+
+A global is initialized one of two ways:
+
+- Direct — the Wasm slot holds the value, produced by a constant expression at
+  instantiation.
+- Deferred — the slot starts at a placeholder and the module's initialization
+  function assigns the value before any other code runs.
+
+Deferral is for values that genuinely need to run code: a call the interpreter
+cannot evaluate, a value read out of mutable state, or a payload too large to
+inline as `array.new_fixed` — a long string literal lives in the data section
+and is materialized at run time, so no constant expression can denote it.
+
+### The decision is made on the value, not on the syntax
+
+Whether a global is direct is decided from what its initializer _evaluates to_,
+after the optimizer has folded it, and against the constant-instruction set
+above. It is not decided from the shape of the declaration.
+
+This matters because the two differ enormously. `global T: List<i32> = [1, 2, 3]`
+is not a literal, but it evaluates to a sequence of constants, which is exactly
+an `array.new_fixed`. Deciding syntactically would defer it; deciding on the
+value does not.
+
+The compile-time interpreter ([niri](./wep-2026-04-27-nir-interpreter.md))
+already models the values this needs — scalars, aggregates, and sequences — so
+the predicate is a mapping from its value model onto the instruction set, not a
+separate evaluator.
+
+### The declared initializer is never replaced
+
+A global's recorded initializer is always the one the program declared. A
+deferred global carries its placeholder alongside, never instead.
+
+This is the invariant the representation must preserve. Anything asking "what is
+this global's value" — constant folding, globalization, documentation — must get
+a truthful answer, and a placeholder standing in for the initializer is a lie
+that reads as a perfectly good constant. A `global A: i32 = 1 + 2` whose
+recorded initializer has become `0` folds every read of `A` to `0`.
+
+### Wasm slot shape is derived, not stored
+
+Whether the Wasm slot is mutable, whether it is nullable, and whether reads need
+narrowing are all consequences of the two facts above, and are derived when the
+Wasm module is built:
+
+- The slot is mutable when the global is `global mut`, or when it is deferred.
+- The slot is nullable when it is deferred and reference-typed, or when the
+  declared value is itself `null`.
+- Reads are narrowed only in the first of those cases, since in the second
+  `null` is a value the program can legitimately observe.
+
+Neither the typed IR nor the normalized IR stores these. They describe the Wasm
+representation, which is the Wasm builder's business.
+
+### Multi-module initialization
+
+Each module with deferred globals gets a `pub fn __initialize_module()`
+assigning them, ordered topologically so a global is assigned after everything
+it depends on. A cycle is a compile-time error.
+
+The entry module gets a `fn __initialize_modules()` that calls each linked
+module's in dependency order, guarded by a flag so repeated entry — an HTTP
+handler invoked many times on one instance — initializes once. Every entry point
+calls it first.
+
+The initialization functions are ordinary functions in the normalized IR, so the
+optimizer inlines, folds, and prunes them like any other. That is why they are
+materialized before optimization rather than when the Wasm module is built.
+
+A global's value must not be folded into a read that happens _inside_ an
+initialization function: the topological order guarantees a dependency is
+assigned first, but the interpreter does not model that order, so it declines
+there rather than reasoning about it.
+
 ## Consequences
 
-### Benefits
+- Most globals initialize directly, so the initialization functions shrink to
+  the values that truly need run-time work, and startup does less.
+- A directly initialized global's value is visible to the optimizer, so reads of
+  it fold, and the folds cascade into branch pruning and dead-global removal.
+- Deciding late means the decision improves as the optimizer improves: a global
+  whose initializer becomes constant through inlining or compile-time evaluation
+  becomes direct without any special case.
+- Globals are module-private unless `pub`; `pub` does not export them across the
+  Component Model boundary.
 
-1. **Direct Wasm mapping**: No runtime overhead - globals compile to exactly what Wasm provides
-2. **Predictable semantics**: Developers familiar with Wasm understand the behavior immediately
-3. **Clear distinction**: `global` vs `let` makes scope and lifetime obvious at declaration site
+## TODO
 
-### Limitations
+- [ ] Keep the declared initializer and carry the placeholder separately, so the
+      recorded initializer is never a lie.
+- [ ] Derive slot mutability, nullability, and read narrowing when building the
+      Wasm module; drop them from the typed and normalized IRs.
+- [ ] Decide direct-versus-deferred from the folded value against the
+      constant-instruction set, replacing the syntactic literal test.
+- [ ] Retire the Wasm-level pass that promotes a deferred global back to a
+      constant one, which exists only because the decision is currently made too
+      early to be right.
+- [ ] Fold reads of a directly initialized immutable global in the interpreter,
+      and decline inside the initialization functions.
 
-1. **Cross-module access**: Globals are module-private by default; `pub` enables cross-module access but not Component Model export
-2. **Initialization order**: Lazy-initialized globals depend on entry point execution; accessing before initialization returns default/null values
+## Future work
 
-### Future Work
-
-1. **Component Model export**: `export global` syntax for exposing globals at CM boundary
-2. **Thread safety**: Consider `global atomic` for thread-safe mutable globals (requires Wasm threads)
-3. ~~**Constant folding optimization**~~: Implemented as `wir_optimize::const_global`. A user-immutable global whose extracted initializer folds to a Wasm constant (scalar, `struct.new`, or `array.new_fixed`) is promoted back to an eager immutable Wasm constant. See [WEP: Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md).
+- Component Model export (`export global`).
+- Thread-safe mutable globals, once Wasm threads are in scope.

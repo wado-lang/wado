@@ -201,7 +201,11 @@ loop, and a pure call building a heap value from literals.
 
 ## TODO
 
-- [ ] Reads of a user-immutable global folding from its initializer, and
-      `G.field` / `G[const]` folding on an immutable aggregate global. Owned by
+- [ ] Reads of a user-immutable global folding from its initializer. Blocked on
+      [Global Variables](./wep-2026-01-27-global-variables.md): a deferred
+      global's recorded initializer is a placeholder today, so keying the
+      interpreter's env on Wado-level immutability would fold reads to the
+      placeholder rather than the value.
+- [ ] `G.field` / `G[const]` folding on an immutable aggregate global. Owned by
       [niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md) — see its
       aggregate globals and element projection TODO.

@@ -1001,12 +1001,7 @@ impl<'a> Interpreter<'a> {
 
     /// The lattice of an array literal: `Const` only when every element is
     /// itself constant, and only up to [`MAX_SEQ_ELEMENTS`].
-    fn seq_lattice(
-        &self,
-        body: &Body,
-        type_id: TypeId,
-        elements: &[Operand],
-    ) -> Lattice {
+    fn seq_lattice(&self, body: &Body, type_id: TypeId, elements: &[Operand]) -> Lattice {
         let mut values = Vec::with_capacity(elements.len());
         for op in elements {
             match self.operand_to_lattice_a(body, *op) {
@@ -1070,9 +1065,7 @@ impl<'a> Interpreter<'a> {
                     .enumerate()
                     .map(|(i, op)| (u32::try_from(i).expect("tuple arity fits u32"), *op)),
             ),
-            ExprKind::ArrayLiteral { elements } => {
-                self.seq_lattice(body, node.type_id, elements)
-            }
+            ExprKind::ArrayLiteral { elements } => self.seq_lattice(body, node.type_id, elements),
             // A byte-string literal's backing array: already a constant, so it
             // only has to be lifted into the value model.
             ExprKind::PackedArray(bytes) => {
@@ -1085,9 +1078,7 @@ impl<'a> Interpreter<'a> {
                     .collect();
                 Value::seq(node.type_id, elements).map_or(Lattice::NonConst, Lattice::Const)
             }
-            ExprKind::Index { expr: inner, index } => {
-                self.index_lattice(body, *inner, *index)
-            }
+            ExprKind::Index { expr: inner, index } => self.index_lattice(body, *inner, *index),
             // A shared borrow of a constant reads as that constant. The engine
             // only ever reads, and a write goes through `MutRef`, which stays
             // unmodelled — so `&x` is transparent and `&mut x` is not.

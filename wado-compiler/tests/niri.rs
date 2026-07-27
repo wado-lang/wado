@@ -3432,7 +3432,11 @@ fn block_of(b: &mut Body, stmts: &[StmtBuild]) -> BlockId {
     })
 }
 
-fn if_stmt_b(condition: Build, then_stmts: Vec<StmtBuild>, else_stmts: Vec<StmtBuild>) -> StmtBuild {
+fn if_stmt_b(
+    condition: Build,
+    then_stmts: Vec<StmtBuild>,
+    else_stmts: Vec<StmtBuild>,
+) -> StmtBuild {
     Rc::new(move |b| {
         let condition = condition(b);
         let then_block = block_of(b, &then_stmts);
@@ -3526,7 +3530,10 @@ fn array_literal_reduces_to_a_sequence() {
         panic!("a constant array literal is a sequence");
     };
     assert_eq!(v.seq_len(), Some(2));
-    assert_eq!(v.element(1).and_then(Value::as_int).map(|(n, _)| n), Some(20));
+    assert_eq!(
+        v.element(1).and_then(Value::as_int).map(|(n, _)| n),
+        Some(20)
+    );
 }
 
 #[test]
@@ -3597,7 +3604,10 @@ fn array_get_reads_through_a_shared_reference() {
     let call = seq_builtin_call(
         func_id,
         vec![
-            shared_ref(packed_array(b"abc".to_vec(), TypeTable::I32), TypeTable::I32),
+            shared_ref(
+                packed_array(b"abc".to_vec(), TypeTable::I32),
+                TypeTable::I32,
+            ),
             int_lit(1, TypeTable::I32, "1"),
         ],
         TypeTable::I32,
@@ -4101,7 +4111,10 @@ fn multi_stmt_let_sequence_folds() {
             return_stmt(local_expr(1, TypeTable::I32)),
         ],
     );
-    assert_eq!(fold_call_of(&f, vec![int_lit(3, TypeTable::I32, "3")]), i32_of(6));
+    assert_eq!(
+        fold_call_of(&f, vec![int_lit(3, TypeTable::I32, "3")]),
+        i32_of(6)
+    );
 }
 
 #[test]
@@ -4138,7 +4151,10 @@ fn multi_stmt_chained_lets_fold() {
             return_stmt(local_expr(2, TypeTable::I32)),
         ],
     );
-    assert_eq!(fold_call_of(&f, vec![int_lit(4, TypeTable::I32, "4")]), i32_of(15));
+    assert_eq!(
+        fold_call_of(&f, vec![int_lit(4, TypeTable::I32, "4")]),
+        i32_of(15)
+    );
 }
 
 /// `fn f(x) { if x > 0 { return 1; } return 2; }`
@@ -4167,14 +4183,20 @@ fn early_return_fn() -> NirFunction {
 #[test]
 fn multi_stmt_early_return_taken() {
     let f = early_return_fn();
-    assert_eq!(fold_call_of(&f, vec![int_lit(5, TypeTable::I32, "5")]), i32_of(1));
+    assert_eq!(
+        fold_call_of(&f, vec![int_lit(5, TypeTable::I32, "5")]),
+        i32_of(1)
+    );
 }
 
 #[test]
 fn multi_stmt_early_return_falls_through() {
     // The then-arm does not run, so execution continues past the `if`.
     let f = early_return_fn();
-    assert_eq!(fold_call_of(&f, vec![int_lit(0, TypeTable::I32, "0")]), i32_of(2));
+    assert_eq!(
+        fold_call_of(&f, vec![int_lit(0, TypeTable::I32, "0")]),
+        i32_of(2)
+    );
 }
 
 #[test]
@@ -4428,7 +4450,11 @@ fn loop_return_leaves_the_function() {
         vec![],
         TypeTable::I32,
         &[],
-        vec![loop_stmt_b(vec![return_stmt(int_lit(5, TypeTable::I32, "5"))])],
+        vec![loop_stmt_b(vec![return_stmt(int_lit(
+            5,
+            TypeTable::I32,
+            "5",
+        ))])],
     );
     assert_eq!(fold_call_of(&f, vec![]), i32_of(5));
 }
@@ -4608,12 +4634,7 @@ fn multi_stmt_aggregate_let_projects_a_field() {
         &[("p", point, false)],
         vec![
             let_stmt_b("p", 0, point, point_lit(point)),
-            return_stmt(field_access(
-                local_expr(0, point),
-                0,
-                "x",
-                TypeTable::I32,
-            )),
+            return_stmt(field_access(local_expr(0, point), 0, "x", TypeTable::I32)),
         ],
     );
     let callees = build_callee_map_test(std::slice::from_ref(&f));

@@ -119,6 +119,23 @@ Calls:
 - A string literal's `len()` folds, as a consequence of the generic
   struct-field projection rather than any string-specific rule.
 
+Sequences:
+
+- The array backing a `String` or a `List` is a value, built from a byte-string
+  literal or a fully-constant array literal, bounded by a maximum length past
+  which building one would cost more than any fold it enables. `String` and
+  `List` need no case of their own: each is an aggregate whose backing field is
+  a sequence and whose length field is an integer.
+- An element or length read folds through the array builtins the read lowers
+  to, not through an index node. A read past the end is left alone, since it
+  traps at run time.
+- A shared borrow reads as the constant it points at, which is what makes a
+  backing array reachable at all — it reaches the builtin as `&arr`. Only a
+  shared one: a write goes through a mutable borrow, which stays unmodelled.
+- What this does not yet reach: a constant table declared as a global. Its
+  reads still do not fold, because the global's recorded initializer is a
+  placeholder — see the aggregate-globals TODO below.
+
 ## TODO
 
 ### Values the engine cannot represent
@@ -126,10 +143,10 @@ Calls:
 - Enum and variant values with their payloads. Today an enum or variant
   pattern cannot be decided, so an `Option` / `Result` accessor exposed by
   inlining leaves a residual match the engine walks past.
-- Sequence values — the array backing `String` and `List`. Without them an
-  element cannot be projected out of an array literal or an indexed global
-  read, and two literal strings cannot be compared (a string pattern reaches
-  the engine as a guard, so deciding it is the same problem).
+- Comparing two literal strings. A string pattern reaches the engine as a
+  guard, and deciding it means running the comparison — which is a method call
+  taking references, so it waits on the two entries below rather than on the
+  value model.
 
 ### Calls
 
@@ -164,7 +181,10 @@ and needs `niri` to see through them so the fold cascades.
 
 - Elements of array literals, and an indexed read of a constant global.
 - A global whose value is visible only as the inline store globalization
-  emits, rather than as an initializer.
+  emits, rather than as an initializer. Narrower than it looks once
+  [Global Variables](./wep-2026-01-27-global-variables.md) stops replacing a
+  deferred global's initializer with a placeholder: the initializer becomes
+  readable, and only the values that genuinely need run-time work stay hidden.
 - The cascade this is for: a globalized constant's field and element reads
   fold to scalars module-wide, the folding and branch-pruning passes reduce
   further, and the now-unread global drops by DCE. This is the

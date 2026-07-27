@@ -290,8 +290,7 @@ fn build_seq_builtin_map(project: &NirPackage) -> SeqBuiltinMap {
         let Some(id) = func.id else {
             continue;
         };
-        let descriptor =
-            crate::nir::FunctionRef::from_resolved(&func, func.module_source.clone());
+        let descriptor = crate::nir::FunctionRef::from_resolved(&func, func.module_source.clone());
         let Some(name) = descriptor.monomorphized_builtin_name() else {
             continue;
         };
