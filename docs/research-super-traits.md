@@ -242,6 +242,106 @@ It flows into `wado doc`, `wado query hover` (which already lists a type's impl
 blocks), and LSP completion — a `T: Circle` receiver can be offered `Shape`'s
 methods with a declared justification rather than by guessing.
 
+## Interaction with Reflection
+
+[WEP: Library-Defined Derivation over `Reflect*`](./wep-2026-06-13-reflect-derivation.md)
+is the area with the most concrete uses, because its whole premise is that
+derivations are ordinary generic library `impl`s reached through bounds.
+
+### A shared face over the four kinds
+
+`ReflectStruct`, `ReflectVariant`, `ReflectEnum`, and `ReflectFlags` each declare
+`type Members`, `fn members()`, `fn type_name()`, and `fn wire_name_policy()`
+verbatim. A kind-agnostic helper — resolve a type's wire-name policy, print its
+name — cannot be bounded today, so it must be written four times.
+`core:serde::wire_name<M: Member>` exists at the _member_ level precisely because
+`Member` is the shared face there; the type level has no counterpart.
+`trait ReflectStruct: Reflect` and friends supply one.
+
+The value is bounded, and worth stating: only the kind-agnostic scalar facts
+factor out. Anything touching members stays kind-split, because `Members` has a
+different shape per kind (`[StructField<Self, F>]` vs `[EnumCase<Self>]`), which
+is what the WEP means by "a type is exactly one kind, so blanket impls over
+different kinds are disjoint". Adding `Reflect` does not disturb that — the four
+kind blankets remain mutually disjoint — but a new `impl<T: Reflect> X for T`
+blanket would overlap all four, so `Reflect` needs the same seal as its
+subtraits and coherence has to account for it.
+
+### A member hierarchy — the clearest win
+
+The WEP specifies `Member::doc()` and a `validate()` shared by the value-bearing
+members. Neither is in `traits.wado` yet: `Member` carries `name()` and
+`wire_name_override()`, and every other member operation (`StructField::get`,
+`VariantCase::extract`, `EnumCase::make`, `FlagsBit::is_set`) is an inherent
+method on the concrete handle with no trait to bound on.
+
+So the shared validation logic the WEP calls for is not writable. Supertraits
+give it a home:
+
+```wado
+internal trait Member { fn name() -> String; fn wire_name_override() -> Option<String>; fn doc() -> Option<String>; }
+internal trait ValuedMember: Member { fn validate(&self) -> Validate; }
+```
+
+`StructField` and `VariantCase` implement `ValuedMember`; a shared helper takes
+`M: ValuedMember` and still calls `m.name()` for its diagnostics through
+elaboration. Without supertraits the choice is to duplicate the face into
+`ValuedMember` or write `M: Member + ValuedMember` at every use site — the same
+redundancy `Eq + Ord` shows today.
+
+This is the case with the best timing: the consumers do not exist yet, so the
+hierarchy can be introduced before anything depends on the flat shape.
+
+### Sealing stops being hard-coded
+
+Rust's sealed-trait idiom _is_ a supertrait: `pub trait Foo: private::Sealed`.
+Wado hard-codes the equivalent — `elaborator/orchestration.rs:877` walks a fixed
+list of `CompilerItem`s (`ReflectStruct`, `ReflectVariant`, `ReflectEnum`,
+`ReflectFlags`, `Member`, `Ref`, `RefMut`) and rejects any user `impl`. That
+covers the stdlib and nothing else: a library building its own member-like
+abstraction cannot seal it.
+
+Supertraits plus `internal` visibility turn sealing into a library pattern, with
+the reflection traits as the motivating first users. The honest caveat is that
+the stdlib gains little — an `internal` trait in `core:prelude` is already
+un-nameable downstream, so the compiler check could stay either way. The gain is
+for user libraries.
+
+### Assoc-type bounds in supertrait position
+
+The canonical derivation header is already an associated-type bound
+(`traits.wado:716`):
+
+```wado
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for T { … }
+```
+
+Rust's 1.72 change is about exactly this constraint written in _supertrait_
+position becoming implied. If Wado's super traits admit assoc-type constraints
+(`trait ReflectStruct: Reflect<Members = …>`), whether they are implied has to be
+settled up front — reversing it later is a compatibility break.
+
+Relatedly, if the format traits gain super traits (`InspectAlt: Inspect`), the
+pack bounds in these headers elaborate: `..F: InspectAlt` would imply
+`..F: Inspect`, which is what the `#?` derivation needs anyway since primitives
+fall back to `inspect`.
+
+### Not: reflecting the trait graph
+
+A different reading — exposing _which traits a type implements_ and their super
+traits as reflected data — does not fit:
+
+- The WEP's principle is that the compiler's only job is to expose a type's
+  structure. A trait list is not structure.
+- There is no consumer. Wado has no `dyn Trait`, so a trait list cannot drive
+  dispatch, and every derivation already resolves statically through blanket
+  impls over `Reflect*`.
+- A positive `T: Trait` question is already a bound. What bounds cannot express
+  is the enumerative or negative form ("every trait `T` implements"), and that
+  breaks coherence: adding an impl downstream would silently change behaviour.
+
+Super traits improve the reflection _API_; they are not reflected _data_.
+
 ## Non-Gains
 
 Being explicit about what super traits will _not_ deliver in Wado:
