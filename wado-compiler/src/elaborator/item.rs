@@ -1237,6 +1237,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ctx
             .type_params
             .insert("Self".to_string(), (0, self_slot));
+        // The slot is bounded by the trait being declared — that is what
+        // makes `Self` usable where the trait is required, as in
+        // `Iterator::map` returning `IterMap<Self, U>` against
+        // `struct IterMap<I: Iterator, U>`. Without the bound `Self` is a
+        // parameter that satisfies nothing and every such signature in the
+        // declaration fails its own well-formedness check.
+        scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
+            "Self".to_string(),
+            vec![ast::TraitBound {
+                name: trait_decl.name.clone(),
+                assoc_types: Vec::new(),
+                span: trait_decl.span,
+                fn_signature: None,
+            }],
+        );
         scope.annotate_ctx.trait_ctx.self_type = Some(self_slot);
         let next_slot = scope.register_generic_params(&trait_decl.type_params, 1);
 

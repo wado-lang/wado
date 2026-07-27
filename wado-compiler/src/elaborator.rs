@@ -1631,6 +1631,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
         }
 
+        // Resolve each `trait` declaration in its own frame, so dispatch
+        // instantiates the recorded signature rather than rebuilding the
+        // frame per lookup. Here rather than in the body pass: `Signatures`
+        // is assembled from these digests once every module's decl pass has
+        // run, so a body-pass query finds nothing recorded later.
+        self.sem.decls.trait_sigs.clear();
+        let trait_decls: Vec<ast::TraitDecl> = module
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Trait(decl) => Some(decl.clone()),
+                _ => None,
+            })
+            .collect();
+        for trait_decl in &trait_decls {
+            self.resolve_trait_decl(trait_decl);
+        }
+
         // Resolve each `interface` / `resource` declaration's operations in
         // its own frame, so a generic resource's methods see its type params
         // and `Self`. The body pass reads these back rather than repeating
@@ -1719,11 +1737,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Item::Impl(impl_block) => {
                     self.resolve_impl_item(impl_block);
                 }
-                Item::Trait(trait_decl) => {
+                Item::Trait(_trait_decl) => {
                     // No TIR output — a trait declares, it does not define.
-                    // Its signatures are recorded so dispatch instantiates
-                    // them instead of re-resolving this AST per impl.
-                    self.resolve_trait_decl(trait_decl);
+                    // Its signatures were recorded by the decl pass.
                 }
                 Item::Variant(variant_decl) => {
                     self.resolve_variant_decl(variant_decl);
