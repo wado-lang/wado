@@ -23,9 +23,11 @@ fn assert_parses(input: &String) {
 // The canonical case: between's mandatory `'and'` must survive the binary
 // `and`-loop. Only the tree is `#[TODO]` — ANTLR4 lets the middle operand take
 // the first `and` since a second is left for between itself, while Gale yields
-// it (the divergence `lr_mid_operand.g4` pins for an LR alternative). Acceptance
-// is asserted outside the `#[TODO]`, so a regression from "wrong tree" to
-// "rejected" fails instead of staying a pending todo.
+// it. Here the competing alternative is an *atom* (`'between' expr 'and' expr`,
+// no leading self-reference), so the continuation gate that closed
+// `lr_mid_operand.g4` does not reach it. Acceptance is asserted outside the
+// `#[TODO]`, so a regression from "wrong tree" to "rejected" fails instead of
+// staying a pending todo.
 test "between with trailing and parses" {
     assert_parses(&"between X1 and X2 and X3 ;");
 }

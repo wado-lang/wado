@@ -255,6 +255,12 @@ pub struct LeftRecursiveRule {
     /// also flips `GenContext.needs_atn`. False for the common LR rule,
     /// whose static `scan_X_lr_*` fast path stays byte-identical.
     pub atn_class: bool = false,
+    /// True when an alternative's mid-operand self-reference climbs a
+    /// delimiter the alternative itself needs (`e 'between' e 'and' e`).
+    /// ANTLR4 parses that operand as `e[0]` and stops it by prediction; the
+    /// equivalent here lets it climb and gates each loop iteration on the
+    /// caller's continuation surviving, which this flag turns on. No ATN.
+    pub mid_operand_gated: bool = false,
 }
 
 /// One left-recursive alternative, with the prefix self-reference
@@ -548,6 +554,11 @@ pub struct RuleCallOp {
     /// `parse_<rule>(p)` / `scan_<rule>(tokens, pos)` (both signatures
     /// accept a defaulted `min_prec = 0`).
     pub min_prec_arg: Option<i32>,
+    /// Follow-mask id for the continuation a mid-operand self-reference must
+    /// leave behind. Passed as the callee's own `lr_cont` argument, never as
+    /// `follow_arg` — every caller sets that one, and the LR loop must not
+    /// read a caller's continuation as this. -1 for every other call.
+    pub lr_cont_mask: i32 = -1,
     /// Dedupped field name in the enclosing alt's struct.
     pub field: String,
     /// Pre-dedup base name (the surface RuleRef's `field_name`).
@@ -922,6 +933,9 @@ pub struct ScanRuleCallElement {
     pub target_snake: String,
     /// Scan-side mirror of `RuleCallOp.follow_arg`. See `FollowArg`.
     pub follow_arg: FollowArg,
+    /// Scan-side mirror of `RuleCallOp.lr_cont_mask`, so the scan's LR loop
+    /// climbs exactly as far as the parse's does.
+    pub lr_cont_mask: i32 = -1,
     /// Scan-side mirror of `RuleCallOp.min_prec_arg`. `Some(p)` when
     /// the call should pass `p` as the `min_prec` argument — set by
     /// `stamp_lr_self_ref_min_prec` for self-recursive RuleCalls

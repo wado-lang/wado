@@ -406,15 +406,18 @@ gate.
 - **LR operator-precedence chain** (`DropLoopEntryBranchInLRRule_4`):
   `scan_expr_lr_*` sees `and X` match and commits where ANTLR4 resolves the
   precedence via full-context prediction at the LR loop entry. The mid-operand
-  half of this (`expr BETWEEN expr AND expr` against `expr AND expr`) has a known
-  correct fix that is **priced out for now**: making the rule ATN-class puts the
-  simulator on every loop entry, parse-side and once per tournament re-scan.
-  Measured on the dev profile over 40 statements: `SELECT … BETWEEN 1 AND 10 AND
-  y = 2` 41 ms → 2.3 s, expression input without any `BETWEEN` still 11x, the
-  scan side ~6x of the total. Memoising the loop-entry decision per (decision,
-  position, precedence, caller depth) is the lever that would make it
-  affordable — the tournament re-asks the same question at the same positions.
-  Details in `TODO.md`.
+  half (`expr BETWEEN expr AND expr` against `expr AND expr`) is **closed on the
+  scan, not the simulator (2026-07)**: an LR self-reference that competes with
+  its own alternative's later delimiter drops to `min_prec = 0` and carries the
+  suffix continuation as a mask, so each loop entry scans the operator's suffix
+  and then checks the continuation still stands. The simulator answer had been
+  priced out — on the dev profile over 40 statements it took `SELECT … BETWEEN 1
+  AND 10 AND y = 2` from 41 ms to 2.3 s.
+- **`lr_between.g4` is still ATN-class and may not need to be.** Its shared-delimiter
+  competition sits in an _atom_ alternative (`'between' expr 'and' expr` — no leading
+  self-reference), so the continuation gate above does not reach it. The question it
+  asks is the same one, so the same gate may apply; if it does, the simulator comes
+  out of grammars that embed it today. Untried.
 - **Ambiguous greedy `rule?` and non-greedy `*?` / `+?` min-match — closed on
   the scan, not the simulator (2026-07).** The simulator answer was implemented
   and reverted at release `sqlite_parse` **2.604 → 402.372 ms/iter (155×)**:

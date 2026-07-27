@@ -664,6 +664,23 @@ fn emit_consume_return(w: &mut CodeWriter) {
 /// stream holds one EOF; advancing past it reads out of bounds, ANTLR4's
 /// `matchedEOF`), everything else advances. Used by `expect`'s match / delete /
 /// resync branches, which all consume `kind` the same way.
+/// The LR loop's caller-continuation argument. Separate from `follow`
+/// because every caller sets that one; only a mid-operand call sets this.
+fn add_lr_cont_param(f: &mut FnSpec) {
+    f.add_param_spec(ParamSpec {
+        name: "lr_cont",
+        type_str: "&List<List<i32>>",
+        default_value: Option::Some("&EMPTY_FOLLOW"),
+    });
+}
+
+fn lr_mid_operand_gated(lowered_rule: &Rule) -> bool {
+    if let LeftRecursive(l) = lowered_rule {
+        return l.mid_operand_gated;
+    }
+    return false;
+}
+
 fn emit_consume_kind_return(w: &mut CodeWriter) {
     w.begin(&"if kind == TK_EOF");
     w.line(&"self.b.token(self.pos);");
@@ -1580,6 +1597,7 @@ fn gen_scan_function_named(
             ctx,
             fn_name,
             atn_loop_dec,
+            l.mid_operand_gated,
         );
         return;
     }
@@ -1697,6 +1715,7 @@ fn gen_scan_lr_functions(
     ctx: &mut GenContext,
     fn_name: &String,
     atn_loop_dec: i32,
+    mid_operand_gated: bool = false,
 ) {
     let atom_name = `${*fn_name}_atom`;
 
@@ -1741,6 +1760,9 @@ fn gen_scan_lr_functions(
         type_str: "i32",
         default_value: Option::Some("0"),
     });
+    if mid_operand_gated {
+        add_lr_cont_param(&mut f2);
+    }
     f2.set_return_type(&"i32");
     f2.emit_begin(w);
     w.line(&`let mut pos = ${atom_name}(tokens, pos${follow_sep(ctx.emit_follow())});`);
@@ -1749,7 +1771,7 @@ fn gen_scan_lr_functions(
     if atn_loop_dec >= 0 {
         gen_lr_suffix_dispatch_atn(w, &side, lr_alts, lr_dispatch, ctx, atn_loop_dec);
     } else {
-        gen_lr_suffix_dispatch(w, &side, rule, lr_alts, lr_dispatch, ctx);
+        gen_lr_suffix_dispatch(w, &side, rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
     }
     w.line(&"return pos;");
     w.end();
@@ -1865,10 +1887,17 @@ struct LrDispatchSide {
     use_prec: bool,  // parse side only
 }
 
-fn gen_lr_branch_call(w: &mut CodeWriter, side: &LrDispatchSide, lr_idx: i32, prec: i32, emit_follow: bool) {
+fn gen_lr_branch_call(
+    w: &mut CodeWriter,
+    side: &LrDispatchSide,
+    lr_idx: i32,
+    prec: i32,
+    emit_follow: bool,
+    mid_operand_gated: bool = false,
+) {
     let suffix_fn = `${side.fn_name}_lr_${lr_idx}`;
     if side.scan {
-        gen_scan_lr_call_with_prec(w, &suffix_fn, prec, emit_follow);
+        gen_scan_lr_call_with_prec(w, &suffix_fn, prec, emit_follow, mid_operand_gated);
     } else {
         let scan_suffix_fn = `${side.scan_fn_name}_lr_${lr_idx}`;
         gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, side.use_prec, emit_follow);
@@ -1882,6 +1911,7 @@ fn gen_lr_suffix_dispatch(
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
     ctx: &mut GenContext,
+    mid_operand_gated: bool = false,
 ) {
     let projected = project_lr_dispatch(lr_alts, lr_dispatch);
     let valid_lr_indices = projected.0;
@@ -1924,7 +1954,7 @@ fn gen_lr_suffix_dispatch(
         if group.len() == 1 {
             let lr_idx = valid_lr_indices[group[0]];
             let prec = lr_precs[group[0]];
-            gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow());
+            gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
         } else {
             gen_lr_overlap_dispatch(
                 w,
@@ -1935,6 +1965,7 @@ fn gen_lr_suffix_dispatch(
                 &lr_precs,
                 &suffix_first_sets,
                 ctx,
+                mid_operand_gated,
             );
         }
     }
@@ -1952,7 +1983,13 @@ fn gen_lr_suffix_dispatch(
     w.end();  // loop
 }
 
-fn gen_scan_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32, emit_follow: bool) {
+fn gen_scan_lr_call_with_prec(
+    w: &mut CodeWriter,
+    suffix_fn: &String,
+    prec: i32,
+    emit_follow: bool,
+    mid_operand_gated: bool = false,
+) {
     // The LR loop must always commit to the longest valid prefix it can
     // build. If the suffix scan fails (e.g. the suffix's first token matches
     // but a deeper element does not, as in `statement letterA 'b'` consuming
@@ -1965,6 +2002,11 @@ fn gen_scan_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32,
     w.line(&`let lr_saved_pos = pos;`);
     w.line(&`pos = ${*suffix_fn}(tokens, pos${follow_sep(emit_follow)});`);
     w.line(&"if pos < 0 { pos = lr_saved_pos; break; }");
+    if mid_operand_gated {
+        // Lockstep with the parse loop: the tournament must measure the same
+        // climb the parse will take.
+        w.line(&"if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }");
+    }
     w.else_begin(&"else");
     w.line(&"break;");
     w.end();
@@ -1979,6 +2021,7 @@ fn gen_lr_overlap_dispatch(
     lr_precs: &List<i32>,
     suffix_first_sets: &List<List<String>>,
     ctx: &mut GenContext,
+    mid_operand_gated: bool = false,
 ) {
     let mut emitted = TreeSet::<String>::new();
     let mut first_branch = true;
@@ -2009,7 +2052,7 @@ fn gen_lr_overlap_dispatch(
                 } else {
                     w.else_begin(&`else if suffix_kind == ${*tk}`);
                 }
-                gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow());
+                gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
                 emitted.insert(*tk);
             }
         }
@@ -2061,10 +2104,10 @@ fn gen_lr_overlap_dispatch(
             let alt = &rule.alternatives[lr_idx];
             if k == last_k {
                 if sub_first {
-                    gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow());
+                    gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
                 } else {
                     w.else_begin(&"else");
-                    gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow());
+                    gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
                     w.end();
                 }
             } else {
@@ -2076,7 +2119,7 @@ fn gen_lr_overlap_dispatch(
                 } else {
                     w.else_begin(&`else if ${sub_cond}`);
                 }
-                gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow());
+                gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
             }
         }
         emitted.insert(*shared_tk);
@@ -2396,12 +2439,13 @@ fn gen_scan_op_element(
             // rule-entry wrapper does. Pop before the fail check so an early return
             // never leaks the frame.
             let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
+            let cont = if rc.lr_cont_mask >= 0 { `, &FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
             if push_ret >= 0 {
                 w.line(&`SCAN_STACK.push(${push_ret});`);
-                w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec});`);
+                w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec}${cont});`);
                 w.line(&"SCAN_STACK.pop();");
             } else {
-                w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec});`);
+                w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec}${cont});`);
             }
             w.line(&`if pos < 0 \{ ${*fail_stmt} \}`);
         },
@@ -2450,7 +2494,8 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
             } else {
                 0;
             };
-            w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec});`);
+            let cont = if rc.lr_cont_mask >= 0 { `, &FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
+            w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec}${cont});`);
         },
         Wildcard => {
             w.line(&"if pos >= tokens.len() || tokens[pos] == TK_EOF { pos = -1; } else { pos += 1; }");
@@ -3008,6 +3053,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         ctx.needs_atn(),
         &rule_result_type_for(rule, ctx),
         ctx,
+        lr_mid_operand_gated(lowered_rule),
     );
 }
 
@@ -3137,6 +3183,7 @@ fn gen_rule_entry_wrapper(
     needs_atn: bool,
     result_type: &String,
     ctx: &GenContext,
+    mid_operand_gated: bool = false,
 ) {
     let rule_display = &rule.name;
     let returns_vals = result_type_carries_vals(result_type);
@@ -3155,6 +3202,9 @@ fn gen_rule_entry_wrapper(
             type_str: "i32",
             default_value: Option::Some("0"),
         });
+    }
+    if mid_operand_gated {
+        add_lr_cont_param(&mut f);
     }
     // Threaded rule arguments come last (defaulted), so the entry and plain
     // callers omit them. Only single-alt rules thread args, so `takes_min_prec`
@@ -3175,10 +3225,11 @@ fn gen_rule_entry_wrapper(
     // the caller's continuation.
     let fsep = if emit_follow { ", follow" } else { "" };
     let argfwd = wrapper_arg_forward(rule, ctx);
+    let contfwd = if mid_operand_gated { ", lr_cont" } else { "" };
     let call = if takes_min_prec {
-        `${*inner_name}(p${fsep}, min_prec${argfwd})`;
+        `${*inner_name}(p${fsep}, min_prec${contfwd}${argfwd})`;
     } else {
-        `${*inner_name}(p${fsep}${argfwd})`;
+        `${*inner_name}(p${fsep}${contfwd}${argfwd})`;
     };
     // open this rule's `CstNode` before the body and close it after, so the
     // body's appended terminals / subtrees become its children. The body may
@@ -3586,7 +3637,7 @@ fn gen_parse_fn_named(
             false;
         };
         let h_loop_dec = if h_atn_class { ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name)) } else { -1 };
-        gen_lr_fn(w, rule, lr_alts, lr_dispatch, ctx, fn_name, h_atn_class, h_loop_dec);
+        gen_lr_fn(w, rule, lr_alts, lr_dispatch, ctx, fn_name, h_atn_class, h_loop_dec, lr_mid_operand_gated(lowered_rule));
         return;
     } else {
         let mut f = FnSpec::new(fn_name);
@@ -4651,8 +4702,9 @@ pub fn gen_op_leaf(
             // reads a single source.
             gen_atn_ret_pending(w, ctx, r.atn_call_site);
             let argsfx = call_arg_suffix(&r, ctx);
+            let cont = if r.lr_cont_mask >= 0 { `, &FOLLOW_MASK_${r.lr_cont_mask}` } else { "" };
             if let Some(min_prec) = r.min_prec_arg {
-                w.line(&`let ${r.field} = ${fn_name}(p${follow_arg_str}, ${min_prec}${argsfx});`);
+                w.line(&`let ${r.field} = ${fn_name}(p${follow_arg_str}, ${min_prec}${cont}${argsfx});`);
             } else {
                 w.line(&`let ${r.field} = ${fn_name}(p${follow_arg_str}${argsfx});`);
             }
@@ -4793,6 +4845,7 @@ fn gen_lr_fn(
     fn_name: &String,
     atn_class: bool,
     loop_dec: i32,
+    mid_operand_gated: bool = false,
 ) {
     let rk = rule_kind_const(&rule.name);
     let mut f = FnSpec::new(fn_name);
@@ -4805,6 +4858,9 @@ fn gen_lr_fn(
         type_str: "i32",
         default_value: Option::Some("0"),
     });
+    if mid_operand_gated {
+        add_lr_cont_param(&mut f);
+    }
     f.set_return_type(&rule_result_type_for(rule, ctx));
     f.emit_begin(w);
     let emits_vals = rule_emits_vals(ctx, rule);
@@ -4877,9 +4933,19 @@ fn gen_lr_fn(
             w.else_begin(&`else if ${cond}`);
         }
         if group.len() == 1 {
-            emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[0]]], rule, &rk, &scan_fn, labeled, ctx, &mut nc);
+            emit_lr_branch(
+                w,
+                &lr_alts[lr_dispatch.valid_lr_alts[group[0]]],
+                rule,
+                &rk,
+                &scan_fn,
+                labeled,
+                ctx,
+                &mut nc,
+                mid_operand_gated,
+            );
         } else {
-            emit_lr_overlap(w, rule, lr_alts, lr_dispatch, group, &rk, &scan_fn, ctx, &mut nc);
+            emit_lr_overlap(w, rule, lr_alts, lr_dispatch, group, &rk, &scan_fn, ctx, &mut nc, mid_operand_gated);
         }
     }
     if first {
@@ -4986,11 +5052,22 @@ fn emit_lr_branch(
     labeled: bool,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
+    mid_operand_gated: bool = false,
 ) {
     w.begin(&`if ${lr.own_prec} >= min_prec`);
-    w.begin(&`if ${*scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())}) < 0`);
-    w.line(&"break;");
-    w.end();
+    let scan_call = `${*scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())})`;
+    if mid_operand_gated {
+        // A caller that needs this operand to leave a delimiter behind hands
+        // it down as `lr_cont`. Take the operator only while that
+        // continuation is still there — climbing past it strands the caller.
+        w.line(&`let _lr_end = ${scan_call};`);
+        w.line(&"if _lr_end < 0 { break; }");
+        w.line(&"if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }");
+    } else {
+        w.begin(&`if ${scan_call} < 0`);
+        w.line(&"break;");
+        w.end();
+    }
     emit_lr_branch_body(w, lr, rule, rk, labeled, ctx, nc);
     w.else_begin(&"else");
     w.line(&"break;");
@@ -5063,6 +5140,7 @@ fn emit_lr_overlap(
     scan_fn: &String,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
+    mid_operand_gated: bool = false,
 ) {
     let labeled = rule_alts_labeled(&rule.alternatives);
     let mut first_sets: List<List<String>> = [];
@@ -5089,7 +5167,7 @@ fn emit_lr_overlap(
                 } else {
                     w.else_begin(&`else if _sk == ${*tk}`);
                 }
-                emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rule, rk, scan_fn, labeled, ctx, nc);
+                emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rule, rk, scan_fn, labeled, ctx, nc, mid_operand_gated);
                 emitted.push(*tk);
             }
         }
@@ -5124,10 +5202,10 @@ fn emit_lr_overlap(
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
             if k == last_k {
                 if sub_first {
-                    emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc);
+                    emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc, mid_operand_gated);
                 } else {
                     w.else_begin(&"else");
-                    emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc);
+                    emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc, mid_operand_gated);
                     w.end();
                 }
             } else {
@@ -5140,7 +5218,7 @@ fn emit_lr_overlap(
                 } else {
                     w.else_begin(&`else if ${sub_cond}`);
                 }
-                emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc);
+                emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc, mid_operand_gated);
             }
         }
         emitted.push(*shared_tk);

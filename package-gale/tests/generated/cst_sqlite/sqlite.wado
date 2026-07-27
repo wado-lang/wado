@@ -8079,7 +8079,7 @@ fn scan_expr_lr_20(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
     }
     if pos >= tokens.len() || tokens[pos] != TK_K_BETWEEN { return -1; }
     pos += 1;
-    pos = scan_expr(tokens, pos, &FOLLOW_MASK_20, 8);
+    pos = scan_expr(tokens, pos, &FOLLOW_MASK_20, 0, &FOLLOW_MASK_21);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_K_AND { return -1; }
     pos += 1;
@@ -8088,7 +8088,7 @@ fn scan_expr_lr_20(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0, lr_cont: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = scan_expr_atom(tokens, pos, follow);
     if pos < 0 { return -1; }
     loop {
@@ -8099,6 +8099,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_4(tokens, pos, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
+                if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
@@ -8107,6 +8108,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_5(tokens, pos, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
+                if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
@@ -8115,6 +8117,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_6(tokens, pos, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
+                if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
@@ -8123,6 +8126,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_7(tokens, pos, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
+                if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
@@ -8131,6 +8135,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_8(tokens, pos, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
+                if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
@@ -8139,6 +8144,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_9(tokens, pos, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
+                if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
@@ -8148,6 +8154,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                     let lr_saved_pos = pos;
                     pos = scan_expr_lr_10(tokens, pos, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
+                    if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
                 } else {
                     break;
                 }
@@ -8156,6 +8163,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                     let lr_saved_pos = pos;
                     pos = scan_expr_lr_17(tokens, pos, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
+                    if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
                 } else {
                     break;
                 }
@@ -8164,6 +8172,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                     let lr_saved_pos = pos;
                     pos = scan_expr_lr_17(tokens, pos, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
+                    if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
                 } else {
                     break;
                 }
@@ -8172,6 +8181,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                     let lr_saved_pos = pos;
                     pos = scan_expr_lr_17(tokens, pos, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
+                    if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
                 } else {
                     break;
                 }
@@ -8180,6 +8190,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                     let lr_saved_pos = pos;
                     pos = scan_expr_lr_17(tokens, pos, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
+                    if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
                 } else {
                     break;
                 }
@@ -8188,6 +8199,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                     let lr_saved_pos = pos;
                     pos = scan_expr_lr_18(tokens, pos, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
+                    if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
                 } else {
                     break;
                 }
@@ -8196,6 +8208,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                     let lr_saved_pos = pos;
                     pos = scan_expr_lr_18(tokens, pos, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
+                    if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
                 } else {
                     break;
                 }
@@ -8204,6 +8217,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                     let lr_saved_pos = pos;
                     pos = scan_expr_lr_20(tokens, pos, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
+                    if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
                 } else {
                     break;
                 }
@@ -8214,6 +8228,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                         let lr_saved_pos = pos;
                         pos = scan_expr_lr_10(tokens, pos, follow);
                         if pos < 0 { pos = lr_saved_pos; break; }
+                        if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
@@ -8222,6 +8237,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                         let lr_saved_pos = pos;
                         pos = scan_expr_lr_17(tokens, pos, follow);
                         if pos < 0 { pos = lr_saved_pos; break; }
+                        if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
@@ -8230,6 +8246,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                         let lr_saved_pos = pos;
                         pos = scan_expr_lr_18(tokens, pos, follow);
                         if pos < 0 { pos = lr_saved_pos; break; }
+                        if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
@@ -8238,6 +8255,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                         let lr_saved_pos = pos;
                         pos = scan_expr_lr_20(tokens, pos, follow);
                         if pos < 0 { pos = lr_saved_pos; break; }
+                        if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
@@ -8248,6 +8266,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_11(tokens, pos, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
+                if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
@@ -8256,6 +8275,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_12(tokens, pos, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
+                if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
@@ -8264,6 +8284,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_16(tokens, pos, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
+                if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
@@ -8272,6 +8293,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_19(tokens, pos, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
+                if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
@@ -8978,7 +9000,7 @@ fn scan_result_column(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
             let mut best: i32 = -1;
             pos = start;
             try_1: {
-                pos = scan_table_name(tokens, pos, &FOLLOW_MASK_21, 0);
+                pos = scan_table_name(tokens, pos, &FOLLOW_MASK_22, 0);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break try_1; }
                 pos += 1;
@@ -9457,7 +9479,7 @@ fn scan_join_clause(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
         let sp = pos;
         sg_244_done: {
             sg_244: {
-                pos = scan_join_operator(tokens, pos, &FOLLOW_MASK_22, 0);
+                pos = scan_join_operator(tokens, pos, &FOLLOW_MASK_23, 0);
                 if pos < 0 { break sg_244; }
                 pos = scan_table_or_subquery(tokens, pos, follow, 0);
                 if pos < 0 { break sg_244; }
@@ -15371,7 +15393,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     return;
 }
 
-fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
+fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0, lr_cont: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_EXPR, _start);
@@ -15382,9 +15404,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
         let _sk = p.peek_kind();
         if _sk == TK_LIT_PIPEPIPE {
             if 14 >= min_prec {
-                if scan_expr_lr_4(&p.kinds, p.pos, follow) < 0 {
-                    break;
-                }
+                let _lr_end = scan_expr_lr_4(&p.kinds, p.pos, follow);
+                if _lr_end < 0 { break; }
+                if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 let lit_pipepipe = p.expect(TK_LIT_PIPEPIPE, &EMPTY_SYNC);
                 let expr_2 = _parse_expr(p, follow, 15);
@@ -15394,9 +15416,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
             }
         } else if _kind_set_36(_sk) {
             if 13 >= min_prec {
-                if scan_expr_lr_5(&p.kinds, p.pos, follow) < 0 {
-                    break;
-                }
+                let _lr_end = scan_expr_lr_5(&p.kinds, p.pos, follow);
+                if _lr_end < 0 { break; }
+                if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 let _ = p.expect_set([TK_LIT_STAR, TK_LIT_SLASH, TK_LIT_PERCENT]);
                 let expr_2 = _parse_expr(p, follow, 14);
@@ -15406,9 +15428,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
             }
         } else if _kind_set_37(_sk) {
             if 12 >= min_prec {
-                if scan_expr_lr_6(&p.kinds, p.pos, follow) < 0 {
-                    break;
-                }
+                let _lr_end = scan_expr_lr_6(&p.kinds, p.pos, follow);
+                if _lr_end < 0 { break; }
+                if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 let _ = p.expect_set([TK_LIT_PLUS, TK_LIT_MINUS]);
                 let expr_2 = _parse_expr(p, follow, 13);
@@ -15418,9 +15440,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
             }
         } else if _kind_set_38(_sk) {
             if 11 >= min_prec {
-                if scan_expr_lr_7(&p.kinds, p.pos, follow) < 0 {
-                    break;
-                }
+                let _lr_end = scan_expr_lr_7(&p.kinds, p.pos, follow);
+                if _lr_end < 0 { break; }
+                if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 let _ = p.expect_set([TK_LIT_LTLT, TK_LIT_GTGT, TK_LIT_AMP, TK_LIT_PIPE]);
                 let expr_2 = _parse_expr(p, follow, 12);
@@ -15430,9 +15452,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
             }
         } else if _kind_set_39(_sk) {
             if 10 >= min_prec {
-                if scan_expr_lr_8(&p.kinds, p.pos, follow) < 0 {
-                    break;
-                }
+                let _lr_end = scan_expr_lr_8(&p.kinds, p.pos, follow);
+                if _lr_end < 0 { break; }
+                if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 let _ = p.expect_set([TK_LIT_LT, TK_LIT_LTEQ, TK_LIT_GT, TK_LIT_GTEQ]);
                 let expr_2 = _parse_expr(p, follow, 11);
@@ -15442,9 +15464,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
             }
         } else if _kind_set_40(_sk) {
             if 9 >= min_prec {
-                if scan_expr_lr_9(&p.kinds, p.pos, follow) < 0 {
-                    break;
-                }
+                let _lr_end = scan_expr_lr_9(&p.kinds, p.pos, follow);
+                if _lr_end < 0 { break; }
+                if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 let _ = p.expect_set([TK_LIT_EQ, TK_LIT_EQEQ, TK_LIT_BANGEQ, TK_LIT_LTGT]);
                 let expr_2 = _parse_expr(p, follow, 10);
@@ -15455,9 +15477,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
         } else if _kind_set_68(_sk) {
             if _sk == TK_K_IN {
                 if 8 >= min_prec {
-                    if scan_expr_lr_10(&p.kinds, p.pos, follow) < 0 {
-                        break;
-                    }
+                    let _lr_end = scan_expr_lr_10(&p.kinds, p.pos, follow);
+                    if _lr_end < 0 { break; }
+                    if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     if p.peek_kind() == TK_K_NOT {
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
@@ -15689,9 +15711,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                 }
             } else if _sk == TK_K_LIKE {
                 if 4 >= min_prec {
-                    if scan_expr_lr_17(&p.kinds, p.pos, follow) < 0 {
-                        break;
-                    }
+                    let _lr_end = scan_expr_lr_17(&p.kinds, p.pos, follow);
+                    if _lr_end < 0 { break; }
+                    if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     if p.peek_kind() == TK_K_NOT {
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
@@ -15708,9 +15730,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                 }
             } else if _sk == TK_K_GLOB {
                 if 4 >= min_prec {
-                    if scan_expr_lr_17(&p.kinds, p.pos, follow) < 0 {
-                        break;
-                    }
+                    let _lr_end = scan_expr_lr_17(&p.kinds, p.pos, follow);
+                    if _lr_end < 0 { break; }
+                    if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     if p.peek_kind() == TK_K_NOT {
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
@@ -15727,9 +15749,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                 }
             } else if _sk == TK_K_REGEXP {
                 if 4 >= min_prec {
-                    if scan_expr_lr_17(&p.kinds, p.pos, follow) < 0 {
-                        break;
-                    }
+                    let _lr_end = scan_expr_lr_17(&p.kinds, p.pos, follow);
+                    if _lr_end < 0 { break; }
+                    if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     if p.peek_kind() == TK_K_NOT {
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
@@ -15746,9 +15768,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                 }
             } else if _sk == TK_K_MATCH {
                 if 4 >= min_prec {
-                    if scan_expr_lr_17(&p.kinds, p.pos, follow) < 0 {
-                        break;
-                    }
+                    let _lr_end = scan_expr_lr_17(&p.kinds, p.pos, follow);
+                    if _lr_end < 0 { break; }
+                    if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     if p.peek_kind() == TK_K_NOT {
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
@@ -15765,9 +15787,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                 }
             } else if _sk == TK_K_ISNULL {
                 if 3 >= min_prec {
-                    if scan_expr_lr_18(&p.kinds, p.pos, follow) < 0 {
-                        break;
-                    }
+                    let _lr_end = scan_expr_lr_18(&p.kinds, p.pos, follow);
+                    if _lr_end < 0 { break; }
+                    if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     let _gk = p.peek_kind();
                     if _gk == TK_K_ISNULL {
@@ -15786,9 +15808,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                 }
             } else if _sk == TK_K_NOTNULL {
                 if 3 >= min_prec {
-                    if scan_expr_lr_18(&p.kinds, p.pos, follow) < 0 {
-                        break;
-                    }
+                    let _lr_end = scan_expr_lr_18(&p.kinds, p.pos, follow);
+                    if _lr_end < 0 { break; }
+                    if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     let _gk = p.peek_kind();
                     if _gk == TK_K_ISNULL {
@@ -15807,15 +15829,15 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                 }
             } else if _sk == TK_K_BETWEEN {
                 if 1 >= min_prec {
-                    if scan_expr_lr_20(&p.kinds, p.pos, follow) < 0 {
-                        break;
-                    }
+                    let _lr_end = scan_expr_lr_20(&p.kinds, p.pos, follow);
+                    if _lr_end < 0 { break; }
+                    if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     if p.peek_kind() == TK_K_NOT {
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                     }
                     let k_between = p.expect(TK_K_BETWEEN, &EMPTY_SYNC);
-                    let expr_2 = _parse_expr(p, &FOLLOW_MASK_20, 8);
+                    let expr_2 = _parse_expr(p, &FOLLOW_MASK_20, 0, &FOLLOW_MASK_21);
                     let k_and = p.expect(TK_K_AND, &EMPTY_SYNC);
                     let expr_3 = _parse_expr(p, follow, 8);
                     p.b.finish_node(p.last_end());
@@ -15825,9 +15847,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
             } else if _sk == TK_K_NOT {
                 if p.peek_at(1) == TK_K_IN {
                     if 8 >= min_prec {
-                        if scan_expr_lr_10(&p.kinds, p.pos, follow) < 0 {
-                            break;
-                        }
+                        let _lr_end = scan_expr_lr_10(&p.kinds, p.pos, follow);
+                        if _lr_end < 0 { break; }
+                        if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                         p.b.start_node_at(_cp, RK_EXPR, _start);
                         if p.peek_kind() == TK_K_NOT {
                             let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
@@ -16059,9 +16081,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     }
                 } else if _kind_set_41(p.peek_at(1)) {
                     if 4 >= min_prec {
-                        if scan_expr_lr_17(&p.kinds, p.pos, follow) < 0 {
-                            break;
-                        }
+                        let _lr_end = scan_expr_lr_17(&p.kinds, p.pos, follow);
+                        if _lr_end < 0 { break; }
+                        if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                         p.b.start_node_at(_cp, RK_EXPR, _start);
                         if p.peek_kind() == TK_K_NOT {
                             let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
@@ -16078,9 +16100,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     }
                 } else if p.peek_at(1) == TK_K_NULL {
                     if 3 >= min_prec {
-                        if scan_expr_lr_18(&p.kinds, p.pos, follow) < 0 {
-                            break;
-                        }
+                        let _lr_end = scan_expr_lr_18(&p.kinds, p.pos, follow);
+                        if _lr_end < 0 { break; }
+                        if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                         p.b.start_node_at(_cp, RK_EXPR, _start);
                         let _gk = p.peek_kind();
                         if _gk == TK_K_ISNULL {
@@ -16099,15 +16121,15 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     }
                 } else {
                     if 1 >= min_prec {
-                        if scan_expr_lr_20(&p.kinds, p.pos, follow) < 0 {
-                            break;
-                        }
+                        let _lr_end = scan_expr_lr_20(&p.kinds, p.pos, follow);
+                        if _lr_end < 0 { break; }
+                        if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                         p.b.start_node_at(_cp, RK_EXPR, _start);
                         if p.peek_kind() == TK_K_NOT {
                             let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                         }
                         let k_between = p.expect(TK_K_BETWEEN, &EMPTY_SYNC);
-                        let expr_2 = _parse_expr(p, &FOLLOW_MASK_20, 8);
+                        let expr_2 = _parse_expr(p, &FOLLOW_MASK_20, 0, &FOLLOW_MASK_21);
                         let k_and = p.expect(TK_K_AND, &EMPTY_SYNC);
                         let expr_3 = _parse_expr(p, follow, 8);
                         p.b.finish_node(p.last_end());
@@ -16118,9 +16140,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
             }
         } else if _sk == TK_K_AND {
             if 7 >= min_prec {
-                if scan_expr_lr_11(&p.kinds, p.pos, follow) < 0 {
-                    break;
-                }
+                let _lr_end = scan_expr_lr_11(&p.kinds, p.pos, follow);
+                if _lr_end < 0 { break; }
+                if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 let k_and = p.expect(TK_K_AND, &EMPTY_SYNC);
                 let expr_2 = _parse_expr(p, follow, 8);
@@ -16130,9 +16152,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
             }
         } else if _sk == TK_K_OR {
             if 6 >= min_prec {
-                if scan_expr_lr_12(&p.kinds, p.pos, follow) < 0 {
-                    break;
-                }
+                let _lr_end = scan_expr_lr_12(&p.kinds, p.pos, follow);
+                if _lr_end < 0 { break; }
+                if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 let k_or = p.expect(TK_K_OR, &EMPTY_SYNC);
                 let expr_2 = _parse_expr(p, follow, 7);
@@ -16142,9 +16164,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
             }
         } else if _sk == TK_K_COLLATE {
             if 5 >= min_prec {
-                if scan_expr_lr_16(&p.kinds, p.pos, follow) < 0 {
-                    break;
-                }
+                let _lr_end = scan_expr_lr_16(&p.kinds, p.pos, follow);
+                if _lr_end < 0 { break; }
+                if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 let k_collate = p.expect(TK_K_COLLATE, &EMPTY_SYNC);
                 let collation_name = _parse_collation_name(p, follow);
@@ -16154,9 +16176,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
             }
         } else if _sk == TK_K_IS {
             if 2 >= min_prec {
-                if scan_expr_lr_19(&p.kinds, p.pos, follow) < 0 {
-                    break;
-                }
+                let _lr_end = scan_expr_lr_19(&p.kinds, p.pos, follow);
+                if _lr_end < 0 { break; }
+                if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 let k_is = p.expect(TK_K_IS, &EMPTY_SYNC);
                 if p.peek_kind() == TK_K_NOT {
@@ -16174,9 +16196,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
     return;
 }
 
-fn _parse_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
+fn _parse_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0, lr_cont: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
-    _parse_expr__inner(p, follow, min_prec);
+    _parse_expr__inner(p, follow, min_prec, lr_cont);
     if p.recovering {
         p.push_rule_stack("expr");
     }
@@ -17041,7 +17063,7 @@ fn _parse_common_table_expression(p: &mut Parser, follow: &List<List<i32>> = &EM
 
 fn _parse_result_column__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let table_name = _parse_table_name(p, &FOLLOW_MASK_21);
+    let table_name = _parse_table_name(p, &FOLLOW_MASK_22);
     let dot = p.expect(TK_LIT_DOT, &SYNC_59);
     let star = p.expect(TK_LIT_STAR, &EMPTY_SYNC);
     return;
@@ -17049,7 +17071,7 @@ fn _parse_result_column__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = 
 
 fn _parse_result_column__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_table_name(tokens, pos, &FOLLOW_MASK_21, 0);
+    pos = scan_table_name(tokens, pos, &FOLLOW_MASK_22, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -17733,7 +17755,7 @@ fn _parse_join_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             let mut pos: i32 = p.pos;
             sg_395_done: {
                 sg_395: {
-                    pos = scan_join_operator(tokens, pos, &FOLLOW_MASK_22, 0);
+                    pos = scan_join_operator(tokens, pos, &FOLLOW_MASK_23, 0);
                     if pos < 0 { break sg_395; }
                     pos = scan_table_or_subquery(tokens, pos, follow, 0);
                     if pos < 0 { break sg_395; }
@@ -17747,7 +17769,7 @@ fn _parse_join_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let join_operator = _parse_join_operator(p, &FOLLOW_MASK_22);
+        let join_operator = _parse_join_operator(p, &FOLLOW_MASK_23);
         let table_or_subquery = _parse_table_or_subquery(p, follow);
         let join_constraint = _parse_join_constraint(p, follow);
     }
@@ -19725,6 +19747,7 @@ global FOLLOW_MASK_17: List<List<i32>> = [[TK_K_AUTOINCREMENT]];
 global FOLLOW_MASK_18: List<List<i32>> = [[TK_BIND_PARAMETER, TK_BLOB_LITERAL, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_PLUS, TK_LIT_TILDE, TK_NUMERIC_LITERAL, TK_STRING_LITERAL]];
 global FOLLOW_MASK_19: List<List<i32>> = [[TK_K_THEN]];
 global FOLLOW_MASK_20: List<List<i32>> = [[TK_K_AND]];
-global FOLLOW_MASK_21: List<List<i32>> = [[TK_LIT_DOT], [TK_LIT_STAR]];
-global FOLLOW_MASK_22: List<List<i32>> = [[TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_LIT_LPAREN, TK_STRING_LITERAL]];
+global FOLLOW_MASK_21: List<List<i32>> = [[TK_K_AND], [TK_BIND_PARAMETER, TK_BLOB_LITERAL, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_PLUS, TK_LIT_TILDE, TK_NUMERIC_LITERAL, TK_STRING_LITERAL]];
+global FOLLOW_MASK_22: List<List<i32>> = [[TK_LIT_DOT], [TK_LIT_STAR]];
+global FOLLOW_MASK_23: List<List<i32>> = [[TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_LIT_LPAREN, TK_STRING_LITERAL]];
 
