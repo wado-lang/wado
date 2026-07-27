@@ -168,6 +168,17 @@ test "tree: bare `return` as if condition (caller-FOLLOW gate)" {
 }
 
 
+// A Repeat nested in a group: `useTree : (simplePath? PATHSEP)? (STAR | …)`.
+// The entry probe for `simplePath?` must not treat the enclosing group's end
+// as the rule's tail — `PATHSEP` is followed by `*`, so asking the caller's
+// FOLLOW (`;`) at that position rejects a path that does parse.
+test "tree: glob `use` path (probe continuation past the enclosing group)" {
+    let r = rlex_prs(&"use foo::*;");
+    if !r.ok() {
+        panic(`parse failed: ${r.diagnostics[0].message}`);
+    }
+}
+
 fn assert_tree(input: &String, expected: &String) {
     let result = rlex_prs(input);
     let actual = rust::to_string_tree(&result);

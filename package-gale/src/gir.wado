@@ -963,6 +963,13 @@ pub struct ScanRepeatElement {
     /// tokens until the exit set (`caller_follow_first`) or EOF, mirroring
     /// the parse-side `compute_non_greedy_condition`.
     pub non_greedy: bool,
+    /// Scan-side mirror of `RepeatOp.continuation_scan`, so the scan decides
+    /// a probed Repeat exactly as the parse side does. The tournament
+    /// measures scan lengths, so a scan that answered this differently could
+    /// pick an alternative the parse then does not consume.
+    pub continuation_scan: List<ScanElement> = [],
+    /// Scan-side mirror of `RepeatOp.continuation_scannable`.
+    pub continuation_scannable: bool = false,
 }
 
 pub struct ScanGroupElement {

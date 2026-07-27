@@ -2491,6 +2491,46 @@ fn gen_scan_non_greedy_skip(w: &mut CodeWriter, exit_first: &List<String>, ctx: 
     w.line(&`while pos < tokens.len() && tokens[pos] != TK_EOF && !(${exit_check}) \{ pos += 1; \}`);
 }
 
+/// Scan mirror of `gen_optional_probe_entry`: try the body, then the
+/// continuation from where it ended, then the caller's FOLLOW. The body is
+/// kept only when all three hold, so the scan advances by exactly what the
+/// parse will consume.
+fn gen_scan_optional_probe(
+    w: &mut CodeWriter,
+    re: &ScanRepeatElement,
+    ctx: &mut GenContext,
+    caller_follow_gate: &String,
+) {
+    let check = ctx.kind_check_str(&re.inner_first, &"tokens[pos]");
+    let guard = if caller_follow_gate.is_empty() {
+        `pos < tokens.len() && ${check}`;
+    } else {
+        `pos < tokens.len() && ${check} && !(${*caller_follow_gate})`;
+    };
+    w.begin(&`if ${guard}`);
+    w.line(&"let sp = pos;");
+    gen_scan_op_element_assign(w, &re.body, ctx);
+    w.begin(&"if pos < 0");
+    w.line(&"pos = sp;");
+    w.else_begin(&"else");
+    w.line(&"let bp = pos;");
+    w.line(&"let mut opt_ok: bool = false;");
+    w.begin(&"opt_probe:");
+    let fail = "break opt_probe;";
+    for let se of &re.continuation_scan {
+        gen_scan_op_element(w, se, ctx, &fail);
+    }
+    if ctx.emit_follow() {
+        w.line(&"if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) { opt_ok = true; }");
+    } else {
+        w.line(&"opt_ok = true;");
+    }
+    w.end();
+    w.line(&"pos = if opt_ok { bp } else { sp };");
+    w.end();
+    w.end();
+}
+
 fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
     let loop_first = re.inner_first;
 
@@ -2518,6 +2558,21 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         // caller's next position. The `caller_follow_first` subtraction
         // matches the surface emitter's `combined_follow = follow_first`.
         let body_is_rulecall = re.body matches { RuleCall(_) };
+        // Lockstep with the parse side: where it probes instead of
+        // subtracting, so does the scan (`gen_scan_optional_probe`).
+        if body_is_rulecall
+            && optional_probe_decides_parts(
+                true,
+                re.continuation_scannable,
+                re.continuation_scan.is_empty(),
+                &loop_first,
+                &re.caller_follow_first,
+                ctx,
+            )
+        {
+            gen_scan_optional_probe(w, re, ctx, &caller_follow_gate);
+            return;
+        }
         let effective_first = if body_is_rulecall && !re.caller_follow_first.is_empty() {
             subtract_sets(&loop_first, &re.caller_follow_first);
         } else {
@@ -6486,7 +6541,40 @@ fn gen_op_repeat_optional_rulecall(
 /// sides of the probe are scannable; everywhere else the subtraction already
 /// agrees with ANTLR4 and keeps its emit byte-identical.
 fn optional_probe_decides(r: &RepeatOp, follow: &List<String>, ctx: &mut GenContext) -> bool {
-    return r.body_scannable && r.continuation_scannable && sets_overlap(&r.body_first_set, follow);
+    return optional_probe_decides_parts(
+        r.body_scannable,
+        r.continuation_scannable,
+        r.continuation_scan.is_empty(),
+        &r.body_first_set,
+        follow,
+        ctx,
+    );
+}
+
+/// The probe decision in terms of the parts both the parse-side `RepeatOp`
+/// and the scan-side `ScanRepeatElement` carry, so the two cannot drift. The
+/// tournament measures scan lengths against what the parse consumes, and a
+/// scan that decided this differently could hand the parse an alternative it
+/// then cannot match — the lockstep invariant.
+fn optional_probe_decides_parts(
+    body_scannable: bool,
+    continuation_scannable: bool,
+    continuation_empty: bool,
+    body_first: &List<String>,
+    follow: &List<String>,
+    ctx: &mut GenContext,
+) -> bool {
+    if !body_scannable || !continuation_scannable {
+        return false;
+    }
+    if !sets_overlap(body_first, follow) {
+        return false;
+    }
+    // With nothing after the body to scan and no runtime FOLLOW to ask, the
+    // probe carries no viability information at all and would reduce to "the
+    // body scans, so enter" — dropping the subtraction with nothing in its
+    // place. The exit probe refuses the same shape.
+    return !continuation_empty || ctx.emit_follow();
 }
 
 /// Greedy Optional decided by the entry probe: scan the body, then the
@@ -6505,7 +6593,15 @@ fn gen_optional_probe_entry(
     let verdict = dedup_name(&"opt_enter", nc);
     let label = dedup_name(&"opt_enter_scan", nc);
     w.line(&`let mut ${verdict}: bool = false;`);
-    w.begin(&`if ${ctx.first_check_str(raw_first)}`);
+    // The caller-FOLLOW yield gate still wins: where the caller's
+    // continuation matches at the entry position the repair already decided
+    // to yield, and the probe only rules on what the gate leaves open.
+    let entry_gate = if ctx.emit_follow() && r.gate_caller_follow {
+        `!(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && `;
+    } else {
+        "";
+    };
+    w.begin(&`if ${entry_gate}${ctx.first_check_str(raw_first)}`);
     w.begin(&`${label}:`);
     w.line(&"let tokens = &p.kinds;");
     w.line(&"let mut pos: i32 = p.pos;");

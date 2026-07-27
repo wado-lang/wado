@@ -1357,7 +1357,7 @@ fn lower_lr_alt_suffix(
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx));
+            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx, false));
         }
         ops.push(op);
     }
@@ -2040,8 +2040,24 @@ fn lower_scan_repeat(
 /// `lower_lr_alt_scan_suffix`, per-shape walks inside groups) to
 /// override the default that `lower_scan_repeat` seeded with
 /// `outer_follow`, matching the parse-side `RepeatOp` post-pass.
-fn rebind_scan_repeat_caller_follow(se: ScanElement, caller_follow_first: List<String>) -> ScanElement {
+fn rebind_scan_repeat_caller_follow(
+    se: ScanElement,
+    caller_follow_first: List<String>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+    reaches_rule_tail: bool,
+) -> ScanElement {
     if let Repeat(re) = se {
+        let mut continuation_scan: List<ScanElement> = [];
+        let mut continuation_scannable = false;
+        let wants_probe = re.non_greedy || re.kind matches { Optional };
+        if wants_probe && reaches_rule_tail {
+            if let Some(scan) = lower_scan_continuation_elements(alt_elements, index, ctx) {
+                continuation_scan = scan;
+                continuation_scannable = true;
+            }
+        }
         return ScanElement::Repeat(ScanRepeatElement {
             kind: re.kind,
             body: re.body,
@@ -2049,9 +2065,30 @@ fn rebind_scan_repeat_caller_follow(se: ScanElement, caller_follow_first: List<S
             caller_follow_first: caller_follow_first,
             gate_caller_follow: re.gate_caller_follow,
             non_greedy: re.non_greedy,
+            continuation_scan,
+            continuation_scannable,
         });
     }
     return se;
+}
+
+/// The scan mirror of the elements after `index`. Shared by the parse-side
+/// `lower_continuation_scan` and its scan-side counterpart so the two probes
+/// scan the same tokens.
+fn lower_scan_continuation_elements(
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+) -> Option<List<ScanElement>> {
+    let mut out: List<ScanElement> = [];
+    for let mut k = index + 1; k < alt_elements.len(); k += 1 {
+        let mut visiting: List<String> = [];
+        if !ctx.is_element_scannable(&alt_elements[k], &mut visiting) {
+            return null;
+        }
+        out.push(lower_alt_scan_element(alt_elements, k, ctx, false));
+    }
+    return Option::Some(out);
 }
 
 /// Lower one element of `alt_elements` at index `i` to a `ScanElement`,
@@ -2086,7 +2123,7 @@ fn lower_alt_scan_element(
     );
     if let Repeat(_) = &se {
         let basic_follow = ctx.first_of_elements_from(alt_elements, i + 1);
-        se = rebind_scan_repeat_caller_follow(se, basic_follow);
+        se = rebind_scan_repeat_caller_follow(se, basic_follow, alt_elements, i, ctx, enclosing_at_tail);
     }
     return se;
 }
@@ -2391,7 +2428,7 @@ fn lower_alt_body(
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx));
+            op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx, true));
         }
         ops.push(op);
     }
@@ -2717,10 +2754,10 @@ fn lower_single_alt_group(
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             if let Repeat(rep_op) = &op {
                 let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-                op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx));
+                op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, i, ctx, false));
             }
             if se_is_repeat {
-                se = rebind_scan_repeat_caller_follow(se, basic_follow);
+                se = rebind_scan_repeat_caller_follow(se, basic_follow, &alt.elements, i, ctx, false);
             }
         }
         ops.push(op);
@@ -3055,10 +3092,10 @@ fn lower_general_group(
                 let basic_follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
                 if let Repeat(rep_op) = &op {
                     let basic_second = compute_caller_follow_second(&alt.elements, ei + 1, ctx);
-                    op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, ei, ctx));
+                    op = Op::Repeat(patch_repeat_op_caller_follow(rep_op, basic_follow, basic_second, &alt.elements, ei, ctx, false));
                 }
                 if se_is_repeat {
-                    se = rebind_scan_repeat_caller_follow(se, basic_follow);
+                    se = rebind_scan_repeat_caller_follow(se, basic_follow, &alt.elements, ei, ctx, false);
                 }
             }
             ops.push(op);
@@ -3610,10 +3647,11 @@ fn patch_repeat_op_caller_follow(
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut GenContext,
+    reaches_rule_tail: bool,
 ) -> RepeatOp {
     let mut continuation_scan: List<ScanElement> = [];
     let mut continuation_scannable = false;
-    if let Some(scan) = lower_continuation_scan(rep_op, alt_elements, index, ctx) {
+    if let Some(scan) = lower_continuation_scan(rep_op, alt_elements, index, ctx, reaches_rule_tail) {
         continuation_scan = scan;
         continuation_scannable = true;
     }
@@ -3636,20 +3674,22 @@ fn lower_continuation_scan(
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut GenContext,
+    reaches_rule_tail: bool,
 ) -> Option<List<ScanElement>> {
     let wants_probe = rep_op.non_greedy || rep_op.kind matches { Optional };
     if !wants_probe {
         return null;
     }
-    let mut out: List<ScanElement> = [];
-    for let mut k = index + 1; k < alt_elements.len(); k += 1 {
-        let mut visiting: List<String> = [];
-        if !ctx.is_element_scannable(&alt_elements[k], &mut visiting) {
-            return null;
-        }
-        out.push(lower_alt_scan_element(alt_elements, k, ctx));
+    // The probe ends its scan by asking the caller's FOLLOW, which is only
+    // the right question at the rule's tail. Walking `alt_elements` inside a
+    // group stops at that group's end, so everything after the group would
+    // be missing and the FOLLOW would be asked at a position the rule has
+    // not reached — `useTree : (simplePath? PATHSEP)? (STAR | …)` lands on
+    // `*` and rejects `use foo::*`. Only a rule-level alt may claim it.
+    if !reaches_rule_tail {
+        return null;
     }
-    return Option::Some(out);
+    return lower_scan_continuation_elements(alt_elements, index, ctx);
 }
 
 /// True iff `elem` is a list-label (`+=`). Used by

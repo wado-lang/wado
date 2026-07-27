@@ -9609,6 +9609,43 @@ fn scan_inherent_impl(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_KW_IMPL { return -1; }
     pos += 1;
+    if pos < tokens.len() && tokens[pos] == TK_LT {
+        let sp = pos;
+        pos = scan_generic_params(tokens, pos, &EMPTY_FOLLOW, 0);
+        if pos < 0 {
+            pos = sp;
+        } else {
+            let bp = pos;
+            let mut opt_ok: bool = false;
+            opt_probe: {
+                pos = scan_type_(tokens, pos, &FOLLOW_MASK_21, 0);
+                if pos < 0 { break opt_probe; }
+                if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
+                    let sp = pos;
+                    pos = scan_where_clause(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { pos = sp; }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { break opt_probe; }
+                pos += 1;
+                while pos < tokens.len() && tokens[pos] == TK_POUND {
+                    let sp = pos;
+                    pos = scan_inner_attribute(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { pos = sp; break; }
+                    if pos == sp { break; }
+                }
+                while pos < tokens.len() && _kind_set_36(tokens[pos]) {
+                    let sp = pos;
+                    pos = scan_associated_item(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { pos = sp; break; }
+                    if pos == sp { break; }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break opt_probe; }
+                pos += 1;
+                if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) { opt_ok = true; }
+            }
+            pos = if opt_ok { bp } else { sp };
+        }
+    }
     pos = scan_type_(tokens, pos, &FOLLOW_MASK_21, 0);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
@@ -10018,6 +10055,29 @@ fn scan_lifetime_where_clause_item(tokens: &Array<i32>, pos: i32, follow: &List<
 
 fn scan_type_bound_where_clause_item(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
+    if pos < tokens.len() && tokens[pos] == TK_KW_FOR {
+        let sp = pos;
+        pos = scan_for_lifetimes(tokens, pos, &EMPTY_FOLLOW, 0);
+        if pos < 0 {
+            pos = sp;
+        } else {
+            let bp = pos;
+            let mut opt_ok: bool = false;
+            opt_probe: {
+                pos = scan_type_(tokens, pos, &FOLLOW_MASK_15, 0);
+                if pos < 0 { break opt_probe; }
+                if pos >= tokens.len() || tokens[pos] != TK_COLON { break opt_probe; }
+                pos += 1;
+                if pos < tokens.len() && _kind_set_35(tokens[pos]) {
+                    let sp = pos;
+                    pos = scan_type_param_bounds(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { pos = sp; }
+                }
+                if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) { opt_ok = true; }
+            }
+            pos = if opt_ok { bp } else { sp };
+        }
+    }
     pos = scan_type_(tokens, pos, &FOLLOW_MASK_15, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_COLON { return -1; }
@@ -16904,19 +16964,7 @@ fn _parse_use_tree__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Li
 fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     if _kind_set_9(p.peek_kind()) && p.peek_at(1) == TK_PATHSEP {
-        let mut opt_enter: bool = false;
-        if _kind_set_9(p.peek_kind()) {
-            opt_enter_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_simple_path(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break opt_enter_scan; }
-                if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break opt_enter_scan; }
-                pos += 1;
-                if follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF) { opt_enter = true; }
-            }
-        }
-        if opt_enter {
+        if _kind_set_19(p.peek_kind()) {
             let simple_path = _parse_simple_path(p, &EMPTY_FOLLOW);
         }
         let pathsep = p.expect(TK_PATHSEP, &EMPTY_SYNC);
@@ -19213,7 +19261,7 @@ fn _parse_type_bound_where_clause_item__inner(p: &mut Parser, follow: &List<List
             if pos < 0 { break opt_enter_scan; }
             if pos >= tokens.len() || tokens[pos] != TK_COLON { break opt_enter_scan; }
             pos += 1;
-            if pos < tokens.len() && _kind_set_35(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+            if pos < tokens.len() && _kind_set_35(tokens[pos]) {
                 let sp = pos;
                 pos = scan_type_param_bounds(tokens, pos, &EMPTY_FOLLOW, 0);
                 if pos < 0 { pos = sp; }

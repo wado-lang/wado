@@ -1769,10 +1769,27 @@ fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos] == TK_ID {
+    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
         pos = scan_t(tokens, pos, 0);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+        } else {
+            let bp = pos;
+            let mut opt_ok: bool = false;
+            opt_probe: {
+                while pos < tokens.len() && tokens[pos] == TK_NULL {
+                    let sp = pos;
+                    pos = scan_c(tokens, pos, 0);
+                    if pos < 0 { pos = sp; break; }
+                    if pos == sp { break; }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break opt_probe; }
+                pos += 1;
+                opt_ok = true;
+            }
+            pos = if opt_ok { bp } else { sp };
+        }
     }
     while pos < tokens.len() && tokens[pos] == TK_NULL {
         let sp = pos;
