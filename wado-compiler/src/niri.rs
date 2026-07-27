@@ -79,19 +79,22 @@
 //!   scalars projected out of them. A local carries an aggregate
 //!   constant only when every mention of it merely reads the value; see
 //!   [`Interpreter::record_aggregate_locals`].
-//! - Pure-call inlining: a free `Call` whose args all reduce to
+//! - Pure-call evaluation: a free `Call` whose args all reduce to
 //!   constants and whose callee was admitted to the [`CalleeMap`]
-//!   (pure, non-async, monomorphic — see [`is_ctfe_eligible`]) and
-//!   whose body is a single `Return { Some(_) }` or `Expr(_)`
-//!   evaluates the body's tail with the args bound into a fresh local
-//!   environment. The `call_stack` of in-flight callees blocks
-//!   recursive re-entry; a per-pass step budget caps total CTFE work;
-//!   the dynamic borrow on the shared callee `RefCell` blocks the
-//!   visitor's outer `borrow_mut`. `NonConst` tail results (e.g. body
-//!   contains a runtime div-by-zero) are downgraded to Unevaluated so
-//!   the original Call survives and the runtime trap is preserved.
-//!   `MethodCall` / `IndirectCall` / `CmRawCall` and multi-stmt bodies
-//!   are out of scope.
+//!   (pure, non-async, monomorphic — see [`is_ctfe_eligible`]) runs the
+//!   callee's body with the args bound into a fresh local environment.
+//!   The body is executed statement by statement — `let` bindings,
+//!   assignment to a local, an `if` whose condition decides, an early
+//!   `return`, a labeled block completed by its `break`. A loop, a
+//!   destructuring `let`, an undecidable `if`, or a store the frame
+//!   does not own abandons the evaluation. The `call_stack` of
+//!   in-flight callees blocks recursive re-entry; a per-pass step
+//!   budget charged per statement caps total work; the dynamic borrow
+//!   on the shared callee `RefCell` blocks the visitor's outer
+//!   `borrow_mut`. A body that does not produce a constant (e.g. it
+//!   contains a runtime div-by-zero) leaves the original Call in place
+//!   so the runtime trap is preserved. `MethodCall` / `IndirectCall` /
+//!   `CmRawCall` are out of scope.
 //!
 //! Float arithmetic uses native Rust IEEE 754 ops (same as Wasm), following
 //! cranelift's approach: fold the result, but skip if it is NaN since NaN
@@ -258,12 +261,13 @@ pub type GlobalEnv = IndexMap<GlobalKey, Lattice>;
 pub type GlobalFieldEnv = IndexMap<GlobalKey, IndexMap<String, Value>>;
 
 /// Default per-pass CTFE step budget. Mirrors rustc's CTFE step counter
-/// shape: a hard ceiling on the number of productive call entries
-/// before the engine starts bailing. Borrow-blocked re-entries (the
-/// recursion guard) bail before the budget charge, so they don't
-/// consume budget; the ceiling only applies to new-frame work that
-/// actually runs.
-pub const DEFAULT_STEP_BUDGET: u32 = 1000;
+/// shape: a hard ceiling on the work the engine performs before it starts
+/// bailing. A step is one call entry plus one per statement executed, so the
+/// ceiling bounds total interpretation, not just how many calls are attempted.
+/// Borrow-blocked re-entries (the recursion guard) bail before the budget
+/// charge, so they don't consume budget; the ceiling only applies to
+/// new-frame work that actually runs.
+pub const DEFAULT_STEP_BUDGET: u32 = 10_000;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Field knowledge
@@ -494,6 +498,10 @@ pub struct Interpreter<'a> {
     /// may bind an aggregate constant. Cleared by [`Self::enter_function`], so
     /// an unpopulated set simply refuses every aggregate binding.
     aggregate_locals: LocalSet,
+    /// Locals of the CTFE frame currently executing that another handle may
+    /// write — see [`clobbered_locals`]. Empty outside a frame, so ordinary
+    /// folding is unaffected.
+    ctfe_clobbered: LocalSet,
     /// CTFE scratch-body fold memo: `expr → folded constant`. The scratch
     /// [`BodySink`] cannot promote a fold to an `Operand::Value` (no parent map)
     /// and pure scalars have no literal-node form, so a fold is recorded here and
@@ -659,6 +667,7 @@ impl<'a> Interpreter<'a> {
             env: IndexMap::default(),
             ref_global_aliases: IndexMap::default(),
             aggregate_locals: LocalSet::default(),
+            ctfe_clobbered: LocalSet::default(),
             scratch_folds: IndexMap::default(),
             callees: None,
             globals: None,
@@ -751,6 +760,7 @@ impl<'a> Interpreter<'a> {
         self.env.clear();
         self.ref_global_aliases.clear();
         self.aggregate_locals = LocalSet::default();
+        self.ctfe_clobbered = LocalSet::default();
         self.scratch_folds.clear();
         debug_assert!(
             self.call_stack.is_empty(),
@@ -1843,11 +1853,140 @@ impl<'a> Interpreter<'a> {
         sink.replace_with_value(e, v)
     }
 
-    /// Fold a pure call whose args are all constant: bind the params, evaluate
-    /// the callee's single tail expression, and return `Const(v)` only when it
-    /// reduces to a value. `Unevaluated` on any miss (non-call, unknown or
-    /// recursive callee, non-const arg, unrecognized body, exhausted budget),
-    /// so the original call — and any runtime trap inside it — survives.
+    /// Execute a block's statements in order under the current environment.
+    fn exec_block_a(&mut self, body: &mut Body, block: BlockId) -> Flow {
+        let stmts = body.blocks[block].stmts.clone();
+        let mut value = Lattice::Unevaluated;
+        for s in stmts {
+            match self.exec_stmt_a(body, s) {
+                Flow::Fallthrough(v) => value = v,
+                other => return other,
+            }
+        }
+        Flow::Fallthrough(value)
+    }
+
+    /// Execute one statement, charging the shared budget so a body cannot run
+    /// unbounded.
+    fn exec_stmt_a(&mut self, body: &mut Body, s: StmtId) -> Flow {
+        if self.step_budget == 0 {
+            return Flow::Bail;
+        }
+        self.step_budget -= 1;
+        match &body.stmts[s].kind {
+            StmtKind::Let {
+                local_index, value, ..
+            } => {
+                let (index, value) = (*local_index, *value);
+                let lattice = self.eval_operand_a(body, value);
+                self.bind_ctfe_local(index, lattice);
+                Flow::Fallthrough(Lattice::Unevaluated)
+            }
+            StmtKind::Expr(op) => {
+                let op = *op;
+                self.exec_expr_stmt_a(body, op)
+            }
+            StmtKind::Return { value } => {
+                let lattice = self.eval_optional_operand_a(body, *value);
+                Flow::Return(lattice)
+            }
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
+                match self.eval_operand_a(body, condition) {
+                    Lattice::Const(Value::Bool(true)) => self.exec_block_a(body, then_block),
+                    Lattice::Const(Value::Bool(false)) => match else_block {
+                        Some(eb) => self.exec_block_a(body, eb),
+                        None => Flow::Fallthrough(Lattice::Unevaluated),
+                    },
+                    // Which branch runs decides what the body does; an
+                    // undecidable condition cannot be guessed.
+                    Lattice::Const(
+                        Value::Int { .. }
+                        | Value::Float { .. }
+                        | Value::Char(_)
+                        | Value::Aggregate { .. },
+                    )
+                    | Lattice::NonConst
+                    | Lattice::Unevaluated => Flow::Bail,
+                }
+            }
+            StmtKind::Break { label, value } => {
+                let (label, value) = (label.clone(), *value);
+                let value = self.eval_optional_operand_a(body, value);
+                Flow::Break { label, value }
+            }
+            StmtKind::Continue => Flow::Continue,
+            StmtKind::LabeledBlock { label, block } => {
+                let (label, block) = (label.clone(), *block);
+                match self.exec_block_a(body, block) {
+                    Flow::Break {
+                        label: Some(broke),
+                        value,
+                    } if broke == label => Flow::Fallthrough(value),
+                    other => other,
+                }
+            }
+            // Executing a loop, and binding a destructuring `let`'s pattern,
+            // are both future work.
+            StmtKind::Loop { .. } | StmtKind::LetDestructure { .. } => Flow::Bail,
+        }
+    }
+
+    /// An expression statement: an assignment updates the environment,
+    /// anything else contributes its value as the block's result.
+    fn exec_expr_stmt_a(&mut self, body: &mut Body, op: Operand) -> Flow {
+        if let Some(e) = op.as_expr()
+            && let ExprKind::Assign { target, value } = &body.exprs[e].kind
+        {
+            let (target, value) = (*target, *value);
+            let Some(index) = assign_target_local(body, target) else {
+                return Flow::Bail;
+            };
+            let lattice = self.eval_operand_a(body, value);
+            self.bind_ctfe_local(index, lattice);
+            return Flow::Fallthrough(Lattice::Unevaluated);
+        }
+        Flow::Fallthrough(self.eval_operand_a(body, op))
+    }
+
+    fn eval_optional_operand_a(&mut self, body: &mut Body, op: Option<Operand>) -> Lattice {
+        match op {
+            Some(op) => self.eval_operand_a(body, op),
+            None => Lattice::Unevaluated,
+        }
+    }
+
+    /// Evaluate an operand in the current frame. Reducing in place first is
+    /// what lets a nested call fold before the operand is projected.
+    fn eval_operand_a(&mut self, body: &mut Body, op: Operand) -> Lattice {
+        match op.as_expr() {
+            Some(e) => {
+                self.reduce_in_place_a(body, e);
+                self.reduce_to_lattice_a(body, e)
+            }
+            None => self.operand_to_lattice_a(body, op),
+        }
+    }
+
+    /// Bind a local inside a compile-time frame. A local the frame may reach
+    /// through another handle keeps no value.
+    fn bind_ctfe_local(&mut self, index: u32, lattice: Lattice) {
+        if self.ctfe_clobbered.contains(index) {
+            self.env.insert(index, Lattice::NonConst);
+        } else {
+            self.bind_local(index, lattice);
+        }
+    }
+
+    /// Fold a pure call whose args are all constant: bind the params, run the
+    /// callee's body, and return `Const(v)` only when it produces a value.
+    /// `Unevaluated` on any miss (non-call, unknown or recursive callee,
+    /// non-const arg, a body the executor cannot follow, exhausted budget), so
+    /// the original call — and any runtime trap inside it — survives.
     fn try_call_fold_a(&mut self, body: &Body, e: ExprId) -> Lattice {
         let Some(callees) = self.callees else {
             return Lattice::Unevaluated;
@@ -1881,9 +2020,6 @@ impl<'a> Interpreter<'a> {
         let Some(callee_body) = callee.body.as_ref() else {
             return Lattice::Unevaluated;
         };
-        let Some(tail) = single_tail_expression_a(callee_body) else {
-            return Lattice::Unevaluated;
-        };
         if self.step_budget == 0 {
             return Lattice::Unevaluated;
         }
@@ -1897,22 +2033,37 @@ impl<'a> Interpreter<'a> {
         // Local indices are per-function, so the caller's read-only-local set
         // says nothing about the callee's.
         let saved_aggregates = std::mem::take(&mut self.aggregate_locals);
-        for (i, v) in bound.into_iter().enumerate() {
-            #[allow(clippy::cast_possible_truncation)]
-            self.env.insert(i as u32, Lattice::Const(v));
-        }
-        // Reduce the tail on a scratch copy of the callee's nodes so the shared
-        // callee body (held under an immutable `Ref`) is not mutated. Only the
-        // node maps are cloned (`nodes_only_clone`) — reduction reads no
+        let saved_clobbered = std::mem::take(&mut self.ctfe_clobbered);
+        // Execute on a scratch copy of the callee's nodes so the shared callee
+        // body (held under an immutable `Ref`) is not mutated. Only the node
+        // maps are cloned (`nodes_only_clone`) — evaluation reads no
         // function-level metadata, so cloning the callee's `locals` would be
         // pure waste.
         let mut scratch = callee_body.nodes_only_clone();
-        self.reduce_in_place_a(&mut scratch, tail);
-        let result = self.reduce_to_lattice_a(&scratch, tail);
+        self.record_aggregate_locals(&scratch);
+        self.ctfe_clobbered = clobbered_locals(&scratch);
+        for (i, v) in bound.into_iter().enumerate() {
+            let index = u32::try_from(i).expect("param count fits u32");
+            let lattice = if self.ctfe_clobbered.contains(index) {
+                Lattice::NonConst
+            } else {
+                Lattice::Const(v)
+            };
+            self.env.insert(index, lattice);
+        }
+        let root = scratch.root;
+        let result = match self.exec_block_a(&mut scratch, root) {
+            Flow::Return(lattice) | Flow::Fallthrough(lattice) => lattice,
+            // A `break` or `continue` escaping the body, or a construct the
+            // engine cannot follow, means the evaluation never produced the
+            // call's value.
+            Flow::Break { .. } | Flow::Continue | Flow::Bail => Lattice::Unevaluated,
+        };
         self.env = saved_env;
         self.scratch_folds = saved_folds;
         self.ref_global_aliases = saved_aliases;
         self.aggregate_locals = saved_aggregates;
+        self.ctfe_clobbered = saved_clobbered;
         self.call_stack.pop();
         match result {
             c @ Lattice::Const(_) => c,
@@ -1973,17 +2124,6 @@ fn operand_reads_any_local(body: &Body, op: Operand, binds: &PatBindings) -> boo
 /// The tail expression of a body whose root block is a single statement —
 /// `Return { Some(e) }` or `Expr(e)`. `None` for any other shape, which the
 /// caller treats as "do not fold this call".
-fn single_tail_expression_a(body: &Body) -> Option<ExprId> {
-    let [single] = body.blocks[body.root].stmts.as_slice() else {
-        return None;
-    };
-    match body.stmts[*single].kind {
-        StmtKind::Return { value: Some(e) } => e.as_expr(),
-        StmtKind::Expr(e) => e.as_expr(),
-        _ => None,
-    }
-}
-
 /// `Some(v)` ↦ `Const(v)`, `None` ↦ `NonConst`. Used at the boundary
 /// where a numeric-evaluation helper that still returns `Option<Value>`
 /// (because its failure modes are runtime traps, not "haven't tried")
@@ -2012,6 +2152,92 @@ enum PatternMatch {
     Yes,
     No,
     Unknown,
+}
+
+/// How control left a statement sequence during compile-time execution.
+///
+/// `Break` and `Continue` are modelled even though loops are not executed:
+/// a labeled block is the value-producing shape a `break L: v` completes, so
+/// the signal is not loop-specific.
+enum Flow {
+    /// Reached the end of the sequence, carrying the value of the last
+    /// statement that produced one — a body ending in an expression statement
+    /// yields it.
+    Fallthrough(Lattice),
+    Return(Lattice),
+    Break {
+        label: Option<String>,
+        value: Lattice,
+    },
+    Continue,
+    /// The engine could not follow the program. The whole evaluation is
+    /// abandoned and the original call survives, so anything the body would
+    /// have done at run time still happens.
+    Bail,
+}
+
+/// Locals of `body` that a compile-time frame cannot track, because something
+/// other than a bare assignment at statement position can write them: a
+/// borrow, a mutable argument, a method receiver, a store through a
+/// projection, or an assignment buried inside a larger expression. `niri`
+/// models whole values, not the heap, so such a local must not carry one.
+fn clobbered_locals(body: &Body) -> LocalSet {
+    fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
+        if let Some(index) = lvalue_root_local(body, op) {
+            set.insert(index);
+        }
+    }
+    // Assignments the executor applies itself. Any other assignment is reached
+    // through the operand path, which reduces expressions but does not run
+    // them, so its target would keep a stale value.
+    let mut executed: IndexSet<ExprId> = IndexSet::default();
+    for (_, stmt) in &body.stmts {
+        if let StmtKind::Expr(op) = &stmt.kind
+            && let Some(e) = op.as_expr()
+            && matches!(body.exprs[e].kind, ExprKind::Assign { .. })
+        {
+            executed.insert(e);
+        }
+    }
+    let mut set = LocalSet::default();
+    for (e, node) in &body.exprs {
+        match &node.kind {
+            // `local = v` at statement position is modelled exactly; a store
+            // through a projection reaches a value the frame does not own.
+            ExprKind::Assign { target, .. } => {
+                if !executed.contains(&e)
+                    || !matches!(body.exprs[*target].kind, ExprKind::Local { .. })
+                {
+                    disqualify(body, (*target).into(), &mut set);
+                }
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                expr,
+            } => disqualify(body, *expr, &mut set),
+            ExprKind::MethodCall { receiver, args, .. } => {
+                disqualify(body, *receiver, &mut set);
+                for arg in args.iter().filter(|a| a.is_mut) {
+                    disqualify(body, arg.expr, &mut set);
+                }
+            }
+            ExprKind::Call { args, .. } => {
+                for arg in args.iter().filter(|a| a.is_mut) {
+                    disqualify(body, arg.expr, &mut set);
+                }
+            }
+            _ => {}
+        }
+    }
+    set
+}
+
+/// The local a bare `local = value` assigns, if the target is one.
+fn assign_target_local(body: &Body, target: ExprId) -> Option<u32> {
+    match &body.exprs[target].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        _ => None,
+    }
 }
 
 /// The locals a matched pattern binds, paired with the scrutinee sub-values

@@ -99,10 +99,16 @@ Control flow:
 Calls:
 
 - A free call whose arguments are all constant and whose callee is pure,
-  non-async and monomorphic evaluates at compile time when the callee's body
-  is a single expression. Recursion and total work are bounded. A body that
-  does not reduce to a constant leaves the call in place, so a runtime trap
+  non-async and monomorphic runs at compile time. The body executes statement
+  by statement, so a `let` sequence, assignment to a local, an `if` whose
+  condition decides, an early `return`, and a labeled block completed by its
+  `break` all reach a value. Recursion and total work are bounded. A body that
+  does not produce a constant leaves the call in place, so a runtime trap
   inside it stays observable.
+- A local the frame cannot track — one a borrow, a mutable argument, a method
+  receiver, a store through a projection, or an assignment buried inside a
+  larger expression can write — carries no value, so a stale constant cannot
+  outlive the write.
 - A string literal's `len()` folds, as a consequence of the generic
   struct-field projection rather than any string-specific rule.
 
@@ -120,10 +126,8 @@ Calls:
 
 ### Calls
 
-- Multi-statement bodies: a `let` sequence, an early return. Only a
-  single-expression body folds today, which excludes most functions outright
-  and every body that pattern lowering desugared into statements — aggregate
-  parameters included.
+- A destructuring `let`, which binds a pattern rather than a name; a body
+  containing one is abandoned.
 - Method calls, excluded because a `&mut self` receiver mutates through the
   call. Worth revisiting now that mod-ref and alias analysis can prove a
   receiver is not written.
@@ -138,8 +142,13 @@ Calls:
 - A `switch` with a constant scrutinee is not folded, although `if` and
   `match` are. Since a switch is formed before inlining, a scrutinee that
   inlining makes constant survives to the end untouched.
-- Loops with a constant trip count, unrolled within the work budget.
-  Expressions that don't terminate within it stay residual.
+- Loops, which abandon a compile-time evaluation today. Running one inside a
+  call needs no constant trip count — the work budget already bounds it, and a
+  loop that outruns the budget simply leaves the call in place. What the
+  executor does need is to stop a value derived in one iteration from leaking
+  into the next.
+- Unrolling a loop in place in the caller, which is a separate question: a
+  code-size trade needing a cost model, not an evaluation capability.
 - Guards decided when the engine is only asked what an expression denotes;
   today an arm's bindings are only in scope on the rewriting path.
 

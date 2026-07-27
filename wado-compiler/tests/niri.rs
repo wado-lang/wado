@@ -3385,6 +3385,145 @@ fn let_stmt_b(name: &str, local_index: u32, type_id: TypeId, value: Build) -> St
     })
 }
 
+fn let_mut_stmt_b(name: &str, local_index: u32, type_id: TypeId, value: Build) -> StmtBuild {
+    let name = name.to_string();
+    Rc::new(move |b| {
+        let value = value(b);
+        ps(
+            b,
+            StmtKind::Let {
+                name: name.clone(),
+                local_index,
+                is_mut: true,
+                is_reactive: false,
+                type_id,
+                value,
+                skip_value_copy: false,
+            },
+        )
+    })
+}
+
+/// `local = value` as an expression statement.
+fn assign_local_stmt_b(local_index: u32, type_id: TypeId, value: Build) -> StmtBuild {
+    Rc::new(move |b| {
+        let target = pe(
+            b,
+            ExprKind::Local {
+                index: local_index,
+                name: String::new(),
+            },
+            type_id,
+        );
+        let value = value(b);
+        let assign = pe(b, ExprKind::Assign { target, value }, TypeTable::UNIT);
+        ps(b, StmtKind::Expr(Operand::Expr(assign)))
+    })
+}
+
+fn block_of(b: &mut Body, stmts: &[StmtBuild]) -> BlockId {
+    let ids: Vec<StmtId> = stmts.iter().map(|s| s(b)).collect();
+    b.blocks.push(BlockNode {
+        stmts: ids,
+        span: Span::default(),
+    })
+}
+
+fn if_stmt_b(condition: Build, then_stmts: Vec<StmtBuild>, else_stmts: Vec<StmtBuild>) -> StmtBuild {
+    Rc::new(move |b| {
+        let condition = condition(b);
+        let then_block = block_of(b, &then_stmts);
+        let else_block = (!else_stmts.is_empty()).then(|| block_of(b, &else_stmts));
+        ps(
+            b,
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            },
+        )
+    })
+}
+
+fn loop_stmt_b(stmts: Vec<StmtBuild>) -> StmtBuild {
+    Rc::new(move |b| {
+        let body = block_of(b, &stmts);
+        ps(b, StmtKind::Loop { body })
+    })
+}
+
+fn labeled_block_stmt_b(label: &str, stmts: Vec<StmtBuild>) -> StmtBuild {
+    let label = label.to_string();
+    Rc::new(move |b| {
+        let block = block_of(b, &stmts);
+        ps(
+            b,
+            StmtKind::LabeledBlock {
+                label: label.clone(),
+                block,
+            },
+        )
+    })
+}
+
+fn break_stmt_b(label: Option<&str>, value: Option<Build>) -> StmtBuild {
+    let label = label.map(str::to_string);
+    Rc::new(move |b| {
+        let value = value.as_ref().map(|v| v(b));
+        ps(
+            b,
+            StmtKind::Break {
+                label: label.clone(),
+                value,
+            },
+        )
+    })
+}
+
+/// `{ local = value }` as a block expression, so the assignment sits inside an
+/// operand rather than at statement position.
+fn block_expr_assigning_local(local_index: u32, type_id: TypeId, value: Build) -> Build {
+    Rc::new(move |b| {
+        let target = pe(
+            b,
+            ExprKind::Local {
+                index: local_index,
+                name: String::new(),
+            },
+            type_id,
+        );
+        let value = value(b);
+        let assign = pe(b, ExprKind::Assign { target, value }, TypeTable::UNIT);
+        let stmt = ps(b, StmtKind::Expr(Operand::Expr(assign)));
+        let block = b.blocks.push(BlockNode {
+            stmts: vec![stmt],
+            span: Span::default(),
+        });
+        Operand::Expr(pe(b, ExprKind::Block(block), TypeTable::UNIT))
+    })
+}
+
+fn mut_ref_of_local(index: u32, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let local = pe(
+            b,
+            ExprKind::Local {
+                index,
+                name: String::new(),
+            },
+            type_id,
+        );
+        Operand::Expr(pe(
+            b,
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: Operand::Expr(local),
+            },
+            type_id,
+        ))
+    })
+}
+
 /// Build a root block from `stmts` and install it as `f`'s arena body.
 fn set_arena_body(f: &mut NirFunction, stmts: Vec<StmtBuild>) {
     let mut body = Body::empty();
@@ -3651,19 +3790,68 @@ fn non_pure_call_with_effect_left_intact() {
     assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }
 
+/// The `Value` a folded `i32` expression yields.
+fn i32_of(value: u64) -> Option<Value> {
+    Some(Value::Int {
+        value,
+        prim: PrimitiveType::I32,
+    })
+}
+
+/// Append locals to `f` so its local indices line up with the arena body the
+/// test installed. Params already occupy `0..params.len()`.
+fn push_locals(f: &mut NirFunction, locals: &[(&str, TypeId, bool)]) {
+    for (name, type_id, is_mut) in locals {
+        f.locals.push(NirLocal {
+            name: (*name).to_string(),
+            type_id: *type_id,
+            is_mut: *is_mut,
+        });
+    }
+}
+
+/// A CTFE-eligible callee with a multi-statement arena body.
+fn make_multi_stmt_fn(
+    name: &str,
+    params: Vec<(&str, TypeId)>,
+    return_type: TypeId,
+    locals: &[(&str, TypeId, bool)],
+    stmts: Vec<StmtBuild>,
+) -> NirFunction {
+    let mut f = make_pure_fn(name, params, return_type, return_none());
+    set_arena_body(&mut f, stmts);
+    push_locals(&mut f, locals);
+    f
+}
+
+/// Fold `f(args)` through a fresh interpreter holding just `f`.
+fn fold_call_of(f: &NirFunction, args: Vec<Build>) -> Option<Value> {
+    let callees = build_callee_map_test(std::slice::from_ref(f));
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    flow_fold(&mut interp, &call_expr(f, args))
+}
+
+/// Assert `f(args)` is left as a `Call`.
+fn assert_call_intact(f: &NirFunction, args: Vec<Build>) {
+    let callees = build_callee_map_test(std::slice::from_ref(f));
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    let (changed, body, e) = reduce_local_into(&mut interp, &call_expr(f, args));
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+}
+
 #[test]
-fn multi_stmt_body_left_intact() {
-    // fn f(x) { let y = x * 2; return y; }
-    // The recognized body shape is single-stmt only, so the fold
-    // declines.
-    let mut f = make_pure_fn(
+fn multi_stmt_let_sequence_folds() {
+    // fn f(x) { let y = x * 2; return y; }  f(3) → 6
+    let f = make_multi_stmt_fn(
         "f",
         vec![("x", TypeTable::I32)],
         TypeTable::I32,
-        return_none(), // placeholder, replaced below
-    );
-    set_arena_body(
-        &mut f,
+        &[("y", TypeTable::I32, false)],
         vec![
             let_stmt_b(
                 "y",
@@ -3679,20 +3867,277 @@ fn multi_stmt_body_left_intact() {
             return_stmt(local_expr(1, TypeTable::I32)),
         ],
     );
-    // local 1 = `y`; pushing it makes `f.local_count()` (== locals.len()) 2.
-    f.locals.push(NirLocal {
-        name: "y".to_string(),
-        type_id: TypeTable::I32,
-        is_mut: false,
-    });
+    assert_eq!(fold_call_of(&f, vec![int_lit(3, TypeTable::I32, "3")]), i32_of(6));
+}
 
+#[test]
+fn multi_stmt_chained_lets_fold() {
+    // fn f(x) { let a = x + 1; let b = a * 3; return b; }  f(4) → 15
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![("x", TypeTable::I32)],
+        TypeTable::I32,
+        &[("a", TypeTable::I32, false), ("b", TypeTable::I32, false)],
+        vec![
+            let_stmt_b(
+                "a",
+                1,
+                TypeTable::I32,
+                binary(
+                    NirBinaryOp::Add,
+                    local_expr(0, TypeTable::I32),
+                    int_lit(1, TypeTable::I32, "1"),
+                    TypeTable::I32,
+                ),
+            ),
+            let_stmt_b(
+                "b",
+                2,
+                TypeTable::I32,
+                binary(
+                    NirBinaryOp::Mul,
+                    local_expr(1, TypeTable::I32),
+                    int_lit(3, TypeTable::I32, "3"),
+                    TypeTable::I32,
+                ),
+            ),
+            return_stmt(local_expr(2, TypeTable::I32)),
+        ],
+    );
+    assert_eq!(fold_call_of(&f, vec![int_lit(4, TypeTable::I32, "4")]), i32_of(15));
+}
+
+/// `fn f(x) { if x > 0 { return 1; } return 2; }`
+fn early_return_fn() -> NirFunction {
+    make_multi_stmt_fn(
+        "f",
+        vec![("x", TypeTable::I32)],
+        TypeTable::I32,
+        &[],
+        vec![
+            if_stmt_b(
+                binary(
+                    NirBinaryOp::Gt,
+                    local_expr(0, TypeTable::I32),
+                    int_lit(0, TypeTable::I32, "0"),
+                    TypeTable::BOOL,
+                ),
+                vec![return_stmt(int_lit(1, TypeTable::I32, "1"))],
+                vec![],
+            ),
+            return_stmt(int_lit(2, TypeTable::I32, "2")),
+        ],
+    )
+}
+
+#[test]
+fn multi_stmt_early_return_taken() {
+    let f = early_return_fn();
+    assert_eq!(fold_call_of(&f, vec![int_lit(5, TypeTable::I32, "5")]), i32_of(1));
+}
+
+#[test]
+fn multi_stmt_early_return_falls_through() {
+    // The then-arm does not run, so execution continues past the `if`.
+    let f = early_return_fn();
+    assert_eq!(fold_call_of(&f, vec![int_lit(0, TypeTable::I32, "0")]), i32_of(2));
+}
+
+#[test]
+fn multi_stmt_assign_rebinds_local() {
+    // fn f() { let mut y = 1; y = y + 41; return y; }  → 42
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("y", TypeTable::I32, true)],
+        vec![
+            let_mut_stmt_b("y", 0, TypeTable::I32, int_lit(1, TypeTable::I32, "1")),
+            assign_local_stmt_b(
+                0,
+                TypeTable::I32,
+                binary(
+                    NirBinaryOp::Add,
+                    local_expr(0, TypeTable::I32),
+                    int_lit(41, TypeTable::I32, "41"),
+                    TypeTable::I32,
+                ),
+            ),
+            return_stmt(local_expr(0, TypeTable::I32)),
+        ],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(42));
+}
+
+#[test]
+fn multi_stmt_trailing_expr_is_the_value() {
+    // A tail expression statement, not a `return`, carries the body's value.
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("y", TypeTable::I32, false)],
+        vec![
+            let_stmt_b("y", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            expr_stmt_b(binary(
+                NirBinaryOp::Mul,
+                local_expr(0, TypeTable::I32),
+                int_lit(3, TypeTable::I32, "3"),
+                TypeTable::I32,
+            )),
+        ],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(6));
+}
+
+#[test]
+fn multi_stmt_undecidable_condition_bails() {
+    // The condition reads a local the engine knows nothing about, so which
+    // branch runs is undecidable and the whole evaluation is abandoned.
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("flag", TypeTable::BOOL, false)],
+        vec![
+            if_stmt_b(
+                local_expr(0, TypeTable::BOOL),
+                vec![return_stmt(int_lit(1, TypeTable::I32, "1"))],
+                vec![],
+            ),
+            return_stmt(int_lit(2, TypeTable::I32, "2")),
+        ],
+    );
+    assert_call_intact(&f, vec![]);
+}
+
+#[test]
+fn multi_stmt_loop_bails() {
+    // Loops are not executed yet; the call must survive rather than skip one.
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[],
+        vec![
+            loop_stmt_b(vec![break_stmt_b(None, None)]),
+            return_stmt(int_lit(7, TypeTable::I32, "7")),
+        ],
+    );
+    assert_call_intact(&f, vec![]);
+}
+
+#[test]
+fn multi_stmt_labeled_block_break_is_caught() {
+    // `L: { break L; }` completes the labeled block; it must not escape and
+    // abandon the evaluation of the statements after it.
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[],
+        vec![
+            labeled_block_stmt_b("L", vec![break_stmt_b(Some("L"), None)]),
+            return_stmt(int_lit(7, TypeTable::I32, "7")),
+        ],
+    );
+    assert_eq!(fold_call_of(&f, vec![]), i32_of(7));
+}
+
+#[test]
+fn multi_stmt_mut_borrowed_local_blocks_fold() {
+    // fn f() { let mut y = 1; sink(&mut y); return y; }
+    // `sink` may write through the borrow, so `y` must not keep its literal.
+    let sink = make_pure_fn(
+        "sink",
+        vec![("p", TypeTable::I32)],
+        TypeTable::UNIT,
+        return_none(),
+    );
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("y", TypeTable::I32, true)],
+        vec![
+            let_mut_stmt_b("y", 0, TypeTable::I32, int_lit(1, TypeTable::I32, "1")),
+            expr_stmt_b(call_expr(&sink, vec![mut_ref_of_local(0, TypeTable::I32)])),
+            return_stmt(local_expr(0, TypeTable::I32)),
+        ],
+    );
+    assert_call_intact(&f, vec![]);
+}
+
+#[test]
+fn multi_stmt_assign_inside_an_operand_blocks_fold() {
+    // fn f() { let mut y = 1; if_expr_writing_y; return y; }
+    // The write sits inside an expression the executor reduces rather than
+    // runs, so `y` must not keep its pre-write literal.
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("y", TypeTable::I32, true)],
+        vec![
+            let_mut_stmt_b("y", 0, TypeTable::I32, int_lit(1, TypeTable::I32, "1")),
+            expr_stmt_b(block_expr_assigning_local(
+                0,
+                TypeTable::I32,
+                int_lit(99, TypeTable::I32, "99"),
+            )),
+            return_stmt(local_expr(0, TypeTable::I32)),
+        ],
+    );
+    assert_call_intact(&f, vec![]);
+}
+
+#[test]
+fn multi_stmt_aggregate_let_projects_a_field() {
+    // fn f() { let p = Point { x: 10, y: 32 }; return p.x; }  → 10
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("p", point, false)],
+        vec![
+            let_stmt_b("p", 0, point, point_lit(point)),
+            return_stmt(field_access(
+                local_expr(0, point),
+                0,
+                "x",
+                TypeTable::I32,
+            )),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&f));
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    assert_eq!(flow_fold(&mut interp, &call_expr(&f, vec![])), i32_of(10));
+}
+
+#[test]
+fn multi_stmt_step_budget_bails() {
+    // Executing a statement costs budget, so a body longer than the budget
+    // leaves the call in place instead of running unbounded.
+    let f = make_multi_stmt_fn(
+        "f",
+        vec![],
+        TypeTable::I32,
+        &[("a", TypeTable::I32, false), ("b", TypeTable::I32, false)],
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(1, TypeTable::I32, "1")),
+            let_stmt_b("b", 1, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            return_stmt(local_expr(1, TypeTable::I32)),
+        ],
+    );
     let callees = build_callee_map_test(std::slice::from_ref(&f));
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
-
-    let expr = call_expr(&f, vec![int_lit(3, TypeTable::I32, "3")]);
-    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    interp.set_step_budget(2);
+    let (changed, body, e) = reduce_local_into(&mut interp, &call_expr(&f, vec![]));
     assert!(!changed);
     assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }
