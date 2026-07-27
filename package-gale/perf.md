@@ -425,11 +425,16 @@ gate.
   continuation before exiting. Cost is proportional to the tokens scanned, with
   no closure, no allocation, and nothing resident for the collector. The probe
   is emitted only where the two readings compete, so a grammar whose optional
-  does not overlap its continuation keeps its previous emit. **Measure the next
-  change here on release `sqlite_parse`** — the 155× was invisible in the
-  per-case dev timings that guided the reverted attempt. What remains is a
-  tail-position loop, where the probe has nothing local to scan and falls back
-  to the FOLLOW mask; `TODO.md` has why the mask cannot answer it.
+  does not overlap its continuation keeps its previous emit. Measured on release
+  `sqlite_parse`, alternating base and probe on one host: base 4.74 / 4.74 /
+  4.65 / 4.80 MB/s, probe 4.71 / 4.69 / 4.97 / 4.76 — the spread inside each
+  group is wider than the gap between them, so the probe costs **nothing
+  measurable** (the machine's noise floor is ~3%, and the `sqlparser-rs`
+  reference row moved 6.98–7.49 MB/s across the same runs). Measure it this way
+  and not on dev per-case timings — the reverted attempt's 155× was invisible
+  in those. What remains is a tail-position loop, where the probe has nothing
+  local to scan and falls back to the FOLLOW mask; `TODO.md` has why the mask
+  cannot answer it.
 - **Recursive lexer rule with `.+?` / `.*?`**
   (`RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`): the static single-pass
   emitter over-consumes nested `/* … */` comments.
