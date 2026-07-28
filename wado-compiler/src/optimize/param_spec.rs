@@ -29,6 +29,18 @@
 //! alone. The facts are flow-insensitive — valid at every program point, so no
 //! dataflow is needed to place them.
 //!
+//! ## Cost
+//!
+//! Unlike the other fixed-point-loop passes this one is not gate-aware: it
+//! re-summarizes every live function each iteration.
+//!
+//! TODO: gate it. Note that staleness is a correctness surface here, not just
+//! a missed rewrite as it is for a local rewrite pass — a summary taken before
+//! a callee gained a write would license an unsound substitution. Collapsing
+//! the per-function body walks was tried first and measured as a wash, because
+//! the costly path is already only taken for a function that has candidate
+//! roots.
+//!
 //! ## Propagation depth
 //!
 //! Each clone records what it knows about its own parameters
