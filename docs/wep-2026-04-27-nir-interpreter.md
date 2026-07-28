@@ -47,6 +47,12 @@ needs to know _which_ definition reaches a use belongs to the `ValueGraph`,
 and a proposal to teach `niri` about control flow between statements should be
 read as a sign the fact belongs on the other side of this line.
 
+What the line does not forbid is a store over the values the engine itself
+constructed. Inside a frame `niri` already executes statements in order, so a
+value built there — and reachable from nothing the frame did not build — can be
+written through and read back without asking which definition reaches a use.
+The program's heap stays the `ValueGraph`'s; the engine's own is the engine's.
+
 ### Effects are the purity gate
 
 CTFE soundness rests on effect inference: a function admitted for
@@ -167,6 +173,12 @@ Sequences:
 - Enum and variant values with their payloads. Today an enum or variant
   pattern cannot be decided, so an `Option` / `Result` accessor exposed by
   inlining leaves a residual match the engine walks past.
+- An aggregate has no way back into the IR. Both exits filter on a scalar and
+  the value pool has no aggregate case, so a constant `String` or `List` the
+  engine reduced is discarded at the boundary rather than emitted. It has a
+  literal form already — the `StructLiteral` over an `ArrayLiteral` that the
+  lower phase emits for a source string — so this is an exit to add, capped by
+  length the way `MAX_SEQ_ELEMENTS` caps the way in.
 - Comparing two literal strings. A string pattern reaches the engine as a
   guard, and deciding it means running the comparison — which is a method call
   taking references, so it waits on the two entries below rather than on the
@@ -178,7 +190,13 @@ Sequences:
   containing one is abandoned.
 - Method calls, excluded because a `&mut self` receiver mutates through the
   call. Worth revisiting now that mod-ref and alias analysis can prove a
-  receiver is not written.
+  receiver is not written — and unnecessary for a receiver the frame owns, which
+  the store below can simply update.
+- A call that returns nothing. Eligibility asks for a value to substitute, which
+  is the right question for replacing a call and the wrong one for running it:
+  a call whose every write lands in a place the frame owns is executable as a
+  statement whatever it returns. Splitting the two — value-CTFE and
+  frame-executable — is what lets a builder-style helper run.
 - Closure calls: an indirect call whose closure is known at the call site is
   never resolved to a direct call, so neither inlining nor CTFE can reach
   through it.
@@ -199,9 +217,74 @@ Sequences:
 ### Sequences
 
 - Writes. A sequence is read-only to the engine: an element or spine mutation
-  leaves the container non-constant instead of producing the updated value. A
-  compile-time call that fills a table in a loop therefore does not fold, which
-  is the workload the wasm-CTFE backend below is meant to take.
+  leaves the container non-constant instead of producing the updated value, so
+  a compile-time call that fills a buffer in a loop does not fold. The store
+  the scope boundary permits is what closes this: a `&mut` denotes a place — a
+  root the frame owns plus a projection path — rather than its referent, and a
+  write through it updates the frame's value for that root. `array_set`,
+  `array_new` and `array_copy` join the element and length builtins the engine
+  already recognizes; a field store updates a field; a `&mut` argument writes
+  back on return. A place whose root the frame did not build stays refused, so
+  today's blanket refusals become the fallback rather than the rule. What still
+  does not fit — a table past the length cap, a fill loop past the step budget —
+  stays the wasm-CTFE backend's case.
+
+### Regions
+
+- A closed block is not evaluated, only a call is. A block that builds a value
+  in locals of its own, writes only to those locals, and yields one of them is
+  as self-contained as a call body and needs no more machinery to run — the
+  difference is that the caller wrote it inline. Recognizing that shape is what
+  turns the string-template case below from a call-level problem, which needs a
+  contract about the caller's buffer, into a frame the engine starts from
+  scratch.
+
+### Compile-time string formatting
+
+A template whose interpolations are all constant still formats at run time.
+`` `n=${42}` `` reaches the end of the optimizer as a buffer allocation, two
+byte pushes, a `Formatter` literal, and a call to `i32::fmt_decimal`, paying a
+digit-count loop and a division loop per evaluation — and keeping the
+formatting code alive in the binary — for four bytes decided at compile time.
+The same string written `"n=42"` folds to a deduplicated constant global.
+Every `${}` over constants, every `to_string()` on a literal, every constant
+`assert` message, and every constant `${x:?}` pays this.
+
+Nothing here waits on trait dispatch: `Display::fmt` is monomorphized and
+devirtualized to a free call before the optimizer runs. What it waits on is the
+four entries above — the aggregate exit, the store, the frame-executable call,
+and region recognition. Together they fold the region to the literal the source
+could have written, after which constant-object globalization deduplicates it
+and DCE drops the formatting functions no live call reaches.
+
+Fold the region, not the call. A region constructs its own buffer, so every
+value inside it is concrete and the engine needs no contract about what a
+`Formatter` does to a buffer it did not build. Rewriting one `fmt` call to
+`push_str(<literal>)` against an unknown buffer — which is what a template with
+a runtime interpolation alongside a constant one would need — is sound only
+under an append-only `Formatter` contract that `internal_raw_bytes_mut` does not
+enforce today; it is a later step, and a decision about that accessor first.
+
+Milestones, each red/green with the fixture first:
+
+- [ ] The aggregate exit, capped by length. A compile-time call returning a
+      constant `String` folds.
+- [ ] Places and the frame store. A compile-time call that fills and returns a
+      `List<u8>` folds.
+- [ ] Frame-executable calls. A call writing through a `&mut` parameter runs.
+- [ ] Region recognition. `` `ab` `` and `` `a${"b"}` `` fold to one literal.
+- [ ] Coverage, in order of engine cost: `bool` / `char` / `String`, then
+      integers, then width / zero-pad / radix specs, then `Inspect`, then
+      floats. Each step measures what it spends against the step budget:
+      integer formatting is two short loops and fits, and `fpfmt` is the
+      candidate for overrunning it — if it does, floats are the wasm-CTFE
+      backend's case rather than a reason to raise the budget.
+- [ ] A remark for a region that nearly folded — one runtime interpolation, or
+      an exhausted budget — so a missed fold is visible instead of silent, plus
+      a `wasm-size` and `benchmark` run to record what the whole thing bought.
+
+A template with any runtime interpolation keeps today's imperative form,
+including the loop-buffer reuse `tmpl_hoist` gives it.
 
 ### wasm-CTFE backend
 
@@ -252,3 +335,8 @@ question, not a design-time one.
 - Where does the wasm-CTFE module cache live — per `compile` invocation or per
   process? Per-invocation is simpler; per-process speeds up watch-mode
   workflows but needs eviction.
+- Is `Formatter` append-only by contract? Partial folding of a single `fmt`
+  call needs the guarantee, and `internal_raw_bytes_mut` currently hands out
+  the whole buffer. Narrowing that accessor would buy the contract; whether it
+  is worth the stdlib churn depends on how much a template mixing constant and
+  runtime interpolations actually costs.
