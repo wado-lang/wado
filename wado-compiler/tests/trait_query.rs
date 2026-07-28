@@ -722,3 +722,29 @@ export fn run() {
         "names the bad supertrait and its trait: {msg}"
     );
 }
+
+#[test]
+fn an_unsatisfiable_bound_blames_the_bound_that_was_written() {
+    let msg = compile_err_contains(
+        r"
+struct Handler {
+    cb: fn(i32) -> i32,
+}
+
+fn sorted<T: Ord>(a: T, b: T) -> bool {
+    return a < b;
+}
+
+export fn run() {
+    let h = Handler { cb: |x| { return x; } };
+    let g = Handler { cb: |x| { return x; } };
+    assert sorted(h, g);
+}
+",
+        "does not implement trait 'Ord'",
+    );
+    assert!(
+        !msg.contains("trait 'Eq'"),
+        "the written bound is the one cause; its supertrait must not be reported too: {msg}"
+    );
+}

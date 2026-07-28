@@ -1493,15 +1493,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         bindings
     }
 
+    /// The name a trait was declared under, undoing a `use ... as` alias. A
+    /// declaration only ever carries its own name, so a bound written through
+    /// an alias has to be translated before it can be matched against one.
+    fn declared_trait_name(&self, trait_name: &str) -> String {
+        self.canonical_decl_key(trait_name).1
+    }
+
+    /// Whether the trait named `trait_name` declares `method_name`. The cheap
+    /// form of [`Self::find_trait_decl_method`], for counting candidates
+    /// without cloning each one's declaration.
+    fn trait_declares_method(&self, trait_name: &str, method_name: &str) -> bool {
+        let trait_name = &self.declared_trait_name(trait_name);
+        let declares = |items: &[Item]| {
+            items.iter().any(|item| {
+                matches!(item, Item::Trait(t)
+                    if t.name == *trait_name && t.methods.iter().any(|m| m.name == method_name))
+            })
+        };
+        self.loaded_modules
+            .iter()
+            .any(|(_, module)| declares(&module.items))
+            || declares(self.current_module_items)
+    }
+
     /// The declaration of `method_name` in the trait named `trait_name`, with
     /// the trait's associated types and declaring module. Loaded modules first,
-    /// then the current one — the search order [`Self::find_method_in_trait_bounds`]
-    /// resolves *and* counts candidates by, so the two cannot disagree.
+    /// then the current one — the search order [`Self::trait_declares_method`]
+    /// counts candidates by, so resolution and counting cannot disagree.
     fn find_trait_decl_method(
         &self,
         trait_name: &str,
         method_name: &str,
     ) -> Option<(ast::Function, Vec<ast::AssociatedTypeDecl>, ModuleSource)> {
+        let trait_name = self.declared_trait_name(trait_name);
         let search = |items: &[Item], module: &ModuleSource| {
             items.iter().find_map(|item| {
                 let Item::Trait(trait_decl) = item else {
@@ -1543,19 +1568,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> Option<(String, MethodInfo)> {
         let bounds = self.elaborate_bound_names(bounds);
-        // One scan per bound, and the winner's declaration is cloned once —
-        // this runs for every type-param method call and every operator on a
-        // bounded receiver.
-        let mut candidates: Vec<String> = Vec::new();
-        let mut resolved = None;
-        for trait_name in &bounds {
-            if let Some(found) = self.find_trait_decl_method(trait_name, method_name) {
-                candidates.push(trait_name.clone());
-                if resolved.is_none() {
-                    resolved = Some((trait_name.clone(), found));
-                }
-            }
-        }
+        // Every bound is scanned — stopping at the first hit is what would hide
+        // the ambiguity — but the scan is by predicate, so only the winner's
+        // declaration is cloned. This runs for every type-param method call and
+        // every operator on a bounded receiver.
+        let candidates: Vec<String> = bounds
+            .iter()
+            .filter(|t| self.trait_declares_method(t, method_name))
+            .cloned()
+            .collect();
+        let resolved = candidates.first().and_then(|trait_name| {
+            self.find_trait_decl_method(trait_name, method_name)
+                .map(|found| (trait_name.clone(), found))
+        });
         if candidates.len() > 1 {
             // Report and keep going with the first candidate. Returning `None`
             // would read to the caller as "no such method", which it then says
@@ -1882,12 +1907,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 vec![type_arg]
             };
-            for bound in self.elaborate_bounds(&param.bounds) {
+            for bound in &param.bounds.clone() {
                 if bound.fn_signature.is_some() {
                     continue;
                 }
                 for &subject in &subjects {
                     self.enforce_single_bound(subject, &bound.name, &param.name, span);
+                }
+            }
+            // A supertrait of a written bound is implied by it, so its failure
+            // has the same one cause and reporting it too would just double up.
+            // It is still *asked*: the question is what drives on-demand
+            // derivation, which is how `T: Ord` alone gets `Eq` synthesized.
+            for bound in self.elaborate_bounds(&param.bounds) {
+                if bound.fn_signature.is_some() || param.bounds.iter().any(|b| b.name == bound.name)
+                {
+                    continue;
+                }
+                for &subject in &subjects {
+                    self.check_and_register_bound(subject, &bound.name);
                 }
             }
         }
@@ -1903,14 +1941,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_name: &str,
         span: Span,
     ) {
-        if self.tysys.type_implements_trait(
-            &self.annotate_ctx,
-            &self.type_lookup(),
-            type_arg,
-            trait_name,
-        ) {
-            self.register_assoc_types_for_concrete_type_and_trait(type_arg, trait_name);
-        } else {
+        if !self.check_and_register_bound(type_arg, trait_name) {
             let type_name = self.tysys.type_id_to_string(type_arg);
             let reason = self.tysys.trait_unimpl_reason_chain(
                 &self.annotate_ctx,
@@ -1926,6 +1957,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
+    }
+
+    /// Whether `type_arg` satisfies `trait_name`, registering its associated
+    /// types when it does. Asking is not free of consequence — the question is
+    /// what records an on-demand derivation request — so callers that do not
+    /// report the answer still need to ask it.
+    pub(super) fn check_and_register_bound(&mut self, type_arg: TypeId, trait_name: &str) -> bool {
+        if !self.tysys.type_implements_trait(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            type_arg,
+            trait_name,
+        ) {
+            return false;
+        }
+        self.register_assoc_types_for_concrete_type_and_trait(type_arg, trait_name);
+        true
     }
 
     /// Register associated type resolutions for a concrete type instantiating a trait.

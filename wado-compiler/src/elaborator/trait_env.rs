@@ -1064,8 +1064,21 @@ impl TraitEnv {
 
         let mut violations = check_all_orphan_rules(modules, &decl_index, &type_decl_index);
 
+        // `canonical_key` resolves through `symbols`, which does not see a
+        // `use { Base as B }` alias; a supertrait written `B` would look
+        // undeclared. The module's import scope carries the alias, so map the
+        // name back to its declared one before asking.
         let resolve_trait = |module: &ModuleSource, name: &str| {
-            decl_index.get(&canonical_key(module, name)).cloned()
+            let scope = module_import_scopes.get(module);
+            let declared = scope
+                .and_then(|s| s.original_names.get(name))
+                .map_or(name, String::as_str);
+            if let Some(source) = scope.and_then(|s| s.sources.get(name))
+                && let Some(loc) = decl_index.get(&(source.clone(), declared.to_string()))
+            {
+                return Some(loc.clone());
+            }
+            decl_index.get(&canonical_key(module, declared)).cloned()
         };
         let (supertrait_closures, cycles) =
             build_supertrait_closures(&trait_decl_headers, &resolve_trait);
@@ -1605,8 +1618,15 @@ type ResolveTrait<'a> = &'a dyn Fn(&ModuleSource, &str) -> Option<TraitDeclLoc>;
 /// Append `bound` unless a bound of that name is already present. Bound lists
 /// are name-keyed everywhere downstream, so a name is the identity here too.
 pub(super) fn push_unique_bound(bounds: &mut Vec<ast::TraitBound>, bound: &ast::TraitBound) {
-    if !bounds.iter().any(|b| b.name == bound.name) {
+    let Some(existing) = bounds.iter_mut().find(|b| b.name == bound.name) else {
         bounds.push(bound.clone());
+        return;
+    };
+    // Same trait twice: keep whichever constrains an associated type. A written
+    // `Collect<Item = u8>` must not be swallowed by a bare `Collect` that a
+    // supertrait closure happened to contribute first.
+    if existing.assoc_types.is_empty() && !bound.assoc_types.is_empty() {
+        *existing = bound.clone();
     }
 }
 
