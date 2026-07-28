@@ -1161,114 +1161,70 @@ fn method_call_info_for_type(
     }
 }
 
-/// Whether `type_id` satisfies a blanket impl's receiver-param `bounds`. Only
-/// the `ReflectStruct` bound is checked structurally (via the `Fields` associated
-/// type registered for every reflected struct); other bounds are treated as
-/// satisfiable, preserving existing blanket dispatch (e.g. `IntoIterator`).
+/// The reflection kind `type_id` is, or `None` when reflection does not cover
+/// it. A type is exactly one kind and its kind is fixed by its declaration, so
+/// this is a structural question — it does not depend on how far the pipeline
+/// has run. A `GenericInstance` takes its base declaration's kind: `Pair<i32>`
+/// is a struct because `Pair` is. The sealed member handles are the one
+/// declared struct reflection never covers.
+fn reflect_kind_of(type_id: TypeId, tt: &TypeTable) -> Option<CompilerItem> {
+    if tt
+        .decl_of_type(type_id)
+        .is_some_and(|decl| tt.is_sealed_reflect_member(decl))
+    {
+        return None;
+    }
+    match tt.get(type_id) {
+        ResolvedType::Struct { .. } => Some(CompilerItem::ReflectStruct),
+        ResolvedType::Variant { .. } => Some(CompilerItem::ReflectVariant),
+        ResolvedType::Enum { .. } => Some(CompilerItem::ReflectEnum),
+        ResolvedType::Flags { .. } => Some(CompilerItem::ReflectFlags),
+        ResolvedType::GenericInstance {
+            name,
+            module_source,
+            ..
+        } => {
+            if tt.find_struct_by_name(name, module_source).is_some() {
+                Some(CompilerItem::ReflectStruct)
+            } else if tt.find_variant_type(name, module_source).is_some() {
+                Some(CompilerItem::ReflectVariant)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Whether `type_id` satisfies a blanket impl's receiver-param `bounds`. A
+/// `Reflect*` bound holds exactly when the receiver is that kind; any other
+/// bound is treated as satisfiable, preserving existing blanket dispatch
+/// (e.g. `IntoIterator`).
 pub(crate) fn receiver_satisfies_blanket_bounds(
     type_id: TypeId,
     bounds: Vec<String>,
     tt: &TypeTable,
 ) -> bool {
-    receiver_satisfies_blanket_bounds_inner(type_id, &bounds, tt, false)
-}
-
-/// A `ReflectStruct` bound is satisfied by any non-generic `struct` (which is
-/// unconditionally `ReflectStruct`-derived). At monomorphize time this is the
-/// registered `Fields` associated type; during trait synthesis, which runs
-/// before `synthesize_reflect` registers it, `allow_pre_reflect_struct` lets a
-/// plain `ResolvedType::Struct` stand in — an original declared struct is always
-/// ReflectStruct-eligible, and only originals appear at synthesis time (monomorphized
-/// generics like a token `EnumCase<Color>` are not `ResolvedType::Struct` there).
-pub(crate) fn receiver_satisfies_blanket_bounds_inner(
-    type_id: TypeId,
-    bounds: &[String],
-    tt: &TypeTable,
-    allow_pre_reflect_struct: bool,
-) -> bool {
     if bounds.is_empty() {
         return true;
     }
+    let kind = reflect_kind_of(type_id, tt);
     let items = tt.compiler_items();
-    let struct_name = items.trait_name(CompilerItem::ReflectStruct).to_string();
-    let variant_name = items.trait_name(CompilerItem::ReflectVariant).to_string();
-    let enum_name = items.trait_name(CompilerItem::ReflectEnum).to_string();
-    let flags_name = items.trait_name(CompilerItem::ReflectFlags).to_string();
-    for bound in bounds {
-        // A type is exactly one reflection kind, so each `Reflect*` bound is
-        // decided by the receiver's kind. Deciding only `ReflectStruct` would
-        // let the other three kinds' derivations claim any receiver at all.
-        let holds = if *bound == struct_name {
-            type_is_reflect(type_id, tt, allow_pre_reflect_struct)
-        } else if *bound == variant_name {
-            type_is_declared_variant(type_id, tt)
-        } else if *bound == enum_name {
-            matches!(tt.get(type_id), ResolvedType::Enum { .. })
-        } else if *bound == flags_name {
-            matches!(tt.get(type_id), ResolvedType::Flags { .. })
-        } else {
-            true
-        };
-        if !holds {
-            return false;
+    let reflect_bounds = [
+        CompilerItem::ReflectStruct,
+        CompilerItem::ReflectVariant,
+        CompilerItem::ReflectEnum,
+        CompilerItem::ReflectFlags,
+    ];
+    bounds.iter().all(|bound| {
+        match reflect_bounds
+            .into_iter()
+            .find(|item| bound == items.trait_name(*item))
+        {
+            Some(required) => kind == Some(required),
+            None => true,
         }
-    }
-    true
-}
-
-/// Whether `type_id` is spelled from a variant declaration. A `GenericInstance`
-/// counts: `Option<i32>` is a variant because `Option` is.
-fn type_is_declared_variant(type_id: TypeId, tt: &TypeTable) -> bool {
-    match tt.get(type_id) {
-        ResolvedType::Variant { .. } => true,
-        ResolvedType::GenericInstance {
-            name,
-            module_source,
-            ..
-        } => tt.find_variant_type(name, module_source).is_some(),
-        _ => false,
-    }
-}
-
-fn type_is_reflect(type_id: TypeId, tt: &TypeTable, allow_pre_reflect_struct: bool) -> bool {
-    if tt
-        .resolve_assoc_type(type_id, crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC)
-        .is_some()
-    {
-        return true;
-    }
-    // A generic instance's projection lives on its base declaration and is
-    // substituted per instantiation, which may not have happened yet. The
-    // definition's presence is the fact — the substitution is mechanical.
-    if matches!(tt.get(type_id), ResolvedType::GenericInstance { .. })
-        && tt.has_generic_assoc_type_def(
-            type_id,
-            crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
-        )
-    {
-        return true;
-    }
-    allow_pre_reflect_struct && is_unsealed_declared_struct(type_id, tt)
-}
-
-/// Whether `type_id` is spelled from a struct declaration that reflection will
-/// cover — the stand-in the pre-reflect window accepts. A `GenericInstance`
-/// counts: `Pair<i32>` is a struct because `Pair` is. Sealed member handles are
-/// the one struct reflection never covers.
-fn is_unsealed_declared_struct(type_id: TypeId, tt: &TypeTable) -> bool {
-    let declared = match tt.get(type_id) {
-        ResolvedType::Struct { .. } => true,
-        ResolvedType::GenericInstance {
-            name,
-            module_source,
-            ..
-        } => tt.find_struct_by_name(name, module_source).is_some(),
-        _ => false,
-    };
-    declared
-        && !tt
-            .decl_of_type(type_id)
-            .is_some_and(|decl| tt.is_sealed_reflect_member(decl))
+    })
 }
 
 /// The module of a struct-like `type_id`, used as the disambiguation hint for
@@ -1299,7 +1255,6 @@ pub(crate) fn blanket_dispatch_for(
     trait_name: &str,
     method_name: &str,
     tt: &TypeTable,
-    allow_pre_reflect_struct: bool,
 ) -> Option<(MonomorphInfo, ModuleSource)> {
     let type_key = match RefKind::from_resolved(tt.get(type_id)) {
         Some(kind) => Receiver::Ref(kind),
@@ -1314,7 +1269,7 @@ pub(crate) fn blanket_dispatch_for(
     // registration order. Param and pack projections must come from that same
     // blanket, or the template name would name one kind and the args another.
     let blanket = trait_env.value_blanket_for_receiver(trait_name, type_module.as_ref(), &|bounds| {
-        receiver_satisfies_blanket_bounds_inner(type_id, bounds, tt, allow_pre_reflect_struct)
+        receiver_satisfies_blanket_bounds(type_id, bounds.to_vec(), tt)
     })?;
     let blanket_module = blanket.module.clone();
     let generic_name = LocalMethodName::new(
@@ -1365,7 +1320,6 @@ fn blanket_method_call_info(
         trait_name,
         method_name,
         &ctx.tt.borrow(),
-        false,
     )?;
     Some(MethodCallInfo {
         local_name: local_name.clone(),

@@ -5562,7 +5562,6 @@ fn trait_call_on_type(
             trait_name,
             method_name,
             tt,
-            true,
         )
     };
 
