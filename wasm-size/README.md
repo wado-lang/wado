@@ -21,24 +21,27 @@ Compares WebAssembly binary sizes across different languages.
 
 ## Results
 
+Measured 2026-07-28 with wasi-sdk 25.0, rustc 1.97.1, Zig 0.15.2, Moonbit
+0.1.20260724. Sizes are toolchain- but not host-dependent.
+
 ### hello_world
 
 | Language | Size (bytes) |
 | -------- | -----------: |
 | wado     |        1,983 |
-| c¹       |        2,209 |
+| c        |        3,829 |
 | zig      |        4,449 |
-| moonbit¹ |       22,884 |
+| moonbit  |        9,157 |
 | rust     |       40,365 |
 
 ### pi_approx
 
 | Language | Size (bytes) |
 | -------- | -----------: |
-| wado     |        8,225 |
+| wado     |        6,061 |
 | zig      |       10,608 |
-| c¹       |       14,315 |
-| moonbit¹ |       32,940 |
+| c        |       18,105 |
+| moonbit  |       22,748 |
 | rust     |       59,753 |
 
 ### zlib
@@ -47,9 +50,9 @@ Reads gzip data from stdin and decompresses it.
 
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
-| wado     |       16,183 | stdin + gzip decompress (core:zlib)    |
+| wado     |       16,237 | stdin + gzip decompress (core:zlib)    |
 | zig      |       20,072 | stdin + gzip decompress (std.compress) |
-| c¹       |       30,238 | stdin + gzip decompress (zlib 1.3.1)   |
+| c        |       34,484 | stdin + gzip decompress (zlib 1.3.1)   |
 | rust     |       89,069 | stdin + gzip decompress (zlib-rs)      |
 
 ### sqlite_highlight
@@ -58,12 +61,8 @@ Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
 
 | Language | Size (bytes) | Notes                                       |
 | -------- | -----------: | ------------------------------------------- |
-| wado     |      277,354 | Gale-generated highlighter from `SQLite.g4` |
-| rust¹    |    3,482,397 | tree-sitter + tree-sitter-sequel            |
-
-¹ Carried over from a previous report; not re-measured this round (C and
-Rust's tree-sitter parser need `wasi-sdk`; Moonbit needs a separate manual
-install — see Requirements). Sizes are toolchain- but not host-dependent.
+| wado     |      276,421 | Gale-generated highlighter from `SQLite.g4` |
+| rust     |    3,487,646 | tree-sitter + tree-sitter-sequel            |
 
 ## Usage
 
