@@ -50,14 +50,12 @@ array _and_ one payload per element. The walk covers strings, lists, records,
 tuples, variants, options and results, and ends by releasing the return area
 itself.
 
-Two rules shape it.
-
 Handles are never touched. Lifting _transfers_ an `own<r>` to the host, so
-dropping one here would be a double-drop. Handles count as owning nothing — the
+dropping one would be a double-drop. Handles count as owning nothing — the
 distinction is "owns no memory", not "is not four bytes wide".
 
-A part that owns no memory produces no code, so a result of scalars reduces to
-the single free of its return area.
+A part owning no memory produces no code, so a result of scalars reduces to the
+single free of its return area.
 
 ### Staying in step with lowering
 
@@ -77,16 +75,10 @@ survive.
 The two reclaiming allocators fail loudly in opposite directions, so between them
 they pin both halves of correctness:
 
-- `freelist` traps on a double-free, so a walk that visits a buffer twice cannot
-  pass.
+- `freelist` traps on a double-free, so a walk visiting a buffer twice cannot
+  pass. Running the CM type catalog under it covers every shape the walk takes.
 - `debug` poisons freed memory and never reuses it, so a free that runs too early
   or covers too much corrupts data the test reads back.
-
-The regression tests are a memory-capped reproduction of the leak, an assertion
-that the canonical option tracks the indirect return rather than memory
-ownership, and the CM type catalog round-tripped twice under `freelist` — the
-widest shape corpus available, covering strings, nested lists, tuples, options,
-results, records, variants, flags, enums and newtypes.
 
 Where a leak can be pinned by inspecting the emitted component, that is preferred
 to exhausting a memory cap: the inspection is exact and cheap, while an
@@ -119,7 +111,7 @@ D1 — a top-level `string` parameter was never freed. The caller lowers it into
 guest memory using the guest's own allocator, so the buffer belongs to the guest
 once it has been copied onto the GC heap. Nested strings were already released by
 the lift sites that read them; only the top-level case had no such site. Fixed
-with this WEP, with its own reproduction.
+with this WEP.
 
 D2 — a memory-backed `task.return` result is never freed. `task.return` lifts
 eagerly, so the guest may release the payload as soon as the call returns, but

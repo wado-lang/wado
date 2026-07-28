@@ -71,11 +71,10 @@ pub struct WorldExportPlan {
     /// adapters are synthesized as value-returning functions. The WASI worlds
     /// (CLI, HTTP, kiln) and `async` `--lib` exports keep the async lift.
     pub sync_lift: bool,
-    /// Core function backing the lift's `post-return` canonical option, when
-    /// this export's result owns linear memory. `None` leaves the option off
-    /// entirely — there is nothing to reclaim, and the option is illegal
-    /// alongside `async` anyway, so this is only ever `Some` under
-    /// [`Self::sync_lift`].
+    /// Core function backing the lift's `post-return` canonical option, which
+    /// reclaims the area an indirectly-returned result came back through.
+    /// `None` leaves the option off; the option is illegal alongside `async`,
+    /// so this is only ever `Some` under [`Self::sync_lift`].
     pub post_return_core_name: Option<String>,
     /// This is a `--lib` world export: codegen builds its CM param/result types
     /// from the raw Wado types in [`Self::param_types`] / [`Self::result_type`]

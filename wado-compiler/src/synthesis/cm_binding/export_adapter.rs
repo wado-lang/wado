@@ -746,13 +746,10 @@ pub(super) fn synthesize_lift_from_flat_params(
     match ty {
         Type::Named(named) if named.name == names.string => {
             // String flat ABI: (ptr: i32, len: i32) pointing to linear memory.
-            //
-            // The caller lowered the string into *our* memory through *our*
-            // `realloc`, so the buffer is the guest's to release once
-            // `memory_to_gc_string` has copied it onto the GC heap. Nested
-            // strings are released by the lift site that reads them
-            // (`synthesize_lift_list`, `synthesize_lift_option_inner`); this
-            // is the top-level arm, which had no such site.
+            // The caller lowered it there through *our* `realloc`, so the buffer
+            // is the guest's to release once it has been copied onto the GC
+            // heap. Nested strings are released by the lift site that reads
+            // them; this arm is the only top-level one.
             let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
             let len = local_ref(flat_param_locals[1], "__p", TypeTable::I32);
             let lifted_local = alloc_local(next_local, locals, target_type_id);
@@ -1761,24 +1758,22 @@ fn push_sync_return_epilogue(
 }
 
 /// The core function named by a sync lift's `post-return` canonical option.
-///
-/// Mirrors [`export_binding_func_name`]; the two names differ so the core
-/// module can export both.
+/// Distinct from [`export_binding_func_name`] so the core module exports both.
 pub(super) fn post_return_func_name(export_name: &str) -> String {
     format!("__cm_post_return__{export_name}")
 }
 
 /// Synthesize the `post-return` function for a sync-lifted export, or `None`
-/// when the export returns nothing for the guest to reclaim.
+/// when nothing was allocated for it to reclaim.
 ///
-/// The gate is the indirect return, not memory ownership: a result flattening to
-/// more than one core value is returned through a guest-allocated area, and that
-/// area needs freeing even when nothing hangs off it — a record of two `u32`
-/// owns no memory yet still leaks its eight bytes per call. Ownership only
-/// decides whether the walk that reaches nested buffers emits anything.
+/// The gate is the indirect return, not memory ownership: a result wider than
+/// one core value comes back through a guest-allocated area that leaks without
+/// this, even when nothing hangs off it — a record of two `u32` owns no memory
+/// and still loses its eight bytes per call. Ownership only decides whether the
+/// walk over nested buffers emits anything.
 ///
-/// The canonical ABI calls the function with the lifted core function's results,
-/// which in the indirect case is that single out-pointer.
+/// The canonical ABI calls it with the lifted core function's results, which in
+/// the indirect case is that single out-pointer.
 pub(super) fn synthesize_post_return(
     export_name: &str,
     env: &ExportBindingEnv<'_>,
@@ -1788,15 +1783,13 @@ pub(super) fn synthesize_post_return(
         let tt = env.type_table.borrow();
         compute_export_flat_return_types(ty, env.tir_modules, &tt).len()
     };
-    // Matches `push_sync_return_epilogue`, which allocates the return area under
-    // exactly this condition.
+    // The condition `push_sync_return_epilogue` allocates the area under.
     if flat_count <= 1 {
         return None;
     }
 
-    let names = super::types::CmStdlibNames::from_compiler_items(
-        env.type_table.borrow().compiler_items(),
-    );
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(env.type_table.borrow().compiler_items());
     let shape_ctx = CmShapeContext {
         cm_interface_registry: env.cm_interface_registry,
         cm_package: env.cm_package,

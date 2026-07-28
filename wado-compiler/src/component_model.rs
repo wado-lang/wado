@@ -3196,9 +3196,8 @@ pub trait CmTypeSink {
 }
 
 /// [`CmTypeSink`] that records the names a type walk would export, emitting
-/// nothing. Lets a caller ask which names a signature puts into an interface's
-/// namespace, through the very walk that would put them there — so the answer
-/// cannot drift from what codegen goes on to emit.
+/// nothing — so a caller can ask which names a signature puts into an
+/// interface's namespace through the same walk codegen uses to put them there.
 #[derive(Default)]
 pub struct CmNameSink {
     names: Vec<String>,
@@ -3206,7 +3205,6 @@ pub struct CmNameSink {
 }
 
 impl CmNameSink {
-    /// The CM names claimed so far, in walk order.
     pub fn names(&self) -> &[String] {
         &self.names
     }

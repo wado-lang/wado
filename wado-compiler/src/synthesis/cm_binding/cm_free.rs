@@ -27,10 +27,8 @@ use crate::synthesis::common::{
 
 use super::types::{CmStdlibNames, binary_add, is_unit_type};
 
-/// What [`cm_shape`] needs to classify a type: the registry that resolves named
-/// types, the package scoping those lookups, and the stdlib name snapshot.
-/// Deliberately lighter than `LowerContext` — freeing needs no `TypeTable`,
-/// because it reads the CM value out of memory rather than out of a GC object.
+/// Lighter than `LowerContext`: freeing reads the value out of memory rather
+/// than out of a GC object, so it needs no `TypeTable`.
 pub(super) struct CmShapeContext<'a> {
     pub cm_interface_registry: &'a CmInterfaceRegistry,
     pub cm_package: &'a str,
@@ -40,10 +38,10 @@ pub(super) struct CmShapeContext<'a> {
 /// A part of a CM value: a record field, a variant payload, or a list element.
 pub(super) struct CmField {
     pub shape: CmShape,
-    /// Byte offset from the parent value's address. Always 0 for a list
-    /// element, whose address is computed from the element buffer base.
+    /// Byte offset from the parent's address; 0 for a list element, whose
+    /// address comes from the element buffer base.
     pub offset: u32,
-    /// Canonical ABI size — the element stride for a list element.
+    /// Canonical ABI size — the stride for a list element.
     pub size: u32,
     pub align: u32,
 }
@@ -56,13 +54,12 @@ impl CmField {
 
 /// How a Wado type owns linear memory once lowered to the CM ABI.
 pub(super) enum CmShape {
-    /// Fixed-width and self-contained: integers, floats, `bool`, `char`, unit,
-    /// an `enum` or `flags` discriminant, and every handle — resource,
-    /// `stream`, `future`. Owns nothing.
+    /// Owns nothing: integers, floats, `bool`, `char`, unit, an `enum` or
+    /// `flags` discriminant, and every handle.
     ///
-    /// Handles are `Scalar` because lifting *transfers* them to the host;
-    /// dropping one here would be a double-drop. `Scalar` means "owns no
-    /// memory", never "is four bytes".
+    /// Handles belong here because lifting *transfers* them to the host, so
+    /// dropping one would be a double-drop. `Scalar` means "owns no memory",
+    /// never "is four bytes".
     Scalar,
     /// `string`: `(ptr, len)` at the value's address, `len` bytes at align 1.
     Str,
@@ -72,33 +69,23 @@ pub(super) enum CmShape {
     /// `record` or `tuple`: fields at fixed offsets, no discriminant.
     Record(Vec<CmField>),
     /// `variant`, `option` or `result`: a one-byte discriminant at offset 0
-    /// selecting one payload. Indexed by discriminant value; `None` is a case
-    /// without a payload.
+    /// selecting one payload, indexed by discriminant value.
     Variant(Vec<Option<CmField>>),
 }
 
 impl CmShape {
-    /// Whether freeing this value emits anything at all. Lets the walk skip
-    /// whole subtrees — a `[u32, u32]` record contributes no code.
     pub(super) fn owns_memory(&self) -> bool {
         match self {
             CmShape::Scalar => false,
             CmShape::Str | CmShape::List(_) => true,
             CmShape::Record(fields) => fields.iter().any(CmField::owns_memory),
-            CmShape::Variant(cases) => cases
-                .iter()
-                .flatten()
-                .any(CmField::owns_memory),
+            CmShape::Variant(cases) => cases.iter().flatten().any(CmField::owns_memory),
         }
     }
 }
 
-/// Classify `ty` by how it owns linear memory at the CM boundary.
-///
-/// Mirrors the dispatch of `lower::synthesize_lower_wasi_type_to_memory` — a
-/// named record, a named variant, a tuple, `Option`, `List`, `Result`, and
-/// everything else fixed-width — and takes every layout number from the same
-/// `cm_abi` helpers.
+/// Classify `ty` by how it owns linear memory at the CM boundary, mirroring the
+/// dispatch of `lower::synthesize_lower_wasi_type_to_memory`.
 pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
     let resolved = ctx.cm_interface_registry.resolve_type(ty);
     let names = ctx.names;
@@ -117,10 +104,7 @@ pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
                 Some(ctx.cm_package),
             )
             .offsets[1];
-            CmShape::Variant(vec![
-                None,
-                payload_case(&g.args[0], payload_offset, ctx),
-            ])
+            CmShape::Variant(vec![None, payload_case(&g.args[0], payload_offset, ctx)])
         }
         Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
             let payload_offset = cm_abi::layout_result_with_registry_scoped(
@@ -135,10 +119,7 @@ pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
                 payload_case(&g.args[1], payload_offset, ctx),
             ])
         }
-        // `Own`/`Borrow`/`Stream`/`Future` are i32 handles the host now owns.
-        Type::Generic(g)
-            if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") =>
-        {
+        Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") => {
             CmShape::Scalar
         }
         Type::Reference(_) | Type::MutReference(_) => CmShape::Scalar,
@@ -149,8 +130,7 @@ pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
     }
 }
 
-/// A named type is a registry record, a registry variant, or a fixed-width
-/// leaf (primitive, `enum`, `flags`, resource handle).
+/// A registry record, a registry variant, or a fixed-width leaf.
 fn named_shape(named: &NamedType, ctx: &CmShapeContext<'_>) -> CmShape {
     let Some(source) = ctx
         .cm_interface_registry
@@ -192,7 +172,6 @@ fn named_shape(named: &NamedType, ctx: &CmShapeContext<'_>) -> CmShape {
     CmShape::Scalar
 }
 
-/// Lay `types` out as a record/tuple and describe each field.
 fn field_list(types: &[Type], ctx: &CmShapeContext<'_>) -> Vec<CmField> {
     let offsets = cm_abi::layout_fields_with_registry_scoped(
         types.iter(),
@@ -216,8 +195,7 @@ fn field_of(ty: &Type, offset: u32, ctx: &CmShapeContext<'_>) -> CmField {
     }
 }
 
-/// A variant case's payload, or `None` when the case carries nothing to free —
-/// either it has no payload at all, or its payload is unit.
+/// A case's payload, or `None` when it is unit and so carries nothing to free.
 fn payload_case(ty: &Type, offset: u32, ctx: &CmShapeContext<'_>) -> Option<CmField> {
     if is_unit_type(ty) {
         return None;
@@ -225,10 +203,8 @@ fn payload_case(ty: &Type, offset: u32, ctx: &CmShapeContext<'_>) -> Option<CmFi
     Some(field_of(ty, offset, ctx))
 }
 
-/// Free every linear-memory buffer the CM value at `addr` owns.
-///
-/// `addr` must be evaluable more than once; callers pass a local reference.
-/// Emits nothing when the value owns no memory.
+/// Free every linear-memory buffer the CM value at `addr` owns. `addr` is
+/// evaluated more than once, so callers pass a local reference.
 pub(super) fn synthesize_free_cm_value(
     shape: &CmShape,
     addr: &TirExpr,
@@ -237,7 +213,7 @@ pub(super) fn synthesize_free_cm_value(
 ) -> Vec<TirStmt> {
     match shape {
         CmShape::Scalar => vec![],
-        CmShape::Str => vec![free_ptr_len(addr, 1)],
+        CmShape::Str => vec![free_ptr_len(addr, 1, 1)],
         CmShape::List(elem) => free_list(elem, addr, next_local, locals),
         CmShape::Record(fields) => fields
             .iter()
@@ -250,15 +226,10 @@ pub(super) fn synthesize_free_cm_value(
     }
 }
 
-/// `realloc(load(addr), load(addr + 4) * stride, align, 0)` — the shared shape
-/// of `string` and `list`, whose `(ptr, len)` pair sits at the value's address.
-/// The `len > 0` guard mirrors the lowering side, which allocates nothing for
-/// an empty payload, and keeps the `debug` allocator's poison length exact.
-fn free_ptr_len(addr: &TirExpr, align: u32) -> TirStmt {
-    free_ptr_len_strided(addr, 1, align)
-}
-
-fn free_ptr_len_strided(addr: &TirExpr, stride: u32, align: u32) -> TirStmt {
+/// Release the buffer behind the `(ptr, len)` pair at `addr`, shared by `string`
+/// and `list`. The `len > 0` guard mirrors the lowering side, which allocates
+/// nothing for an empty payload, and keeps `debug`'s poison length exact.
+fn free_ptr_len(addr: &TirExpr, stride: u32, align: u32) -> TirStmt {
     let ptr = builtin_call("i32_load", vec![addr.clone()], TypeTable::I32);
     let len = builtin_call(
         "i32_load",
@@ -354,14 +325,11 @@ fn free_list(
         ));
         body.push(expr_stmt(assign(
             local_ref(i_local, "__free_i", TypeTable::I32),
-            binary_add(
-                local_ref(i_local, "__free_i", TypeTable::I32),
-                i32_const(1),
-            ),
+            binary_add(local_ref(i_local, "__free_i", TypeTable::I32), i32_const(1)),
         )));
         stmts.push(loop_stmt(block(body)));
     }
-    stmts.push(free_ptr_len_strided(addr, elem.size, elem.align));
+    stmts.push(free_ptr_len(addr, elem.size, elem.align));
     stmts
 }
 

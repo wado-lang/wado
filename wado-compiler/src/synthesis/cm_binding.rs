@@ -616,10 +616,8 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                 adapter,
             ));
 
-            // A synchronous lift returns its value through guest-allocated
-            // memory; `post-return` is the ABI's only channel for handing that
-            // memory back. Async lifts return through `task.return`, where the
-            // option is not even permitted.
+            // `post-return` is illegal alongside `async`, so only a synchronous
+            // lift can reclaim its return area this way.
             if matches!(strategy, ExportReturnStrategy::SyncReturn)
                 && let Some(post_return) = synthesize_post_return(&export.name, &env)
             {
@@ -632,11 +630,10 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
         }
     }
 
-    // After the per-export loop: the name check walks every export signature
-    // through the CM type engine, which recurses without a depth guard, so it
-    // must not see a signature `validate_boundary_representable` would have
-    // rejected. A recursive type reaches the engine only if this runs first,
-    // and overflows the stack instead of producing that diagnostic.
+    // Must follow the loop above: the name check walks signatures through the CM
+    // type engine, which recurses without a depth guard, so a recursive type has
+    // to be rejected by `validate_boundary_representable` first or it overflows
+    // the stack instead of getting that diagnostic.
     if is_lib_world {
         validate_lib_interface_names(&world_info, &project.cm_interface_registry)?;
     }
@@ -660,68 +657,32 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
     Ok(())
 }
 
-/// Reject two library exports that would claim the same name in the synthesized
-/// interface.
+/// Reject a library whose exports would claim one interface name twice.
 ///
 /// A Component Model interface has one namespace covering its types *and* its
 /// functions — "An interface has a single namespace which means that none of the
-/// defined names can collide" — and names in it must be unique
-/// case-insensitively (`WIT.md`). Wado gives types and functions separate
-/// namespaces, so `variant Shape` alongside `export fn shape` reads as
-/// unambiguous right up until both kebab-case to `shape` at the boundary. Left
-/// to codegen, that surfaces as a Wasm validation failure reported as a compiler
-/// bug, when it is the source that has to change.
-///
-/// The exported type names come from the same walk codegen uses to emit them, so
-/// the set checked here is the set that lands in the instance.
+/// defined names can collide" — with case-insensitive uniqueness (`WIT.md`).
+/// Wado keeps the two apart, so `variant Shape` beside `export fn shape` reads
+/// as unambiguous until both kebab-case to `shape`. Left to codegen it surfaces
+/// as a Wasm validation failure reported as a compiler bug, when it is the
+/// source that has to change.
 fn validate_lib_interface_names(
     world_info: &WorldInfo,
     cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
 ) -> Result<(), String> {
-    let mut type_gen = match world_info.exports.first().and_then(|e| e.from_interface_fq.as_deref())
-    {
-        Some(fq) => crate::component_model::CmTypeGen::with_interface_hint(fq),
-        None => crate::component_model::CmTypeGen::new(),
-    };
-    let mut sink = crate::component_model::CmNameSink::default();
-    let no_resources = IndexMap::default();
-    let mut walk = |ty: &crate::ast::Type| {
-        let resolved = cm_interface_registry.resolve_type_preserving_local_newtypes(ty);
-        type_gen.ast_type_to_cm(&mut sink, &resolved, cm_interface_registry, &no_resources);
-    };
-    for export in &world_info.exports {
-        for (_, ty) in &export.params {
-            walk(ty);
-        }
-        if let Some(ty) = &export.return_type {
-            walk(ty);
-        }
-    }
-
-    // The Wado types behind each exported CM name, so a collision can name both
-    // sides. A user type's CM name is `to_kebab` of its Wado name, applied by
-    // the registry when it records the type.
-    let mut wado_names: IndexMap<String, IndexSet<String>> = IndexMap::default();
-    for export in &world_info.exports {
-        for (_, ty) in &export.params {
-            collect_named_types(ty, &mut wado_names);
-        }
-        if let Some(ty) = &export.return_type {
-            collect_named_types(ty, &mut wado_names);
-        }
-    }
+    let exported = exported_cm_type_names(world_info, cm_interface_registry);
+    let wado_names = wado_names_by_cm_name(world_info);
     let describe = |cm_name: &str| match wado_names.get(cm_name).and_then(IndexSet::first) {
         Some(wado) => format!("type `{wado}` (exported as `{cm_name}`)"),
         None => format!("type `{cm_name}`"),
     };
 
-    // One claim per name, first claimant wins the error message's "already".
     let mut claimed: IndexMap<String, String> = IndexMap::default();
-    for cm_name in sink.names() {
-        // Two Wado types kebab-casing onto one CM name never reach the sink
+    for cm_name in &exported {
+        // Two Wado types kebab-casing onto one CM name never reach `exported`
         // twice: `CmTypeGen` caches by CM name, so the second silently reuses
-        // the first one's type and the two records merge. Catch it from the
-        // signatures, where both names are still distinct.
+        // the first one's type and the two merge. Catch it from the signatures,
+        // where both names are still distinct.
         if let Some(wado) = wado_names.get(cm_name)
             && wado.len() > 1
         {
@@ -762,9 +723,50 @@ fn validate_lib_interface_names(
     Ok(())
 }
 
-/// Group the named types reachable from `ty` by the CM name they kebab-case to,
-/// so a collision can be reported with the Wado names behind it — and so two
-/// types landing on one name are visible at all.
+/// The CM type names the export signatures put into the interface, taken from
+/// the same walk codegen uses to emit them.
+fn exported_cm_type_names(
+    world_info: &WorldInfo,
+    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
+) -> Vec<String> {
+    let mut type_gen = match world_info
+        .exports
+        .first()
+        .and_then(|e| e.from_interface_fq.as_deref())
+    {
+        Some(fq) => crate::component_model::CmTypeGen::with_interface_hint(fq),
+        None => crate::component_model::CmTypeGen::new(),
+    };
+    let mut sink = crate::component_model::CmNameSink::default();
+    let no_resources = IndexMap::default();
+    for ty in export_signature_types(world_info) {
+        let resolved = cm_interface_registry.resolve_type_preserving_local_newtypes(ty);
+        type_gen.ast_type_to_cm(&mut sink, &resolved, cm_interface_registry, &no_resources);
+    }
+    sink.names().to_vec()
+}
+
+/// The Wado types behind each CM name the signatures mention. A user type's CM
+/// name is `to_kebab` of its Wado name, applied by the registry when it records
+/// the type, so this inverts that exactly.
+fn wado_names_by_cm_name(world_info: &WorldInfo) -> IndexMap<String, IndexSet<String>> {
+    let mut out = IndexMap::default();
+    for ty in export_signature_types(world_info) {
+        collect_named_types(ty, &mut out);
+    }
+    out
+}
+
+fn export_signature_types(world_info: &WorldInfo) -> impl Iterator<Item = &crate::ast::Type> {
+    world_info.exports.iter().flat_map(|export| {
+        export
+            .params
+            .iter()
+            .map(|(_, ty)| ty)
+            .chain(export.return_type.as_ref())
+    })
+}
+
 fn collect_named_types(ty: &crate::ast::Type, out: &mut IndexMap<String, IndexSet<String>>) {
     use crate::ast::Type;
     match ty {
@@ -791,10 +793,7 @@ fn collect_named_types(ty: &crate::ast::Type, out: &mut IndexMap<String, IndexSe
         Type::Reference(inner) | Type::MutReference(inner) => collect_named_types(inner, out),
         // Not representable at the CM boundary; a signature carrying one is
         // rejected by `validate_boundary_representable` before this runs.
-        Type::Function(_)
-        | Type::TypePackSpread(_, _)
-        | Type::Infer(_)
-        | Type::Error(_) => {}
+        Type::Function(_) | Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
     }
 }
 

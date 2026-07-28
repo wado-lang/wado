@@ -203,10 +203,8 @@ pub fn is_variant_payload_field(field_name: &str) -> bool {
 
 /// Kebab-case a world export's function name for the Component Model boundary.
 ///
-/// Wado function identifiers are `[a-z0-9_]`, so replacing underscores already
-/// yields a valid CM extern name; already-kebab WASI names (`run`, `handle`) are
-/// unchanged. Kept apart from [`to_kebab`], which additionally splits word
-/// boundaries in `PascalCase` type names.
+/// Wado function identifiers are `[a-z0-9_]`, so replacing underscores suffices.
+/// Distinct from [`to_kebab`], which also splits `PascalCase` word boundaries.
 pub fn kebab_export_name(name: &str) -> String {
     name.replace('_', "-")
 }

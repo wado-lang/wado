@@ -1,25 +1,17 @@
-//! Return-buffer reclamation for synchronously-lifted `--lib` exports.
+//! Buffer reclamation at the synchronously-lifted `--lib` boundary.
 //!
-//! A non-`async` `--lib` export is lifted with `sync_lift`. When it returns a
-//! memory-backed value — `string`, `list<T>`, a composite via outptr — the guest
-//! allocates the payload with `realloc` and hands the host a pointer. The
-//! Canonical ABI's only mechanism for telling the guest that the host has
-//! finished reading is the `post-return` option of `canon lift`
-//! (`CanonicalABI.md`).
+//! A non-`async` `--lib` export returning a value wider than one core value
+//! hands the host a pointer into guest memory. The Canonical ABI's only channel
+//! for telling the guest the host has finished reading is the `post-return`
+//! option of `canon lift` (`CanonicalABI.md`).
 //!
-//! The tests cap guest memory well below the total payload they move, so a
-//! per-call leak exhausts the cap while correct reclamation stays flat. They run
-//! under `freelist` — the library world's own default — which also traps on
-//! double-free, so an over-eager free walk fails here too.
+//! The runtime tests cap guest memory well below the total payload they move, so
+//! a per-call leak exhausts the cap while correct reclamation stays flat. They
+//! run under `freelist` — the library world's own default — which also traps on
+//! double-free, so an over-eager free fails here too.
 //!
-//! Covered:
-//!
-//! - the returned payload, reclaimed through `post-return`;
-//! - an incoming `string` parameter, whose buffer the caller allocated with the
-//!   guest's `realloc` and which the export binding releases once it has copied
-//!   it onto the GC heap;
-//! - the canonical option itself: present when the result owns memory, absent
-//!   when it does not.
+//! Covered: the returned payload, an incoming `string` parameter, and the
+//! canonical option itself, which tracks the indirect return.
 
 #![allow(unused_crate_dependencies)]
 
@@ -212,10 +204,9 @@ fn lib_sync_lift_param_buffer_is_reclaimed_o2() {
     run_param(OptLevel::O2);
 }
 
-/// One memory-owning result and one that owns nothing, so the assertion below
-/// pins every direction of the canonical option in a single component: a result
-/// that owns a buffer, one that owns nothing but is still returned indirectly,
-/// and one returned in a core result with no allocation at all.
+/// Every direction of the canonical option in one component: a result that owns
+/// a buffer, one that owns nothing but is still returned indirectly, and one
+/// returned in a core result with no allocation at all.
 const OPTION_SOURCE: &str = r#"
 struct Pair {
     a: u32,
@@ -274,4 +265,3 @@ fn post_return_tracks_the_indirect_return() {
          its lift must carry no `post-return`:\n{direct}"
     );
 }
-

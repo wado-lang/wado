@@ -73,10 +73,10 @@ pub struct Package {
     /// Populated by `synthesis::cm_binding` when export adapters are synthesized.
     /// For example: `"run"` → `"__cm_export__run"`.
     pub export_binding_names: IndexMap<String, String>,
-    /// Maps world export name → `post-return` function name, for the
-    /// sync-lifted exports whose result owns linear memory. Populated
-    /// alongside `export_binding_names`; absent for every other export, which
-    /// gets no `post-return` canonical option at all.
+    /// Maps world export name → `post-return` function name, for the sync-lifted
+    /// exports that return indirectly. Populated alongside
+    /// `export_binding_names`; absent for every other export, which gets no
+    /// `post-return` canonical option.
     pub post_return_binding_names: IndexMap<String, String>,
     /// Flattened CM ABI parameter types for the `task-return` canonical intrinsic.
     /// Populated by `synthesis::cm_binding` when an export returns a Result type.

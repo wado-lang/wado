@@ -591,8 +591,6 @@ fn register_exports(ctx: &mut WirContext<'_>) {
             );
         }
 
-        // The lift's `post-return` names a core function, so it needs its own
-        // core export for codegen to alias.
         if let Some(post_return) = &export.post_return_core_name {
             let fq = format!("{entry_source}/{post_return}");
             let Some(func_id) = ctx.func_map.get(&fq) else {

@@ -530,10 +530,9 @@ async fn embedded_stream_round_trip(
     Ok(())
 }
 
-/// Compile the catalog fixture as a library world at `opt_level`.
-///
-/// The default allocator is `debug`, which poisons freed memory and so surfaces
-/// lift/lower use-after-free at the boundary.
+/// Compile the catalog fixture as a library world at `opt_level`, under the
+/// `debug` allocator: it poisons freed memory, surfacing use-after-free at the
+/// boundary.
 fn compile_catalog(opt_level: OptLevel) -> Vec<u8> {
     compile_catalog_with_allocator(opt_level, "debug")
 }
@@ -1395,9 +1394,8 @@ fn cm_lib_rejects_empty_record_boundary_type() {
 }
 
 /// A Component Model interface has one namespace shared by its types and its
-/// functions, and names in it must be unique case-insensitively (`WIT.md`). Wado
-/// source has separate namespaces, so a `PascalCase` type and a `snake_case`
-/// function look unambiguous right up until kebab-casing maps them onto the same
+/// functions (`WIT.md`). Wado keeps the two apart, so a `PascalCase` type and a
+/// `snake_case` function look unambiguous until kebab-casing maps them onto one
 /// CM name. That must be a diagnostic naming both, not an ICE from Wasm
 /// validation.
 #[test]
@@ -1480,15 +1478,10 @@ fn cm_catalog_round_trip_o2() {
 /// Round-trip every value case twice under `freelist`, whose free path traps on
 /// a block that is already free.
 ///
-/// This is the guard for the `post-return` free walk (wado-lang/wado#1683): the
-/// walk visits every buffer a returned value owns, and a shape it visits twice —
-/// a variant case counted under two discriminants, an element freed both in the
-/// loop and with the array — is a double-free. Calling twice also catches a walk
-/// that frees a buffer the host has not finished with, since `freelist` hands the
-/// block straight back on the next call.
-///
-/// The catalog is the widest shape corpus available: strings, nested lists,
-/// tuples, options, results, records, variants, flags, enums and newtypes.
+/// The guard for the `post-return` free walk (wado-lang/wado#1683): a buffer the
+/// walk visits twice is a double-free, and calling twice also catches a buffer
+/// freed while the host still needs it, since `freelist` hands the block straight
+/// back on the next call. The catalog is the widest shape corpus available.
 fn run_double_free_guard(opt_level: OptLevel) {
     let wasm = compile_catalog_with_allocator(opt_level, "freelist");
     let engine = common::engine();
