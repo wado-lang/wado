@@ -153,3 +153,4 @@ history is the SSoT for how the design got here.
 - [Async Canonical Options for `stream.read` / `stream.write`](./wep-2026-07-25-async-stream-canonical.md)
 - [Provider Metadata — Source-Bundled Package Artifacts](./wep-2026-07-26-provider-metadata.md)
 - [Super Traits](./wep-2026-07-27-super-traits.md)
+- [Canonical Type Identity for Synthesized Helpers](./wep-2026-07-28-value-copy-canonical-identity.md)
