@@ -1289,10 +1289,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     pub(crate) fn canonical_decl_key(&self, name: &str) -> (ModuleSource, String) {
-        // An fq receiver name is this very key serialized, so a caller holding
-        // one is asking about the same declaration. Resolve on the simple name;
-        // the module is re-derived below and must agree.
-        let name = name.rsplit('/').next().unwrap_or(name);
         super::elaborator::trait_query::canonical_decl_key_with(
             name,
             &self.current_module_source,
