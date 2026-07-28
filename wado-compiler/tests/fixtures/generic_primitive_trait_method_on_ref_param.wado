@@ -15,6 +15,12 @@ fn sum<T: Add<Output = T>>(a: &T, b: &T) -> T {
     return a.add(b);
 }
 
+// `T` itself instantiated at a reference type: the `&` node comes off and the
+// value underneath is still a reference, so one deref is not enough.
+fn same_value<T: Eq>(a: T, b: T) -> bool {
+    return a == b;
+}
+
 export fn run() {
     assert same(&1, &1);
     assert !same(&1, &2);
@@ -25,6 +31,12 @@ export fn run() {
     let x: f64 = 1.5;
     let y: f64 = 1.5;
     assert same(&x, &y);
+
+    let n: i32 = 5;
+    let m: i32 = 6;
+    assert same_value(&n, &n);
+    assert !same_value(&n, &m);
+    assert same(&(&n), &(&n));
 }
 
 __DATA__

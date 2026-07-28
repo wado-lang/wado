@@ -4533,25 +4533,32 @@ fn try_lower_comparison(
 /// holding one — has no `&` node to drop, so it gets an explicit deref; leaving
 /// it alone handed codegen a `(ref $type)` where the instruction wanted an i32.
 fn unref_operand(operand: &TirExpr, type_table: &TypeTable) -> TirExpr {
-    if let TirExprKind::Unary {
+    let mut expr = if let TirExprKind::Unary {
         op: TirUnaryOp::Ref,
         expr: inner,
     } = &operand.kind
     {
-        return (**inner).clone();
+        (**inner).clone()
+    } else {
+        operand.clone()
+    };
+    // Dropping the `&` node is not the end of it: `T = &i32` leaves the inner
+    // value a reference of its own. Peel one layer at a time until a value is
+    // left, so each `Deref` is typed by what it actually yields.
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = type_table.get(expr.type_id)
+    {
+        let inner = *inner;
+        let span = expr.span;
+        expr = TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: Box::new(expr),
+            },
+            inner,
+            span,
+        );
     }
-    let peeled = type_table.peel_refs(operand.type_id);
-    if peeled == operand.type_id {
-        return operand.clone();
-    }
-    TirExpr::new(
-        TirExprKind::Unary {
-            op: TirUnaryOp::Deref,
-            expr: Box::new(operand.clone()),
-        },
-        peeled,
-        operand.span,
-    )
+    expr
 }
 
 /// Convert a trait method name to a TIR binary operator, if applicable.
