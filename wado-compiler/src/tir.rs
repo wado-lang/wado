@@ -3185,6 +3185,35 @@ impl TypeTable {
         }
     }
 
+    /// The name a struct is *stored* under in the package's struct list and
+    /// named by in a `StructLiteral`: the declaration or instantiation name
+    /// with the head left bare, module disambiguation carried alongside as a
+    /// `ModuleSource` rather than folded into the string.
+    ///
+    /// Every mangler qualifies a declared head by its module; this namespace
+    /// must not, because that is how the struct list is keyed. `None` for a
+    /// type that is not struct-shaped.
+    #[must_use]
+    pub fn struct_decl_name(&self, id: TypeId) -> Option<String> {
+        match self.get(id) {
+            ResolvedType::Struct { name, .. } => Some(name.clone()),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_arg_for_generic(*t))
+                    .collect();
+                Some(if Self::is_tuple_type(name) {
+                    crate::name::mangle_tuple_type(&args)
+                } else {
+                    crate::name::mangle_generic_name(name, &args)
+                })
+            }
+            _ => None,
+        }
+    }
+
     /// The key `id`'s impl blocks are indexed under: the head name as the
     /// source writes it, with the reference kind lifted out.
     ///

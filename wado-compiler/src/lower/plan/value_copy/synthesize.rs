@@ -410,15 +410,20 @@ fn build_copy_return_expr(
     ) {
         return None;
     }
-    // Two same-named structs from distinct modules mangle to the same name
-    // (`mangle_type_name` intentionally does not module-qualify structs), so the
-    // copy body must be built from *this* type's module, not the first match.
+    // The struct list keys on the bare declaration / instantiation name, so
+    // the lookup and the `StructLiteral` it feeds both use that name — a
+    // mangled one qualifies the head by its module and matches nothing.
+    // Two same-named structs from distinct modules share that key, so the
+    // copy body is built from *this* type's module, not the first match.
     let module = match resolved {
         ResolvedType::Struct { module_source, .. }
         | ResolvedType::GenericInstance { module_source, .. } => Some(module_source.clone()),
         _ => None,
     };
-    let mangled = type_table.borrow().mangle_type_name(type_id);
+    let mangled = type_table
+        .borrow()
+        .struct_decl_name(type_id)
+        .expect("struct-shaped type has a stored struct name");
     if let Some(struct_def) = lookup_struct(project, &mangled, module.as_ref()) {
         return Some(build_struct_copy(
             type_id, &mangled, struct_def, v_local, type_table, span,
