@@ -3686,6 +3686,90 @@ fn a_sequence_without_the_builtin_map_stays_a_call() {
     assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }
 
+#[test]
+fn a_shared_reference_reduces_to_what_it_points_at() {
+    // A borrow is not an operation over a value. Evaluating it as one reports
+    // the referent's own constant as non-constant, and `let r = &CONST` then
+    // carries nothing for the reads through `r` to project out of.
+    let Lattice::Const(v) = lattice_of(&shared_ref(
+        array_literal(
+            TypeTable::I32,
+            vec![
+                int_lit(10, TypeTable::I32, "10"),
+                int_lit(20, TypeTable::I32, "20"),
+            ],
+        ),
+        TypeTable::I32,
+    )) else {
+        panic!("a reference to a constant container denotes that container");
+    };
+    assert_eq!(
+        v.field(SeqField::Len.index()).and_then(Value::as_int),
+        Some((2, PrimitiveType::I32))
+    );
+}
+
+#[test]
+fn array_get_reads_an_element_out_of_a_constant_global() {
+    // `TABLE[1]` on `global TABLE: List<i32> = [10, 31];` — the container is
+    // known through the global env, so the element reads out of it.
+    let func_id = next_test_func_id();
+    let map = seq_builtin_map(func_id, SeqBuiltin::Get);
+    let table = TypeTable::new();
+    let module = ModuleSource::default();
+    let backing = Value::seq(
+        TypeTable::I32,
+        vec![
+            Value::Int {
+                value: 10,
+                prim: PrimitiveType::I32,
+            },
+            Value::Int {
+                value: 31,
+                prim: PrimitiveType::I32,
+            },
+        ],
+    )
+    .expect("within the sequence cap");
+    let mut globals = GlobalEnv::default();
+    globals.insert(
+        (module.clone(), "TABLE".to_string()),
+        Lattice::Const(Value::aggregate(
+            TypeTable::I32,
+            vec![
+                (SeqField::Backing.index(), backing),
+                (
+                    SeqField::Len.index(),
+                    Value::Int {
+                        value: 2,
+                        prim: PrimitiveType::I32,
+                    },
+                ),
+            ],
+        )),
+    );
+    let mut interp = Interpreter::new(&table);
+    interp.with_seq_builtins(&map);
+    interp.with_globals(&globals);
+    let call = seq_builtin_call(
+        func_id,
+        vec![
+            shared_ref(
+                field_access(
+                    global_get(module, "TABLE", TypeTable::I32),
+                    SeqField::Backing.index(),
+                    "repr",
+                    TypeTable::I32,
+                ),
+                TypeTable::I32,
+            ),
+            int_lit(1, TypeTable::I32, "1"),
+        ],
+        TypeTable::I32,
+    );
+    assert_eq!(flow_fold(&mut interp, &call), i32_of(31));
+}
+
 fn continue_stmt_b() -> StmtBuild {
     Rc::new(|b| ps(b, StmtKind::Continue))
 }

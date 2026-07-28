@@ -74,9 +74,22 @@ Bindings:
   Mutable and assigned locals are non-constant.
 - Immutable globals whose initializer is constant fold at every read, as do
   the known constant fields of a global (a sequence global's length).
+- A global whose value is not in its slot but in the assignment that fills it —
+  what an extracted initializer and body globalization both leave behind —
+  reads back from that assignment. A global assigned anything that does not
+  reduce, or two disagreeing constants, stays non-constant. Reads inside module
+  initialization need no exception: initializers are ordered by dependency, so
+  a read there already follows the assignment it would fold from.
+- Nothing is read off a global something writes through. `global` without `mut`
+  forbids reassignment, not in-place mutation, so a `&mut self` method, a
+  mutable borrow, or a store to a projection of one makes both its value and
+  its known fields stale — the same discipline a local carrying an aggregate is
+  held to.
 - An aggregate constant binds to a local only when every mention of that local
   merely reads it. `niri` models whole values, not the heap, so a local
   another handle can write through would go stale.
+- A borrow denotes what it points at rather than operating on it, so a local
+  bound to `&CONST` carries the referent and reads project out of it.
 
 Control flow:
 
@@ -135,15 +148,17 @@ Sequences:
   inlining `t.len()` leaves the original method call behind, and counting its
   receiver would refuse every list the caller then reads.
 - An element or length read folds through the array builtins the read lowers
-  to, not through an index node. A read past the end is left alone, since it
+  to, not through an index node. Both the generic builtin and the `u8`
+  specialization are recognized. A read past the end is left alone, since it
   traps at run time.
 - A shared borrow reads as the constant it points at, which is what makes a
   backing array reachable at all — it reaches the builtin as `&arr`. Only a
   shared one: a write goes through a mutable borrow, which stays unmodelled.
 - A constant list's length folds, so a constant-index bounds check on it does
-  too. What this does not yet reach is the element: body globalization hoists
-  the value into a global before the read, and a deferred global's recorded
-  initializer is a placeholder — see the aggregate-globals TODO below.
+  too, and so does the element that check guards — out of a local literal, and
+  out of a global, whose container the engine recovers from the assignment that
+  fills its slot. Only a scalar element reaches the IR; an aggregate one stays
+  inside the engine, as every aggregate does.
 
 ## TODO
 
@@ -181,23 +196,12 @@ Sequences:
 - Guards decided when the engine is only asked what an expression denotes;
   today an arm's bindings are only in scope on the rewriting path.
 
-### Aggregate globals and element projection
+### Sequences
 
-Motivated by
-[Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md),
-which turns read-only constant aggregates into immutable module-scope globals
-and needs `niri` to see through them so the fold cascades.
-
-- Elements of array literals, and an indexed read of a constant global.
-- A global whose value is visible only as the inline store globalization
-  emits, rather than as an initializer. Narrower than it looks once
-  [Global Variables](./wep-2026-01-27-global-variables.md) stops replacing a
-  deferred global's initializer with a placeholder: the initializer becomes
-  readable, and only the values that genuinely need run-time work stay hidden.
-- The cascade this is for: a globalized constant's field and element reads
-  fold to scalars module-wide, the folding and branch-pruning passes reduce
-  further, and the now-unread global drops by DCE. This is the
-  cross-function constant propagation intra-function SROA cannot reach.
+- Writes. A sequence is read-only to the engine: an element or spine mutation
+  leaves the container non-constant instead of producing the updated value. A
+  compile-time call that fills a table in a loop therefore does not fold, which
+  is the workload the wasm-CTFE backend below is meant to take.
 
 ### wasm-CTFE backend
 

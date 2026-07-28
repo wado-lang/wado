@@ -169,10 +169,11 @@ there rather than reasoning about it.
 
 ## TODO
 
-- [ ] Record what a Wado-immutable deferred global is assigned, so the
+- [x] Record what a Wado-immutable deferred global is assigned, so the
       interpreter can fold its reads without waiting for the Wasm-level
-      classifier. Decline inside the initialization functions, whose reads may
-      precede the assignment.
+      classifier. Initialization functions need no exception: initializers are
+      ordered by dependency, so a read there follows the assignment it folds
+      from.
 - [x] Represent the two initialization kinds as one choice rather than a
       placeholder standing in for the initializer, so a deferred global's
       recorded initializer can never be mistaken for its value.

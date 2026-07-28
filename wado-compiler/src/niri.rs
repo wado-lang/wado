@@ -1166,6 +1166,14 @@ impl<'a> Interpreter<'a> {
                 };
                 option_to_lattice(eval_binary(l, *op, r))
             }
+            // A shared borrow is not an operation over a value: it denotes what
+            // it points at, which [`Self::expr_to_lattice_a`] models. Handing it
+            // to `eval_unary` would report the referent's own constant as
+            // non-constant and bury it.
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                ..
+            } => Lattice::Unevaluated,
             ExprKind::Unary { op, expr: inner } => {
                 let v = match self.operand_to_lattice_a(body, *inner) {
                     Lattice::Const(v) => v,
