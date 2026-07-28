@@ -143,8 +143,10 @@ pub(super) fn blanket_impl_args_with_projected_packs(
 ) -> Vec<TypeId> {
     let mut out = args.to_vec();
     if out.len() == 1 {
-        for assoc in trait_env.blanket_projected_pack_assocs(trait_name, Some(blanket_module)) {
-            if let Some(ty) = type_table.resolve_assoc_type(out[0], &assoc) {
+        for (bound_trait, assoc) in
+            trait_env.blanket_projected_pack_assocs(trait_name, Some(blanket_module))
+        {
+            if let Some(ty) = type_table.resolve_trait_assoc_type(out[0], &bound_trait, &assoc) {
                 out.push(ty);
             }
         }
@@ -3158,7 +3160,9 @@ impl Monomorphizer {
                         .trait_env
                         .blanket_projected_pack_assocs(tn, Some(bm))
                         .iter()
-                        .filter_map(|assoc| type_table.resolve_assoc_type(recv_inner, assoc))
+                        .filter_map(|(bound_trait, assoc)| {
+                            type_table.resolve_trait_assoc_type(recv_inner, bound_trait, assoc)
+                        })
                         .collect(),
                     _ => Vec::new(),
                 };

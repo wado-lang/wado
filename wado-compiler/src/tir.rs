@@ -2185,6 +2185,55 @@ impl TypeTable {
         self.resolve_generic_assoc_type_mono(concrete_id, assoc_name)
     }
 
+    /// The registered resolution of `trait_name::assoc_name` on `concrete_id`.
+    /// Unlike [`Self::resolve_assoc_type`] this cannot be confused by a name
+    /// several traits share; unlike
+    /// [`Self::resolve_trait_assoc_type_of_instance`] it does not substitute a
+    /// generic definition, so it needs no interning.
+    pub fn resolve_trait_assoc_type(
+        &self,
+        concrete_id: TypeId,
+        trait_name: &str,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        self.assoc_type_resolutions
+            .get(&(concrete_id, trait_name.to_string(), assoc_name.to_string()))
+            .copied()
+    }
+
+    /// [`Self::resolve_assoc_type_of_instance`] for a caller that knows which
+    /// trait declares the associated type. The untyped form scans every trait
+    /// and gives up when two disagree, so a name several traits share — the
+    /// reflection kinds all spell their member channel `Members` — is only
+    /// unambiguous here.
+    pub fn resolve_trait_assoc_type_of_instance(
+        &mut self,
+        concrete_id: TypeId,
+        trait_name: &str,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        let key = (concrete_id, trait_name.to_string(), assoc_name.to_string());
+        if let Some(&resolved) = self.assoc_type_resolutions.get(&key) {
+            return Some(resolved);
+        }
+        let type_args = match self.get(concrete_id).clone() {
+            ResolvedType::GenericInstance { type_args, .. } => type_args,
+            _ => return None,
+        };
+        let def_key = (
+            self.decl_of_type(concrete_id)?,
+            trait_name.to_string(),
+            assoc_name.to_string(),
+        );
+        let def_type_id = *self.generic_assoc_type_defs.get(&def_key)?;
+        let subst: IndexMap<u32, TypeId> = type_args
+            .iter()
+            .enumerate()
+            .map(|(i, &a)| (i as u32, a))
+            .collect();
+        Some(self.substitute_type_params(def_type_id, &subst))
+    }
+
     /// Substitute `TypeParam` and `TypePack` indices in `type_id` using `substitution`.
     ///
     /// Returns a new `TypeId` with the substitutions applied. Missing indices

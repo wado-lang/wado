@@ -1254,7 +1254,7 @@ pub(crate) fn blanket_dispatch_for(
     base_struct_name: &str,
     trait_name: &str,
     method_name: &str,
-    tt: &TypeTable,
+    tt: &mut TypeTable,
 ) -> Option<(MonomorphInfo, ModuleSource)> {
     let type_key = match RefKind::from_resolved(tt.get(type_id)) {
         Some(kind) => Receiver::Ref(kind),
@@ -1278,13 +1278,18 @@ pub(crate) fn blanket_dispatch_for(
         method_name.to_string(),
     )
     .to_mangled_name();
+    // `impl_type_args` is positional against the impl's type params
+    // (`impl<V, ..P>` → `[receiver, P]`). A blanket that projects a pack the
+    // receiver cannot supply does not apply: instantiating it with the pack
+    // missing would leave the body unable to bind it.
     let mut impl_type_args = vec![type_id];
-    impl_type_args.extend(
-        trait_env
-            .pack_assocs_of_blanket(blanket)
-            .iter()
-            .filter_map(|assoc| tt.resolve_assoc_type(type_id, assoc)),
-    );
+    for (bound_trait, assoc) in trait_env.pack_assocs_of_blanket(blanket) {
+        impl_type_args.push(tt.resolve_trait_assoc_type_of_instance(
+            type_id,
+            &bound_trait,
+            &assoc,
+        )?);
+    }
     Some((
         MonomorphInfo {
             generic_name,
@@ -1319,7 +1324,7 @@ fn blanket_method_call_info(
         &local_name.base_struct_name(),
         trait_name,
         method_name,
-        &ctx.tt.borrow(),
+        &mut ctx.tt.borrow_mut(),
     )?;
     Some(MethodCallInfo {
         local_name: local_name.clone(),

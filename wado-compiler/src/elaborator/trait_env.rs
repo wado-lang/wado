@@ -1315,16 +1315,20 @@ impl TraitEnv {
         &self,
         trait_name: &str,
         type_module: Option<&ModuleSource>,
-    ) -> Vec<String> {
+    ) -> Vec<(String, String)> {
         let Some(blanket) = self.value_blanket_for_trait(trait_name, type_module) else {
             return Vec::new();
         };
         self.pack_assocs_of_blanket(blanket)
     }
 
-    /// [`Self::blanket_projected_pack_assocs`] for a caller that already
-    /// selected the blanket (see [`Self::value_blanket_for_receiver`]).
-    pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<String> {
+    /// The `(declaring trait, associated type)` pairs a value blanket projects
+    /// into type packs, in the order the impl declares them —
+    /// `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` yields
+    /// `[("Bound", "Assoc")]`. The trait is carried because a bare assoc name
+    /// is ambiguous: the reflection kinds all spell their member channel
+    /// `Members`.
+    pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<(String, String)> {
         let Some(header) = self
             .impl_headers
             .get(&(blanket.module.clone(), blanket.ast_id))
@@ -1335,14 +1339,14 @@ impl TraitEnv {
             .type_params
             .iter()
             .flat_map(|tp| &tp.bounds)
-            .flat_map(|bound| &bound.assoc_types)
-            .filter_map(|assoc| match &assoc.ty {
+            .flat_map(|bound| bound.assoc_types.iter().map(move |a| (&bound.name, a)))
+            .filter_map(|(bound_name, assoc)| match &assoc.ty {
                 ast::Type::Tuple(elems)
                     if elems
                         .iter()
                         .any(|e| matches!(e, ast::Type::TypePackSpread(..))) =>
                 {
-                    Some(assoc.name.clone())
+                    Some((bound_name.clone(), assoc.name.clone()))
                 }
                 _ => None,
             })
