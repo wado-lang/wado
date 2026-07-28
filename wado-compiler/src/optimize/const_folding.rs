@@ -617,13 +617,23 @@ impl GlobalStoreCollector<'_> {
 
     /// `Some(true)` when `func_id`'s `self` parameter is `&mut self`,
     /// `Some(false)` when it is `&self` or by-value, `None` when unresolvable.
+    ///
+    /// Read off [`NirParam::is_mut_ref`], captured before boxing: boxing lowers
+    /// `&mut T`, `&T`, and a by-value primitive receiver alike to `Box<T>`, so
+    /// by then the type no longer says which of them mutates its caller's
+    /// storage.
+    ///
+    /// [`NirParam::is_mut_ref`]: crate::nir::NirParam::is_mut_ref
     fn callee_mutates_self(&self, func_id: crate::nir::FuncId) -> Option<bool> {
         let func = self.funcs.get(func_id.index())?.borrow();
         let receiver = func.params.first()?;
-        Some(matches!(
-            self.type_table.get(receiver.type_id),
-            ResolvedType::MutRef(_)
-        ))
+        Some(
+            receiver.is_mut_ref
+                || matches!(
+                    self.type_table.get(receiver.type_id),
+                    ResolvedType::MutRef(_)
+                ),
+        )
     }
 
     /// Mark the global a place roots at as one nothing may be read off, through
