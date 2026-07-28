@@ -9,7 +9,7 @@ use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexSet;
 
 use crate::module_source::ModuleSource;
-use crate::name::LocalMethodName;
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
@@ -372,7 +372,11 @@ pub fn generic_static_call(
     args: Vec<TirExpr>,
     return_type: TypeId,
 ) -> TirExpr {
-    let info = LocalMethodName::new(struct_name.to_string(), None, method_name.to_string());
+    let info = LocalMethodName::new(
+        FqTypeName::declared(&module_source, struct_name),
+        None,
+        method_name.to_string(),
+    );
     let mangled_name = info.to_mangled_name();
     let monomorph_info = if type_args.is_empty() {
         None
@@ -414,7 +418,11 @@ pub fn generic_method_call(
     args: Vec<TirExpr>,
     return_type: TypeId,
 ) -> TirExpr {
-    let info = LocalMethodName::new(struct_name.to_string(), None, method_name.to_string());
+    let info = LocalMethodName::new(
+        FqTypeName::declared(&method_module_source, struct_name),
+        None,
+        method_name.to_string(),
+    );
     let mangled_name = info.to_mangled_name();
     let _n = args.len();
     TirExpr::new(
@@ -535,7 +543,7 @@ pub fn write_str_stmt(
                 name: format!("{formatter_name}::write_str"),
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
-                    formatter_name.to_string(),
+                    FqTypeName::from_mangled(formatter_name.clone()),
                     None,
                     "write_str".to_string(),
                 )),

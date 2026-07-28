@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::compiler_item::CompilerItem;
-use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::synthesis::common::{
     block, local_ref, make_synthetic_method, param_local, return_stmt, synth_span,
 };
@@ -48,7 +48,11 @@ pub fn synthesize_from(module: &mut TirModule) {
         // pre-mangled request string.
         let source_name = module.type_table.borrow().type_name(source);
         let from_trait = mangle_generic_name(&from_trait_name, &[source_name]);
-        let key = MethodName::format_local(&req.target_type_name, Some(&from_trait), "from");
+        let key = MethodName::format_local(
+            &FqTypeName::declared(&module.module_source, &req.target_type_name),
+            Some(&from_trait),
+            "from",
+        );
         if existing.contains(&key) {
             continue;
         }
@@ -75,7 +79,7 @@ fn collect_existing_from_methods(
                     if trait_name == from_trait_name || trait_name.starts_with(from_prefix.as_str())
                     {
                         Some(MethodName::format_local(
-                            &info.base_struct_name(),
+                            &info.fq_base_struct_name(),
                             Some(trait_name),
                             &info.method_name,
                         ))
@@ -127,12 +131,13 @@ fn generate_variant_from(
     let body = block(vec![return_stmt(Some(variant_construct))]);
     let locals = vec![param_local("value", from_type, false)];
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(from_trait.to_string()),
         "from".to_string(),
     );
-    let qualified_name = MethodName::format_local(&req.target_type_name, Some(from_trait), "from");
+    let qualified_name = MethodName::format_local(&target, Some(from_trait), "from");
 
     Some(make_synthetic_method(
         qualified_name,

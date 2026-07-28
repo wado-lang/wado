@@ -3,7 +3,7 @@
 use crate::ast::{self, BinaryOp, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir::{
     FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TypeId, TypeTable,
 };
@@ -1273,7 +1273,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                         // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
                         let mangled_method_name = MethodName::format_local(
-                            &lookup_name,
+                            &FqTypeName::from_mangled(lookup_name.clone()),
                             Some(&trait_info.trait_name),
                             "index_assign",
                         );
