@@ -141,62 +141,48 @@ struct SubstitutedCall {
 /// over their own `Reflect*` bound — and picking the first-registered one would
 /// ask a variant receiver for a struct's `FieldTypes` and key the instance
 /// under args the template never declared.
-pub(super) fn blanket_impl_args_with_projected_packs(
+/// The impl args a pack-projecting blanket dispatch instantiates under, or
+/// `None` when this is not one.
+///
+/// One question, asked once: can this receiver supply every pack this blanket
+/// projects? Splitting it — a guard asking the blanket whether it projects
+/// packs, a helper asking the receiver whether it can supply them — let the two
+/// answer differently and key the same instance two ways.
+pub(super) fn blanket_pack_dispatch_args(
     args: &[TypeId],
     trait_env: &TraitEnv,
     trait_name: &str,
+    method_name: &str,
     blanket_module: &ModuleSource,
+    generic_name: &str,
     type_table: &TypeTable,
-) -> Vec<TypeId> {
-    let mut out = args.to_vec();
-    if out.len() != 1 {
-        return out;
+) -> Option<Vec<TypeId>> {
+    if args.len() != 1 {
+        return None;
     }
-    let receiver = out[0];
-    let Some(blanket) =
+    let receiver = args[0];
+    let blanket =
         trait_env.value_blanket_for_receiver(trait_name, Some(blanket_module), &|bounds| {
             crate::synthesis::template::receiver_satisfies_blanket_bounds(
                 receiver,
                 bounds.to_vec(),
                 type_table,
             )
-        })
-    else {
-        return out;
-    };
-    // All or nothing, the rule the emit side applies: appending a subset would
-    // key this instance under an argument list the template never declared.
-    let mut packs = Vec::new();
-    for (bound_trait, assoc) in trait_env.pack_assocs_of_blanket(blanket) {
-        let Some(ty) = type_table.resolve_trait_assoc_type(receiver, &bound_trait, &assoc) else {
-            return out;
-        };
-        packs.push(ty);
+        })?;
+    // The dispatch names its template by the blanket's receiver param; a
+    // concrete, shape, or ref dispatch spells it otherwise and is not ours.
+    if generic_name != MethodName::format_local(&blanket.param, Some(trait_name), method_name) {
+        return None;
     }
-    out.extend(packs);
-    out
-}
-
-/// Whether `generic_name` is the bare-`T` blanket template for `trait_name` and
-/// that blanket projects type packs. Excludes one-arg blankets and concrete /
-/// shape / ref dispatches, whose `generic_name` is not the param's template.
-pub(super) fn is_pack_blanket_dispatch(
-    trait_env: &TraitEnv,
-    trait_name: &str,
-    method_name: &str,
-    blanket_module: &ModuleSource,
-    generic_name: &str,
-) -> bool {
-    let Some(param) = trait_env.blanket_impl_param_for_trait(trait_name, Some(blanket_module))
-    else {
-        return false;
-    };
-    if generic_name != MethodName::format_local(&param, Some(trait_name), method_name) {
-        return false;
+    let projected = trait_env.pack_assocs_of_blanket(blanket);
+    if projected.is_empty() {
+        return None;
     }
-    !trait_env
-        .blanket_projected_pack_assocs(trait_name, Some(blanket_module))
-        .is_empty()
+    let mut out = args.to_vec();
+    for (bound_trait, assoc) in projected {
+        out.push(type_table.resolve_trait_assoc_type(receiver, &bound_trait, &assoc)?);
+    }
+    Some(out)
 }
 
 /// Whether a blanket impl `impl<T: Bound> Trait for T` may claim the receiver.
@@ -623,27 +609,20 @@ impl Monomorphizer {
                                 .base_trait_name
                                 .as_deref()
                                 .or(info.trait_name.as_deref());
-                            let impl_type_args = match blanket_trait {
-                                Some(tn)
-                                    if monomorph.is_blanket
-                                        && is_pack_blanket_dispatch(
-                                            &self.functions.trait_env,
-                                            tn,
-                                            &info.method_name,
-                                            &func.module_source,
-                                            &monomorph.generic_name,
-                                        ) =>
-                                {
-                                    blanket_impl_args_with_projected_packs(
+                            let impl_type_args = blanket_trait
+                                .filter(|_| monomorph.is_blanket)
+                                .and_then(|tn| {
+                                    blanket_pack_dispatch_args(
                                         &impl_type_args,
                                         &self.functions.trait_env,
                                         tn,
+                                        &info.method_name,
                                         &func.module_source,
+                                        &monomorph.generic_name,
                                         type_table,
                                     )
-                                }
-                                _ => impl_type_args,
-                            };
+                                })
+                                .unwrap_or(impl_type_args);
                             let method_type_args = monomorph.method_type_args.clone();
                             let total = impl_type_args.len() + method_type_args.len();
                             if total >= generic_func.impl_type_params.len() {
@@ -1220,64 +1199,24 @@ impl Monomorphizer {
                     // `ReflectStruct<FieldTypes>` / `ReflectEnum<Members>` /
                     // `ReflectFlags<Members>`; a one-arg blanket, the shape-keyed
                     // ref blankets, and any non-template dispatch project none.
-                    let projects_packs = match (trait_name, info) {
-                        (Some(tn), Some(info)) => is_pack_blanket_dispatch(
+                    let pack_args = match (trait_name, info) {
+                        (Some(tn), Some(info)) => blanket_pack_dispatch_args(
+                            &mono.impl_type_args,
                             &self.functions.trait_env,
                             tn,
                             &info.method_name,
                             &generic_func.module_source,
                             &mono.generic_name,
+                            type_table,
                         ),
-                        _ => false,
+                        _ => None,
                     };
-                    // The direct-name blanket lookup finds a pack blanket even when
-                    // the receiver arg does not satisfy its bound — a non-`ReflectStruct`
-                    // generic struct (a token like `EnumCase<Color>`) or a ref.
-                    // Instantiating it would call `ReflectStruct::<T>::…` on a `T` that has
-                    // no such impl and trap. Skip so the type-specific dispatch
-                    // (bespoke, or the ref blanket) is used instead.
-                    let blanket_bound_ok = {
-                        let recv = mono.impl_type_args.first().copied();
-                        match (trait_name, recv) {
-                            (Some(tn), Some(rt)) => {
-                                if projects_packs {
-                                    let bounds = self
-                                        .functions
-                                        .trait_env
-                                        .blanket_impl_bounds_for_trait(
-                                            tn,
-                                            Some(&generic_func.module_source),
-                                        )
-                                        .unwrap_or_default();
-                                    crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                                        rt, bounds, type_table,
-                                    )
-                                } else {
-                                    true
-                                }
-                            }
-                            _ => true,
-                        }
-                    };
-                    if !blanket_bound_ok {
-                        drop(generic_func);
-                        return;
-                    }
                     let method_info = generic_func.method_info.clone();
                     // impl_type_args and method_type_args are now separate in MonomorphInfo.
                     // For blanket impls, impl_type_args contains the concrete receiver type.
                     // method_type_args comes from the MethodCall's type_args field.
                     // If method_type_args is empty but the callee has type params, infer from args.
-                    let impl_ta = match trait_name {
-                        Some(tn) if projects_packs => blanket_impl_args_with_projected_packs(
-                            &mono.impl_type_args,
-                            &self.functions.trait_env,
-                            tn,
-                            &generic_func.module_source,
-                            type_table,
-                        ),
-                        _ => mono.impl_type_args.clone(),
-                    };
+                    let impl_ta = pack_args.unwrap_or_else(|| mono.impl_type_args.clone());
                     let method_ta = if !type_args.is_empty() {
                         type_args.clone()
                     } else if mono.method_type_args.is_empty()

@@ -319,27 +319,20 @@ impl Monomorphizer {
                     .base_trait_name
                     .as_deref()
                     .or(info.trait_name.as_deref());
-                let impl_ta = match blanket_trait {
-                    Some(tn)
-                        if monomorph.is_blanket
-                            && super::func_inst::is_pack_blanket_dispatch(
-                                &self.functions.trait_env,
-                                tn,
-                                &info.method_name,
-                                &func.module_source,
-                                &monomorph.generic_name,
-                            ) =>
-                    {
-                        super::func_inst::blanket_impl_args_with_projected_packs(
+                let impl_ta = blanket_trait
+                    .filter(|_| monomorph.is_blanket)
+                    .and_then(|tn| {
+                        super::func_inst::blanket_pack_dispatch_args(
                             &monomorph.impl_type_args,
                             &self.functions.trait_env,
                             tn,
+                            &info.method_name,
                             &func.module_source,
+                            &monomorph.generic_name,
                             type_table,
                         )
-                    }
-                    _ => monomorph.impl_type_args.clone(),
-                };
+                    })
+                    .unwrap_or_else(|| monomorph.impl_type_args.clone());
                 let base_struct_name = info.base_struct_name();
                 let candidates: Vec<&str> = vec![&base_struct_name, &info.struct_name];
                 for generic_method_name in names_to_try {
@@ -682,28 +675,19 @@ impl Monomorphizer {
                 let info = method_func.method_info.as_ref();
                 let blanket_trait =
                     info.and_then(|i| i.base_trait_name.as_deref().or(i.trait_name.as_deref()));
-                let projects_packs = match (blanket_trait, info) {
-                    (Some(tn), Some(info)) => super::func_inst::is_pack_blanket_dispatch(
+                let impl_ta = match (blanket_trait, info) {
+                    (Some(tn), Some(info)) => super::func_inst::blanket_pack_dispatch_args(
+                        &mono.impl_type_args,
                         &self.functions.trait_env,
                         tn,
                         &info.method_name,
                         &method_func.module_source,
                         &mono.generic_name,
+                        type_table,
                     ),
-                    _ => false,
-                };
-                let impl_ta = match blanket_trait {
-                    Some(tn) if projects_packs => {
-                        super::func_inst::blanket_impl_args_with_projected_packs(
-                            &mono.impl_type_args,
-                            &self.functions.trait_env,
-                            tn,
-                            &method_func.module_source,
-                            type_table,
-                        )
-                    }
-                    _ => mono.impl_type_args.clone(),
-                };
+                    _ => None,
+                }
+                .unwrap_or_else(|| mono.impl_type_args.clone());
                 let key = InstantiationKey {
                     name: mono.generic_name.clone(),
                     module_source: method_func.module_source.clone(),
