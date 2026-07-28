@@ -1284,11 +1284,14 @@ pub(crate) fn blanket_dispatch_for(
     // missing would leave the body unable to bind it.
     let mut impl_type_args = vec![type_id];
     for (bound_trait, assoc) in trait_env.pack_assocs_of_blanket(blanket) {
-        impl_type_args.push(tt.resolve_trait_assoc_type_of_instance(
-            type_id,
-            &bound_trait,
-            &assoc,
-        )?);
+        let pack = tt.resolve_trait_assoc_type_of_instance(type_id, &bound_trait, &assoc)?;
+        // A generic instance's pack is substituted from its base declaration's
+        // definition, which needs interning and so a mutable table. Record it
+        // against the instance here, the one place that has one, so every later
+        // reader — the monomorphizer rewrites calls behind a shared borrow — is
+        // a plain lookup.
+        tt.register_assoc_type_resolution(type_id, bound_trait, assoc, pack);
+        impl_type_args.push(pack);
     }
     Some((
         MonomorphInfo {
