@@ -640,41 +640,59 @@ fn value_with_path(base: &Value, path: &[u32], new: Value) -> Option<Value> {
     base.with_field(*head, updated)
 }
 
-/// The borrow arguments of the sequence builtins, which do not make the local
-/// they root at stale: the executor performs the write itself, and a read
-/// cannot write at all. Every other borrow still disqualifies its root.
+/// The writes a compile-time frame performs itself, so the local each one roots
+/// at keeps a current value instead of a stale one. Every other write still
+/// disqualifies its root.
 ///
 /// A write counts only at statement position, where the executor runs it — one
 /// buried in a larger expression is merely reduced, so its target would keep a
 /// stale value.
-fn seq_builtin_borrows(body: &Body, seq_builtins: Option<&SeqBuiltinMap>) -> IndexSet<ExprId> {
-    let mut set = IndexSet::default();
-    let Some(map) = seq_builtins else {
-        return set;
-    };
-    let mut statement_calls: IndexSet<ExprId> = IndexSet::default();
-    for (_, stmt) in &body.stmts {
-        if let StmtKind::Expr(op) = &stmt.kind
-            && let Some(e) = op.as_expr()
-        {
-            statement_calls.insert(e);
+#[derive(Default)]
+struct ExecutedWrites {
+    /// The borrow arguments of the sequence builtins. A read cannot write at
+    /// all, so its borrow counts wherever it appears.
+    seq_borrows: IndexSet<ExprId>,
+    /// The `Assign` nodes whose target names a place.
+    place_assigns: IndexSet<ExprId>,
+}
+
+impl ExecutedWrites {
+    fn of(body: &Body, seq_builtins: Option<&SeqBuiltinMap>) -> Self {
+        let mut statements: IndexSet<ExprId> = IndexSet::default();
+        for (_, stmt) in &body.stmts {
+            if let StmtKind::Expr(op) = &stmt.kind
+                && let Some(e) = op.as_expr()
+            {
+                statements.insert(e);
+            }
         }
-    }
-    for (e, node) in &body.exprs {
-        let ExprKind::Call { func_id, args, .. } = &node.kind else {
-            continue;
+        let mut writes = Self::default();
+        for e in &statements {
+            if let ExprKind::Assign { target, .. } = &body.exprs[*e].kind
+                && place_of(body, (*target).into()).is_some()
+            {
+                writes.place_assigns.insert(*e);
+            }
+        }
+        let Some(map) = seq_builtins else {
+            return writes;
         };
-        let Some(builtin) = map.get(func_id) else {
-            continue;
-        };
-        if *builtin == SeqBuiltin::Set && !statement_calls.contains(&e) {
-            continue;
+        for (e, node) in &body.exprs {
+            let ExprKind::Call { func_id, args, .. } = &node.kind else {
+                continue;
+            };
+            let Some(builtin) = map.get(func_id) else {
+                continue;
+            };
+            if *builtin == SeqBuiltin::Set && !statements.contains(&e) {
+                continue;
+            }
+            if let Some(arg) = args.first().and_then(|a| a.expr.as_expr()) {
+                writes.seq_borrows.insert(arg);
+            }
         }
-        if let Some(arg) = args.first().and_then(|a| a.expr.as_expr()) {
-            set.insert(arg);
-        }
+        writes
     }
-    set
 }
 
 /// Every expression id reachable from the body root, in arena order.
@@ -700,12 +718,12 @@ fn reachable_exprs(body: &Body) -> Vec<ExprId> {
 /// Locals of `body` that may bind an aggregate constant: every mention only
 /// reads the value — as a field read's receiver or a `match` / `switch`
 /// scrutinee — and no store target, mutable borrow, method receiver, or
-/// mutable argument roots at them. A borrow in `seq_borrows` is exempt: the
-/// executor performs that write, so the value it leaves is current.
+/// mutable argument roots at them. A write in `writes` is exempt: the executor
+/// performs it, so the value it leaves is current.
 ///
 /// Only the reachable body is scanned: a mention orphaned by an earlier rewrite
 /// cannot run, so it must not disqualify a local.
-fn aggregate_safe_locals(body: &Body, seq_borrows: &IndexSet<ExprId>) -> LocalSet {
+fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
             set.insert(index);
@@ -728,13 +746,15 @@ fn aggregate_safe_locals(body: &Body, seq_borrows: &IndexSet<ExprId>) -> LocalSe
                 }
             }
             ExprKind::Assign { target, .. } => {
-                disqualify_root(body, (*target).into(), &mut disqualified);
+                if !writes.place_assigns.contains(&e) {
+                    disqualify_root(body, (*target).into(), &mut disqualified);
+                }
             }
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr,
             } => {
-                if !seq_borrows.contains(&e) {
+                if !writes.seq_borrows.contains(&e) {
                     disqualify_root(body, *expr, &mut disqualified);
                 }
             }
@@ -851,8 +871,8 @@ impl<'a> Interpreter<'a> {
     /// Record `body`'s [`aggregate_safe_locals`]. The driving visitor calls
     /// this once per function, next to [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
-        let seq_borrows = seq_builtin_borrows(body, self.seq_builtins);
-        self.aggregate_locals = aggregate_safe_locals(body, &seq_borrows);
+        let writes = ExecutedWrites::of(body, self.seq_builtins);
+        self.aggregate_locals = aggregate_safe_locals(body, &writes);
     }
 
     pub fn record_ref_global_aliases(&mut self, body: &Body) {
@@ -2255,19 +2275,52 @@ impl<'a> Interpreter<'a> {
             && let ExprKind::Assign { target, value } = &body.exprs[e].kind
         {
             let (target, value) = (*target, *value);
-            let Some(index) = assign_target_local(body, target) else {
-                return Flow::Bail;
-            };
-            let Lattice::Const(v) = self.eval_operand_a(body, value) else {
-                return Flow::Bail;
-            };
-            self.bind_ctfe_local(index, Lattice::Const(v));
-            return Flow::Fallthrough(Lattice::Unevaluated);
+            return self.exec_store_a(body, target, value);
         }
         match self.eval_operand_a(body, op) {
             lattice @ Lattice::Const(_) => Flow::Fallthrough(lattice),
             Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
         }
+    }
+
+    /// Perform `place = value`, updating the frame's value for the place's
+    /// root. A target that names no place, or a projection into a root the
+    /// frame holds no constant for, bails: stepping past a store it did not
+    /// apply would leave the container stale.
+    fn exec_store_a(&mut self, body: &mut Body, target: ExprId, value: Operand) -> Flow {
+        let Some((root, path)) = place_of(body, target.into()) else {
+            return Flow::Bail;
+        };
+        let Lattice::Const(value) = self.eval_operand_a(body, value) else {
+            return Flow::Bail;
+        };
+        if path.is_empty() {
+            self.bind_ctfe_local(root, Lattice::Const(value));
+            return Flow::Fallthrough(Lattice::Unevaluated);
+        }
+        match self.update_place_a(root, &path, |_| Some(value)) {
+            Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
+            None => Flow::Bail,
+        }
+    }
+
+    /// Rebind the frame's value for `root` with the value at `path` replaced by
+    /// what `update` makes of it. `None` when the frame holds no constant for
+    /// the root — which is what confines a write to values the engine itself
+    /// built — or when the path does not reach a value the update applies to.
+    fn update_place_a(
+        &mut self,
+        root: u32,
+        path: &[u32],
+        update: impl FnOnce(&Value) -> Option<Value>,
+    ) -> Option<()> {
+        let Lattice::Const(container) = self.env.get(&root)?.clone() else {
+            return None;
+        };
+        let target = path.iter().try_fold(&container, |v, i| v.field(*i))?;
+        let updated = value_with_path(&container, path, update(target)?)?;
+        self.bind_ctfe_local(root, Lattice::Const(updated));
+        Some(())
     }
 
     /// Perform `array_set(&mut place, i, v)`, updating the frame's value for the
@@ -2302,19 +2355,10 @@ impl<'a> Interpreter<'a> {
         let Some((index, _)) = index.as_int() else {
             return Some(Flow::Bail);
         };
-        let Some(Lattice::Const(container)) = self.env.get(&root).cloned() else {
-            return Some(Flow::Bail);
-        };
-        let Some(updated) = path
-            .iter()
-            .try_fold(&container, |v, i| v.field(*i))
-            .and_then(|target| target.with_element(index, element))
-            .and_then(|updated| value_with_path(&container, &path, updated))
-        else {
-            return Some(Flow::Bail);
-        };
-        self.bind_ctfe_local(root, Lattice::Const(updated));
-        Some(Flow::Fallthrough(Lattice::Unevaluated))
+        match self.update_place_a(root, &path, |seq| seq.with_element(index, element)) {
+            Some(()) => Some(Flow::Fallthrough(Lattice::Unevaluated)),
+            None => Some(Flow::Bail),
+        }
     }
 
     fn eval_optional_operand_a(&mut self, body: &mut Body, op: Option<Operand>) -> Lattice {
@@ -2438,9 +2482,9 @@ impl<'a> Interpreter<'a> {
         // Execute on a scratch copy so the shared callee body, held under an
         // immutable `Ref`, is not mutated.
         let mut scratch = callee_body.nodes_only_clone();
-        self.record_aggregate_locals(&scratch);
-        self.ctfe_clobbered =
-            clobbered_locals(&scratch, &seq_builtin_borrows(&scratch, self.seq_builtins));
+        let writes = ExecutedWrites::of(&scratch, self.seq_builtins);
+        self.aggregate_locals = aggregate_safe_locals(&scratch, &writes);
+        self.ctfe_clobbered = clobbered_locals(&scratch, &writes);
         for (i, v) in bound.into_iter().enumerate() {
             let index = u32::try_from(i).expect("param count fits u32");
             let lattice = if self.ctfe_clobbered.contains(index) {
@@ -2634,33 +2678,20 @@ impl LoopSnapshot {
 }
 
 /// Locals of `body` that a compile-time frame cannot track, because something
-/// other than a bare assignment at statement position can write them: a
-/// borrow, a mutable argument, a method receiver, a store through a
-/// projection, or an assignment buried inside a larger expression.
-fn clobbered_locals(body: &Body, seq_borrows: &IndexSet<ExprId>) -> LocalSet {
+/// other than a write it performs itself can reach them: a borrow, a mutable
+/// argument, a method receiver, or an assignment buried inside a larger
+/// expression.
+fn clobbered_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
     fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
             set.insert(index);
-        }
-    }
-    // Assignments the executor applies itself. Any other assignment is only
-    // reduced, never run, so its target would keep a stale value.
-    let mut executed: IndexSet<ExprId> = IndexSet::default();
-    for (_, stmt) in &body.stmts {
-        if let StmtKind::Expr(op) = &stmt.kind
-            && let Some(e) = op.as_expr()
-            && matches!(body.exprs[e].kind, ExprKind::Assign { .. })
-        {
-            executed.insert(e);
         }
     }
     let mut set = LocalSet::default();
     for (e, node) in &body.exprs {
         match &node.kind {
             ExprKind::Assign { target, .. } => {
-                if !executed.contains(&e)
-                    || !matches!(body.exprs[*target].kind, ExprKind::Local { .. })
-                {
+                if !writes.place_assigns.contains(&e) {
                     disqualify(body, (*target).into(), &mut set);
                 }
             }
@@ -2668,7 +2699,7 @@ fn clobbered_locals(body: &Body, seq_borrows: &IndexSet<ExprId>) -> LocalSet {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr,
             } => {
-                if !seq_borrows.contains(&e) {
+                if !writes.seq_borrows.contains(&e) {
                     disqualify(body, *expr, &mut set);
                 }
             }
@@ -2687,13 +2718,6 @@ fn clobbered_locals(body: &Body, seq_borrows: &IndexSet<ExprId>) -> LocalSet {
         }
     }
     set
-}
-
-fn assign_target_local(body: &Body, target: ExprId) -> Option<u32> {
-    match &body.exprs[target].kind {
-        ExprKind::Local { index, .. } => Some(*index),
-        _ => None,
-    }
 }
 
 /// The locals a matched pattern binds, paired with the scrutinee sub-values

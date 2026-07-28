@@ -233,10 +233,10 @@ Sequences:
 
 ### Sequences
 
-- The rest of the spine. An element write lands, but the operations that give a
-  container its shape do not: `array_new` should denote a zero-filled sequence
-  and `array_copy` a spliced one, a field store should update a field, and a
-  `&mut` argument should write back into the caller frame's place on return.
+- The rest of the spine. Element and field writes land, but the operations that
+  give a container its shape do not: `array_new` should denote a zero-filled
+  sequence and `array_copy` a spliced one, and a `&mut` argument should write
+  back into the caller frame's place on return.
   Without them a buffer that grows — which is what `String` does the moment it
   outruns its capacity — still abandons the evaluation. What will not fit even
   then — a table past the length cap, a fill loop past the step budget — stays
@@ -317,8 +317,8 @@ Milestones, each red/green with the fixture first:
       folds. No cap of its own is needed: `MAX_SEQ_ELEMENTS` already bounds what
       becomes a sequence value, and a payload past the inline threshold reaches
       the binary as a data segment rather than as code.
-- [ ] Places and the frame store. `array_set` through a frame-owned place
-      lands; `array_new`, `array_copy`, field stores and `&mut` write-back
+- [ ] Places and the frame store. `array_set` and a field store through a
+      frame-owned place land; `array_new`, `array_copy` and `&mut` write-back
       remain, and with them a compile-time call that fills and returns a
       `List<u8>` folds.
 - [ ] Frame-executable calls. A call writing through a `&mut` parameter runs.

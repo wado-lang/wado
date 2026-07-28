@@ -3425,6 +3425,27 @@ fn assign_local_stmt_b(local_index: u32, type_id: TypeId, value: Build) -> StmtB
     })
 }
 
+/// `target = value` as an expression statement, for a target that is a
+/// projection rather than a bare local.
+fn assign_stmt_b(target: Build, value: Build) -> StmtBuild {
+    Rc::new(move |b| {
+        let target = target(b)
+            .as_expr()
+            .expect("a store target is a skeleton expression");
+        let value = value(b);
+        let assign = pe(b, ExprKind::Assign { target, value }, TypeTable::UNIT);
+        ps(b, StmtKind::Expr(Operand::Expr(assign)))
+    })
+}
+
+fn index_expr(receiver: Build, index: Build, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let expr = receiver(b);
+        let index = index(b);
+        Operand::Expr(pe(b, ExprKind::Index { expr, index }, type_id))
+    })
+}
+
 fn block_of(b: &mut Body, stmts: &[StmtBuild]) -> BlockId {
     let ids: Vec<StmtId> = stmts.iter().map(|s| s(b)).collect();
     b.blocks.push(BlockNode {
@@ -3710,16 +3731,18 @@ fn a_write_through_a_frame_owned_place_is_read_back() {
 
 #[test]
 fn a_write_through_a_place_the_frame_does_not_own_is_refused() {
-    // The same write rooted at a parameter: the frame did not build that value,
-    // so the store has nothing current to update and the call stays.
+    // The same write rooted at a global: the frame holds no value for that
+    // root, so the statement abandons the evaluation instead of stepping past a
+    // write it did not apply — the constant the body would return does not come
+    // out either.
     let mut table = TypeTable::new();
     let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
     let set_id = next_test_func_id();
     let builtins = seq_builtin_map(set_id, SeqBuiltin::Set);
 
-    let write_param = make_pure_fn_stmts(
-        "write_param",
-        vec![("c", list_ty)],
+    let write_global = make_pure_fn_stmts(
+        "write_global",
+        vec![],
         TypeTable::U8,
         vec![
             expr_stmt_b(seq_write_call(
@@ -3727,7 +3750,7 @@ fn a_write_through_a_place_the_frame_does_not_own_is_refused() {
                 vec![
                     mut_ref(
                         field_access(
-                            local_expr(0, list_ty),
+                            global_get(ModuleSource::default(), "BUF", list_ty),
                             SeqField::Backing.index(),
                             "repr",
                             list_ty,
@@ -3742,16 +3765,88 @@ fn a_write_through_a_place_the_frame_does_not_own_is_refused() {
             return_stmt(int_lit(7, TypeTable::U8, "7")),
         ],
     );
-    let callees = build_callee_map_test(std::slice::from_ref(&write_param));
+    let callees = build_callee_map_test(std::slice::from_ref(&write_global));
 
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
     interp.with_seq_builtins(&builtins);
 
-    let call = call_expr(&write_param, vec![seq_lit(list_ty, vec![0, 0])]);
-    let (changed, body, e) = reduce_local_into(&mut interp, &call);
-    assert!(!changed);
-    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+    assert_eq!(flow_fold(&mut interp, &call_expr(&write_global, vec![])), None);
+}
+
+#[test]
+fn a_field_store_through_a_frame_owned_place_is_read_back() {
+    // A store into a field of a container the frame built updates the frame's
+    // value for it, so a later read of that field sees what was written.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+
+    let used = || {
+        field_access(
+            local_expr(0, list_ty),
+            SeqField::Len.index(),
+            "used",
+            TypeTable::I32,
+        )
+    };
+    let store_then_read = make_pure_fn_stmts(
+        "store_then_read",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            assign_stmt_b(used(), int_lit(1, TypeTable::I32, "1")),
+            return_stmt(used()),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&store_then_read));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&store_then_read, vec![])),
+        Some(Value::Int {
+            value: 1,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn a_store_through_a_projection_that_is_not_a_place_is_refused() {
+    // An element position is not a field path, so the target names no place the
+    // frame can update — the write is refused rather than stepped past.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+
+    let store_through_index = make_pure_fn_stmts(
+        "store_through_index",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            assign_stmt_b(
+                field_access(
+                    index_expr(local_expr(0, list_ty), int_lit(0, TypeTable::I32, "0"), list_ty),
+                    SeqField::Len.index(),
+                    "used",
+                    TypeTable::I32,
+                ),
+                int_lit(1, TypeTable::I32, "1"),
+            ),
+            return_stmt(int_lit(7, TypeTable::I32, "7")),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&store_through_index));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&store_through_index, vec![])),
+        None,
+    );
 }
 
 #[test]
