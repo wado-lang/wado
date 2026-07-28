@@ -132,9 +132,7 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 - [ ] Strength reduction; reassociation; jump threading; SimplifyCFG.
 - [ ] Cross-block copy propagation.
 - [ ] `param_spec` profitability — specialize only when the constants can decide
-      a branch. A clone that folds nothing is minted today to carry constants
-      along a chain, which duplicates code where the chain never folds and a
-      cold path keeps the original live.
+      a branch, so a chain that never folds stops duplicating code.
 - [ ] Argument promotion — pass a by-reference parameter's fields by value when
       the callee only reads them. `param_spec` covers the constant case; a
       non-constant field still costs a GC load per read.

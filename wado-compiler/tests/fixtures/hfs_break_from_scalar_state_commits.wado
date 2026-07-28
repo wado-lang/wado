@@ -13,16 +13,15 @@
 // without the inline commit at break, the post-loop read sees the
 // initial value.
 //
-// The written values are `self.base + k` rather than bare literals so
-// the post-scalarize store→load forward cannot fold the scalar to a
-// constant and elide the commit. `base` is seeded from a mutable
-// global so `param_spec` cannot specialize `fill` on it either — a
-// literal `base` would propagate into the callee and collapse the
-// body to a single `self.channel = <const>` store, exercising nothing.
+// A fully-constant body would (correctly) collapse to a single
+// `self.channel = <const>` store and exercise nothing, so the shape is
+// kept opaque from both directions: the written values are
+// `self.base + k` rather than literals, `fill` is `#[inline(never)]` so
+// `self.base` stays a parameter field, and `base` is seeded from a
+// mutable global so `param_spec` cannot specialize `fill` on it.
 
 use { println, Stdout } from "core:cli";
 
-// Mutable, so the optimizer treats its value as unknown.
 global mut BASE_SEED: i32 = 0;
 
 struct Actions {

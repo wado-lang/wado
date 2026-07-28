@@ -6,8 +6,8 @@
 // — lifted from the `StructNew` in wir_build — used to keep it, so returning
 // `None` (null) trapped with `wasm trap: null reference`. `split` is
 // `inline("never")` so the call survives to exercise the lifted ABI. The
-// signature is matched without the callee's name: `param_spec` may clone
-// `split` on the constant `tok.used`, and the ABI is what this pins.
+// signature is pinned without the callee's name, since `param_spec` may
+// clone `split` on the constant `tok.used`.
 
 struct Opt {
     raw: String,

@@ -1,27 +1,22 @@
 //! Constant-field specialization of struct-reference parameters.
 //!
-//! Interprocedural constant propagation over struct fields, implemented by
-//! cloning. A hot caller often threads a by-reference config struct whose
-//! fields are compile-time constants — a template's `Formatter` (`width`,
-//! `precision`, `sign_plus`, …) through `fmt_decimal` → `prepare_int_write` →
-//! `write_char_n`. Those callees sit above the inline threshold, so without
-//! this pass the constants never reach them and every `if f.sign_plus` /
-//! `if f.width > 0` survives all the way to Wasm.
+//! Interprocedural constant propagation over struct fields, by cloning. A hot
+//! caller often threads a by-reference config struct of compile-time constants
+//! — a template's `Formatter` through `fmt_decimal` → `prepare_int_write` —
+//! into callees above the inline threshold, where `if f.sign_plus` and
+//! `if f.width > 0` then survive all the way to Wasm.
 //!
-//! For a call `g(…, x, …)` where `x` is a struct local (or an already
-//! specialized parameter) with known constant fields, the pass clones `g`,
-//! substitutes those fields' reads with the constants, and retargets the call
-//! to the clone. It performs no folding itself: the clone's dead branches are
-//! left to `const_fold` / `const_branch_prune` on the next fixed-point
-//! iteration, and `dce` drops the original when every call site specialized.
+//! For `g(…, x, …)` where `x` is a struct local (or an already specialized
+//! parameter) with constant fields, the pass clones `g`, substitutes those
+//! fields' reads, and retargets the call. It folds nothing itself: the clone's
+//! dead branches fall to `const_fold` / `const_branch_prune` next iteration,
+//! and `dce` drops the original once every call site has specialized.
 //!
 //! ## Legality
 //!
 //! A field may be substituted only if the callee never writes it — directly or
 //! through any function it forwards the reference to. [`summarize_params`]
-//! computes that write set as a fixed point over the call graph, alongside the
-//! read set (which drives profitability: a chain like `fmt_decimal` reads no
-//! interesting field itself, only the callees it forwards to do) and an
+//! computes that write set as a fixed point over the call graph, alongside an
 //! `opaque` flag for a reference whose use the summary cannot classify.
 //!
 //! On the caller side [`collect_roots`] keeps a field only when every write to
@@ -31,14 +26,12 @@
 //!
 //! ## Profitability
 //!
-//! A field is profitable when the callee reads it transitively, so a clone
-//! whose own body folds nothing is still minted — that is what carries the
-//! constants along a pass-through link. Where the chain does fold, the clone
-//! replaces the original and costs nothing. Where it does not, and a cold path
-//! (panic / assert formatting) keeps the original live, the clone is pure
-//! duplication: over the fixture corpus 7 of 1897 came out identical to a
-//! surviving original. Whole programs shrink, but the formatting-heavy
-//! fixtures grow 1.5-9.6% of Wasm.
+//! A field counts when the callee reads it *transitively*, so a clone that
+//! folds nothing in its own body is minted deliberately — it carries the
+//! constants along a pass-through link. That pays off when the chain ends in a
+//! fold and the clone replaces the original; it is duplication when the chain
+//! never folds and a cold path keeps the original live. Rare, but it is why
+//! Wasm grows on formatting-heavy code while whole programs shrink.
 //!
 //! TODO: require that the substituted constants can decide a branch.
 //!
@@ -53,12 +46,10 @@
 //!
 //! ## Propagation depth
 //!
-//! Each clone records what it knows about its own parameters
-//! ([`ParamSpecState::param_consts`]), so the next iteration treats the clone's
-//! parameter as a root and specializes one level deeper. The optimizer's
-//! fixed-point loop therefore walks the chain one call deep per iteration; the
-//! clone cache keys on the callee plus its bindings, so a recursive call
-//! specializes to the same clone and terminates.
+//! Each clone records what it knows about its own parameters, so the next
+//! iteration roots on them and reaches one call deeper — the loop walks the
+//! chain one link per iteration. The clone cache keys on callee plus bindings,
+//! so a recursive call resolves to the same clone and terminates.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -88,10 +79,9 @@ const MAX_TOTAL_SPECIALIZATIONS: usize = 128;
 /// costs more in duplicated code than its folded branches can return.
 const MAX_CLONE_EXPRS: usize = 2000;
 
-/// A scalar constant known for one struct field. Portable across functions
-/// (unlike a `ValueId`, which is pool-local), and hashable so it can key the
-/// clone cache. `Int` / `Float` carry the source `TypeId` so a substitution
-/// into a read of a different width is rejected rather than silently widened.
+/// A scalar constant known for one struct field. Portable across functions,
+/// unlike a pool-local `ValueId`, and hashable so it can key the clone cache.
+/// `Int` / `Float` carry their `TypeId` so a width mismatch is rejected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum FieldConst {
     Int(u64, TypeId),
@@ -159,29 +149,27 @@ struct SpecKey {
     bindings: Vec<(u32, u32, FieldConst)>,
 }
 
-/// Cross-iteration state for [`specialize_const_params`]. Lives beside the
-/// optimizer's fixed-point loop so a clone minted in one iteration is reused
-/// (rather than re-minted) by the next, and so the constants a clone's
-/// parameters carry stay available to specialize one call deeper.
+/// Cross-iteration state, so a clone minted in one iteration is reused by the
+/// next rather than re-minted, and its parameters' constants stay available to
+/// specialize one call deeper.
 #[derive(Default)]
 pub(super) struct ParamSpecState {
     /// Minted clones by identity.
     clones: IndexMap<SpecKey, FuncId>,
     /// Clones minted per original callee.
     per_callee: IndexMap<FuncId, usize>,
-    /// What each clone knows about its own parameters, keyed by parameter
-    /// *name*: `dae` renumbers local indices when it drops a parameter, so a
-    /// positional key would silently drift onto a different parameter. Also the
-    /// set of functions that are themselves clones, never specialized again.
+    /// What each clone knows about its own parameters. Keyed by *name*, since
+    /// `dae` renumbers local indices when it drops a parameter. Doubles as the
+    /// set of clones, which are never specialized again.
     param_consts: IndexMap<FuncId, IndexMap<String, ParamSeed>>,
 }
 
 /// What a clone knows about one of its own parameters.
 #[derive(Debug, Clone)]
 struct ParamSeed {
-    /// The struct the parameter referenced when the clone was minted. A later
-    /// pass that reshapes the parameter (`sroa_param`) invalidates the seed, so
-    /// the pointee is re-checked before the constants are believed.
+    /// The struct the parameter referenced when the clone was minted,
+    /// re-checked before the constants are believed — `sroa_param` reshapes
+    /// parameters.
     pointee: TypeId,
     consts: FieldConsts,
 }
@@ -255,9 +243,8 @@ struct Signatures {
     param_struct: Vec<Vec<Option<TypeId>>>,
     /// Whether the function has a body the summary can walk.
     has_body: Vec<bool>,
-    /// Whether the function may be cloned. A `#[compiler_item]` function is the
-    /// unique anchor passes resolve that item by, so a second copy carrying the
-    /// same marker would shadow it.
+    /// Whether the function may be cloned. A `#[compiler_item]` may not: it is
+    /// the unique anchor passes resolve that item by.
     specializable: Vec<bool>,
 }
 
@@ -419,11 +406,9 @@ fn collect_local_uses(
     mark_unclassified_opaque(body, tracked, &classified, out);
 }
 
-/// The place contexts a `FieldAccess` read has to be interpreted against: the
-/// value each assignment target receives, and the referents of `&` / `&mut`.
-/// A node's role depends on its parent, so these are gathered up front rather
-/// than during the classifying walk, which visits parents and children in no
-/// fixed order.
+/// The value each assignment target receives, and the referents of `&` /
+/// `&mut`. Gathered up front because a `FieldAccess`'s role depends on its
+/// parent, which the classifying walk may not have visited yet.
 fn collect_place_contexts(body: &Body) -> (IndexMap<ExprId, Operand>, IndexSet<ExprId>) {
     let mut assigned: IndexMap<ExprId, Operand> = IndexMap::default();
     let mut borrowed: IndexSet<ExprId> = IndexSet::default();
@@ -449,10 +434,9 @@ fn collect_place_contexts(body: &Body) -> (IndexMap<ExprId, Operand>, IndexSet<E
     (assigned, borrowed)
 }
 
-/// Mark every tracked local whose use the classifying walk did not reach — a
-/// return value, an aggregate element, an indirect call, a deref, a
-/// destructuring binding. Its storage is beyond this summary, so assume the
-/// worst.
+/// Mark every tracked local the classifying walk did not reach — a return
+/// value, an aggregate element, an indirect call, a deref, a destructuring
+/// binding. Its storage is beyond this summary.
 fn mark_unclassified_opaque(
     body: &Body,
     tracked: &IndexSet<u32>,
@@ -488,10 +472,9 @@ fn tracked_local(body: &Body, op: Operand, tracked: &IndexSet<u32>) -> Option<u3
     }
 }
 
-/// The local an argument operand names, looking through the `&` / `&mut` a
-/// by-value place is borrowed through at the call. Returns the local index and
-/// the `Local` node, which the caller marks classified so the catch-all walk
-/// does not read the same occurrence as an unmodelled escape.
+/// The local an argument names, looking through the `&` / `&mut` a by-value
+/// place is borrowed through. Returns the `Local` node too, which the caller
+/// marks classified so the catch-all does not re-read it as an escape.
 fn argument_local(body: &Body, arg: Operand) -> Option<(u32, ExprId)> {
     let mut expr = arg.as_expr()?;
     if let ExprKind::Unary {
@@ -990,15 +973,12 @@ struct Clone {
     param_consts: IndexMap<String, ParamSeed>,
 }
 
-/// Clone `site.callee` with its bindings substituted, registering the clone in
-/// the function index so its call sites are born resolved. The caller has
-/// already checked the size budget, so the copy always yields a clone.
+/// Clone `site.callee` with its bindings substituted, registered so its call
+/// sites are born resolved. The size budget is the caller's to check.
 ///
-/// The clone's identity has to differ from the original's along every axis the
-/// call graph keys on. A method's is its `method_name`, not only its function
-/// name — DCE resolves a `MethodCall` target through `method_info` — so leaving
-/// the original's there would route every call to the clone back to the
-/// original, and the clone would be pruned out from under its live call site.
+/// The clone's identity must differ from the original's along every axis the
+/// call graph keys on, `method_name` included — DCE resolves a `MethodCall`
+/// through `method_info`, and would prune the clone as unreachable.
 fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize) -> Clone {
     let mut clone = project.functions[site.callee.index()].borrow().clone();
     let origin = (clone.module_source.clone(), clone.name.clone());
@@ -1089,11 +1069,8 @@ fn signatures_match(project: &NirPackage, original: FuncId, clone: FuncId) -> bo
 }
 
 /// Replace every value-position read of a bound field with its constant.
-///
-/// Matching nothing is a normal outcome, not a failure: a pass-through callee
-/// reads none of the bound fields itself, only the callees it forwards to do.
-/// The clone is still what carries the constants to them, through the
-/// `param_consts` its caller records.
+/// Matching nothing is normal: a pass-through callee reads none of them
+/// itself (see the module's Profitability note).
 fn substitute_fields(
     body: &mut Body,
     locals: &mut Vec<crate::nir::NirLocal>,
