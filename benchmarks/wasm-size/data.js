@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785221566648,
+  "lastUpdate": 1785226497982,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44512,6 +44512,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276421,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "63d29e66c32bd2e8312f9d1598dc1de712d60974",
+          "message": "Merge pull request #1706 from wado-lang/claude/benchmark-http-routing-analysis-0tfux5\n\nperf(optimizer): hoist by-value constants and move more values instead of copying",
+          "timestamp": "2026-07-28T17:03:18+09:00",
+          "tree_id": "d2b275fc0f670269d06736354ae601079e7d6532",
+          "url": "https://github.com/wado-lang/wado/commit/63d29e66c32bd2e8312f9d1598dc1de712d60974"
+        },
+        "date": 1785226497153,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16237,
             "unit": "bytes"
           },
           {
