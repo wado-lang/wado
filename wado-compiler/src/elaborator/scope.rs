@@ -190,11 +190,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Expand a written bound list to include every bound's supertraits, so a
-    /// declared `T: Ord` also demands `Eq`. Only for the sites that *check* a
-    /// bound: what a type parameter is known to satisfy is elaborated on read
-    /// ([`super::tysys::TypeSystem::bound_implies`]), never on registration —
-    /// there are too many registration sites to keep in step.
-    /// `fn(...)` bounds name no trait and pass through untouched.
+    /// declared `T: Ord` also demands `Eq`. For the sites that *check* a bound;
+    /// what a parameter is known to satisfy is elaborated on read instead, by
+    /// [`super::tysys::TypeSystem::bound_implies`]. `fn(...)` bounds name no
+    /// trait and pass through untouched.
     pub(super) fn elaborate_bounds(&self, bounds: &[ast::TraitBound]) -> Vec<ast::TraitBound> {
         let mut elaborated = Vec::with_capacity(bounds.len());
         for bound in bounds {

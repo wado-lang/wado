@@ -107,7 +107,7 @@ Rules:
 - Visibility is independent: a `pub resource X extends Y` is permitted whether `Y` is `pub` or module-private, **provided `Y` is visible at every use site of `X`**. The compiler enforces this; it is not a special rule for `extends`.
 - Cycles are rejected (`A extends B`, `B extends A`).
 
-`extends` does not appear in any other position. There is no `extends` clause on `struct`, `trait`, `enum`, `variant`, `flags`, `effect`, or function declarations in this WEP. (A separate WEP could later introduce trait supertraits with a different syntax, e.g., `:`.)
+`extends` does not appear in any other position. There is no `extends` clause on `struct`, `trait`, `enum`, `variant`, `flags`, `effect`, or function declarations in this WEP. (Trait supertraits use a separate syntax, `:` — see [Super Traits](./wep-2026-07-27-super-traits.md).)
 
 ### No cross-representation conversion in v1
 

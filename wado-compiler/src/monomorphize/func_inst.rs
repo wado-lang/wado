@@ -4542,9 +4542,8 @@ fn unref_operand(operand: &TirExpr, type_table: &TypeTable) -> TirExpr {
     } else {
         operand.clone()
     };
-    // Dropping the `&` node is not the end of it: `T = &i32` leaves the inner
-    // value a reference of its own. Peel one layer at a time until a value is
-    // left, so each `Deref` is typed by what it actually yields.
+    // `T = &i32` leaves the inner value a reference of its own, so peel a
+    // layer at a time and type each `Deref` by what it yields.
     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = type_table.get(expr.type_id)
     {
         let inner = *inner;

@@ -522,10 +522,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Enforce a trait's supertraits against `impl Trait for T`: `T` must
-    /// implement every trait in the closure, not only the direct ones — a
-    /// supertrait satisfied structurally has no impl block of its own to carry
-    /// the rest of the chain.
+    /// Enforce a trait's supertraits against `impl Trait for T`. The whole
+    /// closure, not just the direct ones: a supertrait satisfied structurally
+    /// has no impl block of its own to carry the rest of the chain.
     pub(super) fn enforce_impl_supertraits(&mut self, impl_block: &ast::ImplBlock) {
         let Some(trait_type) = &impl_block.trait_type else {
             return;
@@ -1510,9 +1509,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         bindings
     }
 
-    /// The name a trait was declared under, undoing a `use ... as` alias. A
-    /// declaration only ever carries its own name, so a bound written through
-    /// an alias has to be translated before it can be matched against one.
+    /// The name a trait was declared under, undoing a `use ... as` alias — a
+    /// declaration only ever carries its own name.
     fn declared_trait_name(&self, trait_name: &str) -> String {
         self.canonical_decl_key(trait_name).1
     }
@@ -1535,9 +1533,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The declaration of `method_name` in the trait named `trait_name`, with
-    /// the trait's associated types and declaring module. Loaded modules first,
-    /// then the current one — the search order [`Self::trait_declares_method`]
-    /// counts candidates by, so resolution and counting cannot disagree.
+    /// the trait's associated types and declaring module. Shares its search
+    /// order with [`Self::trait_declares_method`], so counting candidates and
+    /// resolving one cannot disagree.
     fn find_trait_decl_method(
         &self,
         trait_name: &str,
@@ -1571,12 +1569,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .or_else(|| search(self.current_module_items, &self.current_module_source))
     }
 
-    /// Find a method in the trait declarations given by the bound names, read
-    /// in elaborated form: `T: Ord` searches `Ord` and its supertraits.
-    /// Returns (`trait_name`, `MethodInfo`) with `Self` substituted by the
-    /// `TypeParam`'s type. More than one bound declaring the name is ambiguous
-    /// — reported here, then resolved to the first so the caller has something
-    /// well-formed to carry.
+    /// Find a method in the trait declarations the bound names give, read in
+    /// elaborated form: `T: Ord` searches `Ord` and its supertraits. `Self` is
+    /// substituted by the `TypeParam`'s type. More than one bound declaring the
+    /// name is ambiguous — reported, then resolved to the first.
     pub(super) fn find_method_in_trait_bounds(
         &mut self,
         bounds: &[String],
@@ -1585,10 +1581,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> Option<(String, MethodInfo)> {
         let bounds = self.elaborate_bound_names(bounds);
-        // Every bound is scanned — stopping at the first hit is what would hide
-        // the ambiguity — but the scan is by predicate, so only the winner's
-        // declaration is cloned. This runs for every type-param method call and
-        // every operator on a bounded receiver.
+        // Stopping at the first hit would hide the ambiguity, so every bound is
+        // scanned — by predicate, leaving only the winner to clone.
         let candidates: Vec<String> = bounds
             .iter()
             .filter(|t| self.trait_declares_method(t, method_name))
@@ -1599,9 +1593,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|found| (trait_name.clone(), found))
         });
         if candidates.len() > 1 {
-            // Report and keep going with the first candidate. Returning `None`
-            // would read to the caller as "no such method", which it then says
-            // out loud — two contradicting errors for one call.
+            // Keep going with the first candidate: `None` reads to the caller
+            // as "no such method", which it would then report as well.
             let _ = self.emit(TypeError::AmbiguousTraitMethod {
                 method: method_name.to_string(),
                 traits: candidates,
@@ -1933,10 +1926,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.enforce_assoc_type_bounds(subject, bound, span);
                 }
             }
-            // A supertrait of a written bound is implied by it, so its failure
-            // has the same one cause and reporting it too would just double up.
-            // It is still *asked*: the question is what drives on-demand
-            // derivation, which is how `T: Ord` alone gets `Eq` synthesized.
+            // A supertrait failure has the same one cause as the bound that
+            // implied it, so it is asked but not reported — asking is what
+            // drives the derivation that makes `T: Ord` alone satisfy `Eq`.
             for bound in self.elaborate_bounds(&param.bounds) {
                 if bound.fn_signature.is_some() || param.bounds.iter().any(|b| b.name == bound.name)
                 {
@@ -1944,9 +1936,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 for &subject in &subjects {
                     self.check_and_register_bound(subject, &bound.name);
-                    // A constraint written in supertrait position
-                    // (`trait Sink: Collect<Item = i32>`) *is* implied — it is
-                    // the trait's own promise, not a second cause.
                     self.enforce_assoc_type_bounds(subject, &bound, span);
                 }
             }
@@ -1981,20 +1970,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Check the associated-type constraints written on a bound
-    /// (`T: Collect<Item = i32>`) against the type argument. Only the bound's
-    /// trait was ever checked, so a type binding `Item = String` passed and the
-    /// mismatch reached codegen as an invalid module.
-    ///
-    /// Runs after [`Self::enforce_single_bound`], which is what registers the
-    /// argument's bindings in the first place. A binding that stayed parametric
-    /// is left alone, as everywhere else.
+    /// Check a bound's associated-type constraints (`T: Collect<Item = i32>`)
+    /// against the type argument. Runs after [`Self::enforce_single_bound`],
+    /// which is what registers the argument's bindings.
     fn enforce_assoc_type_bounds(&mut self, type_arg: TypeId, bound: &ast::TraitBound, span: Span) {
         for constraint in &bound.assoc_types {
-            // A constraint phrased against `Self` (`type Iter: Iterator<Item =
-            // Self::Item>`) means the *implementing* type, which this site has
-            // no binding for — resolving it here would only report `Self::Item`
-            // as an unknown type. `enforce_impl_assoc_type_bounds` owns those.
+            // `Self` means the implementing type, which this site has no
+            // binding for; `enforce_impl_assoc_type_bounds` owns those.
             if mentions_self(&constraint.ty) {
                 continue;
             }
@@ -2031,9 +2013,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `type_arg` satisfies `trait_name`, registering its associated
-    /// types when it does. Asking is not free of consequence — the question is
-    /// what records an on-demand derivation request — so callers that do not
-    /// report the answer still need to ask it.
+    /// types when it does. Asking is what records an on-demand derivation
+    /// request, so callers that do not report the answer still ask.
     pub(super) fn check_and_register_bound(&mut self, type_arg: TypeId, trait_name: &str) -> bool {
         if !self.tysys.type_implements_trait(
             &self.annotate_ctx,

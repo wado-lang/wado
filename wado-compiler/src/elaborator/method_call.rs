@@ -1677,12 +1677,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )
                     }
                 }
+                // The target names no struct-like type: a trait, an undeclared
+                // name, a turbofish on a non-generic.
                 _ => {
-                    // The target names no struct-like type (a trait, an
-                    // undeclared name, a turbofish on a non-generic). Returning
-                    // a bare error type here left the call undiagnosed, so
-                    // codegen received an expression that pushed nothing. Report
-                    // it the same way the not-found guard below does.
                     let _ = self.emit(TypeError::UnknownFunction {
                         name: format!(
                             "{}::{}",

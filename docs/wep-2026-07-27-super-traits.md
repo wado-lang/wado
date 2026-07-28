@@ -52,16 +52,21 @@ trait a type can be required to implement.
 
 ### Obligation
 
-`impl Sub for T` requires `T: Super` for every direct supertrait of `Sub`,
-reported at the impl block with a reason chain. Structural on-demand derivation
-satisfies the obligation, so a plain struct gets `Ord: Eq` without an `impl Eq`
-being written.
+`impl Sub for T` requires `T: Super` for every trait in `Sub`'s closure, not
+only its direct supertraits — one satisfied structurally has no impl block of
+its own to carry the rest of the chain. Reported at the impl block with a reason
+chain. Structural on-demand derivation satisfies the obligation, so a plain
+struct gets `Ord: Eq` without an `impl Eq` being written.
 
 ### Elaboration
 
 A declared bound `T: Sub` expands to the transitive closure of `Sub` and its
 supertraits, feeding bound checking, on-demand derivation, and method lookup
 alike. The derivation half is what makes `T: Ord` alone sufficient for `==`.
+
+The expansion happens where a bound is read, not where it is registered: a type
+parameter's bounds stay as written, and the question "does `T` implement `Eq`?"
+is what walks the closure. Registration sites are too many to keep in step.
 
 An associated-type constraint written in supertrait position
 (`trait Sink: Collect<Item = i32>`) is checked: a type binding `Item = String`
@@ -94,10 +99,10 @@ obligation holds on arrival, and the redundant `Eq` in `impl<T: Eq + Ord>` comes
 out.
 
 The format-trait pairs (`InspectAlt: Inspect`, `DisplayAlt: Display`, and the
-rest of the `*Alt` family), `Fn: FnMut` — which
+rest of the `*Alt` family), a shared face over the `Reflect*` traits, and the
+stdlib `Fn: FnMut` that
 [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md)
-deferred for want of this syntax — and a shared face over the `Reflect*` traits
-are follow-ups.
+leaves open are follow-ups.
 
 ## Consequences
 
@@ -109,19 +114,3 @@ makes, and the reason a non-implied bound carries neither risk.
 style splits are expressible for the first time — though nothing is split here.
 
 Front-end only: no NIR, WIR, codegen, runtime, or code-size effect.
-
-## Tasks
-
-- [x] Parse the clause onto `ast::TraitDecl`; reject `fn` bounds in it
-- [x] `unparse` and the formatter round-trip it; formatter fixtures
-- [x] Supertrait closure and cycle detection
-- [x] Impl-site obligation check with a reason chain
-- [x] Bound elaboration
-- [x] Ambiguous-method error at the call site
-- [x] `trait Ord: Eq`; drop the redundant `Eq` from `impl<T: Eq + Ord>` sites
-- [x] `wado doc` / `query hover` surface the clause
-
-Bounds elaborate where they are read, not where they are registered: a type
-parameter's declared bounds stay as written, and the question "does `T`
-implement `Eq`?" expands through the closure. The requirement side is left
-alone — the impl obligation already carries supertraits transitively.

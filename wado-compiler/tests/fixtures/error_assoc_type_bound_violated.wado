@@ -1,8 +1,6 @@
-// An associated-type constraint on a bound has to be checked against the type
-// argument. Only the bound's trait was ever checked, so a type binding
-// `Item = String` passed and the mismatch reached codegen as an invalid Wasm
-// module. `Sink`'s constraint is written in supertrait position, which carries
-// the same promise and is checked the same way.
+// An associated-type constraint on a bound is checked against the type
+// argument, whether written on the bound (`take_i32`) or in supertrait
+// position (`Sink`) — the same promise either way.
 trait Collect {
     type Item;
 

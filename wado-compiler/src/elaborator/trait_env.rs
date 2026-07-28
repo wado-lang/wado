@@ -527,10 +527,9 @@ pub struct TraitEnv {
     /// Transitive supertraits per trait declaration. See
     /// [`SupertraitClosureIndex`].
     supertrait_closures: SupertraitClosureIndex,
-    /// The same closures keyed by bare trait name, for the uniquely-named
-    /// traits. Prelude-implicit names (`Ord`, `Eq`, …) reach a query through
-    /// no import, so a scoped lookup cannot canonicalise them; a name declared
-    /// exactly once needs no disambiguation anyway.
+    /// The same closures keyed by bare trait name, for names declared exactly
+    /// once. Prelude-implicit names (`Ord`, `Eq`, …) reach a query through no
+    /// import, so a scoped lookup cannot canonicalise them.
     supertrait_closures_by_name: IndexMap<String, Vec<ast::TraitBound>>,
     /// Free-function type parameters keyed by `(declaring module, function
     /// name)`. Lets `lookup_function_type_params` read a callee's type params
@@ -1064,10 +1063,8 @@ impl TraitEnv {
 
         let mut violations = check_all_orphan_rules(modules, &decl_index, &type_decl_index);
 
-        // `canonical_key` resolves through `symbols`, which does not see a
-        // `use { Base as B }` alias; a supertrait written `B` would look
-        // undeclared. The module's import scope carries the alias, so map the
-        // name back to its declared one before asking.
+        // `canonical_key` goes through `symbols`, which does not carry a
+        // `use ... as` alias; the module's import scope does.
         let resolve_trait = |module: &ModuleSource, name: &str| {
             let scope = module_import_scopes.get(module);
             let declared = scope
@@ -1622,9 +1619,7 @@ pub(super) fn push_unique_bound(bounds: &mut Vec<ast::TraitBound>, bound: &ast::
         bounds.push(bound.clone());
         return;
     };
-    // Same trait twice: keep whichever constrains an associated type. A written
-    // `Collect<Item = u8>` must not be swallowed by a bare `Collect` that a
-    // supertrait closure happened to contribute first.
+    // Same trait twice: the constrained one wins, whichever arrived first.
     if existing.assoc_types.is_empty() && !bound.assoc_types.is_empty() {
         *existing = bound.clone();
     }
@@ -1632,8 +1627,7 @@ pub(super) fn push_unique_bound(bounds: &mut Vec<ast::TraitBound>, bound: &ast::
 
 /// Expand every trait's direct supertraits into its transitive closure,
 /// reporting each trait that reaches itself. A cycle's edge is cut rather than
-/// followed, so the closure stays finite and the rest of the compile proceeds
-/// against a truthful — if incomplete — picture.
+/// followed, keeping the closure finite.
 fn build_supertrait_closures(
     headers: &IndexMap<TraitDeclLoc, TraitDeclHeader>,
     resolve: ResolveTrait<'_>,
@@ -1679,10 +1673,7 @@ fn expand_supertraits(
     let mut closure: Vec<ast::TraitBound> = Vec::new();
     for direct in &header.supertraits {
         let Some(super_loc) = resolve(&loc.0, &direct.name) else {
-            // A name that declares no trait. Blaming the declaration is the
-            // whole point: left to the impl-site obligation, a typo here
-            // surfaces as "type 'X' does not implement 'Undeclrd'" against
-            // every implementor.
+            // Blame the declaration, not every implementor of it.
             cycles.push((
                 loc.0.clone(),
                 TypeError::UnknownSupertrait {
@@ -1693,8 +1684,7 @@ fn expand_supertraits(
             ));
             continue;
         };
-        // Before the push: a trait must not land in its own closure, and
-        // `trait Loop: Loop` would do exactly that.
+        // Before the push: `trait Loop: Loop` must not land in its own closure.
         if let Some(pos) = stack.iter().position(|s| *s == super_loc) {
             report_supertrait_cycle(pos, stack, headers, reported, cycles);
             continue;
