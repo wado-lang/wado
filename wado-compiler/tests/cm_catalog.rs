@@ -531,14 +531,19 @@ async fn embedded_stream_round_trip(
 }
 
 /// Compile the catalog fixture as a library world at `opt_level`.
+///
+/// The default allocator is `debug`, which poisons freed memory and so surfaces
+/// lift/lower use-after-free at the boundary.
 fn compile_catalog(opt_level: OptLevel) -> Vec<u8> {
+    compile_catalog_with_allocator(opt_level, "debug")
+}
+
+fn compile_catalog_with_allocator(opt_level: OptLevel, allocator: &str) -> Vec<u8> {
     let source = std::fs::read_to_string(FIXTURE).expect("read cm_catalog fixture");
     let options = CompilerOptions {
         opt_level,
         lib_world: Some(LIB_WORLD_FQ.to_string()),
-        // The debug allocator poisons freed memory, surfacing lift/lower
-        // use-after-free at the boundary.
-        allocator: Some("debug".to_string()),
+        allocator: Some(allocator.to_string()),
         ..Default::default()
     };
     common::compile_source_with_compiler_options(Path::new(FIXTURE), &source, options)
@@ -1415,4 +1420,90 @@ fn cm_catalog_round_trip_o0() {
 #[test]
 fn cm_catalog_round_trip_o2() {
     run_round_trips(OptLevel::O2);
+}
+
+/// Round-trip every value case twice under `freelist`, whose free path traps on
+/// a block that is already free.
+///
+/// This is the guard for the `post-return` free walk (wado-lang/wado#1683): the
+/// walk visits every buffer a returned value owns, and a shape it visits twice —
+/// a variant case counted under two discriminants, an element freed both in the
+/// loop and with the array — is a double-free. Calling twice also catches a walk
+/// that frees a buffer the host has not finished with, since `freelist` hands the
+/// block straight back on the next call.
+///
+/// The catalog is the widest shape corpus available: strings, nested lists,
+/// tuples, options, results, records, variants, flags, enums and newtypes.
+fn run_double_free_guard(opt_level: OptLevel) {
+    let wasm = compile_catalog_with_allocator(opt_level, "freelist");
+    let engine = common::engine();
+    let opt = common::opt_level_name(opt_level);
+
+    common::runtime().block_on(async {
+        let component = Component::new(engine, &wasm).expect("instantiate component type");
+        let linker = common::linker(engine).expect("build linker");
+        let state = common::WasiState::new_with_pipes(
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+        );
+        let mut store = Store::new(engine, state);
+        store.set_epoch_deadline((common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .expect("instantiate library component");
+        let iface = instance
+            .get_export(&mut store, None, LIB_WORLD_FQ)
+            .map(|(_, idx)| idx);
+
+        let mut failures = Vec::new();
+        for Case { export, value } in cases() {
+            let func = iface
+                .as_ref()
+                .and_then(|i| instance.get_export(&mut store, Some(i), export))
+                .map(|(_, idx)| idx)
+                .and_then(|idx| instance.get_func(&mut store, idx));
+            let Some(func) = func else {
+                failures.push(format!("[{opt}] export `{export}` not found"));
+                continue;
+            };
+            for call in 0..2 {
+                let mut results = vec![Val::Bool(false); func.ty(&store).results().len()];
+                match func
+                    .call_async(&mut store, std::slice::from_ref(&value), &mut results)
+                    .await
+                {
+                    Ok(()) if results.first() == Some(&value) => {}
+                    Ok(()) => failures.push(format!(
+                        "[{opt}] `{export}` call {call}: round-trip mismatch\n  \
+                         in:  {value:?}\n  out: {:?}",
+                        results.first()
+                    )),
+                    Err(e) => failures.push(format!(
+                        "[{opt}] `{export}` call {call} trapped: {e:#}\n  \
+                         A `freelist` trap here is a double-free or a \
+                         premature free in the `post-return` walk."
+                    )),
+                }
+            }
+        }
+
+        assert!(
+            failures.is_empty(),
+            "{} of {} catalog exports failed under `freelist`:\n{}",
+            failures.len(),
+            cases().len(),
+            failures.join("\n")
+        );
+    });
+}
+
+#[test]
+fn cm_catalog_no_double_free_o0() {
+    run_double_free_guard(OptLevel::O0);
+}
+
+#[test]
+fn cm_catalog_no_double_free_o2() {
+    run_double_free_guard(OptLevel::O2);
 }

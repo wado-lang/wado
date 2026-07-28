@@ -70,6 +70,12 @@ pub struct WorldExportPlan {
     /// adapters are synthesized as value-returning functions. The WASI worlds
     /// (CLI, HTTP, kiln) and `async` `--lib` exports keep the async lift.
     pub sync_lift: bool,
+    /// Core function backing the lift's `post-return` canonical option, when
+    /// this export's result owns linear memory. `None` leaves the option off
+    /// entirely — there is nothing to reclaim, and the option is illegal
+    /// alongside `async` anyway, so this is only ever `Some` under
+    /// [`Self::sync_lift`].
+    pub post_return_core_name: Option<String>,
     /// This is a `--lib` world export: codegen builds its CM param/result types
     /// from the raw Wado types in [`Self::param_types`] / [`Self::result_type`]
     /// (via [`crate::component_model::CmTypeGen`]) rather than the WASI-only
@@ -168,6 +174,7 @@ pub fn build_component_plan(
     tests: &[TirTest],
     test_name_filters: &[String],
     export_binding_names: &IndexMap<String, String>,
+    post_return_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
     cm_interface_registry: &CmInterfaceRegistry,
     lib_world: Option<&WorldInfo>,
@@ -181,6 +188,7 @@ pub fn build_component_plan(
         build_world_export_plans(
             target_world,
             export_binding_names,
+            post_return_binding_names,
             world_registry,
             cm_interface_registry,
             lib_world,
@@ -228,6 +236,7 @@ pub fn build_component_plan(
 fn build_world_export_plans(
     target_world: &str,
     export_binding_names: &IndexMap<String, String>,
+    post_return_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
     cm_interface_registry: &CmInterfaceRegistry,
     lib_world: Option<&WorldInfo>,
@@ -257,6 +266,7 @@ fn build_world_export_plans(
                 .get(&export.name)
                 .cloned()
                 .unwrap_or_else(|| export.name.clone());
+            let post_return_core_name = post_return_binding_names.get(&export.name).cloned();
 
             // Library exports carry their raw Wado types; codegen builds the
             // CM value types (and the named types they reference) top-level via
@@ -311,6 +321,7 @@ fn build_world_export_plans(
                 // `async` exports (WASI CLI / HTTP, the kiln generator's
                 // `generate`, async lib exports) keep the `task.return` lift.
                 sync_lift: !export.is_async,
+                post_return_core_name,
                 is_lib: is_lib_world,
             }
         })

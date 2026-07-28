@@ -10,6 +10,7 @@
 //!
 //! See `docs/wep-2026-02-15-cm-binding-synthesis.md` for design details.
 
+mod cm_free;
 mod export_adapter;
 mod import_adapter;
 mod lift;
@@ -34,7 +35,10 @@ use crate::wir::CmPayloadType;
 use crate::world_registry::WorldExportInfo;
 
 pub use export_adapter::export_binding_func_name;
-use export_adapter::{ExportBindingEnv, ExportReturnStrategy, synthesize_export_binding};
+use export_adapter::{
+    ExportBindingEnv, ExportReturnStrategy, post_return_func_name, synthesize_export_binding,
+    synthesize_post_return,
+};
 pub use import_adapter::binding_func_name;
 use import_adapter::synthesize_adapter;
 pub use lift::synthesize_lift;
@@ -509,6 +513,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
 
     // Collect adapters in a read-only pass (synthesize_export_binding needs &tir_modules)
     let mut export_adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
+    let mut post_returns: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
     {
         let entry_module = project
             .tir_modules
@@ -610,6 +615,20 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                 export_binding_func_name(&export.name),
                 adapter,
             ));
+
+            // A synchronous lift returns its value through guest-allocated
+            // memory; `post-return` is the ABI's only channel for handing that
+            // memory back. Async lifts return through `task.return`, where the
+            // option is not even permitted.
+            if matches!(strategy, ExportReturnStrategy::SyncReturn)
+                && let Some(post_return) = synthesize_post_return(&export.name, &env)
+            {
+                post_returns.push((
+                    export.name.clone(),
+                    post_return_func_name(&export.name),
+                    post_return,
+                ));
+            }
         }
     }
 
@@ -622,6 +641,12 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             .export_binding_names
             .insert(export_name, binding_name);
         entry_module.functions.push(adapter);
+    }
+    for (export_name, func_name, post_return) in post_returns {
+        project
+            .post_return_binding_names
+            .insert(export_name, func_name);
+        entry_module.functions.push(post_return);
     }
     Ok(())
 }

@@ -2114,6 +2114,21 @@ fn emit_world_exports(
         }
         lift_opts.push(CanonicalOption::Memory(ctx.memory_idx()));
         lift_opts.push(CanonicalOption::Realloc(ctx.core_func_idx("realloc")));
+        // A sync lift returning a memory-backed value hands the host a guest
+        // allocation; `post-return` is where the guest gets it back. Only
+        // present when the result owns memory, so exports with nothing to
+        // reclaim keep the option off entirely.
+        if let Some(post_return) = &export.post_return_core_name {
+            let alias = format!("{post_return}-core");
+            ctx.register_core_func(&alias);
+            builder.core_alias_export(
+                Some(&alias),
+                ctx.core_instance_idx("main"),
+                post_return,
+                ExportKind::Func,
+            );
+            lift_opts.push(CanonicalOption::PostReturn(ctx.core_func_idx(&alias)));
+        }
         builder.lift_func(
             Some(cm_name),
             ctx.core_func_idx(&core_name),
