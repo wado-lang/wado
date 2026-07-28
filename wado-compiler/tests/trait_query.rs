@@ -666,3 +666,59 @@ export fn run() {
         "ambiguous method",
     );
 }
+
+#[test]
+fn an_ambiguous_call_does_not_also_claim_the_method_is_missing() {
+    let msg = compile_err_contains(
+        r"
+trait Left {
+    fn f(&self) -> i32;
+}
+
+trait Right {
+    fn f(&self) -> i32;
+}
+
+fn call<T: Left + Right>(x: &T) -> i32 {
+    return x.f();
+}
+
+export fn run() {
+}
+",
+        "ambiguous method",
+    );
+    assert!(
+        !msg.contains("no method"),
+        "ambiguity must not also report the method as missing: {msg}"
+    );
+}
+
+#[test]
+fn an_undeclared_supertrait_is_reported_at_the_declaration() {
+    let msg = compile_err_contains(
+        r"
+trait A: Undeclrd {
+    fn a(&self) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl A for S {
+    fn a(&self) -> i32 {
+        return self.v;
+    }
+}
+
+export fn run() {
+}
+",
+        "is not a declared trait",
+    );
+    assert!(
+        msg.contains("Undeclrd") && msg.contains("'A'"),
+        "names the bad supertrait and its trait: {msg}"
+    );
+}

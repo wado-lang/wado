@@ -768,9 +768,6 @@ impl TypeSystem {
         }
     }
 
-    /// The trait declaration `trait_name` binds to in scope (local, else an
-    /// explicit import); `None` when it falls through to the ambient compiler
-    /// trait. Lets a same-name user `trait` be distinguished from the compiler's.
     /// Whether holding `bound_name` also gives `trait_name` — the same trait,
     /// or one of its supertraits. The single place a declared bound is read as
     /// its elaborated form, so no registration site can bypass it.
@@ -801,6 +798,9 @@ impl TypeSystem {
         }
     }
 
+    /// The trait declaration `trait_name` binds to in scope (local, else an
+    /// explicit import); `None` when it falls through to the ambient compiler
+    /// trait. Lets a same-name user `trait` be distinguished from the compiler's.
     fn scoped_trait_decl_module<'a>(
         &self,
         scope: &TypeLookup<'a>,
@@ -1493,10 +1493,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         bindings
     }
 
-    /// Find a method in the trait declarations given by the bound names.
-    /// For example, if T: Ord, look up the "cmp" method in the Ord trait declaration.
-    /// Returns (`trait_name`, `MethodInfo`) with the method's return type, `self_kind`, and `param_types`,
-    /// where Self is substituted with the `TypeParam`'s type.
     /// The declaration of `method_name` in the trait named `trait_name`, with
     /// the trait's associated types and declaring module. Loaded modules first,
     /// then the current one — the search order [`Self::find_method_in_trait_bounds`]
@@ -1533,6 +1529,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .or_else(|| search(self.current_module_items, &self.current_module_source))
     }
 
+    /// Find a method in the trait declarations given by the bound names, read
+    /// in elaborated form: `T: Ord` searches `Ord` and its supertraits.
+    /// Returns (`trait_name`, `MethodInfo`) with `Self` substituted by the
+    /// `TypeParam`'s type. More than one bound declaring the name is ambiguous
+    /// — reported here, then resolved to the first so the caller has something
+    /// well-formed to carry.
     pub(super) fn find_method_in_trait_bounds(
         &mut self,
         bounds: &[String],
@@ -1541,23 +1543,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> Option<(String, MethodInfo)> {
         let bounds = self.elaborate_bound_names(bounds);
-        let candidates: Vec<String> = bounds
-            .iter()
-            .filter(|t| self.find_trait_decl_method(t, method_name).is_some())
-            .cloned()
-            .collect();
+        // One scan per bound, and the winner's declaration is cloned once —
+        // this runs for every type-param method call and every operator on a
+        // bounded receiver.
+        let mut candidates: Vec<String> = Vec::new();
+        let mut resolved = None;
+        for trait_name in &bounds {
+            if let Some(found) = self.find_trait_decl_method(trait_name, method_name) {
+                candidates.push(trait_name.clone());
+                if resolved.is_none() {
+                    resolved = Some((trait_name.clone(), found));
+                }
+            }
+        }
         if candidates.len() > 1 {
+            // Report and keep going with the first candidate. Returning `None`
+            // would read to the caller as "no such method", which it then says
+            // out loud — two contradicting errors for one call.
             let _ = self.emit(TypeError::AmbiguousTraitMethod {
                 method: method_name.to_string(),
                 traits: candidates,
                 span,
             });
-            return None;
         }
-        for trait_name in &bounds {
-            if let Some((method, trait_assoc_types, _module_source)) =
-                self.find_trait_decl_method(trait_name, method_name)
-            {
+        {
+            if let Some((trait_name, (method, trait_assoc_types, _module_source))) = resolved {
                 // Save the entire trait context; we'll modify self_type, assoc_type_bindings,
                 // type_params, and type_param_bounds during this resolution scope.
                 let mut scope = self.enter_inherited_type_param_scope();
@@ -1688,7 +1698,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 drop(scope);
 
                 return Some((
-                    trait_name.clone(),
+                    trait_name,
                     MethodInfo {
                         impl_offset: None,
                         return_type,
