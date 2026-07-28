@@ -228,8 +228,9 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
 global mut global:wasi_tls_mock_recv.wado::__modules_initialized: bool = 0;
-global global:core:prelude/string.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 118, 97, 108, 105, 100, 32, 85, 84, 70, 45, 56, 32, 97, 116, 32, 98, 121, 116, 101, 32), used: 22 };
-global global:wasi_tls_mock_recv.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 110, 101, 120, 112, 101, 99, 116, 101, 100, 32, 104, 97, 110, 100, 115, 104, 97, 107, 101, 32, 102, 97, 105, 108, 117, 114, 101, 58, 32), used: 30 };
+global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/string.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 118, 97, 108, 105, 100, 32, 85, 84, 70, 45, 56, 32, 97, 116, 32, 98, 121, 116, 101, 32), used: 22 };
+global global:wasi_tls_mock_recv.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 110, 101, 120, 112, 101, 99, 116, 101, 100, 32, 104, 97, 110, 100, 115, 104, 97, 107, 101, 32, 102, 97, 105, 108, 117, 114, 101, 58, 32), used: 30 };
 
 fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
     let conn: i32;
@@ -268,7 +269,7 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
     if @likely(__match_19.discriminant == 0) {
     } else {
         e = ref.cast "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>::Err"(__match_19).payload_0;
-        "core:rt/panic"(__local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(46), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_14, global:wasi_tls_mock_recv.wado::__const_obj_1); "core:prelude/string.wado/String::push_str"(__local_14, "wasi_tls_mock_recv.wado/__cm_binding__Error_to_debug_string"(e)); __local_14);
+        "core:rt/panic"(__local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(46), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_14, global:wasi_tls_mock_recv.wado::__const_obj_2); "core:prelude/string.wado/String::push_str"(__local_14, "wasi_tls_mock_recv.wado/__cm_binding__Error_to_debug_string"(e)); __local_14);
         unreachable;
     }
     received = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
@@ -337,7 +338,6 @@ fn "wasi_tls_mock_recv.wado/__cm_binding__Connector_connect"(this, server_name) 
 
 fn "wasi_tls_mock_recv.wado/__cm_binding__Error_to_debug_string"(self) with Error {
     let __outptr: i32;
-    let __lifted_result_2: ref "core:prelude/string.wado//String";
     let ptr: i32;
     let len_4: i32;
     let arr: ref Array<u8>;
@@ -346,9 +346,8 @@ fn "wasi_tls_mock_recv.wado/__cm_binding__Error_to_debug_string"(self) with Erro
     ptr = builtin::load_i32(__outptr);
     len_4 = builtin::load_i32(__outptr + 4);
     arr = "core:rt/memory_to_gc_array"(ptr, len_4);
-    __lifted_result_2 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(arr); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, arr, 0, __array_clone_len_2); __array_clone_dst_2), used: len_4 };
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_2;
+    return struct.new "core:prelude/string.wado//String" { repr: arr, used: len_4 };
 }
 
 fn "wasi_tls_mock_recv.wado/__cm_lift__Connector_connect"(__outptr) {
@@ -783,7 +782,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_0, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
@@ -875,7 +874,7 @@ fn "core:prelude/string.wado/String::from_utf8_slice"(bytes) {
             multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: _licm_repr_9, start: _licm_start_10, end: _licm_end_11 }, i, len);
             if @unlikely(scalar_mv_valid == 0) {
                 cold_path;
-                return 1, ref.as_non_null(__local_4 = "core:prelude/string.wado/String::with_capacity"(38); "core:prelude/string.wado/String::push_str"(__local_4, global:core:prelude/string.wado::__const_obj_0); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: i }, __local_5); __local_4);
+                return 1, ref.as_non_null(__local_4 = "core:prelude/string.wado/String::with_capacity"(38); "core:prelude/string.wado/String::push_str"(__local_4, global:core:prelude/string.wado::__const_obj_1); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: i }, __local_5); __local_4);
             }
             i = i + scalar_mv_advance;
             continue l62;

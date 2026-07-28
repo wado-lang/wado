@@ -1,0 +1,89 @@
+// A callee that hands a projection of its by-value parameter back is not
+// read-only, so a constant argument must not be hoisted into a shared global.
+//
+// Reading a field of a by-value parameter is a read, so the read-only gate
+// alone admits `return s.data`: under value semantics the parameter is the
+// callee's own copy, and the return-convention fixpoint calls the result owned,
+// so the caller keeps no defensive copy of it. Hoist the argument and that
+// "owned" value is the shared global's storage — the first `push` mutates the
+// constant for every later call.
+//
+// Four routes to the same storage, each of which the guard has to see:
+//
+// - `take_field` returns the projection directly.
+// - `take_bound` reaches it through a `match` arm binding, which names it
+//   without ever mentioning the parameter again.
+// - `take_if` / `take_match` deliver it as a branch result — the value of an
+//   `if` / `match` expression, which the freshness rule counts as owned just
+//   like a bare projection.
+//
+// Each is called three times and the caller pushes onto the result: identical
+// lengths are the check; a regression prints `4 5 6`.
+
+use { println, Stdout } from "core:cli";
+
+struct Inner {
+    blob: List<u8>,
+}
+
+struct S {
+    inner: Inner,
+    tag: List<u8>,
+}
+
+#[inline(never)]
+fn take_field(s: S) -> List<u8> {
+    if s.tag.len() > 100 {
+        return s.tag;
+    }
+    return s.inner.blob;
+}
+
+#[inline(never)]
+fn take_bound(s: S) -> List<u8> {
+    match s.inner {
+        Inner { blob } => {
+            return blob;
+        },
+    }
+}
+
+#[inline(never)]
+fn take_if(s: S) -> List<u8> {
+    return if s.tag.len() > 100 {
+        s.tag;
+    } else {
+        s.inner.blob;
+    };
+}
+
+#[inline(never)]
+fn take_match(s: S) -> List<u8> {
+    return match s.tag.len() > 100 {
+        true => s.tag,
+        false => s.inner.blob,
+    };
+}
+
+fn fresh() -> S {
+    return S { inner: Inner { blob: [1, 2, 3] as List<u8> }, tag: [7, 8] as List<u8> };
+}
+
+export fn run() with Stdout {
+    for let _i of 0..<3 {
+        let mut a = take_field(fresh());
+        a.push(9);
+        let mut b = take_bound(fresh());
+        b.push(9);
+        let mut c = take_if(fresh());
+        c.push(9);
+        let mut d = take_match(fresh());
+        d.push(9);
+        println(`${a.len()} ${b.len()} ${c.len()} ${d.len()}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "4 4 4 4\n4 4 4 4\n4 4 4 4\n"
+}

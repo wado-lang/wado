@@ -140,10 +140,11 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:serde_serialize_struct.wado::__modules_initialized: bool = 0;
-global mut global:serde_serialize_struct.wado::__const_obj_0: ref null "serde_serialize_struct.wado//User" = ref.null none;
-global global:serde_serialize_struct.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 99, 116, 105, 118, 101), used: 6 };
-global global:serde_serialize_struct.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 103, 101), used: 3 };
-global global:serde_serialize_struct.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 115, 101, 114, 78, 97, 109, 101), used: 8 };
+global mut global:serde_serialize_struct.wado::__const_obj_1: ref null "serde_serialize_struct.wado//User" = ref.null none;
+global global:serde_serialize_struct.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 99, 116, 105, 118, 101), used: 6 };
+global global:serde_serialize_struct.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 103, 101), used: 3 };
+global global:serde_serialize_struct.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 115, 101, 114, 78, 97, 109, 101), used: 8 };
+global global:core:prelude/primitive.wado::__const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "serde_serialize_struct.wado/run"() with Stdout {
     let ser: ref "serde_serialize_struct.wado//JsonSerializer";
@@ -153,9 +154,9 @@ fn "serde_serialize_struct.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:serde_serialize_struct.wado::__modules_initialized = 1;
     };
-    global:serde_serialize_struct.wado::__const_obj_0 = struct.new "serde_serialize_struct.wado//User" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, active: 1 };
+    global:serde_serialize_struct.wado::__const_obj_1 = struct.new "serde_serialize_struct.wado//User" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, active: 1 };
     ser = struct.new "serde_serialize_struct.wado//JsonSerializer" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-    drop("serde_serialize_struct.wado/User^Serialize::serialize<serde_serialize_struct.wado/JsonSerializer>$spec0"(global:serde_serialize_struct.wado::__const_obj_0, ser));
+    drop("serde_serialize_struct.wado/User^Serialize::serialize<serde_serialize_struct.wado/JsonSerializer>$spec0"(global:serde_serialize_struct.wado::__const_obj_1, ser));
     "core:cli/println"(ser.buf);
 }
 
@@ -498,9 +499,9 @@ fn "serde_serialize_struct.wado/User^Serialize::serialize<serde_serialize_struct
     st_2 = struct.new "core:prelude/types.wado//Result<serde_serialize_struct.wado/JsonStructSerializer,serde_serialize_struct.wado/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "serde_serialize_struct.wado//JsonStructSerializer" { ser: s, count: 0 } };
     if ref.test "core:prelude/types.wado//Result<serde_serialize_struct.wado/JsonStructSerializer,serde_serialize_struct.wado/SerializeError>::Ok"(st_2) {
         __local_4 = ref.cast "core:prelude/types.wado//Result<serde_serialize_struct.wado/JsonStructSerializer,serde_serialize_struct.wado/SerializeError>::Ok"(st_2).payload_0;
-        drop("serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(__local_4, global:serde_serialize_struct.wado::__const_obj_6, self.name));
-        drop("serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<i32>"(__local_4, global:serde_serialize_struct.wado::__const_obj_5, 30));
-        drop("serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<bool>"(__local_4, global:serde_serialize_struct.wado::__const_obj_4, 1));
+        drop("serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(__local_4, global:serde_serialize_struct.wado::__const_obj_7, self.name));
+        drop("serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<i32>"(__local_4, global:serde_serialize_struct.wado::__const_obj_6, 30));
+        drop("serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<bool>"(__local_4, global:serde_serialize_struct.wado::__const_obj_5, 1));
         return self_18 = __local_4.ser.buf, start_20 = "core:prelude/string.wado/String::internal_reserve_uninit"(self_18, 1), builtin::array_set_u8(self_18.repr, start_20, 125), ref.null none;
     } else {
     }
@@ -515,7 +516,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_8, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 

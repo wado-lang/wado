@@ -28,6 +28,16 @@
 //!   assignment to it or a projection, and any by-value consuming use
 //!   disqualify it. See the per-arm comments in [`expr_readonly`].
 //!
+//! A constant handed to a call *by value* ([`CandidateKind::ValueArg`]) runs the
+//! read-only gate over the *callee's* parameter instead
+//! ([`Gate::callee_param_readonly`]): the value crosses into the callee
+//! uncopied — the value-copy planner skipped the copy because the literal is
+//! fresh — so the callee is the only party that could write the shared object.
+//! Being read-only is not enough there: a by-value parameter is the callee's
+//! own copy, so it may legitimately hand a *projection* of it back
+//! (`return s.data`), which the return-convention fixpoint calls owned and the
+//! caller then mutates. [`param_storage_escapes`] rules that out.
+//!
 //! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
 //! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): a project-level pass
 //! whose analysis (read-only gate, const check) and mutation (read rewrite,
@@ -88,6 +98,16 @@ enum CandidateKind {
         /// The `Unary { op: Ref, .. }` node whose inner operand is hoisted.
         ref_expr: ExprId,
     },
+    /// A constant aggregate handed to a call *by value* — `append(name,
+    /// b"application/json")`. The value-copy planner leaves such an argument
+    /// uncopied because the literal is fresh, so hoisting it is sound only
+    /// when the callee cannot write the value it receives; see
+    /// [`Gate::callee_param_readonly`]. Hoisted in place like [`Self::InlineRef`],
+    /// wrapping the argument itself instead of a `&`'s operand.
+    ValueArg {
+        /// The argument node whose value is hoisted.
+        arg_expr: ExprId,
+    },
 }
 
 pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
@@ -114,6 +134,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         type_table: &type_table,
         hoistable_pure: &hoistable_pure,
         structs: &project.structs,
+        param_readonly: RefCell::new(IndexMap::default()),
     };
     let mut candidates: Vec<Candidate> = Vec::new();
     for (fi, f) in project.functions.iter().enumerate() {
@@ -146,7 +167,13 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             kind,
             guarded,
         } = cand;
-        let is_inline_ref = matches!(kind, CandidateKind::InlineRef { .. });
+        // An in-place hoist keeps the value at its original call site, where a
+        // lazy `array.new_data` global would cost a guard branch per call; the
+        // fixed repr lets `wir_optimize::const_global` promote it to eager.
+        let prefer_fixed_repr = matches!(
+            kind,
+            CandidateKind::InlineRef { .. } | CandidateKind::ValueArg { .. }
+        );
 
         let mut func = project.functions[func_idx].borrow_mut();
         let body = func.body.as_mut().expect("candidate function has a body");
@@ -183,6 +210,16 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
                     guarded.then_some(is_uninitialized),
                 );
             }
+            CandidateKind::ValueArg { arg_expr } => {
+                hoist_value_arg(
+                    body,
+                    arg_expr,
+                    &module_source,
+                    &name,
+                    ty,
+                    guarded.then_some(is_uninitialized),
+                );
+            }
         }
         drop(func);
 
@@ -201,7 +238,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             module_source,
             span: crate::token::Span::new(0, 0, 1, 1),
             locals: Vec::new(),
-            prefer_fixed_string_repr: is_inline_ref,
+            prefer_fixed_string_repr: prefer_fixed_repr,
         });
     }
     true
@@ -264,8 +301,143 @@ fn collect_candidates(
                 continue;
             }
         }
+        if let NodeRef::Expr(id) = node {
+            let hoisted = value_arg_candidates(body, id, gate);
+            if !hoisted.is_empty() {
+                for &arg in &hoisted {
+                    out.push(Candidate {
+                        func_idx,
+                        ty: body.exprs[arg].type_id,
+                        module_source: module_source.clone(),
+                        kind: CandidateKind::ValueArg { arg_expr: arg },
+                        guarded: expr_contains_call(body, arg),
+                    });
+                }
+                // The hoisted arguments keep their subtrees verbatim inside the
+                // global's initializer, so a nested candidate there would nest
+                // one global's `GlobalVarSet` inside another's — the shape the
+                // `let`/`&` cases avoid by not recursing either.
+                body.for_each_child(node, |c| {
+                    if !matches!(c, NodeRef::Expr(e) if hoisted.contains(&e)) {
+                        stack.push(c);
+                    }
+                });
+                continue;
+            }
+        }
         body.for_each_child(node, |c| stack.push(c));
     }
+}
+
+/// The arguments of the call at `expr` that qualify for by-value hoisting.
+///
+/// An argument qualifies when it is a closed constant aggregate (the gate the
+/// `let` and `&` cases use) *and* the callee's matching parameter is read-only
+/// in the callee's own body. That second gate is what makes sharing sound: a
+/// fresh literal is handed over uncopied, so a callee that writes its parameter
+/// would write the shared global.
+fn value_arg_candidates(body: &Body, expr: ExprId, gate: &Gate<'_>) -> Vec<ExprId> {
+    // `self` occupies parameter 0 of a method, so its explicit arguments start
+    // one position later.
+    let (func_id, args, first_param) = match &body.exprs[expr].kind {
+        ExprKind::Call { func_id, args, .. } => (*func_id, args, 0),
+        ExprKind::MethodCall { func_id, args, .. } => (*func_id, args, 1),
+        _ => return Vec::new(),
+    };
+    args.iter()
+        .enumerate()
+        .filter(|(_, arg)| !arg.is_mut)
+        .filter_map(|(pos, arg)| Some((pos, arg.expr.as_expr()?)))
+        .filter(|&(_, arg)| {
+            // A `&`-wrapped literal is the `InlineRef` case; leave it there.
+            !matches!(
+                body.exprs[arg].kind,
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                    ..
+                }
+            )
+        })
+        .filter(|&(pos, arg)| {
+            let ty = body.exprs[arg].type_id;
+            gate.is_reference_type(ty)
+                && is_globalizable_const(body, arg, gate, &mut IndexSet::default())
+                && contains_aggregate(body, arg, gate)
+                && gate.callee_param_readonly(func_id, first_param + pos)
+        })
+        .map(|(_, arg)| arg)
+        .collect()
+}
+
+/// Rewrite a `ValueArg` candidate in place: the argument node `E` becomes
+/// `{ GlobalVarSet(name, E); GlobalVarGet(name) }`. The original subtree moves
+/// into the set, keeping its evaluation position, and the call now reads the
+/// named global — which `wir_optimize::const_global` promotes to a Wasm
+/// instantiation-time constant when `E` is const-expressible.
+fn hoist_value_arg(
+    body: &mut Body,
+    arg_expr: ExprId,
+    module_source: &ModuleSource,
+    name: &str,
+    ty: TypeId,
+    guarded: Option<crate::nir::FuncId>,
+) {
+    let span = body.exprs[arg_expr].span;
+    let inner_kind = std::mem::replace(
+        &mut body.exprs[arg_expr].kind,
+        ExprKind::GlobalVarGet {
+            module_source: module_source.clone(),
+            name: name.to_string(),
+        },
+    );
+    let inner = body.exprs.push(ExprNode {
+        kind: inner_kind,
+        type_id: ty,
+        span,
+    });
+
+    let set_expr = body.exprs.push(ExprNode {
+        kind: ExprKind::GlobalVarSet {
+            module_source: module_source.clone(),
+            name: name.to_string(),
+            value: Operand::Expr(inner),
+        },
+        type_id: TypeTable::UNIT,
+        span,
+    });
+    let set_stmt = if let Some(is_uninitialized) = guarded {
+        guard_set_on_uninit(
+            body,
+            set_expr,
+            module_source,
+            name,
+            ty,
+            is_uninitialized,
+            span,
+        )
+    } else {
+        body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Expr(set_expr)),
+            span,
+        })
+    };
+    let get_expr = body.exprs.push(ExprNode {
+        kind: ExprKind::GlobalVarGet {
+            module_source: module_source.clone(),
+            name: name.to_string(),
+        },
+        type_id: ty,
+        span,
+    });
+    let get_stmt = body.stmts.push(StmtNode {
+        kind: StmtKind::Expr(Operand::Expr(get_expr)),
+        span,
+    });
+    let wrap_block = body.blocks.push(BlockNode {
+        stmts: vec![set_stmt, get_stmt],
+        span,
+    });
+    body.exprs[arg_expr].kind = ExprKind::Block(wrap_block);
 }
 
 /// Local indices declared by exactly one `let` statement in `body`.
@@ -763,6 +935,10 @@ struct Gate<'a> {
     /// Indexed by `func_id.index()`.
     hoistable_pure: &'a [bool],
     structs: &'a [crate::nir::NirStruct],
+    /// `(callee index, parameter position)` → [`Gate::callee_param_readonly`].
+    /// Each verdict costs two walks of the callee body, and one helper taking a
+    /// constant is typically called from many sites.
+    param_readonly: RefCell<IndexMap<(usize, usize), bool>>,
 }
 
 impl Gate<'_> {
@@ -855,11 +1031,308 @@ impl Gate<'_> {
             ResolvedType::MutRef(_)
         ))
     }
+
+    /// Whether the callee takes its receiver by `&self` — the only receiver
+    /// convention that neither writes the caller's storage (`&mut self`) nor
+    /// takes it over (a by-value `self`). An unknown callee answers `false`.
+    fn callee_borrows_self(&self, func_id: crate::nir::FuncId) -> bool {
+        use cranelift_entity::EntityRef;
+        let Some(f) = self.funcs.get(func_id.index()) else {
+            return false;
+        };
+        let f = f.borrow();
+        f.params.first().is_some_and(|p0| {
+            matches!(
+                self.type_table.borrow().get(p0.type_id),
+                ResolvedType::Ref(_)
+            )
+        })
+    }
+
+    /// Whether parameter `param_pos` is taken by value and never written or
+    /// consumed inside the callee — the precondition for handing it a shared
+    /// global instead of a fresh object.
+    ///
+    /// A bodyless callee (an import, an unresolved id) answers `false`: nothing
+    /// here can prove what it does with the value. A `&` / `&mut` parameter
+    /// answers `false` too — a by-value argument never lands there, and `&mut`
+    /// writes the caller's storage outright.
+    fn callee_param_readonly(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
+        use cranelift_entity::EntityRef;
+        let key = (func_id.index(), param_pos);
+        if let Some(&cached) = self.param_readonly.borrow().get(&key) {
+            return cached;
+        }
+        let verdict = self.compute_param_readonly(func_id, param_pos);
+        self.param_readonly.borrow_mut().insert(key, verdict);
+        verdict
+    }
+
+    fn compute_param_readonly(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
+        use cranelift_entity::EntityRef;
+        let Some(f) = self.funcs.get(func_id.index()) else {
+            return false;
+        };
+        let f = f.borrow();
+        let Some(param) = f.params.get(param_pos) else {
+            return false;
+        };
+        if matches!(
+            self.type_table.borrow().get(param.type_id),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) {
+            return false;
+        }
+        f.body.as_ref().is_some_and(|body| {
+            is_readonly_body(body, param.local_index, self)
+                && !param_storage_escapes(body, param.local_index, self)
+        })
+    }
 }
 
 /// True when every use of local `idx` in `body` keeps it immutable.
 fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     block_readonly(body, body.root, idx, gate)
+}
+
+/// Whether the callee hands the *storage* of by-value parameter `idx` back out
+/// — returning `s.data`, stashing it in a global, or passing it on by value.
+///
+/// [`is_readonly_body`] does not cover this: reading a field of the parameter is
+/// a read, and a by-value parameter is the callee's own copy, so returning that
+/// field is legitimate — the return-convention fixpoint even calls it *owned*,
+/// which is what lets the caller skip a defensive copy of the result. Hoisting
+/// the argument invalidates the premise: the "owned" value handed back is the
+/// shared global's storage, and the first mutation corrupts the constant.
+/// Passing the storage on by value hands the same problem to the next callee.
+///
+/// A borrow (`&s.data`) is not an escape — the callee's own read-only gate
+/// already bounds what the borrow can do — and a scalar projection copies its
+/// value outright.
+fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
+    let roots = projection_alias_roots(body, idx, gate);
+    let escapes = |op: Operand| delivers_projection_operand(body, op, &roots, gate);
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        match node {
+            NodeRef::Stmt(s) => match &body.stmts[s].kind {
+                StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+                    if value.is_some_and(escapes) {
+                        return true;
+                    }
+                }
+                StmtKind::Let { value, .. } => {
+                    // A `let` alias is itself a root, so its own uses are
+                    // covered by this walk.
+                    let _ = value;
+                }
+                StmtKind::Expr(_)
+                | StmtKind::If { .. }
+                | StmtKind::Loop { .. }
+                | StmtKind::LabeledBlock { .. }
+                | StmtKind::LetDestructure { .. }
+                | StmtKind::Continue => {}
+            },
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::Assign { value, .. } => {
+                    if escapes(*value) {
+                        return true;
+                    }
+                }
+                ExprKind::Call { args, .. } => {
+                    if args.iter().any(|a| escapes(a.expr)) {
+                        return true;
+                    }
+                }
+                // A by-value `self` receiver hands the storage to the callee,
+                // which may return or store it in turn; `&self` only reads it.
+                ExprKind::MethodCall {
+                    receiver,
+                    func_id,
+                    args,
+                    ..
+                } => {
+                    if args.iter().any(|a| escapes(a.expr))
+                        || (escapes(*receiver) && !gate.callee_borrows_self(*func_id))
+                    {
+                        return true;
+                    }
+                }
+                ExprKind::IndirectCall { args, .. } => {
+                    if args.iter().any(|&a| escapes(a)) {
+                        return true;
+                    }
+                }
+                _ => {}
+            },
+            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    false
+}
+
+/// `idx` plus every local *bound* from something that can yield one of their
+/// storages: a `let` (`let r = s.data;`, which LICM also produces), a
+/// destructuring `let`, or a `match` arm pattern over such a scrutinee
+/// (`match s.inner { Inner { blob } => …`). They all name the same storage, so
+/// an escape through any of them is an escape of the parameter.
+///
+/// The source only has to *contain* a reference-typed projection of a root —
+/// `let r = if c { s.a } else { s.b };` binds one of two projections, and
+/// neither the branch shape nor the pattern says which. Over-approximating a
+/// binding as an alias only makes the escape check stricter: a scalar binding
+/// can never carry a reference-typed projection of itself, so it is inert.
+fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
+    let mut roots = vec![idx];
+    let mut i = 0;
+    while i < roots.len() {
+        let root = roots[i];
+        let mut stack = vec![NodeRef::Block(body.root)];
+        while let Some(node) = stack.pop() {
+            match node {
+                NodeRef::Stmt(s) => match &body.stmts[s].kind {
+                    StmtKind::Let {
+                        local_index, value, ..
+                    } => {
+                        if yields_projection_of(body, *value, root, gate)
+                            && !roots.contains(local_index)
+                        {
+                            roots.push(*local_index);
+                        }
+                    }
+                    StmtKind::LetDestructure { pattern, value, .. } => {
+                        if yields_projection_of(body, *value, root, gate) {
+                            collect_pattern_bindings(body, *pattern, &mut roots);
+                        }
+                    }
+                    StmtKind::Expr(_)
+                    | StmtKind::Return { .. }
+                    | StmtKind::Break { .. }
+                    | StmtKind::If { .. }
+                    | StmtKind::Loop { .. }
+                    | StmtKind::LabeledBlock { .. }
+                    | StmtKind::Continue => {}
+                },
+                NodeRef::Expr(e) => {
+                    if let ExprKind::Match { expr, arms } = &body.exprs[e].kind
+                        && yields_projection_of(body, *expr, root, gate)
+                    {
+                        for arm in arms {
+                            collect_pattern_bindings(body, arm.pattern, &mut roots);
+                        }
+                    }
+                }
+                NodeRef::Block(_) | NodeRef::Pat(_) => {}
+            }
+            body.for_each_child(node, |c| stack.push(c));
+        }
+        i += 1;
+    }
+    roots
+}
+
+fn delivers_projection_operand(body: &Body, op: Operand, roots: &[u32], gate: &Gate<'_>) -> bool {
+    op.as_expr()
+        .is_some_and(|e| delivers_projection(body, e, roots, gate))
+}
+
+/// Whether evaluating `expr` yields the storage of a root — directly, or as the
+/// value a branch delivers.
+///
+/// `return if c { s.tag } else { s.inner.blob };` hands out a projection just as
+/// plainly as `return s.tag;` does, and `analyze::is_owned_value` treats such a
+/// branch result as owned, so the caller keeps no copy of it. A block's value is
+/// its tail expression, an `if`'s is the tail of whichever branch runs, and a
+/// `match`/`switch`'s is its arm's — the same rule the freshness side follows.
+fn delivers_projection(body: &Body, expr: ExprId, roots: &[u32], gate: &Gate<'_>) -> bool {
+    if gate.is_reference_type(body.exprs[expr].type_id)
+        && roots.iter().any(|&r| projection_roots_at(body, expr, r))
+    {
+        return true;
+    }
+    match &body.exprs[expr].kind {
+        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
+            block_tail_delivers(body, *block, roots, gate)
+        }
+        ExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            block_tail_delivers(body, *then_branch, roots, gate)
+                || else_branch.is_some_and(|eb| block_tail_delivers(body, eb, roots, gate))
+        }
+        ExprKind::Match { arms, .. } => arms
+            .iter()
+            .any(|arm| delivers_projection_operand(body, arm.body, roots, gate)),
+        ExprKind::Switch { arms, default, .. } => {
+            arms.iter()
+                .any(|&a| block_tail_delivers(body, a, roots, gate))
+                || block_tail_delivers(body, *default, roots, gate)
+        }
+        _ => false,
+    }
+}
+
+/// The value a block falls off its end with: its tail expression statement.
+/// A `break`-delivered value is checked where the `break` is.
+fn block_tail_delivers(body: &Body, block: BlockId, roots: &[u32], gate: &Gate<'_>) -> bool {
+    body.blocks[block]
+        .stmts
+        .last()
+        .is_some_and(|&s| match &body.stmts[s].kind {
+            StmtKind::Expr(op) => delivers_projection_operand(body, *op, roots, gate),
+            _ => false,
+        })
+}
+
+/// Every local a pattern binds, appended to `out` if not already there.
+fn collect_pattern_bindings(body: &Body, pattern: crate::nir_arena::PatId, out: &mut Vec<u32>) {
+    let mut stack = vec![NodeRef::Pat(pattern)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Pat(p) = node
+            && let crate::nir_arena::PatKind::Binding { local_index, .. } = &body.pats[p].kind
+            && !out.contains(local_index)
+        {
+            out.push(*local_index);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+}
+
+/// Whether evaluating `op` can produce the storage of `root` itself: it is, or
+/// contains, a reference-typed projection rooted there. A scalar projection
+/// (`s.used`) copies its value out and does not count.
+fn yields_projection_of(body: &Body, op: Operand, root: u32, gate: &Gate<'_>) -> bool {
+    let Some(expr) = op.as_expr() else {
+        return false;
+    };
+    let mut stack = vec![NodeRef::Expr(expr)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && projection_roots_at(body, e, root)
+            && gate.is_reference_type(body.exprs[e].type_id)
+        {
+            return true;
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    false
+}
+
+/// Whether `expr` is a projection chain (`x`, `x.f`, `x[i].f`) rooted at local
+/// `idx`.
+fn projection_roots_at(body: &Body, expr: ExprId, idx: u32) -> bool {
+    match &body.exprs[expr].kind {
+        ExprKind::Local { index, .. } => *index == idx,
+        ExprKind::FieldAccess { expr: base, .. }
+        | ExprKind::Index { expr: base, .. }
+        | ExprKind::Cast { expr: base, .. } => base
+            .as_expr()
+            .is_some_and(|e| projection_roots_at(body, e, idx)),
+        _ => false,
+    }
 }
 
 fn block_readonly(body: &Body, block: BlockId, idx: u32, gate: &Gate<'_>) -> bool {

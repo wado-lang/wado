@@ -21,7 +21,7 @@ pub mod stores;
 pub mod synthesize;
 
 use crate::flat_package::FlatPackage;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
@@ -65,6 +65,10 @@ pub struct ValueCopyPlan {
     /// Functions whose result aliases their receiver's storage (a borrowed
     /// projection / element read). Used only by the read-only-share analysis.
     pub returns_receiver_alias: FuncKeySet,
+    /// Return types for which every closure `__call` — the complete set of
+    /// indirect-call targets after closure lowering — returns owned, so an
+    /// indirect call yielding that type is fresh.
+    pub indirect_owned_returns: IndexSet<TypeId>,
 }
 
 pub fn plan(
@@ -93,6 +97,8 @@ pub fn plan(
         );
     }
     let returns_receiver_alias = ownership::compute_receiver_alias(flat);
+    let indirect_owned_returns =
+        ownership::compute_indirect_owned_returns(flat, &conventions.returns_owned);
     ValueCopyPlan {
         name_for_type,
         returns_owned: conventions.returns_owned,
@@ -103,6 +109,7 @@ pub fn plan(
         mut_ref_params,
         ref_receiver_methods,
         returns_receiver_alias,
+        indirect_owned_returns,
     }
 }
 

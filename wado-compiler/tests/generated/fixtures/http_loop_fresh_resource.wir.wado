@@ -329,35 +329,9 @@ global mut global:http_loop_fresh_resource.wado::__modules_initialized: bool = 0
 fn "http_loop_fresh_resource.wado/take_fields"(f) {
     let name: ref "core:prelude/string.wado//String";
     let value_3: ref "core:prelude//List<u8>";
-    let v_5: ref null "wasi:http/types.wado//HeaderError";
-    let __vc_payload_1: ref "wasi:http/types.wado//HeaderError";
-    let __vc_payload_4: ref null "core:prelude/string.wado//String";
-    let __vc_payload_0: ref "core:prelude/string.wado//String";
     name = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
     value_3 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(120), used: 1 };
-    v_5 = "http_loop_fresh_resource.wado/__cm_binding__Fields_append"(f, name, value_3);
-    drop((if ref.is_null(v_5) -> ref null "wasi:http/types.wado//HeaderError" {
-        v_5;
-    } else {
-        __vc_payload_1 = ref.as_non_null(v_5);
-        ref.as_non_null((if __vc_payload_1.discriminant == 0 -> ref "wasi:http/types.wado//HeaderError" {
-            __vc_payload_1;
-        } else if __vc_payload_1.discriminant == 1 -> ref "wasi:http/types.wado//HeaderError" {
-            __vc_payload_1;
-        } else if __vc_payload_1.discriminant == 2 -> ref "wasi:http/types.wado//HeaderError" {
-            __vc_payload_1;
-        } else if __vc_payload_1.discriminant == 3 -> ref "wasi:http/types.wado//HeaderError" {
-            __vc_payload_1;
-        } else {
-            __vc_payload_4 = ref.cast "wasi:http/types.wado//HeaderError::Other"(__vc_payload_1).payload_0;
-            struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: (if ref.is_null(__vc_payload_4) == 0 -> ref null "core:prelude/string.wado//String" {
-                __vc_payload_0 = ref.as_non_null(__vc_payload_4);
-                struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = __vc_payload_0.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: __vc_payload_0.used };
-            } else {
-                __vc_payload_4;
-            }) };
-        }));
-    }));
+    drop("http_loop_fresh_resource.wado/__cm_binding__Fields_append"(f, name, value_3));
     "wasi/resource-drop:fields"(f);
 }
 
@@ -501,12 +475,12 @@ fn "http_loop_fresh_resource.wado/handle"(request) {
         global:http_loop_fresh_resource.wado::__modules_initialized = 1;
     };
     i = 0;
-    b6: block {
-        l7: loop {
-            break_if b6 i >= 3;
+    b0: block {
+        l1: loop {
+            break_if b0 i >= 3;
             "http_loop_fresh_resource.wado/take_fields"(local.tee scratch("http_loop_fresh_resource.wado/__cm_binding__Fields_new"()));
             i = i + 1;
-            continue l7;
+            continue l1;
         };
     };
     rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
@@ -850,7 +824,7 @@ fn "http_loop_fresh_resource.wado/__cm_binding__Fields_append"(self, name, value
             __disc_10 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_10 != 0 {
-                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_17 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr_18 = "core:rt/memory_to_gc_array"(ptr, len_17); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(arr_18); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, arr_18, 0, __array_clone_len_1); __array_clone_dst_1), used: len_17 });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_17 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr_18 = "core:rt/memory_to_gc_array"(ptr, len_17); struct.new "core:prelude/string.wado//String" { repr: arr_18, used: len_17 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: __option_result };
@@ -1201,12 +1175,12 @@ fn "core:rt/memory_to_gc_array"(ptr, len) {
     let i: i32;
     arr = builtin::array_new<u8>(len);
     i = 0;
-    b140: block {
-        l141: loop {
-            break_if b140 i >= len;
+    b134: block {
+        l135: loop {
+            break_if b134 i >= len;
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
-            continue l141;
+            continue l135;
         };
     };
     return arr;
@@ -1215,12 +1189,12 @@ fn "core:rt/memory_to_gc_array"(ptr, len) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b142: block {
-        l143: loop {
-            break_if b142 i >= len;
+    b136: block {
+        l137: loop {
+            break_if b136 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l143;
+            continue l137;
         };
     };
 }

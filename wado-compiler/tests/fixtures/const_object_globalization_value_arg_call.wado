@@ -1,0 +1,48 @@
+// Constant Object Globalization for a *pure call* result passed by value.
+//
+// The by-value argument case (see `const_object_globalization_value_arg.wado`)
+// and the pure-call initializer case (see
+// `const_object_globalization_pure_call.wado`) compose: the argument here is a
+// pure call on constants, so it hoists under the lazy-init guard — a call
+// initializer is never Wasm-const-expressible, so the assignment survives and
+// must not re-run per iteration.
+//
+// `byte_total` is `#[inline(never)]` and only reads its by-value parameter, so
+// the callee gate admits it.
+
+use { println, Stdout } from "core:cli";
+
+fn encode_key(name: &String) -> String {
+    let mut s = String::with_capacity(name.len() + 3);
+    s.push('"');
+    s.push_str(name);
+    s.push_str(&"\":");
+    return s;
+}
+
+#[inline(never)]
+fn byte_total(s: String) -> i32 {
+    let mut total = 0;
+    for let i of 0..<s.len() {
+        total = total + s.get_byte_unchecked(i) as i32;
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    let mut acc = 0;
+    for let _i of 0..<3 {
+        acc = acc + byte_total(encode_key(&"ab"));
+    }
+    // "\"ab\":" = 34+97+98+34+58 = 321; three iterations = 963.
+    println(`${acc}`);
+}
+
+__DATA__
+{
+    "stdout": "963\n",
+    "wir_expect:O2": [
+        "if ref.is_null(global:const_object_globalization_value_arg_call.wado::__const_obj_0)",
+        "global:const_object_globalization_value_arg_call.wado::__const_obj_0 = \"const_object_globalization_value_arg_call.wado/encode_key\""
+    ]
+}

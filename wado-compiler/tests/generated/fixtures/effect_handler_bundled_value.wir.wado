@@ -163,6 +163,7 @@ global mut global:effect_handler_bundled_value.wado::handler_built: i32 = 0;
 global mut global:effect_handler_bundled_value.wado::__effect_Greeting: ref null "effect_handler_bundled_value.wado//__Dispatch_Greeting" = ref.null none;
 global mut global:effect_handler_bundled_value.wado::__effect_Counter: ref null "effect_handler_bundled_value.wado//__Dispatch_Counter" = ref.null none;
 global mut global:effect_handler_bundled_value.wado::__modules_initialized: bool = 0;
+global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "effect_handler_bundled_value.wado/run"() with Stdout {
     let g: ref "core:prelude/string.wado//String";
@@ -235,17 +236,15 @@ fn "effect_handler_bundled_value.wado/__effect_dispatch__Greeting__hello"() {
     let __saved: ref null "effect_handler_bundled_value.wado//__Dispatch_Greeting";
     let __local_1: ref "effect_handler_bundled_value.wado//__Dispatch_Greeting";
     let __local_2: ref "core:prelude/string.wado//String";
-    let v: ref "core:prelude/string.wado//String";
     __saved = global:effect_handler_bundled_value.wado::__effect_Greeting;
     if @likely(ref.is_null(__saved) == 0) {
         __local_1 = ref.as_non_null(__saved);
         global:effect_handler_bundled_value.wado::__effect_Greeting = __local_1.outer;
-        v = block -> ref "core:prelude/string.wado//String" {
+        __local_2 = block -> ref "core:prelude/string.wado//String" {
             let __indirect_call_0: ref "canonical//CanonicalClosure_0";
             __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(__local_1.op_hello);
             call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
         };
-        __local_2 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: v.used };
         global:effect_handler_bundled_value.wado::__effect_Greeting = __saved;
         return __local_2;
     } else {
@@ -511,7 +510,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_0, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
@@ -707,7 +706,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_0, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
