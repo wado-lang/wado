@@ -13,9 +13,10 @@ GC work induced by the ~20 short-lived objects that request allocates is ~40 µs
 Allocation churn, not routing or serialization logic, is what separates
 `wado serve` from Axum on the guest side.
 
-Two changes applied here — a byte-string literal for the `content-type` value and
-`write_raw` for the body — remove 4 of those objects and measure +2 to +6%. The
-rest of the list is optimizer work.
+Two source changes (a byte-string literal for the `content-type` value,
+`write_raw` for the body) and one optimizer change (globalizing a constant passed
+by value) remove 6 of those objects. Each is verified in the WIR; end to end they
+measure a few percent, which is this host's noise floor — see below.
 
 ## Method
 
@@ -115,24 +116,28 @@ and 4 are now applied to `app.wado`; 2 and 3 are compiler work.
 
 ## Measured levers
 
-Items 1 and 4 together, interleaved A/B against the previous `app.wado`, best of
-3 rounds (this run's machine state is faster than the ablation run above, so
-compare within the table only):
+The payoff is proportional to objects removed, not to instructions removed:
+removing all five header objects by hand measured +8.2% / +9.7% on the two
+routes (28,950 → 31,325 and 25,207 → 27,651 req/s, best of 5 rounds), of which
+only ~1 µs is compute and the rest is GC that no longer runs.
 
-| Request                        |   base | `b"…"` + `write_raw` | delta |
-| ------------------------------ | -----: | -------------------: | ----: |
-| `GET /user`                    | 35,801 |               38,026 | +6.2% |
-| `GET /event/abcd1234/comments` | 31,953 |               32,683 | +2.3% |
-| `GET /static/index.html`       | 31,983 |               33,423 | +4.5% |
+Items 1 and 4 together — the byte literal plus `write_raw` — measured +2.3% to
++6.2% across three request shapes, and a further hand-hoist of the literal into a
+`global` measured +1% to +8% on top of that.
 
-Hoisting the byte literal further into a `global` — what constant globalization
-would do — adds another +1 to +8% on top (39,862 / 35,176 / 33,790 in the same
-run), for +6 to +11% over the base.
+## Noise floor
 
-The payoff is proportional to objects removed, not to instructions removed: an
-earlier A/B that removed all five header objects by hand measured +8.2% / +9.7%
-on the two routes, of which only ~1 µs was compute and the rest GC that no longer
-runs.
+Those single-digit deltas need a scale: an A/B of two servers running the _same_
+binary on the _same_ app, interleaved the same way over 5 rounds, spreads -4.2%
+to +0.4% on this host. So anything under ~5% here is a hint, not a result —
+including the +2 to +6% above. What is certain is the WIR: the objects are gone.
+
+For a change this size, isolate it instead. A CLI loop over the by-value
+constant argument alone (1000 calls per iteration, `#[inline(never)]` callee)
+goes from 33.6k to 735.6k iterations/s once the constant is globalized — 29 ns to
+1.3 ns per call. End to end that saving is ~2 of ~18 objects per request: the
+same-binary-different-compiler A/B measured +2.3% and +1.3% over 8 s slices,
+which is the right order of magnitude and still inside the floor.
 
 ## The constant is no longer rebuilt per request
 
