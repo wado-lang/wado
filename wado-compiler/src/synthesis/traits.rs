@@ -30,7 +30,7 @@ use crate::token::Span;
 
 use super::common::{
     deref_expr, make_synthetic_free_function, make_synthetic_method, param_local, ref_expr,
-    synth_span, trait_method_call, write_str_stmt,
+    synth_span, write_str_stmt,
 };
 
 /// Snapshot of every `core:prelude/{traits,format}` symbol name that the
