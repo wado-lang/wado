@@ -3550,13 +3550,6 @@ export fn run() { ... }
 A `pub`-only item reaches Wado consumers only (source dependency or
 provider-tagged `.wasm`); a non-Wado CM consumer sees `export` items only.
 
-At the CM boundary a library's exported functions and the types their signatures
-reference share one namespace, and names in it are kebab-cased and compared
-case-insensitively. Wado keeps types and functions in separate namespaces, so a
-pair that reads as unambiguous can still collide there — `variant Shape` beside
-`export fn shape`, or `HTTPServer` beside `HttpServer`, each landing on one CM
-name. Both are compile errors; rename one side.
-
 The ladder applies to top-level items. Members of an `impl` block (methods,
 associated constants) accept the same file-private / `internal` / `pub` ladder;
 `export` on a member is a compile error (a method has no Component Model
