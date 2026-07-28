@@ -141,6 +141,13 @@ pub fn shallow_copy_helper_name(deep_name: &str) -> String {
     format!("{deep_name}$shallow")
 }
 
+/// The name of a `param_spec` clone: the original's name plus the clone's
+/// ordinal among that callee's specializations. Unique package-wide, since the
+/// original's name already is.
+pub fn param_spec_name(original: &str, ordinal: usize) -> String {
+    format!("{original}$spec{ordinal}")
+}
+
 /// The name of the synthesized `Case::<V, P>::extract` helper for a variant
 /// and one of its payload types, both identified by their structural mangles
 /// (same identity discipline as [`value_copy_helper_name`]). Lowering rewrites

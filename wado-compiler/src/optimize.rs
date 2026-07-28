@@ -40,9 +40,11 @@
 //! 14. `const_folding` — partial evaluation via [`crate::niri`] (also drives
 //!     alias-aware field-knowledge tracking; see `alias`). The flow-sensitive
 //!     half; the env-free folds and trivial-block pruning run in `peephole`.
-//! 15. `licm` — Loop-Invariant Code Motion.
-//! 16. `condition_implication` — eliminate conditions implied by dominators.
-//! 17. `tmpl_hoist` — hoist template-string backing buffers out of loops.
+//! 15. `param_spec` — clone a callee on the constant fields of a by-reference
+//!     struct its caller passes, substituting those reads.
+//! 16. `licm` — Loop-Invariant Code Motion.
+//! 17. `condition_implication` — eliminate conditions implied by dominators.
+//! 18. `tmpl_hoist` — hoist template-string backing buffers out of loops.
 //!
 //! Dense `Match` → `Switch` on global initializer bodies runs once before the
 //! loop (`match_to_switch_globals`); `-O0` skips the loop and lowers everything
@@ -95,6 +97,7 @@ mod loop_version_bce;
 mod match_to_switch;
 mod mod_ref;
 mod multi_value_return;
+mod param_spec;
 mod peephole;
 mod ref_elim;
 mod scalar_forward;
@@ -600,6 +603,7 @@ fn run_optimization_passes(
     // GlobalEnv / GlobalFieldEnv). Rebuilt only when the function or global count
     // changes; see `ConstFoldCache`.
     let mut const_fold_cache: Option<ConstFoldCache> = None;
+    let mut param_spec_state = param_spec::ParamSpecState::default();
     // Dense `Match` → `Switch` in global initializer bodies. Functions are
     // lowered by `MatchToSwitchRule` inside the unified peephole session; the
     // function-level loop never mutates global initializer bodies, so a single
@@ -762,6 +766,20 @@ fn run_optimization_passes(
         // `nir/peephole` run above; the post-loop `branch_prune_final` and the
         // post-globalization `const_fold_post_global` keep their own engine
         // sessions (`prune_template_block_wrappers` / `prune_constant_branches`).
+        // After `const_fold`, so a caller's config struct literal already holds
+        // folded constants; inside the loop, so the next iteration prunes the
+        // clone's dead branches and reaches one call deeper.
+        {
+            let c = run_pass("nir/param_spec", project, profiler, |p| {
+                param_spec::specialize_const_params(p, &mut param_spec_state, &mut gate)
+            });
+            if c {
+                changed = true;
+                if trace_loop {
+                    iter_changed.push("nir/param_spec");
+                }
+            }
+        }
         gated!("nir/licm", apply_licm);
         gated!("nir/tmpl_hoist", hoist_template_buffers);
         profiler.span_end(&format!("nir/iteration {}", i + 1));

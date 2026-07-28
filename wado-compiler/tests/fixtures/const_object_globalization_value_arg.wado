@@ -1,0 +1,42 @@
+// Constant Object Globalization for a constant aggregate passed *by value*
+// as a call argument (WEP-2026-05-31, extended).
+//
+// A `&`-referenced literal was already hoisted; a by-value argument was not,
+// so a constant like `append(name, b"application/json")` was rebuilt on every
+// call. The pass now hoists it too, gated on the callee's parameter being
+// read-only in the callee's own body: the caller-side copy the value-copy
+// planner would otherwise insert is absent precisely *because* the literal is
+// fresh, so sharing it is sound only when the callee cannot write it.
+//
+// `head_len` reads its by-value parameter, so its literal hoists into a shared
+// immutable global. `bump_first` writes its by-value parameter; hoisting that
+// literal would let one call's mutation leak into the next, so it stays
+// per-call — the three identical `bump_first` results are the soundness check.
+//
+// Both callees are `#[inline(never)]` so the calls (and their literal
+// arguments) survive to `const_object_globalization`.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn head_len(s: List<u8>) -> i32 {
+    return s.len();
+}
+
+#[inline(never)]
+fn bump_first(mut v: List<u8>) -> i32 {
+    v[0] = v[0] + 1;
+    return v[0] as i32;
+}
+
+export fn run() with Stdout {
+    // b"hello" is 5 bytes; `bump_first` must see a fresh b"abc" every call.
+    println(`${head_len(b"hello")} ${bump_first(b"abc")} ${bump_first(b"abc")} ${bump_first(b"abc")}`);
+}
+
+__DATA__
+{
+    "stdout": "5 98 98 98\n",
+    "wir_expect:O2": ["array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 }"],
+    "wir_not_expect:O2": ["array.new_fixed<u8>(97, 98, 99), used: 3 };"]
+}

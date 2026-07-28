@@ -189,6 +189,49 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.with_scope_field(|scope| &mut scope.default_scope_module, module, body)
     }
 
+    /// Expand a written bound list to include every bound's supertraits, so a
+    /// declared `T: Ord` also demands `Eq`. For the sites that *check* a bound;
+    /// what a parameter is known to satisfy is elaborated on read instead, by
+    /// [`super::tysys::TypeSystem::bound_implies`]. `fn(...)` bounds name no
+    /// trait and pass through untouched.
+    pub(super) fn elaborate_bounds(&self, bounds: &[ast::TraitBound]) -> Vec<ast::TraitBound> {
+        let mut elaborated = Vec::with_capacity(bounds.len());
+        for bound in bounds {
+            super::trait_env::push_unique_bound(&mut elaborated, bound);
+            if bound.fn_signature.is_some() {
+                continue;
+            }
+            for inherited in self
+                .tysys
+                .supertraits_of(&self.type_lookup(), &bound.name)
+                .to_vec()
+            {
+                super::trait_env::push_unique_bound(&mut elaborated, &inherited);
+            }
+        }
+        elaborated
+    }
+
+    /// [`Self::elaborate_bounds`] over bare trait names.
+    pub(super) fn elaborate_bound_names(&self, names: &[String]) -> Vec<String> {
+        let mut elaborated: Vec<String> = Vec::with_capacity(names.len());
+        for name in names {
+            if !elaborated.contains(name) {
+                elaborated.push(name.clone());
+            }
+            for inherited in self
+                .tysys
+                .supertraits_of(&self.type_lookup(), name)
+                .to_vec()
+            {
+                if !elaborated.contains(&inherited.name) {
+                    elaborated.push(inherited.name);
+                }
+            }
+        }
+        elaborated
+    }
+
     /// Register a list of generic parameters as `TypeParam` / `TypePack` ids
     /// in the current `trait_ctx`, starting from `offset`. Skips effect params.
     /// Returns the next free index (i.e. `offset + non_effect_count`).

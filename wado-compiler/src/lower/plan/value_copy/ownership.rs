@@ -24,7 +24,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     FunctionKind, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeTable, matches_builtin,
+    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -38,6 +38,7 @@ fn is_container_alias_read(name: &str, monomorph_info: Option<&MonomorphInfo>) -
 pub struct OwnedCalls<'a> {
     returns_owned: &'a FuncKeySet,
     returns_self_projection: &'a FuncKeySet,
+    indirect_owned_returns: Option<&'a IndexSet<TypeId>>,
 }
 
 impl<'a> OwnedCalls<'a> {
@@ -45,7 +46,24 @@ impl<'a> OwnedCalls<'a> {
         Self {
             returns_owned,
             returns_self_projection,
+            indirect_owned_returns: None,
         }
+    }
+
+    /// Attach the indirect-call verdict (see [`compute_indirect_owned_returns`]).
+    /// Left off during the return-convention fixpoint, whose own result it is
+    /// derived from; the fold attaches it.
+    pub fn with_indirect(mut self, indirect_owned_returns: &'a IndexSet<TypeId>) -> Self {
+        self.indirect_owned_returns = Some(indirect_owned_returns);
+        self
+    }
+
+    /// Whether an indirect call yielding `return_type` is owned. Every callable
+    /// value is a closure functor by this point, so the question is whether
+    /// every closure `__call` of that return type returns owned.
+    pub fn indirect_is_owned(&self, return_type: TypeId) -> bool {
+        self.indirect_owned_returns
+            .is_some_and(|set| set.contains(&return_type))
     }
 
     /// Whether a call to `func` yields an owned (fresh) value. A core builtin
@@ -218,6 +236,38 @@ pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
         returns_owned: owned,
         returns_self_projection: self_proj,
     }
+}
+
+/// Return types for which *every* possible indirect-call target returns owned.
+///
+/// `lower::plan::closure` rewrites every callable value — a closure literal and
+/// a bare `FuncRef` alike — into a functor whose `__call` is an ordinary
+/// function in `project.functions`, so those `__call`s are the complete set of
+/// indirect-call targets. An indirect call is type-checked against its callee's
+/// signature, so only targets returning the same type can be reached: a return
+/// type all of whose `__call`s return owned makes every such call owned.
+///
+/// Derived from `returns_owned`, so it is computed after that fixpoint settles
+/// and never feeds back into it.
+pub fn compute_indirect_owned_returns(
+    project: &FlatPackage,
+    returns_owned: &FuncKeySet,
+) -> IndexSet<TypeId> {
+    let mut owned_returns: IndexSet<TypeId> = IndexSet::default();
+    let mut borrowed_returns: IndexSet<TypeId> = IndexSet::default();
+    for func in &project.functions {
+        let func = func.borrow();
+        if !func.is_closure_call() {
+            continue;
+        }
+        if returns_owned.contains(&func.module_source, &func.name) {
+            owned_returns.insert(func.return_type);
+        } else {
+            borrowed_returns.insert(func.return_type);
+        }
+    }
+    owned_returns.retain(|ty| !borrowed_returns.contains(ty));
+    owned_returns
 }
 
 /// The function's `(returns_owned, returns_self_projection)` convention: whether

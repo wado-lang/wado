@@ -124,6 +124,7 @@ global global:bug_const_forward_stale_block_fold.wado::__const_obj_4: ref null "
 global global:bug_const_forward_stale_block_fold.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 99, 108, 97, 115, 115, 105, 102, 121, 40, 49, 41, 32, 61, 61, 32, 49, 10), used: 29 };
 global global:bug_const_forward_stale_block_fold.wado::__const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 108, 97, 115, 115, 105, 102, 121, 40, 48, 41, 58, 32), used: 13 };
 global global:bug_const_forward_stale_block_fold.wado::__const_obj_9: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 99, 108, 97, 115, 115, 105, 102, 121, 40, 48, 41, 32, 61, 61, 32, 48, 10), used: 29 };
+global global:core:prelude/primitive.wado::__const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "bug_const_forward_stale_block_fold.wado/classify"(tag) {
     let winner: i32;
@@ -368,7 +369,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_12, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 

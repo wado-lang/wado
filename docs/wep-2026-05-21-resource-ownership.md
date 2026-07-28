@@ -163,8 +163,9 @@ by-value receiver transfer, with no aggregate-shape guessing. Two fixes landed:
 
 - A `&self` inspector on a `Result<Resource, E>` (`is_ok`, …) is a borrow and
   leaves the structural drop intact (#1569).
-- A resource value discarded in statement position (`Fields::new();`, `let _ =
-  …`) is dropped, not leaked; a tail expression is left for its consumer.
+- A resource value discarded in statement position (`Fields::new();`,
+  `let _ = …`) is dropped, not leaked; a tail expression is left for its
+  consumer.
 
 The `is_resource_aggregate` heuristic is **retired**: cleanup now drops "owned and
 not transferred at scope exit" directly.
@@ -209,7 +210,26 @@ where it cannot prove move / share / fresh; no elision pass):
   (`receiver_storing_methods`), so a `&mut self` mutation like `List::push`
   (which stores only its value) no longer pins the receiver local.
 - Freshness — `ownership.rs` return conventions (a call is fresh iff the callee
-  returns owned).
+  returns owned), plus the literals that materialize their own storage: a string
+  _and_ a bytes literal, both of which lower to a fresh aggregate over a packed
+  array. An _indirect_ call is fresh when every closure `__call` of its
+  return type returns owned: closure lowering rewrites every callable value —
+  a closure literal and a bare `FuncRef` alike — into a functor whose `__call`
+  is an ordinary function, so those are the complete set of targets, and the
+  call's own signature narrows them to one return type. The verdict is derived
+  from the return-convention fixpoint and so is computed after it, never inside
+  it.
+- Representation-preserving casts — a newtype shares its base type's
+  representation (WEP 2026-01-29), so `bytes as ByteArray` hands over the same
+  storage and the move side reads through it, as freshness always did. Without
+  that, `String { repr: bytes as ByteArray, used: len }` — how the CM string
+  lift and `String::substring` build their result — deep-copies an array the
+  caller just allocated.
+- Branch results — a block's value is its tail expression and an `if`'s is the
+  tail of whichever branch runs, so each is fresh exactly when those tails are,
+  the rule `match` arms already followed. A router dispatch — a response bound
+  from an `if let` over the matched route — needs both this and the
+  indirect-call rule, or every later field read of the binding is deep-copied.
 - Confinement — `confine.rs` per-parameter escape fixpoint.
 - Read-only-share — a read-only binding whose storage is never mutated while live.
 
@@ -292,6 +312,10 @@ Verified against the tree.
 - [x] Place-level move at struct / tuple literals (whole-value / clean-field
       materialization out of a dead aggregate); receiver-storing precision so a
       value-storing `&mut self` method does not pin its receiver.
+- [x] Freshness through an indirect call and through block / `if` results.
+- [x] Move through a newtype cast (`bytes as ByteArray`), which the freshness
+      side already read through.
+- [x] A bytes literal counts as fresh, like a string literal.
 - [ ] Pin representative move / copy / share decisions as e2e fixtures.
 
 ## Deferred: the `move` and `unique` keywords

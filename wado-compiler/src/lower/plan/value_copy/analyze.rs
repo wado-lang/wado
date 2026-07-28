@@ -197,7 +197,11 @@ pub(crate) fn is_owned_value(
     type_table: &TypeTable,
 ) -> bool {
     match &expr.kind {
+        // A string / bytes literal lowers to a fresh `StructLiteral` over a
+        // packed array (`translate::seq_literal`), so each evaluation
+        // materializes its own storage.
         TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::StructLiteral { .. }
         | TirExprKind::TupleLiteral { .. }
         | TirExprKind::TupleSpread { .. }
@@ -226,6 +230,11 @@ pub(crate) fn is_owned_value(
                     && is_owned_value(receiver, fresh_locals, oracle, type_table))
         }
         TirExprKind::CmRawCall { .. } => true,
+        // Every callable value is a closure functor by lowering time, so an
+        // indirect call is owned when every `__call` of this return type is
+        // (`compute_indirect_owned_returns`). Without that verdict — inside the
+        // fixpoint the verdict is derived from — it stays borrowed.
+        TirExprKind::IndirectCall { .. } => oracle.indirect_is_owned(expr.type_id),
         TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
         TirExprKind::Local { index, .. } => fresh_locals.contains(index),
         TirExprKind::Unary {
@@ -234,6 +243,23 @@ pub(crate) fn is_owned_value(
         } => is_owned_value(inner, fresh_locals, oracle, type_table),
         TirExprKind::LabeledBlock { label, block, .. } => {
             block_breaks_are_fresh(label, block, fresh_locals, oracle, type_table)
+        }
+        // A block's value is its tail expression, and an `if`'s is the tail of
+        // whichever branch runs — owned exactly when those tails are, the same
+        // rule `Match` follows. `let resp = if let … { handler(…) } else { … }`
+        // is the shape that needs it: without this the binding is classified
+        // borrowed and every later field read is deep-copied.
+        TirExprKind::Block(block) => block_tail_is_owned(block, fresh_locals, oracle, type_table),
+        TirExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            let Some(else_branch) = else_branch else {
+                return false;
+            };
+            block_tail_is_owned(then_branch, fresh_locals, oracle, type_table)
+                && block_tail_is_owned(else_branch, fresh_locals, oracle, type_table)
         }
         TirExprKind::Match { expr: scrut, arms } => {
             match_result_is_fresh(scrut, arms, fresh_locals, oracle, type_table)
@@ -307,6 +333,39 @@ pub(crate) fn collect_pattern_bindings(pattern: &TirPattern, out: &mut IndexSet<
         | TirPattern::Enum { .. }
         | TirPattern::ConstantValue { .. }
         | TirPattern::Range { .. } => {}
+    }
+}
+
+/// Whether the value a block delivers by falling off its end is owned.
+///
+/// The value is the block's tail expression statement; `let`s ahead of it seed
+/// the fresh set exactly as they do inside a labeled block. A block that
+/// diverges instead (`return` / `break` as the last statement) delivers no
+/// value, so it cannot make the result borrowed — the caller's other branch, or
+/// the enclosing `Match` arm rule, decides.
+fn block_tail_is_owned(
+    block: &TirBlock,
+    parent_fresh: &IndexSet<u32>,
+    oracle: &OwnedCalls,
+    type_table: &TypeTable,
+) -> bool {
+    let mut fresh_locals = parent_fresh.clone();
+    let Some((last, init)) = block.stmts.split_last() else {
+        return false;
+    };
+    for stmt in init {
+        if let TirStmtKind::Let {
+            local_index, value, ..
+        } = &stmt.kind
+            && is_owned_value(value, &fresh_locals, oracle, type_table)
+        {
+            fresh_locals.insert(*local_index);
+        }
+    }
+    match &last.kind {
+        TirStmtKind::Expr(expr) => is_owned_value(expr, &fresh_locals, oracle, type_table),
+        TirStmtKind::Return { .. } | TirStmtKind::Break { .. } => true,
+        _ => false,
     }
 }
 

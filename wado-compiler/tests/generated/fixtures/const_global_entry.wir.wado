@@ -125,6 +125,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 global global:const_global_entry.wado::ORIGIN: ref null "const_global_entry.wado//Point" = struct.new "const_global_entry.wado//Point" { x: 3, y: 4 };
 global mut global:const_global_entry.wado::__modules_initialized: bool = 0;
+<<<<<<< HEAD
 global global:core:prelude/traits.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 125), used: 3 };
 global global:core:prelude/traits.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 32, 46, 46, 32, 125), used: 7 };
 global global:core:prelude/traits.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
@@ -134,6 +135,10 @@ global global:core:prelude/traits.wado::__const_obj_5: ref null "core:prelude/st
 global global:core:prelude/traits.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
 global mut global:core:prelude/traits.wado::__const_obj_9: ref null "tuple//[core:prelude/traits.wado/StructField<const_global_entry.wado/Point,i32>, core:prelude/traits.wado/StructField<const_global_entry.wado/Point,i32>]" = ref.null none;
 global global:core:prelude/traits.wado::__const_obj_10: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80, 111, 105, 110, 116), used: 5 };
+||||||| 2738e686c
+=======
+global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+>>>>>>> origin/main
 
 fn "const_global_entry.wado/run"() with Stdout {
     let __local_0: ref "core:prelude/string.wado//String";
@@ -348,7 +353,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_0, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 

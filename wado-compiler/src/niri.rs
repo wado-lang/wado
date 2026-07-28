@@ -2617,8 +2617,14 @@ fn pattern_is_catch_all_a(body: &Body, pat: PatId) -> bool {
     }
 }
 
-/// Simplify `false && x` / `true || x` and their mirror forms.
+/// Simplify a short-circuit one operand already decides. The neutral element
+/// keeps the other operand (`true && x` / `false || x` — and their mirrors —
+/// become `x`); the absorbing element becomes the result (`false && x` /
+/// `true || x` become `false` / `true`).
 fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) -> bool {
+    if let Some(absorbing) = absorbing_short_circuit(sink.body(), e) {
+        return sink.replace_with_value(e, Value::Bool(absorbing));
+    }
     let body = sink.body();
     let keep: Operand = match &body.exprs[e].kind {
         ExprKind::Binary { left, op, right } => {
@@ -2638,6 +2644,58 @@ fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) -> bool {
     };
     sink.become_expr(e, keep_e);
     true
+}
+
+/// The value a short-circuit collapses to when one operand is its absorbing
+/// element — `true` for `||`, `false` for `&&`. `None` unless the *other*
+/// operand is discardable: `x || true` still evaluates `x` first, so deleting
+/// it is only sound when it can neither trap nor be observed.
+fn absorbing_short_circuit(body: &Body, e: ExprId) -> Option<bool> {
+    let ExprKind::Binary { left, op, right } = &body.exprs[e].kind else {
+        return None;
+    };
+    let (left, op, right) = (*left, *op, *right);
+    let absorbing = match op {
+        NirBinaryOp::Or => true,
+        NirBinaryOp::And => false,
+        _ => return None,
+    };
+    let discarded = if operand_bool(body, left) == Some(absorbing) {
+        right
+    } else if operand_bool(body, right) == Some(absorbing) {
+        left
+    } else {
+        return None;
+    };
+    is_discardable_operand_a(body, discarded).then_some(absorbing)
+}
+
+/// Whether `e` can be *deleted* outright: side-effect-free like
+/// [`is_speculatable_a`], and trap-free on top of that.
+///
+/// The two differ where a trap is possible. `is_speculatable_a` admits
+/// `FieldAccess` and `Cast`, which is right for its callers — they *reorder* an
+/// expression, so a trap it would raise still happens. Deleting the expression
+/// erases the trap, which the program is entitled to observe.
+fn is_discardable_a(body: &Body, e: ExprId) -> bool {
+    match &body.exprs[e].kind {
+        ExprKind::Local { .. } => true,
+        ExprKind::Binary { left, op, right } => {
+            !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
+                && is_discardable_operand_a(body, *left)
+                && is_discardable_operand_a(body, *right)
+        }
+        ExprKind::Unary { op, expr: inner } => {
+            !matches!(op, NirUnaryOp::Deref) && is_discardable_operand_a(body, *inner)
+        }
+        _ => false,
+    }
+}
+
+/// Operand form of [`is_discardable_a`]: a promoted pure value (a constant) is
+/// always discardable.
+fn is_discardable_operand_a(body: &Body, op: crate::nir_arena::Operand) -> bool {
+    op.as_expr().is_none_or(|e| is_discardable_a(body, e))
 }
 
 /// The boolean value of an operand: a promoted `ValueKind::Bool` in the pool.

@@ -54,19 +54,23 @@ type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // Typ
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(22)
 
-type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(23)
+type "functype//core:prelude/string.wado/String^Ord::cmp" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(23)
 
-type "functype//core:prelude/string.wado/String^Ord::cmp" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(24)
+type "functype//core:prelude/list.wado/List<i32>^Eq::eq" = fn(ref "core:prelude//List<i32>", ref "core:prelude//List<i32>") -> bool;  // TypeId(24)
 
-type "functype//core:prelude/list.wado/List<i32>^Eq::eq" = fn(ref "core:prelude//List<i32>", ref "core:prelude//List<i32>") -> bool;  // TypeId(25)
+type "functype//core:prelude/list.wado/List<i32>^Ord::cmp" = fn(ref "core:prelude//List<i32>", ref "core:prelude//List<i32>") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(25)
 
-type "functype//core:prelude/list.wado/List<i32>^Ord::cmp" = fn(ref "core:prelude//List<i32>", ref "core:prelude//List<i32>") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(26)
+type "functype//core:prelude/string.wado/String^Eq::eq$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(26)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
+type "functype//core:prelude/string.wado/String^Ord::cmp$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(27)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
+type "functype//core:prelude/string.wado/String^Ord::cmp$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(28)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(29)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
+
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(31)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -125,13 +129,13 @@ fn "ordering_basic.wado/run"() with Stdout {
     if "core:prelude/string.wado/String^Ord::cmp"(global:ordering_basic.wado::__const_obj_2, global:ordering_basic.wado::__const_obj_1) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple < banana"), used: 14 });
     }
-    if "core:prelude/string.wado/String^Ord::cmp"(global:ordering_basic.wado::__const_obj_2, global:ordering_basic.wado::__const_obj_0) != 2 {
+    if "core:prelude/string.wado/String^Ord::cmp$spec1"(global:ordering_basic.wado::__const_obj_2, global:ordering_basic.wado::__const_obj_0) != 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple <= apple"), used: 14 });
     }
-    if "core:prelude/string.wado/String^Ord::cmp"(global:ordering_basic.wado::__const_obj_1, global:ordering_basic.wado::__const_obj_2) == 2 {
+    if "core:prelude/string.wado/String^Ord::cmp$spec0"(global:ordering_basic.wado::__const_obj_1, global:ordering_basic.wado::__const_obj_2) == 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana > apple"), used: 14 });
     }
-    if "core:prelude/string.wado/String^Eq::eq"(global:ordering_basic.wado::__const_obj_2, global:ordering_basic.wado::__const_obj_0) {
+    if "core:prelude/string.wado/String^Eq::eq$spec0"(global:ordering_basic.wado::__const_obj_2, global:ordering_basic.wado::__const_obj_0) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple == apple"), used: 14 });
     }
 }
@@ -254,33 +258,6 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
-    let len: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
-    len = self.used;
-    if len != other.used {
-        return 0;
-    }
-    return __inline_bytes_match_at_2: block -> bool {
-        haystack = self.repr;
-        needle = other.repr;
-        j = 0;
-        b20: block {
-            l21: loop {
-                break_if b20 j >= len;
-                if builtin::array_get<u8>(haystack, 0 + j) != builtin::array_get<u8>(needle, j) {
-                    break __inline_bytes_match_at_2: 0;
-                }
-                j = j + 1;
-                continue l21;
-            };
-        };
-        break __inline_bytes_match_at_2: 1;
-    };
-}
-
 fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
     let len_a: i32;
     let len_b: i32;
@@ -296,9 +273,9 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
     a_repr = self.repr;
     b_repr = other.repr;
     i = 0;
-    b23: block {
-        l24: loop {
-            break_if b23 i >= min_len;
+    b19: block {
+        l20: loop {
+            break_if b19 i >= min_len;
             a_byte = builtin::array_get<u8>(a_repr, i);
             b_byte = builtin::array_get<u8>(b_repr, i);
             if a_byte <u b_byte {
@@ -308,7 +285,7 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
                 return 2;
             }
             i = i + 1;
-            continue l24;
+            continue l20;
         };
     };
     if len_a < len_b {
@@ -332,14 +309,14 @@ fn "core:prelude/list.wado/List<i32>^Eq::eq"(self, other) {
     _licm_used_7 = self.used;
     _licm_repr_8 = self.repr;
     _licm_repr_9 = other.repr;
-    b30: block {
-        l31: loop {
-            break_if b30 i >= _licm_used_7;
+    b26: block {
+        l27: loop {
+            break_if b26 i >= _licm_used_7;
             if builtin::array_get<i32>(_licm_repr_8, i) != builtin::array_get<i32>(_licm_repr_9, i) {
                 return 0;
             }
             i = i + 1;
-            continue l31;
+            continue l27;
         };
     };
     return 1;
@@ -360,9 +337,9 @@ fn "core:prelude/list.wado/List<i32>^Ord::cmp"(self, other) {
     i = 0;
     _licm_repr_18 = self.repr;
     _licm_repr_19 = other.repr;
-    b33: block {
-        l34: loop {
-            break_if b33 i >= min_len;
+    b29: block {
+        l30: loop {
+            break_if b29 i >= min_len;
             a_4 = builtin::array_get<i32>(_licm_repr_18, i);
             b_5 = builtin::array_get<i32>(_licm_repr_19, i);
             if __inline_i32_Ord__cmp_3: block -> "core:prelude/traits.wado//enum:Ordering" {
@@ -388,7 +365,7 @@ fn "core:prelude/list.wado/List<i32>^Ord::cmp"(self, other) {
                 return 2;
             }
             i = i + 1;
-            continue l34;
+            continue l30;
         };
     };
     if self.used < other.used {
@@ -397,6 +374,86 @@ fn "core:prelude/list.wado/List<i32>^Ord::cmp"(self, other) {
     if self.used > other.used {
         return 2;
     }
+    return 1;
+}
+
+fn "core:prelude/string.wado/String^Eq::eq$spec0"(self, other) {
+    let haystack: ref Array<u8>;
+    let needle: ref Array<u8>;
+    let j: i32;
+    return __inline_bytes_match_at_2: block -> bool {
+        haystack = self.repr;
+        needle = other.repr;
+        j = 0;
+        b39: block {
+            l40: loop {
+                break_if b39 j >= 5;
+                if builtin::array_get<u8>(haystack, 0 + j) != builtin::array_get<u8>(needle, j) {
+                    break __inline_bytes_match_at_2: 0;
+                }
+                j = j + 1;
+                continue l40;
+            };
+        };
+        break __inline_bytes_match_at_2: 1;
+    };
+}
+
+fn "core:prelude/string.wado/String^Ord::cmp$spec0"(self, other) {
+    let min_len: i32;
+    let a_repr: ref Array<u8>;
+    let b_repr: ref Array<u8>;
+    let i: i32;
+    let a_byte: u8;
+    let b_byte: u8;
+    min_len = select i32(0, 6, 5);
+    a_repr = self.repr;
+    b_repr = other.repr;
+    i = 0;
+    b42: block {
+        l43: loop {
+            break_if b42 i >= min_len;
+            a_byte = builtin::array_get<u8>(a_repr, i);
+            b_byte = builtin::array_get<u8>(b_repr, i);
+            if a_byte <u b_byte {
+                return 0;
+            }
+            if a_byte >u b_byte {
+                return 2;
+            }
+            i = i + 1;
+            continue l43;
+        };
+    };
+    return 2;
+}
+
+fn "core:prelude/string.wado/String^Ord::cmp$spec1"(self, other) {
+    let min_len: i32;
+    let a_repr: ref Array<u8>;
+    let b_repr: ref Array<u8>;
+    let i: i32;
+    let a_byte: u8;
+    let b_byte: u8;
+    min_len = select i32(0, 5, 5);
+    a_repr = self.repr;
+    b_repr = other.repr;
+    i = 0;
+    b46: block {
+        l47: loop {
+            break_if b46 i >= min_len;
+            a_byte = builtin::array_get<u8>(a_repr, i);
+            b_byte = builtin::array_get<u8>(b_repr, i);
+            if a_byte <u b_byte {
+                return 0;
+            }
+            if a_byte >u b_byte {
+                return 2;
+            }
+            i = i + 1;
+            continue l47;
+        };
+    };
     return 1;
 }
 

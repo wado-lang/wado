@@ -133,6 +133,7 @@ global global:array_bounds_elim_redundant_check.wado::__const_obj_12: ref null "
 global global:array_bounds_elim_redundant_check.wado::__const_obj_13: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 114, 114, 97, 121, 95, 98, 111, 117, 110, 100, 115, 95, 101, 108, 105, 109, 95, 114, 101, 100, 117, 110, 100, 97, 110, 116, 95, 99, 104, 101, 99, 107, 46, 119, 97, 100, 111), used: 38 };
 global global:array_bounds_elim_redundant_check.wado::__const_obj_21: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 101, 91, 51, 93, 32, 61, 61, 32, 57, 10), used: 22 };
 global global:array_bounds_elim_redundant_check.wado::__const_obj_30: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 101, 91, 50, 93, 32, 61, 61, 32, 53, 10), used: 22 };
+global global:core:prelude/primitive.wado::__const_obj_39: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "array_bounds_elim_redundant_check.wado/bump"(end, child, parent) {
     let __v1_6: i32;
@@ -413,7 +414,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_39, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 

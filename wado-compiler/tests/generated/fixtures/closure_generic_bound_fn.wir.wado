@@ -159,6 +159,7 @@ global global:closure_generic_bound_fn.wado::__const_obj_10: ref null "core:prel
 global global:closure_generic_bound_fn.wado::__const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(95, 95, 116, 101, 115, 116, 95, 50, 95, 100, 117, 112, 95, 118, 105, 97, 95, 103, 101, 110, 101, 114, 105, 99, 95, 98, 111, 117, 110, 100), used: 30 };
 global global:closure_generic_bound_fn.wado::__const_obj_14: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 97, 105, 114, 91, 48, 93, 40, 49, 41, 58, 32), used: 12 };
 global global:closure_generic_bound_fn.wado::__const_obj_15: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 112, 97, 105, 114, 91, 48, 93, 40, 49, 41, 32, 61, 61, 32, 49, 49, 10), used: 29 };
+global global:core:prelude/primitive.wado::__const_obj_19: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "closure_generic_bound_fn.wado/__test_1_generic_bound_fn_mut"() {
     let total: ref "core:prelude/types.wado//Box<i32>";
@@ -440,7 +441,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_19, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
