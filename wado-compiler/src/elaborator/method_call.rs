@@ -2015,14 +2015,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Check if a static method exists directly for a given type name (no newtype fallback).
     fn has_static_method_direct(&self, struct_name: &str, method_name: &str) -> bool {
-        let mangled = MethodName::format_local(struct_name, None, method_name);
+        // Every lookup into a name-keyed index builds the name by the same rule
+        // the definition followed, or it can only miss.
+        let qualified = self.qualified_receiver_name(struct_name);
+        let mangled = MethodName::format_local(&qualified, None, method_name);
         if self.sem.decls.function_return_types.contains_key(&mangled) {
             return true;
         }
         // Also check with trait-qualified name
         if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name) {
             let trait_mangled =
-                MethodName::format_local(struct_name, Some(&trait_name), method_name);
+                MethodName::format_local(&qualified, Some(&trait_name), method_name);
             if self
                 .sem
                 .decls
@@ -2093,8 +2096,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Try with trait-qualified name (StructName^TraitName::method)
         if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name) {
-            let trait_mangled =
-                MethodName::format_local(struct_name, Some(&trait_name), method_name);
+            let trait_mangled = MethodName::format_local(
+                &self.qualified_receiver_name(struct_name),
+                Some(&trait_name),
+                method_name,
+            );
             if let Some(&return_type) = self.sem.decls.function_return_types.get(&trait_mangled) {
                 return return_type;
             }
