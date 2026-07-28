@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785226497982,
+  "lastUpdate": 1785230609322,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44541,6 +44541,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/63d29e66c32bd2e8312f9d1598dc1de712d60974"
         },
         "date": 1785226497153,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16237,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276421,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fb7ba1593ac1f0e72669c37b1c657ac7e2243ad1",
+          "message": "Merge pull request #1707 from wado-lang/claude/niri-array-operations-j9ff3m\n\nfeat(compiler)!: fold constant sequence elements and immutable-global values",
+          "timestamp": "2026-07-28T18:12:32+09:00",
+          "tree_id": "d86a51c28b0d95d7cd154b3cf3bb1e73d1566672",
+          "url": "https://github.com/wado-lang/wado/commit/fb7ba1593ac1f0e72669c37b1c657ac7e2243ad1"
+        },
+        "date": 1785230608627,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
