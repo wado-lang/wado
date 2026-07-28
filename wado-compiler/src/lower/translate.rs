@@ -132,6 +132,8 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
             ids,
             stubs: Vec::new(),
             base_len,
+            #[cfg(debug_assertions)]
+            shadowed: Vec::new(),
         }),
         moved_local_spans,
     };
@@ -196,7 +198,18 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     // Finalize the born-resolved callee ids: append the interned extern stubs,
     // set every function's `id` to its store position (`FuncId == position`), and
     // publish the reverse index. Replaces the former post-pass `assign_func_ids`.
-    let Interner { ids, stubs, .. } = translator.interner.into_inner();
+    let Interner {
+        ids,
+        stubs,
+        #[cfg(debug_assertions)]
+        shadowed,
+        ..
+    } = translator.interner.into_inner();
+    #[cfg(debug_assertions)]
+    assert!(
+        shadowed.is_empty(),
+        "a call minted an extern stub for a name the package defines: {shadowed:#?}"
+    );
     nir.functions.extend(stubs);
     for (i, func_rc) in nir.functions.iter().enumerate() {
         func_rc.borrow_mut().id = Some(crate::nir::FuncId::new(i));
@@ -230,6 +243,9 @@ struct Interner {
     ids: IndexMap<crate::name::FunctionId, crate::nir::FuncId>,
     stubs: Vec<Rc<RefCell<NirFunction>>>,
     base_len: usize,
+    /// Stubs minted for a name the package defines — see `resolve`.
+    #[cfg(debug_assertions)]
+    shadowed: Vec<String>,
 }
 
 impl Interner {
@@ -239,6 +255,21 @@ impl Interner {
         let key = func_ref.function_id();
         if let Some(&id) = self.ids.get(&key) {
             return id;
+        }
+        // A stub is for a callee outside the package. Minting one for a name the
+        // package *does* define means the call and the definition disagree on
+        // some other part of the identity — the call then binds to a body-less
+        // stub and only surfaces as an unsatisfied trait bound at WIR build.
+        #[cfg(debug_assertions)]
+        {
+            let name = &func_ref.name;
+            let same_name = |k: &crate::name::FunctionId| match k {
+                crate::name::FunctionId::Free(f) => f.name == *name,
+                crate::name::FunctionId::Method(_) => false,
+            };
+            if let Some(defined) = self.ids.keys().find(|k| same_name(k)) {
+                self.shadowed.push(format!("{key:?} vs defined {defined:?}"));
+            }
         }
         let id = crate::nir::FuncId::new(self.base_len + self.stubs.len());
         let mut stub = NirFunction::extern_stub(func_ref);
