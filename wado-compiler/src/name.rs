@@ -2197,6 +2197,13 @@ impl FqTypeName {
         &self.0
     }
 
+    /// The declared name without its module — what the source wrote. Use it to
+    /// branch on which declaration this is, never to build another name.
+    #[must_use]
+    pub fn simple_name(&self) -> &str {
+        self.0.rsplit('/').next().unwrap_or(&self.0)
+    }
+
     #[must_use]
     pub fn into_string(self) -> String {
         self.0

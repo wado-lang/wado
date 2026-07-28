@@ -8,7 +8,7 @@ use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir::{CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -605,11 +605,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        let mangled_builder_name = if type_arg_names.is_empty() {
-            builder_base_name.clone()
+        let mangled_builder_name = FqTypeName::from_mangled(if type_arg_names.is_empty() {
+            self.qualified_receiver_name(&builder_base_name).into_string()
         } else {
-            crate::name::mangle_generic_name(&builder_base_name, &type_arg_names)
-        };
+            crate::name::mangle_generic_name(
+                self.qualified_receiver_name(&builder_base_name).as_str(),
+                &type_arg_names,
+            )
+        });
 
         let new_mangled_name =
             MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
@@ -775,11 +778,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        let mangled_builder_name = if type_arg_names.is_empty() {
-            builder_base_name.clone()
+        let mangled_builder_name = FqTypeName::from_mangled(if type_arg_names.is_empty() {
+            self.qualified_receiver_name(&builder_base_name).into_string()
         } else {
-            crate::name::mangle_generic_name(&builder_base_name, &type_arg_names)
-        };
+            crate::name::mangle_generic_name(
+                self.qualified_receiver_name(&builder_base_name).as_str(),
+                &type_arg_names,
+            )
+        });
 
         let new_mangled_name =
             MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
@@ -874,7 +880,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 /// elaborator's coercion / cast paths and the reify pass produce
 /// byte-identical TIR.
 pub(super) fn build_int128_from_pair(
-    type_name: &str,
+    type_name: &FqTypeName,
     low: u64,
     high: i64,
     target_type: TypeId,
@@ -893,7 +899,7 @@ pub(super) fn build_int128_from_pair(
             value: high.cast_unsigned(),
             repr: high.to_string(),
         },
-        if type_name == "u128" {
+        if type_name.simple_name() == "u128" {
             TypeTable::U64
         } else {
             TypeTable::I64
@@ -901,7 +907,7 @@ pub(super) fn build_int128_from_pair(
         span,
     );
 
-    let method_info = LocalMethodName::new(type_name.to_string(), None, "from_pair".to_string());
+    let method_info = LocalMethodName::new(type_name.clone(), None, "from_pair".to_string());
     let mangled_func_name = method_info.to_mangled_name();
 
     TirExpr::new(
@@ -930,7 +936,7 @@ pub(super) fn build_int128_from_pair(
 /// `from_pair`, matching the elaborator's historical output. Pure and
 /// `self`-free so both the elaborator and reify build identical TIR.
 pub(super) fn build_int128_literal_call(
-    name: &str,
+    name: &FqTypeName,
     value: i128,
     repr: &str,
     allow_small: bool,
@@ -938,14 +944,14 @@ pub(super) fn build_int128_literal_call(
     span: Span,
 ) -> TirExpr {
     let use_small = allow_small
-        && if name == "u128" {
+        && if name.simple_name() == "u128" {
             u64::try_from(value).is_ok()
         } else {
             i64::try_from(value).is_ok()
         };
 
     if use_small {
-        let (inner_type, method_name, store_value) = if name == "u128" {
+        let (inner_type, method_name, store_value) = if name.simple_name() == "u128" {
             (
                 TypeTable::U64,
                 "from_u64",
@@ -970,7 +976,7 @@ pub(super) fn build_int128_literal_call(
             span,
         );
 
-        let method_info = LocalMethodName::new(name.to_string(), None, method_name.to_string());
+        let method_info = LocalMethodName::new(name.clone(), None, method_name.to_string());
         let mangled_func_name = method_info.to_mangled_name();
 
         return TirExpr::new(
@@ -998,17 +1004,17 @@ pub(super) fn build_int128_literal_call(
 /// is the source expression already cast to the `u64` / `i64` width.
 /// Pure and `self`-free so the elaborator and reify stay in lockstep.
 pub(super) fn build_int128_from_intermediate(
-    name: &str,
+    name: &FqTypeName,
     intermediate: TirExpr,
     target_type: TypeId,
     span: Span,
 ) -> TirExpr {
-    let method_name = if name == "u128" {
+    let method_name = if name.simple_name() == "u128" {
         "from_u64"
     } else {
         "from_i64"
     };
-    let method_info = LocalMethodName::new(name.to_string(), None, method_name.to_string());
+    let method_info = LocalMethodName::new(name.clone(), None, method_name.to_string());
     let mangled_func_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::Call {
