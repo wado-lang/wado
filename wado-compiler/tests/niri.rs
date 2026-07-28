@@ -3544,6 +3544,73 @@ fn array_literal_reduces_to_the_container_it_denotes() {
     );
 }
 
+/// The shape the lower phase emits for a source string: a container struct
+/// over a packed byte array plus its length.
+fn seq_lit(type_id: TypeId, bytes: Vec<u8>) -> Build {
+    Rc::new(move |b| {
+        let backing = packed_array(bytes.clone(), type_id)(b);
+        let used = int_lit(bytes.len() as u64, TypeTable::I32, "len")(b);
+        Operand::Expr(pe(
+            b,
+            ExprKind::StructLiteral {
+                struct_type: type_id,
+                struct_name: "String".to_string(),
+                fields: vec![
+                    ArenaStructField {
+                        name: SeqField::Backing.field_name().to_string(),
+                        value: backing,
+                        field_index: SeqField::Backing.index(),
+                    },
+                    ArenaStructField {
+                        name: SeqField::Len.field_name().to_string(),
+                        value: used,
+                        field_index: SeqField::Len.index(),
+                    },
+                ],
+            },
+            type_id,
+        ))
+    })
+}
+
+#[test]
+fn a_constant_string_call_result_becomes_a_literal() {
+    // A CTFE call returning a `String` reduces to the container it denotes, and
+    // the exit writes that container back as the literal the lower phase emits
+    // for a source string — instead of discarding it for not being a scalar.
+    let mut table = TypeTable::new();
+    let string_ty = table.make_struct("String".to_string(), ModuleSource::default());
+    let greeting = make_pure_fn(
+        "greeting",
+        vec![],
+        string_ty,
+        return_stmt(seq_lit(string_ty, b"hi".to_vec())),
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&greeting));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    let (changed, body, e) = reduce_local_into(&mut interp, &call_expr(&greeting, vec![]));
+    assert!(changed, "a constant String call folds");
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[e].kind else {
+        panic!("the folded call is the container literal");
+    };
+    let backing = fields
+        .iter()
+        .find(|f| f.field_index == SeqField::Backing.index())
+        .and_then(|f| f.value.as_expr())
+        .expect("a backing operand");
+    assert!(matches!(&body.exprs[backing].kind, ExprKind::PackedArray(b) if b == b"hi"));
+    assert_eq!(
+        fields
+            .iter()
+            .find(|f| f.field_index == SeqField::Len.index())
+            .map(|f| op_int(&body, f.value)),
+        Some(2),
+    );
+}
+
 #[test]
 fn packed_array_reduces_to_a_sequence_of_bytes() {
     let table = TypeTable::new();

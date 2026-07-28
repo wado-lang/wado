@@ -116,8 +116,8 @@ use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirFunction, NirLiteralPattern, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
-    PatKind, StmtId, StmtKind, StmtNode,
+    ArenaStructField, ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef,
+    Operand, PatId, PatKind, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::nir_visitor::NirRefVisitor;
@@ -398,6 +398,10 @@ pub(crate) trait EditSink {
     /// backend is a no-op (`false`) — its reads recompute the value through the
     /// value lattice, so it needs no node write-back.
     fn replace_with_value(&mut self, e: ExprId, value: Value) -> bool;
+    /// Intern a constant into the function's value pool and return it as an
+    /// operand. A scalar has no literal-node form, so a synthesized one in an
+    /// operand position goes through the pool.
+    fn const_operand(&mut self, kind: ValueKind, type_id: TypeId) -> Operand;
     /// Make `dst` take `src`'s content (`dst` becomes `src`).
     fn become_expr(&mut self, dst: ExprId, src: ExprId);
     fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId;
@@ -426,6 +430,9 @@ impl EditSink for BodySink<'_> {
         // read (`reduce_to_lattice_a` → `try_fold_a` over operands + env), so the
         // write-back is a no-op here.
         false
+    }
+    fn const_operand(&mut self, kind: ValueKind, type_id: TypeId) -> Operand {
+        Operand::Value(self.body.values.alloc_unshared(kind, type_id))
     }
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         // Clone src's whole node into dst (the original short-circuit rewrite
@@ -1470,15 +1477,24 @@ impl<'a> Interpreter<'a> {
     /// engine-routed visitor keeps the parent map / use index coherent and the
     /// scratch-body CTFE path mutates in place.
     pub(crate) fn reduce_local_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
-        if let Some(value) = self.flow_fold_value_a(sink.body(), e) {
-            // Promote the folded scalar to an `Operand::Value` in `e`'s parent.
-            if sink.replace_with_value(e, value.clone()) {
+        if let Some(value) = self.flow_fold_candidate_a(sink.body(), e) {
+            if value.is_scalar() {
+                // Promote the folded scalar to an `Operand::Value` in `e`'s parent.
+                if sink.replace_with_value(e, value.clone()) {
+                    return true;
+                }
+                // The scratch backend cannot promote (no parent map); memoize the
+                // fold so the scratch's later lattice reads see the constant. Falling
+                // through to the structural rewrites is a no-op for a pure constant.
+                self.scratch_folds.insert(e, value);
+            } else if matches!(sink.body().exprs[e].kind, ExprKind::Call { .. })
+                && self.materialize_seq_via(sink, e, &value)
+            {
+                // Only a `Call` — the literal a materialization writes denotes
+                // the same value, so re-materializing one would report a change
+                // at every visit and the worklist would never settle.
                 return true;
             }
-            // The scratch backend cannot promote (no parent map); memoize the
-            // fold so the scratch's later lattice reads see the constant. Falling
-            // through to the structural rewrites is a no-op for a pure constant.
-            self.scratch_folds.insert(e, value);
         }
         if rewrite_short_circuit_via(sink, e) {
             return true;
@@ -1487,6 +1503,75 @@ impl<'a> Interpreter<'a> {
             return true;
         }
         self.rewrite_match_expr_via(sink, e)
+    }
+
+    /// Write `value` back over `e` as the container literal the lower phase
+    /// emits for a source string: a struct over a packed byte array and its
+    /// length. Only a byte-sequence container has that form — every other
+    /// aggregate stays inside the engine, having no operand form to promote to
+    /// and no literal shape to be written as.
+    ///
+    /// The bytes are the container's first `used`, not the whole backing array:
+    /// a grown container's capacity outruns what it holds, and capacity is not
+    /// observable.
+    fn materialize_seq_via<S: EditSink>(&self, sink: &mut S, e: ExprId, value: &Value) -> bool {
+        let Value::Aggregate { type_id, .. } = value else {
+            return false;
+        };
+        let Some(Value::Seq {
+            type_id: backing_type,
+            elements,
+        }) = value.field(SeqField::Backing.index())
+        else {
+            return false;
+        };
+        let Some((used, PrimitiveType::I32)) =
+            value.field(SeqField::Len.index()).and_then(Value::as_int)
+        else {
+            return false;
+        };
+        // A negative length sign-extends to a value past any real element
+        // count, so the bound below rules it out along with an overrun one.
+        let Ok(used) = usize::try_from(used) else {
+            return false;
+        };
+        if used > elements.len() {
+            return false;
+        }
+        let mut bytes = Vec::with_capacity(used);
+        for element in &elements[..used] {
+            let Some((byte, PrimitiveType::U8)) = element.as_int() else {
+                return false;
+            };
+            let Ok(byte) = u8::try_from(byte) else {
+                return false;
+            };
+            bytes.push(byte);
+        }
+        let span = sink.body().exprs[e].span;
+        let backing = sink.alloc_expr(ExprKind::PackedArray(bytes), *backing_type, span);
+        let len = u64::try_from(used).expect("a bounded element count fits u64");
+        let len = sink.const_operand(ValueKind::Int(len, TypeTable::I32), TypeTable::I32);
+        sink.replace_kind(
+            e,
+            ExprKind::StructLiteral {
+                struct_type: *type_id,
+                struct_name: self.type_table.type_name(*type_id),
+                fields: vec![
+                    ArenaStructField {
+                        name: SeqField::Backing.field_name().to_string(),
+                        value: Operand::Expr(backing),
+                        field_index: SeqField::Backing.index(),
+                    },
+                    ArenaStructField {
+                        name: SeqField::Len.field_name().to_string(),
+                        value: len,
+                        field_index: SeqField::Len.index(),
+                    },
+                ],
+            },
+        );
+        true
     }
 
     /// The environment-free constant value of `e`, as the literal [`ExprKind`]

@@ -231,6 +231,13 @@ impl EditSink for EngineSink<'_, '_> {
     fn replace_with_value(&mut self, e: ExprId, value: crate::const_eval::Value) -> bool {
         self.engine.replace_expr_with_value(e, value)
     }
+    fn const_operand(
+        &mut self,
+        kind: crate::nir_value_graph::ValueKind,
+        type_id: TypeId,
+    ) -> crate::nir_arena::Operand {
+        self.engine.const_operand(kind, type_id)
+    }
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         self.engine.become_expr(dst, src);
     }

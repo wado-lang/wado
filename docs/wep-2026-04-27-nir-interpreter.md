@@ -68,8 +68,9 @@ Value model:
   bitwise and unary operators over them, and casts between them.
 - Structs and tuples whose every field is constant, and field reads
   projecting back out of them — out of a literal, a local, an immutable
-  global, or a compile-time call result. Aggregates never leave the engine;
-  what reaches the IR is the scalars projected out of them.
+  global, or a compile-time call result. An aggregate leaves the engine only
+  where it has a literal shape to be written as; otherwise what reaches the IR
+  is the scalars projected out of it.
 - A three-state lattice — unevaluated, constant, non-constant — with a join,
   so an unreachable branch contributes nothing to the result and a trapping
   arm does not contaminate a fold.
@@ -165,6 +166,13 @@ Sequences:
   out of a global, whose container the engine recovers from the assignment that
   fills its slot. Only a scalar element reaches the IR; an aggregate one stays
   inside the engine, as every aggregate does.
+- A byte-sequence container a compile-time call produced is written back as the
+  literal the lower phase emits for a source string — a struct over a packed
+  byte array and its length. The bytes are the container's first `used`, since
+  a grown container's capacity outruns what it holds and capacity is not
+  observable. Only a call is rewritten this way: the literal denotes the value
+  it replaced, so materializing one again would report a change at every visit
+  and the worklist would never settle.
 
 ## TODO
 
@@ -173,12 +181,11 @@ Sequences:
 - Enum and variant values with their payloads. Today an enum or variant
   pattern cannot be decided, so an `Option` / `Result` accessor exposed by
   inlining leaves a residual match the engine walks past.
-- An aggregate has no way back into the IR. Both exits filter on a scalar and
-  the value pool has no aggregate case, so a constant `String` or `List` the
-  engine reduced is discarded at the boundary rather than emitted. It has a
-  literal form already — the `StructLiteral` over an `ArrayLiteral` that the
-  lower phase emits for a source string — so this is an exit to add, capped by
-  length the way `MAX_SEQ_ELEMENTS` caps the way in.
+- An aggregate that is not a byte sequence has no way back into the IR. A
+  `List<T>` of scalars would want the `ArrayLiteral` shape, and a plain struct
+  a `StructLiteral` over its materialized fields; both are exits to add beside
+  the byte-sequence one, and both inherit its `Call`-only restriction until
+  something establishes the value did not come from the node being rewritten.
 - Comparing two literal strings. A string pattern reaches the engine as a
   guard, and deciding it means running the comparison — which is a method call
   taking references, so it waits on the two entries below rather than on the
@@ -300,8 +307,10 @@ capabilities want the same representation.
 
 Milestones, each red/green with the fixture first:
 
-- [ ] The aggregate exit, capped by length. A compile-time call returning a
-      constant `String` folds.
+- [x] The aggregate exit. A compile-time call returning a constant `String`
+      folds. No cap of its own is needed: `MAX_SEQ_ELEMENTS` already bounds what
+      becomes a sequence value, and a payload past the inline threshold reaches
+      the binary as a data segment rather than as code.
 - [ ] Places and the frame store. A compile-time call that fills and returns a
       `List<u8>` folds.
 - [ ] Frame-executable calls. A call writing through a `&mut` parameter runs.
