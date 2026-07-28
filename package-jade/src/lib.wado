@@ -27,7 +27,7 @@ impl Serialize for TypeSet {
         return match self {
             One(name) => s.serialize_string(name),
             Many(names) => {
-                let seq = s.begin_seq(names.len())?;
+                let mut seq = s.begin_seq(names.len())?;
                 for let n of names {
                     seq.element(n)?;
                 }
@@ -156,7 +156,7 @@ impl Serialize for Schema {
             n += 1;
         }
 
-        let m = s.begin_map(n)?;
+        let mut m = s.begin_map(n)?;
         if let Some(d) = &self.dialect {
             m.key(&"$schema")?;
             m.value(d)?;

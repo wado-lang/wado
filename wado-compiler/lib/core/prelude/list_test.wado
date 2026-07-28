@@ -13,7 +13,7 @@ test "from_tuple collects a homogeneous tuple" {
 }
 
 test "push to empty array" {
-    let arr: List<i32> = [];
+    let mut arr: List<i32> = [];
     arr.push(10);
     arr.push(20);
     arr.push(30);
@@ -24,7 +24,7 @@ test "push to empty array" {
 }
 
 test "push triggers growth" {
-    let arr: List<i32> = [];
+    let mut arr: List<i32> = [];
     arr.push(10);
     arr.push(20);
     arr.push(30);
@@ -69,7 +69,7 @@ test "is_empty on nonempty array" {
 }
 
 test "is_empty after push" {
-    let arr: List<i32> = [];
+    let mut arr: List<i32> = [];
     assert arr.is_empty();
     arr.push(1);
     assert !arr.is_empty();
@@ -376,7 +376,7 @@ test "truncate larger than len is no-op" {
 }
 
 test "push to empty array" {
-    let arr: List<i32> = [];
+    let mut arr: List<i32> = [];
     arr.push(10);
     arr.push(20);
     assert arr.len() == 2;

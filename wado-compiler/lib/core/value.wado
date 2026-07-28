@@ -125,14 +125,14 @@ impl Serialize for Value {
             String(str_val) => s.serialize_string(str_val),
             Bytes(bytes) => s.serialize_bytes(bytes.as_byte_slice()),
             List(arr) => {
-                let seq = s.begin_seq(arr.len())?;
+                let mut seq = s.begin_seq(arr.len())?;
                 for let item of arr {
                     seq.element(item)?;
                 }
                 seq.end();
             },
             Object(map) => {
-                let m = s.begin_map(map.len())?;
+                let mut m = s.begin_map(map.len())?;
                 for let [key, val] of map.entries() {
                     m.key(&key)?;
                     m.value(&val)?;

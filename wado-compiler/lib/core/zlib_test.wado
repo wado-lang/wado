@@ -561,7 +561,7 @@ test "DeflateStream copy" {
     let data = make_pattern_data(200);
     let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
     ds.update(&data);
-    let ds_clone = ds.copy();
+    let mut ds_clone = ds.copy();
     let f1 = ds.finish();
     let f2 = ds_clone.finish();
     assert f1.len() == f2.len(), "copy should produce same-size output";

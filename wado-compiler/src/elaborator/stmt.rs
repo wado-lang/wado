@@ -1336,7 +1336,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `name` refers to an immutable global (defined here or imported),
     /// which in pattern position is a constant-value (refutable) match rather
     /// than a fresh binding.
-    fn is_immutable_global(&self, name: &str) -> bool {
+    pub(super) fn is_immutable_global(&self, name: &str) -> bool {
         self.sem
             .decls
             .current_module_globals
@@ -2705,7 +2705,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the loop variable (`resolve_if_pattern_inner`, preserving the
         // binding's real `AstId`) and walks the body for its facts.
         ctx.enter_scope();
-        self.resolve_if_pattern_inner(&for_of.binding, item_type, ctx, span, RefBinding::None);
+        // `for let mut x of …` carries the `mut` on the statement, and the
+        // pattern walker only reads it off a `MutIdent`. Normalize before
+        // binding, or the loop variable binds immutable and a write through it
+        // is rejected.
+        let binding = match (&for_of.binding, for_of.is_mut) {
+            (
+                Pattern::Ident {
+                    id,
+                    name,
+                    span: name_span,
+                },
+                true,
+            ) => Pattern::MutIdent {
+                id: *id,
+                name: name.clone(),
+                span: *name_span,
+            },
+            _ => for_of.binding.clone(),
+        };
+        self.resolve_if_pattern_inner(&binding, item_type, ctx, span, RefBinding::None);
         self.resolve_block(&for_of.body, ctx, None);
         ctx.exit_scope();
 

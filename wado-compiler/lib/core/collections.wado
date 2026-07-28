@@ -531,7 +531,7 @@ impl<V: Serialize> Serialize for TreeMap<String, V> {
 
 impl<V: Deserialize> Deserialize for TreeMap<String, V> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<String, V>, DeserializeError> {
-        let map = d.begin_map()?;
+        let mut map = d.begin_map()?;
         let mut result: TreeMap<String, V> = {};
         loop {
             let key_opt = map.next_key_string()?;

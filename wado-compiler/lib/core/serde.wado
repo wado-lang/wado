@@ -226,7 +226,7 @@ pub trait Serializer {
     /// sequence of `u8` (the historical `List<u8>` behaviour), so a format
     /// with no distinct byte-string form keeps working unchanged.
     fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
-        let seq = self.begin_seq(v.len())?;
+        let mut seq = self.begin_seq(v.len())?;
         let mut i = 0;
         while i < v.len() {
             let b = v[i];
@@ -432,7 +432,7 @@ pub trait Deserializer {
     /// Deserialize a byte string. Self-describing binary formats read a native
     /// byte string; JSON reads base64. The default reads a sequence of `u8`.
     fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError> {
-        let seq = self.begin_seq()?;
+        let mut seq = self.begin_seq()?;
         let mut out: ByteList = [];
         loop {
             let opt = seq.next_element()?;
@@ -587,7 +587,7 @@ impl<T: Serialize> Serialize for Option<T> {
 
 impl<T: Serialize> Serialize for List<T> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        let seq = s.begin_seq(self.len())?;
+        let mut seq = s.begin_seq(self.len())?;
         for let item of self {
             seq.element(item)?;
         }
@@ -622,12 +622,12 @@ impl<T: Serialize, E: Serialize> Serialize for Result<T, E> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         match self {
             Ok(v) => {
-                let var = s.begin_variant(&"Result", &"Ok", 0)?;
+                let mut var = s.begin_variant(&"Result", &"Ok", 0)?;
                 var.payload(v)?;
                 return var.end();
             },
             Err(v) => {
-                let var = s.begin_variant(&"Result", &"Err", 1)?;
+                let mut var = s.begin_variant(&"Result", &"Err", 1)?;
                 var.payload(v)?;
                 return var.end();
             },
@@ -758,7 +758,7 @@ impl<T: Deserialize> Deserialize for Option<T> {
 
 impl<T: Deserialize> Deserialize for List<T> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<List<T>, DeserializeError> {
-        let seq = d.begin_seq()?;
+        let mut seq = d.begin_seq()?;
         // Peek at the first element before allocating backing storage.
         // Empty arrays (very common in practice) avoid any capacity allocation.
         // Non-empty arrays start at capacity 4, covering 1–4 elements without a grow.
@@ -802,7 +802,7 @@ impl Deserialize for ByteArray {
 
 impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Result<T, E>, DeserializeError> {
-        let va = d.begin_variant(&"Result", 2)?;
+        let mut va = d.begin_variant(&"Result", 2)?;
         let name = va.variant_name()?;
         if name == "Ok" {
             let val = va.payload()?;
