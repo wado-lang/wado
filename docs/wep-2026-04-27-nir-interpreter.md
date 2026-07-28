@@ -258,12 +258,22 @@ could have written, after which constant-object globalization deduplicates it
 and DCE drops the formatting functions no live call reaches.
 
 Fold the region, not the call. A region constructs its own buffer, so every
-value inside it is concrete and the engine needs no contract about what a
-`Formatter` does to a buffer it did not build. Rewriting one `fmt` call to
-`push_str(<literal>)` against an unknown buffer — which is what a template with
-a runtime interpolation alongside a constant one would need — is sound only
-under an append-only `Formatter` contract that `internal_raw_bytes_mut` does not
-enforce today; it is a later step, and a decision about that accessor first.
+value inside it is concrete and nothing is assumed about it.
+
+The call-level fold — rewriting one `fmt` over a constant into
+`push_str(<literal>)`, which is what a template mixing constant and runtime
+interpolations would need — is a different problem, and not a smaller one.
+Evaluating the callee against one concrete buffer says what it does to that
+buffer; the rewrite claims what it does to every buffer. Nothing licenses that
+step but a proof, and the proof obligation is relational: the prior contents
+survive unchanged, and the appended bytes do not depend on them. Discharging it
+means evaluating against a symbolic prefix — a buffer of an opaque run of bytes
+followed by a known one — rather than a concrete value, and the stdlib says
+what that costs: `realloc_to` copies the prefix wholesale, `apply_padding`
+shifts everything above its mark, and `grow`'s capacity test cannot decide, so
+both of its paths have to join to the same delta. That is a capability to
+build, not a convention to adopt, and it is worth building only if a
+measurement says mixed templates cost enough to pay for it.
 
 Milestones, each red/green with the fixture first:
 
@@ -335,8 +345,10 @@ question, not a design-time one.
 - Where does the wasm-CTFE module cache live — per `compile` invocation or per
   process? Per-invocation is simpler; per-process speeds up watch-mode
   workflows but needs eviction.
-- Is `Formatter` append-only by contract? Partial folding of a single `fmt`
-  call needs the guarantee, and `internal_raw_bytes_mut` currently hands out
-  the whole buffer. Narrowing that accessor would buy the contract; whether it
-  is worth the stdlib churn depends on how much a template mixing constant and
-  runtime interpolations actually costs.
+- Would narrowing `Formatter`'s buffer access pay for itself? A checked
+  property — the way effects are checked, not a documented convention — would
+  shrink the symbolic-prefix proof the call-level format fold needs, by ruling
+  out the writes it would otherwise have to consider. It would not remove the
+  proof: `realloc_to` reads the prefix to move it, so the symbolic model is
+  needed either way. Measure the fold's value before spending stdlib churn on
+  making it cheaper.
