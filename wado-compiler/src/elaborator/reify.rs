@@ -67,7 +67,7 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{Receiver, global_name};
+use crate::name::{FqTypeName, Receiver, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, ResolvedType, TirBinaryOp, TirBlock, TirEnum, TirEnumCase,
@@ -1469,7 +1469,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // safety net for the synthesis path and matches the
                 // combined walk byte-for-byte.
                 tir_func.name = MethodName::format_local(
-                    concrete_owner.as_deref().unwrap_or(&struct_name),
+                    &FqTypeName::from_mangled(
+                        concrete_owner.as_deref().unwrap_or(&struct_name).to_string(),
+                    ),
                     Some(&trait_name_mangled),
                     &default_method.name,
                 );
@@ -1624,7 +1626,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // handle it, and `impl List<u8>` vs `impl List<i32>` stay distinct.
         if let Some(owner) = concrete_owner {
             mangled_name = crate::name::MethodName::format_local(
-                owner,
+                &FqTypeName::from_mangled(owner.clone()),
                 facts.trait_name_mangled.as_deref(),
                 &func.name,
             );
@@ -6381,7 +6383,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // --- Builder::new_literal(capacity) ---
         let new_method_info = LocalMethodName::new(
-            facts.builder_base_name.clone(),
+            FqTypeName::from_mangled(facts.builder_base_name.clone()),
             Some(facts.trait_name.clone()),
             "new_literal".to_string(),
         )
@@ -6437,7 +6439,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // --- For each element: __b.push_literal(elem) ---
         let push_method_info = LocalMethodName::new(
-            facts.builder_base_name.clone(),
+            FqTypeName::from_mangled(facts.builder_base_name.clone()),
             Some(facts.trait_name.clone()),
             "push_literal".to_string(),
         )
@@ -6495,7 +6497,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
         let build_method_info = LocalMethodName::new(
-            facts.builder_base_name.clone(),
+            FqTypeName::from_mangled(facts.builder_base_name.clone()),
             Some(facts.trait_name.clone()),
             "build".to_string(),
         )
@@ -6587,7 +6589,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // --- Builder::new_literal([capacity]) ---
         let new_method_info = LocalMethodName::new(
-            facts.builder_base_name.clone(),
+            FqTypeName::from_mangled(facts.builder_base_name.clone()),
             Some(facts.trait_name.clone()),
             "new_literal".to_string(),
         )
@@ -6649,12 +6651,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // In source order, `insert_all(base)` per spread and `insert_literal` per
         // field; later inserts override, giving explicit-over-base / last-wins.
         let insert_method_info = LocalMethodName::new(
-            facts.builder_base_name.clone(),
+            FqTypeName::from_mangled(facts.builder_base_name.clone()),
             Some(facts.trait_name.clone()),
             "insert_literal".to_string(),
         );
         let insert_all_method_info = LocalMethodName::new(
-            facts.builder_base_name.clone(),
+            FqTypeName::from_mangled(facts.builder_base_name.clone()),
             Some(facts.trait_name.clone()),
             "insert_all".to_string(),
         );
@@ -6733,7 +6735,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
         let result_expr = if let Some(build_mangled_name) = facts.build_mangled_name.clone() {
             let build_method_info = LocalMethodName::new(
-                facts.builder_base_name.clone(),
+                FqTypeName::from_mangled(facts.builder_base_name.clone()),
                 Some(facts.trait_name.clone()),
                 "build".to_string(),
             );
@@ -9127,9 +9129,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
         let target_type = choice.target_type;
         let name = match self.tysys.type_table.borrow().get(target_type).clone() {
-            crate::tir::ResolvedType::Struct { name, .. } if name == "u128" || name == "i128" => {
-                name
-            }
+            crate::tir::ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name),
             _ => return None,
         };
 
@@ -9150,7 +9154,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             _ => return None,
         };
 
-        let parse_result = if name == "u128" {
+        let parse_result = if name.simple_name() == "u128" {
             super::util::parse_u128_literal(&repr).map(|v| v as i128)
         } else if negated {
             super::util::parse_i128_literal(&format!("-{repr}"))
@@ -9182,9 +9186,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
         let name = match self.tysys.type_table.borrow().get(target_type).clone() {
-            crate::tir::ResolvedType::Struct { name, .. } if name == "u128" || name == "i128" => {
-                name
-            }
+            crate::tir::ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name),
             _ => return None,
         };
 
@@ -9195,7 +9201,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }) = &cast.expr
             && !super::util::is_float_only_literal(repr)
         {
-            let parsed = if name == "u128" {
+            let parsed = if name.simple_name() == "u128" {
                 super::util::parse_u128_literal(repr).map(|v| v as i128)
             } else {
                 super::util::parse_i128_literal(repr)
@@ -9213,7 +9219,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         // Negated literal operand (i128 only): `-170... as i128`.
-        if name == "i128"
+        if name.simple_name() == "i128"
             && let ast::Expr::Unary(unary) = &cast.expr
             && unary.op == ast::UnaryOp::Neg
             && let ast::Expr::Literal(ast::LiteralExpr {
@@ -9252,7 +9258,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 cast.span,
             ));
         }
-        let intermediate_type = if name == "u128" {
+        let intermediate_type = if name.simple_name() == "u128" {
             crate::tir::TypeTable::U64
         } else {
             crate::tir::TypeTable::I64
@@ -9363,7 +9369,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let (_, owner_type, method_name) = tt.compiler_method(item);
                 (owner_type.to_string(), method_name.to_string())
             };
-            let method_info = crate::name::LocalMethodName::new(owner_type, None, method_name);
+            let method_info = crate::name::LocalMethodName::new(
+                crate::name::FqTypeName::declared(
+                    &crate::module_source::ModuleSource::int128(),
+                    &owner_type,
+                ),
+                None,
+                method_name,
+            );
             crate::tir::FunctionRef {
                 module_source: crate::module_source::ModuleSource::int128(),
                 name: method_info.to_mangled_name(),
