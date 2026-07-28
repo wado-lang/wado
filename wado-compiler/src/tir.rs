@@ -3239,7 +3239,10 @@ impl TypeTable {
     pub fn impl_receiver_key(&self, id: TypeId) -> crate::name::Receiver {
         use crate::name::Receiver;
         let named = |name: &String| Receiver::Type(name.clone());
-        match self.get(id) {
+        // Unerased: which impls a type has is a fact about its identity, and
+        // erasure rewrites a newtype / flags id to the representation it is
+        // stored as, whose impls are a different set.
+        match self.get_unerased(id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
                 crate::name::RefKind::from_resolved(self.get(id))
                     .map_or_else(|| Receiver::Type(String::new()), Receiver::Ref)

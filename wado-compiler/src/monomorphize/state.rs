@@ -477,8 +477,11 @@ impl Monomorphizer {
     }
 
     /// Peel refs/newtypes to the first newtype level satisfying `has_own_impl`
-    /// (evaluated on that level's mangled name and its `TypeId`), returning
-    /// that name.
+    /// (evaluated on that level's name and its `TypeId`), returning that name.
+    ///
+    /// Reads the unerased view: erasure redirects a newtype id to its base
+    /// before monomorphize, so the erased view never reports a `Newtype` level
+    /// at all and every newtype would look like one without its own impl.
     fn newtype_own_name(
         &self,
         type_id: TypeId,
@@ -487,11 +490,15 @@ impl Monomorphizer {
     ) -> Option<String> {
         let mut tid = type_id;
         loop {
-            match type_table.get(tid) {
+            match type_table.get_unerased(tid) {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => tid = *inner,
-                ResolvedType::Newtype { base_type, .. } => {
+                ResolvedType::Newtype {
+                    base_type,
+                    name,
+                    module_source,
+                } => {
                     let base = *base_type;
-                    let own = type_table.mangle_type_name(tid);
+                    let own = FqTypeName::declared(module_source, name).into_string();
                     if has_own_impl(&own, tid) {
                         return Some(own);
                     }
