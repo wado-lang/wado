@@ -795,6 +795,15 @@ impl LocalMethodName {
         FqTypeName::from_mangled(self.struct_name.clone())
     }
 
+    /// The receiver's declaration name, without its module — the key form the
+    /// WIT-derived CM interface registry uses (`Fields::new`). That registry
+    /// knows nothing of Wado modules, so a static call on a WASI resource has
+    /// to reach it by the declared name alone.
+    #[must_use]
+    pub fn receiver_decl_name(&self) -> String {
+        self.fq_base_struct_name().simple_name().to_string()
+    }
+
     /// The receiver's reference kind, or `None` for a value receiver.
     #[must_use]
     pub fn ref_receiver(&self) -> Option<RefKind> {
@@ -2247,7 +2256,9 @@ impl FqTypeName {
     }
 
     /// The declared name without its module — what the source wrote. Use it to
-    /// branch on which declaration this is, never to build another name.
+    /// branch on which declaration this is, or to key a registry that knows
+    /// nothing of Wado modules (the WIT-derived CM interface registry), never
+    /// to build another mangled name.
     #[must_use]
     pub fn simple_name(&self) -> &str {
         self.0.rsplit('/').next().unwrap_or(&self.0)

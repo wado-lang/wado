@@ -1159,9 +1159,10 @@ fn rewrite_calls_in_expr(
 
     // Check if this is a resource static Call (with method_info) that should be rewritten to target a binding
     if let TirExprKind::Call { func, .. } = &expr.kind
-        && func.method_info.is_some()
+        && let Some(info) = func.method_info.as_ref()
     {
-        let func_name = func.name.clone();
+        // Keyed as the registry declares it — `Resource::method`, no module.
+        let func_name = format!("{}::{}", info.receiver_decl_name(), info.method_name);
         if let Some(adapter_rc) = adapters.get(&func_name) {
             // Look up WASI function info to flatten args at the call site
             let wasi_func_info = cm_interface_registry.get_function(&func_name).cloned();
@@ -1351,13 +1352,17 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                     }
                 }
                 // WASI resource static method calls (e.g. `Response::new`).
-                if func.method_info.is_some()
-                    && self
+                // The registry keys on the declared `Resource::method`, so the
+                // receiver reaches it by its declaration name.
+                if let Some(info) = func.method_info.as_ref() {
+                    let qualified = format!("{}::{}", info.receiver_decl_name(), info.method_name);
+                    if self
                         .cm_interface_registry
-                        .get_function(&func.name)
+                        .get_function(&qualified)
                         .is_some()
-                {
-                    self.effects.insert(func.name.clone());
+                    {
+                        self.effects.insert(qualified);
+                    }
                 }
                 // World function (Phase 9): the same-source check keeps a
                 // same-named local function from being taken for the import.
