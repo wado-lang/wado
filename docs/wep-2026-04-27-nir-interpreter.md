@@ -280,10 +280,10 @@ written — `prepare_int_write` reserves a region the digit writers fill
 backwards, `mark` / `apply_padding` appends content and then shifts it to make
 room for alignment, and `fpfmt`'s writers reserve and slide a fractional tail
 to insert the point. A strictly-append contract, where bytes land on the end
-and are never revisited, would be lighter to state but is not free to reach:
-the digit loops would have to emit most-significant-first, and a padded float
-would need a scratch buffer to learn its length before appending. Region append
-costs nothing, covers all three idioms, and is still one sentence.
+and are never revisited, is not the design: a padded float cannot learn its
+length before appending, so reaching it would mean formatting through an
+intermediate buffer, which costs more at run time than the contract is worth.
+Region append covers all three idioms unchanged and is still one sentence.
 
 What any particular `fmt` body does is then derived rather than declared: run it
 against a buffer the engine constructed, and admit the result when every buffer
@@ -368,10 +368,7 @@ question, not a design-time one.
 - Where does the wasm-CTFE module cache live — per `compile` invocation or per
   process? Per-invocation is simpler; per-process speeds up watch-mode
   workflows but needs eviction.
-- Is a strictly-append `Formatter` worth its cost? Region append asks nothing of
-  the stdlib; narrowing to pure append would let the marked set be byte-list
-  appends alone and would put `internal_raw_bytes_mut` out of `Formatter`'s
-  reach entirely, at the price of most-significant-first digit loops and a
-  scratch buffer on the padded float path. It buys the engine nothing extra —
-  both forms license the same fold — so it is a stdlib-clarity trade, to be
-  decided against a benchmark rather than on taste.
+- Which primitives make the marked set. Every buffer touch in the formatting
+  path has to reach one, so the set is whatever `write_str`, `write_char`,
+  `pad`, `mark` / `apply_padding`, `prepare_int_write`, and `fpfmt`'s reserving
+  writers turn out to factor into.
