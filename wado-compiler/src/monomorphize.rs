@@ -164,6 +164,15 @@ pub fn monomorphize(flat: &mut FlatPackage) {
     flat.rebuild_variant_indices();
 }
 
+/// The receiver head a dispatch template is named after, peeling `&`/`&mut`
+/// and newtypes — the same transparency the struct-info lookups apply when they
+/// report the struct a call keys on. `fq_base_type_name` alone keeps a
+/// newtype's own identity, which names a template that does not exist when the
+/// newtype inherits its base's impl.
+fn dispatch_receiver_head(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTypeName {
+    tt.fq_base_type_name(tt.resolve_newtype_base(tt.peel_refs(type_id)))
+}
+
 /// Determine the module where trait implementations for a concrete type are defined.
 /// Used when substituting a type parameter receiver (e.g., `T^Ord::cmp` → `i32^Ord::cmp`)
 /// to set the correct `module_source` so DCE can find the target function.

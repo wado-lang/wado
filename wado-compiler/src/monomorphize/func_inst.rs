@@ -787,7 +787,7 @@ impl Monomorphizer {
                                 let method_info =
                                     gf.borrow().method_info.clone().unwrap_or_else(|| {
                                         LocalMethodName::new(
-                                            type_table.fq_base_type_name(receiver.type_id),
+                                            super::dispatch_receiver_head(type_table, receiver.type_id),
                                             tn.clone(),
                                             method_name.clone(),
                                         )
@@ -825,7 +825,7 @@ impl Monomorphizer {
                                 // struct-instantiation key, which carries no
                                 // module.
                                 let receiver_head =
-                                    type_table.fq_base_type_name(receiver.type_id);
+                                    super::dispatch_receiver_head(type_table, receiver.type_id);
                                 // Try both inherent and trait method formats
                                 let mut dg_names: Vec<(String, Option<String>)> = vec![(
                                     MethodName::format_local(&receiver_head, None, &method_name),
@@ -956,7 +956,7 @@ impl Monomorphizer {
                     };
                     // A struct-instantiation key names its template without a
                     // module; the method template is named after the receiver.
-                    let receiver_head = type_table.fq_base_type_name(receiver.type_id);
+                    let receiver_head = super::dispatch_receiver_head(type_table, receiver.type_id);
                     names_to_try.push(MethodName::format_local(
                         &receiver_head,
                         None,
@@ -1096,7 +1096,7 @@ impl Monomorphizer {
                     let impl_type_args = struct_key.impl_type_args.clone();
                     // A struct-instantiation key names its template without a
                     // module; the method template is named after the receiver.
-                    let receiver_head = type_table.fq_base_type_name(receiver.type_id);
+                    let receiver_head = super::dispatch_receiver_head(type_table, receiver.type_id);
 
                     let mut names_to_try =
                         vec![MethodName::format_local(&receiver_head, None, &method_name)];

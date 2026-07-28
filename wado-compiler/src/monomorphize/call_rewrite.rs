@@ -484,7 +484,7 @@ impl Monomorphizer {
                     // The method template is named after the receiver's fq head:
                     // `base_struct` is a struct-instantiation key, which carries
                     // no module.
-                    let receiver_head = type_table.fq_base_type_name(receiver.type_id);
+                    let receiver_head = super::dispatch_receiver_head(type_table, receiver.type_id);
                     // Try both inherent and trait method formats
                     let mut dg_names = vec![(
                         MethodName::format_local(&receiver_head, None, &method_name),
@@ -581,7 +581,7 @@ impl Monomorphizer {
         {
             // A struct-instantiation key names its template without a module;
             // the method template is named after the receiver.
-            let receiver_head = type_table.fq_base_type_name(receiver.type_id);
+            let receiver_head = super::dispatch_receiver_head(type_table, receiver.type_id);
             // Try trait method name format first (e.g., Triple^IndexValue::index_value)
             let mut possible_keys = Vec::new();
             if let Some(info) = method_func.method_info.as_ref()
