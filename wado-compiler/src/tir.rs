@@ -1221,9 +1221,12 @@ impl TypeTable {
 
     /// The fq name of a compiler-item struct: its declaring module plus its
     /// name, the form any name that embeds a receiver expects.
-    pub fn compiler_struct_fq_name(&self, item: crate::compiler_item::CompilerItem) -> String {
+    pub fn compiler_struct_fq_name(
+        &self,
+        item: crate::compiler_item::CompilerItem,
+    ) -> crate::name::FqTypeName {
         let (module, name) = self.compiler_items.require_struct(item);
-        format!("{module}/{name}")
+        crate::name::FqTypeName::declared(module, name)
     }
 
     pub fn compiler_trait_name(&self, item: crate::compiler_item::CompilerItem) -> &str {

@@ -17,7 +17,7 @@ use std::sync::Arc;
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::elaborator::trait_env::TraitEnv;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, Receiver, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr,
     TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart,
@@ -44,7 +44,7 @@ pub(super) struct FormatStdlibNames {
     /// `formatter` prefixed by its declaring module — the form a function name
     /// embeds. The bare `formatter` stays for type-table lookups, which key a
     /// struct by its simple name plus module.
-    pub formatter_fq: String,
+    pub formatter_fq: FqTypeName,
     pub alignment: String,
     pub left_name: String,
     pub left_index: u32,
@@ -92,7 +92,7 @@ impl FormatStdlibNames {
             formatter: items.struct_name(CompilerItem::Formatter).to_string(),
             formatter_fq: {
                 let (module, name) = items.require_struct(CompilerItem::Formatter);
-                format!("{module}/{name}")
+                FqTypeName::declared(module, name)
             },
             alignment: items.enum_name(CompilerItem::Alignment).to_string(),
             left_name: left_name.to_string(),
@@ -1281,7 +1281,7 @@ pub(crate) fn blanket_dispatch_for(
     })?;
     let blanket_module = blanket.module.clone();
     let generic_name = LocalMethodName::new(
-        blanket.param.clone(),
+        FqTypeName::binder(&blanket.param),
         Some(trait_name.to_string()),
         method_name.to_string(),
     )
@@ -1364,14 +1364,18 @@ fn method_name_for_type(
             .iter()
             .map(|t| tt_ref.mangle_type_name(*t))
             .collect();
-        return LocalMethodName::new(name, Some(trait_name.to_string()), method_name.to_string())
-            .with_struct_type_args(&arg_names);
+        return LocalMethodName::new(
+            FqTypeName::from_mangled(name),
+            Some(trait_name.to_string()),
+            method_name.to_string(),
+        )
+        .with_struct_type_args(&arg_names);
     }
     let resolved = tt_ref.get(type_id).clone();
     match resolved {
         ResolvedType::TypeParam { ref name, .. } | ResolvedType::TypePack { ref name, .. } => {
             let mut info = LocalMethodName::new(
-                name.clone(),
+                FqTypeName::binder(name),
                 Some(trait_name.to_string()),
                 method_name.to_string(),
             );
@@ -1391,7 +1395,7 @@ fn method_name_for_type(
             let type_args =
                 crate::name::fn_type_arg_names(params.len(), &tt_ref.mangle_type_name(return_type));
             LocalMethodName::new(
-                crate::name::CLOSURE_FN_TRAIT.to_string(),
+                FqTypeName::binder(crate::name::CLOSURE_FN_TRAIT),
                 Some(trait_name.to_string()),
                 method_name.to_string(),
             )
@@ -1399,7 +1403,11 @@ fn method_name_for_type(
         }
         _ => {
             let name = tt_ref.mangle_type_name(type_id);
-            LocalMethodName::new(name, Some(trait_name.to_string()), method_name.to_string())
+            LocalMethodName::new(
+                FqTypeName::from_mangled(name),
+                Some(trait_name.to_string()),
+                method_name.to_string(),
+            )
         }
     }
 }
