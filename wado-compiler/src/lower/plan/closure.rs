@@ -7,7 +7,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir;
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBlock,
@@ -549,7 +549,11 @@ impl ClosureLowerer {
             // candidate map. `LocalMethodName` stays unqualified so codegen
             // re-mangles it consistently with other methods.
             let qualified_method_name =
-                MethodName::format_local(&struct_name, None, crate::name::CLOSURE_CALL_METHOD);
+                MethodName::format_local(
+                    &FqTypeName::declared(&self.module_source, &struct_name),
+                    None,
+                    crate::name::CLOSURE_CALL_METHOD,
+                );
             let self_ref_type = type_table.make_ref(struct_type_id);
 
             let mut params = Vec::with_capacity(1 + collected.params.len());
@@ -666,7 +670,7 @@ impl ClosureLowerer {
             // `method_info` carries the unmangled (struct, trait, method)
             // triple so codegen can produce the canonical mangled name.
             let method_info = LocalMethodName::new(
-                struct_name.clone(),
+                FqTypeName::declared(&self.module_source, &struct_name),
                 None,
                 crate::name::CLOSURE_CALL_METHOD.to_string(),
             );
@@ -861,7 +865,7 @@ impl ClosureLowerer {
                     name: format!("{formatter_name}::write_str"),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        formatter_name.to_string(),
+                        FqTypeName::from_mangled(formatter_name.clone()),
                         None,
                         "write_str".to_string(),
                     )),
@@ -930,10 +934,14 @@ impl ClosureLowerer {
                 Box::new(self_local),
                 FunctionRef {
                     module_source: self.module_source.clone(),
-                    name: MethodName::format_local(struct_name, Some(target_trait), target_method),
+                    name: MethodName::format_local(
+                        &FqTypeName::declared(&self.module_source, struct_name),
+                        Some(target_trait),
+                        target_method,
+                    ),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        struct_name.to_string(),
+                        FqTypeName::declared(&self.module_source, struct_name),
                         Some(target_trait.to_string()),
                         target_method.to_string(),
                     )),
@@ -974,14 +982,18 @@ impl ClosureLowerer {
         TirFunction {
             module_source: self.module_source.clone(),
             is_async: false,
-            name: MethodName::format_local(struct_name, Some(trait_name), method_name),
+            name: MethodName::format_local(
+                &FqTypeName::declared(&self.module_source, struct_name),
+                Some(trait_name),
+                method_name,
+            ),
             visibility: crate::ast::Visibility::Private,
             is_export: false,
             type_params: Vec::new(),
             impl_type_params: Vec::new(),
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(
-                struct_name.to_string(),
+                FqTypeName::declared(&self.module_source, struct_name),
                 Some(trait_name.to_string()),
                 method_name.to_string(),
             )),
@@ -1729,7 +1741,7 @@ impl ClosureCallSiteLowerer<'_> {
         };
 
         let new_method_info = LocalMethodName::new(
-            functor.struct_name.clone(),
+            FqTypeName::from_mangled(functor.struct_name.clone()),
             Some(base_trait.to_string()),
             info.method_name.clone(),
         );
