@@ -134,6 +134,13 @@ struct SubstitutedCall {
 /// `[T, T::Assoc, …]` while a call site supplies `[T]`, so without this the
 /// queueing and rewrite sides key the same instance differently. A blanket that
 /// projects nothing is returned unchanged.
+///
+/// The blanket is selected by the receiver, the same rule the emit side applies
+/// (`synthesis::template::blanket_dispatch_for`): a trait may carry several
+/// disjoint value blankets — the four reflection kinds each derive `Inspect`
+/// over their own `Reflect*` bound — and picking the first-registered one would
+/// ask a variant receiver for a struct's `FieldTypes` and key the instance
+/// under args the template never declared.
 pub(super) fn blanket_impl_args_with_projected_packs(
     args: &[TypeId],
     trait_env: &TraitEnv,
@@ -142,13 +149,24 @@ pub(super) fn blanket_impl_args_with_projected_packs(
     type_table: &TypeTable,
 ) -> Vec<TypeId> {
     let mut out = args.to_vec();
-    if out.len() == 1 {
-        for (bound_trait, assoc) in
-            trait_env.blanket_projected_pack_assocs(trait_name, Some(blanket_module))
-        {
-            if let Some(ty) = type_table.resolve_trait_assoc_type(out[0], &bound_trait, &assoc) {
-                out.push(ty);
-            }
+    if out.len() != 1 {
+        return out;
+    }
+    let receiver = out[0];
+    let Some(blanket) =
+        trait_env.value_blanket_for_receiver(trait_name, Some(blanket_module), &|bounds| {
+            crate::synthesis::template::receiver_satisfies_blanket_bounds(
+                receiver,
+                bounds.to_vec(),
+                type_table,
+            )
+        })
+    else {
+        return out;
+    };
+    for (bound_trait, assoc) in trait_env.pack_assocs_of_blanket(blanket) {
+        if let Some(ty) = type_table.resolve_trait_assoc_type(receiver, &bound_trait, &assoc) {
+            out.push(ty);
         }
     }
     out
