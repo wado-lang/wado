@@ -1370,8 +1370,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         use crate::tir::ResolvedType;
         let mut current = self.tysys.type_table.borrow().peel_refs(type_id);
         loop {
+            // `impl_name` is a receiver name, so it carries its declaring
+            // module. Build the same form from the candidate key rather than
+            // taking `impl_name` apart — a name is assembled, never parsed.
             if let Some(key) = self.type_decl_key(current)
-                && key.1 == impl_name
+                && (key.1 == impl_name
+                    || crate::name::FqTypeName::declared(&key.0, &key.1).as_str() == impl_name)
             {
                 return Some(key);
             }
