@@ -5,7 +5,7 @@ use crate::hashmap::IndexMap;
 use crate::ast::{self, Expr, Item, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -566,7 +566,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Only populated by `infer_static_method_type_args`; the
                 // explicit `call.type_args` only carries method-level args.
                 let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
-                let mangled_name = MethodName::format_local(prefix, None, suffix);
+                let mangled_name =
+                    MethodName::format_local(&self.qualified_receiver_name(prefix), None, suffix);
                 // Omitted turbofish infers both levels; an explicit `_` fills
                 // only the hole slots (see `infer_static_call_type_args`).
                 if method_type_args.is_empty() {
@@ -1005,7 +1006,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Static method call on a type from the namespace module.
                     // Use the namespace module source so codegen finds the right impl.
-                    let mangled_name = MethodName::format_local(type_name, None, method_name);
+                    let mangled_name = MethodName::format_local(
+                        &self.qualified_receiver_name(type_name),
+                        None,
+                        method_name,
+                    );
                     let method_type_args: Vec<TypeId> = call
                         .type_args
                         .iter()
@@ -1032,7 +1037,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let struct_module = method_ref.module.clone();
 
                     let final_mangled = if let Some(ref tn) = method_ref.trait_name {
-                        MethodName::format_local(type_name, Some(tn), method_name)
+                        MethodName::format_local(
+                            &self.qualified_receiver_name(type_name),
+                            Some(tn),
+                            method_name,
+                        )
                     } else {
                         mangled_name
                     };
@@ -1062,7 +1071,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         name: final_mangled,
                         monomorph_info,
                         method_info: Some(LocalMethodName::new(
-                            type_name.to_string(),
+                            self.qualified_receiver_name(type_name),
                             trait_name,
                             method_name.to_string(),
                         )),
@@ -2683,7 +2692,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
                 .collect();
             let mut method_info = LocalMethodName::new(
-                type_param_name.to_string(),
+                FqTypeName::binder(&type_param_name),
                 Some(found_trait),
                 method_name.to_string(),
             );
