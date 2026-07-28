@@ -10,7 +10,7 @@ use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, mangle_local_trait_method};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_local_trait_method};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, ResolvedType, SynthTrait, SynthesisRequest,
@@ -403,7 +403,7 @@ pub fn synthesize_serde(project: &mut Package) {
             match req.trait_ref {
                 SynthTrait::Serialize => {
                     let key = MethodName::format_local(
-                        &req.target_type_name,
+                        &FqTypeName::declared(&module.module_source, &req.target_type_name),
                         Some(&names.serialize),
                         "serialize",
                     );
@@ -420,7 +420,7 @@ pub fn synthesize_serde(project: &mut Package) {
                 }
                 SynthTrait::Deserialize => {
                     let key = MethodName::format_local(
-                        &req.target_type_name,
+                        &FqTypeName::declared(&module.module_source, &req.target_type_name),
                         Some(&names.deserialize),
                         "deserialize",
                     );
@@ -591,7 +591,7 @@ fn type_param_method_call(
 ) -> TirExpr {
     let info = if method_type_args.is_empty() {
         let mut i = LocalMethodName::new(
-            struct_name.to_string(),
+            FqTypeName::binder(struct_name),
             Some(trait_name.to_string()),
             method_name.to_string(),
         );
@@ -1279,13 +1279,13 @@ fn generate_struct_serialize(
         names,
     ));
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(names.serialize.clone()),
         "serialize".to_string(),
     );
-    let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some(&names.serialize), "serialize");
+    let qualified_name = MethodName::format_local(&target, Some(&names.serialize), "serialize");
 
     Some(TirFunction {
         module_source: ModuleSource::default(),
@@ -1847,13 +1847,14 @@ fn generate_struct_deserialize(
         names,
     ));
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(names.deserialize.clone()),
         "deserialize".to_string(),
     );
     let qualified_name = MethodName::format_local(
-        &req.target_type_name,
+        &target,
         Some(&names.deserialize),
         "deserialize",
     );
@@ -2334,13 +2335,13 @@ fn generate_enum_serialize(
 
     let stmts = vec![return_stmt(Some(match_expr))];
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(names.serialize.clone()),
         "serialize".to_string(),
     );
-    let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some(&names.serialize), "serialize");
+    let qualified_name = MethodName::format_local(&target, Some(&names.serialize), "serialize");
 
     Some(TirFunction {
         module_source: ModuleSource::default(),
@@ -2877,13 +2878,14 @@ fn generate_variant_family_deserialize(
         names,
     ));
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(names.deserialize.clone()),
         "deserialize".to_string(),
     );
     let qualified_name = MethodName::format_local(
-        &req.target_type_name,
+        &target,
         Some(&names.deserialize),
         "deserialize",
     );
@@ -3190,13 +3192,13 @@ fn generate_variant_serialize(
 
     let stmts = vec![expr_stmt(match_expr)];
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(names.serialize.clone()),
         "serialize".to_string(),
     );
-    let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some(&names.serialize), "serialize");
+    let qualified_name = MethodName::format_local(&target, Some(&names.serialize), "serialize");
 
     Some(TirFunction {
         module_source: ModuleSource::default(),
@@ -3512,13 +3514,13 @@ fn generate_flags_serialize(
         names,
     ));
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(names.serialize.clone()),
         "serialize".to_string(),
     );
-    let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some(&names.serialize), "serialize");
+    let qualified_name = MethodName::format_local(&target, Some(&names.serialize), "serialize");
 
     Some(TirFunction {
         module_source: ModuleSource::default(),
@@ -3902,13 +3904,14 @@ fn generate_flags_deserialize(
         names,
     ));
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(names.deserialize.clone()),
         "deserialize".to_string(),
     );
     let qualified_name = MethodName::format_local(
-        &req.target_type_name,
+        &target,
         Some(&names.deserialize),
         "deserialize",
     );
