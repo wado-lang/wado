@@ -166,6 +166,16 @@ Sequences:
   out of a global, whose container the engine recovers from the assignment that
   fills its slot. Only a scalar element reaches the IR; an aggregate one stays
   inside the engine, as every aggregate does.
+- An element write lands. `array_set` through a `&mut` reaching a place the
+  frame owns — a local it bound to a constant, plus the field path into it —
+  updates that local's value, so a later read sees what was written. The write
+  is performed, not folded: it only counts at statement position, where the
+  executor runs it. A place rooted anywhere else — a parameter, a global,
+  anything the frame did not build — has no current value to update and
+  abandons the evaluation rather than being stepped past.
+- A borrow handed to a sequence builtin does not make its root stale: the
+  executor performs the write itself, and a read cannot write at all. Every
+  other borrow still does.
 - A byte-sequence container a compile-time call produced is written back as the
   literal the lower phase emits for a source string — a struct over a packed
   byte array and its length. The bytes are the container's first `used`, since
@@ -223,18 +233,14 @@ Sequences:
 
 ### Sequences
 
-- Writes. A sequence is read-only to the engine: an element or spine mutation
-  leaves the container non-constant instead of producing the updated value, so
-  a compile-time call that fills a buffer in a loop does not fold. The store
-  the scope boundary permits is what closes this: a `&mut` denotes a place — a
-  root the frame owns plus a projection path — rather than its referent, and a
-  write through it updates the frame's value for that root. `array_set`,
-  `array_new` and `array_copy` join the element and length builtins the engine
-  already recognizes; a field store updates a field; a `&mut` argument writes
-  back on return. A place whose root the frame did not build stays refused, so
-  today's blanket refusals become the fallback rather than the rule. What still
-  does not fit — a table past the length cap, a fill loop past the step budget —
-  stays the wasm-CTFE backend's case.
+- The rest of the spine. An element write lands, but the operations that give a
+  container its shape do not: `array_new` should denote a zero-filled sequence
+  and `array_copy` a spliced one, a field store should update a field, and a
+  `&mut` argument should write back into the caller frame's place on return.
+  Without them a buffer that grows — which is what `String` does the moment it
+  outruns its capacity — still abandons the evaluation. What will not fit even
+  then — a table past the length cap, a fill loop past the step budget — stays
+  the wasm-CTFE backend's case.
 
 ### Regions
 
@@ -311,7 +317,9 @@ Milestones, each red/green with the fixture first:
       folds. No cap of its own is needed: `MAX_SEQ_ELEMENTS` already bounds what
       becomes a sequence value, and a payload past the inline threshold reaches
       the binary as a data segment rather than as code.
-- [ ] Places and the frame store. A compile-time call that fills and returns a
+- [ ] Places and the frame store. `array_set` through a frame-owned place
+      lands; `array_new`, `array_copy`, field stores and `&mut` write-back
+      remain, and with them a compile-time call that fills and returns a
       `List<u8>` folds.
 - [ ] Frame-executable calls. A call writing through a `&mut` parameter runs.
 - [ ] Region recognition. `` `ab` `` and `` `a${"b"}` `` fold to one literal.

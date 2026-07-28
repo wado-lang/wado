@@ -77,6 +77,42 @@ impl Value {
             .map(|pos| &fields[pos].1)
     }
 
+    /// This aggregate with field `index` replaced. `None` for a scalar or an
+    /// absent field — a NIR aggregate literal lists every field, so an absent
+    /// one means the value is not the aggregate the write assumed.
+    #[must_use]
+    pub fn with_field(&self, index: u32, value: Self) -> Option<Self> {
+        let Self::Aggregate { type_id, fields } = self else {
+            return None;
+        };
+        let pos = fields.binary_search_by_key(&index, |(i, _)| *i).ok()?;
+        let mut fields = fields.to_vec();
+        fields[pos].1 = value;
+        Some(Self::Aggregate {
+            type_id: *type_id,
+            fields: fields.into(),
+        })
+    }
+
+    /// This sequence with element `index` replaced. `None` for a non-sequence
+    /// or an index past the end, where the write traps at run time.
+    #[must_use]
+    pub fn with_element(&self, index: u64, value: Self) -> Option<Self> {
+        let Self::Seq { type_id, elements } = self else {
+            return None;
+        };
+        let index = usize::try_from(index).ok()?;
+        if index >= elements.len() {
+            return None;
+        }
+        let mut elements = elements.to_vec();
+        elements[index] = value;
+        Some(Self::Seq {
+            type_id: *type_id,
+            elements: elements.into(),
+        })
+    }
+
     /// `None` when longer than [`MAX_SEQ_ELEMENTS`].
     #[must_use]
     pub fn seq(type_id: TypeId, elements: Vec<Value>) -> Option<Self> {

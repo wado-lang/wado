@@ -3485,6 +3485,43 @@ fn shared_ref(inner: Build, type_id: TypeId) -> Build {
     })
 }
 
+fn mut_ref(inner: Build, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let inner = inner(b);
+        Operand::Expr(pe(
+            b,
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            },
+            type_id,
+        ))
+    })
+}
+
+/// `array_set(&mut place, i, v)`: the first argument is the mutable one.
+fn seq_write_call(func_id: wado_compiler::nir::FuncId, args: Vec<Build>, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let args = args
+            .iter()
+            .enumerate()
+            .map(|(i, a)| wado_compiler::nir_arena::ArenaCallArg {
+                expr: a(b),
+                is_mut: i == 0,
+            })
+            .collect();
+        Operand::Expr(pe(
+            b,
+            ExprKind::Call {
+                func_id,
+                type_args: Vec::new(),
+                args,
+            },
+            type_id,
+        ))
+    })
+}
+
 /// A call to a synthetic builtin id, paired with the map that classifies it.
 fn seq_builtin_call(
     func_id: wado_compiler::nir::FuncId,
@@ -3609,6 +3646,112 @@ fn a_constant_string_call_result_becomes_a_literal() {
             .map(|f| op_int(&body, f.value)),
         Some(2),
     );
+}
+
+#[test]
+fn a_write_through_a_frame_owned_place_is_read_back() {
+    // `array_set` through a `&mut` place the frame built updates the container,
+    // so a later read of that element sees the written value rather than
+    // abandoning the evaluation.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = seq_builtin_map(set_id, SeqBuiltin::Set);
+    builtins.insert(get_id, SeqBuiltin::Get);
+
+    let backing = || {
+        field_access(
+            local_expr(0, list_ty),
+            SeqField::Backing.index(),
+            "repr",
+            list_ty,
+        )
+    };
+    let set_then_get = make_pure_fn_stmts(
+        "set_then_get",
+        vec![],
+        TypeTable::U8,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    mut_ref(backing(), list_ty),
+                    int_lit(1, TypeTable::I32, "1"),
+                    int_lit(7, TypeTable::U8, "7"),
+                ],
+                TypeTable::UNIT,
+            )),
+            return_stmt(seq_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(backing(), list_ty),
+                    int_lit(1, TypeTable::I32, "1"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&set_then_get));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_seq_builtins(&builtins);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&set_then_get, vec![])),
+        Some(Value::Int {
+            value: 7,
+            prim: PrimitiveType::U8,
+        }),
+    );
+}
+
+#[test]
+fn a_write_through_a_place_the_frame_does_not_own_is_refused() {
+    // The same write rooted at a parameter: the frame did not build that value,
+    // so the store has nothing current to update and the call stays.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let builtins = seq_builtin_map(set_id, SeqBuiltin::Set);
+
+    let write_param = make_pure_fn_stmts(
+        "write_param",
+        vec![("c", list_ty)],
+        TypeTable::U8,
+        vec![
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    mut_ref(
+                        field_access(
+                            local_expr(0, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            list_ty,
+                        ),
+                        list_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                    int_lit(7, TypeTable::U8, "7"),
+                ],
+                TypeTable::UNIT,
+            )),
+            return_stmt(int_lit(7, TypeTable::U8, "7")),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&write_param));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_seq_builtins(&builtins);
+
+    let call = call_expr(&write_param, vec![seq_lit(list_ty, vec![0, 0])]);
+    let (changed, body, e) = reduce_local_into(&mut interp, &call);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }
 
 #[test]
@@ -3957,6 +4100,15 @@ fn make_pure_fn(
     return_type: TypeId,
     body_stmt: StmtBuild,
 ) -> NirFunction {
+    make_pure_fn_stmts(name, params, return_type, vec![body_stmt])
+}
+
+fn make_pure_fn_stmts(
+    name: &str,
+    params: Vec<(&str, TypeId)>,
+    return_type: TypeId,
+    body_stmts: Vec<StmtBuild>,
+) -> NirFunction {
     let span = Span::default();
     let tir_params: Vec<NirParam> = params
         .iter()
@@ -4012,7 +4164,7 @@ fn make_pure_fn(
         kind: FunctionKind::Regular,
         return_abi: ReturnAbi::Single,
     };
-    set_arena_body(&mut f, vec![body_stmt]);
+    set_arena_body(&mut f, body_stmts);
     f
 }
 

@@ -226,11 +226,16 @@ pub type CalleeKey = crate::nir::FuncId;
 pub type CalleeMap = IndexMap<CalleeKey, Rc<RefCell<NirFunction>>>;
 
 /// The array builtins the engine can evaluate over a constant sequence. An
-/// element read reaches NIR as a call to one of these, not as an `Index` node.
+/// element read or write reaches NIR as a call to one of these, not as an
+/// `Index` node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SeqBuiltin {
     Get,
     Len,
+    /// `array_set(&mut seq, i, v)`. Unlike the reads, this is performed rather
+    /// than folded: it updates the frame's value for the place its first
+    /// argument roots at, and only inside a compile-time frame that owns it.
+    Set,
 }
 
 /// Which sequence builtin each callee id is, for the ids that are one.
@@ -603,6 +608,75 @@ fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
     }
 }
 
+/// The location a borrow or lvalue chain denotes: the local it roots at, plus
+/// the field path reaching into that local's value. Distinct from
+/// [`lvalue_root_local`], which answers only *which* local is touched — a write
+/// also needs to know where inside it lands.
+fn place_of(body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
+    match &body.exprs[op.as_expr()?].kind {
+        ExprKind::Local { index, .. } => Some((*index, Vec::new())),
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+            expr,
+        } => place_of(body, *expr),
+        ExprKind::FieldAccess {
+            expr, field_index, ..
+        } => {
+            let (root, mut path) = place_of(body, *expr)?;
+            path.push(*field_index);
+            Some((root, path))
+        }
+        _ => None,
+    }
+}
+
+/// `base` with the value at `path` replaced by `new`. `None` when the path does
+/// not reach a field the value has.
+fn value_with_path(base: &Value, path: &[u32], new: Value) -> Option<Value> {
+    let Some((head, rest)) = path.split_first() else {
+        return Some(new);
+    };
+    let updated = value_with_path(base.field(*head)?, rest, new)?;
+    base.with_field(*head, updated)
+}
+
+/// The borrow arguments of the sequence builtins, which do not make the local
+/// they root at stale: the executor performs the write itself, and a read
+/// cannot write at all. Every other borrow still disqualifies its root.
+///
+/// A write counts only at statement position, where the executor runs it — one
+/// buried in a larger expression is merely reduced, so its target would keep a
+/// stale value.
+fn seq_builtin_borrows(body: &Body, seq_builtins: Option<&SeqBuiltinMap>) -> IndexSet<ExprId> {
+    let mut set = IndexSet::default();
+    let Some(map) = seq_builtins else {
+        return set;
+    };
+    let mut statement_calls: IndexSet<ExprId> = IndexSet::default();
+    for (_, stmt) in &body.stmts {
+        if let StmtKind::Expr(op) = &stmt.kind
+            && let Some(e) = op.as_expr()
+        {
+            statement_calls.insert(e);
+        }
+    }
+    for (e, node) in &body.exprs {
+        let ExprKind::Call { func_id, args, .. } = &node.kind else {
+            continue;
+        };
+        let Some(builtin) = map.get(func_id) else {
+            continue;
+        };
+        if *builtin == SeqBuiltin::Set && !statement_calls.contains(&e) {
+            continue;
+        }
+        if let Some(arg) = args.first().and_then(|a| a.expr.as_expr()) {
+            set.insert(arg);
+        }
+    }
+    set
+}
+
 /// Every expression id reachable from the body root, in arena order.
 fn reachable_exprs(body: &Body) -> Vec<ExprId> {
     struct Collect(Vec<ExprId>);
@@ -626,11 +700,12 @@ fn reachable_exprs(body: &Body) -> Vec<ExprId> {
 /// Locals of `body` that may bind an aggregate constant: every mention only
 /// reads the value — as a field read's receiver or a `match` / `switch`
 /// scrutinee — and no store target, mutable borrow, method receiver, or
-/// mutable argument roots at them.
+/// mutable argument roots at them. A borrow in `seq_borrows` is exempt: the
+/// executor performs that write, so the value it leaves is current.
 ///
 /// Only the reachable body is scanned: a mention orphaned by an earlier rewrite
 /// cannot run, so it must not disqualify a local.
-fn aggregate_safe_locals(body: &Body) -> LocalSet {
+fn aggregate_safe_locals(body: &Body, seq_borrows: &IndexSet<ExprId>) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
             set.insert(index);
@@ -658,7 +733,11 @@ fn aggregate_safe_locals(body: &Body) -> LocalSet {
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr,
-            } => disqualify_root(body, *expr, &mut disqualified),
+            } => {
+                if !seq_borrows.contains(&e) {
+                    disqualify_root(body, *expr, &mut disqualified);
+                }
+            }
             ExprKind::MethodCall { receiver, args, .. } => {
                 disqualify_root(body, *receiver, &mut disqualified);
                 for arg in args.iter().filter(|a| a.is_mut) {
@@ -772,7 +851,8 @@ impl<'a> Interpreter<'a> {
     /// Record `body`'s [`aggregate_safe_locals`]. The driving visitor calls
     /// this once per function, next to [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
-        self.aggregate_locals = aggregate_safe_locals(body);
+        let seq_borrows = seq_builtin_borrows(body, self.seq_builtins);
+        self.aggregate_locals = aggregate_safe_locals(body, &seq_borrows);
     }
 
     pub fn record_ref_global_aliases(&mut self, body: &Body) {
@@ -2167,6 +2247,11 @@ impl<'a> Interpreter<'a> {
     /// value as the block's result.
     fn exec_expr_stmt_a(&mut self, body: &mut Body, op: Operand) -> Flow {
         if let Some(e) = op.as_expr()
+            && let Some(flow) = self.exec_seq_write_a(body, e)
+        {
+            return flow;
+        }
+        if let Some(e) = op.as_expr()
             && let ExprKind::Assign { target, value } = &body.exprs[e].kind
         {
             let (target, value) = (*target, *value);
@@ -2183,6 +2268,53 @@ impl<'a> Interpreter<'a> {
             lattice @ Lattice::Const(_) => Flow::Fallthrough(lattice),
             Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
         }
+    }
+
+    /// Perform `array_set(&mut place, i, v)`, updating the frame's value for the
+    /// place's root. `None` when the statement is not a sequence write at all;
+    /// `Some(Flow::Bail)` when it is one the engine cannot follow — stepping
+    /// past a write it did not apply would leave the container stale.
+    ///
+    /// The root has to be a local the frame already holds a constant for, which
+    /// is what confines the store to values the engine itself built: a
+    /// parameter, a global, or anything else reaches the frame as
+    /// `NonConst` and bails here.
+    fn exec_seq_write_a(&mut self, body: &mut Body, e: ExprId) -> Option<Flow> {
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+            return None;
+        };
+        if self.seq_builtins.and_then(|m| m.get(func_id)) != Some(&SeqBuiltin::Set) {
+            return None;
+        }
+        let [seq, index, element] = args.as_slice() else {
+            return Some(Flow::Bail);
+        };
+        let (seq, index, element) = (seq.expr, index.expr, element.expr);
+        let Some((root, path)) = place_of(body, seq) else {
+            return Some(Flow::Bail);
+        };
+        let (Lattice::Const(index), Lattice::Const(element)) = (
+            self.eval_operand_a(body, index),
+            self.eval_operand_a(body, element),
+        ) else {
+            return Some(Flow::Bail);
+        };
+        let Some((index, _)) = index.as_int() else {
+            return Some(Flow::Bail);
+        };
+        let Some(Lattice::Const(container)) = self.env.get(&root).cloned() else {
+            return Some(Flow::Bail);
+        };
+        let Some(updated) = path
+            .iter()
+            .try_fold(&container, |v, i| v.field(*i))
+            .and_then(|target| target.with_element(index, element))
+            .and_then(|updated| value_with_path(&container, &path, updated))
+        else {
+            return Some(Flow::Bail);
+        };
+        self.bind_ctfe_local(root, Lattice::Const(updated));
+        Some(Flow::Fallthrough(Lattice::Unevaluated))
     }
 
     fn eval_optional_operand_a(&mut self, body: &mut Body, op: Option<Operand>) -> Lattice {
@@ -2237,7 +2369,8 @@ impl<'a> Interpreter<'a> {
                 })
             }
             (SeqBuiltin::Get, [arr, index]) => self.index_lattice(body, arr.expr, index.expr),
-            (SeqBuiltin::Len | SeqBuiltin::Get, _) => Lattice::Unevaluated,
+            // A write denotes nothing; the executor performs it as a statement.
+            (SeqBuiltin::Set | SeqBuiltin::Len | SeqBuiltin::Get, _) => Lattice::Unevaluated,
         }
     }
 
@@ -2306,7 +2439,8 @@ impl<'a> Interpreter<'a> {
         // immutable `Ref`, is not mutated.
         let mut scratch = callee_body.nodes_only_clone();
         self.record_aggregate_locals(&scratch);
-        self.ctfe_clobbered = clobbered_locals(&scratch);
+        self.ctfe_clobbered =
+            clobbered_locals(&scratch, &seq_builtin_borrows(&scratch, self.seq_builtins));
         for (i, v) in bound.into_iter().enumerate() {
             let index = u32::try_from(i).expect("param count fits u32");
             let lattice = if self.ctfe_clobbered.contains(index) {
@@ -2503,7 +2637,7 @@ impl LoopSnapshot {
 /// other than a bare assignment at statement position can write them: a
 /// borrow, a mutable argument, a method receiver, a store through a
 /// projection, or an assignment buried inside a larger expression.
-fn clobbered_locals(body: &Body) -> LocalSet {
+fn clobbered_locals(body: &Body, seq_borrows: &IndexSet<ExprId>) -> LocalSet {
     fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
             set.insert(index);
@@ -2533,7 +2667,11 @@ fn clobbered_locals(body: &Body) -> LocalSet {
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr,
-            } => disqualify(body, *expr, &mut set),
+            } => {
+                if !seq_borrows.contains(&e) {
+                    disqualify(body, *expr, &mut set);
+                }
+            }
             ExprKind::MethodCall { receiver, args, .. } => {
                 disqualify(body, *receiver, &mut set);
                 for arg in args.iter().filter(|a| a.is_mut) {
