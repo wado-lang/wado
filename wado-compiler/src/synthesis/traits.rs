@@ -2922,6 +2922,16 @@ enum ImplScope {
     AnyModule,
 }
 
+/// The module declaring a shape's base (`Stream` for `Stream<u8>`), which names
+/// its synthesized impls. `None` for a shape with no declaration to point at.
+fn shape_declaring_module(resolved: &ResolvedType) -> Option<ModuleSource> {
+    match resolved {
+        ResolvedType::GenericInstance { module_source, .. }
+        | ResolvedType::GenericResource { module_source, .. } => Some(module_source.clone()),
+        _ => None,
+    }
+}
+
 /// Resolve type parameter definitions into `TypeIds`.
 fn make_type_param_ids(type_params: &[TirTypeParam], tt: &mut TypeTable) -> Vec<TypeId> {
     type_params
@@ -3512,6 +3522,21 @@ fn generate_inspect_impls(module_source: &ModuleSource, module: &mut TirModule, 
                 // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
             }
             _ => {
+                // A name carries its subject's declaring module, so one name is
+                // one function: the stub belongs to the module declaring the
+                // shape's base and is emitted once, there. Emitting a copy into
+                // every using module — which the bare-name scheme needed, since
+                // each module's copy then had a distinct identity — now mints
+                // several functions under one name, and a call from a third
+                // module matches none of them.
+                // A shape with no declaration (a tuple, a reference, a `Fn`)
+                // has no module to be named by, so it keeps a copy per using
+                // module — the same reason the `Fn` arm below does.
+                let shape_module = match shape_declaring_module(&resolved) {
+                    Some(m) if m != module_source => continue,
+                    Some(m) => m,
+                    None => module_source.clone(),
+                };
                 let type_name = tt.type_name(type_id);
                 generated.push(Rc::new(RefCell::new(generate_opaque_inspect_fn(
                     &base_name,
@@ -3523,7 +3548,7 @@ fn generate_inspect_impls(module_source: &ModuleSource, module: &mut TirModule, 
                     string_type,
                     ref_string_type,
                     ctx.trait_env,
-                    &module_source,
+                    &shape_module,
                     &mut tt,
                     span,
                     &inspect_name,
@@ -3532,9 +3557,6 @@ fn generate_inspect_impls(module_source: &ModuleSource, module: &mut TirModule, 
                     &lower_hex_name,
                     &lower_hex_method,
                 ))));
-                // Intentionally do NOT `ctx.record_impl` — these per-module
-                // stubs are emitted into every module that uses the shape,
-                // so call sites resolve to a stub in the caller's module.
             }
         }
     }
@@ -4213,19 +4235,27 @@ fn generate_inspect_alt_impls(module_source: &ModuleSource, module: &mut TirModu
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
             continue;
         }
+        // One name is one function, so the delegating impl belongs to the
+        // module declaring the shape's base and is emitted once, there —
+        // matching where its `Inspect` counterpart lands.
+        let shape_module = match shape_declaring_module(&resolved) {
+            Some(m) if m != module_source => continue,
+            Some(m) => m,
+            None => module_source.clone(),
+        };
         let ref_type = tt.make_ref(type_id);
         // Opaque resource types (Future, Stream, etc.): delegate to
         // Inspect via the stock `display_fallback`.
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(&module_source, &base_name, &inspect_alt_name, &inspect_alt_method)
+            trait_method_info(&shape_module, &base_name, &inspect_alt_name, &inspect_alt_method)
                 .with_struct_type_args(&type_arg_names),
-            trait_method_info(&module_source, &base_name, &inspect_name, &inspect_method)
+            trait_method_info(&shape_module, &base_name, &inspect_name, &inspect_method)
                 .with_struct_type_args(&type_arg_names),
             ref_type,
             type_id,
             fmt_type,
             ctx.trait_env,
-            &module_source,
+            &shape_module,
             vec![],
             &tt,
             span,
