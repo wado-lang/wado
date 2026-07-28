@@ -1856,8 +1856,20 @@ mod tests {
             fix.ctx(),
         );
         assert_eq!(consumed, 2);
-        // Should be a call to memory_to_gc_string
-        assert!(matches!(expr.kind, TirExprKind::Call { .. }));
+        // The lifted string is materialized into a local so the caller-lowered
+        // buffer can be released before the value is used.
+        assert!(matches!(expr.kind, TirExprKind::Local { .. }));
+
+        let emitted = format!("{stmts:?}");
+        assert!(
+            emitted.contains("memory_to_gc_string"),
+            "expected the copy onto the GC heap in:\n{emitted}"
+        );
+        assert!(
+            emitted.contains("realloc"),
+            "the buffer the caller lowered the string into must be released \
+             once it has been copied:\n{emitted}"
+        );
     }
 
     #[test]
