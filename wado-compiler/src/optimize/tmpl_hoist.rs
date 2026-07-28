@@ -86,7 +86,7 @@ pub(super) struct TmplCalleeIds {
 fn is_string_with_capacity(f: &NirFunction) -> bool {
     f.module_source.is_core()
         && f.method_info.as_ref().is_some_and(|mi| {
-            mi.base_struct_name() == "String"
+            mi.receiver_decl_name() == "String"
                 && mi.method_name == "with_capacity"
                 && mi.trait_name.is_none()
         })
