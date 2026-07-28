@@ -872,10 +872,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(vec![elem]),
                 )
             }
-            ResolvedType::Newtype { name, .. }
-                if matched_impl_struct_name.as_deref() == Some(name.as_str()) =>
-            {
-                (name.clone(), name, vec![], None)
+            // The newtype answers the call with its own impl. It is a
+            // declaration like any other, so it is named by the module that
+            // declares it — a bare head would name no definition, and the
+            // later re-resolution would peel past the impl to the base.
+            ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            } if matched_impl_struct_name.as_deref() == Some(name.as_str()) => {
+                let base = FqTypeName::declared(&module_source, &name);
+                (base.as_str().to_string(), base.into_string(), vec![], None)
             }
             ResolvedType::Newtype { name, .. } if name.contains('<') => {
                 let type_args = {
