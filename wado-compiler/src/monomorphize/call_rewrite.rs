@@ -1,7 +1,7 @@
 //! Post-monomorphization rewrites: function call rewriting to monomorphized names.
 
 use crate::module_source::ModuleSource;
-use crate::name::LocalMethodName;
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::name::{MethodName, RefKind};
 use crate::tir::{
     CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
@@ -298,13 +298,13 @@ impl Monomorphizer {
                 && (!monomorph.impl_type_args.is_empty() || !monomorph.method_type_args.is_empty())
             {
                 let mut names_to_try = vec![MethodName::format_local(
-                    &info.base_struct_name(),
+                    &info.fq_base_struct_name(),
                     info.trait_name.as_deref(),
                     &info.method_name,
                 )];
                 if info.struct_name != info.base_struct_name() {
                     names_to_try.push(MethodName::format_local(
-                        &info.struct_name,
+                        &info.fq_struct_name(),
                         info.trait_name.as_deref(),
                         &info.method_name,
                     ));
@@ -483,12 +483,12 @@ impl Monomorphizer {
                 if let Some((base_struct, impl_type_args)) = base_info {
                     // Try both inherent and trait method formats
                     let mut dg_names = vec![(
-                        MethodName::format_local(&base_struct, None, &method_name),
+                        MethodName::format_local(&FqTypeName::from_mangled(base_struct.clone()), None, &method_name),
                         None::<String>,
                     )];
                     if let Some(ref tn) = trait_name_opt {
                         dg_names.push((
-                            MethodName::format_local(&base_struct, Some(tn), &method_name),
+                            MethodName::format_local(&FqTypeName::from_mangled(base_struct.clone()), Some(tn), &method_name),
                             Some(tn.clone()),
                         ));
                     }
@@ -582,7 +582,7 @@ impl Monomorphizer {
                 && info.base_struct_name() != base_struct
             {
                 possible_keys.push(InstantiationKey {
-                    name: MethodName::format_local(&info.base_struct_name(), None, &method_name),
+                    name: MethodName::format_local(&info.fq_base_struct_name(), None, &method_name),
                     module_source: method_func.module_source.clone(),
                     impl_type_args: impl_type_args.clone(),
                     method_type_args: vec![],
@@ -596,7 +596,7 @@ impl Monomorphizer {
                 if info.base_struct_name() != base_struct {
                     possible_keys.push(InstantiationKey {
                         name: MethodName::format_local(
-                            &info.base_struct_name(),
+                            &info.fq_base_struct_name(),
                             Some(trait_name),
                             &method_name,
                         ),
@@ -618,7 +618,7 @@ impl Monomorphizer {
             }
             // Also try regular method format
             possible_keys.push(InstantiationKey {
-                name: MethodName::format_local(&base_struct, None, &method_name),
+                name: MethodName::format_local(&FqTypeName::from_mangled(base_struct.clone()), None, &method_name),
                 module_source: method_func.module_source.clone(),
                 impl_type_args,
                 method_type_args: vec![],
