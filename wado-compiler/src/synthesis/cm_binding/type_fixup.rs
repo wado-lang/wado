@@ -1002,21 +1002,22 @@ fn rewrite_calls_in_expr(
     }
 
     // Check if this is a resource MethodCall that should be rewritten to target a binding
-    if let TirExprKind::MethodCall { func, .. } = &expr.kind
+    if let TirExprKind::MethodCall { receiver, func, .. } = &expr.kind
         && let Some(method_info) = func.method_info.clone()
     {
-        let mut qualified = format!(
-            "{}::{}",
-            method_info.base_struct_name(),
-            method_info.method_name
-        );
+        let head = {
+            let tt = type_table.borrow();
+            tt.impl_receiver_key(tt.peel_refs(receiver.type_id))
+                .head_key()
+                .into_owned()
+        };
+        let mut qualified = format!("{head}::{}", method_info.method_name);
         // Resolve through type aliases (e.g., Headers -> Fields). Scoped to
         // `wasi:` — the method resolution path is WASI-only.
         if !adapters.contains_key(&qualified)
-            && let Some(source) =
-                cm_interface_registry.find_wasi_newtype_source(&method_info.base_struct_name())
+            && let Some(source) = cm_interface_registry.find_wasi_newtype_source(&head)
             && let Some(Type::Named(resolved)) =
-                cm_interface_registry.get_newtype_by_source(source, &method_info.base_struct_name())
+                cm_interface_registry.get_newtype_by_source(source, &head)
         {
             let aliased = format!("{}::{}", resolved.name, method_info.method_name);
             if adapters.contains_key(&aliased) {
@@ -1300,10 +1301,12 @@ pub(super) fn collect_effect_calls_in_block(
     block: &TirBlock,
     effects: &mut IndexSet<String>,
     cm_interface_registry: &CmInterfaceRegistry,
+    type_table: &RefCell<TypeTable>,
 ) {
     EffectCallCollector {
         effects,
         cm_interface_registry,
+        type_table,
     }
     .visit_block(block);
 }
@@ -1317,6 +1320,7 @@ pub(super) fn collect_effect_calls_in_block(
 struct EffectCallCollector<'a> {
     effects: &'a mut IndexSet<String>,
     cm_interface_registry: &'a CmInterfaceRegistry,
+    type_table: &'a RefCell<TypeTable>,
 }
 
 impl TirRefVisitor for EffectCallCollector<'_> {
@@ -1363,25 +1367,26 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                     self.effects.insert(func.name.clone());
                 }
             }
-            TirExprKind::MethodCall { func, .. } => {
+            TirExprKind::MethodCall { receiver, func, .. } => {
                 if let Some(method_info) = func.method_info.clone() {
-                    let qualified = format!(
-                        "{}::{}",
-                        method_info.base_struct_name(),
-                        method_info.method_name
-                    );
+                    let head = {
+                        let tt = self.type_table.borrow();
+                        tt.impl_receiver_key(tt.peel_refs(receiver.type_id))
+                            .head_key()
+                            .into_owned()
+                    };
+                    let qualified = format!("{head}::{}", method_info.method_name);
                     if self
                         .cm_interface_registry
                         .get_function(&qualified)
                         .is_some()
                     {
                         self.effects.insert(qualified);
-                    } else if let Some(source) = self
-                        .cm_interface_registry
-                        .find_wasi_newtype_source(&method_info.base_struct_name())
+                    } else if let Some(source) =
+                        self.cm_interface_registry.find_wasi_newtype_source(&head)
                         && let Some(Type::Named(resolved)) = self
                             .cm_interface_registry
-                            .get_newtype_by_source(source, &method_info.base_struct_name())
+                            .get_newtype_by_source(source, &head)
                     {
                         // Resolve through type aliases (e.g. Headers -> Fields).
                         let aliased = format!("{}::{}", resolved.name, method_info.method_name);

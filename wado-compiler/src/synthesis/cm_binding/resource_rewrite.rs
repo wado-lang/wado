@@ -1179,6 +1179,9 @@ fn synthesize_stream_read_func(
     let list_struct_name =
         super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items())
             .array;
+    // `List` is a declaration, so the receiver its methods are named after
+    // carries the module that declares it.
+    let list_fq = crate::name::FqTypeName::declared(&ModuleSource::list(), &list_struct_name);
 
     let mut next_local: u32 = 0;
     let mut locals: Vec<TirLocal> = Vec::new();
@@ -1292,16 +1295,16 @@ fn synthesize_stream_read_func(
         TirExprKind::Call {
             func: FunctionRef {
                 module_source: ModuleSource::list(),
-                name: format!("{list_struct_name}<{elem_inst_name}>::with_capacity"),
+                name: format!("{list_fq}<{elem_inst_name}>::with_capacity"),
                 monomorph_info: Some(MonomorphInfo {
-                    generic_name: "List::with_capacity".to_string(),
+                    generic_name: format!("{list_fq}::with_capacity"),
                     impl_type_args: vec![elem_type_id],
                     method_type_args: vec![],
                     is_blanket: false,
                 }),
                 method_info: Some(LocalMethodName {
-                    struct_name: format!("{list_struct_name}<{elem_inst_name}>"),
-                    receiver: Receiver::Type(list_struct_name.clone()),
+                    struct_name: format!("{list_fq}<{elem_inst_name}>"),
+                    receiver: Receiver::Type(list_fq.as_str().to_string()),
                     trait_name: None,
                     base_trait_name: None,
                     base_trait_module: None,
@@ -1401,16 +1404,16 @@ fn synthesize_stream_read_func(
             Box::new(local_ref(arr_idx, "arr", array_type_id)),
             FunctionRef {
                 module_source: ModuleSource::list(),
-                name: format!("{list_struct_name}<{elem_inst_name}>::push"),
+                name: format!("{list_fq}<{elem_inst_name}>::push"),
                 monomorph_info: Some(MonomorphInfo {
-                    generic_name: "List::push".to_string(),
+                    generic_name: format!("{list_fq}::push"),
                     impl_type_args: vec![elem_type_id],
                     method_type_args: vec![],
                     is_blanket: false,
                 }),
                 method_info: Some(LocalMethodName {
-                    struct_name: format!("{list_struct_name}<{elem_inst_name}>"),
-                    receiver: Receiver::Type(list_struct_name),
+                    struct_name: format!("{list_fq}<{elem_inst_name}>"),
+                    receiver: Receiver::Type(list_fq.as_str().to_string()),
                     trait_name: None,
                     base_trait_name: None,
                     base_trait_module: None,

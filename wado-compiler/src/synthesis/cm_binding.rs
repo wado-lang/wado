@@ -389,6 +389,7 @@ fn generate_import_adapters(project: &mut Package) {
                     body,
                     &mut seen_effects,
                     &project.cm_interface_registry,
+                    &module.type_table,
                 );
             }
         }
