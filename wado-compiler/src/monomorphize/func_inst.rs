@@ -152,9 +152,7 @@ pub(super) fn blanket_pack_dispatch_args(
     args: &[TypeId],
     trait_env: &TraitEnv,
     trait_name: &str,
-    method_name: &str,
     blanket_module: &ModuleSource,
-    generic_name: &str,
     type_table: &TypeTable,
 ) -> Option<Vec<TypeId>> {
     if args.len() != 1 {
@@ -169,11 +167,6 @@ pub(super) fn blanket_pack_dispatch_args(
                 type_table,
             )
         })?;
-    // The dispatch names its template by the blanket's receiver param; a
-    // concrete, shape, or ref dispatch spells it otherwise and is not ours.
-    if generic_name != MethodName::format_local(&blanket.param, Some(trait_name), method_name) {
-        return None;
-    }
     let projected = trait_env.pack_assocs_of_blanket(blanket);
     if projected.is_empty() {
         return None;
@@ -185,11 +178,12 @@ pub(super) fn blanket_pack_dispatch_args(
     Some(out)
 }
 
-/// Whether a blanket impl `impl<T: Bound> Trait for T` may claim the receiver.
-/// The blanket applies only when the receiver satisfies the param's bound
-/// (e.g. a `ReflectStruct`-bound `Inspect` derive must not swallow a token type that
-/// has no `ReflectStruct`). `None` receiver info means the caller cannot vet the
-/// bound and the blanket is allowed as before.
+/// Whether any of `trait_name`'s blanket impls may claim the receiver — the
+/// template name the caller looked up already pins which one. Asking only the
+/// first-registered blanket would reject every receiver of the other kinds when
+/// a trait carries several, as each reflection kind's `Inspect` derive does.
+/// `None` receiver info means the caller cannot vet the bound and the blanket is
+/// allowed as before.
 fn blanket_receiver_satisfies(
     trait_env: &TraitEnv,
     trait_name: &str,
@@ -199,10 +193,15 @@ fn blanket_receiver_satisfies(
     let Some((type_id, type_table)) = blanket_receiver else {
         return true;
     };
-    let bounds = trait_env
-        .blanket_impl_bounds_for_trait(trait_name, Some(blanket_module))
-        .unwrap_or_default();
-    crate::synthesis::template::receiver_satisfies_blanket_bounds(type_id, bounds, type_table)
+    trait_env
+        .value_blanket_for_receiver(trait_name, Some(blanket_module), &|bounds| {
+            crate::synthesis::template::receiver_satisfies_blanket_bounds(
+                type_id,
+                bounds.to_vec(),
+                type_table,
+            )
+        })
+        .is_some()
 }
 
 fn lookup_template_with_trait_fallback<'a, V>(
@@ -616,9 +615,7 @@ impl Monomorphizer {
                                         &impl_type_args,
                                         &self.functions.trait_env,
                                         tn,
-                                        &info.method_name,
                                         &func.module_source,
-                                        &monomorph.generic_name,
                                         type_table,
                                     )
                                 })
@@ -1200,13 +1197,11 @@ impl Monomorphizer {
                     // `ReflectFlags<Members>`; a one-arg blanket, the shape-keyed
                     // ref blankets, and any non-template dispatch project none.
                     let pack_args = match (trait_name, info) {
-                        (Some(tn), Some(info)) => blanket_pack_dispatch_args(
+                        (Some(tn), Some(_)) => blanket_pack_dispatch_args(
                             &mono.impl_type_args,
                             &self.functions.trait_env,
                             tn,
-                            &info.method_name,
                             &generic_func.module_source,
-                            &mono.generic_name,
                             type_table,
                         ),
                         _ => None,
@@ -1956,34 +1951,31 @@ impl Monomorphizer {
                                     &new_info,
                                     receiver_module.as_ref(),
                                 );
-                            let blanket_module = if generic_or_concrete.is_none() {
+                            // Dispatch through the blanket the receiver
+                            // satisfies, and take its param from that same
+                            // blanket: a trait carries one per reflection kind,
+                            // and the first-registered fits only its own.
+                            let blanket = if generic_or_concrete.is_none() {
                                 trait_name_for_blanket.and_then(|tn| {
                                     self.functions
                                         .trait_env
-                                        .blanket_impl_module_for_trait(tn, receiver_module.as_ref())
-                                        .cloned()
+                                        .value_blanket_for_receiver(
+                                            tn,
+                                            receiver_module.as_ref(),
+                                            &|bounds| {
+                                                crate::synthesis::template::receiver_satisfies_blanket_bounds(
+                                                    concrete_type_id,
+                                                    bounds.to_vec(),
+                                                    type_table,
+                                                )
+                                            },
+                                        )
+                                        .map(|b| (b.module.clone(), b.param.clone()))
                                 })
                             } else {
                                 None
                             };
-                            // Only dispatch through the blanket if the receiver
-                            // satisfies its param bound (e.g. a `ReflectStruct` struct
-                            // derive must not swallow a token type without a
-                            // `ReflectStruct` impl).
-                            let blanket_module = blanket_module.filter(|bm| {
-                                let bounds = trait_name_for_blanket
-                                    .and_then(|tn| {
-                                        self.functions
-                                            .trait_env
-                                            .blanket_impl_bounds_for_trait(tn, Some(bm))
-                                    })
-                                    .unwrap_or_default();
-                                crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                                    concrete_type_id,
-                                    bounds,
-                                    type_table,
-                                )
-                            });
+                            let blanket_module = blanket.as_ref().map(|(m, _)| m.clone());
                             let concrete_impl_module = self
                                 .functions
                                 .impl_module(&new_info, receiver_module.as_ref());
@@ -2012,23 +2004,16 @@ impl Monomorphizer {
                             // (`i32^Default::default`) is a direct function,
                             // unless it dispatches through a blanket impl (see
                             // below).
-                            let blanket_generic_name = blanket_module
+                            let blanket_generic_name = blanket
                                 .as_ref()
-                                .and(trait_name_for_blanket)
-                                .and_then(|tn| {
-                                    let param =
-                                        self.functions.trait_env.blanket_impl_param_for_trait(
-                                            tn,
-                                            blanket_module.as_ref(),
-                                        )?;
-                                    Some(
-                                        LocalMethodName::new(
-                                            param,
-                                            Some(tn.to_string()),
-                                            new_info.method_name.clone(),
-                                        )
-                                        .to_mangled_name(),
+                                .zip(trait_name_for_blanket)
+                                .map(|((_, param), tn)| {
+                                    LocalMethodName::new(
+                                        param.clone(),
+                                        Some(tn.to_string()),
+                                        new_info.method_name.clone(),
                                     )
+                                    .to_mangled_name()
                                 });
                             let new_monomorph = if let Some(generic_name) = blanket_generic_name {
                                 Some(MonomorphInfo {
@@ -3028,44 +3013,40 @@ impl Monomorphizer {
         let generic_or_concrete = self
             .functions
             .generic_or_concrete_impl_module(&new_info, receiver_module.as_ref());
-        let blanket_module = if generic_or_concrete.is_none() {
+        // Dispatch through the blanket the receiver satisfies — a
+        // `ReflectStruct`-bound struct derive must not swallow a type carrying
+        // its own unregistered impl (`Fn^Inspect`), and with a blanket per
+        // reflection kind the first-registered one fits only its own kind. Its
+        // module and its receiver param name (`T` in `impl<T: Bound> Trait for
+        // T`, which keys its template) must come from that same blanket: the
+        // call-site type-param head of `old_func_name` equals the param only for
+        // a direct `T::method` call, while a call on a pack member `F` inside a
+        // blanket body must still resolve to the template.
+        let blanket = if generic_or_concrete.is_none() {
+            let recv_inner = type_table.peel_refs(receiver_type_id);
             trait_name_for_blanket.and_then(|tn| {
                 self.functions
                     .trait_env
-                    .blanket_impl_module_for_trait(tn, receiver_module.as_ref())
-                    .cloned()
+                    .value_blanket_for_receiver(tn, receiver_module.as_ref(), &|bounds| {
+                        crate::synthesis::template::receiver_satisfies_blanket_bounds(
+                            recv_inner,
+                            bounds.to_vec(),
+                            type_table,
+                        )
+                    })
+                    .map(|b| {
+                        (
+                            b.module.clone(),
+                            b.param.clone(),
+                            self.functions.trait_env.pack_assocs_of_blanket(b),
+                        )
+                    })
             })
         } else {
             None
         };
-        // Only dispatch through the blanket if the receiver satisfies its
-        // param bound — a `ReflectStruct`-bound struct derive must not swallow a
-        // type carrying its own unregistered impl (e.g. `Fn^Inspect`).
-        let blanket_module = blanket_module.filter(|bm| {
-            let recv_inner = type_table.peel_refs(receiver_type_id);
-            let bounds = trait_name_for_blanket
-                .and_then(|tn| {
-                    self.functions
-                        .trait_env
-                        .blanket_impl_bounds_for_trait(tn, Some(bm))
-                })
-                .unwrap_or_default();
-            crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                recv_inner, bounds, type_table,
-            )
-        });
-        // The blanket's receiver param name (`T` in `impl<T: Bound> Trait
-        // for T`) keys its template. The call-site type-param head of
-        // `old_func_name` only equals it for a direct `T::method` call; a
-        // call on a *different* param (a pack member `F` inside the blanket
-        // body) must still resolve to `T^Trait::method`.
-        let blanket_param = blanket_module.as_ref().and_then(|bm| {
-            trait_name_for_blanket.and_then(|tn| {
-                self.functions
-                    .trait_env
-                    .blanket_impl_param_for_trait(tn, Some(bm))
-            })
-        });
+        let blanket_module = blanket.as_ref().map(|(m, ..)| m.clone());
+        let blanket_param = blanket.as_ref().map(|(_, p, _)| p.clone());
         let concrete_impl_module = self
             .functions
             .impl_module(&new_info, receiver_module.as_ref());
@@ -3115,19 +3096,34 @@ impl Monomorphizer {
             // `[T, T::Assoc, …]` so its instance name matches the two-arg template.
             // A plain one-arg blanket (`impl<I: Iterator> IntoIterator for I`)
             // projects nothing, so it stays keyed by the call-site args.
-            let projected_assocs: Vec<TypeId> =
-                match (blanket_module.as_ref(), trait_name_for_blanket) {
-                    (Some(bm), Some(tn)) => self
-                        .functions
-                        .trait_env
-                        .blanket_projected_pack_assocs(tn, Some(bm))
-                        .iter()
-                        .filter_map(|(bound_trait, assoc)| {
-                            type_table.resolve_trait_assoc_type(recv_inner, bound_trait, assoc)
-                        })
-                        .collect(),
-                    _ => Vec::new(),
-                };
+            // Read off the blanket the receiver selected, all or nothing: a
+            // partial list keys the instance under an argument shape the
+            // template never declared, and the blind by-trait lookup would hand
+            // a variant receiver the struct kind's `FieldTypes`.
+            let projected_assocs: Vec<TypeId> = blanket
+                .as_ref()
+                .map(|(_, _, assocs)| assocs.as_slice())
+                .unwrap_or_default()
+                .to_vec()
+                .iter()
+                .map(|(bound_trait, assoc)| {
+                    // A generic instance's pack is substituted from its base
+                    // declaration; a generic variant never becomes its own
+                    // declaration, so nothing registers a resolution for it.
+                    let pack = type_table
+                        .resolve_trait_assoc_type_of_instance(recv_inner, bound_trait, assoc)?;
+                    // Record it so the call-rewrite side, which reads behind a
+                    // shared borrow and cannot substitute, sees the same answer.
+                    type_table.register_assoc_type_resolution(
+                        recv_inner,
+                        bound_trait.clone(),
+                        assoc.clone(),
+                        pack,
+                    );
+                    Some(pack)
+                })
+                .collect::<Option<Vec<_>>>()
+                .unwrap_or_default();
             let has_projected = !projected_assocs.is_empty();
             let blanket_name = if receiver_is_assoc_projection {
                 new_func_name.clone()

@@ -1269,31 +1269,6 @@ impl TraitEnv {
         values.next()
     }
 
-    /// The value blanket's receiver-param name (`I` in `impl<I: Bound> Trait for
-    /// I`), used to reconstruct the template's mangled name `I^Trait::method`.
-    pub(crate) fn blanket_impl_param_for_trait(
-        &self,
-        trait_name: &str,
-        type_module: Option<&ModuleSource>,
-    ) -> Option<String> {
-        self.value_blanket_for_trait(trait_name, type_module)
-            .map(|b| b.param.clone())
-    }
-
-    /// The bound trait names on the value blanket's receiver param (`Bound` in
-    /// `impl<I: Bound> Trait for I`). A call may only dispatch through the
-    /// blanket if the receiver satisfies these bounds — otherwise a type with
-    /// its own (unregistered, auto-derived) impl, e.g. a closure's `Fn^Inspect`,
-    /// would be misrouted to the blanket body.
-    pub(crate) fn blanket_impl_bounds_for_trait(
-        &self,
-        trait_name: &str,
-        type_module: Option<&ModuleSource>,
-    ) -> Option<Vec<String>> {
-        self.value_blanket_for_trait(trait_name, type_module)
-            .map(|b| b.bounds.clone())
-    }
-
     /// Whether `trait_name` has a *universal* ref blanket
     /// `impl<T: Bound> Trait for &T` (`is_mut` selects `&mut T`) — the inner is a
     /// bare type param, so it applies to every reference. Distinguished from a
@@ -1306,20 +1281,6 @@ impl TraitEnv {
                 .iter()
                 .any(|b| b.receiver == BlanketReceiver::Ref { is_mut })
         })
-    }
-
-    /// The associated-type names a value blanket projects into type packs, in
-    /// header order — `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` yields
-    /// `["Assoc"]`. Empty for a blanket that projects none.
-    pub(crate) fn blanket_projected_pack_assocs(
-        &self,
-        trait_name: &str,
-        type_module: Option<&ModuleSource>,
-    ) -> Vec<(String, String)> {
-        let Some(blanket) = self.value_blanket_for_trait(trait_name, type_module) else {
-            return Vec::new();
-        };
-        self.pack_assocs_of_blanket(blanket)
     }
 
     /// The `(declaring trait, associated type)` pairs a value blanket projects

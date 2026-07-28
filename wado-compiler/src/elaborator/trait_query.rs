@@ -1065,6 +1065,9 @@ impl TypeSystem {
             ) => scope
                 .struct_fields_in(name, module_source)
                 .is_some_and(|info| self.has_visible_fields(scope, info)),
+            // Kinds are disjoint, so a variant never satisfies `ReflectStruct` —
+            // its payload layout registers struct-shaped fields under its own
+            // name and would otherwise answer the struct query too.
             (
                 ResolvedType::Variant {
                     name,
@@ -1091,9 +1094,13 @@ impl TypeSystem {
         } = &resolved
             && match on_bound {
                 Some(OnBoundTrait::ReflectStruct) => {
-                    scope
-                        .struct_fields_in(name, module_source)
-                        .is_some_and(|info| self.has_visible_fields(scope, info))
+                    // Kinds are disjoint: a generic variant instance registers
+                    // struct-shaped fields for its payload under the same name,
+                    // so the struct query alone would claim it.
+                    scope.variant_case_in(name, module_source).is_none()
+                        && scope
+                            .struct_fields_in(name, module_source)
+                            .is_some_and(|info| self.has_visible_fields(scope, info))
                         && self.is_reflect_eligible(type_id)
                 }
                 Some(OnBoundTrait::ReflectVariant) => {

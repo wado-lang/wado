@@ -326,9 +326,7 @@ impl Monomorphizer {
                             &monomorph.impl_type_args,
                             &self.functions.trait_env,
                             tn,
-                            &info.method_name,
                             &func.module_source,
-                            &monomorph.generic_name,
                             type_table,
                         )
                     })
@@ -676,13 +674,11 @@ impl Monomorphizer {
                 let blanket_trait =
                     info.and_then(|i| i.base_trait_name.as_deref().or(i.trait_name.as_deref()));
                 let impl_ta = match (blanket_trait, info) {
-                    (Some(tn), Some(info)) => super::func_inst::blanket_pack_dispatch_args(
+                    (Some(tn), Some(_)) => super::func_inst::blanket_pack_dispatch_args(
                         &mono.impl_type_args,
                         &self.functions.trait_env,
                         tn,
-                        &info.method_name,
                         &method_func.module_source,
-                        &mono.generic_name,
                         type_table,
                     ),
                     _ => None,

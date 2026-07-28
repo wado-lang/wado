@@ -717,12 +717,12 @@ internal trait Inspect {
 /// Struct debug formatting derived over `ReflectStruct` (WEP 2026-06-13): walk
 /// the field members, writing `Name { field: value, ... }`. Secret fields are
 /// elided and reported with a trailing `, ..`.
-impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for T {
+impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
     fn inspect(&self, f: &mut Formatter) {
-        f.write_str(&ReflectStruct::<T>::type_name());
+        f.write_str(&ReflectStruct::<S>::type_name());
         let mut wrote_field = false;
         let mut has_secret = false;
-        for let field of ReflectStruct::<T>::members() {
+        for let field of ReflectStruct::<S>::members() {
             if field.is_secret() {
                 has_secret = true;
             } else {

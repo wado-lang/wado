@@ -1184,10 +1184,13 @@ fn reflect_kind_of(type_id: TypeId, tt: &TypeTable) -> Option<CompilerItem> {
             module_source,
             ..
         } => {
-            if tt.find_struct_by_name(name, module_source).is_some() {
-                Some(CompilerItem::ReflectStruct)
-            } else if tt.find_variant_type(name, module_source).is_some() {
+            // A variant is asked first: a variant declaration also registers a
+            // struct-shaped payload layout under its own name, so the struct
+            // lookup answers for both kinds.
+            if tt.find_variant_type(name, module_source).is_some() {
                 Some(CompilerItem::ReflectVariant)
+            } else if tt.find_struct_by_name(name, module_source).is_some() {
+                Some(CompilerItem::ReflectStruct)
             } else {
                 None
             }
