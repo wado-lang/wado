@@ -1,0 +1,37 @@
+// A Wado-immutable global keeps its value in an inline `GlobalVarSet`, not in
+// its slot: a non-trivial initializer is extracted into module init and the
+// slot is left holding a placeholder. niri recovers the value from that store,
+// so a constant-index read of the global folds to the element and the reader
+// disappears.
+//
+// `#[inline(never)]` keeps the inliner out, so the fold is attributable to
+// niri.
+
+use { println, Stdout } from "core:cli";
+
+global TABLE: List<i32> = [10, 20, 31];
+global NAMES: List<String> = ["ada", "grace"];
+
+#[inline(never)]
+fn third() -> i32 {
+    return TABLE[2];
+}
+
+// A non-scalar element stays in place: the engine models the value, but only a
+// scalar can be substituted for the read.
+#[inline(never)]
+fn second_name() -> String {
+    return NAMES[1];
+}
+
+export fn run() with Stdout {
+    assert third() == 31;
+    assert second_name() == "grace";
+    println(`${third()} ${second_name()}`);
+}
+
+__DATA__
+{
+    "stdout": "31 grace\n",
+    "wir_not_expect:O2": ["third"]
+}

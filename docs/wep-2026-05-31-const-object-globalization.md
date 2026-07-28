@@ -221,20 +221,11 @@ loop, and a pure call building a heap value from literals.
 - The const predicate lives in one place and codegen mirrors it.
 - Short string globals are eager via a constant `array.new_fixed<u8>` repr;
   longer ones stay lazy.
-- A derived scalar global (`global B = A + 10`) is promoted to an eager const,
-  but its reads no longer fold at use sites: `niri`'s `GlobalEnv` keys on
-  Wasm-mutability (`const_folding::build_global_env`), so an extracted global is
-  `NonConst` to the interpreter.
+- An extracted global's value is readable to `niri` from the assignment that
+  fills the slot, not from the placeholder in it, so a derived scalar global
+  (`global B = A + 10`) and a hoisted constant aggregate alike fold at their use
+  sites — field and element reads down to scalars, then branch pruning, then DCE
+  of the global nobody reads. This is the cross-function constant propagation
+  intra-function SROA cannot reach.
 - Cost: a marginally larger global section for constants a path may never reach,
   acceptable given no access-time overhead.
-
-## TODO
-
-- [ ] Reads of a user-immutable global folding from its initializer. Blocked on
-      [Global Variables](./wep-2026-01-27-global-variables.md): a deferred
-      global's recorded initializer is a placeholder today, so keying the
-      interpreter's env on Wado-level immutability would fold reads to the
-      placeholder rather than the value.
-- [ ] `G.field` / `G[const]` folding on an immutable aggregate global. Owned by
-      [niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md) — see its
-      aggregate globals and element projection TODO.

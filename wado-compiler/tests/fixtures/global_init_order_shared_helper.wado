@@ -1,0 +1,34 @@
+// What a callee reads is an inferred dependency, and the inference is
+// path-insensitive: `pick` names both globals, so each initializer calling it
+// looks dependent on the other even though neither execution reads either. Such
+// an edge must yield rather than manufacture a cycle out of a program with none.
+//
+// `#[inline(never)]` keeps the reads behind the call, where the inference is.
+
+use { println, Stdout } from "core:cli";
+
+global LEVEL: i32 = pick(1);
+global PREFIX: i32 = pick(2);
+
+#[inline(never)]
+fn pick(n: i32) -> i32 {
+    if n == 1 {
+        return 10;
+    }
+    if n == 2 {
+        return 20;
+    }
+    if LEVEL > 0 {
+        return PREFIX;
+    }
+    return 0;
+}
+
+export fn run() with Stdout {
+    println(`${LEVEL} ${PREFIX}`);
+}
+
+__DATA__
+{
+    "stdout": "10 20\n"
+}

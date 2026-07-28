@@ -1,0 +1,31 @@
+// A function named as a value reaches a call the dependency scan cannot see:
+// `apply(reader)` calls `reader` through a parameter, so following only direct
+// calls left `A` ordered before the `B` that `reader` reads, and the
+// initializer took the placeholder still in B's slot.
+//
+// `#[inline(never)]` keeps the indirection: inlining `apply` would turn the
+// call back into a direct one the scan already follows.
+
+use { println, Stdout } from "core:cli";
+
+global A: i32 = apply(reader) + 1;
+global B: List<i32> = [1, 2, 3];
+
+#[inline(never)]
+fn reader() -> i32 {
+    return B.len();
+}
+
+#[inline(never)]
+fn apply(f: fn() -> i32) -> i32 {
+    return f();
+}
+
+export fn run() with Stdout {
+    println(`${A}`);
+}
+
+__DATA__
+{
+    "stdout": "4\n"
+}

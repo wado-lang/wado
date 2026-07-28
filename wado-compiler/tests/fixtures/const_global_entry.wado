@@ -18,12 +18,14 @@ struct Point {
 global ORIGIN: Point = Point { x: 3, y: 4 };
 
 export fn run() with Stdout {
-    println(`${ORIGIN.x},${ORIGIN.y}`);
+    // The field reads fold to their scalars; inspecting the whole value is what
+    // keeps the global itself alive for the promotion this fixture pins.
+    println(`${ORIGIN.x},${ORIGIN.y},${ORIGIN:?}`);
 }
 
 __DATA__
 {
-    "stdout": "3,4\n",
+    "stdout": "3,4,Point { x: 3, y: 4 }\n",
     "wir_expect:O2": [
         "global global:const_global_entry.wado::ORIGIN",
         "= struct.new",

@@ -149,6 +149,21 @@ for let of of arr {
 - `return expr;` is necessary for a function to return a value.
 - Control flow statements do not need to be followed by a semicolon.
 
+### Variable Mutability
+
+`mut` governs every write reaching the binding's storage, not just
+reassignment. A `&mut self` method, a mutable borrow, and a store to a field or
+element all require it.
+
+```wado
+let xs: List<i32> = [1, 2, 3];
+xs.push(4);      // Error: `push` takes `&mut self`
+xs[0] = 9;       // Error: the store roots at an immutable binding
+```
+
+A write through a `&mut T` is what that reference grants, so the binding
+holding one needs no `mut` of its own.
+
 ### Variable Scoping
 
 Variables are scoped to their enclosing block. Variables declared inside control flow bodies (`if`, `while`, `for`, `loop`) are not accessible outside.
@@ -252,17 +267,27 @@ Any type is supported. Any pure expression (no effects) can be used as an initia
 
 #### Mutability
 
-Assignment is only allowed for `global mut` declarations:
+Globals follow [Variable Mutability](#variable-mutability): without `mut` a
+global keeps what its initializer gave it for the whole program.
 
 ```wado
 global CONSTANT: i32 = 42;
+global TABLE: List<i32> = [1, 2, 3];
 global mut variable: i32 = 0;
 
 fn example() {
     variable = 10;    // OK: mutable global
     CONSTANT = 10;    // Error: cannot assign to immutable global
+    TABLE.push(4);    // Error: `push` takes `&mut self`
 }
 ```
+
+#### Initialization Order
+
+An initializer too complex for a Wasm constant runs at module initialization.
+Initializers run in dependency order, so one may read another global whatever
+the declaration order — across modules too, and whether it names the global or
+reaches it through a call. A cycle among them is an error.
 
 ### Operators
 

@@ -30,12 +30,15 @@ global GREET: String = "hi";
 global BANNER: String = "welcome to wado";
 
 export fn run() with Stdout {
-    println(`${ORIGIN.x},${ORIGIN.y},${NUMS:?},${GREET},${BANNER}`);
+    // A scalar field read folds and leaves nothing behind, so `ORIGIN` is
+    // inspected as a whole value to keep the global these expectations are
+    // about alive.
+    println(`${ORIGIN.x},${ORIGIN.y},${ORIGIN:?},${NUMS:?},${GREET},${BANNER}`);
 }
 
 __DATA__
 {
-    "stdout": "3,4,[10, 20, 30],hi,welcome to wado\n",
+    "stdout": "3,4,Point { x: 3, y: 4 },[10, 20, 30],hi,welcome to wado\n",
     "wir_expect:O2": [
         "global global:const_global_object.wado::ORIGIN",
         "global global:const_global_object.wado::NUMS",

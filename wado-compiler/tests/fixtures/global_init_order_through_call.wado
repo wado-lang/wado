@@ -1,0 +1,27 @@
+// Global initializers run in dependency order, and a dependency reached
+// through a call counts. The scan only followed references written directly in
+// the initializer, so `A` — whose value comes from a function that reads `B` —
+// was ordered before `B` and read the placeholder still in its slot.
+//
+// `#[inline(never)]` keeps the read behind a call, which is the whole point:
+// inlining it would put the reference back in the initializer where the direct
+// scan already sees it.
+
+use { println, Stdout } from "core:cli";
+
+global A: i32 = read_b() + 1;
+global B: List<i32> = [1, 2, 3];
+
+#[inline(never)]
+fn read_b() -> i32 {
+    return B.len();
+}
+
+export fn run() with Stdout {
+    println(`${A}`);
+}
+
+__DATA__
+{
+    "stdout": "4\n"
+}

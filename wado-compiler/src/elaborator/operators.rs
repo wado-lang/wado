@@ -955,12 +955,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let expr_type = self.resolve_expr(&unary.expr, ctx, inner_expected);
 
         if unary.op == UnaryOp::MutRef
-            && let ast::Expr::Ident(id) = &unary.expr
-            && let Some(local) = ctx.lookup(&id.name)
-            && !local.is_mut
+            && let Some(binding) = self.place_roots_at_immutable_binding(&unary.expr, ctx)
         {
             let _ = self.emit(TypeError::CannotAssign {
-                message: format!("cannot take &mut of immutable variable '{}'", id.name),
+                message: format!("cannot take &mut of immutable variable '{binding}'"),
                 span: unary.span,
             });
         }
@@ -1208,6 +1206,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 return TypeTable::ERROR;
             }
+            if let Some(binding) = self.place_roots_at_immutable_binding(&index_expr.expr, ctx) {
+                let _ = self.emit(TypeError::CannotAssign {
+                    message: format!("cannot assign into immutable '{binding}'"),
+                    span: target_ast.span(),
+                });
+                return TypeTable::ERROR;
+            }
 
             // Get base type (unwrap reference if needed)
             let base_type_id = match self.tysys.type_table.borrow().get(indexed_type) {
@@ -1357,23 +1362,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNIT;
         }
 
+        // A projection is writable only when nothing on the way to its storage
+        // forbids it. Reported before the classification below, which only
+        // decides whether the target is a place at all, so one target yields
+        // one diagnostic.
+        if matches!(target_ast, ast::Expr::FieldAccess(_) | ast::Expr::Index(_)) {
+            if self.place_roots_at_immutable_ref(target_ast) {
+                let _ = self.emit(TypeError::CannotAssign {
+                    message: "cannot assign through immutable reference".to_string(),
+                    span: target_ast.span(),
+                });
+                return TypeTable::ERROR;
+            }
+            if let Some(binding) = self.place_roots_at_immutable_binding(target_ast, ctx) {
+                let _ = self.emit(TypeError::CannotAssign {
+                    message: format!("cannot assign into immutable '{binding}'"),
+                    span: target_ast.span(),
+                });
+                return TypeTable::ERROR;
+            }
+        }
+
         // Validate that the target is a valid l-value. Every
         // resolver returns a placeholder, so each target shape is classified
         // from the AST + recorded facts.
         let is_valid_lvalue = match target_ast {
-            // A field access is a place, but writable only when not rooted
-            // at an immutable reference.
-            ast::Expr::FieldAccess(_) => {
-                if self.place_roots_at_immutable_ref(target_ast) {
-                    let _ = self.emit(TypeError::CannotAssign {
-                        message: "cannot assign through immutable reference".to_string(),
-                        span: target_ast.span(),
-                    });
-                    false
-                } else {
-                    true
-                }
-            }
+            ast::Expr::FieldAccess(_) => true,
             // The IndexAssign path at the top of `assign_to_target` already
             // returned for index-assignable receivers, so an `Index` target
             // here is a tuple index (a place), a read-only `Index` /

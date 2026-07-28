@@ -1,0 +1,17 @@
+// A closure body's own scopes hold only its parameters and locals; the
+// enclosing frame's bindings reach it as captures. Consulting just the scopes
+// would leave a captured binding unchecked, so mutating an immutable one
+// through a closure would compile and write.
+
+export fn run() {
+    let xs: List<i32> = [1];
+    let f = || {
+        xs.push(2);
+    };
+    f();
+}
+
+__DATA__
+{
+    "compile_error": "cannot call `&mut self` method `push` on immutable 'xs'"
+}

@@ -640,7 +640,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // placeholder.
 
         if self_kind == ast::SelfKind::MutRef && !is_ref_impl {
-            self.check_mut_receiver(&receiver, receiver_ast, method_name, span);
+            self.check_mut_receiver(&receiver, receiver_ast, method_name, span, ctx);
         }
 
         // Adjust receiver based on what the method expects (self_kind)

@@ -1,0 +1,17 @@
+// A store to a projection roots at the binding, so an immutable one rejects it
+// — the field is no more writable than the whole value.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() {
+    let p = Point { x: 1, y: 2 };
+    p.x = 9;
+}
+
+__DATA__
+{
+    "compile_error": "cannot assign into immutable 'p'"
+}

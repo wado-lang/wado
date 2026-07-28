@@ -1,0 +1,12 @@
+// `let` without `mut` forbids in-place mutation, not just reassignment: a
+// `&mut self` method on the binding is rejected the same way `&mut t` is.
+
+export fn run() {
+    let t: List<i32> = [1, 2, 3];
+    t.push(4);
+}
+
+__DATA__
+{
+    "compile_error": "cannot call `&mut self` method `push` on immutable 't'"
+}

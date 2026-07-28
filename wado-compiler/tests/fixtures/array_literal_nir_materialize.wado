@@ -1,18 +1,25 @@
 // `optimize::array_literal` materializes a constant array literal into a
 // `NirExprKind::ArrayLiteral`, which `wir_build` lowers to `array.new_fixed`.
-// The NIR-level literal also lets later passes see the static length: the
-// indexed reads below are bounds-check-free and the values are visible to
-// const-folding.
+// The NIR-level literal also lets later passes see the static length and the
+// elements: the scalar reads below fold to the values they denote and the
+// `i32` array drops entirely, while the `String` list keeps its materialized
+// array — an aggregate element never leaves the interpreter, so nothing can be
+// substituted for the read.
 export fn run() {
     let a: List<i32> = [10, 20, 30];
     assert a[0] == 10;
     assert a[1] == 20;
     assert a[2] == 30;
     assert a.len() == 3;
+
+    let s: List<String> = ["hello", "world"];
+    assert s.len() == 2;
+    assert s[1] == "world";
 }
 
 __DATA__
 {
     "stdout": "",
-    "wir_expect:O2": ["array.new_fixed<i32>(10, 20, 30)"]
+    "wir_expect:O2": ["array.new_fixed<ref \"core:prelude/string.wado//String\">("],
+    "wir_not_expect:O2": ["array.new_fixed<i32>"]
 }
