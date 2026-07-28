@@ -1597,7 +1597,7 @@ impl Monomorphizer {
                     .iter()
                     .any(|p| p.name == info.base_struct_name());
                 if is_blanket && !impl_type_arg_names.is_empty() {
-                    let base = type_table.base_type_name(key.impl_type_args[0]);
+                    let base = type_table.fq_base_type_name(key.impl_type_args[0]).into_string();
                     info.with_substituted_struct_name(&impl_type_arg_names[0], &base)
                 } else {
                     info.with_type_args(&impl_type_arg_names, &method_type_arg_names)
@@ -1847,7 +1847,7 @@ impl Monomorphizer {
                                 let dispatch_tid =
                                     self.type_param_dispatch_tid(concrete_tid, &info, type_table);
                                 let type_name = type_table.mangle_type_name(dispatch_tid);
-                                let base = type_table.base_type_name(dispatch_tid);
+                                let base = type_table.fq_base_type_name(dispatch_tid).into_string();
                                 info.with_substituted_struct_name(&type_name, &base)
                             }
                             None => info.clone(),
@@ -2902,7 +2902,7 @@ impl Monomorphizer {
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
             // then fall back to the base type name (e.g., "f64") if no direct impl exists.
             let own_mangled = type_table.mangle_type_name(inner);
-            let own_base = type_table.base_type_name(inner);
+            let own_base = type_table.fq_base_type_name(inner).into_string();
             let candidate = info.with_substituted_struct_name(&own_mangled, &own_base);
             if self.functions.has_impl(&candidate) {
                 candidate
@@ -2915,7 +2915,7 @@ impl Monomorphizer {
                 // `struct_name` becomes "List<u8>", and the trait_env
                 // candidate lookup misses the per-type impl.
                 let resolved_inner = type_table.resolve_newtype_base(inner);
-                let base = type_table.base_type_name(resolved_inner);
+                let base = type_table.fq_base_type_name(resolved_inner).into_string();
                 info.with_substituted_struct_name(&mangled, &base)
             }
         } else if needs_struct_type_args {
@@ -2930,7 +2930,7 @@ impl Monomorphizer {
             // template's home module — required by the `(module_source, name)`
             // lookup in `monomorphize_with_externals` (issue #1110).
             let resolved_recv = type_table.resolve_newtype_base(recv_inner);
-            let recv_base = type_table.base_type_name(resolved_recv);
+            let recv_base = type_table.fq_base_type_name(resolved_recv).into_string();
             let mut new_info = info.with_substituted_struct_name(&recv_mangled, &recv_base);
             // For ref-type impls (e.g., impl IntoIterator for &List<T>), preserve
             // the ref receiver (`&` / `&mut`) so that the monomorphizer selects the
@@ -3790,7 +3790,7 @@ impl Monomorphizer {
                     && let Some(info) = &mut func.method_info
                 {
                     let type_name = type_table.mangle_type_name(elem_type);
-                    let base_name = type_table.base_type_name(elem_type);
+                    let base_name = type_table.fq_base_type_name(elem_type).into_string();
                     *info = info.with_substituted_struct_name(&type_name, &base_name);
                     func.name = info.to_mangled_name();
                     if let Some(ms) = module_source_for_trait_impl(type_table, elem_type) {

@@ -859,11 +859,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // name is the full `Array<T>` spelling, but the method-owner base
             // name is "Array" (matching `impl Array<T>`'s registration).
             ResolvedType::BuiltinArray(elem) => {
-                let arg_name = self.tysys.type_table.borrow().mangle_type_name(elem);
-                let mangled = crate::name::mangle_builtin_array_type(&arg_name);
+                let arg_name = self.tysys.type_table.borrow().mangle_type_arg_for_generic(elem);
+                // `Array` is a declaration like any other, so the receiver
+                // carries its module and the base name matches `impl Array<T>`'s
+                // registration.
+                let base = self.qualified_receiver_name(TypeTable::ARRAY_TYPE_NAME);
+                let mangled = mangle_generic_name(base.as_str(), &[arg_name.clone()]);
                 (
                     mangled,
-                    TypeTable::ARRAY_TYPE_NAME.to_string(),
+                    base.into_string(),
                     vec![arg_name],
                     Some(vec![elem]),
                 )

@@ -3185,6 +3185,27 @@ impl TypeTable {
         }
     }
 
+    /// [`Self::base_type_name`] as a receiver head: the base is a declaration,
+    /// so it carries its module and matches what the impl registered. The bare
+    /// form stays for indices keyed by the written simple name.
+    #[must_use]
+    pub fn fq_base_type_name(&self, id: TypeId) -> crate::name::FqTypeName {
+        match self.get(id) {
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => crate::name::FqTypeName::declared(module_source, name),
+            ResolvedType::Struct {
+                base_name: Some(base),
+                module_source,
+                ..
+            } => crate::name::FqTypeName::declared(module_source, base),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.fq_base_type_name(*inner),
+            _ => crate::name::FqTypeName::from_mangled(self.mangle_type_name(id)),
+        }
+    }
+
     /// Extract the type arguments for a generic type.
     ///
     /// Works for both `GenericInstance` (which stores `type_args` directly) and
