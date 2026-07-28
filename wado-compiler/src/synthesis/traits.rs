@@ -4013,7 +4013,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             return true;
         }
         let mangled = MethodName::format_local(
-            &FqTypeName::declared(&module_source, type_name),
+            &FqTypeName::of_head(&module_source, type_name),
             Some(&inspect_name),
             &inspect_method,
         );

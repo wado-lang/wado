@@ -2162,14 +2162,17 @@ mod tests {
     }
 }
 
-/// Whether `name` is a builtin shape's head — a shape no module declares, so
-/// every mangler spells it the same way wherever it appears. See
+/// Whether `name` names a builtin shape — one no module declares, so every
+/// mangler spells it the same way wherever it appears. See
 /// [`FqTypeName::builtin`].
+///
+/// An instantiated shape is its head: `Fn<1,i32>`, `Array<u8>` and `[]<A,B>`
+/// are as module-less as the heads they instantiate.
 #[must_use]
 pub fn is_builtin_shape_name(name: &str) -> bool {
     name.starts_with('&')
         || matches!(
-            name,
+            split_base_name(name),
             "i8" | "i16"
                 | "i32"
                 | "i64"
