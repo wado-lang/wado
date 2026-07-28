@@ -981,7 +981,11 @@ fn default_value_for_type(
         .to_string();
     requested_defaults.push((base_name.clone(), module_source.clone()));
     let mut method_info =
-        LocalMethodName::new(base_name, Some(default_trait_name), "default".to_string());
+        LocalMethodName::new(
+            FqTypeName::declared(&module_source, &base_name),
+            Some(default_trait_name),
+            "default".to_string(),
+        );
     if !type_args.is_empty() {
         let arg_names: Vec<String> = type_args.iter().map(|t| type_table.type_name(*t)).collect();
         method_info = method_info.with_type_args(&arg_names, &[]);
@@ -1977,8 +1981,12 @@ fn byte_slice_method_call(
     compiler_items: &crate::compiler_item::CompilerItems,
 ) -> TirExpr {
     let (module_source, owner, name) = compiler_items.require_method(item);
-    let method_info = LocalMethodName::new(owner.to_string(), None, name.to_string())
-        .with_struct_type_args(&["u8".to_string()]);
+    let method_info = LocalMethodName::new(
+        FqTypeName::declared(module_source, owner),
+        None,
+        name.to_string(),
+    )
+    .with_struct_type_args(&["u8".to_string()]);
     let monomorph_info = crate::tir::MonomorphInfo {
         generic_name: method_info.base_struct_name(),
         impl_type_args: vec![TypeTable::U8],
@@ -2047,7 +2055,11 @@ fn field_schema_method_fn(
 ) -> TirFunction {
     TirFunction {
         module_source: ModuleSource::default(),
-        name: MethodName::format_local(type_name, Some(field_schema_trait), method),
+        name: MethodName::format_local(
+            &FqTypeName::from_mangled(type_name),
+            Some(field_schema_trait),
+            method,
+        ),
         visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_cm_export: false,
@@ -2058,7 +2070,7 @@ fn field_schema_method_fn(
         impl_type_params: Vec::new(),
         monomorph_info: None,
         method_info: Some(LocalMethodName::new(
-            type_name.to_string(),
+            FqTypeName::from_mangled(type_name),
             Some(field_schema_trait.to_string()),
             method.to_string(),
         )),
@@ -2788,7 +2800,7 @@ fn generate_variant_family_deserialize(
             span,
         );
         let eq_method = LocalMethodName::new(
-            string_struct_name.clone(),
+            FqTypeName::from_mangled(string_struct_name.clone()),
             Some(eq_trait_name.clone()),
             "eq".to_string(),
         );
@@ -3723,7 +3735,7 @@ fn generate_flags_deserialize(
             span,
         );
         let eq_method = LocalMethodName::new(
-            string_struct_name.clone(),
+            FqTypeName::from_mangled(string_struct_name.clone()),
             Some(eq_trait_name.clone()),
             "eq".to_string(),
         );
