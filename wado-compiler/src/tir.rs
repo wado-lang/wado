@@ -852,6 +852,20 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
+    /// [`Self::get`] before the newtype / flags erasure applied ahead of
+    /// monomorphize.
+    ///
+    /// Erasure is a representation choice — a `flags` value is a `u32` at
+    /// runtime — but `impl Trait for Perms` is still keyed under `Perms`. A
+    /// name that has to match an impl must read the identity; only code that
+    /// cares how the value is stored should read [`Self::get`].
+    #[must_use]
+    pub fn get_unerased(&self, id: TypeId) -> &ResolvedType {
+        self.types
+            .get(id)
+            .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
+    }
+
     /// [`Self::get`] returning `None` for ids pruned by DCE's `retain`.
     pub fn get_pruned(&self, id: TypeId) -> Option<&ResolvedType> {
         let id = self.redirects.get(id).copied().unwrap_or(id);
