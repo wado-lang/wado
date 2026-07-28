@@ -2705,10 +2705,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the loop variable (`resolve_if_pattern_inner`, preserving the
         // binding's real `AstId`) and walks the body for its facts.
         ctx.enter_scope();
-        // `for let mut x of …` carries the `mut` on the statement, and the
-        // pattern walker only reads it off a `MutIdent`. Push it onto the
-        // pattern's leaves before binding, or the loop variable binds immutable
-        // and a write through it is rejected.
         let binding = if for_of.is_mut {
             mut_bindings_of(&for_of.binding)
         } else {

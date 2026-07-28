@@ -1363,10 +1363,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // A projection is writable only when nothing on the way to its storage
-        // forbids it: a `&T` step forbids writing through the reference, and
-        // `let` without `mut` forbids writing through the binding. Reported
-        // before the classification below, which only decides whether the
-        // target is a place at all — so one target yields one diagnostic.
+        // forbids it. Reported before the classification below, which only
+        // decides whether the target is a place at all, so one target yields
+        // one diagnostic.
         if matches!(target_ast, ast::Expr::FieldAccess(_) | ast::Expr::Index(_)) {
             if self.place_roots_at_immutable_ref(target_ast) {
                 let _ = self.emit(TypeError::CannotAssign {

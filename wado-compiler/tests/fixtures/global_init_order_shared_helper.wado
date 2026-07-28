@@ -1,10 +1,7 @@
 // What a callee reads is an inferred dependency, and the inference is
 // path-insensitive: `pick` names both globals, so each initializer calling it
-// looks dependent on the other even though neither execution reads either.
-//
-// An inferred edge must yield rather than manufacture a cycle out of a program
-// that has none — the references written in the initializers already fix every
-// order really required, and there are none here.
+// looks dependent on the other even though neither execution reads either. Such
+// an edge must yield rather than manufacture a cycle out of a program with none.
 //
 // `#[inline(never)]` keeps the reads behind the call, where the inference is.
 

@@ -718,6 +718,56 @@ fn renumber_locals_in_pattern(pattern: &mut TirPattern, offset: u32) {
     }
 }
 
+/// Order the per-module initializers so each runs after the modules whose
+/// globals it reads, entry last.
+///
+/// [`topological_sort_global_inits`] settles the order within a module; a
+/// global read across a module boundary needs the same treatment one level up,
+/// or the reader finds a placeholder. Discovery order is no substitute: it
+/// tracks how the loader happened to reach the modules.
+fn sort_modules_by_dependency(
+    modules: &mut Vec<ModuleSource>,
+    entry_source: &ModuleSource,
+    functions: &[Rc<RefCell<TirFunction>>],
+) {
+    let reads = global_reads_by_function(functions);
+    let module_deps = |module: &ModuleSource| -> IndexSet<ModuleSource> {
+        let key = function_key(module, crate::name::MODULE_INIT_FUNCTION);
+        reads
+            .get(&key)
+            .into_iter()
+            .flatten()
+            .map(|(source, _)| source.clone())
+            .filter(|source| source != module)
+            .collect()
+    };
+
+    let mut ordered: Vec<ModuleSource> = Vec::with_capacity(modules.len());
+    let mut placed: IndexSet<ModuleSource> = IndexSet::default();
+    // Entry last: it is the one module every other is linked into, and a cycle
+    // among the rest — which imports cannot form — would otherwise strand it.
+    let mut pending: Vec<ModuleSource> = modules
+        .iter()
+        .filter(|ms| *ms != entry_source)
+        .cloned()
+        .collect();
+
+    while !pending.is_empty() {
+        let ready = pending
+            .iter()
+            .position(|ms| module_deps(ms).iter().all(|dep| placed.contains(dep)));
+        // No module is ready only if the remainder depends on each other, which
+        // the import graph cannot express. Take one so the loop terminates.
+        let next = pending.remove(ready.unwrap_or(0));
+        placed.insert(next.clone());
+        ordered.push(next);
+    }
+    if modules.iter().any(|ms| ms == entry_source) {
+        ordered.push(entry_source.clone());
+    }
+    *modules = ordered;
+}
+
 /// Generate `__initialize_modules` for a `FlatPackage`.
 /// Generate the top-level `__initialize_modules` aggregator. Must run
 /// after all per-module init functions exist (i.e. after [`extract`]).
@@ -739,8 +789,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         return;
     }
 
-    // Sort: entry module last
-    modules_with_init.sort_by_key(|ms| i32::from(*ms == entry_source));
+    sort_modules_by_dependency(&mut modules_with_init, &entry_source, &flat.functions);
 
     let span = Span::new(0, 0, 1, 1);
 

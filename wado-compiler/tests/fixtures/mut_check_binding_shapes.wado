@@ -1,11 +1,9 @@
 // The shapes `mut` must reach, each of which was silently dropping it.
 //
 // - `for let mut` over a variant destructure: the statement carries the `mut`
-//   while the pattern walker reads it off the identifier leaves, so it has to
-//   be pushed through the case's bindings.
+//   while the pattern walker reads it off the identifier leaves.
 // - A capture: a `let mut` binding stays writable inside a closure, and a local
-//   shadowing a same-named immutable global answers for itself rather than
-//   letting the global speak.
+//   shadowing a same-named immutable global answers for itself.
 
 use { println, Stdout } from "core:cli";
 

@@ -127,13 +127,9 @@ null // coerce to Option::None
 ## Variables
 
 ```wado
-let x = 42;             // immutable: no reassignment, and no write through it
+let x = 42;             // immutable
 let mut y = 0;          // mutable
 let z: i64 = 100;       // with type annotation
-
-// `mut` covers in-place mutation too, not just reassignment
-let xs: List<i32> = [1];
-xs.push(2);             // Error: `push` takes `&mut self`; use `let mut xs`
 
 // Same-scope shadowing (when RHS references the old value)
 let x = x + 1;          // OK: derives from old x

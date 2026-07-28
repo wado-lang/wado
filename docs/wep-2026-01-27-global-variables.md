@@ -142,9 +142,11 @@ assigning them, ordered topologically so a global is assigned after everything
 it depends on. A cycle is a compile-time error.
 
 The entry module gets a `fn __initialize_modules()` that calls each linked
-module's in dependency order, guarded by a flag so repeated entry — an HTTP
-handler invoked many times on one instance — initializes once. Every entry point
-calls it first.
+module's, guarded by a flag so repeated entry — an HTTP handler invoked many
+times on one instance — initializes once. Every entry point calls it first.
+Those calls are ordered the same way, by the globals each module's initializers
+read, so a global crossing a module boundary is assigned before it is read; the
+entry module goes last.
 
 The initialization functions are ordinary functions in the normalized IR, so the
 optimizer inlines, folds, and prunes them like any other. That is why they are
