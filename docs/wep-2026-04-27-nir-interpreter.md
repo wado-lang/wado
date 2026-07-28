@@ -320,10 +320,16 @@ Milestones, each red/green with the fixture first:
       never filled stays as the source wrote it: an empty one is a reservation
       rather than a result, and a literal cannot carry the capacity it asked
       for.
-- [ ] Places and the frame store. Element writes, field stores, allocations and
-      copies land through a frame-owned place; `&mut` write-back remains, and
-      with it a compile-time call that fills and returns a `List<u8>` folds.
-- [ ] Frame-executable calls. A call writing through a `&mut` parameter runs.
+- [x] Places and the frame store. Element writes, field stores, allocations and
+      copies all land through a frame-owned place.
+- [ ] Frame-executable calls. A call writing through a `&mut` parameter runs and
+      writes back into the caller frame's place, and with it a compile-time call
+      that fills and returns a `List<u8>` folds. The write-back is not separable:
+      what fills a container is `push`, which returns nothing, so the caller's
+      place is the only thing the run produces. Three gates stand in the way, all
+      written for folding rather than running — a unit return, a method rather
+      than a free call, and a `stores` clause, which `List::push` carries for a
+      `T` that may be a reference.
 - [ ] Region recognition. `` `ab` `` and `` `a${"b"}` `` fold to one literal.
 - [ ] Coverage, in order of engine cost: `bool` / `char` / `String`, then
       integers, then width / zero-pad / radix specs, then `Inspect`, then
