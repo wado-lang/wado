@@ -1,41 +1,62 @@
 // A callee that hands a projection of its by-value parameter back is not
 // read-only, so a constant argument must not be hoisted into a shared global.
 //
-// `is_readonly_body` rejects a bare whole-value read of the binding but used to
-// admit `return s.data`. Under value semantics a by-value parameter is the
-// callee's own copy, so the return-convention fixpoint calls that owned and the
-// caller keeps no defensive copy — with the argument hoisted, the "owned" value
-// it receives is the shared global's storage, and the first `push` mutates the
+// `is_readonly_body` rejects a bare whole-value read of the binding but admits
+// `return s.data`. Under value semantics a by-value parameter is the callee's
+// own copy, so the return-convention fixpoint calls that owned and the caller
+// keeps no defensive copy — with the argument hoisted, the "owned" value it
+// receives is the shared global's storage, and the first `push` mutates the
 // constant for every later call.
 //
-// `take` is called three times with the same literal; each caller pushes onto
-// the result. Identical lengths are the check — before the fix this printed
+// `take_field` returns the projection directly; `take_bound` reaches the same
+// storage through a `match` arm binding, which names it without ever mentioning
+// the parameter again. Each is called three times and the caller pushes onto the
+// result: identical lengths are the check — before the fix these printed
 // `4 5 6`.
 
 use { println, Stdout } from "core:cli";
 
+struct Inner {
+    blob: List<u8>,
+}
+
 struct S {
-    data: List<u8>,
+    inner: Inner,
     tag: List<u8>,
 }
 
 #[inline(never)]
-fn take(s: S) -> List<u8> {
+fn take_field(s: S) -> List<u8> {
     if s.tag.len() > 100 {
         return s.tag;
     }
-    return s.data;
+    return s.inner.blob;
+}
+
+#[inline(never)]
+fn take_bound(s: S) -> List<u8> {
+    match s.inner {
+        Inner { blob } => {
+            return blob;
+        },
+    }
+}
+
+fn fresh() -> S {
+    return S { inner: Inner { blob: [1, 2, 3] as List<u8> }, tag: [7, 8] as List<u8> };
 }
 
 export fn run() with Stdout {
     for let _i of 0..<3 {
-        let mut x = take(S { data: [1, 2, 3] as List<u8>, tag: [7, 8] as List<u8> });
-        x.push(9);
-        println(`${x.len()}`);
+        let mut a = take_field(fresh());
+        a.push(9);
+        let mut b = take_bound(fresh());
+        b.push(9);
+        println(`${a.len()} ${b.len()}`);
     }
 }
 
 __DATA__
 {
-    "stdout": "4\n4\n4\n"
+    "stdout": "4 4\n4 4\n4 4\n"
 }

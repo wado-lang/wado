@@ -134,6 +134,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         type_table: &type_table,
         hoistable_pure: &hoistable_pure,
         structs: &project.structs,
+        param_readonly: RefCell::new(IndexMap::default()),
     };
     let mut candidates: Vec<Candidate> = Vec::new();
     for (fi, f) in project.functions.iter().enumerate() {
@@ -934,6 +935,10 @@ struct Gate<'a> {
     /// Indexed by `func_id.index()`.
     hoistable_pure: &'a [bool],
     structs: &'a [crate::nir::NirStruct],
+    /// `(callee index, parameter position)` → [`Gate::callee_param_readonly`].
+    /// Each verdict costs two walks of the callee body, and one helper taking a
+    /// constant is typically called from many sites.
+    param_readonly: RefCell<IndexMap<(usize, usize), bool>>,
 }
 
 impl Gate<'_> {
@@ -1051,6 +1056,17 @@ impl Gate<'_> {
     /// writes the caller's storage outright.
     fn callee_param_readonly(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
+        let key = (func_id.index(), param_pos);
+        if let Some(&cached) = self.param_readonly.borrow().get(&key) {
+            return cached;
+        }
+        let verdict = self.compute_param_readonly(func_id, param_pos);
+        self.param_readonly.borrow_mut().insert(key, verdict);
+        verdict
+    }
+
+    fn compute_param_readonly(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
+        use cranelift_entity::EntityRef;
         let Some(f) = self.funcs.get(func_id.index()) else {
             return false;
         };
@@ -1091,7 +1107,7 @@ fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 /// already bounds what the borrow can do — and a scalar projection copies its
 /// value outright.
 fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
-    let roots = projection_alias_roots(body, idx);
+    let roots = projection_alias_roots(body, idx, gate);
     let escapes = |op: Operand| {
         op.as_expr().is_some_and(|e| {
             gate.is_reference_type(body.exprs[e].type_id)
@@ -1158,32 +1174,98 @@ fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     false
 }
 
-/// `idx` plus every local bound directly from a projection of one of them
-/// (`let r = s.data;`, which LICM also produces): they all name the same
-/// storage, so an escape through any of them is an escape of the parameter.
-fn projection_alias_roots(body: &Body, idx: u32) -> Vec<u32> {
+/// `idx` plus every local *bound* from something that can yield one of their
+/// storages: a `let` (`let r = s.data;`, which LICM also produces), a
+/// destructuring `let`, or a `match` arm pattern over such a scrutinee
+/// (`match s.inner { Inner { blob } => …`). They all name the same storage, so
+/// an escape through any of them is an escape of the parameter.
+///
+/// The source only has to *contain* a reference-typed projection of a root —
+/// `let r = if c { s.a } else { s.b };` binds one of two projections, and
+/// neither the branch shape nor the pattern says which. Over-approximating a
+/// binding as an alias only makes the escape check stricter: a scalar binding
+/// can never carry a reference-typed projection of itself, so it is inert.
+fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
     let mut roots = vec![idx];
     let mut i = 0;
     while i < roots.len() {
         let root = roots[i];
         let mut stack = vec![NodeRef::Block(body.root)];
         while let Some(node) = stack.pop() {
-            if let NodeRef::Stmt(s) = node
-                && let StmtKind::Let {
-                    local_index, value, ..
-                } = &body.stmts[s].kind
-                && value
-                    .as_expr()
-                    .is_some_and(|e| projection_roots_at(body, e, root))
-                && !roots.contains(local_index)
-            {
-                roots.push(*local_index);
+            match node {
+                NodeRef::Stmt(s) => match &body.stmts[s].kind {
+                    StmtKind::Let {
+                        local_index, value, ..
+                    } => {
+                        if yields_projection_of(body, *value, root, gate)
+                            && !roots.contains(local_index)
+                        {
+                            roots.push(*local_index);
+                        }
+                    }
+                    StmtKind::LetDestructure { pattern, value, .. } => {
+                        if yields_projection_of(body, *value, root, gate) {
+                            collect_pattern_bindings(body, *pattern, &mut roots);
+                        }
+                    }
+                    StmtKind::Expr(_)
+                    | StmtKind::Return { .. }
+                    | StmtKind::Break { .. }
+                    | StmtKind::If { .. }
+                    | StmtKind::Loop { .. }
+                    | StmtKind::LabeledBlock { .. }
+                    | StmtKind::Continue => {}
+                },
+                NodeRef::Expr(e) => {
+                    if let ExprKind::Match { expr, arms } = &body.exprs[e].kind
+                        && yields_projection_of(body, *expr, root, gate)
+                    {
+                        for arm in arms {
+                            collect_pattern_bindings(body, arm.pattern, &mut roots);
+                        }
+                    }
+                }
+                NodeRef::Block(_) | NodeRef::Pat(_) => {}
             }
             body.for_each_child(node, |c| stack.push(c));
         }
         i += 1;
     }
     roots
+}
+
+/// Every local a pattern binds, appended to `out` if not already there.
+fn collect_pattern_bindings(body: &Body, pattern: crate::nir_arena::PatId, out: &mut Vec<u32>) {
+    let mut stack = vec![NodeRef::Pat(pattern)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Pat(p) = node
+            && let crate::nir_arena::PatKind::Binding { local_index, .. } = &body.pats[p].kind
+            && !out.contains(local_index)
+        {
+            out.push(*local_index);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+}
+
+/// Whether evaluating `op` can produce the storage of `root` itself: it is, or
+/// contains, a reference-typed projection rooted there. A scalar projection
+/// (`s.used`) copies its value out and does not count.
+fn yields_projection_of(body: &Body, op: Operand, root: u32, gate: &Gate<'_>) -> bool {
+    let Some(expr) = op.as_expr() else {
+        return false;
+    };
+    let mut stack = vec![NodeRef::Expr(expr)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && projection_roots_at(body, e, root)
+            && gate.is_reference_type(body.exprs[e].type_id)
+        {
+            return true;
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    false
 }
 
 /// Whether `expr` is a projection chain (`x`, `x.f`, `x[i].f`) rooted at local
