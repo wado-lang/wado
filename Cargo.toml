@@ -159,6 +159,29 @@ inherits = "release"
 debug = 2
 strip = false
 
+# `debugger` is `dev` with the debuginfo `dev` deliberately drops, for stepping
+# under rust-gdb. `dev` sets `debug = "line-tables-only"` and raises the
+# workspace crates to `opt-level = 1` to keep the edit-test cycle fast, which
+# together leave `info locals` / `info args` empty in every compiler frame.
+# This profile restores full DWARF and turns optimization off for the crates
+# being stepped through, at the cost of a slower binary. Build with
+# `cargo build --profile debugger --bin wado`; it lives in its own
+# `target/debugger/` dir, so it never invalidates the `dev` cache.
+# See the `debugger` skill.
+[profile.debugger]
+inherits = "dev"
+debug = 2
+split-debuginfo = "off"
+
+[profile.debugger.package.wado-compiler]
+opt-level = 0
+
+[profile.debugger.package.wado-cli]
+opt-level = 0
+
+[profile.debugger.package.wado-dev-tools]
+opt-level = 0
+
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 disallowed_types = "warn"
