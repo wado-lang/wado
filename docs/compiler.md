@@ -205,6 +205,11 @@ The loader canonicalizes paths (RFC 3986, project-root-relative with `/` separat
 | WASI canonical   | `wasi:{pkg}/{iface}::{fn}`        | `wasi:cli/stdout::write-via-stream` |
 | Mangled generic  | `{Base}$T1$T2…`                   | `Box$i32`, `Pair$i32$String`        |
 
+Every fq name names its subject by the module that declares it: `to_mangled_name`
+prepends nothing, so the `{file}/` above is part of `struct_name`, and a type
+written into any name goes through `TypeTable::mangle_type_arg_for_generic`. A
+simple name alone is never an identity — two modules may declare the same one.
+
 ## Component Model Registries
 
 Three registries collect declarative information from the standard library and feed both the elaborator and codegen:
