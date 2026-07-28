@@ -348,24 +348,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // a plain variant's comparison falls through to
             // `try_lower_comparison` at monomorphize time, after synthesis
             // already ran, and the method is never generated.
+            // The receiver is named by the module that declares it, read off
+            // the resolved type itself — the declaration is right here, so
+            // nothing re-resolves a written name.
             let struct_name = match &left_type {
-                ResolvedType::Struct { name, .. } => Some(name.clone()),
-                ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
-                ResolvedType::Variant { name, .. } => Some(name.clone()),
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    ..
+                }
+                | ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    ..
+                }
+                | ResolvedType::Variant {
+                    name,
+                    module_source,
+                } => Some(FqTypeName::declared(module_source, name).into_string()),
                 ResolvedType::Newtype { base_type, .. } => {
                     let tt = self.tysys.type_table.borrow();
                     let ultimate = tt.get_ultimate_base_type(*base_type);
                     match tt.get(ultimate) {
                         ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
-                            drop(tt);
-                            self.tysys.struct_name_for_type(*base_type)
+                            Some(tt.fq_base_type_name(*base_type).into_string())
                         }
                         // A newtype of a variant (e.g. `type Alias = SomeVariant;`)
                         // needs the same Variant-dispatch path as a direct
-                        // `ResolvedType::Variant` comparison above —
-                        // `struct_name_for_type` doesn't cover `Variant`, so
-                        // read the name straight off the resolved ultimate type.
-                        ResolvedType::Variant { name, .. } => Some(name.clone()),
+                        // `ResolvedType::Variant` comparison above.
+                        ResolvedType::Variant {
+                            name,
+                            module_source,
+                        } => Some(FqTypeName::declared(module_source, name).into_string()),
                         _ => None,
                     }
                 }

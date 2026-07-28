@@ -232,7 +232,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Shared scan-and-map prologue behind `find_indexing_trait_impl`,
     /// `find_assoc_type_in_trait_impl`, and `find_arithmetic_trait_impl`: walk
-    /// the trait impls on `struct_name` whose name satisfies `trait_matches`
+    /// the trait impls on `target` whose name satisfies `trait_matches`
     /// (prefix for indexing / assoc, exact for arithmetic), align each
     /// candidate's slots against `concrete_type_args`, and return the first
     /// non-`None` `project`. Per-candidate filtering and projection live in
@@ -240,7 +240,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// returning `None` skips the candidate.
     fn probe_trait_impls<R>(
         &mut self,
-        struct_name: &str,
+        target: &ImplTargetKey,
         concrete_type_args: &[TypeId],
         trait_matches: impl Fn(&str) -> bool,
         mut project: impl FnMut(
@@ -252,7 +252,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<R> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let signatures = Rc::clone(&self.tysys.signatures);
-        let impl_refs = self.collect_trait_impl_refs(&self.impl_target(struct_name));
+        let impl_refs = self.collect_trait_impl_refs(target);
         for impl_ref in &impl_refs {
             let header = impl_header(&trait_env, impl_ref);
             let trait_name = self.get_type_name(header.trait_type.as_ref().unwrap());
@@ -2572,7 +2572,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
         self.probe_trait_impls(
-            struct_name,
+            &self.impl_target_of(base_type_id, struct_name),
             &concrete_type_args,
             |trait_name| trait_name.starts_with(trait_base_name),
             |s, impl_ref, impl_sig, declared| {
@@ -2769,7 +2769,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
         self.probe_trait_impls(
-            struct_name,
+            &self.impl_target_of(base_type_id, struct_name),
             &concrete_type_args,
             |found_trait_name| found_trait_name == trait_name,
             |s, impl_ref, impl_sig, _declared| {
@@ -2883,7 +2883,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
         self.probe_trait_impls(
-            struct_name,
+            &self.impl_target_of(base_type_id, struct_name),
             &concrete_type_args,
             |trait_base| trait_base.starts_with(trait_base_name),
             |s, impl_ref, impl_sig, declared| {
