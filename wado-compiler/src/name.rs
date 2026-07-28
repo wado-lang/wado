@@ -731,6 +731,74 @@ pub fn split_trait_method_receiver(name: &str) -> Option<(&str, &str)> {
     Some((ty, trait_name))
 }
 
+/// The reference prefix a mangled name carries, and the rest.
+fn split_ref_prefix(name: &str) -> (&str, &str) {
+    for prefix in [RefKind::Mut.prefix(), RefKind::Shared.prefix()] {
+        if let Some(rest) = name.strip_prefix(prefix) {
+            let (sep, rest) = rest
+                .strip_prefix(' ')
+                .map_or(("", rest), |trimmed| (" ", trimmed));
+            return (&name[..prefix.len() + sep.len()], rest);
+        }
+    }
+    ("", name)
+}
+
+/// The head's name without its declaring module. A module may itself contain
+/// `/` (`./sub/geom.wado`), so the split is on the last one; a head never
+/// carries type arguments, which is what makes that safe here.
+fn head_simple_name(head: &str) -> &str {
+    head.rsplit('/').next().unwrap_or(head)
+}
+
+/// Split a mangled argument list on the commas that separate arguments,
+/// ignoring those nested inside an argument's own brackets.
+fn split_type_args(inner: &str) -> Vec<&str> {
+    let mut args = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0usize;
+    for (i, c) in inner.char_indices() {
+        match c {
+            '<' | '[' => depth += 1,
+            '>' | ']' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                args.push(&inner[start..i]);
+                start = i + c.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    args.push(&inner[start..]);
+    args
+}
+
+/// Render a mangled type name the way source writes it: the declaring module
+/// dropped from the head and from every type argument.
+///
+/// A diagnostic names a type the way the user typed it. The module an fq name
+/// carries is an internal identity, so printing one raw turns `Point` into
+/// `./geom.wado/Point` and `Option<String>` into
+/// `core:prelude/types.wado/Option<core:prelude/string.wado/String>`.
+#[must_use]
+pub fn display_type_name(mangled: &str) -> String {
+    let (prefix, rest) = split_ref_prefix(mangled);
+    let Some(open) = rest.find('<') else {
+        return format!("{prefix}{}", head_simple_name(rest));
+    };
+    let Some(inner) = rest[open + 1..].strip_suffix('>') else {
+        return format!("{prefix}{}", head_simple_name(rest));
+    };
+    let args: Vec<String> = split_type_args(inner)
+        .into_iter()
+        .map(display_type_name)
+        .collect();
+    format!(
+        "{prefix}{}<{}>",
+        head_simple_name(&rest[..open]),
+        args.join(",")
+    )
+}
+
 /// Decompose a local method mangle into `(receiver, trait, method)`.
 ///
 /// - `Point::sum` → `("Point", None, "sum")`
@@ -2159,6 +2227,26 @@ mod tests {
             Receiver::Type("List".into()).mangle(&["i32".into()]),
             "List<i32>"
         );
+    }
+
+    #[test]
+    fn display_type_name_drops_modules_from_head_and_args() {
+        assert_eq!(display_type_name("./geom.wado/Point"), "Point");
+        // A naive split on the last `/` would answer `String>` here.
+        assert_eq!(
+            display_type_name(
+                "core:prelude/types.wado/Option<core:prelude/string.wado/String>"
+            ),
+            "Option<String>"
+        );
+        assert_eq!(
+            display_type_name("a.wado/Pair<b.wado/K,c.wado/Map<d.wado/V,i32>>"),
+            "Pair<K,Map<V,i32>>"
+        );
+        // Builtin shapes carry no module, and refs keep their prefix.
+        assert_eq!(display_type_name("i32"), "i32");
+        assert_eq!(display_type_name("&./geom.wado/Point"), "&Point");
+        assert_eq!(display_type_name("&mut a.wado/List<b.wado/T>"), "&mut List<T>");
     }
 }
 

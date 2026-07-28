@@ -105,6 +105,7 @@ pub use token::Span;
 /// `Type` does not implement `Trait` (see the WIR-build trait-bound check).
 fn trait_bound_violation_message(call_name: &str, display_trait_name: &str) -> String {
     if let Some((ty, trait_name)) = name::split_trait_method_receiver(call_name) {
+        let ty = name::display_type_name(ty);
         let mut msg = format!("type `{ty}` does not implement trait `{trait_name}`");
         // `Display` has a ready `{x:?}` alternative; `display_trait_name` comes
         // from the registry, not a literal.
