@@ -511,19 +511,21 @@ impl Monomorphizer {
     /// the newtype's own name alongside the list so callers can also seed their
     /// candidate set with it. Shared by the collect (`func_inst.rs`) and rewrite
     /// (`call_rewrite.rs`) paths so the two stay in lockstep.
+    ///
+    /// The names are receivers, so they come off the receiver's type — a
+    /// template is registered under the fq head its definition was named with,
+    /// which a struct-instantiation spelling does not reproduce.
     pub fn newtype_aware_method_names(
         &self,
         receiver_type_id: TypeId,
         type_table: &TypeTable,
         method_name: &str,
-        struct_name: &str,
         trait_name: Option<&str>,
     ) -> (Option<String>, Vec<(String, Option<String>)>) {
         let own_name =
             self.newtype_own_struct_name_with_impl(receiver_type_id, type_table, trait_name);
         let mut names: Vec<(String, Option<String>)> = Vec::new();
-        let mut push_for = |s: &str| {
-            let s = FqTypeName::from_mangled(s.to_string());
+        let mut push_for = |s: FqTypeName| {
             names.push((MethodName::format_local(&s, None, method_name), None));
             if let Some(tn) = trait_name {
                 names.push((
@@ -533,9 +535,10 @@ impl Monomorphizer {
             }
         };
         if let Some(ref own) = own_name {
-            push_for(own);
+            // `newtype_own_name` reports the newtype's own mangle, already fq.
+            push_for(FqTypeName::from_mangled(own.clone()));
         }
-        push_for(struct_name);
+        push_for(super::dispatch_receiver_head(type_table, receiver_type_id));
         (own_name, names)
     }
 

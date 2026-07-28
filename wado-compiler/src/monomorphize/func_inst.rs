@@ -756,7 +756,6 @@ impl Monomorphizer {
                             receiver.type_id,
                             type_table,
                             &method_name,
-                            &struct_name,
                             trait_name_opt.as_deref(),
                         );
 
