@@ -1476,6 +1476,8 @@ fn compile_after_load<H: CompilerHost>(
     {
         let _span = logger.span("monomorphize");
         monomorphize(&mut flat);
+        #[cfg(debug_assertions)]
+        link::assert_no_stub_shadowing(&flat.functions, "monomorphize");
     }
 
     // === Phase 9a: Erase Newtypes and Flags ===
@@ -1490,6 +1492,8 @@ fn compile_after_load<H: CompilerHost>(
     // bridges are keyed by its concrete member types. It must follow erasure
     // too, since lowering names the call from the erased mangle.
     synthesis::reflect_bridge::synthesize_monomorphized_reflect_bridges(&mut flat);
+    #[cfg(debug_assertions)]
+    link::assert_no_stub_shadowing(&flat.functions, "reflect bridges");
 
     // === Phase 10: Lower (FlatPackage → NirPackage) ===
     let nir = {
