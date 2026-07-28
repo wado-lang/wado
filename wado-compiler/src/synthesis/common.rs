@@ -524,7 +524,7 @@ pub fn write_str_stmt(
     string_type: TypeId,
     ref_string_type: TypeId,
     span: Span,
-    formatter_name: &str,
+    formatter_name: &FqTypeName,
 ) -> TirStmt {
     let literal = TirExpr::new(TirExprKind::StringLiteral(text.into()), string_type, span);
     let arg = TirExpr::new(
@@ -543,7 +543,7 @@ pub fn write_str_stmt(
                 name: format!("{formatter_name}::write_str"),
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
-                    FqTypeName::from_mangled(formatter_name.clone()),
+                    formatter_name.clone(),
                     None,
                     "write_str".to_string(),
                 )),

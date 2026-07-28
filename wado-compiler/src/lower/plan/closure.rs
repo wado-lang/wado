@@ -787,6 +787,7 @@ impl ClosureLowerer {
             .compiler_items()
             .struct_name(CompilerItem::Formatter)
             .to_string();
+        let formatter_fq = type_table.compiler_struct_fq_name(CompilerItem::Formatter);
         let formatter_type = type_table.make_struct(formatter_name.clone(), ModuleSource::format());
         let formatter_mut_ref = type_table.make_mut_ref(formatter_type);
         let string_type = type_table.make_compiler_struct(CompilerItem::String);
@@ -815,7 +816,7 @@ impl ClosureLowerer {
                         self_ref_type,
                         formatter_mut_ref,
                         string_type,
-                        &formatter_name,
+                        &formatter_fq,
                         span,
                     )
                 }
@@ -846,7 +847,7 @@ impl ClosureLowerer {
         self_ref_type: TypeId,
         formatter_mut_ref: TypeId,
         string_type: TypeId,
-        formatter_name: &str,
+        formatter_fq: &FqTypeName,
         span: Span,
     ) -> TirFunction {
         let fmt_local = TirExpr::new(
@@ -862,10 +863,10 @@ impl ClosureLowerer {
                 Box::new(fmt_local),
                 FunctionRef {
                     module_source: ModuleSource::format(),
-                    name: format!("{formatter_name}::write_str"),
+                    name: format!("{formatter_fq}::write_str"),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        FqTypeName::from_mangled(formatter_name.clone()),
+                        formatter_fq.clone(),
                         None,
                         "write_str".to_string(),
                     )),

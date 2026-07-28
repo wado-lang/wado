@@ -42,6 +42,9 @@ use super::common::{
 #[derive(Clone, Debug)]
 pub(crate) struct TraitsStdlibNames {
     pub formatter: String,
+    /// `formatter` named by its declaring module — the form a function name
+    /// embeds. The bare `formatter` stays for type-table lookups.
+    pub formatter_fq: FqTypeName,
     pub display: String,
     /// `Display::fmt` method name, resolved via [`Resolved::Trait::method_name`].
     pub display_method: String,
@@ -73,6 +76,10 @@ impl TraitsStdlibNames {
             items.require_enum_case(CompilerItem::OrderingGreater);
         Self {
             formatter: items.struct_name(CompilerItem::Formatter).to_string(),
+            formatter_fq: {
+                let (module, name) = items.require_struct(CompilerItem::Formatter);
+                FqTypeName::declared(module, name)
+            },
             display: items.trait_name(CompilerItem::Display).to_string(),
             display_method: items.trait_method_name(CompilerItem::Display).to_string(),
             display_alt: items.trait_name(CompilerItem::DisplayAlt).to_string(),
@@ -3419,6 +3426,7 @@ fn generate_inspect_impls(module_source: &ModuleSource, module: &mut TirModule, 
     let module_source = module.module_source.clone();
     let mut generated = Vec::new();
     let formatter_name = ctx.names.formatter.clone();
+    let formatter_fq = ctx.names.formatter_fq.clone();
     let inspect_name = ctx.names.inspect.clone();
     let inspect_method = ctx.names.inspect_method.clone();
     let lower_hex_name = ctx.names.lower_hex.clone();
@@ -3465,7 +3473,7 @@ fn generate_inspect_impls(module_source: &ModuleSource, module: &mut TirModule, 
             string_type,
             ref_string_type,
             span,
-            &formatter_name,
+            &ctx.names.formatter_fq,
         );
         generated.push(Rc::new(RefCell::new(generate_newtype_fmt_fn(
             &nt.name,
@@ -3520,7 +3528,7 @@ fn generate_inspect_impls(module_source: &ModuleSource, module: &mut TirModule, 
                     span,
                     &inspect_name,
                     &inspect_method,
-                    &formatter_name,
+                    &formatter_fq,
                     &lower_hex_name,
                     &lower_hex_method,
                 ))));
@@ -3552,7 +3560,7 @@ fn generate_inspect_impls(module_source: &ModuleSource, module: &mut TirModule, 
             *rspan,
             &inspect_name,
             &inspect_method,
-            &formatter_name,
+            &formatter_fq,
             &lower_hex_name,
             &lower_hex_method,
         ))));
@@ -3596,6 +3604,7 @@ fn generate_enum_display_impls(module_source: &ModuleSource, module: &mut TirMod
     let display_name = ctx.names.display.clone();
     let display_method = ctx.names.display_method.clone();
     let formatter_name = ctx.names.formatter.clone();
+    let formatter_fq = ctx.names.formatter_fq.clone();
 
     let enum_infos: Vec<_> = module
         .enums
@@ -3630,7 +3639,7 @@ fn generate_enum_display_impls(module_source: &ModuleSource, module: &mut TirMod
             *espan,
             &display_name,
             &display_method,
-            &formatter_name,
+            &formatter_fq,
         ))));
         ctx.record_impl(name, &display_name);
     }
@@ -3654,7 +3663,7 @@ fn generate_enum_display_fn(
     span: Span,
     display_trait: &str,
     display_method: &str,
-    formatter_name: &str,
+    formatter_fq: &FqTypeName,
 ) -> TirFunction {
     let method_info = trait_method_info(module_source, enum_name, display_trait, display_method);
     let qualified_name = method_info.to_mangled_name();
@@ -3671,7 +3680,7 @@ fn generate_enum_display_fn(
                 string_type,
                 ref_string_type,
                 span,
-                formatter_name,
+                &formatter_fq,
             )],
             span,
         );
@@ -3892,7 +3901,7 @@ fn generate_opaque_inspect_fn(
     span: Span,
     inspect_trait: &str,
     inspect_method: &str,
-    formatter_name: &str,
+    formatter_fq: &FqTypeName,
     lower_hex_trait: &str,
     lower_hex_method: &str,
 ) -> TirFunction {
@@ -3929,7 +3938,7 @@ fn generate_opaque_inspect_fn(
                 string_type,
                 ref_string_type,
                 span,
-                formatter_name,
+                &formatter_fq,
             ),
             hex_stmt,
         ],
@@ -3954,6 +3963,7 @@ fn generate_opaque_inspect_fn(
 fn generate_inspect_alt_impls(module_source: &ModuleSource, module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     let module_source = module.module_source.clone();
     let formatter_name = ctx.names.formatter.clone();
+    let formatter_fq = ctx.names.formatter_fq.clone();
     let inspect_name = ctx.names.inspect.clone();
     let inspect_method = ctx.names.inspect_method.clone();
     let inspect_alt_name = ctx.names.inspect_alt.clone();
@@ -4045,7 +4055,7 @@ fn generate_inspect_alt_impls(module_source: &ModuleSource, module: &mut TirModu
             *sspan,
             &inspect_alt_name,
             &inspect_alt_method,
-            &formatter_name,
+            &formatter_fq,
         ))));
         ctx.record_impl(name, &inspect_alt_name);
     }
@@ -4074,7 +4084,7 @@ fn generate_inspect_alt_impls(module_source: &ModuleSource, module: &mut TirModu
             *sspan,
             &inspect_alt_name,
             &inspect_alt_method,
-            &formatter_name,
+            &formatter_fq,
         ))));
         ctx.record_impl(name, &inspect_alt_name);
     }
@@ -4101,7 +4111,7 @@ fn generate_inspect_alt_impls(module_source: &ModuleSource, module: &mut TirModu
             *vspan,
             &inspect_alt_name,
             &inspect_alt_method,
-            &formatter_name,
+            &formatter_fq,
         ))));
         ctx.record_impl(name, &inspect_alt_name);
     }
@@ -4130,7 +4140,7 @@ fn generate_inspect_alt_impls(module_source: &ModuleSource, module: &mut TirModu
             *vspan,
             &inspect_alt_name,
             &inspect_alt_method,
-            &formatter_name,
+            &formatter_fq,
         ))));
         ctx.record_impl(name, &inspect_alt_name);
     }
@@ -4280,7 +4290,7 @@ fn generate_struct_inspect_alt_fn(
     span: Span,
     inspect_alt_trait: &str,
     inspect_alt_method: &str,
-    formatter_name: &str,
+    formatter_fq: &FqTypeName,
 ) -> TirFunction {
     let method_info = trait_method_info(module_source, struct_name, inspect_alt_trait, inspect_alt_method);
     let qualified_name = method_info.to_mangled_name();
@@ -4297,7 +4307,7 @@ fn generate_struct_inspect_alt_fn(
         module_source,
         tt,
         span,
-        formatter_name,
+        formatter_fq,
         inspect_alt_trait,
         inspect_alt_method,
     );
@@ -4329,7 +4339,7 @@ fn build_struct_inspect_alt_body(
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
-    formatter_name: &str,
+    formatter_fq: &FqTypeName,
     inspect_alt_trait: &str,
     inspect_alt_method: &str,
 ) -> Vec<TirStmt> {
@@ -4341,7 +4351,7 @@ fn build_struct_inspect_alt_body(
             string_type,
             ref_string_type,
             span,
-            formatter_name,
+            &formatter_fq,
         )
     };
     let newline_indent = || {
@@ -4350,7 +4360,7 @@ fn build_struct_inspect_alt_body(
             fmt(),
             None::<(&str, TypeId)>,
             span,
-            formatter_name,
+            &formatter_fq,
         )
     };
 
@@ -4364,7 +4374,7 @@ fn build_struct_inspect_alt_body(
             string_type,
             ref_string_type,
             span,
-            formatter_name,
+            &formatter_fq,
         ));
         return stmts;
     }
@@ -4374,7 +4384,7 @@ fn build_struct_inspect_alt_body(
         fmt(),
         Some((format!("{struct_name} {{"), string_type)),
         span,
-        formatter_name,
+        &formatter_fq,
     ));
     for (field_name, field_type, field_index) in fields {
         stmts.push(newline_indent());
@@ -4384,7 +4394,7 @@ fn build_struct_inspect_alt_body(
             string_type,
             ref_string_type,
             span,
-            formatter_name,
+            &formatter_fq,
         ));
         let field_access = field_access_local(
             0,
@@ -4417,7 +4427,7 @@ fn build_struct_inspect_alt_body(
         fmt(),
         Some(("}", string_type)),
         span,
-        formatter_name,
+        &formatter_fq,
     ));
     stmts
 }
@@ -4440,7 +4450,7 @@ fn generate_variant_inspect_alt_fn(
     span: Span,
     inspect_alt_trait: &str,
     inspect_alt_method: &str,
-    formatter_name: &str,
+    formatter_fq: &FqTypeName,
 ) -> TirFunction {
     let method_info = trait_method_info(module_source, variant_name, inspect_alt_trait, inspect_alt_method);
     let qualified_name = method_info.to_mangled_name();
@@ -4478,7 +4488,7 @@ fn generate_variant_inspect_alt_fn(
         module_source,
         tt,
         span,
-        formatter_name,
+        formatter_fq,
         inspect_alt_trait,
         inspect_alt_method,
     );
@@ -4511,7 +4521,7 @@ fn build_variant_inspect_alt_body(
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
-    formatter_name: &str,
+    formatter_fq: &FqTypeName,
     inspect_alt_trait: &str,
     inspect_alt_method: &str,
 ) -> Vec<TirStmt> {
@@ -4539,7 +4549,7 @@ fn build_variant_inspect_alt_body(
                     string_type,
                     ref_string_type,
                     span,
-                    formatter_name,
+                    &formatter_fq,
                 ));
                 Vec::new()
             } else {
@@ -4548,14 +4558,14 @@ fn build_variant_inspect_alt_body(
                     fmt_local(),
                     Some((format!("{variant_name}::{case_name}("), string_type)),
                     span,
-                    formatter_name,
+                    &formatter_fq,
                 ));
                 body_stmts.push(formatter_call(
                     "write_newline_indent",
                     fmt_local(),
                     None::<(&str, TypeId)>,
                     span,
-                    formatter_name,
+                    &formatter_fq,
                 ));
                 let binding_idx = binding_idx.expect("non-unit case must have a payload binding");
                 let binding_name = format!("__inspect_alt_{case_name}_{binding_idx}");
@@ -4577,14 +4587,14 @@ fn build_variant_inspect_alt_body(
                     string_type,
                     ref_string_type,
                     span,
-                    formatter_name,
+                    &formatter_fq,
                 ));
                 body_stmts.push(formatter_call(
                     "close_brace",
                     fmt_local(),
                     Some((")", string_type)),
                     span,
-                    formatter_name,
+                    &formatter_fq,
                 ));
                 vec![TirPattern::Binding {
                     name: binding_name,
@@ -4655,7 +4665,7 @@ fn formatter_call(
     fmt: TirExpr,
     text_arg: Option<(impl Into<String>, TypeId)>,
     span: Span,
-    formatter_name: &str,
+    formatter_fq: &FqTypeName,
 ) -> TirStmt {
     let args = match text_arg {
         Some((text, string_type)) => vec![CallArg::new(
@@ -4669,10 +4679,10 @@ fn formatter_call(
             Box::new(fmt),
             FunctionRef {
                 module_source: ModuleSource::format(),
-                name: format!("{formatter_name}::{method_name}"),
+                name: format!("{formatter_fq}::{method_name}"),
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
-                    FqTypeName::declared(&ModuleSource::format(), formatter_name),
+                    formatter_fq.clone(),
                     None,
                     method_name.to_string(),
                 )),

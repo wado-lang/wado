@@ -831,13 +831,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .clone()
         {
             ResolvedType::GenericInstance {
-                name, type_args, ..
+                name,
+                type_args,
+                module_source,
             }
             | ResolvedType::GenericResource {
-                name, type_args, ..
+                name,
+                type_args,
+                module_source,
             } => {
-                // Qualify the arguments so a concrete-generic impl's method
-                // name matches its definition (issue #1348).
+                // Qualify the base and the arguments alike, so a concrete-generic
+                // impl's method name matches its definition (issue #1348).
                 let type_arg_names: Vec<String> = type_args
                     .iter()
                     .map(|t| {
@@ -847,8 +851,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .mangle_type_arg_for_generic(*t)
                     })
                     .collect();
-                let mangled = mangle_generic_name(&name, &type_arg_names);
-                (mangled, name, type_arg_names, Some(type_args))
+                let base = FqTypeName::declared(&module_source, &name);
+                let mangled = mangle_generic_name(base.as_str(), &type_arg_names);
+                (mangled, base.into_string(), type_arg_names, Some(type_args))
             }
             // The raw GC array splits like a generic instance: the receiver
             // name is the full `Array<T>` spelling, but the method-owner base
@@ -3048,8 +3053,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: final_mangled_name,
             monomorph_info,
             method_info: Some({
+                // `actual_struct_name` is the written receiver, so it goes
+                // through the receiver rule — `from_mangled` would pass a bare
+                // name straight through and key the instantiation under a name
+                // the emitted call never looks up.
                 let mut m = LocalMethodName::new(
-                    FqTypeName::from_mangled(actual_struct_name),
+                    self.qualified_receiver_name(&actual_struct_name),
                     trait_name_opt,
                     method_name.to_string(),
                 );
