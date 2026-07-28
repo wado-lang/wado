@@ -88,6 +88,43 @@ pub fn link(package: Package) -> FlatPackage {
         }
     }
 
+    // A bodyless function is a stub a call may bind to; a bodied one is the
+    // definition. A name carries its subject's declaring module, so one name
+    // means one function — a stub sharing a definition's name is a call waiting
+    // to bind to nothing, surfacing much later as an unsatisfied trait bound at
+    // WIR build. Report every such name at once rather than one per fixture.
+    // Shape stubs (tuples, `Stream<u8>`) are emitted per using module by
+    // design and have no definition anywhere, so they never collide. A
+    // `core:builtin` declaration paired with its `core:rt` implementation is
+    // the intended shape of an intrinsic, not a collision.
+    #[cfg(debug_assertions)]
+    {
+        let mut bodied: crate::hashmap::IndexMap<String, ModuleSource> =
+            crate::hashmap::IndexMap::default();
+        for f in &functions {
+            let f = f.borrow();
+            if f.body.is_some() {
+                bodied.insert(f.name.clone(), f.module_source.clone());
+            }
+        }
+        let collisions: Vec<(String, ModuleSource, ModuleSource)> = functions
+            .iter()
+            .filter_map(|f| {
+                let f = f.borrow();
+                if f.body.is_some() || f.module_source == ModuleSource::builtin() {
+                    return None;
+                }
+                bodied
+                    .get(&f.name)
+                    .map(|def| (f.name.clone(), f.module_source.clone(), def.clone()))
+            })
+            .collect();
+        assert!(
+            collisions.is_empty(),
+            "a bodyless stub shares a definition's name (name, stub module, definition module): {collisions:#?}"
+        );
+    }
+
     // Build variant lookup indices.
     let mut variant_index = IndexMap::default();
     for (i, v) in variants.iter().enumerate() {
