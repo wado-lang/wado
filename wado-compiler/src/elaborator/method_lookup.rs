@@ -192,13 +192,23 @@ impl TypeSystem {
     }
 
     /// The mangled name of the declaration `name` refers to from
-    /// `impl_module`'s perspective. Falls back to the written name when the
-    /// type table has no entry — a builtin shape spells itself.
+    /// `impl_module`'s perspective: its own declaration if it has one, else the
+    /// module that does declare it. Falls back to the written name for a
+    /// builtin shape, which spells itself, and for an ambiguous name, where
+    /// rejecting on a guess would be worse than not constraining.
     fn mangled_decl_name_in(&self, impl_module: &ModuleSource, name: &str) -> String {
-        let tt = self.type_table.borrow();
-        tt.find_decl_type_by_name(name, impl_module)
-            .map(|id| tt.mangle_type_name(id))
-            .unwrap_or_else(|| name.to_string())
+        {
+            let tt = self.type_table.borrow();
+            if let Some(id) = tt.find_decl_type_by_name(name, impl_module) {
+                return tt.mangle_type_name(id);
+            }
+        }
+        self.trait_env
+            .find_struct_like_decl_key(name)
+            .map_or_else(
+                || name.to_string(),
+                |(module, decl)| crate::name::FqTypeName::declared(&module, &decl).into_string(),
+            )
     }
 }
 
