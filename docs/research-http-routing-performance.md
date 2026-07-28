@@ -148,6 +148,9 @@ stable to a few percent where the HTTP path is not:
   iteration, each building a 64-byte body): 2.46k → 2.71k iterations/s, +10%,
   with every post-fix run above every pre-fix run. The loop pays for building
   the body too, so the removed copy is a large share of what is left.
+- Moving through the newtype cast (1000 `substr_bytes` per iteration, the path
+  parameter shape): 7.6k → 12.2k iterations/s. Halving the allocations per
+  substring is worth ~1.5x on a loop that does nothing else.
 
 ## The constant is no longer rebuilt per request
 
