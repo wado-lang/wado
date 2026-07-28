@@ -300,6 +300,17 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A type argument whose associated type does not match the constraint
+    /// written on the bound (`T: Collect<Item = i32>` given `Item = String`).
+    AssocTypeBoundNotSatisfied {
+        type_name: String,
+        trait_name: String,
+        assoc_name: String,
+        expected: String,
+        actual: String,
+        span: Span,
+    },
+
     /// A supertrait clause naming something that is not a declared trait.
     UnknownSupertrait {
         trait_name: String,
@@ -812,6 +823,20 @@ impl TypeError {
                         .map(|t| format!("'{t}'"))
                         .collect::<Vec<_>>()
                         .join(" and ")
+                ),
+                *span,
+            ),
+            TypeError::AssocTypeBoundNotSatisfied {
+                type_name,
+                trait_name,
+                assoc_name,
+                expected,
+                actual,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "type '{type_name}' does not satisfy the associated type '{trait_name}::{assoc_name} = {expected}': it is '{actual}'"
                 ),
                 *span,
             ),

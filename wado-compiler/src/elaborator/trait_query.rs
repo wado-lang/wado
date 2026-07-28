@@ -167,6 +167,23 @@ pub(crate) fn decl_identity_core(
     None
 }
 
+/// Whether an AST type is phrased against `Self` anywhere, and so only means
+/// something where an implementing type is bound.
+fn mentions_self(ty: &ast::Type) -> bool {
+    match ty {
+        ast::Type::Named(named) => named.name == "Self",
+        ast::Type::NamespacedGeneric(ns) => {
+            ns.namespace == "Self" || ns.args.iter().any(mentions_self)
+        }
+        ast::Type::Generic(generic) => {
+            generic.name == "Self" || generic.args.iter().any(mentions_self)
+        }
+        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => mentions_self(inner),
+        ast::Type::Tuple(elements) => elements.iter().any(mentions_self),
+        _ => false,
+    }
+}
+
 pub(crate) fn canonical_decl_key_with(
     name: &str,
     current_module_source: &ModuleSource,
@@ -1913,6 +1930,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 for &subject in &subjects {
                     self.enforce_single_bound(subject, &bound.name, &param.name, span);
+                    self.enforce_assoc_type_bounds(subject, bound, span);
                 }
             }
             // A supertrait of a written bound is implied by it, so its failure
@@ -1926,6 +1944,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 for &subject in &subjects {
                     self.check_and_register_bound(subject, &bound.name);
+                    // A constraint written in supertrait position
+                    // (`trait Sink: Collect<Item = i32>`) *is* implied — it is
+                    // the trait's own promise, not a second cause.
+                    self.enforce_assoc_type_bounds(subject, &bound, span);
                 }
             }
         }
@@ -1954,6 +1976,55 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_name: trait_name.to_string(),
                 param_name: param_name.to_string(),
                 reason,
+                span,
+            });
+        }
+    }
+
+    /// Check the associated-type constraints written on a bound
+    /// (`T: Collect<Item = i32>`) against the type argument. Only the bound's
+    /// trait was ever checked, so a type binding `Item = String` passed and the
+    /// mismatch reached codegen as an invalid module.
+    ///
+    /// Runs after [`Self::enforce_single_bound`], which is what registers the
+    /// argument's bindings in the first place. A binding that stayed parametric
+    /// is left alone, as everywhere else.
+    fn enforce_assoc_type_bounds(&mut self, type_arg: TypeId, bound: &ast::TraitBound, span: Span) {
+        for constraint in &bound.assoc_types {
+            // A constraint phrased against `Self` (`type Iter: Iterator<Item =
+            // Self::Item>`) means the *implementing* type, which this site has
+            // no binding for — resolving it here would only report `Self::Item`
+            // as an unknown type. `enforce_impl_assoc_type_bounds` owns those.
+            if mentions_self(&constraint.ty) {
+                continue;
+            }
+            let Some(actual) = self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
+                type_arg,
+                &bound.name,
+                &constraint.name,
+            ) else {
+                continue;
+            };
+            let expected = self.resolve_type(&constraint.ty);
+            let tt = self.tysys.type_table.borrow();
+            if tt.contains_type_param(expected)
+                || tt.contains_type_param(actual)
+                || expected == actual
+            {
+                continue;
+            }
+            let (expected_name, actual_name) = (
+                self.tysys.type_id_to_string(expected),
+                self.tysys.type_id_to_string(actual),
+            );
+            drop(tt);
+            let type_name = self.tysys.type_id_to_string(type_arg);
+            let _ = self.emit(TypeError::AssocTypeBoundNotSatisfied {
+                type_name,
+                trait_name: bound.name.clone(),
+                assoc_name: constraint.name.clone(),
+                expected: expected_name,
+                actual: actual_name,
                 span,
             });
         }

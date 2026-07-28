@@ -1,0 +1,49 @@
+// An associated-type constraint on a bound has to be checked against the type
+// argument. Only the bound's trait was ever checked, so a type binding
+// `Item = String` passed and the mismatch reached codegen as an invalid Wasm
+// module. `Sink`'s constraint is written in supertrait position, which carries
+// the same promise and is checked the same way.
+trait Collect {
+    type Item;
+
+    fn first(&self) -> Self::Item;
+}
+
+trait Sink: Collect<Item = i32> {
+    fn drain(&self) -> i32;
+}
+
+struct SBag {
+    v: String,
+}
+
+impl Collect for SBag {
+    type Item = String;
+
+    fn first(&self) -> String {
+        return self.v;
+    }
+}
+
+impl Sink for SBag {
+    fn drain(&self) -> i32 {
+        return 1;
+    }
+}
+
+fn take_i32<T: Collect<Item = i32>>(x: &T) -> i32 {
+    return 0;
+}
+
+fn drain_it<T: Sink>(x: &T) -> i32 {
+    return x.drain();
+}
+
+export fn run() {
+    let b = SBag { v: "x" };
+    assert take_i32(&b) == 0;
+    assert drain_it(&b) == 1;
+}
+
+__DATA__
+{"compile_error": "does not satisfy the associated type"}
