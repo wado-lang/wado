@@ -2901,13 +2901,13 @@ impl Monomorphizer {
             let inner = type_table.peel_refs(receiver_type_id);
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
             // then fall back to the base type name (e.g., "f64") if no direct impl exists.
-            let own_mangled = type_table.mangle_type_name(inner);
+            let own_mangled = type_table.mangle_type_arg_for_generic(inner);
             let own_base = type_table.fq_base_type_name(inner).into_string();
             let candidate = info.with_substituted_struct_name(&own_mangled, &own_base);
             if self.functions.has_impl(&candidate) {
                 candidate
             } else {
-                let mangled = type_table.mangle_type_name_resolving_newtypes(inner);
+                let mangled = type_table.mangle_type_arg_for_generic_resolving_newtypes(inner);
                 // Take the base name from the *resolved* type so newtypes
                 // (`type FieldValue = List<u8>`) inherit the underlying
                 // type's base ("List"), not the newtype's own name.
@@ -2922,7 +2922,7 @@ impl Monomorphizer {
             // Derive the struct name from the already-substituted receiver type.
             // Resolve through newtypes so that e.g. MyArray<i32>::len → List<i32>::len.
             let recv_inner = type_table.peel_refs(receiver_type_id);
-            let recv_mangled = type_table.mangle_type_name_resolving_newtypes(recv_inner);
+            let recv_mangled = type_table.mangle_type_arg_for_generic_resolving_newtypes(recv_inner);
             // `base_type_name(Newtype)` returns the newtype's own name (e.g.
             // "MyBytes"), but the post-substitution body actually targets the
             // base type's impl ("List"). Peel through the newtype first so

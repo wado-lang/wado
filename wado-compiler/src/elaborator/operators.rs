@@ -1266,7 +1266,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         super::Elaborator::find_index_assign_trait_impl,
                     );
-                    if let Some(trait_info) = assign_info {
+                    if let Some((trait_info, matched_type_id)) = assign_info {
                         if let Some(key_type) = trait_info.index_type
                             && key_type != index_type
                         {
@@ -1286,8 +1286,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.typecheck(value_type, trait_info.input_type, value_span);
 
                         // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
+                        let receiver = self.fq_index_receiver(matched_type_id);
                         let mangled_method_name = MethodName::format_local(
-                            &FqTypeName::from_mangled(lookup_name.clone()),
+                            &receiver,
                             Some(&trait_info.trait_name),
                             "index_assign",
                         );
@@ -1297,7 +1298,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             name: mangled_method_name,
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
-                                FqTypeName::from_mangled(lookup_name),
+                                receiver,
                                 Some(trait_info.trait_name),
                                 "index_assign".to_string(),
                             )),

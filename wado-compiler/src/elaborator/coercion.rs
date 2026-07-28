@@ -587,10 +587,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .make_compiler_struct(crate::compiler_item::CompilerItem::String);
 
         // Get type args for monomorphization from builder type
-        let builder_base_name = self
-            .tysys
-            .struct_name_for_type(builder_type)
-            .unwrap_or_else(|| base_name.clone());
+        let builder_base_name = self.tysys.fq_receiver_head(builder_type);
         let (type_arg_names, type_arg_ids): (Vec<String>, Vec<TypeId>) = {
             let tt = self.tysys.type_table.borrow();
             match tt.get(builder_type) {
@@ -605,14 +602,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        let mangled_builder_name = FqTypeName::from_mangled(if type_arg_names.is_empty() {
-            self.qualified_receiver_name(&builder_base_name).into_string()
+        let mangled_builder_name = if type_arg_names.is_empty() {
+            builder_base_name.clone()
         } else {
-            crate::name::mangle_generic_name(
-                self.qualified_receiver_name(&builder_base_name).as_str(),
+            FqTypeName::from_mangled(crate::name::mangle_generic_name(
+                builder_base_name.as_str(),
                 &type_arg_names,
-            )
-        });
+            ))
+        };
 
         let new_mangled_name =
             MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
@@ -757,10 +754,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let builder_type = seq_info.builder_type;
         let output_type = seq_info.output_type;
         let impl_module_source = seq_info.impl_module_source;
-        let builder_base_name = self
-            .tysys
-            .struct_name_for_type(builder_type)
-            .unwrap_or_else(|| base_name.clone());
+        let builder_base_name = self.tysys.fq_receiver_head(builder_type);
 
         let span = expr.span();
 
@@ -778,14 +772,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        let mangled_builder_name = FqTypeName::from_mangled(if type_arg_names.is_empty() {
-            self.qualified_receiver_name(&builder_base_name).into_string()
+        let mangled_builder_name = if type_arg_names.is_empty() {
+            builder_base_name.clone()
         } else {
-            crate::name::mangle_generic_name(
-                self.qualified_receiver_name(&builder_base_name).as_str(),
+            FqTypeName::from_mangled(crate::name::mangle_generic_name(
+                builder_base_name.as_str(),
                 &type_arg_names,
-            )
-        });
+            ))
+        };
 
         let new_mangled_name =
             MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");

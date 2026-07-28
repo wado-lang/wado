@@ -1259,15 +1259,11 @@ fn type_module_hint_tt(type_id: TypeId, tt: &TypeTable) -> Option<ModuleSource> 
 pub(crate) fn blanket_dispatch_for(
     trait_env: &TraitEnv,
     type_id: TypeId,
-    base_struct_name: &str,
     trait_name: &str,
     method_name: &str,
     tt: &mut TypeTable,
 ) -> Option<(MonomorphInfo, ModuleSource)> {
-    let type_key = match RefKind::from_resolved(tt.get(type_id)) {
-        Some(kind) => Receiver::Ref(kind),
-        None => Receiver::Type(base_struct_name.to_string()),
-    };
+    let type_key = tt.impl_receiver_key(type_id);
     if trait_env.has_any_methodful_impl_by_receiver(&type_key, trait_name) {
         return None;
     }
@@ -1332,7 +1328,6 @@ fn blanket_method_call_info(
     let (monomorph_info, blanket_module) = blanket_dispatch_for(
         ctx.trait_env,
         type_id,
-        &local_name.base_struct_name(),
         trait_name,
         method_name,
         &mut ctx.tt.borrow_mut(),

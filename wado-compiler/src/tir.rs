@@ -3185,24 +3185,99 @@ impl TypeTable {
         }
     }
 
+    /// The key `id`'s impl blocks are indexed under: the head name as the
+    /// source writes it, with the reference kind lifted out.
+    ///
+    /// This is not a mangled name and never becomes one. Every mangler
+    /// qualifies a declared type by its module, but the impl index keys on the
+    /// written head and disambiguates by the `(ModuleSource, AstId)` payload it
+    /// stores, so the key is read off the resolved type directly.
+    #[must_use]
+    pub fn impl_receiver_key(&self, id: TypeId) -> crate::name::Receiver {
+        use crate::name::Receiver;
+        let named = |name: &String| Receiver::Type(name.clone());
+        match self.get(id) {
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
+                crate::name::RefKind::from_resolved(self.get(id))
+                    .map_or_else(|| Receiver::Type(String::new()), Receiver::Ref)
+            }
+            ResolvedType::Struct {
+                base_name: Some(base),
+                ..
+            } => named(base),
+            ResolvedType::Struct { name, .. }
+            | ResolvedType::Enum { name, .. }
+            | ResolvedType::Variant { name, .. }
+            | ResolvedType::Newtype { name, .. }
+            | ResolvedType::Flags { name, .. }
+            | ResolvedType::Resource { name, .. }
+            | ResolvedType::GenericInstance { name, .. }
+            | ResolvedType::GenericResource { name, .. }
+            | ResolvedType::TypeParam { name, .. } => named(name),
+            ResolvedType::BuiltinArray(_) => Receiver::Type(Self::ARRAY_TYPE_NAME.to_string()),
+            ResolvedType::Unit => Receiver::Type(Self::UNIT_TYPE_NAME.to_string()),
+            ResolvedType::Primitive(prim) => Receiver::Type(prim.as_str().to_string()),
+            ResolvedType::Function { .. } => {
+                Receiver::Type(crate::name::CLOSURE_FN_TRAIT.to_string())
+            }
+            _ => Receiver::Type(self.base_type_name(id)),
+        }
+    }
+
     /// [`Self::base_type_name`] as a receiver head: the base is a declaration,
     /// so it carries its module and matches what the impl registered. The bare
     /// form stays for indices keyed by the written simple name.
     #[must_use]
     pub fn fq_base_type_name(&self, id: TypeId) -> crate::name::FqTypeName {
+        use crate::name::FqTypeName;
         match self.get(id) {
             ResolvedType::GenericInstance {
                 name,
                 module_source,
                 ..
-            } => crate::name::FqTypeName::declared(module_source, name),
+            }
+            | ResolvedType::GenericResource {
+                name,
+                module_source,
+                ..
+            } if !Self::is_tuple_type(name) => FqTypeName::declared(module_source, name),
             ResolvedType::Struct {
                 base_name: Some(base),
                 module_source,
                 ..
-            } => crate::name::FqTypeName::declared(module_source, base),
+            } => FqTypeName::declared(module_source, base),
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Enum {
+                name,
+                module_source,
+            }
+            | ResolvedType::Variant {
+                name,
+                module_source,
+            }
+            | ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Flags {
+                name,
+                module_source,
+            }
+            | ResolvedType::Resource {
+                name,
+                module_source,
+            } => FqTypeName::declared(module_source, name),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.fq_base_type_name(*inner),
-            _ => crate::name::FqTypeName::from_mangled(self.mangle_type_name(id)),
+            ResolvedType::BuiltinArray(_) => FqTypeName::builtin(Self::ARRAY_TYPE_NAME),
+            ResolvedType::Unit => FqTypeName::builtin(Self::UNIT_TYPE_NAME),
+            // Tuples, primitives and function types are builtin shapes: no
+            // module declares them and every mangler spells them bare.
+            _ => FqTypeName::builtin(&self.base_type_name(id)),
         }
     }
 

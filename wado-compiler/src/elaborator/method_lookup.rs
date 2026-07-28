@@ -2434,6 +2434,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// when it actually differs. For a non-newtype receiver the base equals the
     /// primary, so the former `lookup(primary).or_else(|| lookup(base))` re-ran
     /// the identical scan on every `a[i]`; this skips that redundant call.
+    ///
+    /// The matched receiver's `TypeId` comes back with the hit, so the caller
+    /// names the dispatched method after the type whose impl actually matched.
     pub(super) fn index_lookup_or_newtype_base<T>(
         &mut self,
         struct_name: &str,
@@ -2441,14 +2444,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         lookup_name: &str,
         lookup_type_id: TypeId,
         mut lookup: impl FnMut(&mut Self, &str, TypeId) -> Option<T>,
-    ) -> Option<T> {
+    ) -> Option<(T, TypeId)> {
         if let Some(found) = lookup(self, struct_name, base_type_id) {
-            return Some(found);
+            return Some((found, base_type_id));
         }
         if lookup_name != struct_name || lookup_type_id != base_type_id {
-            return lookup(self, lookup_name, lookup_type_id);
+            return lookup(self, lookup_name, lookup_type_id).map(|found| (found, lookup_type_id));
         }
         None
+    }
+
+    /// The fq receiver name for an indexing-trait dispatch on `matched_type_id`
+    /// — the `TypeId` [`Self::index_lookup_or_newtype_base`] reports alongside
+    /// the impl it found.
+    pub(super) fn fq_index_receiver(&self, matched_type_id: TypeId) -> crate::name::FqTypeName {
+        self.tysys.fq_receiver_head(matched_type_id)
     }
 
     /// Whether concrete subscripts on `type_id` take the optimized intrinsic

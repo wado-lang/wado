@@ -6383,7 +6383,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // --- Builder::new_literal(capacity) ---
         let new_method_info = LocalMethodName::new(
-            FqTypeName::from_mangled(facts.builder_base_name.clone()),
+            facts.builder_base_name.clone(),
             Some(facts.trait_name.clone()),
             "new_literal".to_string(),
         )
@@ -6398,7 +6398,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         None
                     } else {
                         Some(MonomorphInfo {
-                            generic_name: format!("{}::new_literal", facts.builder_base_name),
+                            generic_name: format!("{}::new_literal", facts.builder_base_name.as_str()),
                             impl_type_args: facts.type_arg_ids.clone(),
                             method_type_args: vec![],
                             is_blanket: false,
@@ -6439,7 +6439,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // --- For each element: __b.push_literal(elem) ---
         let push_method_info = LocalMethodName::new(
-            FqTypeName::from_mangled(facts.builder_base_name.clone()),
+            facts.builder_base_name.clone(),
             Some(facts.trait_name.clone()),
             "push_literal".to_string(),
         )
@@ -6471,7 +6471,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         None
                     } else {
                         Some(MonomorphInfo {
-                            generic_name: format!("{}::push_literal", facts.builder_base_name),
+                            generic_name: format!("{}::push_literal", facts.builder_base_name.as_str()),
                             impl_type_args: facts.type_arg_ids.clone(),
                             method_type_args: vec![],
                             is_blanket: false,
@@ -6497,7 +6497,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
         let build_method_info = LocalMethodName::new(
-            FqTypeName::from_mangled(facts.builder_base_name.clone()),
+            facts.builder_base_name.clone(),
             Some(facts.trait_name.clone()),
             "build".to_string(),
         )
@@ -6511,7 +6511,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     None
                 } else {
                     Some(MonomorphInfo {
-                        generic_name: format!("{}::build", facts.builder_base_name),
+                        generic_name: format!("{}::build", facts.builder_base_name.as_str()),
                         impl_type_args: facts.type_arg_ids.clone(),
                         method_type_args: vec![],
                         is_blanket: false,
@@ -6589,7 +6589,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // --- Builder::new_literal([capacity]) ---
         let new_method_info = LocalMethodName::new(
-            FqTypeName::from_mangled(facts.builder_base_name.clone()),
+            facts.builder_base_name.clone(),
             Some(facts.trait_name.clone()),
             "new_literal".to_string(),
         )
@@ -6619,7 +6619,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         None
                     } else {
                         Some(MonomorphInfo {
-                            generic_name: format!("{}::new_literal", facts.builder_base_name),
+                            generic_name: format!("{}::new_literal", facts.builder_base_name.as_str()),
                             impl_type_args: facts.type_arg_ids.clone(),
                             method_type_args: vec![],
                             is_blanket: false,
@@ -6651,12 +6651,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // In source order, `insert_all(base)` per spread and `insert_literal` per
         // field; later inserts override, giving explicit-over-base / last-wins.
         let insert_method_info = LocalMethodName::new(
-            FqTypeName::from_mangled(facts.builder_base_name.clone()),
+            facts.builder_base_name.clone(),
             Some(facts.trait_name.clone()),
             "insert_literal".to_string(),
         );
         let insert_all_method_info = LocalMethodName::new(
-            FqTypeName::from_mangled(facts.builder_base_name.clone()),
+            facts.builder_base_name.clone(),
             Some(facts.trait_name.clone()),
             "insert_all".to_string(),
         );
@@ -6735,7 +6735,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
         let result_expr = if let Some(build_mangled_name) = facts.build_mangled_name.clone() {
             let build_method_info = LocalMethodName::new(
-                FqTypeName::from_mangled(facts.builder_base_name.clone()),
+                facts.builder_base_name.clone(),
                 Some(facts.trait_name.clone()),
                 "build".to_string(),
             );
@@ -6743,7 +6743,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 None
             } else {
                 Some(MonomorphInfo {
-                    generic_name: format!("{}::build", facts.builder_base_name),
+                    generic_name: format!("{}::build", facts.builder_base_name.as_str()),
                     impl_type_args: facts.type_arg_ids.clone(),
                     method_type_args: vec![],
                     is_blanket: false,

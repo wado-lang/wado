@@ -333,6 +333,15 @@ impl TypeSystem {
         }
     }
 
+    /// The fq receiver name of `type_id`'s head: the name a method defined on
+    /// this type is spelled with, module included and type arguments dropped
+    /// (`List<i32>` → `core:prelude/list.wado/List`). Reading the module off
+    /// the resolved type is what makes this exact — a written name would have
+    /// to be re-resolved in the current scope, which the type already did.
+    pub(crate) fn fq_receiver_head(&self, type_id: TypeId) -> crate::name::FqTypeName {
+        self.type_table.borrow().fq_base_type_name(type_id)
+    }
+
     /// For newtypes, get the base type name and ID for trait impl lookup fallback.
     /// Returns (`base_name`, `base_type_id`) if the type is a newtype; otherwise returns the same name/id.
     pub(crate) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {

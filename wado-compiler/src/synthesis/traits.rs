@@ -5637,7 +5637,6 @@ fn trait_call_on_type(
         crate::synthesis::template::blanket_dispatch_for(
             trait_env,
             value_type,
-            &info.base_struct_name(),
             trait_name,
             method_name,
             tt,

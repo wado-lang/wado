@@ -603,8 +603,8 @@ pub(crate) struct SequenceCoercionFacts {
     pub(crate) output_type: crate::tir::TypeId,
     /// Module that hosts the impl block.
     pub(crate) impl_module_source: crate::module_source::ModuleSource,
-    /// Builder's base struct name (e.g. `"List"`).
-    pub(crate) builder_base_name: String,
+    /// Builder's base struct name, fq (e.g. `core:prelude/list.wado/List`).
+    pub(crate) builder_base_name: crate::name::FqTypeName,
     /// Type-arg `TypeId`s on the builder (e.g. `[i32]` for `List<i32>`).
     pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
     /// Type-arg display names (mangled) parallel to `type_arg_ids`.
@@ -642,8 +642,8 @@ pub(crate) struct KeyValueCoercionFacts {
     pub(crate) target_type: crate::tir::TypeId,
     /// Module that hosts the impl block.
     pub(crate) impl_module_source: crate::module_source::ModuleSource,
-    /// Builder's base struct name.
-    pub(crate) builder_base_name: String,
+    /// Builder's base struct name, fq.
+    pub(crate) builder_base_name: crate::name::FqTypeName,
     /// Type-arg `TypeId`s on the builder.
     pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
     /// Type-arg display names (mangled) parallel to `type_arg_ids`.

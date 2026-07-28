@@ -1742,7 +1742,7 @@ impl ClosureCallSiteLowerer<'_> {
         };
 
         let new_method_info = LocalMethodName::new(
-            FqTypeName::from_mangled(functor.struct_name.clone()),
+            FqTypeName::declared(&functor.module_source, &functor.struct_name),
             Some(base_trait.to_string()),
             info.method_name.clone(),
         );

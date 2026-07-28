@@ -1439,7 +1439,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         |s, n, t| s.find_index_value_trait_impl(n, t, None),
                     )
-                    .and_then(|i| i.index_type)
+                    .and_then(|(i, _)| i.index_type)
                 })
                 .flatten();
             let index_type = self.resolve_expr(&index.index, ctx, expected_key);
@@ -1464,18 +1464,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
                 })
                 .flatten();
-            if let Some(trait_info) = index_trait_info {
+            if let Some((trait_info, matched_type_id)) = index_trait_info {
                 if let Some(key_type) = trait_info.index_type
                     && key_type != index_type
                 {
                     let _ = self.resolve_expr(&index.index, ctx, Some(key_type));
                 }
 
-                let mangled_method_name = MethodName::format_local(
-                    &FqTypeName::from_mangled(lookup_name.clone()),
-                    Some(&trait_info.trait_name),
-                    "index_ref",
-                );
+                let receiver = self.fq_index_receiver(matched_type_id);
+                let mangled_method_name =
+                    MethodName::format_local(&receiver, Some(&trait_info.trait_name), "index_ref");
 
                 // The method returns &Output, so the type is Ref(output_type)
                 let ref_output_type = self
@@ -1489,7 +1487,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: mangled_method_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        FqTypeName::from_mangled(lookup_name),
+                        receiver,
                         Some(trait_info.trait_name.clone()),
                         "index_ref".to_string(),
                     )),
@@ -1522,18 +1520,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 lookup_type_id,
                 |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
             );
-            if let Some(trait_info) = index_value_info {
+            if let Some((trait_info, matched_type_id)) = index_value_info {
                 if let Some(key_type) = trait_info.index_type
                     && key_type != index_type
                 {
                     let _ = self.resolve_expr(&index.index, ctx, Some(key_type));
                 }
 
-                let mangled_method_name = MethodName::format_local(
-                    &FqTypeName::from_mangled(lookup_name.clone()),
-                    Some(&trait_info.trait_name),
-                    "index_value",
-                );
+                let receiver = self.fq_index_receiver(matched_type_id);
+                let mangled_method_name =
+                    MethodName::format_local(&receiver, Some(&trait_info.trait_name), "index_value");
 
                 // IndexValue returns Output directly (not a reference)
                 let func = FunctionRef {
@@ -1541,7 +1537,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: mangled_method_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        FqTypeName::from_mangled(lookup_name),
+                        receiver,
                         Some(trait_info.trait_name.clone()),
                         "index_value".to_string(),
                     )),
@@ -1612,7 +1608,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             lookup_type_id,
             |s, n, t| s.find_index_trait_impl(n, t, None),
         )
-        .and_then(|i| i.index_type)
+        .and_then(|(i, _)| i.index_type)
         .or_else(|| {
             self.index_lookup_or_newtype_base(
                 &struct_name,
@@ -1621,7 +1617,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 lookup_type_id,
                 super::Elaborator::find_index_assign_trait_impl,
             )
-            .and_then(|i| i.index_type)
+            .and_then(|(i, _)| i.index_type)
         })
     }
 

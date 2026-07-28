@@ -2151,6 +2151,34 @@ mod tests {
     }
 }
 
+/// Whether `name` is a builtin shape's head — a shape no module declares, so
+/// every mangler spells it the same way wherever it appears. See
+/// [`FqTypeName::builtin`].
+#[must_use]
+pub fn is_builtin_shape_name(name: &str) -> bool {
+    name.starts_with('&')
+        || matches!(
+            name,
+            "i8" | "i16"
+                | "i32"
+                | "i64"
+                | "u8"
+                | "u16"
+                | "u32"
+                | "u64"
+                | "f32"
+                | "f64"
+                | "v128"
+                | "bool"
+                | "char"
+                | "()"
+                | "!"
+                | "Array"
+                | "[]"
+                | "Fn"
+        )
+}
+
 /// A receiver name in the form a mangled name may embed.
 ///
 /// An fq name names its subject by the module that declares it, so a receiver
@@ -2177,10 +2205,11 @@ impl FqTypeName {
         Self(name.to_string())
     }
 
-    /// A primitive (`i32`, `bool`, …). Every mangler spells a primitive bare,
-    /// so its receiver form is bare too.
+    /// A builtin shape — a primitive, `()`, `!`, the raw GC `Array`, a tuple, a
+    /// reference, a function type. No module declares one, and every mangler
+    /// spells it bare, so the spelling already is the fq name.
     #[must_use]
-    pub fn primitive(name: &str) -> Self {
+    pub fn builtin(name: &str) -> Self {
         Self(name.to_string())
     }
 
