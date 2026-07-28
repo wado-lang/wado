@@ -2947,7 +2947,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let ast::Expr::Literal(lit) = &unary.expr
                 && let Literal::Number(repr) = &lit.value
                 && !util::is_float_only_literal(repr)
-                && name == "i128"
+                && simple == "i128"
             {
                 // Parse the negated value directly using Rust's i128
                 let negated_repr = format!("-{repr}");

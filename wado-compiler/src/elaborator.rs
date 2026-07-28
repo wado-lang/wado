@@ -1643,7 +1643,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for (type_name, const_name, ty, value) in assoc_const_inputs {
             let type_id = self.resolve_type(&ty);
             let (type_module, canon_type_name) = self.canonical_decl_key(&type_name);
-            let canon_key = MethodName::format_local(&canon_type_name, None, &const_name);
+            let canon_key = MethodName::format_local(
+                &crate::name::FqTypeName::declared(&type_module, &canon_type_name),
+                None,
+                &const_name,
+            );
             self.sem.decls.associated_constants.insert(
                 (type_module, canon_key),
                 (module_source.clone(), type_id, value),

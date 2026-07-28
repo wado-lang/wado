@@ -17,7 +17,7 @@ use std::rc::Rc;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::{LowerPlan, closure, value_copy};
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use cranelift_entity::EntityRef;
 
 use crate::nir;
@@ -1282,12 +1282,12 @@ impl FunctionTranslator<'_, '_> {
         {
             let nir_receiver = self.convert_expr(callee);
             let call_method_name = MethodName::format_local(
-                &functor.struct_name,
+                &FqTypeName::from_mangled(functor.struct_name.clone()),
                 None,
                 crate::name::CLOSURE_CALL_METHOD,
             );
             let call_method_info = LocalMethodName::new(
-                functor.struct_name.clone(),
+                FqTypeName::from_mangled(functor.struct_name.clone()),
                 None,
                 crate::name::CLOSURE_CALL_METHOD.to_string(),
             );
@@ -1756,7 +1756,7 @@ impl FunctionTranslator<'_, '_> {
                         )
                     }
                     _ => crate::name::MethodName::format_local(
-                        &tt.mangle_type_name(variant_ty),
+                        &crate::name::FqTypeName::from_mangled(tt.mangle_type_name(variant_ty)),
                         Some(items.trait_name(crate::compiler_item::CompilerItem::ReflectVariant)),
                         items.method_name(
                             crate::compiler_item::CompilerItem::ReflectVariantDiscriminant,

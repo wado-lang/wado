@@ -2,7 +2,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 
 use crate::module_source::ModuleSource;
-use crate::name::LocalMethodName;
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::FunctionRef;
 use crate::tir::{
     CallArg, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField,
@@ -1471,7 +1471,7 @@ impl<'a> PatternLowerer<'a> {
         // so we pass the values directly and let translate handle self-kind adjustment.
         // However, the arg explicitly needs &String since that's the method signature.
         let method_info = LocalMethodName::new(
-            self.string_struct_name.clone(),
+            FqTypeName::from_mangled(self.string_struct_name.clone()),
             Some(self.eq_trait_name.clone()),
             "eq".to_string(),
         );

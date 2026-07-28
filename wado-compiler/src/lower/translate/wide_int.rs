@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use crate::lower::wide_int_literal::{create_i128_literal, create_u128_literal};
 use crate::module_source::ModuleSource;
-use crate::name::LocalMethodName;
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
@@ -230,7 +230,11 @@ fn create_i128_eq_call(
                 .to_string(),
         )
     };
-    let method_info = LocalMethodName::new(i128_struct_name, Some(eq_trait_name), "eq".to_string());
+    let method_info = LocalMethodName::new(
+        FqTypeName::from_mangled(i128_struct_name),
+        Some(eq_trait_name),
+        "eq".to_string(),
+    );
     let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::method_call(

@@ -433,7 +433,7 @@ impl MethodName {
     /// Format: `Struct^Trait::method` or `Struct::method`
     pub fn local_name(&self) -> String {
         Self::format_local(
-            &self.struct_name,
+            &self.fq_struct_name(),
             self.trait_name.as_deref(),
             &self.method_name,
         )
