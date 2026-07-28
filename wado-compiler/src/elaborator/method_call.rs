@@ -4,7 +4,7 @@ use super::trait_env::ImplTargetKey;
 use crate::ast::{self, AstId, Item};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirExpr, TirExprKind, TypeId,
     TypeTable,
@@ -905,7 +905,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let mangled_method_name =
-            MethodName::format_local(&receiver_struct_name, trait_name.as_deref(), method_name);
+            MethodName::format_local(&FqTypeName::from_mangled(receiver_struct_name.clone()), trait_name.as_deref(), method_name);
 
         // Build monomorph_info for method calls on generic types or with method type args
         let monomorph_info = if from_concrete_impl {
@@ -922,7 +922,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None
             } else {
                 let generic_name = MethodName::format_local(
-                    &receiver_struct_name,
+                    &FqTypeName::from_mangled(receiver_struct_name.clone()),
                     trait_name.as_deref(),
                     method_name,
                 );
@@ -938,7 +938,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The call site uses the concrete receiver (e.g., "ListIter<i32>").
             // monomorph_info maps from the concrete name back to the template.
             let generic_name =
-                MethodName::format_local(blanket_param, trait_name.as_deref(), method_name);
+                MethodName::format_local(&FqTypeName::binder(blanket_param), trait_name.as_deref(), method_name);
             Some(MonomorphInfo {
                 generic_name,
                 impl_type_args: vec![base_type_id],
@@ -946,7 +946,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 is_blanket: true,
             })
         } else if receiver_type_args.is_some() || !method_type_args.is_empty() {
-            let generic_name = MethodName::format_local(&base_struct_name, None, method_name);
+            let generic_name = MethodName::format_local(&FqTypeName::from_mangled(base_struct_name.clone()), None, method_name);
             Some(MonomorphInfo {
                 generic_name,
                 impl_type_args: receiver_type_args.unwrap_or_default(),
@@ -1726,7 +1726,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         let mangled_func_name = MethodName::format_local(
-            &mangled_struct_name,
+            &FqTypeName::from_mangled(mangled_struct_name.clone()),
             trait_name_opt.as_deref(),
             &static_call.method,
         );
@@ -1818,7 +1818,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Build method_info with base struct name and trait name (if applicable)
         let mut method_info = LocalMethodName::new(
-            struct_name.clone(),
+            self.qualified_receiver_name(&struct_name),
             trait_name_opt,
             static_call.method.clone(),
         )
@@ -1886,7 +1886,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (trait_name, blanket_param, blanket_module) =
             self.find_blanket_static_method(receiver_type_id, method)?;
 
-        let template_name = MethodName::format_local(&blanket_param, Some(&trait_name), method);
+        let template_name = MethodName::format_local(&FqTypeName::binder(&blanket_param), Some(&trait_name), method);
         let method_ref = StaticMethodRef::new(
             blanket_module.clone(),
             blanket_param.clone(),
@@ -1913,7 +1913,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
             .collect();
         let method_info = LocalMethodName::new(
-            receiver_name.to_string(),
+            FqTypeName::from_mangled(receiver_name),
             Some(trait_name.clone()),
             method.to_string(),
         )
@@ -2089,7 +2089,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Also try with just StructName::method (for non-generic types)
-        let simple_name = MethodName::format_local(struct_name, None, method_name);
+        let simple_name = MethodName::format_local(&self.qualified_receiver_name(struct_name), None, method_name);
         if let Some(&return_type) = self.sem.decls.function_return_types.get(&simple_name) {
             return return_type;
         }
@@ -2786,7 +2786,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Get the operator trait and method name for a binary operator.
     pub(super) fn is_static_method(&self, struct_name: &str, method_name: &str) -> bool {
-        let mangled_name = MethodName::format_local(struct_name, None, method_name);
+        let mangled_name = MethodName::format_local(&self.qualified_receiver_name(struct_name), None, method_name);
 
         // Check if it's registered in function_return_types (static methods are registered there)
         if self
@@ -2943,10 +2943,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         _ => vec![],
                     };
                     newtype_dispatch = Some((newtype_id, base_type_id, base_args));
-                    let mangled = MethodName::format_local(&base_name, None, method_name);
+                    let mangled = MethodName::format_local(&FqTypeName::from_mangled(base_name.clone()), None, method_name);
                     (base_name, mangled)
                 } else if let Some(base_name) = base_name {
-                    let mangled = MethodName::format_local(&base_name, None, method_name);
+                    let mangled = MethodName::format_local(&FqTypeName::from_mangled(base_name.clone()), None, method_name);
                     (base_name, mangled)
                 } else {
                     (struct_name.to_string(), mangled_func_name.to_string())
@@ -2990,7 +2990,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Use trait-qualified mangled name if this is a trait method
         let final_mangled_name = if let Some(ref trait_name) = method_ref.trait_name {
-            MethodName::format_local(&actual_struct_name, Some(trait_name), method_name)
+            MethodName::format_local(&FqTypeName::from_mangled(actual_struct_name.clone()), Some(trait_name), method_name)
         } else {
             actual_mangled_name
         };
@@ -3049,7 +3049,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             monomorph_info,
             method_info: Some({
                 let mut m = LocalMethodName::new(
-                    actual_struct_name,
+                    FqTypeName::from_mangled(actual_struct_name),
                     trait_name_opt,
                     method_name.to_string(),
                 );
