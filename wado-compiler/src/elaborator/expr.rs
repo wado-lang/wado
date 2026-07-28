@@ -6,7 +6,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, Receiver, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirField, TirStruct, TirStructField,
     TypeId, TypeTable,
@@ -1472,7 +1472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 let mangled_method_name = MethodName::format_local(
-                    &lookup_name,
+                    &FqTypeName::from_mangled(lookup_name.clone()),
                     Some(&trait_info.trait_name),
                     "index_ref",
                 );
@@ -1489,7 +1489,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: mangled_method_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        lookup_name,
+                        FqTypeName::from_mangled(lookup_name),
                         Some(trait_info.trait_name.clone()),
                         "index_ref".to_string(),
                     )),
@@ -1530,7 +1530,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 let mangled_method_name = MethodName::format_local(
-                    &lookup_name,
+                    &FqTypeName::from_mangled(lookup_name.clone()),
                     Some(&trait_info.trait_name),
                     "index_value",
                 );
@@ -1541,7 +1541,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: mangled_method_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        lookup_name,
+                        FqTypeName::from_mangled(lookup_name),
                         Some(trait_info.trait_name.clone()),
                         "index_value".to_string(),
                     )),
@@ -4367,7 +4367,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Use "From<SourceType>" as the trait name in mangled names to disambiguate
         // multiple From impls on the same target type.
         let from_trait = format!("{from_trait_name}<{from_name}>");
-        let method_name = MethodName::format_local(&target_name, Some(&from_trait), "from");
+        let method_name = MethodName::format_local(
+            &self.qualified_receiver_name(&target_name),
+            Some(&from_trait),
+            "from",
+        );
 
         // Find the module source that provides the From impl
         let module_source = self.find_from_impl_module(&target_name, &from_name);
