@@ -3008,7 +3008,7 @@ pub enum Ordering {
 
 ```wado
 /// Types that can be ordered
-pub trait Ord {
+pub trait Ord: Eq {
     /// Compares self with other and returns an Ordering
     fn cmp(&self, other: &Self) -> Ordering;
 }

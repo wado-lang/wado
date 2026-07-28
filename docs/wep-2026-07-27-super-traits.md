@@ -63,10 +63,10 @@ A declared bound `T: Sub` expands to the transitive closure of `Sub` and its
 supertraits, feeding bound checking, on-demand derivation, and method lookup
 alike. The derivation half is what makes `T: Ord` alone sufficient for `==`.
 
-Associated-type constraints written in supertrait position are implied, matching
-Rust ≥ 1.72: `trait A: B<Item = C>` implies both `Self: B` and the projection
-constraint. Nothing else is — a bound on a generic parameter other than `Self`
-is not a supertrait.
+Only the trait names elaborate. An associated-type constraint written in
+supertrait position (`trait Sink: Collect<Item = i32>`) parses and round-trips,
+but nothing consumes it: `T: Sink` gives `T: Collect` and leaves `T::Item`
+unresolved. Implying it, as Rust ≥ 1.72 does, is follow-up work.
 
 ### Cycles
 
