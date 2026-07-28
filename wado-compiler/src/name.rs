@@ -441,7 +441,11 @@ impl MethodName {
 
     /// Format a local method name (without module path).
     /// This is the canonical way to build method names like `Struct^Trait::method`.
-    pub fn format_local(struct_name: &str, trait_name: Option<&str>, method_name: &str) -> String {
+    pub fn format_local(
+        struct_name: &FqTypeName,
+        trait_name: Option<&str>,
+        method_name: &str,
+    ) -> String {
         match trait_name {
             Some(trait_n) => format!("{struct_name}^{trait_n}::{method_name}"),
             None => format!("{struct_name}::{method_name}"),
@@ -802,7 +806,8 @@ impl LocalMethodName {
     /// derived auto-impls leave it `None` because dispatch synthesis
     /// identifies them by name alone.
     #[must_use]
-    pub fn new(struct_name: String, trait_name: Option<String>, method_name: String) -> Self {
+    pub fn new(struct_name: FqTypeName, trait_name: Option<String>, method_name: String) -> Self {
+        let struct_name = struct_name.into_string();
         debug_assert!(
             !struct_name.contains('<'),
             "LocalMethodName::new() expects base struct name without type params, got: {struct_name}"
@@ -2131,3 +2136,62 @@ mod tests {
         );
     }
 }
+
+/// A receiver name in the form a mangled name may embed.
+///
+/// An fq name names its subject by the module that declares it, so a receiver
+/// written into `Type::method` / `Type^Trait::method` must already carry that
+/// module. The type exists to make the rule unforgeable: a bare `&str` read off
+/// source text or off a `ResolvedType`'s `name` field cannot become a mangled
+/// name by accident — it has to pass through one of the constructors below,
+/// each of which states why its input is already fq.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FqTypeName(String);
+
+impl FqTypeName {
+    /// A declared type, named by the module that declares it. `module` must be
+    /// the *declaring* module, not the use site's.
+    #[must_use]
+    pub fn declared(module: &crate::module_source::ModuleSource, name: &str) -> Self {
+        Self(format!("{module}/{name}"))
+    }
+
+    /// A template's own type-parameter binder (`T` in `impl<T: Bound> Trait for
+    /// T`, a pack member `F`). A binder is not a declaration and has no module.
+    #[must_use]
+    pub fn binder(name: &str) -> Self {
+        Self(name.to_string())
+    }
+
+    /// A primitive (`i32`, `bool`, …). Every mangler spells a primitive bare,
+    /// so its receiver form is bare too.
+    #[must_use]
+    pub fn primitive(name: &str) -> Self {
+        Self(name.to_string())
+    }
+
+    /// A name a `TypeTable` mangler already produced. Those qualify their named
+    /// kinds, so their output is fq by construction — this is the bridge for
+    /// callers that hold a mangle rather than a `(module, name)` pair.
+    #[must_use]
+    pub fn from_mangled(mangled: impl Into<String>) -> Self {
+        Self(mangled.into())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl std::fmt::Display for FqTypeName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
