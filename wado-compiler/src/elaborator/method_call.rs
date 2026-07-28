@@ -1787,8 +1787,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let monomorph_info = if struct_type_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
+            // The template is named by the module declaring the receiver, the
+            // same rule its definition follows.
             let generic_name = MethodName::format_local(
-                &struct_name,
+                &self.qualified_receiver_name(&struct_name),
                 trait_name_opt.as_deref(),
                 &static_call.method,
             );
