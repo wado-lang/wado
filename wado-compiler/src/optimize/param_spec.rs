@@ -885,7 +885,15 @@ pub(super) fn specialize_const_params(
                 bindings: site.bindings.clone(),
             };
             if let Some(&existing) = state.clones.get(&key) {
-                retarget.push((*caller, site.call, existing));
+                // A clone minted in an earlier iteration is only interchangeable
+                // with the original while its signature still matches: `dae` /
+                // `drve` / `sroa_param` reshape a function *after* it is cached,
+                // and they rewrite only the call sites that exist at that
+                // moment. Retargeting a fresh site onto a reshaped clone would
+                // hand it the original's argument list.
+                if signatures_match(project, site.callee, existing) {
+                    retarget.push((*caller, site.call, existing));
+                }
                 continue;
             }
             if state.budget_exhausted() {
@@ -895,9 +903,13 @@ pub(super) fn specialize_const_params(
             if ordinal >= MAX_SPECIALIZATIONS_PER_FUNCTION {
                 continue;
             }
-            let Some(clone) = build_clone(project, site, FuncId::new(next_id), ordinal) else {
+            // Measured before the copy, not after: the check is a field read,
+            // while reaching it through `build_clone` deep-cloned the whole
+            // function only to discard it, once per loop iteration.
+            if body_exprs(project, site.callee) > MAX_CLONE_EXPRS {
                 continue;
-            };
+            }
+            let clone = build_clone(project, site, FuncId::new(next_id), ordinal);
             next_id += 1;
             state.clones.insert(key, clone.id);
             state.per_callee.insert(site.callee, ordinal + 1);
@@ -946,14 +958,10 @@ struct Clone {
 }
 
 /// Clone `site.callee` with its bindings substituted, registering the clone in
-/// the function index so its call sites are born resolved. `None` when the
-/// callee is too large to duplicate or the substitution matched nothing.
-fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize) -> Option<Clone> {
+/// the function index so its call sites are born resolved. The caller has
+/// already checked the size budget, so the copy always yields a clone.
+fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize) -> Clone {
     let mut clone = project.functions[site.callee.index()].borrow().clone();
-    let body_size = clone.body.as_ref().map_or(0, |b| b.exprs.len());
-    if body_size > MAX_CLONE_EXPRS {
-        return None;
-    }
     let origin = (clone.module_source.clone(), clone.name.clone());
     let name = crate::name::param_spec_name(&clone.name, ordinal);
     clone.name.clone_from(&name);
@@ -1013,11 +1021,40 @@ fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize
             .insert((clone.module_source.clone(), name), info);
     }
 
-    Some(Clone {
+    Clone {
         id,
         function: Rc::new(RefCell::new(clone)),
         param_consts,
-    })
+    }
+}
+
+/// The expression-node count of a function's body; `0` for a bodyless record.
+fn body_exprs(project: &NirPackage, func: FuncId) -> usize {
+    project.functions[func.index()]
+        .borrow()
+        .body
+        .as_ref()
+        .map_or(0, |body| body.exprs.len())
+}
+
+/// Whether `clone` still presents the same signature as `original`, so a call
+/// written against the original can be retargeted to it unchanged.
+fn signatures_match(project: &NirPackage, original: FuncId, clone: FuncId) -> bool {
+    // A clone minted earlier in this same invocation is not in the store yet;
+    // nothing has had a chance to reshape it, so it matches by construction.
+    if clone.index() >= project.functions.len() {
+        return true;
+    }
+    let original = project.functions[original.index()].borrow();
+    let clone = project.functions[clone.index()].borrow();
+    !clone.is_dead
+        && clone.params.len() == original.params.len()
+        && clone.return_type == original.return_type
+        && clone
+            .params
+            .iter()
+            .zip(&original.params)
+            .all(|(c, o)| c.type_id == o.type_id && c.local_index == o.local_index)
 }
 
 /// Replace every value-position read of a bound field with its constant.

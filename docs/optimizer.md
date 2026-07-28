@@ -80,7 +80,7 @@ Scalar and dataflow:
 - `elide_local` — drop a binding that is never read (keeping its value if impure).
 - `const_folding` — partial evaluation: constant arithmetic, compile-time execution, immutable-global reads, constant-branch collapse, and constant struct / tuple values (field projection, aggregate arguments and results of a compile-time call, and struct / tuple patterns over a constant scrutinee, with the arm's bindings and guard). A compile-time call runs the callee's statements — `let` sequences, assignment to a local, decided branches, early returns, and loops — bounded by a work budget rather than by a constant trip count, and abandons the call rather than stepping past a statement it cannot perform.
 - `const_branch_prune` — simplify trivial blocks and fold a constant-condition `if` to its taken arm.
-- Short-circuit simplification (in `const_folding`) — `false && x` / `true || x` keep `x`; in the absorbing direction (`true || x`, `false && x`, and their mirrors) the constant is the result, provided the discarded operand is speculatable.
+- Short-circuit simplification (in `const_folding`) — a neutral operand keeps the other (`true && x` / `false || x` → `x`); an absorbing one becomes the result (`false && x` → `false`, `true || x` → `true`), provided the deleted operand can neither trap nor be observed.
 
 Loop and field:
 
