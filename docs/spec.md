@@ -149,6 +149,26 @@ for let of of arr {
 - `return expr;` is necessary for a function to return a value.
 - Control flow statements do not need to be followed by a semicolon.
 
+### Variable Mutability
+
+`let` binds immutably; `let mut` allows writes. `mut` governs every write to
+the binding's storage, not only reassignment — a `&mut self` method, a mutable
+borrow, and a store to a field or element all need it:
+
+```wado
+let xs: List<i32> = [1, 2, 3];
+let mut ys: List<i32> = [1, 2, 3];
+
+ys.push(4);      // OK
+ys[0] = 9;       // OK
+xs.push(4);      // Error: `push` takes `&mut self`
+xs[0] = 9;       // Error: the store roots at an immutable binding
+&mut xs;         // Error: cannot take &mut of an immutable binding
+```
+
+Reaching the storage through a `&mut T` is what that reference is for, so the
+binding holding it needs no `mut` of its own — only a rebinding of it would.
+
 ### Variable Scoping
 
 Variables are scoped to their enclosing block. Variables declared inside control flow bodies (`if`, `while`, `for`, `loop`) are not accessible outside.
@@ -252,17 +272,32 @@ Any type is supported. Any pure expression (no effects) can be used as an initia
 
 #### Mutability
 
-Assignment is only allowed for `global mut` declarations:
+`mut` governs every write, not just reassignment. Without it a global holds
+what its initializer gave it for the whole program, so mutating it in place is
+rejected as well:
 
 ```wado
 global CONSTANT: i32 = 42;
+global TABLE: List<i32> = [1, 2, 3];
 global mut variable: i32 = 0;
+global mut log: List<i32> = [];
 
 fn example() {
     variable = 10;    // OK: mutable global
+    log.push(1);      // OK: mutable global
     CONSTANT = 10;    // Error: cannot assign to immutable global
+    TABLE.push(4);    // Error: `push` takes `&mut self`
+    TABLE[0] = 9;     // Error: the store roots at an immutable global
 }
 ```
+
+#### Initialization Order
+
+An initializer too complex for a Wasm constant runs at module initialization,
+before anything else in the module. Initializers run in dependency order, so
+one may read another global whatever the declaration order — including a
+global it reaches through a call rather than naming. A cycle among them is a
+compile error.
 
 ### Operators
 

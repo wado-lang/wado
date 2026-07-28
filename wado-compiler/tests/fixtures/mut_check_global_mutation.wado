@@ -1,0 +1,14 @@
+// `global` without `mut` holds what its initializer gave it for the whole
+// program, which is what lets the optimizer read a constant off it. Mutating
+// one in place is therefore rejected, not merely reassigning it.
+
+global TABLE: List<i32> = [1, 2, 3];
+
+export fn run() {
+    TABLE.push(4);
+}
+
+__DATA__
+{
+    "compile_error": "cannot call `&mut self` method `push` on immutable 'TABLE'"
+}

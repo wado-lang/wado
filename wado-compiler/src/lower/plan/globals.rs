@@ -199,9 +199,10 @@ pub fn extract(flat: &mut FlatPackage) {
         by_module.entry(entry.2.clone()).or_default().push(entry);
     }
 
+    let reads_by_function = global_reads_by_function(&flat.functions);
     let span = Span::new(0, 0, 1, 1);
     for (module_source, module_inits) in by_module {
-        let sorted_inits = topological_sort_global_inits(&module_inits, &flat.globals);
+        let sorted_inits = topological_sort_global_inits(&module_inits, &reads_by_function);
         let init_func = build_module_init_function(module_source, sorted_inits, span);
         flat.functions.push(Rc::new(RefCell::new(init_func)));
     }
@@ -275,109 +276,105 @@ fn build_module_init_function(
     }
 }
 
-/// Collect global variable references from an expression as
-/// `(module_source, name)` pairs so two modules each declaring a
-/// global with the same name don't collide in the dependency graph
-/// when their initializers happen to share the topo-sort input.
-fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<(ModuleSource, String)>) {
-    match &expr.kind {
-        TirExprKind::GlobalVarGet {
-            name,
-            module_source,
-        } => {
-            refs.insert((module_source.clone(), name.clone()));
-        }
-        // Recursively search in sub-expressions
-        TirExprKind::Binary { left, right, .. } => {
-            collect_global_refs(left, refs);
-            collect_global_refs(right, refs);
-        }
-        TirExprKind::Unary { expr: inner, .. } => {
-            collect_global_refs(inner, refs);
-        }
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                collect_global_refs(&arg.expr, refs);
+/// What a function body reads and calls, in one walk.
+///
+/// Globals are keyed by `(module_source, name)` so two modules each declaring a
+/// global with the same name don't collide in the dependency graph; callees by
+/// [`FunctionRef::full_name`], the same key [`global_reads_by_function`] maps.
+#[derive(Default)]
+struct BodyReads {
+    globals: IndexSet<(ModuleSource, String)>,
+    callees: IndexSet<String>,
+}
+
+impl crate::tir_visitor::TirRefVisitor for BodyReads {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::GlobalVarGet {
+                name,
+                module_source,
+            } => {
+                self.globals.insert((module_source.clone(), name.clone()));
             }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            collect_global_refs(receiver, refs);
-            for arg in args {
-                collect_global_refs(&arg.expr, refs);
+            TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => {
+                self.callees.insert(func.full_name());
             }
+            _ => {}
         }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_global_refs(&field.value, refs);
-            }
-        }
-        TirExprKind::TupleLiteral { elements, .. } => {
-            for elem in elements {
-                collect_global_refs(elem, refs);
-            }
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            collect_global_refs(condition, refs);
-            for stmt in &then_branch.stmts {
-                if let TirStmtKind::Expr(e) = &stmt.kind {
-                    collect_global_refs(e, refs);
-                }
-            }
-            if let Some(else_blk) = else_branch {
-                for stmt in &else_blk.stmts {
-                    if let TirStmtKind::Expr(e) = &stmt.kind {
-                        collect_global_refs(e, refs);
+        self.walk_expr(expr);
+    }
+}
+
+/// Every global each function reads, closed over the call graph.
+///
+/// An initializer's dependency is not always written in it: a call reads
+/// globals the caller never names, and ordering on the directly-written
+/// references alone leaves such a global still holding its placeholder when the
+/// caller runs. Computed as a least fixpoint, so a recursive cycle contributes
+/// each member's own reads and terminates.
+fn global_reads_by_function(
+    functions: &[Rc<RefCell<TirFunction>>],
+) -> IndexMap<String, IndexSet<(ModuleSource, String)>> {
+    use crate::tir_visitor::TirRefVisitor;
+
+    let mut reads: IndexMap<String, IndexSet<(ModuleSource, String)>> = IndexMap::default();
+    let mut callees: IndexMap<String, IndexSet<String>> = IndexMap::default();
+    for func_rc in functions {
+        let func = func_rc.borrow();
+        let Some(body) = func.body.as_ref() else {
+            continue;
+        };
+        let mut scan = BodyReads::default();
+        scan.visit_block(body);
+        let key = FunctionRef::from_resolved(&func, func.module_source.clone()).full_name();
+        reads.entry(key.clone()).or_default().extend(scan.globals);
+        callees.entry(key).or_default().extend(scan.callees);
+    }
+
+    loop {
+        let mut grown: Vec<(String, IndexSet<(ModuleSource, String)>)> = Vec::new();
+        for (name, called) in &callees {
+            let known = reads.get(name);
+            let mut fresh = IndexSet::default();
+            for callee in called {
+                let Some(callee_reads) = reads.get(callee) else {
+                    continue;
+                };
+                for global in callee_reads {
+                    if known.is_none_or(|k| !k.contains(global)) {
+                        fresh.insert(global.clone());
                     }
                 }
             }
-        }
-        TirExprKind::Block(block) => {
-            for stmt in &block.stmts {
-                if let TirStmtKind::Expr(e) = &stmt.kind {
-                    collect_global_refs(e, refs);
-                }
+            if !fresh.is_empty() {
+                grown.push((name.clone(), fresh));
             }
         }
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TupleLen { expr: inner }
-        | TirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
-            collect_global_refs(inner, refs);
+        if grown.is_empty() {
+            return reads;
         }
-        TirExprKind::Index {
-            expr: inner, index, ..
-        } => {
-            collect_global_refs(inner, refs);
-            collect_global_refs(index, refs);
+        for (name, fresh) in grown {
+            reads.entry(name).or_default().extend(fresh);
         }
-        TirExprKind::Cast { expr: inner, .. } => {
-            collect_global_refs(inner, refs);
+    }
+}
+
+/// Collect the globals an initializer depends on: those it names, and those the
+/// functions it calls read.
+fn collect_global_refs(
+    expr: &TirExpr,
+    reads_by_function: &IndexMap<String, IndexSet<(ModuleSource, String)>>,
+    refs: &mut IndexSet<(ModuleSource, String)>,
+) {
+    use crate::tir_visitor::TirRefVisitor;
+
+    let mut scan = BodyReads::default();
+    scan.visit_expr(expr);
+    refs.extend(scan.globals);
+    for callee in &scan.callees {
+        if let Some(callee_reads) = reads_by_function.get(callee) {
+            refs.extend(callee_reads.iter().cloned());
         }
-        TirExprKind::Assign { target, value } => {
-            collect_global_refs(target, refs);
-            collect_global_refs(value, refs);
-        }
-        // Leaf expressions - no sub-expressions
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. } => {}
-        // Other expressions - skip for now
-        _ => {}
     }
 }
 
@@ -386,7 +383,7 @@ fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<(ModuleSource, String
 /// Returns the initializers in an order where dependencies are initialized first.
 fn topological_sort_global_inits(
     lazy_inits: &[(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)],
-    _all_globals: &[TirGlobal],
+    reads_by_function: &IndexMap<String, IndexSet<(ModuleSource, String)>>,
 ) -> Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)> {
     if lazy_inits.len() <= 1 {
         return lazy_inits.to_vec();
@@ -408,7 +405,7 @@ fn topological_sort_global_inits(
 
     for (i, (_, _, _, _, initializer, _)) in lazy_inits.iter().enumerate() {
         let mut refs = IndexSet::default();
-        collect_global_refs(initializer, &mut refs);
+        collect_global_refs(initializer, reads_by_function, &mut refs);
 
         for ref_key in refs {
             if let Some(&dep_idx) = key_to_idx.get(&ref_key)
