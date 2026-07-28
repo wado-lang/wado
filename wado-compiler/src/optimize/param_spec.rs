@@ -840,9 +840,6 @@ pub(super) fn specialize_const_params(
     state: &mut ParamSpecState,
     gate: &mut FunctionGate,
 ) -> bool {
-    if state.budget_exhausted() {
-        return false;
-    }
     let signatures = {
         let types = project.type_table.borrow();
         Signatures::build(project, &types)
@@ -1018,7 +1015,7 @@ fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize
 
     let key = FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
     project.func_index.insert(key, id);
-    copy_name_keyed_tables(project, &origin, (clone.module_source.clone(), name));
+    copy_function_strings(project, &origin, (clone.module_source.clone(), name));
 
     Clone {
         id,
@@ -1027,19 +1024,16 @@ fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize
     }
 }
 
-/// Give the clone its own entries in the name-keyed side tables. DCE reads
-/// `function_strings` to decide which string literals survive, so without them
-/// the clone's literals are pruned out from under it.
-fn copy_name_keyed_tables(
+/// Give the clone its own entry in `function_strings`, which is name-keyed:
+/// DCE reads it to decide which string literals survive, so without one the
+/// clone's literals are pruned out from under it.
+fn copy_function_strings(
     project: &mut NirPackage,
     origin: &(crate::module_source::ModuleSource, String),
     clone: (crate::module_source::ModuleSource, String),
 ) {
     if let Some(strings) = project.function_strings.get(origin).cloned() {
-        project.function_strings.insert(clone.clone(), strings);
-    }
-    if let Some(info) = project.function_method_info.get(origin).cloned() {
-        project.function_method_info.insert(clone, info);
+        project.function_strings.insert(clone, strings);
     }
 }
 
