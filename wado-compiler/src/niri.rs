@@ -2669,8 +2669,7 @@ fn absorbing_short_circuit(body: &Body, e: ExprId) -> Option<bool> {
 /// The two differ where a trap is possible. `is_speculatable_a` admits
 /// `FieldAccess` and `Cast`, which is right for its callers — they *reorder* an
 /// expression, so a trap it would raise still happens. Deleting the expression
-/// erases the trap, which the program is entitled to observe, so those forms
-/// are rejected here. As in its sibling, an unlisted kind is not discardable.
+/// erases the trap, which the program is entitled to observe.
 fn is_discardable_a(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Local { .. } => true,

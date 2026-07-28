@@ -1,8 +1,7 @@
-// `param_spec` legality: a field the callee writes is not a constant inside it,
-// so it must not be substituted. `step` writes `s.count` through the reference
-// it forwards to `bump`, so the caller's `count: 0` holds only on entry.
-//
-// Specializing `count` here would freeze every read at 0 and print `0 0 0`.
+// `param_spec` legality, callee side: a field the callee writes is not
+// constant inside it. `step` writes `count` through the reference it forwards
+// to `bump`, so the caller's `count: 0` holds only on entry; freezing it would
+// print `0 0 0`.
 
 use { println, Stdout } from "core:cli";
 

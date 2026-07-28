@@ -73,14 +73,13 @@ Variant and reference:
 Scalar and dataflow:
 
 - `copy_prop` — propagate trivial copies (`let x = y`) and drop the binding.
-- `param_spec` — clone a callee on the constant fields of a by-reference struct its caller passes, substituting those reads. Interprocedural constant propagation over struct fields; what carries a template's `Formatter` into the format path.
+- `param_spec` — interprocedural constant propagation over struct fields: clone a callee on the constant fields of a by-reference struct its caller passes, substituting those reads.
 - `dae` — drop parameters never read by the callee, and the pure argument at every call site.
 - `drve` — make a function void-returning when its result is dropped at every call site.
 - `store_load_forward` — forward a stored literal to a later unmodified load.
 - `elide_local` — drop a binding that is never read (keeping its value if impure).
-- `const_folding` — partial evaluation: constant arithmetic, compile-time execution, immutable-global reads, constant-branch collapse, and constant struct / tuple values (field projection, aggregate arguments and results of a compile-time call, and struct / tuple patterns over a constant scrutinee, with the arm's bindings and guard). A compile-time call runs the callee's statements — `let` sequences, assignment to a local, decided branches, early returns, and loops — bounded by a work budget rather than by a constant trip count, and abandons the call rather than stepping past a statement it cannot perform.
+- `const_folding` — partial evaluation: constant arithmetic, compile-time execution, immutable-global reads, constant-branch collapse, short-circuit simplification (a neutral operand keeps the other, an absorbing one becomes the result when the deleted operand can neither trap nor be observed), and constant struct / tuple values (field projection, aggregate arguments and results of a compile-time call, and struct / tuple patterns over a constant scrutinee, with the arm's bindings and guard). A compile-time call runs the callee's statements — `let` sequences, assignment to a local, decided branches, early returns, and loops — bounded by a work budget rather than by a constant trip count, and abandons the call rather than stepping past a statement it cannot perform.
 - `const_branch_prune` — simplify trivial blocks and fold a constant-condition `if` to its taken arm.
-- Short-circuit simplification (in `const_folding`) — a neutral operand keeps the other (`true && x` → `x`); an absorbing one becomes the result (`true || x` → `true`) when the deleted operand can neither trap nor be observed.
 
 Loop and field:
 

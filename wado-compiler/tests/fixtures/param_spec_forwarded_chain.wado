@@ -1,8 +1,6 @@
 // `param_spec` propagation depth: the constants reach a callee two calls away.
-//
-// `outer` reads none of the constant fields itself — it only forwards the
-// reference to `inner`. The clone of `outer` carries the constants so the next
-// fixed-point iteration specializes `inner` too, killing the `st.upper` branch
+// `outer` reads none of the fields itself, only forwards the reference, so its
+// clone is what carries them far enough to kill `inner`'s `st.upper` branch
 // and the marker it guards.
 
 use { println, Stdout } from "core:cli";

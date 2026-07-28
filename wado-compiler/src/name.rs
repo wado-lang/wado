@@ -142,10 +142,8 @@ pub fn shallow_copy_helper_name(deep_name: &str) -> String {
 }
 
 /// The name of a `param_spec` clone: the original's name plus the clone's
-/// ordinal among that callee's specializations. Unique package-wide (the
-/// original's name already is) and stable across unrelated compiler changes,
-/// unlike a `FuncId`. Applied to both the function name and — for a method —
-/// its `method_name` component, which the call graph keys on independently.
+/// ordinal among that callee's specializations. Unique package-wide, since the
+/// original's name already is.
 pub fn param_spec_name(original: &str, ordinal: usize) -> String {
     format!("{original}$spec{ordinal}")
 }
