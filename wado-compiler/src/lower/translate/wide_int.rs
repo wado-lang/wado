@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use crate::lower::wide_int_literal::{create_i128_literal, create_u128_literal};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName};
+use crate::name::LocalMethodName;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,

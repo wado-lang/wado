@@ -481,14 +481,18 @@ impl Monomorphizer {
                             .filter(|(_, args)| !args.is_empty())
                     });
                 if let Some((base_struct, impl_type_args)) = base_info {
+                    // The method template is named after the receiver's fq head:
+                    // `base_struct` is a struct-instantiation key, which carries
+                    // no module.
+                    let receiver_head = type_table.fq_base_type_name(receiver.type_id);
                     // Try both inherent and trait method formats
                     let mut dg_names = vec![(
-                        MethodName::format_local(&FqTypeName::from_mangled(base_struct.clone()), None, &method_name),
+                        MethodName::format_local(&receiver_head, None, &method_name),
                         None::<String>,
                     )];
                     if let Some(ref tn) = trait_name_opt {
                         dg_names.push((
-                            MethodName::format_local(&FqTypeName::from_mangled(base_struct.clone()), Some(tn), &method_name),
+                            MethodName::format_local(&receiver_head, Some(tn), &method_name),
                             Some(tn.clone()),
                         ));
                     }
