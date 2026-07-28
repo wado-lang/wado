@@ -207,7 +207,11 @@ impl TypeSystem {
             .find_struct_like_decl_key(name)
             .map_or_else(
                 || name.to_string(),
-                |(module, decl)| crate::name::FqTypeName::declared(&module, &decl).into_string(),
+                // `of_head`, not `declared`: the index also carries builtin
+                // shapes, and a mangler spells those bare wherever they appear.
+                // Qualifying `i32` here made `impl Box<i32>` compare `…/i32`
+                // against the receiver's `i32` and match nothing.
+                |(module, decl)| crate::name::FqTypeName::of_head(&module, &decl).into_string(),
             )
     }
 }
