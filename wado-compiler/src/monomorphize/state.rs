@@ -538,7 +538,9 @@ impl Monomorphizer {
             // `newtype_own_name` reports the newtype's own mangle, already fq.
             push_for(FqTypeName::from_mangled(own.clone()));
         }
-        push_for(super::dispatch_receiver_head(type_table, receiver_type_id));
+        // The key's `impl_type_args` are empty here — the instantiation is
+        // spelled into the name, so the receiver keeps its type arguments.
+        push_for(super::dispatch_receiver_name(type_table, receiver_type_id));
         (own_name, names)
     }
 

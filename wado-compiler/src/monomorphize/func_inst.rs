@@ -785,8 +785,13 @@ impl Monomorphizer {
                             ) {
                                 let method_info =
                                     gf.borrow().method_info.clone().unwrap_or_else(|| {
+                                        // This key carries no `impl_type_args`,
+                                        // so the receiver keeps its own.
                                         LocalMethodName::new(
-                                            super::dispatch_receiver_head(type_table, receiver.type_id),
+                                            super::dispatch_receiver_name(
+                                                type_table,
+                                                receiver.type_id,
+                                            ),
                                             tn.clone(),
                                             method_name.clone(),
                                         )

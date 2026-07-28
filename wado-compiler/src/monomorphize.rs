@@ -164,13 +164,30 @@ pub fn monomorphize(flat: &mut FlatPackage) {
     flat.rebuild_variant_indices();
 }
 
-/// The receiver head a dispatch template is named after, peeling `&`/`&mut`
-/// and newtypes — the same transparency the struct-info lookups apply when they
-/// report the struct a call keys on. `fq_base_type_name` alone keeps a
-/// newtype's own identity, which names a template that does not exist when the
-/// newtype inherits its base's impl.
+/// Peel `&`/`&mut` and newtypes off a dispatch receiver — the same
+/// transparency the struct-info lookups apply when they report the struct a
+/// call keys on. A newtype that inherits its base's impl is dispatched through
+/// the base, so keeping the newtype's own identity would name a template that
+/// does not exist.
+fn dispatch_receiver_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
+    tt.resolve_newtype_base(tt.peel_refs(type_id))
+}
+
+/// The receiver *head* a dispatch template is named after: no type arguments,
+/// for keys that carry them in `impl_type_args`.
 fn dispatch_receiver_head(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTypeName {
-    tt.fq_base_type_name(tt.resolve_newtype_base(tt.peel_refs(type_id)))
+    tt.fq_base_type_name(dispatch_receiver_type(tt, type_id))
+}
+
+/// The receiver's full instantiated name, for keys whose `impl_type_args` are
+/// empty because the instantiation is spelled into the name itself
+/// (`StructField<Thing,i32>::get`). Using the bare head here would collapse
+/// every instantiation onto one key and mint an instance whose body still
+/// carries the impl's type parameters.
+fn dispatch_receiver_name(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTypeName {
+    crate::name::FqTypeName::from_mangled(
+        tt.mangle_type_arg_for_generic(dispatch_receiver_type(tt, type_id)),
+    )
 }
 
 /// Determine the module where trait implementations for a concrete type are defined.
