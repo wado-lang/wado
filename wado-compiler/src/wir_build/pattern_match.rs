@@ -1576,44 +1576,55 @@ impl FunctionTranslator<'_, '_> {
 
         let fq = format!("{var_module}//{var_name}");
 
-        // Look up variant type info
-        if let Some(variant_type_id) = self.ctx.type_map.get(&fq)
-            && let crate::wir::WirTypeDef::Variant(vt) =
+        // Every step below must resolve. Falling back to the scrutinee would
+        // extract the variant where its payload belongs — a miscompile the Wasm
+        // validator only catches when the two happen to differ in shape, and
+        // silently wrong output when they do not.
+        let variant_type_id = self.ctx.type_map.get(&fq).cloned().unwrap_or_else(|| {
+            panic!("no WIR variant registered for `{fq}`, so its payload has nothing to project")
+        });
+        let case_name = {
+            let crate::wir::WirTypeDef::Variant(vt) =
                 &self.ctx.types[variant_type_id.index() as usize]
-        {
-            // ref.cast to the case struct, then struct.get the payload field
-            if let Some(case) = vt.cases.get(case_index as usize) {
-                let case_fq = format!("{fq}::{}", case.name);
-                if let Some(case_type_id) = self.ctx.type_map.get(&case_fq) {
-                    let cast = WirInstr::RefCast {
-                        type_id: case_type_id.clone(),
-                        nullable: false,
-                        expr: Box::new(val),
-                    };
-                    let payload_result_ty = self.struct_field_wir_type(case_type_id, "payload_0");
-                    let get = WirInstr::StructGet {
-                        type_id: case_type_id.clone(),
-                        field_name: "payload_0".to_string(),
-                        expr: Box::new(cast),
-                        result_ty: payload_result_ty.clone(),
-                    };
-                    // The variant case's `payload_0` field is declared
-                    // nullable for the Option<&T> = &T | null boxing
-                    // optimisation, but every `Some(_)` construction site
-                    // wraps its value with `RefAsNonNull`, so the extracted
-                    // value is invariantly non-null at runtime. Narrow the
-                    // WIR type so downstream call-sites and struct writes
-                    // see it as non-null.
-                    if matches!(payload_result_ty, WirType::Ref { nullable: true, .. }) {
-                        return WirInstr::RefAsNonNull(Box::new(get));
-                    }
-                    return get;
-                }
-            }
-        }
+            else {
+                panic!("`{fq}` is registered as a non-variant WIR type")
+            };
+            vt.cases
+                .get(case_index as usize)
+                .unwrap_or_else(|| panic!("variant `{fq}` has no case at index {case_index}"))
+                .name
+                .clone()
+        };
+        let case_fq = format!("{fq}::{case_name}");
+        let case_type_id = self
+            .ctx
+            .type_map
+            .get(&case_fq)
+            .cloned()
+            .unwrap_or_else(|| panic!("no WIR case struct registered for `{case_fq}`"));
 
-        // Fallback
-        val
+        // ref.cast to the case struct, then struct.get the payload field.
+        let cast = WirInstr::RefCast {
+            type_id: case_type_id.clone(),
+            nullable: false,
+            expr: Box::new(val),
+        };
+        let payload_result_ty = self.struct_field_wir_type(&case_type_id, "payload_0");
+        let get = WirInstr::StructGet {
+            type_id: case_type_id,
+            field_name: "payload_0".to_string(),
+            expr: Box::new(cast),
+            result_ty: payload_result_ty.clone(),
+        };
+        // The variant case's `payload_0` field is declared nullable for the
+        // `Option<&T>` = `&T | null` boxing optimisation, but every `Some(_)`
+        // construction site wraps its value with `RefAsNonNull`, so the
+        // extracted value is invariantly non-null at runtime. Narrow the WIR
+        // type so downstream call-sites and struct writes see it as non-null.
+        if matches!(payload_result_ty, WirType::Ref { nullable: true, .. }) {
+            return WirInstr::RefAsNonNull(Box::new(get));
+        }
+        get
     }
 }
 
