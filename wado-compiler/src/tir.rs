@@ -2894,16 +2894,21 @@ impl TypeTable {
         let base = self.resolve_newtype_base(id);
         match self.get(base) {
             ResolvedType::GenericInstance {
-                name, type_args, ..
+                name,
+                type_args,
+                module_source,
             } => {
                 let args: Vec<String> = type_args
                     .iter()
                     .map(|t| self.mangle_type_name_resolving_newtypes(*t))
                     .collect();
+                // A tuple is module-independent; every other instance is named
+                // by the module declaring its base.
                 if Self::is_tuple_type(name) {
                     crate::name::mangle_tuple_type(&args)
                 } else {
-                    crate::name::mangle_generic_name(name, &args)
+                    let unqualified = crate::name::mangle_generic_name(name, &args);
+                    format!("{module_source}/{unqualified}")
                 }
             }
             ResolvedType::BuiltinArray(elem) => {
