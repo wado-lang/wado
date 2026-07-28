@@ -781,6 +781,20 @@ impl LocalMethodName {
         self.receiver.head_key().into_owned()
     }
 
+    /// [`Self::base_struct_name`] as the receiver form a mangled name embeds.
+    /// A name stored on a `LocalMethodName` came in through a [`FqTypeName`],
+    /// so reading it back yields one — no re-derivation from a raw string.
+    #[must_use]
+    pub fn fq_base_struct_name(&self) -> FqTypeName {
+        FqTypeName::from_mangled(self.base_struct_name())
+    }
+
+    /// [`Self::struct_name`] as the receiver form a mangled name embeds.
+    #[must_use]
+    pub fn fq_struct_name(&self) -> FqTypeName {
+        FqTypeName::from_mangled(self.struct_name.clone())
+    }
+
     /// The receiver's reference kind, or `None` for a value receiver.
     #[must_use]
     pub fn ref_receiver(&self) -> Option<RefKind> {

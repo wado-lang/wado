@@ -8,7 +8,7 @@ use std::sync::Arc;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp,
     TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern,
@@ -562,13 +562,13 @@ impl Monomorphizer {
                         || !monomorph.method_type_args.is_empty())
                 {
                     let mut names_to_try = vec![MethodName::format_local(
-                        &info.base_struct_name(),
+                        &info.fq_base_struct_name(),
                         info.trait_name.as_deref(),
                         &info.method_name,
                     )];
                     if info.struct_name != info.base_struct_name() {
                         names_to_try.push(MethodName::format_local(
-                            &info.struct_name,
+                            &info.fq_struct_name(),
                             info.trait_name.as_deref(),
                             &info.method_name,
                         ));
@@ -689,13 +689,13 @@ impl Monomorphizer {
                     }
                 {
                     let mut names_to_try = vec![MethodName::format_local(
-                        &info.base_struct_name(),
+                        &info.fq_base_struct_name(),
                         info.trait_name.as_deref(),
                         &info.method_name,
                     )];
                     if info.struct_name != info.base_struct_name() {
                         names_to_try.push(MethodName::format_local(
-                            &info.struct_name,
+                            &info.fq_struct_name(),
                             info.trait_name.as_deref(),
                             &info.method_name,
                         ));
@@ -787,7 +787,7 @@ impl Monomorphizer {
                                 let method_info =
                                     gf.borrow().method_info.clone().unwrap_or_else(|| {
                                         LocalMethodName::new(
-                                            struct_name.clone(),
+                                            FqTypeName::from_mangled(struct_name.clone()),
                                             tn.clone(),
                                             method_name.clone(),
                                         )
@@ -822,13 +822,13 @@ impl Monomorphizer {
                             if let Some((base_struct, impl_type_args)) = base_info {
                                 // Try both inherent and trait method formats
                                 let mut dg_names: Vec<(String, Option<String>)> = vec![(
-                                    MethodName::format_local(&base_struct, None, &method_name),
+                                    MethodName::format_local(&FqTypeName::from_mangled(base_struct.clone()), None, &method_name),
                                     None,
                                 )];
                                 if let Some(ref tn) = trait_name_opt {
                                     dg_names.push((
                                         MethodName::format_local(
-                                            &base_struct,
+                                            &FqTypeName::from_mangled(base_struct.clone()),
                                             Some(tn),
                                             &method_name,
                                         ),
@@ -840,7 +840,7 @@ impl Monomorphizer {
                                     {
                                         dg_names.push((
                                             MethodName::format_local(
-                                                &info.base_struct_name(),
+                                                &info.fq_base_struct_name(),
                                                 Some(tn),
                                                 &method_name,
                                             ),
@@ -878,7 +878,7 @@ impl Monomorphizer {
                                             >= generic_func.impl_type_params.len()
                                         {
                                             let method_info = LocalMethodName::new(
-                                                base_struct,
+                                                FqTypeName::from_mangled(base_struct),
                                                 tn.clone(),
                                                 method_name.clone(),
                                             );
@@ -917,7 +917,7 @@ impl Monomorphizer {
                         && info.base_struct_name() != base_struct
                     {
                         names_to_try.push(MethodName::format_local(
-                            &info.base_struct_name(),
+                            &info.fq_base_struct_name(),
                             None,
                             &method_name,
                         ));
@@ -930,7 +930,7 @@ impl Monomorphizer {
                         && info.base_struct_name() != base_struct
                     {
                         names_to_try.push(MethodName::format_local(
-                            &info.base_struct_name(),
+                            &info.fq_base_struct_name(),
                             Some(trait_name),
                             &method_name,
                         ));
@@ -938,12 +938,12 @@ impl Monomorphizer {
                     } else {
                         false
                     };
-                    names_to_try.push(MethodName::format_local(&base_struct, None, &method_name));
+                    names_to_try.push(MethodName::format_local(&FqTypeName::from_mangled(base_struct.clone()), None, &method_name));
                     if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
                     {
                         names_to_try.push(MethodName::format_local(
-                            &base_struct,
+                            &FqTypeName::from_mangled(base_struct.clone()),
                             Some(trait_name),
                             &method_name,
                         ));
@@ -1073,12 +1073,12 @@ impl Monomorphizer {
                     let impl_type_args = struct_key.impl_type_args.clone();
 
                     let mut names_to_try =
-                        vec![MethodName::format_local(base_struct, None, &method_name)];
+                        vec![MethodName::format_local(&FqTypeName::from_mangled(base_struct.clone()), None, &method_name)];
                     if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
                     {
                         names_to_try.push(MethodName::format_local(
-                            base_struct,
+                            &FqTypeName::from_mangled(base_struct),
                             Some(trait_name),
                             &method_name,
                         ));
@@ -1086,7 +1086,7 @@ impl Monomorphizer {
                         // the template function is registered under "&^Trait::method"
                         if info.base_struct_name() != *base_struct {
                             names_to_try.push(MethodName::format_local(
-                                &info.base_struct_name(),
+                                &info.fq_base_struct_name(),
                                 Some(trait_name),
                                 &method_name,
                             ));
@@ -1290,8 +1290,10 @@ impl Monomorphizer {
                 {
                     let mono = method_func.monomorph_info.as_ref();
                     let generic_name = mono.map(|m| m.generic_name.clone()).unwrap_or_else(|| {
+                        // A tuple is module-independent, so its receiver form is
+                        // the bare tuple name.
                         MethodName::format_local(
-                            TypeTable::TUPLE_TYPE_NAME,
+                            &FqTypeName::binder(TypeTable::TUPLE_TYPE_NAME),
                             info.trait_name.as_deref(),
                             &info.method_name,
                         )
@@ -2009,7 +2011,7 @@ impl Monomorphizer {
                                 .zip(trait_name_for_blanket)
                                 .map(|((_, param), tn)| {
                                     LocalMethodName::new(
-                                        param.clone(),
+                                        FqTypeName::binder(param),
                                         Some(tn.to_string()),
                                         new_info.method_name.clone(),
                                     )
@@ -2028,7 +2030,7 @@ impl Monomorphizer {
                                 None
                             } else {
                                 let base_info = LocalMethodName::new(
-                                    new_info.base_struct_name(),
+                                    new_info.fq_base_struct_name(),
                                     new_info.trait_name.clone(),
                                     new_info.method_name.clone(),
                                 )
@@ -3129,7 +3131,7 @@ impl Monomorphizer {
                 new_func_name.clone()
             } else if let (true, Some(param)) = (has_projected, blanket_param) {
                 LocalMethodName::new(
-                    param,
+                    FqTypeName::binder(&param),
                     new_info.trait_name.clone(),
                     new_info.method_name.clone(),
                 )
@@ -4391,7 +4393,7 @@ fn try_lower_comparison(
             .as_deref()
             .and_then(|tn| {
                 trait_env
-                    .concrete_impl_module_for(&info.struct_name, tn, type_mod.as_ref())
+                    .concrete_impl_module_for(&info.fq_struct_name(), tn, type_mod.as_ref())
                     .cloned()
             })
             .or(type_mod)
@@ -4409,7 +4411,11 @@ fn try_lower_comparison(
         let receiver = make_ref(left, type_table);
         let arg_ref = make_ref(right, type_table);
         let method_info =
-            LocalMethodName::new(base_struct_name, Some("Eq".to_string()), "eq".to_string())
+            LocalMethodName::new(
+                FqTypeName::from_mangled(base_struct_name),
+                Some("Eq".to_string()),
+                "eq".to_string(),
+            )
                 .with_struct_type_args(&impl_type_args);
         let mangled_name = method_info.to_mangled_name();
         let method_module = resolve_module(&method_info, type_module_source);
@@ -4446,7 +4452,11 @@ fn try_lower_comparison(
             module_source: ModuleSource::prelude(),
         });
         let method_info =
-            LocalMethodName::new(base_struct_name, Some("Ord".to_string()), "cmp".to_string())
+            LocalMethodName::new(
+                FqTypeName::from_mangled(base_struct_name),
+                Some("Ord".to_string()),
+                "cmp".to_string(),
+            )
                 .with_struct_type_args(&impl_type_args);
         let mangled_name = method_info.to_mangled_name();
         let method_module = resolve_module(&method_info, type_module_source);
