@@ -41,6 +41,10 @@ use crate::token::Span;
 #[allow(dead_code)]
 pub(super) struct FormatStdlibNames {
     pub formatter: String,
+    /// `formatter` prefixed by its declaring module — the form a function name
+    /// embeds. The bare `formatter` stays for type-table lookups, which key a
+    /// struct by its simple name plus module.
+    pub formatter_fq: String,
     pub alignment: String,
     pub left_name: String,
     pub left_index: u32,
@@ -86,6 +90,10 @@ impl FormatStdlibNames {
         let (_, _, right_name, right_index) = items.require_enum_case(CompilerItem::AlignmentRight);
         Self {
             formatter: items.struct_name(CompilerItem::Formatter).to_string(),
+            formatter_fq: {
+                let (module, name) = items.require_struct(CompilerItem::Formatter);
+                format!("{module}/{name}")
+            },
             alignment: items.enum_name(CompilerItem::Alignment).to_string(),
             left_name: left_name.to_string(),
             left_index,
@@ -428,10 +436,7 @@ fn build_template_block(
     ctx: &TemplateCtx,
 ) -> TirExpr {
     let tt = ctx.tt;
-    let string_struct_name = tt
-        .borrow()
-        .compiler_struct_name(CompilerItem::String)
-        .to_string();
+    let string_struct_name = tt.borrow().compiler_struct_fq_name(CompilerItem::String);
     let with_capacity_qualified =
         crate::name::MethodName::format_local(&string_struct_name, None, "with_capacity");
     let label = crate::name::TEMPLATE_BLOCK_LABEL.to_string();
@@ -836,10 +841,10 @@ fn build_formatter_expr(
             TirExprKind::Call {
                 func: FunctionRef {
                     module_source: ModuleSource::format(),
-                    name: format!("{}::new", names.formatter),
+                    name: format!("{}::new", names.formatter_fq),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        names.formatter.clone(),
+                        names.formatter_fq.clone(),
                         None,
                         "new".to_string(),
                     )),

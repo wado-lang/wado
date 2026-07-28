@@ -2155,7 +2155,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .unwrap_or(TypeTable::UNIT),
         };
 
-        let mangled_name = MethodName::format_local(struct_name, trait_name, &func.name);
+        // The receiver is named by the module that declares it — the written
+        // name alone is not an identity. `display_name` below stays bare: it is
+        // what diagnostics show, not what the registry keys on.
+        let qualified_struct_name = {
+            let (decl_module, decl_name) = scope.canonical_decl_key(struct_name);
+            format!("{decl_module}/{decl_name}")
+        };
+        let mangled_name =
+            MethodName::format_local(&qualified_struct_name, trait_name, &func.name);
         scope
             .sem
             .decls
