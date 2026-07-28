@@ -43,11 +43,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//opt_elide_adjacent_struct_local_intervening_copy.wado/dump" = fn(ref "opt_elide_adjacent_struct_local_intervening_copy.wado//R");  // TypeId(13)
+type "functype//opt_elide_adjacent_struct_local_intervening_copy.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//opt_elide_adjacent_struct_local_intervening_copy.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//opt_elide_adjacent_struct_local_intervening_copy.wado/__cm_export__run" = fn();  // TypeId(14)
 
-type "functype//opt_elide_adjacent_struct_local_intervening_copy.wado/__cm_export__run" = fn();  // TypeId(15)
+type "functype//opt_elide_adjacent_struct_local_intervening_copy.wado/dump$spec0" = fn(ref "opt_elide_adjacent_struct_local_intervening_copy.wado//R");  // TypeId(15)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(16)
 
@@ -102,15 +102,6 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 global mut global:opt_elide_adjacent_struct_local_intervening_copy.wado::__modules_initialized: bool = 0;
 
-fn "opt_elide_adjacent_struct_local_intervening_copy.wado/dump"(r) with Stdout {
-    let __local_1: ref "core:prelude/string.wado//String";
-    let __local_2: ref "core:prelude/format.wado//Formatter";
-    let f_6: ref "core:prelude/format.wado//Formatter";
-    let start: i32;
-    let f_20: ref "core:prelude/format.wado//Formatter";
-    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_6 = __local_2; "core:prelude/primitive.wado/u64::fmt_decimal"(r.total, f_6); start = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1); builtin::array_set_u8(__local_1.repr, start, 32); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_20 = __local_2; "core:prelude/primitive.wado/u64::fmt_decimal"(r.sum, f_20); __local_1);
-}
-
 fn "opt_elide_adjacent_struct_local_intervening_copy.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
@@ -130,8 +121,17 @@ fn "opt_elide_adjacent_struct_local_intervening_copy.wado/__cm_export__run"() {
         global:opt_elide_adjacent_struct_local_intervening_copy.wado::__modules_initialized = 1;
     };
     r = struct.new "opt_elide_adjacent_struct_local_intervening_copy.wado//R" { total: 100_i64, sum: 200_i64 };
-    "opt_elide_adjacent_struct_local_intervening_copy.wado/dump"(r);
+    "opt_elide_adjacent_struct_local_intervening_copy.wado/dump$spec0"(r);
     "wasi/task-return"(0);
+}
+
+fn "opt_elide_adjacent_struct_local_intervening_copy.wado/dump$spec0"(r) with Stdout {
+    let __local_1: ref "core:prelude/string.wado//String";
+    let __local_2: ref "core:prelude/format.wado//Formatter";
+    let f_6: ref "core:prelude/format.wado//Formatter";
+    let start: i32;
+    let f_20: ref "core:prelude/format.wado//Formatter";
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_6 = __local_2; "core:prelude/primitive.wado/u64::fmt_decimal"(100_i64, f_6); start = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1); builtin::array_set_u8(__local_1.repr, start, 32); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_20 = __local_2; "core:prelude/primitive.wado/u64::fmt_decimal"(200_i64, f_20); __local_1);
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

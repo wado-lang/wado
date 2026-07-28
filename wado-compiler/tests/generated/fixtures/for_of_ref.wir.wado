@@ -155,7 +155,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(57)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(58)
 
-type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(59)
+type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(59)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -288,7 +288,7 @@ fn "for_of_ref.wado/test_for_of_value_unchanged"() with Stdout {
         l13: loop {
             let __sroa___match_9_discriminant: i32;
             let __sroa___match_9_payload_0: i32;
-            multivalue_bind [__sroa___match_9_discriminant, __sroa___match_9_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_3);
+            multivalue_bind [__sroa___match_9_discriminant, __sroa___match_9_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(__iter_3);
             if __sroa___match_9_discriminant == 0 {
                 sum = sum + __sroa___match_9_payload_0;
             } else {
@@ -729,16 +729,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
-    let item: i32;
-    if self.index >= self.end {
-        return 1, 0;
-    }
-    item = builtin::array_get<i32>(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0, item;
-}
-
 fn "core:prelude/slice.wado/ArrayRefIter<for_of_ref.wado/Point>^Iterator::next"(self) {
     let ref_val: ref "for_of_ref.wado//Point";
     if self.index >= self.end {
@@ -757,6 +747,16 @@ fn "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(self) {
     ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(self.repr, self.index) };
     self.index = self.index + 1;
     return ref_val;
+}
+
+fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(self) {
+    let item: i32;
+    if self.index >= 3 {
+        return 1, 0;
+    }
+    item = builtin::array_get<i32>(self.repr, self.index);
+    self.index = self.index + 1;
+    return 0, item;
 }
 
 export fn "for_of_ref.wado/__cm_export__run" as "run"
