@@ -689,6 +689,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:core:json::SERIALIZE_BUFFER_CAPACITY: i32 = 128;
 global mut global:serde_json_treemap.wado::__modules_initialized: bool = 0;
 global global:core:base64::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 101, 108, 102, 46, 117, 115, 101, 100, 58, 32), used: 11 };
 global global:core:base64::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 110, 100, 101, 120, 32, 60, 32, 115, 101, 108, 102, 46, 117, 115, 101, 100, 10), used: 30 };
@@ -2416,7 +2417,8 @@ fn "core:json/core/json/to_string<core:collections/TreeMap<core:prelude/string.w
     let __qm_e: ref "core:serde//SerializeError";
     let c: char;
     let __match_7: ref null "core:serde//SerializeError";
-    buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
+    let capacity: i32;
+    buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity(global:core:json::SERIALIZE_BUFFER_CAPACITY)), used: 0 };
     __match_7 = "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
     if @likely(ref.is_null(__match_7)) {
     } else {
@@ -2437,7 +2439,8 @@ fn "core:json/core/json/to_string<core:collections/TreeMap<core:prelude/string.w
     let __qm_e: ref "core:serde//SerializeError";
     let c: char;
     let __match_7: ref null "core:serde//SerializeError";
-    buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
+    let capacity: i32;
+    buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity(global:core:json::SERIALIZE_BUFFER_CAPACITY)), used: 0 };
     __match_7 = "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
     if @likely(ref.is_null(__match_7)) {
     } else {
@@ -2458,7 +2461,8 @@ fn "core:json/core/json/to_string<core:collections/TreeMap<core:prelude/string.w
     let __qm_e: ref "core:serde//SerializeError";
     let c: char;
     let __match_7: ref null "core:serde//SerializeError";
-    buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
+    let capacity: i32;
+    buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity(global:core:json::SERIALIZE_BUFFER_CAPACITY)), used: 0 };
     __match_7 = "core:collections/TreeMap<core:prelude/string.wado/String,bool>^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
     if @likely(ref.is_null(__match_7)) {
     } else {
@@ -2479,7 +2483,8 @@ fn "core:json/core/json/to_string<core:collections/TreeMap<core:prelude/string.w
     let __qm_e: ref "core:serde//SerializeError";
     let c: char;
     let __match_7: ref null "core:serde//SerializeError";
-    buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
+    let capacity: i32;
+    buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity(global:core:json::SERIALIZE_BUFFER_CAPACITY)), used: 0 };
     __match_7 = "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
     if @likely(ref.is_null(__match_7)) {
     } else {
@@ -2500,7 +2505,8 @@ fn "core:json/core/json/to_string<core:collections/TreeMap<core:prelude/string.w
     let __qm_e: ref "core:serde//SerializeError";
     let c: char;
     let __match_7: ref null "core:serde//SerializeError";
-    buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
+    let capacity: i32;
+    buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity(global:core:json::SERIALIZE_BUFFER_CAPACITY)), used: 0 };
     __match_7 = "core:collections/TreeMap<core:prelude/string.wado/String,i32>^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
     if @likely(ref.is_null(__match_7)) {
     } else {
