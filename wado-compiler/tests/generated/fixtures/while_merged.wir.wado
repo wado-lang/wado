@@ -127,6 +127,10 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(51)
 
+type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(52)
+
+type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec1" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(53)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
 import fn wasi/task-return from "wasi/task-return";
@@ -212,7 +216,7 @@ fn "while_merged.wado/__test_2_while_let_basic"() {
         l7: loop {
             let __sroa___match_9_discriminant: i32;
             let __sroa___match_9_payload_0: i32;
-            multivalue_bind [__sroa___match_9_discriminant, __sroa___match_9_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(iter);
+            multivalue_bind [__sroa___match_9_discriminant, __sroa___match_9_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(iter);
             if __sroa___match_9_discriminant == 0 {
                 sum = sum + __sroa___match_9_payload_0;
             } else {
@@ -280,11 +284,11 @@ fn "while_merged.wado/__test_3_while_let_chain"() {
         l16: loop {
             let __sroa___match_34_discriminant: i32;
             let __sroa___match_34_payload_0: i32;
-            multivalue_bind [__sroa___match_34_discriminant, __sroa___match_34_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(ix);
+            multivalue_bind [__sroa___match_34_discriminant, __sroa___match_34_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(ix);
             if __sroa___match_34_discriminant == 0 {
                 let __sroa___local_35_discriminant: i32;
                 let __sroa___local_35_payload_0: i32;
-                multivalue_bind [__sroa___local_35_discriminant, __sroa___local_35_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(iy);
+                multivalue_bind [__sroa___local_35_discriminant, __sroa___local_35_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(iy);
                 if __sroa___local_35_discriminant == 0 {
                     total = total + (__sroa___match_34_payload_0 + __sroa___local_35_payload_0);
                 } else {
@@ -308,7 +312,7 @@ fn "while_merged.wado/__test_3_while_let_chain"() {
         l21: loop {
             let __sroa___match_36_discriminant: i32;
             let __sroa___match_36_payload_0: i32;
-            multivalue_bind [__sroa___match_36_discriminant, __sroa___match_36_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(iter3);
+            multivalue_bind [__sroa___match_36_discriminant, __sroa___match_36_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec1"(iter3);
             if __sroa___match_36_discriminant == 0 {
                 if (if __sroa___match_36_payload_0 > 1 -> i32 {
                     __sroa___match_36_payload_0 < 6;
@@ -736,6 +740,26 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
     let item: i32;
     if self.index >= self.end {
+        return 1, 0;
+    }
+    item = builtin::array_get<i32>(self.repr, self.index);
+    self.index = self.index + 1;
+    return 0, item;
+}
+
+fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(self) {
+    let item: i32;
+    if self.index >= 3 {
+        return 1, 0;
+    }
+    item = builtin::array_get<i32>(self.repr, self.index);
+    self.index = self.index + 1;
+    return 0, item;
+}
+
+fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec1"(self) {
+    let item: i32;
+    if self.index >= 4 {
         return 1, 0;
     }
     item = builtin::array_get<i32>(self.repr, self.index);

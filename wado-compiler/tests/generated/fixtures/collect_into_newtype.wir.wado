@@ -147,63 +147,69 @@ type "functype//core:prelude/bytes.wado/ByteList::to_hex" = fn(ref "core:prelude
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(48)
 
-type "functype//core:prelude/primitive.wado/u32::fmt_decimal" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(49)
+type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(49)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_base" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(50)
+type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(50)
 
-type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(51)
+type "functype//core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(51)
 
-type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(52)
+type "functype//core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(52)
 
-type "functype//core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(53)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(53)
 
-type "functype//core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(54)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(54)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(55)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(55)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(56)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(56)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(57)
+type "functype//core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(57)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(58)
+type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(58)
 
-type "functype//core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(59)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(59)
 
-type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(60)
+type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(60)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(61)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(61)
 
-type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(62)
+type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(62)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(63)
+type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(63)
 
-type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(64)
+type "functype//core:prelude/slice.wado/ArrayIter<i32>::collect" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> ref "core:prelude//List<i32>";  // TypeId(64)
 
-type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(65)
+type "functype//core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(65)
 
-type "functype//core:prelude/slice.wado/ArrayIter<i32>::collect" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> ref "core:prelude//List<i32>";  // TypeId(66)
+type "functype//core:prelude/list.wado/List<u32>^FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,u32>") -> ref "core:prelude//List<u32>";  // TypeId(66)
 
-type "functype//core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(67)
+type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(67)
 
-type "functype//core:prelude/list.wado/List<u32>^FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,u32>") -> ref "core:prelude//List<u32>";  // TypeId(68)
+type "functype//core:prelude/list.wado/List<u32>::push" = fn(ref "core:prelude//List<u32>", u32);  // TypeId(68)
 
-type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(69)
+type "functype//core:prelude/list.wado/List<u32>::grow" = fn(ref "core:prelude//List<u32>");  // TypeId(69)
 
-type "functype//core:prelude/list.wado/List<u32>::push" = fn(ref "core:prelude//List<u32>", u32);  // TypeId(70)
+type "functype//collect_into_newtype.wado/__Closure_0::__call" = fn(ref "collect_into_newtype.wado//__Closure_0", char) -> u32;  // TypeId(70)
 
-type "functype//core:prelude/list.wado/List<u32>::grow" = fn(ref "core:prelude//List<u32>");  // TypeId(71)
+type "functype//core:prelude/primitive.wado/u64::fmt_base$spec0" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(71)
 
-type "functype//collect_into_newtype.wado/__Closure_0::__call" = fn(ref "collect_into_newtype.wado//__Closure_0", char) -> u32;  // TypeId(72)
+type "functype//core:prelude/primitive.wado/u32::fmt_decimal$spec0" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(72)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(73)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(73)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(74)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(74)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(75)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write$spec1" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(75)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(76)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(76)
 
-type "functype//core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^Iterator::next" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,u32>") -> [i32, u32];  // TypeId(77)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(77)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(78)
+
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(79)
+
+type "functype//core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^Iterator::next" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,u32>") -> [i32, u32];  // TypeId(80)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -266,7 +272,7 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     __sroa_s_repr = array.new_fixed<u8>(65, 66);
     self_14 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __sroa_s_repr, used: 2, index: 0 };
     list = "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(self_14);
-    "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; "core:prelude/primitive.wado/i32::fmt_decimal"(list.used, __local_9); __local_8);
+    "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(list.used, __local_9); __local_8);
     self_23 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __sroa_s_repr, used: 2, index: 0 };
     bytes = "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(self_23);
     "core:cli/println"("core:prelude/bytes.wado/ByteList::to_hex"(bytes));
@@ -275,7 +281,7 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     f_30 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "collect_into_newtype.wado//__Closure_0" {  }, func: ref.func "closure/collect_into_newtype.wado/__closure_wrapper_0" };
     self_27 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,u32>" { inner: ref.as_non_null(struct.new "core:prelude/string.wado//StrCharIter" { repr: __sroa_s_repr, used: 2, byte_index: 0 }), f: f_30 };
     codes = "core:prelude/list.wado/List<u32>^FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>>"(self_27);
-    "core:cli/println"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; "core:prelude/primitive.wado/u32::fmt_decimal"(local.tee self_42(__v1 = codes.used; if @unlikely(0 >= __v1) {
+    "core:cli/println"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; "core:prelude/primitive.wado/u32::fmt_decimal$spec0"(local.tee self_42(__v1 = codes.used; if @unlikely(0 >= __v1) {
         cold_path;
         "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5, global:collect_into_newtype.wado::__const_obj_6); "core:prelude/string.wado/String::push_str"(__local_5, global:collect_into_newtype.wado::__const_obj_5); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 116); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, global:collect_into_newtype.wado::__const_obj_4); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 354 }, __local_6); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 58); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, global:collect_into_newtype.wado::__const_obj_3); "core:prelude/string.wado/String::push_str"(__local_5, global:collect_into_newtype.wado::__const_obj_2); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 105); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 110); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 100); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 101); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 120); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 58); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }, __local_6); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 10); "core:prelude/string.wado/String::push_str"(__local_5, global:collect_into_newtype.wado::__const_obj_1); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v1 }, __local_6); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 10); __local_5);
         unreachable;
@@ -627,7 +633,7 @@ fn "core:prelude/bytes.wado/ByteList::to_hex"(self) {
         l35: loop {
             break_if b34 i >= _licm_used_16;
             byte = builtin::array_get<u8>(_licm_repr_17, i);
-            "core:prelude/string.wado/String::push_str"(s, __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 2, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/u64::fmt_base"(builtin::i64_extend_i32_u(byte), __local_5, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }); __local_4);
+            "core:prelude/string.wado/String::push_str"(s, __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 2, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/u64::fmt_base$spec0"(builtin::i64_extend_i32_u(byte), __local_5, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }); __local_4);
             i = i + 1;
             continue l35;
         };
@@ -647,6 +653,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
+<<<<<<< HEAD
 fn "core:prelude/primitive.wado/u32::fmt_decimal"(self, f) {
     let abs_val: i64;
     let digit_count: i32;
@@ -674,6 +681,36 @@ fn "core:prelude/primitive.wado/u64::fmt_base"(self, f, base, upper, prefix) {
     "core:prelude/primitive.wado/write_u64_base_digits"(self_10 = f.buf; self_10.repr, offset, self, digit_count, bits_per_digit, mask, upper);
 }
 
+||||||| 2738e686c
+fn "core:prelude/primitive.wado/u32::fmt_decimal"(self, f) {
+    let abs_val: i64;
+    let digit_count: i32;
+    let offset: i32;
+    let self_6: ref "core:prelude/string.wado//String";
+    digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(self < 0, builtin::i64_extend_i32_s(self) + 4294967296_i64, builtin::i64_extend_i32_s(self))));
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
+}
+
+fn "core:prelude/primitive.wado/u64::fmt_base"(self, f, base, upper, prefix) {
+    let bits_per_digit: i32;
+    let mask: i32;
+    let digit_count: i32;
+    let offset: i32;
+    let self_10: ref "core:prelude/string.wado//String";
+    bits_per_digit = (if base == 2 -> i32 {
+        1;
+    } else {
+        select i32(base == 8, 3, 4);
+    });
+    mask = base - 1;
+    digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, prefix, digit_count);
+    "core:prelude/primitive.wado/write_u64_base_digits"(self_10 = f.buf; self_10.repr, offset, self, digit_count, bits_per_digit, mask, upper);
+}
+
+=======
+>>>>>>> origin/main
 fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
     "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
@@ -770,12 +807,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b43: block {
-        l44: loop {
-            break_if b43 i >= n;
+    b42: block {
+        l43: loop {
+            break_if b42 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l44;
+            continue l43;
         };
     };
 }
@@ -936,16 +973,16 @@ fn "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.
     _licm_used_12 = iter.used;
     _licm_repr_13 = iter.repr;
     __hfs_index_14 = iter.index;
-    b69: block {
-        l70: loop {
+    b68: block {
+        l69: loop {
             if __hfs_index_14 >= _licm_used_12 {
                 iter.index = __hfs_index_14;
-                break b69;
+                break b68;
             }
             byte = builtin::array_get<u8>(_licm_repr_13, __hfs_index_14);
             __hfs_index_14 = __hfs_index_14 + 1;
             "core:prelude/list.wado/List<u8>::push"(result, byte);
-            continue l70;
+            continue l69;
         };
     };
     return result;
@@ -954,17 +991,17 @@ fn "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.
 fn "core:prelude/list.wado/List<u32>^FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>>"(iter) {
     let result: ref "core:prelude//List<u32>";
     result = struct.new "core:prelude//List<u32>" { repr: builtin::array_new<u32>(0), used: 0 };
-    b72: block {
-        l73: loop {
+    b71: block {
+        l72: loop {
             let __sroa___match_4_discriminant: i32;
             let __sroa___match_4_payload_0: u32;
             multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^Iterator::next"(iter);
             if __sroa___match_4_discriminant == 0 {
                 "core:prelude/list.wado/List<u32>::push"(result, __sroa___match_4_payload_0);
             } else {
-                break b72;
+                break b71;
             }
-            continue l73;
+            continue l72;
         };
     };
     return result;
@@ -1020,6 +1057,99 @@ fn "core:prelude/list.wado/List<u32>::grow"(self) {
 
 fn "collect_into_newtype.wado/__Closure_0::__call"(self, c) {
     return c;
+}
+
+fn "core:prelude/primitive.wado/u64::fmt_base$spec0"(self, f, base, upper, prefix) {
+    let bits_per_digit: i32;
+    let mask: i32;
+    let digit_count: i32;
+    let offset: i32;
+    let self_10: ref "core:prelude/string.wado//String";
+    bits_per_digit = (if base == 2 -> i32 {
+        1;
+    } else {
+        select i32(base == 8, 3, 4);
+    });
+    mask = base - 1;
+    digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, 0, prefix, digit_count);
+    "core:prelude/primitive.wado/write_u64_base_digits"(self_10 = f.buf; self_10.repr, offset, self, digit_count, bits_per_digit, mask, upper);
+}
+
+fn "core:prelude/primitive.wado/u32::fmt_decimal$spec0"(self, f) {
+    let abs_val: i64;
+    let digit_count: i32;
+    let offset: i32;
+    let self_6: ref "core:prelude/string.wado//String";
+    digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(self < 0, builtin::i64_extend_i32_s(self) + 4294967296_i64, builtin::i64_extend_i32_s(self))));
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write$spec1"(f, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
+}
+
+fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
+    let is_negative: bool;
+    let abs_val: i64;
+    let digit_count: i32;
+    let offset: i32;
+    let self_6: ref "core:prelude/string.wado//String";
+    is_negative = self < 0;
+    digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write$spec1"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
+}
+
+fn "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(self, is_negative, prefix, digit_count) {
+    let sign: ref "core:prelude/string.wado//String";
+    let sign_len: i32;
+    let prefix_len: i32;
+    let content_len: i32;
+    let padding: i32;
+    sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    if is_negative {
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+    } else {
+    }
+    sign_len = sign.used;
+    prefix_len = prefix.used;
+    content_len = (sign_len + prefix_len) + digit_count;
+    if content_len >= 2 {
+        if sign_len > 0 {
+            "core:prelude/string.wado/String::push_str"(self.buf, sign);
+        }
+        if prefix_len > 0 {
+            "core:prelude/string.wado/String::push_str"(self.buf, prefix);
+        }
+        return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
+    }
+    padding = 2 - content_len;
+    if sign_len > 0 {
+        "core:prelude/string.wado/String::push_str"(self.buf, sign);
+    }
+    if prefix_len > 0 {
+        "core:prelude/string.wado/String::push_str"(self.buf, prefix);
+    }
+    "core:prelude/format.wado/Formatter::write_char_n"(self, 48, padding);
+    return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
+}
+
+fn "core:prelude/format.wado/Formatter::prepare_int_write$spec1"(self, is_negative, prefix, digit_count) {
+    let sign: ref "core:prelude/string.wado//String";
+    let sign_len: i32;
+    let prefix_len: i32;
+    sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    if is_negative {
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+    } else {
+    }
+    sign_len = sign.used;
+    prefix_len = prefix.used;
+    if sign_len > 0 {
+        "core:prelude/string.wado/String::push_str"(self.buf, sign);
+    }
+    if prefix_len > 0 {
+        "core:prelude/string.wado/String::push_str"(self.buf, prefix);
+    }
+    return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
 }
 
 fn "closure/collect_into_newtype.wado/__closure_wrapper_0"(__env, __p0) {

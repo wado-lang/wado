@@ -4,7 +4,7 @@ use serde::Serialize;
 use crate::ast::{
     AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
     ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, SelfKind, StructDecl, StructField,
-    TraitDecl, Type, UseItem, VariantDecl, Visibility,
+    TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility,
 };
 use crate::comment::{CommentKind, TriviaMap};
 use crate::stdlib;
@@ -329,6 +329,10 @@ fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
     sig.push_str("trait ");
     sig.push_str(&t.name);
     sig.push_str(&render_generic_params(&t.type_params));
+    if !t.supertraits.is_empty() {
+        sig.push_str(": ");
+        render_trait_bounds(&t.supertraits, &mut sig);
+    }
 
     let associated_types: Vec<String> = t.associated_types.iter().map(|a| a.name.clone()).collect();
 
@@ -666,28 +670,33 @@ fn render_generic_params(params: &[GenericParam]) -> String {
         out.push_str(&param.name);
         if !param.bounds.is_empty() {
             out.push_str(": ");
-            for (j, bound) in param.bounds.iter().enumerate() {
-                if j > 0 {
-                    out.push_str(" + ");
-                }
-                out.push_str(&bound.name);
-                if !bound.assoc_types.is_empty() {
-                    out.push('<');
-                    for (k, assoc) in bound.assoc_types.iter().enumerate() {
-                        if k > 0 {
-                            out.push_str(", ");
-                        }
-                        out.push_str(&assoc.name);
-                        out.push_str(" = ");
-                        unparse_type_into(&assoc.ty, &mut out);
-                    }
-                    out.push('>');
-                }
-            }
+            render_trait_bounds(&param.bounds, &mut out);
         }
     }
     out.push('>');
     out
+}
+
+/// `A + B<Item = i32>` — a `+`-joined bound list, as written.
+fn render_trait_bounds(bounds: &[TraitBound], out: &mut String) {
+    for (i, bound) in bounds.iter().enumerate() {
+        if i > 0 {
+            out.push_str(" + ");
+        }
+        out.push_str(&bound.name);
+        if !bound.assoc_types.is_empty() {
+            out.push('<');
+            for (j, assoc) in bound.assoc_types.iter().enumerate() {
+                if j > 0 {
+                    out.push_str(", ");
+                }
+                out.push_str(&assoc.name);
+                out.push_str(" = ");
+                unparse_type_into(&assoc.ty, out);
+            }
+            out.push('>');
+        }
+    }
 }
 
 fn render_param(param: &Param) -> String {

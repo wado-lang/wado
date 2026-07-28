@@ -1,0 +1,45 @@
+// `param_spec` legality, callee side: a field the callee writes is not
+// constant inside it. `step` writes `count` through the reference it forwards
+// to `bump`, so the caller's `count: 0` holds only on entry; freezing it would
+// print `0 0 0`.
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    count: i32,
+    stride: i32,
+}
+
+fn bump(c: &mut Counter) {
+    c.count = c.count + c.stride;
+}
+
+fn step(c: &mut Counter, out: &mut String, n: i32) {
+    let mut i = 0;
+    while i < n {
+        bump(c);
+        i = i + 1;
+    }
+    let mut digits = 0;
+    let mut v = c.count;
+    while v > 0 {
+        digits = digits + 1;
+        v = v / 10;
+    }
+    if digits == 0 {
+        digits = 1;
+    }
+    out.push_str(&`${c.count}(${digits}) `);
+}
+
+export fn run() with Stdout {
+    let mut c = Counter { count: 0, stride: 3 };
+    let mut out = String::with_capacity(32);
+    step(&mut c, &mut out, 2);
+    step(&mut c, &mut out, 2);
+    step(&mut c, &mut out, 1);
+    println(out);
+}
+
+__DATA__
+{"stdout": "6(1) 12(2) 15(2) \n"}

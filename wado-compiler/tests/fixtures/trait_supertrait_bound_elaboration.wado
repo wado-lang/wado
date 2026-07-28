@@ -1,0 +1,37 @@
+// A supertrait's method is callable on a type parameter bounded by the
+// subtrait alone: `T: Derived` elaborates to carry `Base`.
+trait Base {
+    fn base(&self) -> i32;
+}
+
+trait Derived: Base {
+    fn derived(&self) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl Base for S {
+    fn base(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Derived for S {
+    fn derived(&self) -> i32 {
+        return self.v * 2;
+    }
+}
+
+fn total<T: Derived>(x: &T) -> i32 {
+    return x.base() + x.derived();
+}
+
+export fn run() {
+    let s = S { v: 3 };
+    assert total(&s) == 9;
+}
+
+__DATA__
+{"stdout": ""}

@@ -1,0 +1,47 @@
+// An associated-type constraint on a bound is checked against the type
+// argument, whether written on the bound (`take_i32`) or in supertrait
+// position (`Sink`) — the same promise either way.
+trait Collect {
+    type Item;
+
+    fn first(&self) -> Self::Item;
+}
+
+trait Sink: Collect<Item = i32> {
+    fn drain(&self) -> i32;
+}
+
+struct SBag {
+    v: String,
+}
+
+impl Collect for SBag {
+    type Item = String;
+
+    fn first(&self) -> String {
+        return self.v;
+    }
+}
+
+impl Sink for SBag {
+    fn drain(&self) -> i32 {
+        return 1;
+    }
+}
+
+fn take_i32<T: Collect<Item = i32>>(x: &T) -> i32 {
+    return 0;
+}
+
+fn drain_it<T: Sink>(x: &T) -> i32 {
+    return x.drain();
+}
+
+export fn run() {
+    let b = SBag { v: "x" };
+    assert take_i32(&b) == 0;
+    assert drain_it(&b) == 1;
+}
+
+__DATA__
+{"compile_error": "does not satisfy the associated type"}

@@ -152,3 +152,4 @@ history is the SSoT for how the design got here.
 - [`let ... else` Statements](./wep-2026-07-22-let-else.md)
 - [Async Canonical Options for `stream.read` / `stream.write`](./wep-2026-07-25-async-stream-canonical.md)
 - [Provider Metadata — Source-Bundled Package Artifacts](./wep-2026-07-26-provider-metadata.md)
+- [Super Traits](./wep-2026-07-27-super-traits.md)

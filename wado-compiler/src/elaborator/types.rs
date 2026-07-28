@@ -277,6 +277,56 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl Sub for T` block whose `T` does not implement one of `Sub`'s
+    /// supertraits. Reported at the impl block: the impl is what promises the
+    /// subtrait, so it is what owes the supertrait.
+    SupertraitNotSatisfied {
+        type_name: String,
+        trait_name: String,
+        supertrait: String,
+        /// Reason chain, as in [`Self::TraitBoundNotSatisfied`].
+        reason: Vec<String>,
+        span: Span,
+    },
+
+    /// A method name reachable through more than one of a type parameter's
+    /// bounds. Reported where it is called, not where the traits are
+    /// declared: the same two traits are unambiguous on a receiver whose
+    /// bounds name only one of them.
+    AmbiguousTraitMethod {
+        method: String,
+        /// The bounds that declare it, in bound-list order.
+        traits: Vec<String>,
+        span: Span,
+    },
+
+    /// A type argument whose associated type does not match the constraint
+    /// written on the bound (`T: Collect<Item = i32>` given `Item = String`).
+    AssocTypeBoundNotSatisfied {
+        type_name: String,
+        trait_name: String,
+        assoc_name: String,
+        expected: String,
+        actual: String,
+        span: Span,
+    },
+
+    /// A supertrait clause naming something that is not a declared trait.
+    UnknownSupertrait {
+        trait_name: String,
+        supertrait: String,
+        span: Span,
+    },
+
+    /// A trait reaches itself through its supertrait clause, so no type could
+    /// ever satisfy the obligation. `chain` is the path back to the trait,
+    /// starting and ending at it (`A -> B -> A`).
+    CircularSupertrait {
+        trait_name: String,
+        chain: Vec<String>,
+        span: Span,
+    },
+
     /// Invalid pattern in context
     InvalidPattern {
         message: String,
@@ -741,6 +791,75 @@ impl TypeError {
                         "type '{type_name}' does not implement trait '{trait_name}' required by bound on '{param_name}'"
                     ),
                     reason,
+                ),
+                *span,
+            ),
+            TypeError::SupertraitNotSatisfied {
+                type_name,
+                trait_name,
+                supertrait,
+                reason,
+                span,
+            } => (
+                Code::TypeMismatch,
+                append_reason_chain(
+                    format!(
+                        "type '{type_name}' implements trait '{trait_name}' but not its supertrait '{supertrait}'"
+                    ),
+                    reason,
+                ),
+                *span,
+            ),
+            TypeError::AmbiguousTraitMethod {
+                method,
+                traits,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "ambiguous method '{method}': declared by {}",
+                    traits
+                        .iter()
+                        .map(|t| format!("'{t}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and ")
+                ),
+                *span,
+            ),
+            TypeError::AssocTypeBoundNotSatisfied {
+                type_name,
+                trait_name,
+                assoc_name,
+                expected,
+                actual,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "type '{type_name}' does not satisfy the associated type '{trait_name}::{assoc_name} = {expected}': it is '{actual}'"
+                ),
+                *span,
+            ),
+            TypeError::UnknownSupertrait {
+                trait_name,
+                supertrait,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "supertrait '{supertrait}' of trait '{trait_name}' is not a declared trait"
+                ),
+                *span,
+            ),
+            TypeError::CircularSupertrait {
+                trait_name,
+                chain,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "circular supertrait: trait '{trait_name}' is its own supertrait via {}",
+                    chain.join(" -> ")
                 ),
                 *span,
             ),

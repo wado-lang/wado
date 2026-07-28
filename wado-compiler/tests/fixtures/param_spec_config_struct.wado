@@ -1,0 +1,51 @@
+// `param_spec`: a by-reference config struct whose fields are compile-time
+// constants reaches a callee too large to inline. Without specialization
+// `if cfg.verbose` and `if cfg.width > 0` survive to Wasm along with
+// everything they guard, including `verbose_marker`.
+
+use { println, Stdout } from "core:cli";
+
+struct Config {
+    verbose: bool,
+    width: i32,
+}
+
+#[inline(never)]
+fn verbose_marker(out: &mut String) {
+    out.push_str(&"VERBOSE");
+    out.push('!');
+}
+
+#[inline(never)]
+fn render(cfg: &Config, out: &mut String, n: i32) {
+    let mut i = 0;
+    while i < n {
+        out.push('x');
+        i = i + 1;
+    }
+    if cfg.verbose {
+        verbose_marker(out);
+    }
+    if cfg.width > 0 {
+        let mut pad = cfg.width;
+        while pad > 0 {
+            out.push('.');
+            pad = pad - 1;
+        }
+    }
+    out.push('|');
+}
+
+export fn run() with Stdout {
+    let cfg = Config { verbose: false, width: 0 };
+    let mut out = String::with_capacity(16);
+    render(&cfg, &mut out, 3);
+    render(&cfg, &mut out, 2);
+    println(out);
+}
+
+__DATA__
+{
+    "stdout": "xxx|xx|\n",
+    "wir_not_expect:O2": ["verbose_marker"]
+}

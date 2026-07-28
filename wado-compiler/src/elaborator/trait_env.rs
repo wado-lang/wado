@@ -12,6 +12,7 @@ use crate::kiln::InvocationIndex;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name;
 use crate::tir::TypeTable;
+use crate::token::Span;
 
 /// A module's type-name import scope, derived once from its `use`
 /// declarations. The single source of truth for how a module resolves a type
@@ -390,12 +391,26 @@ pub(super) struct TraitDeclHeader {
     pub(super) name: String,
     /// The trait's own type parameters (e.g. `<T, U>` in `trait Foo<T, U>`).
     pub(super) type_params: Vec<ast::GenericParam>,
+    /// Direct supertraits as written (`trait Ord: Eq`). The transitive form
+    /// lives in [`TraitEnv::supertrait_closure`].
+    pub(super) supertraits: Vec<ast::TraitBound>,
     pub(super) methods: Vec<ImplMethodHeader>,
+    pub(super) span: Span,
 }
 
 /// Pre-built index: `(declaring module, trait name)` → (`ModuleSource`, `AstId`)
 /// for trait declarations.
 pub(super) type TraitDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
+
+/// A trait declaration's location, the key both [`TraitEnv::trait_decl_headers`]
+/// and [`SupertraitClosureIndex`] use.
+type TraitDeclLoc = (ModuleSource, AstId);
+
+/// Pre-built index: trait declaration → the transitive closure of its
+/// supertraits, deduplicated by name and excluding the trait itself. A
+/// declared bound `T: Sub` expands through this so `T: Ord` alone carries
+/// `Eq`.
+pub(super) type SupertraitClosureIndex = IndexMap<TraitDeclLoc, Vec<ast::TraitBound>>;
 
 /// Pre-built index: `(declaring module, effect name)` → (`ModuleSource`,
 /// `AstId`) for effect declarations. Effects are first-class citizens distinct
@@ -508,7 +523,14 @@ pub struct TraitEnv {
     /// `(ModuleSource, AstId)`. Lets method-lookup queries read trait
     /// method signatures without re-fetching the trait AST. See
     /// [`TraitDeclHeader`].
-    pub(super) trait_decl_headers: IndexMap<(ModuleSource, AstId), TraitDeclHeader>,
+    pub(super) trait_decl_headers: IndexMap<TraitDeclLoc, TraitDeclHeader>,
+    /// Transitive supertraits per trait declaration. See
+    /// [`SupertraitClosureIndex`].
+    supertrait_closures: SupertraitClosureIndex,
+    /// The same closures keyed by bare trait name, for names declared exactly
+    /// once. Prelude-implicit names (`Ord`, `Eq`, …) reach a query through no
+    /// import, so a scoped lookup cannot canonicalise them.
+    supertrait_closures_by_name: IndexMap<String, Vec<ast::TraitBound>>,
     /// Free-function type parameters keyed by `(declaring module, function
     /// name)`. Lets `lookup_function_type_params` read a callee's type params
     /// without scanning the module AST.
@@ -889,6 +911,7 @@ impl TraitEnv {
                         TraitDeclHeader {
                             name: trait_decl.name.clone(),
                             type_params: trait_decl.type_params.clone(),
+                            supertraits: trait_decl.supertraits.clone(),
                             methods: trait_decl
                                 .methods
                                 .iter()
@@ -899,6 +922,7 @@ impl TraitEnv {
                                     has_body: m.body.is_some(),
                                 })
                                 .collect(),
+                            span: trait_decl.span,
                         },
                     );
                     continue;
@@ -1037,7 +1061,25 @@ impl TraitEnv {
             }
         }
 
-        let violations = check_all_orphan_rules(modules, &decl_index, &type_decl_index);
+        let mut violations = check_all_orphan_rules(modules, &decl_index, &type_decl_index);
+
+        // `canonical_key` goes through `symbols`, which does not carry a
+        // `use ... as` alias; the module's import scope does.
+        let resolve_trait = |module: &ModuleSource, name: &str| {
+            let scope = module_import_scopes.get(module);
+            let declared = scope
+                .and_then(|s| s.original_names.get(name))
+                .map_or(name, String::as_str);
+            if let Some(source) = scope.and_then(|s| s.sources.get(name))
+                && let Some(loc) = decl_index.get(&(source.clone(), declared.to_string()))
+            {
+                return Some(loc.clone());
+            }
+            decl_index.get(&canonical_key(module, declared)).cloned()
+        };
+        let (supertrait_closures, cycles) =
+            build_supertrait_closures(&trait_decl_headers, &resolve_trait);
+        violations.extend(cycles);
 
         (
             Arc::new(Self {
@@ -1049,7 +1091,12 @@ impl TraitEnv {
                 effect_decl_index,
                 resource_decl_index,
                 impl_headers,
+                supertrait_closures_by_name: index_closures_by_name(
+                    &trait_decl_headers,
+                    &supertrait_closures,
+                ),
                 trait_decl_headers,
+                supertrait_closures,
                 function_type_params,
                 struct_like_decl_modules,
                 newtype_decl_modules,
@@ -1088,6 +1135,25 @@ impl TraitEnv {
             .get(module)
             .cloned()
             .unwrap_or_default()
+    }
+
+    /// The transitive supertraits of the trait `key` names, deduplicated by
+    /// name and excluding the trait itself. Empty for a trait with no
+    /// supertrait clause, and for a name that declares no trait.
+    pub(super) fn supertrait_closure(&self, key: &DeclKey) -> &[ast::TraitBound] {
+        self.decl_index
+            .get(key)
+            .and_then(|loc| self.supertrait_closures.get(loc))
+            .map_or_else(|| self.supertrait_closure_named(&key.1), Vec::as_slice)
+    }
+
+    /// [`Self::supertrait_closure`] for a caller holding a bare name with no
+    /// import context to canonicalise it. Empty when the name is declared by
+    /// more than one module.
+    pub(super) fn supertrait_closure_named(&self, name: &str) -> &[ast::TraitBound] {
+        self.supertrait_closures_by_name
+            .get(name)
+            .map_or(&[], Vec::as_slice)
     }
 
     /// Keys of the **inherent** impls on `type_name`, in global build order —
@@ -1540,6 +1606,151 @@ fn check_orphan_rfc2451(impl_block: &ast::ImplBlock, local_type_names: &IndexSet
     }
 
     false
+}
+
+/// Resolves a supertrait name referenced in a trait's own module to that
+/// supertrait's declaration. `None` for a name that declares no trait.
+type ResolveTrait<'a> = &'a dyn Fn(&ModuleSource, &str) -> Option<TraitDeclLoc>;
+
+/// Append `bound` unless a bound of that name is already present. Bound lists
+/// are name-keyed everywhere downstream, so a name is the identity here too.
+pub(super) fn push_unique_bound(bounds: &mut Vec<ast::TraitBound>, bound: &ast::TraitBound) {
+    let Some(existing) = bounds.iter_mut().find(|b| b.name == bound.name) else {
+        bounds.push(bound.clone());
+        return;
+    };
+    // Same trait twice: the constrained one wins, whichever arrived first.
+    if existing.assoc_types.is_empty() && !bound.assoc_types.is_empty() {
+        *existing = bound.clone();
+    }
+}
+
+/// Expand every trait's direct supertraits into its transitive closure,
+/// reporting each trait that reaches itself. A cycle's edge is cut rather than
+/// followed, keeping the closure finite.
+fn build_supertrait_closures(
+    headers: &IndexMap<TraitDeclLoc, TraitDeclHeader>,
+    resolve: ResolveTrait<'_>,
+) -> (SupertraitClosureIndex, Vec<(ModuleSource, TypeError)>) {
+    let mut closures = SupertraitClosureIndex::default();
+    if headers.values().all(|h| h.supertraits.is_empty()) {
+        return (closures, Vec::new());
+    }
+    let mut cycles = Vec::new();
+    let mut reported: IndexSet<TraitDeclLoc> = IndexSet::default();
+    for loc in headers.keys() {
+        let mut stack = Vec::new();
+        expand_supertraits(
+            loc,
+            headers,
+            resolve,
+            &mut closures,
+            &mut stack,
+            &mut reported,
+            &mut cycles,
+        );
+    }
+    (closures, cycles)
+}
+
+fn expand_supertraits(
+    loc: &TraitDeclLoc,
+    headers: &IndexMap<TraitDeclLoc, TraitDeclHeader>,
+    resolve: ResolveTrait<'_>,
+    closures: &mut SupertraitClosureIndex,
+    stack: &mut Vec<TraitDeclLoc>,
+    reported: &mut IndexSet<TraitDeclLoc>,
+    cycles: &mut Vec<(ModuleSource, TypeError)>,
+) -> Vec<ast::TraitBound> {
+    if let Some(done) = closures.get(loc) {
+        return done.clone();
+    }
+    let Some(header) = headers.get(loc) else {
+        return Vec::new();
+    };
+
+    stack.push(loc.clone());
+    let mut closure: Vec<ast::TraitBound> = Vec::new();
+    for direct in &header.supertraits {
+        let Some(super_loc) = resolve(&loc.0, &direct.name) else {
+            // Blame the declaration, not every implementor of it.
+            cycles.push((
+                loc.0.clone(),
+                TypeError::UnknownSupertrait {
+                    trait_name: header.name.clone(),
+                    supertrait: direct.name.clone(),
+                    span: direct.span,
+                },
+            ));
+            continue;
+        };
+        // Before the push: `trait Loop: Loop` must not land in its own closure.
+        if let Some(pos) = stack.iter().position(|s| *s == super_loc) {
+            report_supertrait_cycle(pos, stack, headers, reported, cycles);
+            continue;
+        }
+        push_unique_bound(&mut closure, direct);
+        for inherited in expand_supertraits(
+            &super_loc, headers, resolve, closures, stack, reported, cycles,
+        ) {
+            push_unique_bound(&mut closure, &inherited);
+        }
+    }
+    stack.pop();
+
+    closures.insert(loc.clone(), closure.clone());
+    closure
+}
+
+/// Re-key the closures by bare trait name, dropping any name more than one
+/// module declares — an ambiguous name must not silently pick a closure.
+fn index_closures_by_name(
+    headers: &IndexMap<TraitDeclLoc, TraitDeclHeader>,
+    closures: &SupertraitClosureIndex,
+) -> IndexMap<String, Vec<ast::TraitBound>> {
+    let mut by_name: IndexMap<String, Option<Vec<ast::TraitBound>>> = IndexMap::default();
+    for (loc, header) in headers {
+        let closure = closures.get(loc).cloned().unwrap_or_default();
+        by_name
+            .entry(header.name.clone())
+            .and_modify(|slot| *slot = None)
+            .or_insert(Some(closure));
+    }
+    by_name
+        .into_iter()
+        .filter_map(|(name, closure)| closure.map(|c| (name, c)))
+        .collect()
+}
+
+/// Report the cycle closed by the edge back to `stack[pos]`, attributing it to
+/// that trait — the one that turned out to be its own supertrait.
+fn report_supertrait_cycle(
+    pos: usize,
+    stack: &[TraitDeclLoc],
+    headers: &IndexMap<TraitDeclLoc, TraitDeclHeader>,
+    reported: &mut IndexSet<TraitDeclLoc>,
+    cycles: &mut Vec<(ModuleSource, TypeError)>,
+) {
+    let culprit = &stack[pos];
+    if !reported.insert(culprit.clone()) {
+        return;
+    }
+    let Some(header) = headers.get(culprit) else {
+        return;
+    };
+    let mut chain: Vec<String> = stack[pos..]
+        .iter()
+        .filter_map(|s| headers.get(s).map(|h| h.name.clone()))
+        .collect();
+    chain.push(header.name.clone());
+    cycles.push((
+        culprit.0.clone(),
+        TypeError::CircularSupertrait {
+            trait_name: header.name.clone(),
+            chain,
+            span: header.span,
+        },
+    ));
 }
 
 /// Check orphan rules for all trait impl blocks across all modules.

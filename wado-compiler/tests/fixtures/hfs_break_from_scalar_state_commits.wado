@@ -13,15 +13,16 @@
 // without the inline commit at break, the post-loop read sees the
 // initial value.
 //
-// The written values are `self.base + k` rather than bare literals so
-// the post-scalarize store→load forward cannot fold the scalar to a
-// constant and elide the commit — `fill` is `#[inline(never)]`, so
-// `self.base` stays an opaque parameter field. This keeps the HFS
-// commit-on-break machinery present (the point of the regression),
-// while a fully-constant body would (correctly) collapse to a single
-// `self.channel = <const>` store and exercise nothing.
+// A fully-constant body would (correctly) collapse to a single
+// `self.channel = <const>` store and exercise nothing, so the shape is
+// kept opaque from both directions: the written values are
+// `self.base + k` rather than literals, `fill` is `#[inline(never)]` so
+// `self.base` stays a parameter field, and `base` is seeded from a
+// mutable global so `param_spec` cannot specialize `fill` on it.
 
 use { println, Stdout } from "core:cli";
+
+global mut BASE_SEED: i32 = 0;
 
 struct Actions {
     channel: i32,
@@ -49,7 +50,7 @@ impl Actions {
 }
 
 export fn run() with Stdout {
-    let mut actions = Actions { channel: 0, base: 0 };
+    let mut actions = Actions { channel: 0, base: BASE_SEED };
     actions.fill();
     println(`${actions.channel}`);
 }

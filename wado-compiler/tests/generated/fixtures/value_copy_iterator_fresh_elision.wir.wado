@@ -98,7 +98,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/slice.wado/ArrayIter<value_copy_iterator_fresh_elision.wado/Point>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<value_copy_iterator_fresh_elision.wado/Point>") -> ref null "value_copy_iterator_fresh_elision.wado//Point";  // TypeId(37)
+type "functype//core:prelude/slice.wado/ArrayIter<value_copy_iterator_fresh_elision.wado/Point>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<value_copy_iterator_fresh_elision.wado/Point>") -> ref null "value_copy_iterator_fresh_elision.wado//Point";  // TypeId(37)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
 
@@ -143,7 +143,7 @@ fn "value_copy_iterator_fresh_elision.wado/run"() with Stdout {
     __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<value_copy_iterator_fresh_elision.wado/Point>" { repr: points.repr, index: 0, end: 2 };
     b0: block {
         l1: loop {
-            __match_7 = "core:prelude/slice.wado/ArrayIter<value_copy_iterator_fresh_elision.wado/Point>^Iterator::next"(__iter_2);
+            __match_7 = "core:prelude/slice.wado/ArrayIter<value_copy_iterator_fresh_elision.wado/Point>^Iterator::next$spec0"(__iter_2);
             if ref.is_null(__match_7) == 0 {
                 let __variant_payload_1: ref "value_copy_iterator_fresh_elision.wado//Point";
                 __variant_payload_1 = ref.as_non_null(__match_7);
@@ -503,10 +503,10 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/ArrayIter<value_copy_iterator_fresh_elision.wado/Point>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<value_copy_iterator_fresh_elision.wado/Point>^Iterator::next$spec0"(self) {
     let item: ref "value_copy_iterator_fresh_elision.wado//Point";
     let v: ref "value_copy_iterator_fresh_elision.wado//Point";
-    if self.index >= self.end {
+    if self.index >= 2 {
         return ref.null none;
     }
     v = builtin::array_get<ref "value_copy_iterator_fresh_elision.wado//Point">(self.repr, self.index);

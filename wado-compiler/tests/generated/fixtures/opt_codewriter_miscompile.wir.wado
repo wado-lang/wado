@@ -105,11 +105,15 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(41)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(42)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(42)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(43)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(44)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(44)
+
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(46)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -428,7 +432,7 @@ fn "opt_codewriter_miscompile.wado/emit_alts"(w, n) {
     __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     "core:prelude/string.wado/String::push_str"(__local_5, global:opt_codewriter_miscompile.wado::__const_obj_5);
     __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 };
-    "core:prelude/primitive.wado/i32::fmt_decimal"(id, __local_6);
+    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(id, __local_6);
     start_28 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_5, 1);
     builtin::array_set_u8(__local_5.repr, start_28, 32);
     start_37 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_5, 1);
@@ -469,8 +473,16 @@ fn "opt_codewriter_miscompile.wado/emit_alts"(w, n) {
     __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
     "core:prelude/string.wado/String::push_str"(__local_7, global:opt_codewriter_miscompile.wado::__const_obj_4);
     __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
+<<<<<<< HEAD
     "core:prelude/primitive.wado/i32::fmt_decimal"(id, __local_8);
     "core:prelude/string.wado/String::push_str"(__local_7, global:opt_codewriter_miscompile.wado::__const_obj_3);
+||||||| 2738e686c
+    "core:prelude/primitive.wado/i32::fmt_decimal"(id, __local_8);
+    "core:prelude/string.wado/String::push_str"(__local_7, global:opt_codewriter_miscompile.wado::__const_obj_2);
+=======
+    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(id, __local_8);
+    "core:prelude/string.wado/String::push_str"(__local_7, global:opt_codewriter_miscompile.wado::__const_obj_2);
+>>>>>>> origin/main
     i_145 = 0;
     _licm_indent_level_726 = w.indent_level;
     _licm_buf_727 = w.buf;
@@ -516,7 +528,7 @@ fn "opt_codewriter_miscompile.wado/emit_alts"(w, n) {
                 start_250 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_9, 1);
                 builtin::array_set_u8(__local_9.repr, start_250, 95);
                 __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
-                "core:prelude/primitive.wado/i32::fmt_decimal"(id, __local_10);
+                "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(id, __local_10);
                 i_263 = 0;
                 _licm_indent_level_728 = __hfs_indent_level_738;
                 _licm_buf_729 = w.buf;
@@ -563,7 +575,7 @@ fn "opt_codewriter_miscompile.wado/emit_alts"(w, n) {
             start_377 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_11, 1);
             builtin::array_set_u8(__local_11.repr, start_377, 95);
             __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_11 };
-            "core:prelude/primitive.wado/i32::fmt_decimal"(id, __local_12);
+            "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(id, __local_12);
             start_391 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_11, 1);
             builtin::array_set_u8(__local_11.repr, start_391, 58);
             i_399 = 0;
@@ -619,7 +631,7 @@ fn "opt_codewriter_miscompile.wado/emit_alts"(w, n) {
                     continue l20;
                 };
             };
-            "opt_codewriter_miscompile.wado/emit_body"(w, __local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_13 }; "core:prelude/primitive.wado/i32::fmt_decimal"(id, __local_14); __local_13);
+            "opt_codewriter_miscompile.wado/emit_body"(w, __local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_13 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(id, __local_14); __local_13);
             __hfs_indent_level_738 = local.tee __hfs_indent_level_738(w.indent_level) - 1;
             i_494 = 0;
             _licm_indent_level_732 = __hfs_indent_level_738;
@@ -699,8 +711,16 @@ fn "opt_codewriter_miscompile.wado/emit_alts"(w, n) {
     start_665 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_15, 1);
     builtin::array_set_u8(__local_15.repr, start_665, 95);
     __local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_15 };
+<<<<<<< HEAD
     "core:prelude/primitive.wado/i32::fmt_decimal"(id, __local_16);
     "core:prelude/string.wado/String::push_str"(__local_15, global:opt_codewriter_miscompile.wado::__const_obj_2);
+||||||| 2738e686c
+    "core:prelude/primitive.wado/i32::fmt_decimal"(id, __local_16);
+    "core:prelude/string.wado/String::push_str"(__local_15, global:opt_codewriter_miscompile.wado::__const_obj_1);
+=======
+    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(id, __local_16);
+    "core:prelude/string.wado/String::push_str"(__local_15, global:opt_codewriter_miscompile.wado::__const_obj_1);
+>>>>>>> origin/main
     i_678 = 0;
     _licm_indent_level_736 = w.indent_level;
     _licm_buf_737 = w.buf;
@@ -1127,6 +1147,38 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
+    let is_negative: bool;
+    let abs_val: i64;
+    let digit_count: i32;
+    let offset: i32;
+    let self_6: ref "core:prelude/string.wado//String";
+    is_negative = self < 0;
+    digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
+}
+
+fn "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(self, is_negative, prefix, digit_count) {
+    let sign: ref "core:prelude/string.wado//String";
+    let sign_len: i32;
+    let prefix_len: i32;
+    sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    if is_negative {
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+    } else {
+    }
+    sign_len = sign.used;
+    prefix_len = prefix.used;
+    if sign_len > 0 {
+        "core:prelude/string.wado/String::push_str"(self.buf, sign);
+    }
+    if prefix_len > 0 {
+        "core:prelude/string.wado/String::push_str"(self.buf, prefix);
+    }
+    return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
 }
 
 export fn "opt_codewriter_miscompile.wado/__cm_export__run" as "run"

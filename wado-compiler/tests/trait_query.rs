@@ -373,3 +373,378 @@ export fn run() {
 ",
     );
 }
+
+// ---------------------------------------------------------------------------
+// Supertrait declarations
+// ---------------------------------------------------------------------------
+
+#[test]
+fn supertrait_chain_is_accepted() {
+    compile_ok(
+        r"
+trait Base {
+    fn base(&self) -> i32;
+}
+
+trait Middle: Base {
+    fn middle(&self) -> i32;
+}
+
+trait Top: Middle {
+    fn top(&self) -> i32;
+}
+
+export fn run() {
+}
+",
+    );
+}
+
+#[test]
+fn supertrait_diamond_is_accepted() {
+    compile_ok(
+        r"
+trait Root {
+    fn root(&self) -> i32;
+}
+
+trait Left: Root {
+    fn left(&self) -> i32;
+}
+
+trait Right: Root {
+    fn right(&self) -> i32;
+}
+
+trait Bottom: Left + Right {
+    fn bottom(&self) -> i32;
+}
+
+export fn run() {
+}
+",
+    );
+}
+
+#[test]
+fn direct_supertrait_cycle_is_rejected() {
+    compile_err_contains(
+        r"
+trait A: B {
+    fn a(&self) -> i32;
+}
+
+trait B: A {
+    fn b(&self) -> i32;
+}
+
+export fn run() {
+}
+",
+        "circular supertrait",
+    );
+}
+
+#[test]
+fn self_supertrait_is_rejected() {
+    compile_err_contains(
+        r"
+trait Loop: Loop {
+    fn go(&self) -> i32;
+}
+
+export fn run() {
+}
+",
+        "circular supertrait",
+    );
+}
+
+#[test]
+fn supertrait_method_is_reachable_through_a_bound() {
+    // `x.base()` resolves only if `T: Derived` elaborated to carry `Base`.
+    compile_ok(
+        r"
+trait Base {
+    fn base(&self) -> i32;
+}
+
+trait Derived: Base {
+    fn derived(&self) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl Base for S {
+    fn base(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Derived for S {
+    fn derived(&self) -> i32 {
+        return self.v * 2;
+    }
+}
+
+fn total<T: Derived>(x: &T) -> i32 {
+    return x.base() + x.derived();
+}
+
+export fn run() {
+    let s = S { v: 3 };
+    assert total(&s) == 9;
+}
+",
+    );
+}
+
+#[test]
+fn implementing_a_subtrait_requires_its_supertrait() {
+    compile_err_contains(
+        r"
+trait Base {
+    fn base(&self) -> i32;
+}
+
+trait Derived: Base {
+    fn derived(&self) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl Derived for S {
+    fn derived(&self) -> i32 {
+        return self.v;
+    }
+}
+
+export fn run() {
+}
+",
+        "supertrait",
+    );
+}
+
+#[test]
+fn an_indirect_supertrait_is_required_too() {
+    compile_err_contains(
+        r"
+trait Root {
+    fn root(&self) -> i32;
+}
+
+trait Middle: Root {
+    fn middle(&self) -> i32;
+}
+
+trait Leaf: Middle {
+    fn leaf(&self) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl Middle for S {
+    fn middle(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Leaf for S {
+    fn leaf(&self) -> i32 {
+        return self.v;
+    }
+}
+
+export fn run() {
+}
+",
+        "Root",
+    );
+}
+
+// A method name reachable through two bounds is ambiguous where it is called,
+// not where the traits are declared — the shape Rust reports as E0034.
+
+#[test]
+fn shadowing_a_supertrait_method_is_fine_until_it_is_called() {
+    compile_ok(
+        r"
+trait Base {
+    fn name(&self) -> i32;
+}
+
+trait Derived: Base {
+    fn name(&self) -> i32;
+}
+
+export fn run() {
+}
+",
+    );
+}
+
+#[test]
+fn calling_a_shadowed_supertrait_method_is_ambiguous() {
+    let msg = compile_err_contains(
+        r"
+trait Base {
+    fn name(&self) -> i32;
+}
+
+trait Derived: Base {
+    fn name(&self) -> i32;
+}
+
+fn call<T: Derived>(x: &T) -> i32 {
+    return x.name();
+}
+
+export fn run() {
+}
+",
+        "ambiguous method",
+    );
+    assert!(
+        msg.contains("Base") && msg.contains("Derived"),
+        "both candidates named: {msg}"
+    );
+}
+
+#[test]
+fn calling_a_diamond_supertrait_method_is_ambiguous() {
+    compile_err_contains(
+        r"
+trait Left {
+    fn f(&self) -> i32;
+}
+
+trait Right {
+    fn f(&self) -> i32;
+}
+
+trait Bottom: Left + Right {
+    fn b(&self) -> i32;
+}
+
+fn call<T: Bottom>(x: &T) -> i32 {
+    return x.f();
+}
+
+export fn run() {
+}
+",
+        "ambiguous method",
+    );
+}
+
+#[test]
+fn two_bounds_sharing_a_method_are_ambiguous_without_supertraits() {
+    compile_err_contains(
+        r"
+trait Left {
+    fn f(&self) -> i32;
+}
+
+trait Right {
+    fn f(&self) -> i32;
+}
+
+fn call<T: Left + Right>(x: &T) -> i32 {
+    return x.f();
+}
+
+export fn run() {
+}
+",
+        "ambiguous method",
+    );
+}
+
+#[test]
+fn an_ambiguous_call_does_not_also_claim_the_method_is_missing() {
+    let msg = compile_err_contains(
+        r"
+trait Left {
+    fn f(&self) -> i32;
+}
+
+trait Right {
+    fn f(&self) -> i32;
+}
+
+fn call<T: Left + Right>(x: &T) -> i32 {
+    return x.f();
+}
+
+export fn run() {
+}
+",
+        "ambiguous method",
+    );
+    assert!(
+        !msg.contains("no method"),
+        "ambiguity must not also report the method as missing: {msg}"
+    );
+}
+
+#[test]
+fn an_undeclared_supertrait_is_reported_at_the_declaration() {
+    let msg = compile_err_contains(
+        r"
+trait A: Undeclrd {
+    fn a(&self) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl A for S {
+    fn a(&self) -> i32 {
+        return self.v;
+    }
+}
+
+export fn run() {
+}
+",
+        "is not a declared trait",
+    );
+    assert!(
+        msg.contains("Undeclrd") && msg.contains("'A'"),
+        "names the bad supertrait and its trait: {msg}"
+    );
+}
+
+#[test]
+fn an_unsatisfiable_bound_blames_the_bound_that_was_written() {
+    let msg = compile_err_contains(
+        r"
+struct Handler {
+    cb: fn(i32) -> i32,
+}
+
+fn sorted<T: Ord>(a: T, b: T) -> bool {
+    return a < b;
+}
+
+export fn run() {
+    let h = Handler { cb: |x| { return x; } };
+    let g = Handler { cb: |x| { return x; } };
+    assert sorted(h, g);
+}
+",
+        "does not implement trait 'Ord'",
+    );
+    assert!(
+        !msg.contains("trait 'Eq'"),
+        "the written bound is the one cause; its supertrait must not be reported too: {msg}"
+    );
+}

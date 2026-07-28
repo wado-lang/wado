@@ -2538,6 +2538,29 @@ let p = Person { name: "Alice" };
 println(p.greet());  // "Hello, Alice!"
 ```
 
+#### Supertraits
+
+A trait can require its implementors to implement other traits. `impl Ord for T`
+then fails unless `T` also implements `Eq`, and `T: Ord` alone is enough to use
+`Eq`'s methods:
+
+```wado
+trait Ord: Eq {
+    fn cmp(&self, other: &Self) -> Ordering;
+}
+
+trait Circle: Shape + Display {
+    fn radius(&self) -> i32;
+}
+
+// `T: Ord` implies `T: Eq`
+fn dedup_sorted<T: Ord>(items: List<T>) -> List<T> { ... }
+```
+
+A trait that reaches itself through supertraits is an error. A method name
+reachable through more than one of a receiver's bounds is ambiguous at the call
+site and must be renamed — Wado has no qualified call form to disambiguate one.
+
 #### Multiple Traits
 
 A struct can implement multiple traits:
@@ -2985,7 +3008,7 @@ pub enum Ordering {
 
 ```wado
 /// Types that can be ordered
-pub trait Ord {
+pub trait Ord: Eq {
     /// Compares self with other and returns an Ordering
     fn cmp(&self, other: &Self) -> Ordering;
 }

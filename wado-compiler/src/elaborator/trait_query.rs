@@ -167,6 +167,23 @@ pub(crate) fn decl_identity_core(
     None
 }
 
+/// Whether an AST type is phrased against `Self` anywhere, and so only means
+/// something where an implementing type is bound.
+fn mentions_self(ty: &ast::Type) -> bool {
+    match ty {
+        ast::Type::Named(named) => named.name == "Self",
+        ast::Type::NamespacedGeneric(ns) => {
+            ns.namespace == "Self" || ns.args.iter().any(mentions_self)
+        }
+        ast::Type::Generic(generic) => {
+            generic.name == "Self" || generic.args.iter().any(mentions_self)
+        }
+        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => mentions_self(inner),
+        ast::Type::Tuple(elements) => elements.iter().any(mentions_self),
+        _ => false,
+    }
+}
+
 pub(crate) fn canonical_decl_key_with(
     name: &str,
     current_module_source: &ModuleSource,
@@ -505,6 +522,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Enforce a trait's supertraits against `impl Trait for T`. The whole
+    /// closure, not just the direct ones: a supertrait satisfied structurally
+    /// has no impl block of its own to carry the rest of the chain.
+    pub(super) fn enforce_impl_supertraits(&mut self, impl_block: &ast::ImplBlock) {
+        let Some(trait_type) = &impl_block.trait_type else {
+            return;
+        };
+        let trait_name = self.get_type_name(trait_type);
+        let supertraits: Vec<String> = self
+            .tysys
+            .trait_env
+            .supertrait_closure(&self.canonical_decl_key(&trait_name))
+            .iter()
+            .map(|b| b.name.clone())
+            .collect();
+        if supertraits.is_empty() {
+            return;
+        }
+        let self_type = self.resolve_type(&impl_block.ty);
+        for supertrait in supertraits {
+            if self.tysys.type_implements_trait(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                self_type,
+                &supertrait,
+            ) {
+                continue;
+            }
+            let type_name = self.tysys.type_id_to_string(self_type);
+            let reason = self.tysys.trait_unimpl_reason_chain(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                self_type,
+                &supertrait,
+            );
+            let _ = self.emit(TypeError::SupertraitNotSatisfied {
+                type_name,
+                trait_name: trait_name.clone(),
+                supertrait,
+                reason,
+                span: impl_block.span,
+            });
+        }
+    }
+
     /// Find a trait declaration's type parameters (e.g., `<T, U>` in `trait Foo<T, U>`).
     pub(super) fn find_trait_decl_type_params(
         &self,
@@ -719,6 +781,36 @@ impl TypeSystem {
         match self.scoped_trait_decl_module(scope, trait_name) {
             Some(module) => *module == compiler_module,
             None => true,
+        }
+    }
+
+    /// Whether holding `bound_name` also gives `trait_name` — the same trait,
+    /// or one of its supertraits. The single place a declared bound is read as
+    /// its elaborated form, so no registration site can bypass it.
+    pub(super) fn bound_implies(
+        &self,
+        scope: &TypeLookup,
+        bound_name: &str,
+        trait_name: &str,
+    ) -> bool {
+        bound_name == trait_name
+            || self
+                .supertraits_of(scope, bound_name)
+                .iter()
+                .any(|s| s.name == trait_name)
+    }
+
+    /// The transitive supertraits of `trait_name` as seen from `scope`.
+    pub(super) fn supertraits_of(
+        &self,
+        scope: &TypeLookup,
+        trait_name: &str,
+    ) -> &[ast::TraitBound] {
+        match self.scoped_trait_decl_module(scope, trait_name) {
+            Some(module) => self
+                .trait_env
+                .supertrait_closure(&(module.clone(), trait_name.to_string())),
+            None => self.trait_env.supertrait_closure_named(trait_name),
         }
     }
 
@@ -958,7 +1050,11 @@ impl TypeSystem {
                 .trait_ctx
                 .type_param_bounds
                 .get(name)
-                .is_some_and(|bounds| bounds.iter().any(|b| b.name == trait_name));
+                .is_some_and(|bounds| {
+                    bounds
+                        .iter()
+                        .any(|b| self.bound_implies(scope, &b.name, trait_name))
+                });
         }
 
         if on_bound == Some(OnBoundTrait::Ref) {
@@ -1413,68 +1509,100 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         bindings
     }
 
-    /// Find a method in the trait declarations given by the bound names.
-    /// For example, if T: Ord, look up the "cmp" method in the Ord trait declaration.
-    /// Returns (`trait_name`, `MethodInfo`) with the method's return type, `self_kind`, and `param_types`,
-    /// where Self is substituted with the `TypeParam`'s type.
+    /// The name a trait was declared under, undoing a `use ... as` alias — a
+    /// declaration only ever carries its own name.
+    fn declared_trait_name(&self, trait_name: &str) -> String {
+        self.canonical_decl_key(trait_name).1
+    }
+
+    /// Whether the trait named `trait_name` declares `method_name`. The cheap
+    /// form of [`Self::find_trait_decl_method`], for counting candidates
+    /// without cloning each one's declaration.
+    fn trait_declares_method(&self, trait_name: &str, method_name: &str) -> bool {
+        let trait_name = &self.declared_trait_name(trait_name);
+        let declares = |items: &[Item]| {
+            items.iter().any(|item| {
+                matches!(item, Item::Trait(t)
+                    if t.name == *trait_name && t.methods.iter().any(|m| m.name == method_name))
+            })
+        };
+        self.loaded_modules
+            .iter()
+            .any(|(_, module)| declares(&module.items))
+            || declares(self.current_module_items)
+    }
+
+    /// The declaration of `method_name` in the trait named `trait_name`, with
+    /// the trait's associated types and declaring module. Shares its search
+    /// order with [`Self::trait_declares_method`], so counting candidates and
+    /// resolving one cannot disagree.
+    fn find_trait_decl_method(
+        &self,
+        trait_name: &str,
+        method_name: &str,
+    ) -> Option<(ast::Function, Vec<ast::AssociatedTypeDecl>, ModuleSource)> {
+        let trait_name = self.declared_trait_name(trait_name);
+        let search = |items: &[Item], module: &ModuleSource| {
+            items.iter().find_map(|item| {
+                let Item::Trait(trait_decl) = item else {
+                    return None;
+                };
+                if trait_decl.name != trait_name {
+                    return None;
+                }
+                trait_decl
+                    .methods
+                    .iter()
+                    .find(|m| m.name == method_name)
+                    .map(|m| {
+                        (
+                            m.clone(),
+                            trait_decl.associated_types.clone(),
+                            module.clone(),
+                        )
+                    })
+            })
+        };
+        self.loaded_modules
+            .iter()
+            .find_map(|(module_src, module)| search(&module.items, module_src))
+            .or_else(|| search(self.current_module_items, &self.current_module_source))
+    }
+
+    /// Find a method in the trait declarations the bound names give, read in
+    /// elaborated form: `T: Ord` searches `Ord` and its supertraits. `Self` is
+    /// substituted by the `TypeParam`'s type. More than one bound declaring the
+    /// name is ambiguous — reported, then resolved to the first.
     pub(super) fn find_method_in_trait_bounds(
         &mut self,
         bounds: &[String],
         method_name: &str,
         self_type_id: TypeId,
+        span: Span,
     ) -> Option<(String, MethodInfo)> {
-        // Collect trait declarations from all modules
-        for trait_name in bounds {
-            // Search all loaded modules for the trait declaration
-            let mut found_trait_method: Option<(
-                ast::Function,
-                Vec<ast::AssociatedTypeDecl>,
-                ModuleSource,
-            )> = None;
-
-            for (module_src, module) in self.loaded_modules {
-                for item in &module.items {
-                    if let Item::Trait(trait_decl) = item
-                        && trait_decl.name == *trait_name
-                    {
-                        for method in &trait_decl.methods {
-                            if method.name == method_name {
-                                found_trait_method = Some((
-                                    method.clone(),
-                                    trait_decl.associated_types.clone(),
-                                    module_src.clone(),
-                                ));
-                                break;
-                            }
-                        }
-                    }
-                }
-                if found_trait_method.is_some() {
-                    break;
-                }
-            }
-
-            // Also check current module items
-            if found_trait_method.is_none() {
-                for item in self.current_module_items {
-                    if let Item::Trait(trait_decl) = item
-                        && trait_decl.name == *trait_name
-                    {
-                        for method in &trait_decl.methods {
-                            if method.name == method_name {
-                                found_trait_method = Some((
-                                    method.clone(),
-                                    trait_decl.associated_types.clone(),
-                                    self.current_module_source.clone(),
-                                ));
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if let Some((method, trait_assoc_types, _module_source)) = found_trait_method {
+        let bounds = self.elaborate_bound_names(bounds);
+        // Stopping at the first hit would hide the ambiguity, so every bound is
+        // scanned — by predicate, leaving only the winner to clone.
+        let candidates: Vec<String> = bounds
+            .iter()
+            .filter(|t| self.trait_declares_method(t, method_name))
+            .cloned()
+            .collect();
+        let resolved = candidates.first().and_then(|trait_name| {
+            self.find_trait_decl_method(trait_name, method_name)
+                .map(|found| (trait_name.clone(), found))
+        });
+        if candidates.len() > 1 {
+            // Keep going with the first candidate: `None` reads to the caller
+            // as "no such method", which it would then report as well.
+            let _ = self.emit(TypeError::AmbiguousTraitMethod {
+                method: method_name.to_string(),
+                traits: candidates,
+                span,
+            });
+        }
+        {
+            if let Some((trait_name, (method, trait_assoc_types, _module_source))) = resolved {
                 // Save the entire trait context; we'll modify self_type, assoc_type_bindings,
                 // type_params, and type_param_bounds during this resolution scope.
                 let mut scope = self.enter_inherited_type_param_scope();
@@ -1605,7 +1733,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 drop(scope);
 
                 return Some((
-                    trait_name.clone(),
+                    trait_name,
                     MethodInfo {
                         impl_offset: None,
                         return_type,
@@ -1789,12 +1917,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 vec![type_arg]
             };
-            for bound in &param.bounds {
+            for bound in &param.bounds.clone() {
                 if bound.fn_signature.is_some() {
                     continue;
                 }
                 for &subject in &subjects {
                     self.enforce_single_bound(subject, &bound.name, &param.name, span);
+                    self.enforce_assoc_type_bounds(subject, bound, span);
+                }
+            }
+            // A supertrait failure has the same one cause as the bound that
+            // implied it, so it is asked but not reported — asking is what
+            // drives the derivation that makes `T: Ord` alone satisfy `Eq`.
+            for bound in self.elaborate_bounds(&param.bounds) {
+                if bound.fn_signature.is_some() || param.bounds.iter().any(|b| b.name == bound.name)
+                {
+                    continue;
+                }
+                for &subject in &subjects {
+                    self.check_and_register_bound(subject, &bound.name);
+                    self.enforce_assoc_type_bounds(subject, &bound, span);
                 }
             }
         }
@@ -1810,14 +1952,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_name: &str,
         span: Span,
     ) {
-        if self.tysys.type_implements_trait(
-            &self.annotate_ctx,
-            &self.type_lookup(),
-            type_arg,
-            trait_name,
-        ) {
-            self.register_assoc_types_for_concrete_type_and_trait(type_arg, trait_name);
-        } else {
+        if !self.check_and_register_bound(type_arg, trait_name) {
             let type_name = self.tysys.type_id_to_string(type_arg);
             let reason = self.tysys.trait_unimpl_reason_chain(
                 &self.annotate_ctx,
@@ -1833,6 +1968,64 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
+    }
+
+    /// Check a bound's associated-type constraints (`T: Collect<Item = i32>`)
+    /// against the type argument. Runs after [`Self::enforce_single_bound`],
+    /// which is what registers the argument's bindings.
+    fn enforce_assoc_type_bounds(&mut self, type_arg: TypeId, bound: &ast::TraitBound, span: Span) {
+        for constraint in &bound.assoc_types {
+            // `Self` means the implementing type, which this site has no
+            // binding for; `enforce_impl_assoc_type_bounds` owns those.
+            if mentions_self(&constraint.ty) {
+                continue;
+            }
+            let Some(actual) = self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
+                type_arg,
+                &bound.name,
+                &constraint.name,
+            ) else {
+                continue;
+            };
+            let expected = self.resolve_type(&constraint.ty);
+            let tt = self.tysys.type_table.borrow();
+            if tt.contains_type_param(expected)
+                || tt.contains_type_param(actual)
+                || expected == actual
+            {
+                continue;
+            }
+            let (expected_name, actual_name) = (
+                self.tysys.type_id_to_string(expected),
+                self.tysys.type_id_to_string(actual),
+            );
+            drop(tt);
+            let type_name = self.tysys.type_id_to_string(type_arg);
+            let _ = self.emit(TypeError::AssocTypeBoundNotSatisfied {
+                type_name,
+                trait_name: bound.name.clone(),
+                assoc_name: constraint.name.clone(),
+                expected: expected_name,
+                actual: actual_name,
+                span,
+            });
+        }
+    }
+
+    /// Whether `type_arg` satisfies `trait_name`, registering its associated
+    /// types when it does. Asking is what records an on-demand derivation
+    /// request, so callers that do not report the answer still ask.
+    pub(super) fn check_and_register_bound(&mut self, type_arg: TypeId, trait_name: &str) -> bool {
+        if !self.tysys.type_implements_trait(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            type_arg,
+            trait_name,
+        ) {
+            return false;
+        }
+        self.register_assoc_types_for_concrete_type_and_trait(type_arg, trait_name);
+        true
     }
 
     /// Register associated type resolutions for a concrete type instantiating a trait.

@@ -80,11 +80,15 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(32)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal$spec0" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(33)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(34)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(35)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
+
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(36)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(37)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -174,11 +178,23 @@ fn "tuple_elision_multivalue.wado/run"() with Stdout {
     let __mv_lo_5: i64;
     let __mv_hi_5: i64;
     multivalue_bind [__mv_lo_5, __mv_hi_5] = i64.mul_wide_u(100_i64, 100_i64);
+<<<<<<< HEAD
     "core:cli/println"(__local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_18, global:tuple_elision_multivalue.wado::__const_obj_3); __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_18 }; "core:prelude/primitive.wado/i64::fmt_decimal"(__mv_lo_5, __local_19); __local_18);
+||||||| 2738e686c
+    "core:cli/println"(__local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_18, global:tuple_elision_multivalue.wado::__const_obj_1); __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_18 }; "core:prelude/primitive.wado/i64::fmt_decimal"(__mv_lo_5, __local_19); __local_18);
+=======
+    "core:cli/println"(__local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_18, global:tuple_elision_multivalue.wado::__const_obj_1); __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_18 }; "core:prelude/primitive.wado/i64::fmt_decimal$spec0"(__mv_lo_5, __local_19); __local_18);
+>>>>>>> origin/main
     let __mv_lo_6: i64;
     let __mv_hi_6: i64;
     multivalue_bind [__mv_lo_6, __mv_hi_6] = i64.mul_wide_u(-9223372036854775808_i64, 2_i64);
+<<<<<<< HEAD
     "core:cli/println"(__local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_20, global:tuple_elision_multivalue.wado::__const_obj_2); __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_20 }; "core:prelude/primitive.wado/i64::fmt_decimal"(__mv_hi_6, __local_21); __local_20);
+||||||| 2738e686c
+    "core:cli/println"(__local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_20, global:tuple_elision_multivalue.wado::__const_obj_0); __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_20 }; "core:prelude/primitive.wado/i64::fmt_decimal"(__mv_hi_6, __local_21); __local_20);
+=======
+    "core:cli/println"(__local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_20, global:tuple_elision_multivalue.wado::__const_obj_0); __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_20 }; "core:prelude/primitive.wado/i64::fmt_decimal$spec0"(__mv_hi_6, __local_21); __local_20);
+>>>>>>> origin/main
 }
 
 fn "tuple_elision_multivalue.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -535,6 +551,49 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "core:prelude/primitive.wado/i64::fmt_decimal$spec0"(self, f) {
+    let is_negative: bool;
+    let offset_7: i32;
+    let repr: ref Array<u8>;
+    let abs_val: i64;
+    let digit_count_10: i32;
+    let offset_11: i32;
+    let self_12: ref "core:prelude/string.wado//String";
+    let self_13: ref "core:prelude/string.wado//String";
+    is_negative = self < 0_i64;
+    if self == -9223372036854775808_i64 {
+        offset_7 = "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, 1, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, 19);
+        self_12 = f.buf;
+        repr = self_12.repr;
+        "core:prelude/primitive.wado/write_decimal_digits"(repr, offset_7, 922337203685477580_i64, 18);
+        builtin::array_set_u8(repr, offset_7 + 18, 56);
+    } else {
+        digit_count_10 = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - self, self)));
+        offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_10);
+        "core:prelude/primitive.wado/write_decimal_digits"(self_13 = f.buf; self_13.repr, offset_11, abs_val, digit_count_10);
+    }
+}
+
+fn "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(self, is_negative, prefix, digit_count) {
+    let sign: ref "core:prelude/string.wado//String";
+    let sign_len: i32;
+    let prefix_len: i32;
+    sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    if is_negative {
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+    } else {
+    }
+    sign_len = sign.used;
+    prefix_len = prefix.used;
+    if sign_len > 0 {
+        "core:prelude/string.wado/String::push_str"(self.buf, sign);
+    }
+    if prefix_len > 0 {
+        "core:prelude/string.wado/String::push_str"(self.buf, prefix);
+    }
+    return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
 }
 
 export fn "tuple_elision_multivalue.wado/__cm_export__run" as "run"
