@@ -25,7 +25,7 @@
 
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
-use crate::name::LocalMethodName;
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{CallArg, FunctionRef, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -33,7 +33,7 @@ use crate::token::Span;
 /// before we lock the type table for builders that mutate it.
 struct CtorRef {
     module_source: ModuleSource,
-    type_name: String,
+    type_name: FqTypeName,
     method_name: String,
 }
 
@@ -48,7 +48,7 @@ fn ctor_ref(type_table: &TypeTable, owner: CompilerItem, ctor: CompilerItem) -> 
     debug_assert_eq!(owner_module, method_module);
     CtorRef {
         module_source: owner_module.clone(),
-        type_name: type_name.to_string(),
+        type_name: FqTypeName::declared(owner_module, type_name),
         method_name: method_name.to_string(),
     }
 }

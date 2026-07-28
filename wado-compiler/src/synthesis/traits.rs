@@ -18,7 +18,7 @@ use crate::hashmap::IndexSet;
 
 use crate::elaborator::trait_env::TraitEnv;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, Receiver, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FnDispatchTrait, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
@@ -152,7 +152,7 @@ fn trait_method_info(
     method: &str,
 ) -> LocalMethodName {
     LocalMethodName::new(
-        format!("{module_source}/{struct_name}"),
+        FqTypeName::declared(module_source, struct_name),
         Some(trait_name.to_string()),
         method.to_string(),
     )
@@ -3981,7 +3981,11 @@ fn generate_inspect_alt_impls(module_source: &ModuleSource, module: &mut TirModu
         if ctx.has_impl(type_name, &inspect_name) {
             return true;
         }
-        let mangled = MethodName::format_local(type_name, Some(&inspect_name), &inspect_method);
+        let mangled = MethodName::format_local(
+            &FqTypeName::declared(&module_source, type_name),
+            Some(&inspect_name),
+            &inspect_method,
+        );
         all_fn_names.contains(&mangled)
     };
 
@@ -4668,7 +4672,7 @@ fn formatter_call(
                 name: format!("{formatter_name}::{method_name}"),
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
-                    formatter_name.to_string(),
+                    FqTypeName::declared(&ModuleSource::format(), formatter_name),
                     None,
                     method_name.to_string(),
                 )),
@@ -4845,8 +4849,11 @@ fn generate_fallback_impls(
         if ctx.has_impl(name, &pair.delegate_trait) {
             return true;
         }
-        let delegate_key =
-            MethodName::format_local(name, Some(&pair.delegate_trait), &pair.delegate_method);
+        let delegate_key = MethodName::format_local(
+            &FqTypeName::declared(&module_source, name),
+            Some(&pair.delegate_trait),
+            &pair.delegate_method,
+        );
         all_fn_names.contains(&delegate_key)
     };
 
