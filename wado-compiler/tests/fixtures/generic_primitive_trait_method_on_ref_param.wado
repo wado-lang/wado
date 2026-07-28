@@ -1,0 +1,31 @@
+// A trait method on a `&T` receiver, monomorphized to a primitive, becomes a
+// direct Wasm binary op. The receiver is a reference *value* here (a `&T`
+// parameter), not a `&expr` node — it used to be handed to the binary op still
+// boxed, so codegen emitted `I32Eq` against a `(ref $type)` and the module
+// failed validation.
+fn same<T: Eq>(a: &T, b: &T) -> bool {
+    return a.eq(b);
+}
+
+fn ordered<T: Ord>(a: &T, b: &T) -> bool {
+    return a.cmp(b) == Ordering::Less;
+}
+
+fn sum<T: Add<Output = T>>(a: &T, b: &T) -> T {
+    return a.add(b);
+}
+
+export fn run() {
+    assert same(&1, &1);
+    assert !same(&1, &2);
+    assert ordered(&1, &2);
+    assert !ordered(&2, &1);
+    assert sum(&3, &4) == 7;
+
+    let x: f64 = 1.5;
+    let y: f64 = 1.5;
+    assert same(&x, &y);
+}
+
+__DATA__
+{"stdout": ""}
