@@ -8,11 +8,17 @@
 // receives is the shared global's storage, and the first `push` mutates the
 // constant for every later call.
 //
-// `take_field` returns the projection directly; `take_bound` reaches the same
-// storage through a `match` arm binding, which names it without ever mentioning
-// the parameter again. Each is called three times and the caller pushes onto the
-// result: identical lengths are the check — before the fix these printed
-// `4 5 6`.
+// Four routes to the same storage, each of which the guard has to see:
+//
+// - `take_field` returns the projection directly.
+// - `take_bound` reaches it through a `match` arm binding, which names it
+//   without ever mentioning the parameter again.
+// - `take_if` / `take_match` deliver it as a branch result — the value of an
+//   `if` / `match` expression, which the freshness rule counts as owned just
+//   like a bare projection.
+//
+// Each is called three times and the caller pushes onto the result: identical
+// lengths are the check — before the fix these printed `4 5 6`.
 
 use { println, Stdout } from "core:cli";
 
@@ -42,6 +48,23 @@ fn take_bound(s: S) -> List<u8> {
     }
 }
 
+#[inline(never)]
+fn take_if(s: S) -> List<u8> {
+    return if s.tag.len() > 100 {
+        s.tag;
+    } else {
+        s.inner.blob;
+    };
+}
+
+#[inline(never)]
+fn take_match(s: S) -> List<u8> {
+    return match s.tag.len() > 100 {
+        true => s.tag,
+        false => s.inner.blob,
+    };
+}
+
 fn fresh() -> S {
     return S { inner: Inner { blob: [1, 2, 3] as List<u8> }, tag: [7, 8] as List<u8> };
 }
@@ -52,11 +75,15 @@ export fn run() with Stdout {
         a.push(9);
         let mut b = take_bound(fresh());
         b.push(9);
-        println(`${a.len()} ${b.len()}`);
+        let mut c = take_if(fresh());
+        c.push(9);
+        let mut d = take_match(fresh());
+        d.push(9);
+        println(`${a.len()} ${b.len()} ${c.len()} ${d.len()}`);
     }
 }
 
 __DATA__
 {
-    "stdout": "4 4\n4 4\n4 4\n"
+    "stdout": "4 4 4 4\n4 4 4 4\n4 4 4 4\n"
 }

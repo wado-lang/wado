@@ -1108,12 +1108,7 @@ fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 /// value outright.
 fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     let roots = projection_alias_roots(body, idx, gate);
-    let escapes = |op: Operand| {
-        op.as_expr().is_some_and(|e| {
-            gate.is_reference_type(body.exprs[e].type_id)
-                && roots.iter().any(|&r| projection_roots_at(body, e, r))
-        })
-    };
+    let escapes = |op: Operand| delivers_projection_operand(body, op, &roots, gate);
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         match node {
@@ -1232,6 +1227,66 @@ fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
         i += 1;
     }
     roots
+}
+
+fn delivers_projection_operand(
+    body: &Body,
+    op: Operand,
+    roots: &[u32],
+    gate: &Gate<'_>,
+) -> bool {
+    op.as_expr()
+        .is_some_and(|e| delivers_projection(body, e, roots, gate))
+}
+
+/// Whether evaluating `expr` yields the storage of a root — directly, or as the
+/// value a branch delivers.
+///
+/// `return if c { s.tag } else { s.inner.blob };` hands out a projection just as
+/// plainly as `return s.tag;` does, and `analyze::is_owned_value` treats such a
+/// branch result as owned, so the caller keeps no copy of it. A block's value is
+/// its tail expression, an `if`'s is the tail of whichever branch runs, and a
+/// `match`/`switch`'s is its arm's — the same rule the freshness side follows.
+fn delivers_projection(body: &Body, expr: ExprId, roots: &[u32], gate: &Gate<'_>) -> bool {
+    if gate.is_reference_type(body.exprs[expr].type_id)
+        && roots.iter().any(|&r| projection_roots_at(body, expr, r))
+    {
+        return true;
+    }
+    match &body.exprs[expr].kind {
+        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
+            block_tail_delivers(body, *block, roots, gate)
+        }
+        ExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            block_tail_delivers(body, *then_branch, roots, gate)
+                || else_branch.is_some_and(|eb| block_tail_delivers(body, eb, roots, gate))
+        }
+        ExprKind::Match { arms, .. } => arms
+            .iter()
+            .any(|arm| delivers_projection_operand(body, arm.body, roots, gate)),
+        ExprKind::Switch { arms, default, .. } => {
+            arms.iter()
+                .any(|&a| block_tail_delivers(body, a, roots, gate))
+                || block_tail_delivers(body, *default, roots, gate)
+        }
+        _ => false,
+    }
+}
+
+/// The value a block falls off its end with: its tail expression statement.
+/// A `break`-delivered value is checked where the `break` is.
+fn block_tail_delivers(body: &Body, block: BlockId, roots: &[u32], gate: &Gate<'_>) -> bool {
+    body.blocks[block]
+        .stmts
+        .last()
+        .is_some_and(|&s| match &body.stmts[s].kind {
+            StmtKind::Expr(op) => delivers_projection_operand(body, *op, roots, gate),
+            _ => false,
+        })
 }
 
 /// Every local a pattern binds, appended to `out` if not already there.
