@@ -209,7 +209,9 @@ where it cannot prove move / share / fresh; no elision pass):
   (`receiver_storing_methods`), so a `&mut self` mutation like `List::push`
   (which stores only its value) no longer pins the receiver local.
 - Freshness — `ownership.rs` return conventions (a call is fresh iff the callee
-  returns owned). An _indirect_ call is fresh when every closure `__call` of its
+  returns owned), plus the literals that materialize their own storage: a string
+  _and_ a bytes literal, both of which lower to a fresh aggregate over a packed
+  array. An _indirect_ call is fresh when every closure `__call` of its
   return type returns owned: closure lowering rewrites every callable value —
   a closure literal and a bare `FuncRef` alike — into a functor whose `__call`
   is an ordinary function, so those are the complete set of targets, and the
@@ -312,6 +314,7 @@ Verified against the tree.
 - [x] Freshness through an indirect call and through block / `if` results.
 - [x] Move through a newtype cast (`bytes as ByteArray`), which the freshness
       side already read through.
+- [x] A bytes literal counts as fresh, like a string literal.
 - [ ] Pin representative move / copy / share decisions as e2e fixtures.
 
 ## Deferred: the `move` and `unique` keywords

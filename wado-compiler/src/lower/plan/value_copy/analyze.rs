@@ -197,7 +197,11 @@ pub(crate) fn is_owned_value(
     type_table: &TypeTable,
 ) -> bool {
     match &expr.kind {
+        // A string / bytes literal lowers to a fresh `StructLiteral` over a
+        // packed array (`translate::seq_literal`), so each evaluation
+        // materializes its own storage.
         TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::StructLiteral { .. }
         | TirExprKind::TupleLiteral { .. }
         | TirExprKind::TupleSpread { .. }

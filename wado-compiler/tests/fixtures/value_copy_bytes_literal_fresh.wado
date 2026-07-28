@@ -1,0 +1,42 @@
+// A bytes literal is a fresh value, so passing one by value to a callee that
+// writes its parameter needs no defensive copy (WEP 2026-05-21).
+//
+// `is_owned_value` listed `StringLiteral` but not `BytesLiteral`, so every
+// `b"…"` handed to a mutating callee was deep-copied first. Both lower to the
+// same fresh `StructLiteral` over a packed array (`translate::seq_literal`), so
+// each evaluation already materializes its own storage — the copy protected
+// nothing.
+//
+// `bump_first` writes its parameter and is called three times with the same
+// literal: identical results prove each call still gets its own array.
+// `#[inline(never)]` keeps the calls intact, and nothing else in this program
+// deep-copies.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn bump_first(mut v: List<u8>) -> i32 {
+    v[0] = v[0] + 1;
+    return v[0] as i32;
+}
+
+#[inline(never)]
+fn total(v: List<u8>) -> i32 {
+    let mut sum = 0;
+    for let mut i = 0; i < v.len(); i += 1 {
+        sum = sum + v[i] as i32;
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    // b"abc" is 97, 98, 99: bumping the head yields 98 every time, and the
+    // untouched literal still totals 294.
+    println(`${bump_first(b"abc")} ${bump_first(b"abc")} ${bump_first(b"abc")} ${total(b"abc")}`);
+}
+
+__DATA__
+{
+    "stdout": "98 98 98 294\n",
+    "wir_not_expect:O2": ["__array_clone_len"]
+}

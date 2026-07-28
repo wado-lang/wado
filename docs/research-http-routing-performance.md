@@ -161,11 +161,12 @@ that shape too, gated on the callee's parameter being read-only in the callee's
 own body, and the header value compiles to an eager `array.new_fixed` global read
 straight into `Fields::append`: zero per-request allocations for the header.
 
-One related copy remains: a constant handed to a callee that writes its
-parameter still gets a caller-side defensive copy of a value that was already
-fresh — an `array.new_data` cloned into another array. That copy is also what
-currently blocks hoisting for such callees, which is why the callee gate above
-has to stand on its own.
+A constant handed to a callee that writes its parameter used to get a
+caller-side defensive copy of a value that was already fresh: `is_owned_value`
+listed `StringLiteral` but not `BytesLiteral`, though both lower to the same
+fresh aggregate over a packed array. That copy is gone too — which leaves the
+callee gate above as the only thing standing between a hoisted constant and a
+callee that writes it, exactly as the gate was written to be.
 
 ## Profiler caveat
 
@@ -177,11 +178,9 @@ map; take timing from ablation A/Bs.
 
 ## Next steps, in payoff order
 
-1. Optimizer: stop the value-copy planner from copying a read-only global back
-   into a local — the last known copy of a value that was already fresh.
-2. Router: `match_dynamic` allocates `ranges`, `PathParams`, and `RouteMatch` per
+1. Router: `match_dynamic` allocates `ranges`, `PathParams`, and `RouteMatch` per
    hit while `match_static` returns a pre-built shell. A `ranges` buffer owned by
    the router (or a fixed inline capacity) would make dynamic hits allocation-free
    in the common case.
-3. Host side, separately: the 68 µs floor against Axum's 40 µs is `wado serve`'s
+2. Host side, separately: the 68 µs floor against Axum's 40 µs is `wado serve`'s
    own per-request path, not guest code.
