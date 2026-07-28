@@ -1394,6 +1394,44 @@ fn cm_lib_rejects_empty_record_boundary_type() {
     );
 }
 
+/// A Component Model interface has one namespace shared by its types and its
+/// functions, and names in it must be unique case-insensitively (`WIT.md`). Wado
+/// source has separate namespaces, so a `PascalCase` type and a `snake_case`
+/// function look unambiguous right up until kebab-casing maps them onto the same
+/// CM name. That must be a diagnostic naming both, not an ICE from Wasm
+/// validation.
+#[test]
+fn cm_lib_rejects_export_name_colliding_with_type_name() {
+    let err = try_compile_lib(
+        "variant Shape {\n    Dot,\n    Line(u32),\n}\n\
+         export fn shape(v: u32) -> u32 {\n    return v;\n}\n\
+         export fn make(v: u32) -> Shape {\n    if v == 0 {\n        \
+         return Shape::Dot;\n    } else {\n        return Shape::Line(v);\n    }\n}\n",
+    )
+    .expect_err("a function and a type sharing a CM name should fail to compile");
+    assert!(
+        err.contains("`shape`") && err.contains("`Shape`"),
+        "expected a collision diagnostic naming both the function and the type, got: {err}"
+    );
+}
+
+/// Two type names that differ only in a way kebab-casing erases land on the same
+/// CM name with no function involved at all.
+#[test]
+fn cm_lib_rejects_two_types_sharing_a_cm_name() {
+    let err = try_compile_lib(
+        "struct HTTPServer {\n    port: u32,\n}\n\
+         struct HttpServer {\n    host: String,\n}\n\
+         export fn a(v: HTTPServer) -> u32 {\n    return v.port;\n}\n\
+         export fn b(v: HttpServer) -> String {\n    return v.host;\n}\n",
+    )
+    .expect_err("two types sharing a CM name should fail to compile");
+    assert!(
+        err.contains("http-server"),
+        "expected a diagnostic naming the shared CM name, got: {err}"
+    );
+}
+
 /// The fixture is the published package source reused verbatim, so it must stay
 /// byte-identical to `package-cm-catalog/src/lib.wado`; otherwise the test
 /// corpus and the shipped package could drift apart.

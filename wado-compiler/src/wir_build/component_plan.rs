@@ -6,6 +6,7 @@
 use crate::ast::Type;
 use crate::component_model::{CmInterfaceRegistry, is_unit_type};
 use crate::hashmap::IndexMap;
+use crate::name::kebab_export_name;
 use crate::tir::TirTest;
 use crate::world_registry::{WorldExportInfo, WorldInfo, WorldRegistry};
 
@@ -426,13 +427,6 @@ fn resolve_cm_export_type(
         };
     }
     panic!("unsupported world export type shape: {ty:?}");
-}
-
-/// Kebab-case a world export name for the Component Model boundary: underscores
-/// become hyphens. Wado identifiers are `[a-z0-9_]`, so this yields a valid CM
-/// extern name. Already-kebab WASI names (`run`, `handle`) are unchanged.
-fn kebab_export_name(name: &str) -> String {
-    name.replace('_', "-")
 }
 
 /// Convert a test function name (e.g., `__test_0_my_name`) to a valid kebab-case
