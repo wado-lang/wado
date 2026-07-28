@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785220576480,
+  "lastUpdate": 1785221566648,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44453,6 +44453,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/da23a26044dd95d4d1092f555fdac34101ec807a"
         },
         "date": 1785220575718,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6055,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276421,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9edea7a6ea02a35920939dff542178698e31139f",
+          "message": "Merge pull request #1704 from wado-lang/claude/super-traits-design-4o9sul\n\nfeat(elaborator): super traits",
+          "timestamp": "2026-07-28T15:41:24+09:00",
+          "tree_id": "587d737cd68b7d30ad4b3ed69f1ade7e64c723ad",
+          "url": "https://github.com/wado-lang/wado/commit/9edea7a6ea02a35920939dff542178698e31139f"
+        },
+        "date": 1785221565946,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
