@@ -432,9 +432,8 @@ pub fn synthesize_defaults(project: &mut Package) {
     }
 }
 
-/// Generate `Struct^ReflectStruct::type_name()` for each requested struct
-/// (WEP 2026-06-13 §1). Runs after `synthesize_defaults` so any late demand
-/// recorded by other synthesized bodies is captured.
+/// Generate `Struct^ReflectStruct::type_name()` for each eligible struct
+/// (WEP 2026-06-13 §1).
 pub fn synthesize_reflect(project: &mut Package) {
     let trait_env = project.trait_env.clone();
     let first_module = project

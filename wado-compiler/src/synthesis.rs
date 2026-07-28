@@ -29,10 +29,32 @@ use crate::tir::ResolvedType;
 /// Run pre-monomorphize synthesis phases on the project.
 ///
 /// Execution order:
-/// 1. Traits — generates `Eq`/`Ord` for enums, `Inspect`/`Display` for all types
-/// 2. Template expansion — expands `TemplateString` nodes into trait method calls
-/// 3. CM bindings — generates Component Model boundary adapters
+/// 1. Reflection metadata — `Reflect{Struct,Variant,Enum,Flags}` members, which
+///    the auto-derived bodies dispatch through
+/// 2. Traits — generates `Eq`/`Ord` for enums, `Inspect`/`Display` for all types
+/// 3. Template expansion — expands `TemplateString` nodes into trait method calls
+/// 4. CM bindings — generates Component Model boundary adapters
+/// The four reflection kinds' metadata (WEP 2026-06-13 §1, §3b–d). Driven by
+/// the declarations themselves, not by demand, so it runs exactly once: a
+/// second run would re-emit every member function.
+fn synthesize_reflect_metadata(project: &mut Package) {
+    traits::synthesize_reflect(project);
+    traits::synthesize_reflect_variant(project);
+    traits::synthesize_reflect_enum(project);
+    traits::synthesize_reflect_flags(project);
+}
+
 pub fn synthesize(project: Package) -> Result<Package, String> {
+    let mut project = project;
+
+    // Reflection metadata first: an auto-derived body dispatches through the
+    // `Reflect*` blankets, and `blanket_dispatch_for` can only project a
+    // blanket's `Members` / `FieldTypes` pack once the kind's synthesis has
+    // registered it. Emitting a body before that leaves the call naming a
+    // per-type impl that never exists. Nothing here reads what the later
+    // passes produce — the targets come from the declarations.
+    synthesize_reflect_metadata(&mut project);
+
     let project = traits::synthesize_traits(project);
 
     // Generate From impls from `impl From<T> for Type;` requests.
@@ -47,19 +69,6 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
     // Drain `Default` after serde: `Deserialize` bodies record `Field::default()`
     // requests later than `synthesize_traits`' snapshot (WEP 2026-06-25).
     traits::synthesize_defaults(&mut project);
-
-    // ReflectStruct struct metadata (WEP 2026-06-13 §1). After defaults so any late
-    // demand recorded by synthesized bodies is included.
-    traits::synthesize_reflect(&mut project);
-
-    // ReflectVariant metadata (WEP 2026-06-13 §3d).
-    traits::synthesize_reflect_variant(&mut project);
-
-    // ReflectEnum metadata (WEP 2026-06-13 §3b).
-    traits::synthesize_reflect_enum(&mut project);
-
-    // ReflectFlags metadata (WEP 2026-06-13 §3c).
-    traits::synthesize_reflect_flags(&mut project);
 
     // Snapshot the synthesis-layer impls (auto-derives + From/serde adapters)
     // onto `TraitEnv` so subsequent phases query a single source of truth
