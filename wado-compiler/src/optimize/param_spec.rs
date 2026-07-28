@@ -168,6 +168,13 @@ impl ParamSpecState {
     fn budget_exhausted(&self) -> bool {
         self.clones.len() >= MAX_TOTAL_SPECIALIZATIONS
     }
+
+    /// Whether `func` is itself a clone this pass minted. Such a function has
+    /// its constants already substituted, and specializing it again would key
+    /// the cache on an identity that keeps moving.
+    fn is_clone(&self, func: FuncId) -> bool {
+        self.param_consts.contains_key(&func)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -221,6 +228,8 @@ struct Signatures {
     /// Parameter local indices per function index; empty for a bodyless record.
     param_locals: Vec<Vec<u32>>,
     /// The struct type each parameter's reference points at, when it is one.
+    /// `None` for a parameter the callee may store a reference to: it outlives
+    /// the call, so its fields are not ours to freeze.
     param_struct: Vec<Vec<Option<TypeId>>>,
     /// Whether the function has a body the summary can walk.
     has_body: Vec<bool>,
@@ -243,9 +252,6 @@ impl Signatures {
                 func.params
                     .iter()
                     .map(|p| {
-                        // A parameter the callee may store a reference to
-                        // outlives the call, so its fields are not ours to
-                        // freeze.
                         if func.stores.contains(&p.name) {
                             None
                         } else {
@@ -306,32 +312,7 @@ fn collect_local_uses(
     signatures: &Signatures,
     out: &mut IndexMap<u32, LocalUses>,
 ) {
-    // A `FieldAccess` node's role depends on its parent, so the assignment
-    // targets and borrow referents are gathered before the classifying walk.
-    let mut assigned: IndexMap<ExprId, Operand> = IndexMap::default();
-    let mut borrowed: IndexSet<ExprId> = IndexSet::default();
-    for_each_reachable(body, |node| {
-        let NodeRef::Expr(id) = node else {
-            return;
-        };
-        match &body.exprs[id].kind {
-            ExprKind::Assign { target, value } => {
-                assigned.insert(*target, *value);
-            }
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-                expr,
-            } => {
-                if let Some(referent) = expr.as_expr() {
-                    borrowed.insert(referent);
-                }
-            }
-            _ => {}
-        }
-    });
-
-    // Local reads reached through a classified position; anything left over is
-    // a use the summary does not model.
+    let (assigned, borrowed) = collect_place_contexts(body);
     let mut classified: IndexSet<ExprId> = IndexSet::default();
     for_each_reachable(body, |node| {
         let NodeRef::Expr(id) = node else {
@@ -413,29 +394,66 @@ fn collect_local_uses(
         }
     });
 
-    // Anything unclassified — a return value, an aggregate element, an indirect
-    // call, a deref — leaves the local's storage beyond this summary's reach.
+    mark_unclassified_opaque(body, tracked, &classified, out);
+}
+
+/// The place contexts a `FieldAccess` read has to be interpreted against: the
+/// value each assignment target receives, and the referents of `&` / `&mut`.
+/// A node's role depends on its parent, so these are gathered up front rather
+/// than during the classifying walk, which visits parents and children in no
+/// fixed order.
+fn collect_place_contexts(body: &Body) -> (IndexMap<ExprId, Operand>, IndexSet<ExprId>) {
+    let mut assigned: IndexMap<ExprId, Operand> = IndexMap::default();
+    let mut borrowed: IndexSet<ExprId> = IndexSet::default();
     for_each_reachable(body, |node| {
-        match node {
-            NodeRef::Expr(id) => {
-                if let ExprKind::Local { index, .. } = &body.exprs[id].kind
-                    && tracked.contains(index)
-                    && !classified.contains(&id)
-                {
-                    out.entry(*index).or_default().opaque = true;
+        let NodeRef::Expr(id) = node else {
+            return;
+        };
+        match &body.exprs[id].kind {
+            ExprKind::Assign { target, value } => {
+                assigned.insert(*target, *value);
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                expr,
+            } => {
+                if let Some(referent) = expr.as_expr() {
+                    borrowed.insert(referent);
                 }
             }
-            NodeRef::Pat(id) => {
-                // A destructuring binding rebinds the local to something the
-                // summary never saw.
-                if let PatKind::Binding { local_index, .. } = &body.pats[id].kind
-                    && tracked.contains(local_index)
-                {
-                    out.entry(*local_index).or_default().opaque = true;
-                }
-            }
-            NodeRef::Stmt(_) | NodeRef::Block(_) => {}
+            _ => {}
         }
+    });
+    (assigned, borrowed)
+}
+
+/// Mark every tracked local whose use the classifying walk did not reach — a
+/// return value, an aggregate element, an indirect call, a deref, a
+/// destructuring binding. Its storage is beyond this summary, so assume the
+/// worst.
+fn mark_unclassified_opaque(
+    body: &Body,
+    tracked: &IndexSet<u32>,
+    classified: &IndexSet<ExprId>,
+    out: &mut IndexMap<u32, LocalUses>,
+) {
+    for_each_reachable(body, |node| match node {
+        NodeRef::Expr(id) => {
+            if let ExprKind::Local { index, .. } = &body.exprs[id].kind
+                && tracked.contains(index)
+                && !classified.contains(&id)
+            {
+                out.entry(*index).or_default().opaque = true;
+            }
+        }
+        NodeRef::Pat(id) => {
+            if let PatKind::Binding { local_index, .. } = &body.pats[id].kind
+                && tracked.contains(local_index)
+            {
+                out.entry(*local_index).or_default().opaque = true;
+            }
+        }
+        NodeRef::Stmt(_) | NodeRef::Block(_) => {}
     });
 }
 
@@ -556,9 +574,9 @@ fn summarize_params(
         for key in keys {
             let forwards = facts[&key].forwards.clone();
             for edge in forwards {
+                // No summary means the callee's parameter is not a tracked
+                // struct reference, so nothing is known about it.
                 let Some(target) = facts.get(&edge).cloned() else {
-                    // A forwarded-to parameter with no summary is one whose type
-                    // is not a struct reference (or that the callee stores).
                     let current = &mut facts[&key];
                     changed |= !current.opaque;
                     current.opaque = true;
@@ -625,9 +643,6 @@ fn collect_roots(
     seed: Option<&IndexMap<String, ParamSeed>>,
 ) -> IndexMap<u32, FieldConsts> {
     let locals = &func.locals;
-    // A local is a root candidate when its declared type is a struct (or a
-    // reference to one) — parameters included, so a clone's specialized
-    // parameter propagates one call deeper.
     let mut roots: IndexMap<u32, FieldConsts> = IndexMap::default();
     for param in &func.params {
         let Some(entry) = seed.and_then(|seed| seed.get(&param.name)) else {
@@ -758,9 +773,7 @@ fn select_sites(
             }
             _ => return,
         };
-        if state.param_consts.contains_key(&callee) {
-            // Already a clone: its constants are substituted, and re-cloning it
-            // would key on a moving identity.
+        if state.is_clone(callee) {
             return;
         }
         let index = callee.index();
@@ -838,98 +851,106 @@ pub(super) fn specialize_const_params(
     if facts.is_empty() {
         return false;
     }
-
-    // Phase 1: pick the call sites, holding only shared borrows.
-    let mut per_caller: Vec<(usize, Vec<Site>)> = Vec::new();
-    {
-        let types = project.type_table.borrow();
-        for (index, func_rc) in project.functions.iter().enumerate() {
-            let func = func_rc.borrow();
-            let Some(body) = &func.body else {
-                continue;
-            };
-            if func.is_dead {
-                continue;
-            }
-            let seed = state.param_consts.get(&FuncId::new(index));
-            let roots = collect_roots(&func, body, &types, &signatures, &facts, seed);
-            if roots.is_empty() {
-                continue;
-            }
-            let sites = select_sites(
-                &func.locals,
-                body,
-                &types,
-                &signatures,
-                &facts,
-                &roots,
-                state,
-            );
-            if !sites.is_empty() {
-                per_caller.push((index, sites));
-            }
-        }
-    }
+    let per_caller = collect_sites(project, state, &signatures, &facts);
     if per_caller.is_empty() {
         return false;
     }
+    let (retarget, minted) = mint_clones(project, state, &per_caller);
+    if retarget.is_empty() {
+        return false;
+    }
+    retarget_calls(project, &retarget);
+    project.functions.extend(minted);
+    for (caller, _, _) in retarget {
+        gate.mark_changed(FuncId::new(caller));
+    }
+    true
+}
 
-    // Phase 2: mint the clones each distinct binding set needs.
-    let mut retarget: Vec<(usize, ExprId, FuncId)> = Vec::new();
+/// The specializable call sites of every live function, as
+/// `(caller store position, sites)`. Holds only shared borrows of `project`.
+fn collect_sites(
+    project: &NirPackage,
+    state: &ParamSpecState,
+    signatures: &Signatures,
+    facts: &IndexMap<(FuncId, u32), ParamFacts>,
+) -> Vec<(usize, Vec<Site>)> {
+    let types = project.type_table.borrow();
+    let mut per_caller = Vec::new();
+    for (index, func_rc) in project.functions.iter().enumerate() {
+        let func = func_rc.borrow();
+        let Some(body) = &func.body else {
+            continue;
+        };
+        if func.is_dead {
+            continue;
+        }
+        let seed = state.param_consts.get(&FuncId::new(index));
+        let roots = collect_roots(&func, body, &types, signatures, facts, seed);
+        if roots.is_empty() {
+            continue;
+        }
+        let sites = select_sites(&func.locals, body, &types, signatures, facts, &roots, state);
+        if !sites.is_empty() {
+            per_caller.push((index, sites));
+        }
+    }
+    per_caller
+}
+
+/// One call to point at a clone: `(caller store position, call node, clone)`.
+type Retarget = (usize, ExprId, FuncId);
+
+/// Mint a clone per distinct binding set, reusing one already cached. Returns
+/// the retargets to apply and the clones to append to the store.
+fn mint_clones(
+    project: &mut NirPackage,
+    state: &mut ParamSpecState,
+    per_caller: &[(usize, Vec<Site>)],
+) -> (Vec<Retarget>, Vec<Rc<RefCell<NirFunction>>>) {
+    let mut retarget: Vec<Retarget> = Vec::new();
     let mut minted: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
     let mut next_id = project.next_func_id().index();
-    for (caller, sites) in &per_caller {
+    for (caller, sites) in per_caller {
         for site in sites {
             let key = SpecKey {
                 callee: site.callee,
                 bindings: site.bindings.clone(),
             };
             if let Some(&existing) = state.clones.get(&key) {
-                // A clone minted in an earlier iteration is only interchangeable
-                // with the original while its signature still matches: `dae` /
-                // `drve` / `sroa_param` reshape a function *after* it is cached,
-                // and they rewrite only the call sites that exist at that
-                // moment. Retargeting a fresh site onto a reshaped clone would
-                // hand it the original's argument list.
                 if signatures_match(project, site.callee, existing) {
                     retarget.push((*caller, site.call, existing));
                 }
                 continue;
             }
-            if state.budget_exhausted() {
-                continue;
-            }
             let ordinal = state.per_callee.get(&site.callee).copied().unwrap_or(0);
-            if ordinal >= MAX_SPECIALIZATIONS_PER_FUNCTION {
+            if state.budget_exhausted()
+                || ordinal >= MAX_SPECIALIZATIONS_PER_FUNCTION
+                || body_exprs(project, site.callee) > MAX_CLONE_EXPRS
+            {
                 continue;
             }
-            // Measured before the copy, not after: the check is a field read,
-            // while reaching it through `build_clone` deep-cloned the whole
-            // function only to discard it, once per loop iteration.
-            if body_exprs(project, site.callee) > MAX_CLONE_EXPRS {
-                continue;
-            }
-            let clone = build_clone(project, site, FuncId::new(next_id), ordinal);
-            next_id += 1;
-            state.clones.insert(key, clone.id);
-            state.per_callee.insert(site.callee, ordinal + 1);
-            state.param_consts.insert(clone.id, clone.param_consts);
             crate::compiler_trace!(
                 "param_spec",
                 "specialized {} on {} field(s)",
                 project.functions[site.callee.index()].borrow().name,
                 site.bindings.len()
             );
+            let clone = build_clone(project, site, FuncId::new(next_id), ordinal);
+            next_id += 1;
+            state.clones.insert(key, clone.id);
+            state.per_callee.insert(site.callee, ordinal + 1);
+            state.param_consts.insert(clone.id, clone.param_consts);
             retarget.push((*caller, site.call, clone.id));
             minted.push(clone.function);
         }
     }
-    if retarget.is_empty() {
-        return false;
-    }
+    (retarget, minted)
+}
 
-    // Phase 3: retarget the call sites — a mechanical `func_id` swap.
-    for (caller, call, target) in &retarget {
+/// Point each selected call at its clone — a `func_id` swap, no analysis.
+fn retarget_calls(project: &mut NirPackage, retarget: &[Retarget]) {
+    for (caller, call, target) in retarget {
         let mut func = project.functions[*caller].borrow_mut();
         let Some(body) = &mut func.body else {
             continue;
@@ -941,13 +962,6 @@ pub(super) fn specialize_const_params(
             _ => panic!("param_spec site is not a call"),
         }
     }
-    for func in minted {
-        project.functions.push(func);
-    }
-    for (caller, _, _) in retarget {
-        gate.mark_changed(FuncId::new(caller));
-    }
-    true
 }
 
 /// A freshly minted clone and the facts recorded for it.
@@ -960,16 +974,17 @@ struct Clone {
 /// Clone `site.callee` with its bindings substituted, registering the clone in
 /// the function index so its call sites are born resolved. The caller has
 /// already checked the size budget, so the copy always yields a clone.
+///
+/// The clone's identity has to differ from the original's along every axis the
+/// call graph keys on. A method's is its `method_name`, not only its function
+/// name — DCE resolves a `MethodCall` target through `method_info` — so leaving
+/// the original's there would route every call to the clone back to the
+/// original, and the clone would be pruned out from under its live call site.
 fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize) -> Clone {
     let mut clone = project.functions[site.callee.index()].borrow().clone();
     let origin = (clone.module_source.clone(), clone.name.clone());
     let name = crate::name::param_spec_name(&clone.name, ordinal);
     clone.name.clone_from(&name);
-    // A method's call-graph identity comes from its `method_name`, not only its
-    // function name: DCE marks a `MethodCall`'s target through `method_info`.
-    // Leaving the original's name there would resolve every call to the clone
-    // back to the original, and the clone would be pruned out from under its
-    // live call site.
     if let Some(info) = &mut clone.method_info {
         info.method_name = crate::name::param_spec_name(&info.method_name, ordinal);
     }
@@ -985,10 +1000,6 @@ fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize
             .insert(*field, *value);
     }
 
-    // The substitution may match nothing — a pass-through callee reads none of
-    // the bound fields itself, only the callees it forwards to do. The clone is
-    // still what carries the constants to them: its recorded `param_consts` make
-    // the next iteration specialize one call deeper.
     let body = clone.body.as_mut().expect("specialized callee has a body");
     let mut buffers = EngineBuffers::default();
     substitute_fields(body, &mut clone.locals, &mut buffers, &bound);
@@ -1007,24 +1018,28 @@ fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize
 
     let key = FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
     project.func_index.insert(key, id);
-    // `function_strings` / `function_method_info` are name-keyed, and DCE reads
-    // them to decide which string literals survive; the clone needs its own
-    // entries or its literals are pruned out from under it.
-    if let Some(strings) = project.function_strings.get(&origin).cloned() {
-        project
-            .function_strings
-            .insert((clone.module_source.clone(), name.clone()), strings);
-    }
-    if let Some(info) = project.function_method_info.get(&origin).cloned() {
-        project
-            .function_method_info
-            .insert((clone.module_source.clone(), name), info);
-    }
+    copy_name_keyed_tables(project, &origin, (clone.module_source.clone(), name));
 
     Clone {
         id,
         function: Rc::new(RefCell::new(clone)),
         param_consts,
+    }
+}
+
+/// Give the clone its own entries in the name-keyed side tables. DCE reads
+/// `function_strings` to decide which string literals survive, so without them
+/// the clone's literals are pruned out from under it.
+fn copy_name_keyed_tables(
+    project: &mut NirPackage,
+    origin: &(crate::module_source::ModuleSource, String),
+    clone: (crate::module_source::ModuleSource, String),
+) {
+    if let Some(strings) = project.function_strings.get(origin).cloned() {
+        project.function_strings.insert(clone.clone(), strings);
+    }
+    if let Some(info) = project.function_method_info.get(origin).cloned() {
+        project.function_method_info.insert(clone, info);
     }
 }
 
@@ -1058,13 +1073,17 @@ fn signatures_match(project: &NirPackage, original: FuncId, clone: FuncId) -> bo
 }
 
 /// Replace every value-position read of a bound field with its constant.
-/// Returns whether any read was substituted.
+///
+/// Matching nothing is a normal outcome, not a failure: a pass-through callee
+/// reads none of the bound fields itself, only the callees it forwards to do.
+/// The clone is still what carries the constants to them, through the
+/// `param_consts` its caller records.
 fn substitute_fields(
     body: &mut Body,
     locals: &mut Vec<crate::nir::NirLocal>,
     buffers: &mut EngineBuffers,
     bindings: &IndexMap<u32, FieldConsts>,
-) -> bool {
+) {
     let mut engine = Engine::new(body, buffers, locals);
     let mut reads: Vec<(ExprId, FieldConst)> = Vec::new();
     for_each_reachable(engine.body, |node| {
@@ -1088,10 +1107,7 @@ fn substitute_fields(
         }
     });
 
-    let mut changed = false;
     for (read, value) in reads {
-        // A place-position read hands out storage, not a value; substituting
-        // there would destroy the place.
         if super::extract::is_place_read(&engine, read) {
             continue;
         }
@@ -1100,7 +1116,6 @@ fn substitute_fields(
             continue;
         };
         let interned = engine.body.values.alloc_unshared(kind, type_id);
-        changed |= engine.redirect_expr(read, Operand::Value(interned));
+        engine.redirect_expr(read, Operand::Value(interned));
     }
-    changed
 }

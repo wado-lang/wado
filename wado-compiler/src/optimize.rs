@@ -40,11 +40,10 @@
 //! 14. `const_folding` — partial evaluation via [`crate::niri`] (also drives
 //!     alias-aware field-knowledge tracking; see `alias`). The flow-sensitive
 //!     half; the env-free folds and trivial-block pruning run in `peephole`.
-//! 15. `param_spec` — clone a callee reached with a by-reference config struct
-//!     whose fields are compile-time constants, substituting those reads. Runs
-//!     after `const_fold` (so the caller's literal already holds folded
-//!     constants) and inside the loop, so the next iteration prunes the clone's
-//!     now-dead branches and specializes its own callees one level deeper.
+//! 15. `param_spec` — clone a callee on the constant fields of a by-reference
+//!     struct its caller passes. After `const_fold`, so the caller's literal is
+//!     already folded; inside the loop, so the next iteration prunes the
+//!     clone's dead branches and specializes one call deeper.
 //! 16. `licm` — Loop-Invariant Code Motion.
 //! 17. `condition_implication` — eliminate conditions implied by dominators.
 //! 18. `tmpl_hoist` — hoist template-string backing buffers out of loops.
@@ -772,11 +771,10 @@ fn run_optimization_passes(
         // `nir/peephole` run above; the post-loop `branch_prune_final` and the
         // post-globalization `const_fold_post_global` keep their own engine
         // sessions (`prune_template_block_wrappers` / `prune_constant_branches`).
-        // Interprocedural constant propagation over struct fields, by cloning.
-        // Runs after `const_fold` so a caller's config struct literal already
-        // holds folded constants, and inside the loop so the clone's now-dead
-        // branches are pruned — and its own callees specialized one level
-        // deeper — by the next iteration. See `optimize/param_spec.rs`.
+        // Ordering: after `const_fold`, so a caller's config struct literal
+        // already holds folded constants; inside the loop, so the next
+        // iteration prunes the clone's dead branches and reaches one call
+        // deeper. See `optimize/param_spec.rs`.
         {
             let c = run_pass("nir/param_spec", project, profiler, |p| {
                 param_spec::specialize_const_params(p, &mut param_spec_state, &mut gate)
