@@ -1494,7 +1494,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 10: Lower (FlatPackage → NirPackage) ===
     let nir = {
         let _span = logger.span("lower");
-        lower(flat)
+        lower(flat, logger)?
     };
 
     // === Phase 11: Optimize (NirPackage → NirPackage) ===
@@ -1942,7 +1942,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Lower (FlatPackage → NirPackage)
             let nir = {
                 let _span = logger.span("lower");
-                lower(flat)
+                lower(flat, &logger)?
             };
             // Snapshot lowered state (NIR right after lower, before optimize)
             let lower_text = Some(nir_unparse::unparse_nir_package(&nir));

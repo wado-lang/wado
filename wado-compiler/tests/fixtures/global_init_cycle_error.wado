@@ -1,0 +1,17 @@
+// A cycle among initializers has no order to run them in. It used to reach a
+// `panic!`, so what a program with one got was an ICE and a Rust backtrace
+// rather than a diagnostic pointing at the source.
+
+use { println, Stdout } from "core:cli";
+
+global A: i32 = B + 1;
+global B: i32 = A + 1;
+
+export fn run() with Stdout {
+    println(`${A} ${B}`);
+}
+
+__DATA__
+{
+    "compile_error": "global initializers form a cycle: A, B"
+}

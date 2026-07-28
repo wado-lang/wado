@@ -14,6 +14,7 @@
 //! See `docs/wep-2026-05-11-nir.md`.
 
 use crate::flat_package::FlatPackage;
+use crate::logger::{Bail, ErrorSink};
 
 pub mod boxing;
 pub mod closure;
@@ -64,8 +65,8 @@ fn ref_receiver_methods(flat: &FlatPackage) -> value_copy::funcset::FuncKeySet {
     set
 }
 
-pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
-    globals::extract(flat);
+pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan, Bail> {
+    globals::extract(flat, errors)?;
     // Record each parameter's `&mut`-ness before `boxing::prepare_types`
     // rewrites `&mut T` / `&T` to the same `Box<T>`, erasing the distinction.
     capture_param_mut_ref(flat);
@@ -83,9 +84,9 @@ pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     flat.rebuild_variant_indices();
     lift_mut::lift_mut_match_bindings(flat);
     let value_copy = value_copy::plan(flat, confined_params, ref_receiver_methods);
-    LowerPlan {
+    Ok(LowerPlan {
         box_plan,
         closure,
         value_copy,
-    }
+    })
 }

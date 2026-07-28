@@ -4,7 +4,9 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
+use crate::logger::{Bail, ErrorSink};
 use crate::module_source::ModuleSource;
 use crate::tir::FunctionRef;
 use crate::tir::{
@@ -152,7 +154,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
 /// closure rewrite. The top-level `__initialize_modules` aggregator
 /// that calls each module's `__initialize_module` is built later by
 /// [`build_initialize_modules`].
-pub fn extract(flat: &mut FlatPackage) {
+pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bail> {
     let type_table = flat.type_table.borrow();
 
     // Collect non-constant initializers with their indices for topological sorting
@@ -186,7 +188,7 @@ pub fn extract(flat: &mut FlatPackage) {
 
     // If no lazy initializers, nothing to do
     if lazy_inits.is_empty() {
-        return;
+        return Ok(());
     }
 
     // Partition lazy inits by their owning module so each module gets
@@ -202,10 +204,12 @@ pub fn extract(flat: &mut FlatPackage) {
     let reads_by_function = global_reads_by_function(&flat.functions);
     let span = Span::new(0, 0, 1, 1);
     for (module_source, module_inits) in by_module {
-        let sorted_inits = topological_sort_global_inits(&module_inits, &reads_by_function);
+        let sorted_inits =
+            topological_sort_global_inits(&module_inits, &reads_by_function, errors)?;
         let init_func = build_module_init_function(module_source, sorted_inits, span);
         flat.functions.push(Rc::new(RefCell::new(init_func)));
     }
+    Ok(())
 }
 
 fn build_module_init_function(
@@ -439,9 +443,10 @@ fn depends_on(deps: &[IndexSet<usize>], from: usize, to: usize) -> bool {
 fn topological_sort_global_inits(
     lazy_inits: &[(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)],
     reads_by_function: &IndexMap<String, IndexSet<(ModuleSource, String)>>,
-) -> Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)> {
+    errors: &dyn ErrorSink,
+) -> Result<Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)>, Bail> {
     if lazy_inits.len() <= 1 {
-        return lazy_inits.to_vec();
+        return Ok(lazy_inits.to_vec());
     }
 
     // Build a map from `(module_source, name)` to its index in
@@ -513,22 +518,31 @@ fn topological_sort_global_inits(
         }
     }
 
-    // Check for cycles
     if sorted.len() < lazy_inits.len() {
-        // Cycle detected - report which globals are involved
-        let in_cycle: Vec<&str> = lazy_inits
+        let cycle: Vec<&(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)> = lazy_inits
             .iter()
             .enumerate()
             .filter(|(i, _)| in_degree[*i] > 0)
-            .map(|(_, (_, name, ..))| name.as_str())
+            .map(|(_, init)| init)
             .collect();
-        panic!(
-            "Circular dependency detected among global variables: {}",
-            in_cycle.join(", ")
-        );
+        let names: Vec<&str> = cycle.iter().map(|(_, name, ..)| name.as_str()).collect();
+        let (_, _, module_source, _, initializer, _) = cycle[0];
+        return Err(errors.fatal_in(
+            module_source,
+            Diagnostic {
+                severity: Severity::Error,
+                code: Code::CircularDependency,
+                message: format!(
+                    "global initializers form a cycle: {}. Each waits for a value \
+                     another has not been given yet, so none can go first.",
+                    names.join(", ")
+                ),
+                span: Some(DiagnosticSpan::from_span(&initializer.span, None)),
+            },
+        ));
     }
 
-    sorted
+    Ok(sorted)
 }
 
 /// Renumber all local variable indices in a TIR expression by adding an offset.
