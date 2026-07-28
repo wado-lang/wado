@@ -9,7 +9,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::{self, AstId, BinaryOp, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind};
+use crate::name::{LocalMethodName, MethodName, RefKind};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
 };
@@ -1780,7 +1780,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_ref: &ImplBlockRef,
         names_to_check: &[ImplTargetKey],
         receiver_type_id: Option<TypeId>,
-    ) -> Option<(String, bool)> {
+    ) -> Option<(String, crate::name::FqTypeName, bool)> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, impl_ref);
         let impl_struct_name = self.get_type_name(&header.ty);
@@ -1807,7 +1807,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.concrete_impl_matches_receiver(impl_ref, receiver_type_id) {
             return None;
         }
-        Some((impl_struct_name, is_blanket_type_param))
+        // The impl's methods are named after the receiver as the impl's own
+        // module resolves it, so qualify from that perspective — the call site's
+        // imports may name the same declaration differently, or not at all.
+        let impl_struct_fq = if is_blanket_type_param {
+            crate::name::FqTypeName::binder(&impl_struct_name)
+        } else {
+            let impl_module = impl_ref.0.clone();
+            let impl_scope = trait_env.import_scope(&impl_module);
+            let written = impl_struct_name.clone();
+            self.with_module_perspective(impl_module, impl_scope, |s| {
+                s.qualified_receiver_name(&written)
+            })
+        };
+        Some((impl_struct_name, impl_struct_fq, is_blanket_type_param))
     }
 
     /// For a reference-typed impl (`impl ... for &Container<T>`), whether its
@@ -1972,7 +1985,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_refs = self.trait_method_candidates(&names_to_check, receiver_type_id);
 
         for impl_ref in &impl_refs {
-            let Some((impl_struct_name, is_blanket_type_param)) =
+            let Some((impl_struct_name, impl_struct_fq, is_blanket_type_param)) =
                 self.candidate_matches_receiver(impl_ref, &names_to_check, receiver_type_id)
             else {
                 continue;
@@ -1980,6 +1993,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             found_traits.extend(self.collect_trait_method_matches_from_impl(
                 impl_ref,
                 impl_struct_name,
+                impl_struct_fq,
                 is_blanket_type_param,
                 method_name,
                 receiver_type_args,
@@ -2015,6 +2029,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         impl_ref: &ImplBlockRef,
         impl_struct_name: String,
+        impl_struct_fq: crate::name::FqTypeName,
         is_blanket_type_param: bool,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
@@ -2336,6 +2351,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
                 impl_struct_name: impl_struct_name.clone(),
+                impl_struct_fq: impl_struct_fq.clone(),
                 is_blanket_ref_impl,
             });
             method_found = true;
@@ -2398,6 +2414,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_module_source,
                     blanket_type_param,
                     impl_struct_name,
+                    impl_struct_fq,
                     is_blanket_ref_impl,
                 });
             }
@@ -3075,8 +3092,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None; // Method doesn't need &mut, fall back to Index
         }
 
+        let container_fq = self.tysys.fq_receiver_head(base_type_id);
         let mangled_index_mut_name = MethodName::format_local(
-            &FqTypeName::from_mangled(struct_name.clone()),
+            &container_fq,
             Some(&index_mut_info.trait_name),
             "index_mut_ref",
         );
@@ -3103,7 +3121,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: mangled_index_mut_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        FqTypeName::from_mangled(struct_name.clone()),
+                        container_fq,
                         Some(index_mut_info.trait_name.clone()),
                         "index_mut_ref".to_string(),
                     )),
@@ -3134,8 +3152,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|ty| self.resolve_type(ty))
             .collect();
 
+        let output_fq = self.tysys.fq_receiver_head(output_base_type_id);
         let mangled_method_name = MethodName::format_local(
-            &FqTypeName::from_mangled(output_struct_name.clone()),
+            &output_fq,
             method_trait_name.as_deref(),
             &method_call.method,
         );
@@ -3151,7 +3170,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: mangled_method_name,
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(
-                FqTypeName::from_mangled(output_struct_name),
+                output_fq,
                 method_trait_name,
                 method_call.method.clone(),
             )),

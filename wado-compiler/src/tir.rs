@@ -3275,6 +3275,7 @@ impl TypeTable {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.fq_base_type_name(*inner),
             ResolvedType::BuiltinArray(_) => FqTypeName::builtin(Self::ARRAY_TYPE_NAME),
             ResolvedType::Unit => FqTypeName::builtin(Self::UNIT_TYPE_NAME),
+            ResolvedType::Function { .. } => FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),
             // Tuples, primitives and function types are builtin shapes: no
             // module declares them and every mangler spells them bare.
             _ => FqTypeName::builtin(&self.base_type_name(id)),

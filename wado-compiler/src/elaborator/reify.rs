@@ -1626,7 +1626,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // handle it, and `impl List<u8>` vs `impl List<i32>` stay distinct.
         if let Some(owner) = concrete_owner {
             mangled_name = crate::name::MethodName::format_local(
-                &FqTypeName::from_mangled(owner.clone()),
+                &FqTypeName::from_mangled(owner),
                 facts.trait_name_mangled.as_deref(),
                 &func.name,
             );

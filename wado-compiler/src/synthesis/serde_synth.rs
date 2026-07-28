@@ -1434,6 +1434,10 @@ fn generate_struct_deserialize(
         .map(|(_, _, type_id, _)| tt.type_name(*type_id))
         .collect();
     let base_struct_type_name = tt.type_name(base_struct_type);
+    // `next_field::<Type>()` resolves `FieldSchema::lookup` by substituting the
+    // concrete receiver, so the definition must carry the same fq receiver the
+    // substitution builds.
+    let target_fq = tt.fq_base_type_name(req.target_type_id);
 
     let compiler_items = tt.compiler_items().clone();
     drop(tt);
@@ -1452,7 +1456,7 @@ fn generate_struct_deserialize(
     // at monomorphization, so no closure value is constructed or allocated.
     // Positional fields are skipped: they are never matched by name.
     let lookup_func = generate_lookup_function(
-        &req.target_type_name,
+        &target_fq,
         &names.field_schema,
         &fields,
         &positional_flags,
@@ -1466,7 +1470,7 @@ fn generate_struct_deserialize(
     // rank-th positional field to its field index. Empty (always `null`) when
     // the type has no positional fields, so non-args formats are unaffected.
     let positional_at_func = generate_positional_at_function(
-        &req.target_type_name,
+        &target_fq,
         &names.field_schema,
         &positional_flags,
         option_i32,
@@ -2042,7 +2046,7 @@ fn i32_eq(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
 /// differ.
 #[allow(clippy::too_many_arguments)]
 fn field_schema_method_fn(
-    type_name: &str,
+    type_name: &FqTypeName,
     field_schema_trait: &str,
     method: &str,
     param_name: &str,
@@ -2055,11 +2059,7 @@ fn field_schema_method_fn(
 ) -> TirFunction {
     TirFunction {
         module_source: ModuleSource::default(),
-        name: MethodName::format_local(
-            &FqTypeName::from_mangled(type_name),
-            Some(field_schema_trait),
-            method,
-        ),
+        name: MethodName::format_local(type_name, Some(field_schema_trait), method),
         visibility: crate::ast::Visibility::Public,
         is_export: false,
         is_cm_export: false,
@@ -2070,7 +2070,7 @@ fn field_schema_method_fn(
         impl_type_params: Vec::new(),
         monomorph_info: None,
         method_info: Some(LocalMethodName::new(
-            FqTypeName::from_mangled(type_name),
+            type_name.clone(),
             Some(field_schema_trait.to_string()),
             method.to_string(),
         )),
@@ -2104,7 +2104,7 @@ fn field_schema_method_fn(
 }
 
 fn generate_lookup_function(
-    type_name: &str,
+    type_name: &FqTypeName,
     field_schema_trait: &str,
     fields: &[(String, String, TypeId, u32)],
     positional_flags: &[bool],
@@ -2196,7 +2196,7 @@ fn generate_lookup_function(
 /// loop's field indices, so the returned index drives the same `field == i`
 /// assignment as `lookup`.
 fn generate_positional_at_function(
-    type_name: &str,
+    type_name: &FqTypeName,
     field_schema_trait: &str,
     positional_flags: &[bool],
     option_i32: TypeId,
@@ -2499,14 +2499,10 @@ fn generate_variant_family_deserialize(
 
     let (eq_trait_name, string_struct_name) = {
         let tt = module.type_table.borrow();
-        let items = tt.compiler_items();
         (
-            items
-                .trait_name(crate::compiler_item::CompilerItem::Eq)
+            tt.compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
                 .to_string(),
-            items
-                .struct_name(crate::compiler_item::CompilerItem::String)
-                .to_string(),
+            tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::String),
         )
     };
     let mut tt = module.type_table.borrow_mut();
@@ -2800,7 +2796,7 @@ fn generate_variant_family_deserialize(
             span,
         );
         let eq_method = LocalMethodName::new(
-            FqTypeName::from_mangled(string_struct_name.clone()),
+            string_struct_name.clone(),
             Some(eq_trait_name.clone()),
             "eq".to_string(),
         );
@@ -3362,8 +3358,7 @@ fn generate_flags_serialize(
     let string_struct_name = module
         .type_table
         .borrow()
-        .compiler_struct_name(crate::compiler_item::CompilerItem::String)
-        .to_string();
+        .compiler_struct_fq_name(crate::compiler_item::CompilerItem::String);
     let mut tt = module.type_table.borrow_mut();
 
     let flags_type = req.target_type_id;
@@ -3466,7 +3461,7 @@ fn generate_flags_serialize(
             &names.serialize_seq,
             &names.m_serialize_seq_element,
             serde_module.clone(),
-            vec![string_struct_name.clone()],
+            vec![string_struct_name.as_str().to_string()],
             vec![string_type],
             vec![ref_expr(
                 string_lit(member_name, string_type, span),
@@ -3607,14 +3602,10 @@ fn generate_flags_deserialize(
 
     let (eq_trait_name, string_struct_name) = {
         let tt = module.type_table.borrow();
-        let items = tt.compiler_items();
         (
-            items
-                .trait_name(crate::compiler_item::CompilerItem::Eq)
+            tt.compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
                 .to_string(),
-            items
-                .struct_name(crate::compiler_item::CompilerItem::String)
-                .to_string(),
+            tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::String),
         )
     };
     let mut tt = module.type_table.borrow_mut();
@@ -3705,7 +3696,7 @@ fn generate_flags_deserialize(
         &names.deserialize_seq,
         &names.m_deserialize_seq_next_element,
         serde_module.clone(),
-        vec![string_struct_name.clone()],
+        vec![string_struct_name.as_str().to_string()],
         vec![string_type],
         vec![],
         result_option_string_err,
@@ -3735,7 +3726,7 @@ fn generate_flags_deserialize(
             span,
         );
         let eq_method = LocalMethodName::new(
-            FqTypeName::from_mangled(string_struct_name.clone()),
+            string_struct_name.clone(),
             Some(eq_trait_name.clone()),
             "eq".to_string(),
         );

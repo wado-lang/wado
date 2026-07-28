@@ -566,8 +566,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Only populated by `infer_static_method_type_args`; the
                 // explicit `call.type_args` only carries method-level args.
                 let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
-                let mangled_name =
-                    MethodName::format_local(&self.qualified_receiver_name(prefix), None, suffix);
                 // Omitted turbofish infers both levels; an explicit `_` fills
                 // only the hole slots (see `infer_static_call_type_args`).
                 if method_type_args.is_empty() {
@@ -740,7 +738,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .resolve_static_method_call_from_qualified(
                         prefix,
                         suffix,
-                        &mangled_name,
                         &args,
                         &impl_type_args_inferred,
                         &method_type_args,

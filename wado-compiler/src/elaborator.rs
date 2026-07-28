@@ -50,7 +50,7 @@ use crate::ast::{self, Item, Module};
 use crate::compiler_host::CompilerHost;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{self as name, MethodName, Receiver, RefKind};
+use crate::name::{self as name, Receiver, RefKind};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::tir::{self as tir, TypeId, TypeTable};
 
@@ -847,18 +847,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// An fq name names its subject by the module that declares it, so a
     /// declared type is qualified through the same canonical key the impl
     /// index uses. A type parameter is a template's own binder and a
-    /// primitive has no declaring module in any mangle, so both stay bare —
-    /// matching what `TypeTable::mangle_type_arg_for_generic` produces for
+    /// builtin shape has no declaring module in any mangle, so both stay bare
+    /// — matching what `TypeTable::mangle_type_arg_for_generic` produces for
     /// the same type on the consuming side.
     pub(super) fn qualified_receiver_name(&self, written: &str) -> crate::name::FqTypeName {
-        if crate::name::is_builtin_shape_name(written) {
-            return crate::name::FqTypeName::builtin(written);
-        }
         if self.annotate_ctx.trait_ctx.type_params.contains_key(written) {
             return crate::name::FqTypeName::binder(written);
         }
+        if crate::name::is_builtin_shape_name(written) {
+            return crate::name::FqTypeName::builtin(written);
+        }
         let (module, name) = self.canonical_decl_key(written);
-        crate::name::FqTypeName::declared(&module, &name)
+        crate::name::FqTypeName::of_head(&module, &name)
     }
 
     /// Record the impl-block resolution facts (Gap 12 of Stage 5)

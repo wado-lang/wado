@@ -144,7 +144,7 @@ pub struct Lowering {
     /// Canonical stdlib name of the `Eq` trait.
     eq_trait_name: String,
     /// Canonical stdlib name of the `String` struct.
-    string_struct_name: String,
+    string_struct_name: FqTypeName,
     /// Immutable globals with a bare integer-literal initializer, keyed by `(module, name)`.
     const_int_globals: IndexMap<(ModuleSource, String), i128>,
 }
@@ -189,9 +189,8 @@ impl Lowering {
         let eq_trait_name = type_table
             .compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
             .to_string();
-        let string_struct_name = type_table
-            .compiler_struct_name(crate::compiler_item::CompilerItem::String)
-            .to_string();
+        let string_struct_name =
+            type_table.compiler_struct_fq_name(crate::compiler_item::CompilerItem::String);
         Self {
             variant_case_map,
             struct_fields_map,
@@ -241,7 +240,7 @@ struct PatternLowerer<'a> {
     /// Canonical stdlib name of the `String` struct, resolved through
     /// the same registry so the receiver-type slot of the synthesised
     /// `String^Eq::eq` `LocalMethodName` tracks renames too.
-    string_struct_name: String,
+    string_struct_name: FqTypeName,
     /// Map from (`variant_name`, `module_source`) to a list of
     /// (`case_name`, `case_index`) pairs. The `module_source` axis
     /// is required because Wado allows two modules to each declare a
@@ -260,7 +259,7 @@ impl<'a> PatternLowerer<'a> {
         local_count: u32,
         locals: Vec<TirLocal>,
         eq_trait_name: String,
-        string_struct_name: String,
+        string_struct_name: FqTypeName,
         variant_case_map: &'a IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
         struct_fields_map: &'a IndexMap<(String, ModuleSource), Vec<TirField>>,
         const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
@@ -1471,7 +1470,7 @@ impl<'a> PatternLowerer<'a> {
         // so we pass the values directly and let translate handle self-kind adjustment.
         // However, the arg explicitly needs &String since that's the method signature.
         let method_info = LocalMethodName::new(
-            FqTypeName::from_mangled(self.string_struct_name.clone()),
+            self.string_struct_name.clone(),
             Some(self.eq_trait_name.clone()),
             "eq".to_string(),
         );

@@ -159,7 +159,7 @@ fn trait_method_info(
     method: &str,
 ) -> LocalMethodName {
     LocalMethodName::new(
-        FqTypeName::declared(module_source, struct_name),
+        FqTypeName::of_head(module_source, struct_name),
         Some(trait_name.to_string()),
         method.to_string(),
     )
@@ -268,7 +268,6 @@ fn ordering_construct(
 /// Like `make_synthetic_method`, but lets the caller attach `impl_type_params`
 /// so generic auto-derived methods participate in monomorphisation.
 fn make_trait_method(
-    module_source: &ModuleSource,
     name: String,
     method_info: LocalMethodName,
     impl_type_params: Vec<TirTypeParam>,
@@ -377,17 +376,17 @@ pub fn synthesize_traits(project: Package) -> Package {
             module: module_source.clone(),
             names: &names,
         };
-        generate_enum_trait_impls(&module_source, module, &mut ctx);
+        generate_enum_trait_impls(module, &mut ctx);
         generate_struct_eq_ord_impls(module, &mut ctx);
         generate_variant_eq_impls(module, &mut ctx);
-        generate_inspect_impls(&module_source, module, &mut ctx);
-        generate_inspect_alt_impls(&module_source, module, &mut ctx);
+        generate_inspect_impls(module, &mut ctx);
+        generate_inspect_alt_impls(module, &mut ctx);
         // `Display` is auto-derived only for plain `enum`s (the bare case name).
         // A newtype inherits its base's `Display` at the format call site
         // (`peel_transparent_newtype`), not here. Runs before the `DisplayAlt`
         // pass, whose `needs_fallback` reads the recorded `Display` impl.
-        generate_enum_display_impls(&module_source, module, &mut ctx);
-        generate_display_alt_fallback_impls(&module_source, module, &mut ctx);
+        generate_enum_display_impls(module, &mut ctx);
+        generate_display_alt_fallback_impls(module, &mut ctx);
     }
     project
 }
@@ -429,7 +428,7 @@ pub fn synthesize_defaults(project: &mut Package) {
             module: module_source.clone(),
             names: &names,
         };
-        generate_struct_default_impls(&module_source, module, &mut ctx);
+        generate_struct_default_impls(module, &mut ctx);
     }
 }
 
@@ -779,7 +778,7 @@ impl ReflectSynthEnv {
 fn synthesize_reflect_kind(
     project: &mut Package,
     trait_item: CompilerItem,
-    generate_impls: fn(&ModuleSource, &mut TirModule, &mut SynthesisCtx<'_, '_, '_>, &str),
+    generate_impls: fn(&mut TirModule, &mut SynthesisCtx<'_, '_, '_>, &str),
 ) {
     let trait_env = project.trait_env.clone();
     let first_module = project
@@ -814,7 +813,7 @@ fn synthesize_reflect_kind(
             module: module_source.clone(),
             names: &names,
         };
-        generate_impls(&module_source, module, &mut ctx, &trait_name);
+        generate_impls(module, &mut ctx, &trait_name);
     }
 }
 
@@ -1285,7 +1284,6 @@ pub fn synthesize_reflect_variant(project: &mut Package) {
 
 /// Synthesize the `ReflectVariant` impl of every requested variant in `module`.
 fn generate_variant_reflect_impls(
-    module_source: &ModuleSource,
     module: &mut TirModule,
     ctx: &mut SynthesisCtx<'_, '_, '_>,
     variant_trait_name: &str,
@@ -1973,7 +1971,6 @@ pub fn synthesize_reflect_enum(project: &mut Package) {
 
 /// Synthesize the `ReflectEnum` impl of every requested enum in `module`.
 fn generate_enum_reflect_impls(
-    module_source: &ModuleSource,
     module: &mut TirModule,
     ctx: &mut SynthesisCtx<'_, '_, '_>,
     enum_trait_name: &str,
@@ -2392,7 +2389,6 @@ pub fn synthesize_reflect_flags(project: &mut Package) {
 
 /// Synthesize the `ReflectFlags` impl of every requested flags type in `module`.
 fn generate_flags_reflect_impls(
-    module_source: &ModuleSource,
     module: &mut TirModule,
     ctx: &mut SynthesisCtx<'_, '_, '_>,
     flags_trait_name: &str,
@@ -3062,7 +3058,7 @@ fn collect_generic_struct_visible_fields(
 }
 
 /// Generate auto-derived trait implementations (Eq, Ord) for enum types in a module.
-fn generate_enum_trait_impls(module_source: &ModuleSource, module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
+fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     if module.enums.is_empty() {
         return;
     }
@@ -3254,7 +3250,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
 /// Effect purity of the default expressions is already enforced by
 /// `check_default_purity_semantic` before synthesis runs; if it had failed the
 /// pipeline would have bailed, so every `default_expr` reaching here is pure.
-fn generate_struct_default_impls(module_source: &ModuleSource, module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
+fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     if module.structs.is_empty() {
         return;
     }
@@ -3432,7 +3428,7 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
 /// - Non-generic structs: writes field names and recursively inspects field values
 /// - Generic structs: same with `impl_type_params` having Inspect bounds
 /// - Non-generic variants: `VariantTest` dispatch with payload inspection
-fn generate_inspect_impls(module_source: &ModuleSource, module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
+fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     let module_source = module.module_source.clone();
     let mut generated = Vec::new();
     let formatter_name = ctx.names.formatter.clone();
@@ -3617,7 +3613,7 @@ fn generate_inspect_impls(module_source: &ModuleSource, module: &mut TirModule, 
 /// Auto-derive `EnumName^Display::fmt` writing the bare case name (`Red`),
 /// distinct from `Inspect`'s type-qualified `Color::Red`. Skips enums with a
 /// user-written `Display` impl.
-fn generate_enum_display_impls(module_source: &ModuleSource, module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
+fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     if module.enums.is_empty() {
         return;
     }
@@ -3982,7 +3978,7 @@ fn generate_opaque_inspect_fn(
 /// For composite types (structs, variants, arrays, tuples), generates pretty-printed
 /// multi-line output using Formatter's `begin_block`/`end_block`/`write_field_sep` helpers.
 /// For simple types (enums, flags, newtypes, primitives, functions), delegates to Inspect.
-fn generate_inspect_alt_impls(module_source: &ModuleSource, module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
+fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     let module_source = module.module_source.clone();
     let formatter_name = ctx.names.formatter.clone();
     let formatter_fq = ctx.names.formatter_fq.clone();
@@ -4343,7 +4339,7 @@ fn generate_struct_inspect_alt_fn(
     );
     let body = TirBlock::new(stmts, span);
 
-    make_trait_method(module_source, 
+    make_trait_method(
         qualified_name,
         method_info,
         impl_type_params.to_vec(),
@@ -4524,7 +4520,7 @@ fn generate_variant_inspect_alt_fn(
     );
     let body = TirBlock::new(stmts, span);
 
-    make_trait_method(module_source, 
+    make_trait_method(
         qualified_name,
         method_info,
         impl_type_params.to_vec(),
@@ -4838,16 +4834,15 @@ fn generate_display_fallback(
 }
 
 /// Generate `DisplayAlt::fmt_alt` fallback implementations that delegate to `Display::fmt`.
-fn generate_display_alt_fallback_impls(module_source: &ModuleSource, module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
+fn generate_display_alt_fallback_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     let pair = TraitPair::display_alt(ctx.names);
-    generate_fallback_impls(module_source, module, ctx, &pair);
+    generate_fallback_impls(module, ctx, &pair);
 }
 
 /// Walk every type kind in a module and emit a delegating fallback method
 /// for the configured `TraitPair`. Skips any type where the target trait is
 /// already implemented or the delegate trait is missing.
 fn generate_fallback_impls(
-    module_source: &ModuleSource,
     module: &mut TirModule,
     ctx: &mut SynthesisCtx<'_, '_, '_>,
     pair: &TraitPair,
@@ -5779,7 +5774,7 @@ fn generate_struct_eq_fn(
         span,
     );
 
-    make_trait_method(module_source, 
+    make_trait_method(
         qualified_name,
         method_info,
         impl_type_params.to_vec(),
@@ -5913,7 +5908,7 @@ fn generate_struct_ord_fn(
     );
     let body = TirBlock::new(stmts, span);
 
-    make_trait_method(module_source, 
+    make_trait_method(
         qualified_name,
         method_info,
         impl_type_params.to_vec(),
@@ -6101,7 +6096,7 @@ fn generate_variant_eq_fn(
     );
     let body = TirBlock::new(body_stmts, span);
 
-    make_trait_method(module_source, 
+    make_trait_method(
         qualified_name,
         method_info,
         impl_type_params.to_vec(),

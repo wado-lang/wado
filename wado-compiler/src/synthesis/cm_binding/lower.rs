@@ -758,7 +758,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
     // __elem = list.index_value(__i)
     let elem_local = alloc_local(next_local, locals, elem_type_id);
     let iv_info = LocalMethodName::new(
-        FqTypeName::from_mangled(names.array.clone()),
+        FqTypeName::declared(&ModuleSource::list(), &names.array),
         Some("IndexValue<i32>".to_string()),
         "index_value".to_string(),
     );

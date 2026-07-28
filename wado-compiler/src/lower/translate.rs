@@ -1312,13 +1312,11 @@ impl FunctionTranslator<'_, '_> {
                 .get(spec.functor_id as usize)
         {
             let nir_receiver = self.convert_expr(callee);
-            let call_method_name = MethodName::format_local(
-                &FqTypeName::from_mangled(functor.struct_name.clone()),
-                None,
-                crate::name::CLOSURE_CALL_METHOD,
-            );
+            let functor_fq = FqTypeName::declared(&functor.module_source, &functor.struct_name);
+            let call_method_name =
+                MethodName::format_local(&functor_fq, None, crate::name::CLOSURE_CALL_METHOD);
             let call_method_info = LocalMethodName::new(
-                FqTypeName::from_mangled(functor.struct_name.clone()),
+                functor_fq,
                 None,
                 crate::name::CLOSURE_CALL_METHOD.to_string(),
             );

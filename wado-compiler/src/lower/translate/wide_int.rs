@@ -220,18 +220,14 @@ fn create_i128_eq_call(
     );
     let (eq_trait_name, i128_struct_name) = {
         let tt = type_table.borrow();
-        let items = tt.compiler_items();
         (
-            items
-                .trait_name(crate::compiler_item::CompilerItem::Eq)
+            tt.compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
                 .to_string(),
-            items
-                .struct_name(crate::compiler_item::CompilerItem::I128)
-                .to_string(),
+            tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::I128),
         )
     };
     let method_info = LocalMethodName::new(
-        FqTypeName::from_mangled(i128_struct_name),
+        i128_struct_name,
         Some(eq_trait_name),
         "eq".to_string(),
     );
@@ -283,18 +279,14 @@ fn create_u128_eq_call(
     );
     let (eq_trait_name, u128_struct_name) = {
         let tt = type_table.borrow();
-        let items = tt.compiler_items();
         (
-            items
-                .trait_name(crate::compiler_item::CompilerItem::Eq)
+            tt.compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
                 .to_string(),
-            items
-                .struct_name(crate::compiler_item::CompilerItem::U128)
-                .to_string(),
+            tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::U128),
         )
     };
     let method_info = LocalMethodName::new(
-        FqTypeName::from_mangled(u128_struct_name),
+        u128_struct_name,
         Some(eq_trait_name),
         "eq".to_string(),
     );

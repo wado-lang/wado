@@ -693,7 +693,8 @@ fn collect_bytes_literals_block(body: &Body, root: BlockId, used: &mut IndexSet<
 /// Remove closure functors whose `__call` method was eliminated by function DCE.
 pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
     // Build a set of surviving (module_source, func_name) pairs for O(1) lookup.
-    // The __call method is named "{struct_name}::__call" (via MethodName::format_local).
+    // The __call method is named after the functor's fq struct name (via
+    // `MethodName::format_local`).
     let surviving_funcs: IndexSet<(ModuleSource, String)> = project
         .functions
         .iter()
@@ -709,7 +710,11 @@ pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
         .collect();
 
     project.closure_functors.retain(|functor| {
-        let call_method_name = format!("{}::__call", functor.struct_name);
+        let call_method_name = crate::name::MethodName::format_local(
+            &crate::name::FqTypeName::declared(&functor.module_source, &functor.struct_name),
+            None,
+            crate::name::CLOSURE_CALL_METHOD,
+        );
         surviving_funcs.contains(&(functor.module_source.clone(), call_method_name))
     });
 }
@@ -1442,10 +1447,14 @@ impl<'a> DceWalker<'a> {
     ) {
         // `__call` is always live: the canonical closure struct holds
         // a `ref.func` to it directly.
-        let struct_name = format!(
-            "{prefix}{functor_id}",
-            prefix = crate::name::CLOSURE_STRUCT_PREFIX,
-        );
+        let struct_name = crate::name::FqTypeName::declared(
+            closure_module,
+            &format!(
+                "{prefix}{functor_id}",
+                prefix = crate::name::CLOSURE_STRUCT_PREFIX,
+            ),
+        )
+        .into_string();
         self.analysis
             .callees
             .insert(FunctionId::Method(MethodName::new(

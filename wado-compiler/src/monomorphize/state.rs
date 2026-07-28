@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
 use crate::tir::{InstantiationKey, ResolvedType, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state
@@ -444,7 +444,7 @@ impl Monomorphizer {
         trait_name: Option<&str>,
     ) -> Option<String> {
         let trait_name = trait_name?;
-        self.newtype_own_name(type_id, type_table, |own| {
+        self.newtype_own_name(type_id, type_table, |own, _| {
             self.functions
                 .trait_env
                 .impl_module_for(own, trait_name, None)
@@ -453,12 +453,13 @@ impl Monomorphizer {
     }
 
     /// Peel refs/newtypes to the first newtype level satisfying `has_own_impl`
-    /// (evaluated on that level's mangled name), returning that name.
+    /// (evaluated on that level's mangled name and its `TypeId`), returning
+    /// that name.
     fn newtype_own_name(
         &self,
         type_id: TypeId,
         type_table: &TypeTable,
-        has_own_impl: impl Fn(&str) -> bool,
+        has_own_impl: impl Fn(&str, TypeId) -> bool,
     ) -> Option<String> {
         let mut tid = type_id;
         loop {
@@ -467,7 +468,7 @@ impl Monomorphizer {
                 ResolvedType::Newtype { base_type, .. } => {
                     let base = *base_type;
                     let own = type_table.mangle_type_name(tid);
-                    if has_own_impl(&own) {
+                    if has_own_impl(&own, tid) {
                         return Some(own);
                     }
                     tid = base;
@@ -484,16 +485,15 @@ impl Monomorphizer {
         info: &LocalMethodName,
     ) -> bool {
         let own = match info.trait_name.as_deref() {
-            Some(trait_name) => self.newtype_own_name(receiver_type_id, type_table, |own| {
+            Some(trait_name) => self.newtype_own_name(receiver_type_id, type_table, |own, _| {
                 self.functions
                     .trait_env
                     .impl_module_for(own, trait_name, None)
                     .is_some()
             }),
-            None => self.newtype_own_name(receiver_type_id, type_table, |own| {
-                let head = crate::name::split_base_name(own);
+            None => self.newtype_own_name(receiver_type_id, type_table, |_, tid| {
                 self.functions.trait_env.has_inherent_method_by_receiver(
-                    &Receiver::Type(head.to_string()),
+                    &type_table.impl_receiver_key(tid),
                     &info.method_name,
                 )
             }),

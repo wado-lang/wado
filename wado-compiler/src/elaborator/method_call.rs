@@ -256,7 +256,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut trait_name: Option<String> = None;
         let mut trait_impl_module_source: Option<ModuleSource> = None;
         let mut blanket_type_param: Option<String> = None;
-        let mut trait_impl_struct_name: Option<String> = None;
+        let mut trait_impl_struct_name: Option<FqTypeName> = None;
         let mut matched_impl_struct_name: Option<String> = None;
         // `Some` when the ref-priority path below adopts a `&T` / `&mut T` impl,
         // so `base_struct_name` (then `"&"` / `"&mut"`) keys back to its typed
@@ -290,7 +290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && !trait_match.is_blanket_ref_impl
                 {
                     matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
-                    trait_impl_struct_name = Some(trait_match.impl_struct_name);
+                    trait_impl_struct_name = Some(trait_match.impl_struct_fq);
                     matched_ref_kind = Some(ref_kind);
                     trait_name = Some(trait_match.trait_name);
                     let mut info = trait_match.method_info;
@@ -319,7 +319,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
             if trait_match.impl_struct_name != struct_name {
-                trait_impl_struct_name = Some(trait_match.impl_struct_name);
+                trait_impl_struct_name = Some(trait_match.impl_struct_fq);
             }
             trait_name = Some(trait_match.trait_name);
             method_info = Some(trait_match.method_info);
@@ -909,6 +909,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // E.g., `loc.describe()` where `loc: Location`, `impl Describable for Point` →
         // use "Point" so the call resolves to "Point^Describable::describe".
         if let Some(impl_name) = trait_impl_struct_name {
+            let impl_name = impl_name.into_string();
             receiver_struct_name.clone_from(&impl_name);
             base_struct_name = impl_name;
         }
@@ -1567,7 +1568,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
                         .collect();
-                    let mangled = mangle_generic_name(name, &type_arg_names);
+                    let mangled = mangle_generic_name(
+                        FqTypeName::declared(module_source, name).as_str(),
+                        &type_arg_names,
+                    );
                     (
                         name.clone(),
                         module_source.clone(),
@@ -1582,6 +1586,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::BuiltinArray(elem) => {
                     let elem = *elem;
                     let arg_name = self.tysys.type_table.borrow().mangle_type_name(elem);
+                    // `Array` is a builtin shape: no module declares it, so the
+                    // mangle already is the receiver's fq name.
                     let mangled = crate::name::mangle_builtin_array_type(&arg_name);
                     (
                         TypeTable::ARRAY_TYPE_NAME.to_string(),
@@ -2898,7 +2904,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         method_name: &str,
-        mangled_func_name: &str,
         args: &[TirExpr],
         impl_type_args: &[TypeId],
         method_type_args: &[TypeId],

@@ -1562,7 +1562,12 @@ pub(super) struct TraitMethodMatch {
     pub(super) blanket_type_param: Option<String>,
     /// The struct name that actually has the trait impl (may differ from the
     /// receiver's struct name when the impl was found through the newtype chain).
+    /// Written form — the impl-index key.
     pub(super) impl_struct_name: String,
+    /// [`Self::impl_struct_name`] as the receiver form a mangled name embeds,
+    /// resolved from the impl's own module so it matches the name the impl's
+    /// methods were defined under.
+    pub(super) impl_struct_fq: crate::name::FqTypeName,
     /// True for blanket ref impls like `impl<T: Inspect> Inspect for &T` where
     /// the inner type is a type parameter. False for specific ref impls like
     /// `impl IntoIterator for &List<T>` where the inner type is a concrete generic.
@@ -1948,9 +1953,14 @@ pub(super) struct ResolvedTraitMethod {
     pub(super) trait_name: String,
     /// Method name (e.g., "eq", "cmp", "add", "shl", "neg", "bitnot").
     pub(super) method_name: String,
-    /// Struct name used for method mangling. For newtypes this may be the
-    /// ultimate base-type name when dispatch falls back to the base impl.
+    /// Written name of the type whose impl matched — the impl-index key. For
+    /// newtypes this may be the ultimate base-type name when dispatch falls
+    /// back to the base impl.
     pub(super) impl_name: String,
+    /// That type's `TypeId`, from which the receiver's fq name is read.
+    /// `None` when the receiver is a type parameter, which names no
+    /// declaration.
+    pub(super) impl_type_id: Option<TypeId>,
     /// `self_kind` from the method signature (almost always `Ref`).
     pub(super) self_kind: ast::SelfKind,
     /// Return type of the method, with `Self` and impl type params

@@ -787,7 +787,7 @@ impl Monomorphizer {
                                 let method_info =
                                     gf.borrow().method_info.clone().unwrap_or_else(|| {
                                         LocalMethodName::new(
-                                            FqTypeName::from_mangled(struct_name.clone()),
+                                            type_table.fq_base_type_name(receiver.type_id),
                                             tn.clone(),
                                             method_name.clone(),
                                         )
@@ -877,11 +877,21 @@ impl Monomorphizer {
                                         if impl_type_args.len()
                                             >= generic_func.impl_type_params.len()
                                         {
-                                            let method_info = LocalMethodName::new(
-                                                FqTypeName::from_mangled(base_struct),
-                                                tn.clone(),
-                                                method_name.clone(),
-                                            );
+                                            // The instance is named after the
+                                            // template's own receiver: `base_struct`
+                                            // is a struct-instantiation key, which
+                                            // carries no module.
+                                            let method_info = generic_func
+                                                .method_info
+                                                .clone()
+                                                .unwrap_or_else(|| {
+                                                    LocalMethodName::new(
+                                                        type_table
+                                                            .fq_base_type_name(receiver.type_id),
+                                                        tn.clone(),
+                                                        method_name.clone(),
+                                                    )
+                                                });
                                             let template_module =
                                                 generic_func.module_source.clone();
                                             let key = InstantiationKey {
@@ -4312,25 +4322,11 @@ fn try_lower_comparison(
     type_table: &mut TypeTable,
 ) -> Option<TirExprKind> {
     let operand_type = type_table.get(left.type_id);
-    let (base_struct_name, impl_type_args, type_module_source): (
-        String,
-        Vec<String>,
-        Option<ModuleSource>,
-    ) = match operand_type {
-        ResolvedType::Struct {
-            name,
-            module_source,
-            base_name,
-            ..
-        } => {
-            let struct_name = base_name.as_deref().unwrap_or(name).to_string();
-            (struct_name, vec![], Some(module_source.clone()))
-        }
-        ResolvedType::Variant {
-            name,
-            module_source,
-            ..
-        } => (name.clone(), vec![], Some(module_source.clone())),
+    let (impl_type_args, type_module_source): (Vec<String>, Option<ModuleSource>) = match
+        operand_type
+    {
+        ResolvedType::Struct { module_source, .. }
+        | ResolvedType::Variant { module_source, .. } => (vec![], Some(module_source.clone())),
         ResolvedType::GenericInstance {
             name,
             type_args,
@@ -4356,10 +4352,11 @@ fn try_lower_comparison(
                 .iter()
                 .map(|&t| type_table.mangle_type_arg_for_generic(t))
                 .collect();
-            (name.clone(), args, Some(module_source.clone()))
+            (args, Some(module_source.clone()))
         }
         _ => return None,
     };
+    let base_struct_name = type_table.fq_base_type_name(left.type_id);
 
     let make_ref = |e: &TirExpr, tt: &mut TypeTable| -> TirExpr {
         let ref_type = tt.intern(ResolvedType::Ref(e.type_id));
@@ -4410,13 +4407,12 @@ fn try_lower_comparison(
     if matches!(op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
         let receiver = make_ref(left, type_table);
         let arg_ref = make_ref(right, type_table);
-        let method_info =
-            LocalMethodName::new(
-                FqTypeName::from_mangled(base_struct_name),
-                Some("Eq".to_string()),
-                "eq".to_string(),
-            )
-                .with_struct_type_args(&impl_type_args);
+        let method_info = LocalMethodName::new(
+            base_struct_name,
+            Some("Eq".to_string()),
+            "eq".to_string(),
+        )
+        .with_struct_type_args(&impl_type_args);
         let mangled_name = method_info.to_mangled_name();
         let method_module = resolve_module(&method_info, type_module_source);
 
@@ -4451,13 +4447,12 @@ fn try_lower_comparison(
             name: "Ordering".to_string(),
             module_source: ModuleSource::prelude(),
         });
-        let method_info =
-            LocalMethodName::new(
-                FqTypeName::from_mangled(base_struct_name),
-                Some("Ord".to_string()),
-                "cmp".to_string(),
-            )
-                .with_struct_type_args(&impl_type_args);
+        let method_info = LocalMethodName::new(
+            base_struct_name,
+            Some("Ord".to_string()),
+            "cmp".to_string(),
+        )
+        .with_struct_type_args(&impl_type_args);
         let mangled_name = method_info.to_mangled_name();
         let method_module = resolve_module(&method_info, type_module_source);
 

@@ -2140,6 +2140,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             trait_name: info_trait_name,
             method_name: method_name.to_string(),
             impl_name: struct_name.to_string(),
+            impl_type_id: (!is_type_param).then_some(lookup_type_id),
             self_kind,
             return_type,
             param_types,
@@ -2219,6 +2220,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_module_source,
             blanket_type_param: None,
             impl_struct_name: struct_name.to_string(),
+            impl_struct_fq: self.tysys.fq_receiver_head(base_type_id),
             is_blanket_ref_impl: false,
         })
     }

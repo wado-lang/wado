@@ -1054,7 +1054,10 @@ impl LocalMethodName {
     /// ABIs need to filter them out.
     pub fn is_closure_call(&self) -> bool {
         self.method_name == CLOSURE_CALL_METHOD
-            && self.struct_name.starts_with(CLOSURE_STRUCT_PREFIX)
+            && self
+                .fq_struct_name()
+                .simple_name()
+                .starts_with(CLOSURE_STRUCT_PREFIX)
     }
 }
 
@@ -2211,6 +2214,19 @@ impl FqTypeName {
     #[must_use]
     pub fn builtin(name: &str) -> Self {
         Self(name.to_string())
+    }
+
+    /// A head written in source, resolved against the module that declares it:
+    /// [`Self::builtin`] for a builtin shape, [`Self::declared`] otherwise. The
+    /// single place that decision is made, so a definition and a call site
+    /// spelling the same head cannot disagree.
+    #[must_use]
+    pub fn of_head(module: &crate::module_source::ModuleSource, name: &str) -> Self {
+        if is_builtin_shape_name(name) {
+            Self::builtin(name)
+        } else {
+            Self::declared(module, name)
+        }
     }
 
     /// A name a `TypeTable` mangler already produced. Those qualify their named
