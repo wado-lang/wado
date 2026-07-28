@@ -91,9 +91,12 @@ Order:
    conflating those two was the direct cause of several mis-dispatches.
    `with_substituted_struct_name` now takes one `FqTypeName` instead of an
    (instantiated, base) string pair that could disagree.
-3. **In progress.** `LocalMethodName` stores `struct_type_args:
-   Vec<FqTypeName>`; `struct_name` becomes a method. `with_type_args` still
-   takes `&[String]`, so its callers are the next wave.
+3. **Done in `name.rs`; callers pending.** `LocalMethodName` stores
+   `struct_type_args: Vec<FqTypeName>`, so `fq_struct_name` rebuilds the
+   instantiated receiver instead of re-reading `struct_name`.
+   `with_type_args` / `with_struct_type_args` take `&[FqTypeName]`, and
+   `MethodName::struct_name` is an `FqTypeName` too. `name.rs` itself is
+   clean; every remaining error is a caller still holding a rendered name.
 4. Delete the remaining `split_base_name` / `rsplit('/')` helpers and
    `display_type_name`. Nothing should parse a rendered name afterwards.
 
@@ -103,18 +106,31 @@ will reach for it.
 ## Status
 
 The build is red mid-migration, by design — the type errors are the worklist.
-63 errors across 18 files, each one a site that was handed a rendered name and
-must now be handed structure. The frontier, largest first:
+`name.rs` is clean; 112 errors remain across 19 files, each a site that was
+handed a rendered name and must now be handed structure. The frontier,
+largest first:
 
 | file | errors |
 |---|---|
-| `elaborator/reify.rs` | 9 |
-| `elaborator/method_call.rs` | 9 |
+| `optimize/dce.rs` | 22 |
+| `elaborator/reify.rs` | 14 |
+| `synthesis/traits.rs` | 11 |
+| `monomorphize/func_inst.rs` | 11 |
+| `elaborator/method_call.rs` | 11 |
 | `tir.rs` | 7 |
-| `monomorphize/func_inst.rs` | 6 |
 | `elaborator/trait_query.rs` | 6 |
-| `elaborator/coercion.rs` | 4 |
-| others (12 files) | ≤3 each |
+| `synthesis/serde_synth.rs` | 5 |
+| others (11 files) | ≤4 each |
 
-Most resolve the same way: the caller holds a `TypeId`, so it calls
-`type_table.fq_type_name(id)` instead of `mangle_type_name(id)`.
+The count rose as `name.rs` was finished — that is the migration working:
+each signature that stops accepting a `String` surfaces the callers that were
+passing one.
+
+Two recurring shapes cover most of them:
+
+- The caller holds a `TypeId`: use `type_table.fq_type_name(id)` in place of
+  `mangle_type_name(id)`.
+- The caller compares a receiver against an `impl` header: use
+  `Receiver::decl_key()`, not `head_key()`. Getting this backwards is what
+  emptied SROA's method catalog, silenced the resource-capability check, and
+  broke go-to-definition.

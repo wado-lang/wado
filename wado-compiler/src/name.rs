@@ -406,8 +406,8 @@ impl fmt::Display for FreeFunctionName {
 pub struct MethodName {
     /// The module source where the method is defined
     pub module_source: ModuleSource,
-    /// The struct name (e.g., `Point`)
-    pub struct_name: String,
+    /// The receiver this method hangs off (e.g., `./geom.wado/Point`).
+    pub struct_name: FqTypeName,
     /// The trait name if this is a trait implementation (e.g., `Display`)
     pub trait_name: Option<String>,
     /// The method name (e.g., `sum`)
@@ -417,7 +417,7 @@ pub struct MethodName {
 impl MethodName {
     pub fn new(
         module_source: ModuleSource,
-        struct_name: String,
+        struct_name: FqTypeName,
         trait_name: Option<String>,
         method_name: String,
     ) -> Self {
@@ -433,7 +433,7 @@ impl MethodName {
     /// Format: `Struct^Trait::method` or `Struct::method`
     pub fn local_name(&self) -> String {
         Self::format_local(
-            &FqTypeName::from_mangled(self.struct_name.clone()),
+            &self.struct_name,
             self.trait_name.as_deref(),
             &self.method_name,
         )
@@ -580,6 +580,11 @@ pub struct LocalMethodName {
     /// per-op wrappers, with the resource's operation types substituted
     /// for that combination.
     pub trait_type_args: Vec<crate::tir::TypeId>,
+    /// The receiver's type arguments, structured. Together with `receiver`
+    /// they *are* `struct_name`: [`Self::fq_struct_name`] rebuilds the
+    /// instantiated receiver from them rather than reading the rendered
+    /// `struct_name` back apart.
+    pub struct_type_args: Vec<FqTypeName>,
     /// The method name (e.g., "sum" or "fmt")
     pub method_name: String,
     /// Method-level type args (e.g., ["i64"] for transform<i64>)
@@ -889,10 +894,12 @@ impl LocalMethodName {
         self.receiver.decl_key().into_owned()
     }
 
-    /// [`Self::struct_name`] as the receiver form a mangled name embeds.
+    /// [`Self::struct_name`] as the receiver form a mangled name embeds —
+    /// rebuilt from the typed receiver and its structured arguments.
     #[must_use]
     pub fn fq_struct_name(&self) -> FqTypeName {
-        FqTypeName::from_mangled(self.struct_name.clone())
+        self.fq_base_struct_name()
+            .with_args(self.struct_type_args.clone())
     }
 
     /// The receiver's declaration name, without its module — the key form the
@@ -950,6 +957,7 @@ impl LocalMethodName {
         Self {
             receiver,
             struct_name,
+            struct_type_args: Vec::new(),
             base_trait_name,
             base_trait_module: None,
             trait_name,
@@ -969,21 +977,22 @@ impl LocalMethodName {
     /// derivation rule for `base_trait_name`.
     #[must_use]
     pub fn with_method_type_args(
-        struct_name: String,
+        struct_name: FqTypeName,
         trait_name: Option<String>,
         method_name: String,
         method_type_args: Vec<String>,
     ) -> Self {
         debug_assert!(
-            !struct_name.contains('<'),
-            "LocalMethodName::with_method_type_args() expects base struct name without type params, got: {struct_name}"
+            struct_name.args().is_empty(),
+            "LocalMethodName::with_method_type_args() expects a base receiver without type args, got: {struct_name}"
         );
         let base_trait_name = trait_name
             .as_deref()
             .map(|n| split_base_name(n).to_string());
         Self {
-            receiver: Receiver::Type(struct_name.clone()),
-            struct_name,
+            struct_name: struct_name.to_mangled(),
+            receiver: Receiver::Type(struct_name),
+            struct_type_args: Vec::new(),
             base_trait_name,
             base_trait_module: None,
             trait_name,
@@ -1015,14 +1024,16 @@ impl LocalMethodName {
     /// `base_struct_name`, `base_trait_name`, and `base_trait_module` are
     /// preserved (not changed by type args).
     #[must_use]
-    pub fn with_type_args(&self, impl_type_args: &[String], method_type_args: &[String]) -> Self {
+    pub fn with_type_args(&self, impl_type_args: &[FqTypeName], method_type_args: &[String]) -> Self {
         let mangled_struct = if impl_type_args.is_empty() {
             self.struct_name.clone()
         } else {
-            self.receiver.mangle(impl_type_args)
+            let rendered: Vec<String> = impl_type_args.iter().map(FqTypeName::to_mangled).collect();
+            self.receiver.mangle(&rendered)
         };
         Self {
             struct_name: mangled_struct,
+            struct_type_args: impl_type_args.to_vec(),
             receiver: self.receiver.clone(),
             trait_name: self.trait_name.clone(),
             base_trait_name: self.base_trait_name.clone(),
@@ -1039,7 +1050,7 @@ impl LocalMethodName {
     /// Create a version with only struct type args (no method type args).
     /// This is a convenience method for the common case.
     #[must_use]
-    pub fn with_struct_type_args(&self, type_args: &[String]) -> Self {
+    pub fn with_struct_type_args(&self, type_args: &[FqTypeName]) -> Self {
         self.with_type_args(type_args, &[])
     }
 
@@ -1082,6 +1093,7 @@ impl LocalMethodName {
         Self {
             struct_name: resolved.to_mangled(),
             receiver: Receiver::Type(resolved.head_only()),
+            struct_type_args: resolved.args().to_vec(),
             trait_name: self.trait_name.clone(),
             base_trait_name: self.base_trait_name.clone(),
             base_trait_module: self.base_trait_module.clone(),
