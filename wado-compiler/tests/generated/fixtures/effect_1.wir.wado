@@ -132,9 +132,10 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:effect_1.wado::__modules_initialized: bool = 0;
-global global:effect_1.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 115, 117, 108, 116, 50, 58, 32), used: 9 };
-global global:effect_1.wado::__const_obj_1: ref null "effect_1.wado//__Closure_5" = struct.new "effect_1.wado//__Closure_5" {  };
-global global:effect_1.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 112, 112, 108, 121, 105, 110, 103, 32, 116, 111, 32), used: 12 };
+global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:effect_1.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 115, 117, 108, 116, 50, 58, 32), used: 9 };
+global global:effect_1.wado::__const_obj_2: ref null "effect_1.wado//__Closure_5" = struct.new "effect_1.wado//__Closure_5" {  };
+global global:effect_1.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 112, 112, 108, 121, 105, 110, 103, 32, 116, 111, 32), used: 12 };
 
 fn "effect_1.wado/effect_poly_basic"() with Stdout {
     let result2: i32;
@@ -152,8 +153,8 @@ fn "effect_1.wado/effect_poly_basic"() with Stdout {
     let start_78: i32;
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello from wrapper"), used: 18 });
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }; start_15 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_15, 114); start_24 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_24, 101); start_33 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_33, 115); start_42 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_42, 117); start_51 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_51, 108); start_60 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_60, 116); start_69 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_69, 58); start_78 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_78, 32); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(42, __local_3); __local_2);
-    result2 = "effect_1.wado/__Closure_5::__call"(global:effect_1.wado::__const_obj_1, 21);
-    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_4, global:effect_1.wado::__const_obj_0); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal"(result2, __local_5); __local_4);
+    result2 = "effect_1.wado/__Closure_5::__call"(global:effect_1.wado::__const_obj_2, 21);
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_4, global:effect_1.wado::__const_obj_1); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal"(result2, __local_5); __local_4);
 }
 
 fn "effect_1.wado/effect_poly_chain"() with Stdout {
@@ -396,7 +397,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_0, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
@@ -560,7 +561,7 @@ fn "effect_1.wado/__Closure_2::__call"() {
 fn "effect_1.wado/__Closure_5::__call"(self, x) {
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(28), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, global:effect_1.wado::__const_obj_2); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(x, __local_3); __local_2);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(28), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, global:effect_1.wado::__const_obj_3); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(x, __local_3); __local_2);
     return x * 2;
 }
 

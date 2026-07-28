@@ -151,6 +151,7 @@ global global:allocator_freelist_churn_mixed.wado::__const_obj_5: ref null "core
 global global:allocator_freelist_churn_mixed.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 100, 101, 120, 32, 111, 117, 116, 32, 111, 102, 32, 98, 111, 117, 110, 100, 115), used: 19 };
 global global:allocator_freelist_churn_mixed.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111), used: 22 };
 global global:allocator_freelist_churn_mixed.wado::__const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
+global global:core:prelude/primitive.wado::__const_obj_22: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "allocator_freelist_churn_mixed.wado/run"() with Stdout {
     let sizes: ref "core:prelude//List<i32>";
@@ -507,7 +508,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_22, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 

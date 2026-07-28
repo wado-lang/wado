@@ -102,9 +102,10 @@ Three shapes are matched, collected in a single exhaustive walk:
   no enclosing `let` — the shape a synthesized `serde` field key takes
   (`st.field(&"id_str", …)`). It is rewritten in place: the `Unary::Ref`'s inner
   expression becomes `{ GlobalVarSet(G, …); GlobalVarGet(G) }`.
-- A qualifying value passed to a call *by value* — `append(name,
-  b"application/json")`. Rewritten in place like the `&` shape, wrapping the
-  argument node itself, and gated additionally on the callee (see below).
+- A qualifying value passed to a call _by value_ — a constant header value
+  handed straight to `Fields::append`. Rewritten in place like the `&` shape,
+  wrapping the argument node itself, and gated additionally on the callee (see
+  below).
 
 The walk skips into a qualifying `let`'s own value and into a hoisted argument,
 because hoisting both would nest one global's `GlobalVarSet` inside another's
@@ -151,10 +152,19 @@ the callee writes, stores, or returns fails it, and so does a callee with no
 body (an import: nothing here can prove what it does with the value) or a
 `&` / `&mut` parameter.
 
-The gate is what keeps this shape sound on its own terms rather than by luck: a
-mutating callee also happens to get a caller-side defensive copy today, which
-blocks the const gate first, but that copy is itself removable — nothing else
-would stand between a shared global and a callee that writes it.
+Read-only is not sufficient on its own. A by-value parameter is the callee's own
+copy, so returning a projection of it (`return s.data`) is legitimate — the
+return-convention fixpoint even calls the result _owned_, which is what lets the
+caller skip a defensive copy of it. Hoisting the argument invalidates that
+premise: the "owned" value handed back is the shared global's storage, and the
+first mutation corrupts the constant. `param_storage_escapes` therefore also
+rejects a callee that returns, stores, or passes on the parameter's storage,
+following `let` aliases (`let r = s.data;`) since they name the same storage.
+
+The pair is what keeps this shape sound on its own terms rather than by luck: a
+mutating callee used to get a caller-side defensive copy that blocked the const
+gate first, but that copy was itself removable — nothing else stands between a
+shared global and a callee that writes it.
 
 #### Gate: profitability
 

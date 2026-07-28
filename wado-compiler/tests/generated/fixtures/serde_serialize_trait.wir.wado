@@ -112,7 +112,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:serde_serialize_trait.wado::__modules_initialized: bool = 0;
-global mut global:serde_serialize_trait.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
+global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global mut global:serde_serialize_trait.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "serde_serialize_trait.wado/run"() with Stdout {
     let ser: ref "serde_serialize_trait.wado//TextSerializer";
@@ -141,8 +142,8 @@ fn "serde_serialize_trait.wado/run"() with Stdout {
     drop("serde_serialize_trait.wado/TextSerializer^Serializer::serialize_i32"(ser, 42));
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }; start_10 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_3, 1); builtin::array_set_u8(__local_3.repr, start_10, 105); start_19 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_3, 1); builtin::array_set_u8(__local_3.repr, start_19, 51); start_28 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_3, 1); builtin::array_set_u8(__local_3.repr, start_28, 50); start_37 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_3, 1); builtin::array_set_u8(__local_3.repr, start_37, 58); start_46 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_3, 1); builtin::array_set_u8(__local_3.repr, start_46, 32); "core:prelude/string.wado/String::push_str"(__local_3, ser.buf); __local_3);
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    global:serde_serialize_trait.wado::__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    drop("serde_serialize_trait.wado/TextSerializer^Serializer::serialize_string"(ser, global:serde_serialize_trait.wado::__const_obj_0));
+    global:serde_serialize_trait.wado::__const_obj_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    drop("serde_serialize_trait.wado/TextSerializer^Serializer::serialize_string"(ser, global:serde_serialize_trait.wado::__const_obj_1));
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }; start_58 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_58, 83); start_67 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_67, 116); start_76 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_76, 114); start_85 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_85, 105); start_94 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_94, 110); start_103 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_103, 103); start_112 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_112, 58); start_121 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_121, 32); "core:prelude/string.wado/String::push_str"(__local_4, ser.buf); __local_4);
 }
 
@@ -334,7 +335,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_0, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 

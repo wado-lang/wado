@@ -158,6 +158,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:iter_map_collect_variant.wado::__modules_initialized: bool = 0;
+global global:iter_map_collect_variant.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
 
 fn "iter_map_collect_variant.wado/run"() with Stdout {
     let colors: ref "core:prelude//List<iter_map_collect_variant.wado/Color>";
@@ -178,7 +179,7 @@ fn "iter_map_collect_variant.wado/run"() with Stdout {
     f = struct.new "canonical//CanonicalClosure_0" { env: struct.new "iter_map_collect_variant.wado//__Closure_2" {  }, func: ref.func "closure/iter_map_collect_variant.wado/__closure_wrapper_0" };
     self_10 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/ArrayIter<iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>" { inner: ref.as_non_null(struct.new "core:prelude/slice.wado//ArrayIter<iter_map_collect_variant.wado/Color>" { repr: repr_18, index: 0, end: 2 }), f: f };
     names = "core:prelude/list.wado/List<core:prelude/string.wado/String>^FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>>"(self_10);
-    "core:cli/println"("core:prelude/list.wado/List<core:prelude/string.wado/String>::join"(names, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 }));
+    "core:cli/println"("core:prelude/list.wado/List<core:prelude/string.wado/String>::join"(names, global:iter_map_collect_variant.wado::__const_obj_0));
 }
 
 fn "iter_map_collect_variant.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -547,15 +548,14 @@ fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
 fn "core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>^Iterator::next"(self) {
     let item: ref "iter_map_collect_variant.wado//Color";
     let __match_2: ref null "iter_map_collect_variant.wado//Color";
-    let v: ref "core:prelude/string.wado//String";
     __match_2 = "core:prelude/slice.wado/ArrayIter<iter_map_collect_variant.wado/Color>^Iterator::next"(self.inner);
     if ref.is_null(__match_2) == 0 {
         item = ref.as_non_null(__match_2);
-        return ref.as_non_null(v = block -> ref "core:prelude/string.wado//String" {
+        return ref.as_non_null(block -> ref "core:prelude/string.wado//String" {
             let __indirect_call_0: ref "canonical//CanonicalClosure_0";
             __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(self.f);
             call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, item);
-        }; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: v.used });
+        });
     } else {
     }
     return ref.null none;

@@ -146,6 +146,7 @@ global global:closure_auto_capture_mut.wado::__const_obj_1: ref null "core:prelu
 global global:closure_auto_capture_mut.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(95, 95, 116, 101, 115, 116, 95, 49, 95, 119, 114, 105, 116, 105, 110, 103, 95, 99, 97, 112, 116, 117, 114, 101, 95, 105, 115, 95, 102, 110, 95, 109, 117, 116), used: 34 };
 global global:closure_auto_capture_mut.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
 global global:closure_auto_capture_mut.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(95, 95, 116, 101, 115, 116, 95, 50, 95, 115, 104, 97, 114, 101, 100, 95, 109, 117, 116, 97, 98, 108, 101, 95, 115, 116, 97, 116, 101, 95, 118, 105, 97, 95, 101, 110, 118, 95, 99, 111, 112, 121), used: 42 };
+global global:core:prelude/primitive.wado::__const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "closure_auto_capture_mut.wado/__test_1_writing_capture_is_fn_mut"() {
     let count: ref "core:prelude/types.wado//Box<i32>";
@@ -411,7 +412,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_8, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 

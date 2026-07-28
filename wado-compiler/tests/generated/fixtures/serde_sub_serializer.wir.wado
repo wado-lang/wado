@@ -158,9 +158,10 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:serde_sub_serializer.wado::__modules_initialized: bool = 0;
-global global:serde_sub_serializer.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 103, 101), used: 3 };
-global global:serde_sub_serializer.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 97, 109, 101), used: 4 };
-global mut global:serde_sub_serializer.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = ref.null none;
+global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:serde_sub_serializer.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 103, 101), used: 3 };
+global global:serde_sub_serializer.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 97, 109, 101), used: 4 };
+global mut global:serde_sub_serializer.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "serde_sub_serializer.wado/run"() with Stdout {
     let ser: ref "serde_sub_serializer.wado//TextSerializer";
@@ -225,9 +226,9 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     if ref.test "core:prelude/types.wado//Result<serde_sub_serializer.wado/TextStructSerializer,serde_sub_serializer.wado/SerializeError>::Ok"(st) {
         __local_13 = ref.cast "core:prelude/types.wado//Result<serde_sub_serializer.wado/TextStructSerializer,serde_sub_serializer.wado/SerializeError>::Ok"(st).payload_0;
         s_7 = struct.new "serde_sub_serializer.wado//TextStructSerializer" { parent: __local_13.parent, count: __local_13.count };
-        global:serde_sub_serializer.wado::__const_obj_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
-        drop("serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(s_7, global:serde_sub_serializer.wado::__const_obj_1, global:serde_sub_serializer.wado::__const_obj_2));
-        drop("serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<i32>"(s_7, global:serde_sub_serializer.wado::__const_obj_0, 30));
+        global:serde_sub_serializer.wado::__const_obj_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
+        drop("serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(s_7, global:serde_sub_serializer.wado::__const_obj_2, global:serde_sub_serializer.wado::__const_obj_3));
+        drop("serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<i32>"(s_7, global:serde_sub_serializer.wado::__const_obj_1, 30));
         self_96 = s_7.parent.buf;
         start_98 = "core:prelude/string.wado/String::internal_reserve_uninit"(self_96, 1);
         builtin::array_set_u8(self_96.repr, start_98, 125);
@@ -425,7 +426,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_0, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 

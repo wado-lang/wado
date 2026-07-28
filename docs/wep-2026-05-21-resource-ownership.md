@@ -163,8 +163,9 @@ by-value receiver transfer, with no aggregate-shape guessing. Two fixes landed:
 
 - A `&self` inspector on a `Result<Resource, E>` (`is_ok`, …) is a borrow and
   leaves the structural drop intact (#1569).
-- A resource value discarded in statement position (`Fields::new();`, `let _ =
-…`) is dropped, not leaked; a tail expression is left for its consumer.
+- A resource value discarded in statement position (`Fields::new();`,
+  `let _ = …`) is dropped, not leaked; a tail expression is left for its
+  consumer.
 
 The `is_resource_aggregate` heuristic is **retired**: cleanup now drops "owned and
 not transferred at scope exit" directly.

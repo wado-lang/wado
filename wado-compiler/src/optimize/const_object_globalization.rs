@@ -33,6 +33,10 @@
 //! ([`Gate::callee_param_readonly`]): the value crosses into the callee
 //! uncopied — the value-copy planner skipped the copy because the literal is
 //! fresh — so the callee is the only party that could write the shared object.
+//! Being read-only is not enough there: a by-value parameter is the callee's
+//! own copy, so it may legitimately hand a *projection* of it back
+//! (`return s.data`), which the return-convention fixpoint calls owned and the
+//! caller then mutates. [`param_storage_escapes`] rules that out.
 //!
 //! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
 //! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): a project-level pass
@@ -1023,6 +1027,20 @@ impl Gate<'_> {
         ))
     }
 
+    /// Whether the callee takes its receiver by `&self` — the only receiver
+    /// convention that neither writes the caller's storage (`&mut self`) nor
+    /// takes it over (a by-value `self`). An unknown callee answers `false`.
+    fn callee_borrows_self(&self, func_id: crate::nir::FuncId) -> bool {
+        use cranelift_entity::EntityRef;
+        let Some(f) = self.funcs.get(func_id.index()) else {
+            return false;
+        };
+        let f = f.borrow();
+        f.params.first().is_some_and(|p0| {
+            matches!(self.type_table.borrow().get(p0.type_id), ResolvedType::Ref(_))
+        })
+    }
+
     /// Whether parameter `param_pos` is taken by value and never written or
     /// consumed inside the callee — the precondition for handing it a shared
     /// global instead of a fresh object.
@@ -1046,15 +1064,140 @@ impl Gate<'_> {
         ) {
             return false;
         }
-        f.body
-            .as_ref()
-            .is_some_and(|body| is_readonly_body(body, param.local_index, self))
+        f.body.as_ref().is_some_and(|body| {
+            is_readonly_body(body, param.local_index, self)
+                && !param_storage_escapes(body, param.local_index, self)
+        })
     }
 }
 
 /// True when every use of local `idx` in `body` keeps it immutable.
 fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     block_readonly(body, body.root, idx, gate)
+}
+
+/// Whether the callee hands the *storage* of by-value parameter `idx` back out
+/// — returning `s.data`, stashing it in a global, or passing it on by value.
+///
+/// [`is_readonly_body`] does not cover this: reading a field of the parameter is
+/// a read, and a by-value parameter is the callee's own copy, so returning that
+/// field is legitimate — the return-convention fixpoint even calls it *owned*,
+/// which is what lets the caller skip a defensive copy of the result. Hoisting
+/// the argument invalidates the premise: the "owned" value handed back is the
+/// shared global's storage, and the first mutation corrupts the constant.
+/// Passing the storage on by value hands the same problem to the next callee.
+///
+/// A borrow (`&s.data`) is not an escape — the callee's own read-only gate
+/// already bounds what the borrow can do — and a scalar projection copies its
+/// value outright.
+fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
+    let roots = projection_alias_roots(body, idx);
+    let escapes = |op: Operand| {
+        op.as_expr().is_some_and(|e| {
+            gate.is_reference_type(body.exprs[e].type_id)
+                && roots.iter().any(|&r| projection_roots_at(body, e, r))
+        })
+    };
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        match node {
+            NodeRef::Stmt(s) => match &body.stmts[s].kind {
+                StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+                    if value.is_some_and(escapes) {
+                        return true;
+                    }
+                }
+                StmtKind::Let { value, .. } => {
+                    // A `let` alias is itself a root, so its own uses are
+                    // covered by this walk.
+                    let _ = value;
+                }
+                StmtKind::Expr(_)
+                | StmtKind::If { .. }
+                | StmtKind::Loop { .. }
+                | StmtKind::LabeledBlock { .. }
+                | StmtKind::LetDestructure { .. }
+                | StmtKind::Continue => {}
+            },
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::Assign { value, .. } => {
+                    if escapes(*value) {
+                        return true;
+                    }
+                }
+                ExprKind::Call { args, .. } => {
+                    if args.iter().any(|a| escapes(a.expr)) {
+                        return true;
+                    }
+                }
+                // A by-value `self` receiver hands the storage to the callee,
+                // which may return or store it in turn; `&self` only reads it.
+                ExprKind::MethodCall {
+                    receiver,
+                    func_id,
+                    args,
+                    ..
+                } => {
+                    if args.iter().any(|a| escapes(a.expr))
+                        || (escapes(*receiver) && !gate.callee_borrows_self(*func_id))
+                    {
+                        return true;
+                    }
+                }
+                ExprKind::IndirectCall { args, .. } => {
+                    if args.iter().any(|&a| escapes(a)) {
+                        return true;
+                    }
+                }
+                _ => {}
+            },
+            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    false
+}
+
+/// `idx` plus every local bound directly from a projection of one of them
+/// (`let r = s.data;`, which LICM also produces): they all name the same
+/// storage, so an escape through any of them is an escape of the parameter.
+fn projection_alias_roots(body: &Body, idx: u32) -> Vec<u32> {
+    let mut roots = vec![idx];
+    let mut i = 0;
+    while i < roots.len() {
+        let root = roots[i];
+        let mut stack = vec![NodeRef::Block(body.root)];
+        while let Some(node) = stack.pop() {
+            if let NodeRef::Stmt(s) = node
+                && let StmtKind::Let {
+                    local_index, value, ..
+                } = &body.stmts[s].kind
+                && value
+                    .as_expr()
+                    .is_some_and(|e| projection_roots_at(body, e, root))
+                && !roots.contains(local_index)
+            {
+                roots.push(*local_index);
+            }
+            body.for_each_child(node, |c| stack.push(c));
+        }
+        i += 1;
+    }
+    roots
+}
+
+/// Whether `expr` is a projection chain (`x`, `x.f`, `x[i].f`) rooted at local
+/// `idx`.
+fn projection_roots_at(body: &Body, expr: ExprId, idx: u32) -> bool {
+    match &body.exprs[expr].kind {
+        ExprKind::Local { index, .. } => *index == idx,
+        ExprKind::FieldAccess { expr: base, .. }
+        | ExprKind::Index { expr: base, .. }
+        | ExprKind::Cast { expr: base, .. } => base
+            .as_expr()
+            .is_some_and(|e| projection_roots_at(body, e, idx)),
+        _ => false,
+    }
 }
 
 fn block_readonly(body: &Body, block: BlockId, idx: u32, gate: &Gate<'_>) -> bool {
