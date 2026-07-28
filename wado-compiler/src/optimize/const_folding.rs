@@ -304,7 +304,9 @@ fn build_seq_builtin_map(project: &NirPackage) -> SeqBuiltinMap {
         let builtin = match name.as_str() {
             "builtin::array_get" | "builtin::array_get_u8" => SeqBuiltin::Get,
             "builtin::array_len" => SeqBuiltin::Len,
+            "builtin::array_new" => SeqBuiltin::New,
             "builtin::array_set" | "builtin::array_set_u8" => SeqBuiltin::Set,
+            "builtin::array_copy" => SeqBuiltin::Copy,
             _ => continue,
         };
         map.insert(id, builtin);

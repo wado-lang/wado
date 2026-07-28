@@ -233,14 +233,14 @@ Sequences:
 
 ### Sequences
 
-- The rest of the spine. Element and field writes land, but the operations that
-  give a container its shape do not: `array_new` should denote a zero-filled
-  sequence and `array_copy` a spliced one, and a `&mut` argument should write
-  back into the caller frame's place on return.
-  Without them a buffer that grows — which is what `String` does the moment it
-  outruns its capacity — still abandons the evaluation. What will not fit even
-  then — a table past the length cap, a fill loop past the step budget — stays
-  the wasm-CTFE backend's case.
+- The rest of the spine. Element and field writes land, an allocation denotes a
+  zero-filled sequence and a copy a spliced one; what remains is a `&mut`
+  argument writing back into the caller frame's place on return. Without it a
+  buffer that grows — which is what `String` does the moment it outruns its
+  capacity — still abandons the evaluation, because `grow` reshapes the
+  caller's container from a frame of its own. What will not fit even then — a
+  table past the length cap, a fill loop past the step budget — stays the
+  wasm-CTFE backend's case.
 
 ### Regions
 
@@ -316,11 +316,13 @@ Milestones, each red/green with the fixture first:
 - [x] The aggregate exit. A compile-time call returning a constant `String`
       folds. No cap of its own is needed: `MAX_SEQ_ELEMENTS` already bounds what
       becomes a sequence value, and a payload past the inline threshold reaches
-      the binary as a data segment rather than as code.
-- [ ] Places and the frame store. `array_set` and a field store through a
-      frame-owned place land; `array_new`, `array_copy` and `&mut` write-back
-      remain, and with them a compile-time call that fills and returns a
-      `List<u8>` folds.
+      the binary as a data segment rather than as code. A container the frame
+      never filled stays as the source wrote it: an empty one is a reservation
+      rather than a result, and a literal cannot carry the capacity it asked
+      for.
+- [ ] Places and the frame store. Element writes, field stores, allocations and
+      copies land through a frame-owned place; `&mut` write-back remains, and
+      with it a compile-time call that fills and returns a `List<u8>` folds.
 - [ ] Frame-executable calls. A call writing through a `&mut` parameter runs.
 - [ ] Region recognition. `` `ab` `` and `` `a${"b"}` `` fold to one literal.
 - [ ] Coverage, in order of engine cost: `bool` / `char` / `String`, then

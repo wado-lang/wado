@@ -121,7 +121,7 @@ use crate::nir_arena::{
 };
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::nir_visitor::NirRefVisitor;
-use crate::tir::{PrimitiveType, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// Three-state lattice over compile-time evaluation results.
 ///
@@ -232,10 +232,26 @@ pub type CalleeMap = IndexMap<CalleeKey, Rc<RefCell<NirFunction>>>;
 pub enum SeqBuiltin {
     Get,
     Len,
+    /// `array_new(len)`, which denotes a sequence of `len` default elements.
+    New,
     /// `array_set(&mut seq, i, v)`. Unlike the reads, this is performed rather
     /// than folded: it updates the frame's value for the place its first
     /// argument roots at, and only inside a compile-time frame that owns it.
     Set,
+    /// `array_copy(&mut dst, dst_offset, src, src_offset, len)`, performed like
+    /// [`SeqBuiltin::Set`] but over a run of elements.
+    Copy,
+}
+
+impl SeqBuiltin {
+    /// Whether the builtin writes its first argument, which the executor
+    /// performs at statement position rather than folding.
+    fn is_write(self) -> bool {
+        match self {
+            Self::Set | Self::Copy => true,
+            Self::Get | Self::Len | Self::New => false,
+        }
+    }
 }
 
 /// Which sequence builtin each callee id is, for the ids that are one.
@@ -684,7 +700,7 @@ impl ExecutedWrites {
             let Some(builtin) = map.get(func_id) else {
                 continue;
             };
-            if *builtin == SeqBuiltin::Set && !statements.contains(&e) {
+            if builtin.is_write() && !statements.contains(&e) {
                 continue;
             }
             if let Some(arg) = args.first().and_then(|a| a.expr.as_expr()) {
@@ -1210,6 +1226,11 @@ impl<'a> Interpreter<'a> {
                 Value::seq(node.type_id, elements).map_or(Lattice::NonConst, Lattice::Const)
             }
             ExprKind::Index { expr: inner, index } => self.index_lattice(body, *inner, *index),
+            // A sequence builtin denotes its value structurally, so a container
+            // built over one is constant without the call being rewritten
+            // first — an allocation has no literal node form to be rewritten
+            // to, and the bottom-up walk would otherwise leave it unevaluated.
+            ExprKind::Call { .. } => self.try_seq_builtin_fold_a(body, e),
             ExprKind::Unary {
                 op: NirUnaryOp::Ref,
                 expr: inner,
@@ -1613,7 +1634,9 @@ impl<'a> Interpreter<'a> {
     ///
     /// The bytes are the container's first `used`, not the whole backing array:
     /// a grown container's capacity outruns what it holds, and capacity is not
-    /// observable.
+    /// observable. A container the frame never filled is left alone, though —
+    /// an empty one is a reservation rather than a result, and writing it back
+    /// would trade the capacity the source asked for against nothing.
     fn materialize_seq_via<S: EditSink>(&self, sink: &mut S, e: ExprId, value: &Value) -> bool {
         let Value::Aggregate { type_id, .. } = value else {
             return false;
@@ -1635,7 +1658,7 @@ impl<'a> Interpreter<'a> {
         let Ok(used) = usize::try_from(used) else {
             return false;
         };
-        if used > elements.len() {
+        if used == 0 || used > elements.len() {
             return false;
         }
         let mut bytes = Vec::with_capacity(used);
@@ -2323,41 +2346,83 @@ impl<'a> Interpreter<'a> {
         Some(())
     }
 
-    /// Perform `array_set(&mut place, i, v)`, updating the frame's value for the
-    /// place's root. `None` when the statement is not a sequence write at all;
-    /// `Some(Flow::Bail)` when it is one the engine cannot follow — stepping
-    /// past a write it did not apply would leave the container stale.
+    /// Perform `array_set(&mut place, i, v)` or
+    /// `array_copy(&mut place, at, src, from, len)`, updating the frame's value
+    /// for the place's root. `None` when the statement is not a sequence write
+    /// at all; `Some(Flow::Bail)` when it is one the engine cannot follow —
+    /// stepping past a write it did not apply would leave the container stale.
     ///
     /// The root has to be a local the frame already holds a constant for, which
-    /// is what confines the store to values the engine itself built: a
+    /// is what confines the write to values the engine itself built: a
     /// parameter, a global, or anything else reaches the frame as
     /// `NonConst` and bails here.
     fn exec_seq_write_a(&mut self, body: &mut Body, e: ExprId) -> Option<Flow> {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return None;
         };
-        if self.seq_builtins.and_then(|m| m.get(func_id)) != Some(&SeqBuiltin::Set) {
-            return None;
+        let builtin = *self.seq_builtins.and_then(|m| m.get(func_id))?;
+        let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+        match builtin {
+            SeqBuiltin::Set => Some(self.exec_element_write_a(body, &args)),
+            SeqBuiltin::Copy => Some(self.exec_run_write_a(body, &args)),
+            SeqBuiltin::Get | SeqBuiltin::Len | SeqBuiltin::New => None,
         }
-        let [seq, index, element] = args.as_slice() else {
-            return Some(Flow::Bail);
+    }
+
+    fn exec_element_write_a(&mut self, body: &mut Body, args: &[Operand]) -> Flow {
+        let [seq, index, element] = *args else {
+            return Flow::Bail;
         };
-        let (seq, index, element) = (seq.expr, index.expr, element.expr);
         let Some((root, path)) = place_of(body, seq) else {
-            return Some(Flow::Bail);
+            return Flow::Bail;
         };
         let (Lattice::Const(index), Lattice::Const(element)) = (
             self.eval_operand_a(body, index),
             self.eval_operand_a(body, element),
         ) else {
-            return Some(Flow::Bail);
+            return Flow::Bail;
         };
         let Some((index, _)) = index.as_int() else {
-            return Some(Flow::Bail);
+            return Flow::Bail;
         };
         match self.update_place_a(root, &path, |seq| seq.with_element(index, element)) {
-            Some(()) => Some(Flow::Fallthrough(Lattice::Unevaluated)),
-            None => Some(Flow::Bail),
+            Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
+            None => Flow::Bail,
+        }
+    }
+
+    /// A run write splices `len` of `src`'s elements into the destination. A
+    /// run either side cannot supply is left to trap at run time.
+    fn exec_run_write_a(&mut self, body: &mut Body, args: &[Operand]) -> Flow {
+        let [destination, at, source, from, len] = *args else {
+            return Flow::Bail;
+        };
+        let Some((root, path)) = place_of(body, destination) else {
+            return Flow::Bail;
+        };
+        let (
+            Lattice::Const(at),
+            Lattice::Const(source),
+            Lattice::Const(from),
+            Lattice::Const(len),
+        ) = (
+            self.eval_operand_a(body, at),
+            self.eval_operand_a(body, source),
+            self.eval_operand_a(body, from),
+            self.eval_operand_a(body, len),
+        ) else {
+            return Flow::Bail;
+        };
+        let (Some((at, _)), Some((from, _)), Some((len, _))) =
+            (at.as_int(), from.as_int(), len.as_int())
+        else {
+            return Flow::Bail;
+        };
+        match self.update_place_a(root, &path, |destination| {
+            destination.with_run(at, &source, from, len)
+        }) {
+            Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
+            None => Flow::Bail,
         }
     }
 
@@ -2391,8 +2456,9 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Evaluate `array_get(seq, i)` / `array_len(seq)` over a constant
-    /// sequence. The argument is a reference to the array, and a reference to a
-    /// constant reads as that constant, so no separate deref step is needed.
+    /// sequence, or the sequence `array_new(len)` allocates. A read's argument
+    /// is a reference to the array, and a reference to a constant reads as that
+    /// constant, so no separate deref step is needed.
     fn try_seq_builtin_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return Lattice::Unevaluated;
@@ -2413,9 +2479,47 @@ impl<'a> Interpreter<'a> {
                 })
             }
             (SeqBuiltin::Get, [arr, index]) => self.index_lattice(body, arr.expr, index.expr),
+            (SeqBuiltin::New, [len]) => self.allocation_lattice(body, e, len.expr),
             // A write denotes nothing; the executor performs it as a statement.
-            (SeqBuiltin::Set | SeqBuiltin::Len | SeqBuiltin::Get, _) => Lattice::Unevaluated,
+            (
+                SeqBuiltin::Set
+                | SeqBuiltin::Copy
+                | SeqBuiltin::Len
+                | SeqBuiltin::Get
+                | SeqBuiltin::New,
+                _,
+            ) => Lattice::Unevaluated,
         }
+    }
+
+    /// The sequence `array_new(len)` allocates: `len` elements at the default
+    /// the element type's `array.new_default` leaves. A length that is negative
+    /// or past [`MAX_SEQ_ELEMENTS`], or an element type with no compile-time
+    /// default, is simply not a constant here — the call stays and traps or
+    /// allocates at run time as written.
+    fn allocation_lattice(&self, body: &Body, e: ExprId, len: Operand) -> Lattice {
+        let Lattice::Const(len) = self.operand_to_lattice_a(body, len) else {
+            return Lattice::Unevaluated;
+        };
+        let Some((len, PrimitiveType::I32)) = len.as_int() else {
+            return Lattice::Unevaluated;
+        };
+        let array_type = body.exprs[e].type_id;
+        let ResolvedType::BuiltinArray(element_type) = self.type_table.get(array_type) else {
+            return Lattice::Unevaluated;
+        };
+        let (Ok(len), Some(default)) = (
+            usize::try_from(len as i32),
+            prim_of(*element_type, self.type_table).and_then(Value::default_of),
+        ) else {
+            return Lattice::Unevaluated;
+        };
+        // Checked before building: an allocation the value model would reject
+        // must not be walked element by element first.
+        if len > MAX_SEQ_ELEMENTS {
+            return Lattice::Unevaluated;
+        }
+        Value::seq(array_type, vec![default; len]).map_or(Lattice::Unevaluated, Lattice::Const)
     }
 
     /// Fold a pure call whose args are all constant: bind the params, run the

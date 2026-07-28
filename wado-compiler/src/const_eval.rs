@@ -113,6 +113,52 @@ impl Value {
         })
     }
 
+    /// This sequence with `len` of `source`'s elements from `from` written at
+    /// `at`. `None` for a non-sequence or a run either side cannot supply,
+    /// where the copy traps at run time.
+    #[must_use]
+    pub fn with_run(&self, at: u64, source: &Self, from: u64, len: u64) -> Option<Self> {
+        let (Self::Seq { type_id, elements }, Self::Seq { elements: source, .. }) = (self, source)
+        else {
+            return None;
+        };
+        let (at, from, len) = (
+            usize::try_from(at).ok()?,
+            usize::try_from(from).ok()?,
+            usize::try_from(len).ok()?,
+        );
+        let source = source.get(from..from.checked_add(len)?)?;
+        let mut elements = elements.to_vec();
+        elements
+            .get_mut(at..at.checked_add(len)?)?
+            .clone_from_slice(source);
+        Some(Self::Seq {
+            type_id: *type_id,
+            elements: elements.into(),
+        })
+    }
+
+    /// The value `array.new_default` leaves in an element of this primitive
+    /// type. `None` for the widths the value model does not carry, and for a
+    /// reference element, whose default is null.
+    #[must_use]
+    pub fn default_of(prim: PrimitiveType) -> Option<Self> {
+        match prim {
+            PrimitiveType::I8
+            | PrimitiveType::I16
+            | PrimitiveType::I32
+            | PrimitiveType::I64
+            | PrimitiveType::U8
+            | PrimitiveType::U16
+            | PrimitiveType::U32
+            | PrimitiveType::U64 => Some(Self::Int { value: 0, prim }),
+            PrimitiveType::F32 | PrimitiveType::F64 => Some(Self::Float { value: 0.0, prim }),
+            PrimitiveType::Bool => Some(Self::Bool(false)),
+            PrimitiveType::Char => Some(Self::Char('\0')),
+            PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128 => None,
+        }
+    }
+
     /// `None` when longer than [`MAX_SEQ_ELEMENTS`].
     #[must_use]
     pub fn seq(type_id: TypeId, elements: Vec<Value>) -> Option<Self> {

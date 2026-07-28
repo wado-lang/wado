@@ -3849,6 +3849,252 @@ fn a_store_through_a_projection_that_is_not_a_place_is_refused() {
     );
 }
 
+/// A container over a freshly allocated backing array of `capacity` bytes,
+/// holding `used` of them — the shape `List::with_capacity` returns.
+fn allocated_container(
+    list_ty: TypeId,
+    array_ty: TypeId,
+    new_id: wado_compiler::nir::FuncId,
+    capacity: u64,
+    used: u64,
+) -> Build {
+    struct_lit(
+        list_ty,
+        vec![
+            (
+                SeqField::Backing.index(),
+                "repr",
+                seq_builtin_call(
+                    new_id,
+                    vec![int_lit(capacity, TypeTable::I32, "capacity")],
+                    array_ty,
+                ),
+            ),
+            (
+                SeqField::Len.index(),
+                "used",
+                int_lit(used, TypeTable::I32, "used"),
+            ),
+        ],
+    )
+}
+
+#[test]
+fn array_new_denotes_a_zero_filled_sequence() {
+    // A fresh allocation is every element's default, so reading one back gives
+    // zero instead of abandoning the evaluation.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let array_ty = table.make_builtin_array(TypeTable::U8);
+    let new_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = seq_builtin_map(new_id, SeqBuiltin::New);
+    builtins.insert(get_id, SeqBuiltin::Get);
+
+    let new_then_read = make_pure_fn_stmts(
+        "new_then_read",
+        vec![],
+        TypeTable::U8,
+        vec![
+            let_stmt_b(
+                "c",
+                0,
+                list_ty,
+                allocated_container(list_ty, array_ty, new_id, 3, 3),
+            ),
+            return_stmt(seq_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(
+                        field_access(
+                            local_expr(0, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            array_ty,
+                        ),
+                        array_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&new_then_read));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_seq_builtins(&builtins);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&new_then_read, vec![])),
+        Some(Value::Int {
+            value: 0,
+            prim: PrimitiveType::U8,
+        }),
+    );
+}
+
+#[test]
+fn an_allocation_past_the_element_cap_is_not_a_sequence() {
+    // Building the value would walk every element, so past the cap the
+    // allocation is simply not a constant here and the call stays.
+    let mut table = TypeTable::new();
+    let array_ty = table.make_builtin_array(TypeTable::U8);
+    let new_id = next_test_func_id();
+    let builtins = seq_builtin_map(new_id, SeqBuiltin::New);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_seq_builtins(&builtins);
+    let oversized = seq_builtin_call(
+        new_id,
+        vec![int_lit(
+            MAX_SEQ_ELEMENTS as u64 + 1,
+            TypeTable::I32,
+            "capacity",
+        )],
+        array_ty,
+    );
+
+    assert_eq!(reduce_lat(&mut interp, &oversized), Lattice::Unevaluated);
+}
+
+#[test]
+fn a_container_the_frame_never_filled_stays_an_allocation() {
+    // Materializing it would write the reservation back as an empty literal,
+    // trading a capacity the source asked for against nothing.
+    let mut table = TypeTable::new();
+    let string_ty = table.make_struct("String".to_string(), ModuleSource::default());
+    let array_ty = table.make_builtin_array(TypeTable::U8);
+    let new_id = next_test_func_id();
+    let builtins = seq_builtin_map(new_id, SeqBuiltin::New);
+
+    let with_capacity = make_pure_fn(
+        "with_capacity",
+        vec![],
+        string_ty,
+        return_stmt(allocated_container(string_ty, array_ty, new_id, 8, 0)),
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&with_capacity));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_seq_builtins(&builtins);
+
+    let (changed, body, e) = reduce_local_into(&mut interp, &call_expr(&with_capacity, vec![]));
+    assert!(!changed, "a reservation is not written back as a literal");
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+}
+
+#[test]
+fn a_copy_into_a_frame_owned_place_splices_the_source() {
+    // `array_copy` at statement position lands in the frame's container, so a
+    // later read of a copied element sees the source's byte.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let array_ty = table.make_builtin_array(TypeTable::U8);
+    let copy_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = seq_builtin_map(copy_id, SeqBuiltin::Copy);
+    builtins.insert(get_id, SeqBuiltin::Get);
+
+    let backing = move || {
+        field_access(
+            local_expr(0, list_ty),
+            SeqField::Backing.index(),
+            "repr",
+            array_ty,
+        )
+    };
+    let copy_then_read = make_pure_fn_stmts(
+        "copy_then_read",
+        vec![],
+        TypeTable::U8,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0, 0, 0])),
+            expr_stmt_b(seq_write_call(
+                copy_id,
+                vec![
+                    mut_ref(backing(), array_ty),
+                    int_lit(1, TypeTable::I32, "1"),
+                    shared_ref(packed_array(vec![7, 8], array_ty), array_ty),
+                    int_lit(0, TypeTable::I32, "0"),
+                    int_lit(2, TypeTable::I32, "2"),
+                ],
+                TypeTable::UNIT,
+            )),
+            return_stmt(seq_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(backing(), array_ty),
+                    int_lit(2, TypeTable::I32, "2"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&copy_then_read));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_seq_builtins(&builtins);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&copy_then_read, vec![])),
+        Some(Value::Int {
+            value: 8,
+            prim: PrimitiveType::U8,
+        }),
+    );
+}
+
+#[test]
+fn a_copy_past_the_end_of_the_destination_is_refused() {
+    // The run traps at run time, so the evaluation is abandoned rather than
+    // producing a container the write never made.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let array_ty = table.make_builtin_array(TypeTable::U8);
+    let copy_id = next_test_func_id();
+    let builtins = seq_builtin_map(copy_id, SeqBuiltin::Copy);
+
+    let overrun = make_pure_fn_stmts(
+        "overrun",
+        vec![],
+        TypeTable::U8,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            expr_stmt_b(seq_write_call(
+                copy_id,
+                vec![
+                    mut_ref(
+                        field_access(
+                            local_expr(0, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            array_ty,
+                        ),
+                        array_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                    shared_ref(packed_array(vec![7, 8], array_ty), array_ty),
+                    int_lit(0, TypeTable::I32, "0"),
+                    int_lit(2, TypeTable::I32, "2"),
+                ],
+                TypeTable::UNIT,
+            )),
+            return_stmt(int_lit(7, TypeTable::U8, "7")),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&overrun));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_seq_builtins(&builtins);
+
+    assert_eq!(flow_fold(&mut interp, &call_expr(&overrun, vec![])), None);
+}
+
 #[test]
 fn packed_array_reduces_to_a_sequence_of_bytes() {
     let table = TypeTable::new();
