@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785230609322,
+  "lastUpdate": 1785273133639,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44585,6 +44585,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fb7ba1593ac1f0e72669c37b1c657ac7e2243ad1"
         },
         "date": 1785230608627,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16237,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276421,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fa643d82e0750d8c0fe8085dec123ccb339c0c72",
+          "message": "Merge pull request #1710 from wado-lang/claude/cm-post-return-dx9osz\n\nfix(cm): reclaim linear memory at the synchronously-lifted export boundary",
+          "timestamp": "2026-07-29T06:00:52+09:00",
+          "tree_id": "f08b23ca95d17c242e81b26bd71281b9038b8d06",
+          "url": "https://github.com/wado-lang/wado/commit/fa643d82e0750d8c0fe8085dec123ccb339c0c72"
+        },
+        "date": 1785273132835,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
