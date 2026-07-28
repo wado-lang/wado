@@ -6,7 +6,7 @@
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -227,7 +227,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         module_source: crate::module_source::ModuleSource,
     ) -> FunctionRef {
         let mut method_info = LocalMethodName::new(
-            base_name.to_string(),
+            FqTypeName::declared(&module_source, base_name),
             Some(trait_name.to_string()),
             method.to_string(),
         );
@@ -412,7 +412,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
     ) {
         let mut method_info = LocalMethodName::new(
-            type_param_name.to_string(),
+            FqTypeName::binder(type_param_name),
             Some(reflect_trait_name),
             method,
         );
@@ -917,7 +917,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let mut method_info =
-            LocalMethodName::new(type_param_name.to_string(), Some(trait_name), method);
+            LocalMethodName::new(FqTypeName::binder(type_param_name), Some(trait_name), method);
         method_info.is_type_param_receiver = true;
         let mangled_name = method_info.to_mangled_name();
 
@@ -1103,11 +1103,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let param_is_mut = self.reflect_scalar_param_is_mut(spec, &method);
         let func_ref = FunctionRef {
-            module_source,
-            name: MethodName::format_local(&self_name, Some(&trait_name), &method),
+            module_source: module_source.clone(),
+            name: MethodName::format_local(
+                &FqTypeName::declared(&module_source, &self_name),
+                Some(&trait_name),
+                &method,
+            ),
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(
-                self_name.clone(),
+                FqTypeName::declared(&module_source, &self_name),
                 Some(trait_name.clone()),
                 method.clone(),
             )),
@@ -1159,7 +1163,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let param_is_mut = self.reflect_scalar_param_is_mut(spec, &method);
         let mut method_info =
-            LocalMethodName::new(type_param_name.to_string(), Some(trait_name), method);
+            LocalMethodName::new(FqTypeName::binder(type_param_name), Some(trait_name), method);
         method_info.is_type_param_receiver = true;
         let mangled_name = method_info.to_mangled_name();
 
