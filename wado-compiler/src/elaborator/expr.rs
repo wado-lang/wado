@@ -2898,19 +2898,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
         // For large literals: 170... as i128 → i128::from_pair(low, high)
         let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
-            ResolvedType::Struct { name, .. } => Some(name),
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => Some((FqTypeName::declared(&module_source, &name), name)),
             _ => None,
         };
 
-        if let Some(ref name) = struct_name
-            && (name == "u128" || name == "i128")
+        if let Some((ref name, ref simple)) = struct_name
+            && (simple == "u128" || simple == "i128")
         {
             // Handle number literal cast specially to support values > u64
             if let ast::Expr::Literal(lit) = &cast.expr
                 && let Literal::Number(repr) = &lit.value
                 && !util::is_float_only_literal(repr)
             {
-                let parse_result = if name == "u128" {
+                let parse_result = if simple == "u128" {
                     util::parse_u128_literal(repr).map(|v| v as i128)
                 } else {
                     util::parse_i128_literal(repr)
@@ -2971,7 +2975,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.tysys.type_table.borrow().is_integer(source_type)
                 || self.tysys.type_table.borrow().is_float(source_type)
             {
-                let intermediate_type = if name == "u128" {
+                let intermediate_type = if simple == "u128" {
                     TypeTable::U64
                 } else {
                     TypeTable::I64

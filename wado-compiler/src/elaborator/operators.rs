@@ -1698,13 +1698,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let mangled_method_name = MethodName::format_local(
-            &resolved.impl_name,
+            &FqTypeName::from_mangled(resolved.impl_name.clone()),
             Some(&resolved.trait_name),
             &resolved.method_name,
         );
 
         let mut method_info = LocalMethodName::new(
-            resolved.impl_name.clone(),
+            FqTypeName::from_mangled(resolved.impl_name.clone()),
             Some(resolved.trait_name.clone()),
             resolved.method_name.clone(),
         );

@@ -9,7 +9,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::{self, AstId, BinaryOp, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
 };
@@ -3066,7 +3066,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let mangled_index_mut_name = MethodName::format_local(
-            &struct_name,
+            &FqTypeName::from_mangled(struct_name.clone()),
             Some(&index_mut_info.trait_name),
             "index_mut_ref",
         );
@@ -3093,7 +3093,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: mangled_index_mut_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        struct_name.clone(),
+                        FqTypeName::from_mangled(struct_name.clone()),
                         Some(index_mut_info.trait_name.clone()),
                         "index_mut_ref".to_string(),
                     )),
