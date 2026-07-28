@@ -1045,9 +1045,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Synthetic call sites (e.g. for-of's `.into_iter()` / `.next()`) pass
         // `method_id == None` so no edge is recorded — the call has no
         // source-level method name to navigate from.
+        // The impl-header scan compares against the name the header writes, so
+        // it needs the declaration name — read off the receiver's resolved type,
+        // never split out of the mangled head, which carries the declaring
+        // module and matches no header.
+        let receiver_key = self
+            .tysys
+            .type_table
+            .borrow()
+            .impl_receiver_key(method_impl_type_id);
+        let receiver_decl_name = receiver_key.head_key().into_owned();
         if let Some(method_id) = method_id
-            && let Some(method_ast_id) =
-                self.find_impl_method_ast_id(&method_module_source, &base_struct_name, method_name)
+            && let Some(method_ast_id) = self.find_impl_method_ast_id(
+                &method_module_source,
+                &receiver_decl_name,
+                method_name,
+            )
         {
             self.record_reference_to_def(method_id, method_ast_id);
         }
