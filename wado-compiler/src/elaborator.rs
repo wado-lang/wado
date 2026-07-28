@@ -842,6 +842,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.handler_bindings.insert(key, info);
     }
 
+    /// The fq name of an impl receiver written as `written`.
+    ///
+    /// An fq name names its subject by the module that declares it, so a
+    /// declared type is qualified through the same canonical key the impl
+    /// index uses. A type parameter is a template's own binder and a
+    /// primitive has no declaring module in any mangle, so both stay bare —
+    /// matching what `TypeTable::mangle_type_arg_for_generic` produces for
+    /// the same type on the consuming side.
+    pub(super) fn qualified_receiver_name(&self, written: &str) -> String {
+        if is_primitive_type_name(written)
+            || self.annotate_ctx.trait_ctx.type_params.contains_key(written)
+        {
+            return written.to_string();
+        }
+        let (module, name) = self.canonical_decl_key(written);
+        format!("{module}/{name}")
+    }
+
     /// Record the impl-block resolution facts (Gap 12 of Stage 5)
     /// keyed by the [`crate::ast::ImplBlock`]'s [`AstId`]. Reify
     /// reads the entry verbatim — no re-resolution of the impl
@@ -1885,9 +1903,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),
             );
+            let qualified_struct_name = scope.qualified_receiver_name(&struct_name);
             let receiver = match RefKind::from_ast(&impl_block.ty) {
                 Some(kind) => Receiver::Ref(kind),
-                None => Receiver::Type(struct_name.clone()),
+                None => Receiver::Type(qualified_struct_name.clone()),
             };
             // Concrete type args of the impl's trait reference
             // (`impl Future<i32>` → `[i32]`), resolved in the
@@ -1927,7 +1946,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     trait_type_args,
                     is_handler_method,
                     is_ref_impl,
-                    struct_name: struct_name.clone(),
+                    struct_name: qualified_struct_name,
                     receiver,
                     concrete_owner,
                 },

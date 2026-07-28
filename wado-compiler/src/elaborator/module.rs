@@ -503,11 +503,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // The receiver is named by the module that declares it — the
                 // written name alone is not an identity.
-                let struct_name = {
-                    let written = scope.get_type_name(&impl_block.ty);
-                    let (decl_module, decl_name) = scope.canonical_decl_key(&written);
-                    format!("{decl_module}/{decl_name}")
-                };
+                let struct_name =
+                    scope.qualified_receiver_name(&scope.get_type_name(&impl_block.ty));
                 let trait_name = impl_block
                     .trait_type
                     .as_ref()

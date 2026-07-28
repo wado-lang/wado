@@ -1537,11 +1537,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name,
                     module_source,
                     ..
-                } => (name.clone(), module_source.clone(), name.clone(), vec![]),
-                ResolvedType::Resource {
+                }
+                | ResolvedType::Resource {
                     name,
                     module_source,
-                } => (name.clone(), module_source.clone(), name.clone(), vec![]),
+                } => (
+                    name.clone(),
+                    module_source.clone(),
+                    format!("{module_source}/{name}"),
+                    vec![],
+                ),
                 // Generic resource types (Future<T>, Stream<T>, etc.) - handle like generic structs
                 // for static method resolution: use the base name and type args for substitution.
                 ResolvedType::GenericResource {
@@ -1579,11 +1584,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Enum {
                     name,
                     module_source,
-                } => (name.clone(), module_source.clone(), name.clone(), vec![]),
-                ResolvedType::Variant {
+                }
+                | ResolvedType::Variant {
                     name,
                     module_source,
-                } => (name.clone(), module_source.clone(), name.clone(), vec![]),
+                } => (
+                    name.clone(),
+                    module_source.clone(),
+                    format!("{module_source}/{name}"),
+                    vec![],
+                ),
                 ResolvedType::GenericInstance {
                     name,
                     module_source,
@@ -1598,7 +1608,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     (
                         name.clone(),
                         module_source.clone(),
-                        mangled,
+                        format!("{module_source}/{mangled}"),
                         type_args.clone(),
                     )
                 }
@@ -2886,12 +2896,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // is keyed by the *original* `Counter`, not the local alias.
         // The other lookups below still consume `struct_name` as-is and
         // canonicalise internally via `Elaborator::canonical_decl_key`.
-        let canonical_struct_name = self.canonical_decl_key(struct_name).1;
-        let mangled_func_name_owned = if canonical_struct_name == struct_name {
-            mangled_func_name.to_string()
-        } else {
-            MethodName::format_local(&canonical_struct_name, None, method_name)
-        };
+        // The receiver is named by the module that declares it, so the mangled
+        // name is rebuilt from the canonical key rather than the local alias.
+        let qualified_struct_name = self.qualified_receiver_name(struct_name);
+        let mangled_func_name_owned =
+            MethodName::format_local(&qualified_struct_name, None, method_name);
         let mangled_func_name = mangled_func_name_owned.as_str();
         // For newtypes, check if the newtype itself has the method first,
         // then fall back to the base type's static method
