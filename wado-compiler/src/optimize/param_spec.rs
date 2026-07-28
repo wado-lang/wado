@@ -29,6 +29,19 @@
 //! alone. The facts are flow-insensitive — valid at every program point, so no
 //! dataflow is needed to place them.
 //!
+//! ## Profitability
+//!
+//! A field is profitable when the callee reads it transitively, so a clone
+//! whose own body folds nothing is still minted — that is what carries the
+//! constants along a pass-through link. Where the chain does fold, the clone
+//! replaces the original and costs nothing. Where it does not, and a cold path
+//! (panic / assert formatting) keeps the original live, the clone is pure
+//! duplication: over the fixture corpus 7 of 1897 came out identical to a
+//! surviving original. Whole programs shrink, but the formatting-heavy
+//! fixtures grow 1.5-9.6% of Wasm.
+//!
+//! TODO: require that the substituted constants can decide a branch.
+//!
 //! ## Cost
 //!
 //! Alone among the fixed-point-loop passes this one is not gate-aware: it
