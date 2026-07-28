@@ -1063,7 +1063,11 @@ fn build_resource_fallback_call(
     let mangled_method_name = format!("{label}::{}", op.name);
 
     let mut method_info =
-        crate::name::LocalMethodName::new(base_name.to_string(), None, op.name.clone());
+        crate::name::LocalMethodName::new(
+            crate::name::FqTypeName::from_mangled(base_name.to_string()),
+            None,
+            op.name.clone(),
+        );
     method_info.struct_name = label.to_string();
     method_info.cm_name = Some(cm_name);
 

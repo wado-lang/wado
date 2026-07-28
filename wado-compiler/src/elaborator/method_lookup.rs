@@ -3125,7 +3125,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         let mangled_method_name = MethodName::format_local(
-            &output_struct_name,
+            &FqTypeName::from_mangled(output_struct_name.clone()),
             method_trait_name.as_deref(),
             &method_call.method,
         );
@@ -3141,7 +3141,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: mangled_method_name,
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(
-                output_struct_name,
+                FqTypeName::from_mangled(output_struct_name),
                 method_trait_name,
                 method_call.method.clone(),
             )),

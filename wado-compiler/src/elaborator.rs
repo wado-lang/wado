@@ -1643,11 +1643,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for (type_name, const_name, ty, value) in assoc_const_inputs {
             let type_id = self.resolve_type(&ty);
             let (type_module, canon_type_name) = self.canonical_decl_key(&type_name);
-            let canon_key = MethodName::format_local(
-                &crate::name::FqTypeName::declared(&type_module, &canon_type_name),
-                None,
-                &const_name,
-            );
+            // An associated-constant key is `Type::CONST` with the module held
+            // as the other half of the map key — not a mangled method name, so
+            // it does not carry the module inside the string.
+            let canon_key = format!("{canon_type_name}::{const_name}");
             self.sem.decls.associated_constants.insert(
                 (type_module, canon_key),
                 (module_source.clone(), type_id, value),

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
 use crate::tir::{InstantiationKey, ResolvedType, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state
@@ -523,10 +523,11 @@ impl Monomorphizer {
             self.newtype_own_struct_name_with_impl(receiver_type_id, type_table, trait_name);
         let mut names: Vec<(String, Option<String>)> = Vec::new();
         let mut push_for = |s: &str| {
-            names.push((MethodName::format_local(s, None, method_name), None));
+            let s = FqTypeName::from_mangled(s.to_string());
+            names.push((MethodName::format_local(&s, None, method_name), None));
             if let Some(tn) = trait_name {
                 names.push((
-                    MethodName::format_local(s, Some(tn), method_name),
+                    MethodName::format_local(&s, Some(tn), method_name),
                     Some(tn.to_string()),
                 ));
             }

@@ -15,7 +15,7 @@ use crate::hashmap::IndexSet;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FreeFunctionName, FunctionId, MethodName, mangle_generic_name, mangle_local_method,
+    FqTypeName, FreeFunctionName, FunctionId, MethodName, mangle_generic_name, mangle_local_method,
     mangle_local_trait_method, mangle_method_generic,
 };
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport};
@@ -1211,9 +1211,17 @@ impl<'a> DceWalker<'a> {
                 // method name uses the original generic struct name so
                 // the inlining-induced graph stays mergeable.
                 let mangled_func_name =
-                    MethodName::format_local(name, trait_name.as_deref(), &method_name);
+                    MethodName::format_local(
+                        &FqTypeName::from_mangled(name.clone()),
+                        trait_name.as_deref(),
+                        &method_name,
+                    );
                 let base_method_name =
-                    MethodName::format_local(base_struct, trait_name.as_deref(), &method_name);
+                    MethodName::format_local(
+                        &FqTypeName::from_mangled(base_struct.clone()),
+                        trait_name.as_deref(),
+                        &method_name,
+                    );
                 let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
                     self.current_module.clone(),
                     mangled_func_name,

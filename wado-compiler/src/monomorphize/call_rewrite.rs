@@ -607,7 +607,11 @@ impl Monomorphizer {
                     });
                 }
                 let trait_method_name =
-                    MethodName::format_local(&base_struct, Some(trait_name), &method_name);
+                    MethodName::format_local(
+                        &FqTypeName::from_mangled(base_struct.clone()),
+                        Some(trait_name),
+                        &method_name,
+                    );
                 possible_keys.push(InstantiationKey {
                     name: trait_method_name,
                     module_source: method_func.module_source.clone(),
@@ -737,8 +741,9 @@ impl Monomorphizer {
         {
             let mono = method_func.monomorph_info.as_ref();
             let generic_name = mono.map(|m| m.generic_name.clone()).unwrap_or_else(|| {
+                // A tuple is module-independent, so its receiver form is bare.
                 MethodName::format_local(
-                    TypeTable::TUPLE_TYPE_NAME,
+                    &FqTypeName::binder(TypeTable::TUPLE_TYPE_NAME),
                     info.trait_name.as_deref(),
                     &info.method_name,
                 )

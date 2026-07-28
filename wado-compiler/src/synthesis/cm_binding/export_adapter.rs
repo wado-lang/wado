@@ -29,7 +29,7 @@ use crate::cm_abi;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::LocalMethodName;
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{
     CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
@@ -286,7 +286,7 @@ fn lower_to_flat_inner(
             // __elem = (__arr[__i]) via the IndexValue<i32> trait method.
             let elem_local = alloc_local(next_local, locals, elem_type_id);
             let iv_info = LocalMethodName::new(
-                names.array,
+                FqTypeName::from_mangled(names.array),
                 Some("IndexValue<i32>".to_string()),
                 "index_value".to_string(),
             );

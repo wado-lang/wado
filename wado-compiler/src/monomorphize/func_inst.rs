@@ -4393,7 +4393,7 @@ fn try_lower_comparison(
             .as_deref()
             .and_then(|tn| {
                 trait_env
-                    .concrete_impl_module_for(&info.fq_struct_name(), tn, type_mod.as_ref())
+                    .concrete_impl_module_for(&info.struct_name, tn, type_mod.as_ref())
                     .cloned()
             })
             .or(type_mod)

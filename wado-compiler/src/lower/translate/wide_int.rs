@@ -293,7 +293,11 @@ fn create_u128_eq_call(
                 .to_string(),
         )
     };
-    let method_info = LocalMethodName::new(u128_struct_name, Some(eq_trait_name), "eq".to_string());
+    let method_info = LocalMethodName::new(
+        FqTypeName::from_mangled(u128_struct_name),
+        Some(eq_trait_name),
+        "eq".to_string(),
+    );
     let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::method_call(

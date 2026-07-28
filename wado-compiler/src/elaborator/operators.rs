@@ -1283,7 +1283,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             name: mangled_method_name,
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
-                                lookup_name,
+                                FqTypeName::from_mangled(lookup_name),
                                 Some(trait_info.trait_name),
                                 "index_assign".to_string(),
                             )),
