@@ -124,8 +124,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:trait_bound_assoc_type_ambiguous.wado::__modules_initialized: bool = 0;
-global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 global global:trait_bound_assoc_type_ambiguous.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(49, 50, 51), used: 3 };
+global global:core:prelude/primitive.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "trait_bound_assoc_type_ambiguous.wado/run"() with Stdout {
     let r: ref "core:prelude/types.wado//Result<u64,i32>";
@@ -468,158 +468,6 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-<<<<<<< HEAD
-fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
-    let offset_3: i32;
-    let digit_count: i32;
-    let temp: i64;
-    let rem_adjusted_8: i64;
-    let signed_quot_9: i64;
-    let carry_10: i64;
-    let offset_11: i32;
-    let repr: ref Array<u8>;
-    let pos: i32;
-    let digit: i32;
-    let rem_adjusted_16: i64;
-    let signed_quot_17: i64;
-    let carry_18: i64;
-    let self_19: ref "core:prelude/string.wado//String";
-    let self_20: ref "core:prelude/string.wado//String";
-    if self == 0_i64 {
-        offset_3 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, global:core:prelude/primitive.wado::__const_obj_0, 1);
-        builtin::array_set_u8(self_19 = f.buf; self_19.repr, offset_3, 48);
-        return;
-    }
-    digit_count = 0;
-    temp = self;
-    b42: block {
-        l43: loop {
-            break_if b42 temp == 0_i64;
-            digit_count = digit_count + 1;
-            if temp >= 0_i64 {
-                temp = temp / 10_i64;
-            } else {
-                rem_adjusted_8 = (temp % 10_i64) + 6_i64;
-                signed_quot_9 = temp / 10_i64;
-                carry_10 = 0_i64;
-                if rem_adjusted_8 < 0_i64 {
-                    carry_10 = -1_i64;
-                }
-                temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
-            }
-            continue l43;
-        };
-    };
-    offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, global:core:prelude/primitive.wado::__const_obj_0, digit_count);
-    self_20 = f.buf;
-    repr = self_20.repr;
-    pos = offset_11 + digit_count;
-    temp = self;
-    b46: block {
-        l47: loop {
-            break_if b46 temp == 0_i64;
-            pos = pos - 1;
-            digit = 0;
-            if temp >= 0_i64 {
-                digit = builtin::i32_wrap_i64(temp % 10_i64);
-                temp = temp / 10_i64;
-            } else {
-                rem_adjusted_16 = (temp % 10_i64) + 6_i64;
-                if rem_adjusted_16 >= 0_i64 {
-                    digit = builtin::i32_wrap_i64(rem_adjusted_16);
-                } else {
-                    digit = builtin::i32_wrap_i64(rem_adjusted_16 + 10_i64);
-                }
-                signed_quot_17 = temp / 10_i64;
-                carry_18 = 0_i64;
-                if rem_adjusted_16 < 0_i64 {
-                    carry_18 = -1_i64;
-                }
-                temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
-            }
-            builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l47;
-        };
-    };
-}
-
-||||||| 2738e686c
-fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
-    let offset_3: i32;
-    let digit_count: i32;
-    let temp: i64;
-    let rem_adjusted_8: i64;
-    let signed_quot_9: i64;
-    let carry_10: i64;
-    let offset_11: i32;
-    let repr: ref Array<u8>;
-    let pos: i32;
-    let digit: i32;
-    let rem_adjusted_16: i64;
-    let signed_quot_17: i64;
-    let carry_18: i64;
-    let self_19: ref "core:prelude/string.wado//String";
-    let self_20: ref "core:prelude/string.wado//String";
-    if self == 0_i64 {
-        offset_3 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, 1);
-        builtin::array_set_u8(self_19 = f.buf; self_19.repr, offset_3, 48);
-        return;
-    }
-    digit_count = 0;
-    temp = self;
-    b42: block {
-        l43: loop {
-            break_if b42 temp == 0_i64;
-            digit_count = digit_count + 1;
-            if temp >= 0_i64 {
-                temp = temp / 10_i64;
-            } else {
-                rem_adjusted_8 = (temp % 10_i64) + 6_i64;
-                signed_quot_9 = temp / 10_i64;
-                carry_10 = 0_i64;
-                if rem_adjusted_8 < 0_i64 {
-                    carry_10 = -1_i64;
-                }
-                temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
-            }
-            continue l43;
-        };
-    };
-    offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    self_20 = f.buf;
-    repr = self_20.repr;
-    pos = offset_11 + digit_count;
-    temp = self;
-    b46: block {
-        l47: loop {
-            break_if b46 temp == 0_i64;
-            pos = pos - 1;
-            digit = 0;
-            if temp >= 0_i64 {
-                digit = builtin::i32_wrap_i64(temp % 10_i64);
-                temp = temp / 10_i64;
-            } else {
-                rem_adjusted_16 = (temp % 10_i64) + 6_i64;
-                if rem_adjusted_16 >= 0_i64 {
-                    digit = builtin::i32_wrap_i64(rem_adjusted_16);
-                } else {
-                    digit = builtin::i32_wrap_i64(rem_adjusted_16 + 10_i64);
-                }
-                signed_quot_17 = temp / 10_i64;
-                carry_18 = 0_i64;
-                if rem_adjusted_16 < 0_i64 {
-                    carry_18 = -1_i64;
-                }
-                temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
-            }
-            builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l47;
-        };
-    };
-}
-
-=======
->>>>>>> origin/main
 fn "core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
     let new_repr: ref Array<u8>;
     new_repr = builtin::array_new<u8>(new_capacity);
@@ -679,7 +527,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$spec0"(self, f) {
     let self_19: ref "core:prelude/string.wado//String";
     let self_20: ref "core:prelude/string.wado//String";
     if self == 0_i64 {
-        offset_3 = "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, 1);
+        offset_3 = "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, 0, global:core:prelude/primitive.wado::__const_obj_3, 1);
         builtin::array_set_u8(self_19 = f.buf; self_19.repr, offset_3, 48);
         return;
     }
@@ -703,7 +551,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$spec0"(self, f) {
             continue l43;
         };
     };
-    offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, 0, global:core:prelude/primitive.wado::__const_obj_3, digit_count);
     self_20 = f.buf;
     repr = self_20.repr;
     pos = offset_11 + digit_count;

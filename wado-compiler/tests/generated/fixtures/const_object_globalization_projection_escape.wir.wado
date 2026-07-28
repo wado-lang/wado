@@ -119,7 +119,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(46)
 
-type "functype//core:prelude/range.wado/RangeExclusive<i32>^Iterator::next" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(47)
+type "functype//core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(47)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -196,7 +196,7 @@ fn "const_object_globalization_projection_escape.wado/run"() with Stdout {
         l5: loop {
             let __sroa___match_8_discriminant: i32;
             let __sroa___match_8_payload_0: i32;
-            multivalue_bind [__sroa___match_8_discriminant, __sroa___match_8_payload_0] = "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(__iter_0);
+            multivalue_bind [__sroa___match_8_discriminant, __sroa___match_8_payload_0] = "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0"(__iter_0);
             if __sroa___match_8_discriminant == 0 {
                 a = "const_object_globalization_projection_escape.wado/take_field"(struct.new "const_object_globalization_projection_escape.wado//S" { inner: struct.new "const_object_globalization_projection_escape.wado//Inner" { blob: struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(1, 2, 3), used: 3 } }, tag: struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(7, 8), used: 2 } });
                 "core:prelude/list.wado/List<u8>::push"(a, 9);
@@ -571,35 +571,6 @@ fn "core:prelude/list.wado/List<u8>::push"(self, value) {
     self.used = used + 1;
 }
 
-fn "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(self) {
-    let current: i32;
-    let other: i32;
-    let __sroa_self_value_8: i32;
-    if __inline_i32_Ord__cmp_0: block -> "core:prelude/traits.wado//enum:Ordering" {
-        __sroa_self_value_8 = self.start;
-        other = self.end;
-        if __sroa_self_value_8 < other {
-            break __inline_i32_Ord__cmp_0: 0;
-        }
-        if __sroa_self_value_8 > other {
-            break __inline_i32_Ord__cmp_0: 2;
-        }
-        break __inline_i32_Ord__cmp_0: 1;
-    } != 0 {
-        return 1, 0;
-    }
-    current = self.start;
-    __fused___inline_i32_Step__next_step_1: block {
-        if current == 2147483647 {
-            self.start = self.end;
-            break __fused___inline_i32_Step__next_step_1;
-        }
-        self.start = current + 1;
-        break __fused___inline_i32_Step__next_step_1;
-    };
-    return 0, current;
-}
-
 fn "core:prelude/list.wado/List<u8>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
@@ -609,6 +580,33 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a > 4, a, 4)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
+}
+
+fn "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0"(self) {
+    let current: i32;
+    let __sroa_self_value_8: i32;
+    if __inline_i32_Ord__cmp_0: block -> "core:prelude/traits.wado//enum:Ordering" {
+        __sroa_self_value_8 = self.start;
+        if __sroa_self_value_8 < 3 {
+            break __inline_i32_Ord__cmp_0: 0;
+        }
+        if __sroa_self_value_8 > 3 {
+            break __inline_i32_Ord__cmp_0: 2;
+        }
+        break __inline_i32_Ord__cmp_0: 1;
+    } != 0 {
+        return 1, 0;
+    }
+    current = self.start;
+    __fused___inline_i32_Step__next_step_1: block {
+        if current == 2147483647 {
+            self.start = 3;
+            break __fused___inline_i32_Step__next_step_1;
+        }
+        self.start = current + 1;
+        break __fused___inline_i32_Step__next_step_1;
+    };
+    return 0, current;
 }
 
 export fn "const_object_globalization_projection_escape.wado/__cm_export__run" as "run"

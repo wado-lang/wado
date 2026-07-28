@@ -135,8 +135,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:trait_generic_assoc_type_return.wado::__modules_initialized: bool = 0;
-global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 global global:trait_generic_assoc_type_return.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 121, 122, 49, 50, 51, 97, 98, 99), used: 9 };
+global global:core:prelude/primitive.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
     let r: ref "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/ParseIntError>";
@@ -552,34 +552,6 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-<<<<<<< HEAD
-fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
-    let is_negative: bool;
-    let abs_val: i64;
-    let digit_count: i32;
-    let offset: i32;
-    let self_6: ref "core:prelude/string.wado//String";
-    is_negative = self < 0;
-    digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_0, digit_count);
-    "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
-}
-
-||||||| 2738e686c
-fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
-    let is_negative: bool;
-    let abs_val: i64;
-    let digit_count: i32;
-    let offset: i32;
-    let self_6: ref "core:prelude/string.wado//String";
-    is_negative = self < 0;
-    digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
-}
-
-=======
->>>>>>> origin/main
 fn "core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
     let new_repr: ref Array<u8>;
     new_repr = builtin::array_new<u8>(new_capacity);
@@ -630,7 +602,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_2, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
