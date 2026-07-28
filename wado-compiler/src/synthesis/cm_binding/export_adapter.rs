@@ -43,6 +43,7 @@ use crate::synthesis::common::{
     synth_span,
 };
 
+use super::cm_free::{CmShapeContext, cm_shape, synthesize_free_cm_value};
 use super::import_adapter::make_binding_function;
 use super::lift::synthesize_lift_list;
 use super::lower::synthesize_lower_wasi_type_to_memory;
@@ -744,11 +745,37 @@ pub(super) fn synthesize_lift_from_flat_params(
         super::types::CmStdlibNames::from_compiler_items(type_table_cell.borrow().compiler_items());
     match ty {
         Type::Named(named) if named.name == names.string => {
-            // String flat ABI: (ptr: i32, len: i32) pointing to linear memory
+            // String flat ABI: (ptr: i32, len: i32) pointing to linear memory.
+            // The caller lowered it there through *our* `realloc`, so the buffer
+            // is the guest's to release once it has been copied onto the GC
+            // heap. Nested strings are released by the lift site that reads
+            // them; this arm is the only top-level one.
             let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
             let len = local_ref(flat_param_locals[1], "__p", TypeTable::I32);
-            let lifted = internal_call("memory_to_gc_string", vec![ptr, len], target_type_id);
-            (lifted, 2)
+            let lifted_local = alloc_local(next_local, locals, target_type_id);
+            stmts.push(let_stmt(
+                "__lifted_string",
+                lifted_local,
+                target_type_id,
+                internal_call(
+                    "memory_to_gc_string",
+                    vec![ptr.clone(), len.clone()],
+                    target_type_id,
+                ),
+            ));
+            stmts.push(if_stmt(
+                binary(TirBinaryOp::Gt, len.clone(), i32_const(0), TypeTable::BOOL),
+                block(vec![expr_stmt(builtin_call(
+                    "realloc",
+                    vec![ptr, len, i32_const(1), i32_const(0)],
+                    TypeTable::I32,
+                ))]),
+                None,
+            ));
+            (
+                local_ref(lifted_local, "__lifted_string", target_type_id),
+                2,
+            )
         }
         Type::Named(_)
             if matches!(
@@ -1728,6 +1755,89 @@ fn push_sync_return_epilogue(
             }
         }
     }
+}
+
+/// The core function named by a sync lift's `post-return` canonical option.
+/// Distinct from [`export_binding_func_name`] so the core module exports both.
+pub(super) fn post_return_func_name(export_name: &str) -> String {
+    format!("__cm_post_return__{export_name}")
+}
+
+/// Synthesize the `post-return` function for a sync-lifted export, or `None`
+/// when nothing was allocated for it to reclaim.
+///
+/// The gate is the indirect return, not memory ownership: a result wider than
+/// one core value comes back through a guest-allocated area that leaks without
+/// this, even when nothing hangs off it — a record of two `u32` owns no memory
+/// and still loses its eight bytes per call. Ownership only decides whether the
+/// walk over nested buffers emits anything.
+///
+/// The canonical ABI calls it with the lifted core function's results, which in
+/// the indirect case is that single out-pointer.
+pub(super) fn synthesize_post_return(
+    export_name: &str,
+    env: &ExportBindingEnv<'_>,
+) -> Option<Rc<RefCell<TirFunction>>> {
+    let ty = env.world_return?;
+    let flat_count = {
+        let tt = env.type_table.borrow();
+        compute_export_flat_return_types(ty, env.tir_modules, &tt).len()
+    };
+    // The condition `push_sync_return_epilogue` allocates the area under.
+    if flat_count <= 1 {
+        return None;
+    }
+
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(env.type_table.borrow().compiler_items());
+    let shape_ctx = CmShapeContext {
+        cm_interface_registry: env.cm_interface_registry,
+        cm_package: env.cm_package,
+        names: &names,
+    };
+    let shape = cm_shape(ty, &shape_ctx);
+
+    let ptr = param_local("__ret_ptr", TypeTable::I32, false);
+    let mut locals = vec![ptr];
+    let mut next_local = 1;
+    let addr = local_ref(0, "__ret_ptr", TypeTable::I32);
+
+    let mut body = synthesize_free_cm_value(&shape, &addr, &mut next_local, &mut locals);
+    let size = crate::component_model::cm_size_with_registry_scoped(
+        ty,
+        env.cm_interface_registry,
+        Some(env.cm_package),
+    );
+    let align = crate::component_model::cm_align_with_registry_scoped(
+        ty,
+        env.cm_interface_registry,
+        Some(env.cm_package),
+    );
+    body.push(expr_stmt(builtin_call(
+        "realloc",
+        vec![
+            addr,
+            i32_const(size as i32),
+            i32_const(align as i32),
+            i32_const(0),
+        ],
+        TypeTable::I32,
+    )));
+
+    Some(finalize_export_binding(
+        post_return_func_name(export_name),
+        vec![TirParam {
+            name: "__ret_ptr".to_string(),
+            type_id: TypeTable::I32,
+            local_index: 0,
+            is_mut: false,
+            is_mut_ref: false,
+            span: synth_span(),
+        }],
+        TypeTable::UNIT,
+        body,
+        locals,
+    ))
 }
 
 /// `ResultTaskReturn` epilogue: store the `Result<T, E>` value, zero the flat

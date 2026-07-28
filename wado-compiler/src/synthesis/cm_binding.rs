@@ -10,6 +10,7 @@
 //!
 //! See `docs/wep-2026-02-15-cm-binding-synthesis.md` for design details.
 
+mod cm_free;
 mod export_adapter;
 mod import_adapter;
 mod lift;
@@ -31,10 +32,13 @@ use crate::package::Package;
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
 use crate::tir_visitor::TirRefVisitor;
 use crate::wir::CmPayloadType;
-use crate::world_registry::WorldExportInfo;
+use crate::world_registry::{WorldExportInfo, WorldInfo};
 
 pub use export_adapter::export_binding_func_name;
-use export_adapter::{ExportBindingEnv, ExportReturnStrategy, synthesize_export_binding};
+use export_adapter::{
+    ExportBindingEnv, ExportReturnStrategy, post_return_func_name, synthesize_export_binding,
+    synthesize_post_return,
+};
 pub use import_adapter::binding_func_name;
 use import_adapter::synthesize_adapter;
 pub use lift::synthesize_lift;
@@ -509,6 +513,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
 
     // Collect adapters in a read-only pass (synthesize_export_binding needs &tir_modules)
     let mut export_adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
+    let mut post_returns: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
     {
         let entry_module = project
             .tir_modules
@@ -610,7 +615,27 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                 export_binding_func_name(&export.name),
                 adapter,
             ));
+
+            // `post-return` is illegal alongside `async`, so only a synchronous
+            // lift can reclaim its return area this way.
+            if matches!(strategy, ExportReturnStrategy::SyncReturn)
+                && let Some(post_return) = synthesize_post_return(&export.name, &env)
+            {
+                post_returns.push((
+                    export.name.clone(),
+                    post_return_func_name(&export.name),
+                    post_return,
+                ));
+            }
         }
+    }
+
+    // Must follow the loop above: the name check walks signatures through the CM
+    // type engine, which recurses without a depth guard, so a recursive type has
+    // to be rejected by `validate_boundary_representable` first or it overflows
+    // the stack instead of getting that diagnostic.
+    if is_lib_world {
+        validate_lib_interface_names(&world_info, &project.cm_interface_registry)?;
     }
 
     let entry_module = project
@@ -623,7 +648,153 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             .insert(export_name, binding_name);
         entry_module.functions.push(adapter);
     }
+    for (export_name, func_name, post_return) in post_returns {
+        project
+            .post_return_binding_names
+            .insert(export_name, func_name);
+        entry_module.functions.push(post_return);
+    }
     Ok(())
+}
+
+/// Reject a library whose exports would claim one interface name twice.
+///
+/// A Component Model interface has one namespace covering its types *and* its
+/// functions — "An interface has a single namespace which means that none of the
+/// defined names can collide" — with case-insensitive uniqueness (`WIT.md`).
+/// Wado keeps the two apart, so `variant Shape` beside `export fn shape` reads
+/// as unambiguous until both kebab-case to `shape`. Left to codegen it surfaces
+/// as a Wasm validation failure reported as a compiler bug, when it is the
+/// source that has to change.
+fn validate_lib_interface_names(
+    world_info: &WorldInfo,
+    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
+) -> Result<(), String> {
+    let exported = exported_cm_type_names(world_info, cm_interface_registry);
+    let wado_names = wado_names_by_cm_name(world_info);
+    let describe = |cm_name: &str| match wado_names.get(cm_name).and_then(IndexSet::first) {
+        Some(wado) => format!("type `{wado}` (exported as `{cm_name}`)"),
+        None => format!("type `{cm_name}`"),
+    };
+
+    let mut claimed: IndexMap<String, String> = IndexMap::default();
+    for cm_name in &exported {
+        // Two Wado types kebab-casing onto one CM name never reach `exported`
+        // twice: `CmTypeGen` caches by CM name, so the second silently reuses
+        // the first one's type and the two merge. Catch it from the signatures,
+        // where both names are still distinct.
+        if let Some(wado) = wado_names.get(cm_name)
+            && wado.len() > 1
+        {
+            let names: Vec<String> = wado.iter().map(|n| format!("`{n}`")).collect();
+            return Err(format!(
+                "types {} share the Component Model name `{cm_name}` in this \
+                 library's interface, which can name each type only once. \
+                 Rename all but one of them.",
+                names.join(" and "),
+            ));
+        }
+        let key = cm_name.to_ascii_lowercase();
+        if let Some(previous) = claimed.get(&key) {
+            return Err(format!(
+                "{} and {} both claim the name `{cm_name}` in this library's \
+                 Component Model interface, where types and functions share one \
+                 namespace. Rename one of them.",
+                describe(cm_name),
+                previous,
+            ));
+        }
+        claimed.insert(key, describe(cm_name));
+    }
+    for export in &world_info.exports {
+        let cm_name = crate::name::kebab_export_name(&export.name);
+        let key = cm_name.to_ascii_lowercase();
+        if let Some(previous) = claimed.get(&key) {
+            return Err(format!(
+                "export `{}` becomes `{cm_name}` in this library's Component \
+                 Model interface, where {} already claims that name — an \
+                 interface has a single namespace covering both types and \
+                 functions. Rename one of them.",
+                export.name, previous,
+            ));
+        }
+        claimed.insert(key, format!("function `{}`", export.name));
+    }
+    Ok(())
+}
+
+/// The CM type names the export signatures put into the interface, taken from
+/// the same walk codegen uses to emit them.
+fn exported_cm_type_names(
+    world_info: &WorldInfo,
+    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
+) -> Vec<String> {
+    let mut type_gen = match world_info
+        .exports
+        .first()
+        .and_then(|e| e.from_interface_fq.as_deref())
+    {
+        Some(fq) => crate::component_model::CmTypeGen::with_interface_hint(fq),
+        None => crate::component_model::CmTypeGen::new(),
+    };
+    let mut sink = crate::component_model::CmNameSink::default();
+    let no_resources = IndexMap::default();
+    for ty in export_signature_types(world_info) {
+        let resolved = cm_interface_registry.resolve_type_preserving_local_newtypes(ty);
+        type_gen.ast_type_to_cm(&mut sink, &resolved, cm_interface_registry, &no_resources);
+    }
+    sink.names().to_vec()
+}
+
+/// The Wado types behind each CM name the signatures mention. A user type's CM
+/// name is `to_kebab` of its Wado name, applied by the registry when it records
+/// the type, so this inverts that exactly.
+fn wado_names_by_cm_name(world_info: &WorldInfo) -> IndexMap<String, IndexSet<String>> {
+    let mut out = IndexMap::default();
+    for ty in export_signature_types(world_info) {
+        collect_named_types(ty, &mut out);
+    }
+    out
+}
+
+fn export_signature_types(world_info: &WorldInfo) -> impl Iterator<Item = &crate::ast::Type> {
+    world_info.exports.iter().flat_map(|export| {
+        export
+            .params
+            .iter()
+            .map(|(_, ty)| ty)
+            .chain(export.return_type.as_ref())
+    })
+}
+
+fn collect_named_types(ty: &crate::ast::Type, out: &mut IndexMap<String, IndexSet<String>>) {
+    use crate::ast::Type;
+    match ty {
+        Type::Named(named) => {
+            out.entry(crate::name::to_kebab(&named.name))
+                .or_default()
+                .insert(named.name.clone());
+        }
+        Type::Generic(generic) => {
+            for arg in &generic.args {
+                collect_named_types(arg, out);
+            }
+        }
+        Type::Tuple(elems) => {
+            for elem in elems {
+                collect_named_types(elem, out);
+            }
+        }
+        Type::NamespacedGeneric(generic) => {
+            for arg in &generic.args {
+                collect_named_types(arg, out);
+            }
+        }
+        Type::Reference(inner) | Type::MutReference(inner) => collect_named_types(inner, out),
+        // Not representable at the CM boundary; a signature carrying one is
+        // rejected by `validate_boundary_representable` before this runs.
+        Type::Function(_) | Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
+    }
 }
 
 /// The user function backing a world export: the origin `pub fn` for an
@@ -1831,8 +2002,20 @@ mod tests {
             fix.ctx(),
         );
         assert_eq!(consumed, 2);
-        // Should be a call to memory_to_gc_string
-        assert!(matches!(expr.kind, TirExprKind::Call { .. }));
+        // The lifted string is materialized into a local so the caller-lowered
+        // buffer can be released before the value is used.
+        assert!(matches!(expr.kind, TirExprKind::Local { .. }));
+
+        let emitted = format!("{stmts:?}");
+        assert!(
+            emitted.contains("memory_to_gc_string"),
+            "expected the copy onto the GC heap in:\n{emitted}"
+        );
+        assert!(
+            emitted.contains("realloc"),
+            "the buffer the caller lowered the string into must be released \
+             once it has been copied:\n{emitted}"
+        );
     }
 
     #[test]

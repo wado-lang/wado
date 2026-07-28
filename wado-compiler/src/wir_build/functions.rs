@@ -590,6 +590,22 @@ fn register_exports(ctx: &mut WirContext<'_>) {
                 ctx.func_map.keys().collect::<Vec<_>>()
             );
         }
+
+        if let Some(post_return) = &export.post_return_core_name {
+            let fq = format!("{entry_source}/{post_return}");
+            let Some(func_id) = ctx.func_map.get(&fq) else {
+                panic!(
+                    "[WIR] post-return function '{post_return}' not found (fq: {fq}); available: {:?}",
+                    ctx.func_map.keys().collect::<Vec<_>>()
+                );
+            };
+            ctx.exports.push(crate::wir::WirExport {
+                name: post_return.clone(),
+                desc: crate::wir::WirExportDesc::Func {
+                    func_id: func_id.clone(),
+                },
+            });
+        }
     }
 
     // Also export test functions

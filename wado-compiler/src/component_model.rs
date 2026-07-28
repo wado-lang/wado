@@ -3195,6 +3195,38 @@ pub trait CmTypeSink {
     fn name(&mut self, cm_name: &str, idx: u32) -> u32;
 }
 
+/// [`CmTypeSink`] that records the names a type walk would export, emitting
+/// nothing — so a caller can ask which names a signature puts into an
+/// interface's namespace through the same walk codegen uses to put them there.
+#[derive(Default)]
+pub struct CmNameSink {
+    names: Vec<String>,
+    next_idx: u32,
+}
+
+impl CmNameSink {
+    pub fn names(&self) -> &[String] {
+        &self.names
+    }
+
+    fn alloc(&mut self) -> u32 {
+        let idx = self.next_idx;
+        self.next_idx += 1;
+        idx
+    }
+}
+
+impl CmTypeSink for CmNameSink {
+    fn define(&mut self, _defined: CmDefined<'_>) -> u32 {
+        self.alloc()
+    }
+
+    fn name(&mut self, cm_name: &str, _idx: u32) -> u32 {
+        self.names.push(cm_name.to_string());
+        self.alloc()
+    }
+}
+
 /// [`CmTypeSink`] that emits into an interface [`InstanceType`], sharing the
 /// caller's type-index counter so the engine and any direct emissions stay in
 /// lockstep. Reproduces the historical `CmInstanceTypeGen` behavior exactly.
