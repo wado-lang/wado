@@ -137,12 +137,18 @@ binary on the _same_ app, interleaved the same way over 5 rounds, spreads -4.2%
 to +0.4% on this host. So anything under ~5% here is a hint, not a result —
 including the +2 to +6% above. What is certain is the WIR: the objects are gone.
 
-For a change this size, isolate it instead. A CLI loop over the by-value
-constant argument alone (1000 calls per iteration, `#[inline(never)]` callee)
-goes from 33.6k to 735.6k iterations/s once the constant is globalized — 29 ns to
-1.3 ns per call. End to end that saving is ~2 of ~18 objects per request: the
-same-binary-different-compiler A/B measured +2.3% and +1.3% over 8 s slices,
-which is the right order of magnitude and still inside the floor.
+For a change this size, isolate it instead — a CLI loop, best of three, is
+stable to a few percent where the HTTP path is not:
+
+- Globalizing the by-value constant argument (1000 calls per iteration,
+  `#[inline(never)]` callee): 33.6k → 735.6k iterations/s, 29 ns to 1.3 ns per
+  call. End to end that is ~2 of ~18 objects per request; the
+  same-binary-different-compiler A/B measured +2.3% and +1.3% over 8 s slices,
+  the right order of magnitude and still inside the floor.
+- Moving the body field out of the dispatch result (1000 closure dispatches per
+  iteration, each building a 64-byte body): 2.46k → 2.71k iterations/s, +10%,
+  with every post-fix run above every pre-fix run. The loop pays for building
+  the body too, so the removed copy is a large share of what is left.
 
 ## The constant is no longer rebuilt per request
 
