@@ -1658,14 +1658,28 @@ fn expand_supertraits(
     stack.push(loc.clone());
     let mut closure: Vec<ast::TraitBound> = Vec::new();
     for direct in &header.supertraits {
-        push_unique_bound(&mut closure, direct);
         let Some(super_loc) = resolve(&loc.0, &direct.name) else {
+            // A name that declares no trait. Blaming the declaration is the
+            // whole point: left to the impl-site obligation, a typo here
+            // surfaces as "type 'X' does not implement 'Undeclrd'" against
+            // every implementor.
+            cycles.push((
+                loc.0.clone(),
+                TypeError::UnknownSupertrait {
+                    trait_name: header.name.clone(),
+                    supertrait: direct.name.clone(),
+                    span: direct.span,
+                },
+            ));
             continue;
         };
+        // Before the push: a trait must not land in its own closure, and
+        // `trait Loop: Loop` would do exactly that.
         if let Some(pos) = stack.iter().position(|s| *s == super_loc) {
             report_supertrait_cycle(pos, stack, headers, reported, cycles);
             continue;
         }
+        push_unique_bound(&mut closure, direct);
         for inherited in expand_supertraits(
             &super_loc, headers, resolve, closures, stack, reported, cycles,
         ) {
