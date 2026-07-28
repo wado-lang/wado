@@ -262,18 +262,31 @@ value inside it is concrete and nothing is assumed about it.
 
 The call-level fold — rewriting one `fmt` over a constant into
 `push_str(<literal>)`, which is what a template mixing constant and runtime
-interpolations would need — is a different problem, and not a smaller one.
-Evaluating the callee against one concrete buffer says what it does to that
-buffer; the rewrite claims what it does to every buffer. Nothing licenses that
-step but a proof, and the proof obligation is relational: the prior contents
-survive unchanged, and the appended bytes do not depend on them. Discharging it
-means evaluating against a symbolic prefix — a buffer of an opaque run of bytes
-followed by a known one — rather than a concrete value, and the stdlib says
-what that costs: `realloc_to` copies the prefix wholesale, `apply_padding`
-shifts everything above its mark, and `grow`'s capacity test cannot decide, so
-both of its paths have to join to the same delta. That is a capability to
-build, not a convention to adopt, and it is worth building only if a
-measurement says mixed templates cost enough to pay for it.
+interpolations needs — claims more than one concrete evaluation shows: that the
+callee appends the same bytes to every buffer, not just to the one it ran
+against. `#[compiler_item]` is where that comes from, as it already does for
+`push_str` — the rewrite expanding `buf.push_str("abc")` into per-byte `push`
+is licensed by the marker, not by an analysis of either body.
+
+Mark `Formatter`'s write primitives, not `Display::fmt`. A marked `write_str` /
+`write_char` / `pad` / `prepare_int_write` is one small stdlib function whose
+declared meaning — these bytes go on the end, nothing already in the buffer is
+read or moved — is checkable by reading it, the same size of obligation
+`push_str` already carries. What any particular `fmt` body does is then derived
+rather than declared: run it against an empty buffer, and admit the result only
+if every buffer touch went through a marked primitive. A body reaching the
+buffer any other way — `f.buf` directly, `internal_raw_bytes_mut` — is refused,
+which is a condition the engine checks rather than an invariant it hopes for.
+Marking `Display::fmt` instead would extend the trust across every user-written
+impl, where nothing is checkable at all.
+
+The markers also keep the buffer plumbing out of the interpreter: a marked
+`push_str` is applied by its declared meaning, so `grow`'s undecidable capacity
+test and `realloc_to`'s prefix copy are never interpreted. `prepare_int_write`
+is the one primitive that needs more than a byte list — it reserves a region
+and returns its offset for the digit writers to fill — so what it declares is a
+place at the end of the buffer, which is the same place the frame store hands
+out.
 
 Milestones, each red/green with the fixture first:
 
@@ -345,10 +358,10 @@ question, not a design-time one.
 - Where does the wasm-CTFE module cache live — per `compile` invocation or per
   process? Per-invocation is simpler; per-process speeds up watch-mode
   workflows but needs eviction.
-- Would narrowing `Formatter`'s buffer access pay for itself? A checked
-  property — the way effects are checked, not a documented convention — would
-  shrink the symbolic-prefix proof the call-level format fold needs, by ruling
-  out the writes it would otherwise have to consider. It would not remove the
-  proof: `realloc_to` reads the prefix to move it, so the symbolic model is
-  needed either way. Measure the fold's value before spending stdlib churn on
-  making it cheaper.
+- Which `Formatter` primitives make the marked set, and does the reserve-and-
+  fill idiom survive? `prepare_int_write` hands its caller a raw region, so
+  every integer `fmt` reaches the buffer outside the marked primitives and is
+  refused by the check above unless the reserved place counts as part of the
+  append. Declaring the place is one answer; a stdlib append primitive that
+  hides the reserve is the other, and it would shrink the marked set to
+  byte-list appends alone.
