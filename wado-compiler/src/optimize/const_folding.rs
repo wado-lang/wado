@@ -28,7 +28,7 @@ use cranelift_entity::EntityRef;
 
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::SeqField;
-use crate::const_eval::Value;
+use crate::const_eval::{Value, prim_of};
 use crate::hashmap::IndexSet;
 use crate::nir::NirFunction;
 use crate::nir::NirUnaryOp;
@@ -594,16 +594,20 @@ impl GlobalStoreCollector<'_> {
     /// A binding that hands a global's interior to a local takes it out of
     /// reach: writes then root at the local, not at the global — LICM hoisting
     /// `G.repr` out of a loop that writes through it is the shape that bites.
-    /// A shared borrow of the whole global is the one exception, being what a
-    /// method call on it lowers to and what the engine already models.
+    ///
+    /// Only a binding that can alias. A scalar is copied into its local, so no
+    /// write through it reaches the global, and a shared borrow of the whole
+    /// global is what a method call on it lowers to — the shape the engine
+    /// already models.
     fn visit_stmt(&mut self, body: &Body, s: StmtId) {
         let value = match &body.stmts[s].kind {
             StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => *value,
             _ => return,
         };
-        if value
-            .as_expr()
-            .is_some_and(|e| is_whole_global_ref(body, e))
+        let Some(e) = value.as_expr() else {
+            return;
+        };
+        if is_whole_global_ref(body, e) || prim_of(body.exprs[e].type_id, self.type_table).is_some()
         {
             return;
         }
