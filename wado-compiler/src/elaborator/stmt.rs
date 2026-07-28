@@ -3109,6 +3109,24 @@ fn mut_bindings_of(pattern: &Pattern) -> Pattern {
             has_rest: *has_rest,
             span: *span,
         },
+        Pattern::Variant {
+            variant_name,
+            variant_qualifier,
+            name_id,
+            name_span,
+            bindings,
+            span,
+        } => Pattern::Variant {
+            variant_name: variant_name.clone(),
+            variant_qualifier: variant_qualifier.clone(),
+            name_id: *name_id,
+            name_span: *name_span,
+            bindings: bindings.iter().map(mut_bindings_of).collect(),
+            span: *span,
+        },
+        Pattern::Or(alternatives) => {
+            Pattern::Or(alternatives.iter().map(mut_bindings_of).collect())
+        }
         other => other.clone(),
     }
 }

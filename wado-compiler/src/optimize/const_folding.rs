@@ -599,6 +599,13 @@ impl GlobalStoreCollector<'_> {
     /// write through it reaches the global, and a shared borrow of the whole
     /// global is what a method call on it lowers to — the shape the engine
     /// already models.
+    ///
+    /// A non-scalar `let x = G` is a deep copy by value semantics, yet it counts
+    /// here: `value_copy_demote` and `clone_forward` elide the copy where they
+    /// can prove the binding read-only, which is exactly how the local ends up
+    /// aliasing the global's storage. Deciding it the other way would need this
+    /// pass to redo that read-only analysis, so the cost is one such binding
+    /// anywhere disabling the fold for that global program-wide.
     fn visit_stmt(&mut self, body: &Body, s: StmtId) {
         let value = match &body.stmts[s].kind {
             StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => *value,

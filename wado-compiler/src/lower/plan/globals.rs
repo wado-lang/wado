@@ -299,10 +299,34 @@ impl crate::tir_visitor::TirRefVisitor for BodyReads {
             TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => {
                 self.callees.insert(func.full_name());
             }
+            // A function named as a value reaches a call this walk cannot see —
+            // `apply(reader)` calls `reader` through a parameter, and a closure
+            // body is a function of its own. Counting the mention keeps what it
+            // reads on the mentioning side of the graph.
+            TirExprKind::FuncRef {
+                module_source,
+                name,
+                ..
+            } => {
+                self.callees.insert(function_key(module_source, name));
+            }
             _ => {}
         }
         self.walk_expr(expr);
     }
+}
+
+/// The key [`global_reads_by_function`] maps a function under: the same string
+/// [`FunctionRef::full_name`] produces for a free function, so a call and a
+/// bare mention of the same function land on one entry.
+fn function_key(module_source: &ModuleSource, name: &str) -> String {
+    FunctionRef {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+        monomorph_info: None,
+        method_info: None,
+    }
+    .full_name()
 }
 
 /// Every global each function reads, closed over the call graph.
@@ -359,23 +383,54 @@ fn global_reads_by_function(
     }
 }
 
-/// Collect the globals an initializer depends on: those it names, and those the
-/// functions it calls read.
+/// The globals an initializer depends on, kept apart by how certainly: those it
+/// names, and those the functions it reaches read.
+#[derive(Default)]
+struct InitRefs {
+    direct: IndexSet<(ModuleSource, String)>,
+    via_calls: IndexSet<(ModuleSource, String)>,
+}
+
 fn collect_global_refs(
     expr: &TirExpr,
     reads_by_function: &IndexMap<String, IndexSet<(ModuleSource, String)>>,
-    refs: &mut IndexSet<(ModuleSource, String)>,
-) {
+) -> InitRefs {
     use crate::tir_visitor::TirRefVisitor;
 
     let mut scan = BodyReads::default();
     scan.visit_expr(expr);
-    refs.extend(scan.globals);
+    let mut refs = InitRefs {
+        direct: scan.globals,
+        via_calls: IndexSet::default(),
+    };
     for callee in &scan.callees {
-        if let Some(callee_reads) = reads_by_function.get(callee) {
-            refs.extend(callee_reads.iter().cloned());
+        let Some(callee_reads) = reads_by_function.get(callee) else {
+            continue;
+        };
+        for global in callee_reads {
+            if !refs.direct.contains(global) {
+                refs.via_calls.insert(global.clone());
+            }
         }
     }
+    refs
+}
+
+/// Whether `from` already depends on `to`, directly or transitively — so an
+/// edge `to → from` would close a cycle.
+fn depends_on(deps: &[IndexSet<usize>], from: usize, to: usize) -> bool {
+    let mut seen = vec![false; deps.len()];
+    let mut stack = vec![from];
+    while let Some(node) = stack.pop() {
+        if node == to {
+            return true;
+        }
+        if std::mem::replace(&mut seen[node], true) {
+            continue;
+        }
+        stack.extend(deps[node].iter().copied());
+    }
+    false
 }
 
 /// Topologically sort global initializers based on dependencies.
@@ -400,18 +455,35 @@ fn topological_sort_global_inits(
         .map(|(i, (_, name, module_source, ..))| ((module_source.clone(), name.clone()), i))
         .collect();
 
-    // Build dependency graph: deps[i] = set of indices that i depends on
+    // Build dependency graph: deps[i] = set of indices that i depends on.
     let mut deps: Vec<IndexSet<usize>> = vec![IndexSet::default(); lazy_inits.len()];
+    let edges = |refs: IndexSet<(ModuleSource, String)>, i: usize| -> Vec<usize> {
+        refs.into_iter()
+            .filter_map(|key| key_to_idx.get(&key).copied())
+            .filter(|&dep| dep != i)
+            .collect()
+    };
 
-    for (i, (_, _, _, _, initializer, _)) in lazy_inits.iter().enumerate() {
-        let mut refs = IndexSet::default();
-        collect_global_refs(initializer, reads_by_function, &mut refs);
+    let scanned: Vec<InitRefs> = lazy_inits
+        .iter()
+        .map(|(_, _, _, _, initializer, _)| collect_global_refs(initializer, reads_by_function))
+        .collect();
 
-        for ref_key in refs {
-            if let Some(&dep_idx) = key_to_idx.get(&ref_key)
-                && dep_idx != i
-            {
-                deps[i].insert(dep_idx);
+    // A reference written in the initializer is a definite dependency.
+    for (i, refs) in scanned.iter().enumerate() {
+        for dep in edges(refs.direct.clone(), i) {
+            deps[i].insert(dep);
+        }
+    }
+    // What a callee reads is inferred, and the inference is path-insensitive: a
+    // helper that reads two globals makes each initializer calling it look
+    // dependent on the other, even when no execution reads both. Such an edge
+    // yields rather than manufacturing a cycle out of a program that has none —
+    // the definite edges above already fix every order that is really required.
+    for (i, refs) in scanned.iter().enumerate() {
+        for dep in edges(refs.via_calls.clone(), i) {
+            if !depends_on(&deps, dep, i) {
+                deps[i].insert(dep);
             }
         }
     }
