@@ -636,6 +636,10 @@ impl FunctionTranslator<'_, '_> {
     /// final use, or a field / whole-value materialization that aliases out of a
     /// dead aggregate at a literal (place-level move, keyed by span).
     fn is_last_use_move(&self, value: &TirExpr) -> bool {
+        // A newtype cast hands over the same storage (see
+        // `last_use::strip_casts`), so it must not hide the materialization
+        // underneath it.
+        let value = value_copy::last_use::strip_casts(value);
         // Place-level move: the literal scan proved this exact materialization
         // aliases a dead aggregate. Covers both `base.field` and a whole `base`.
         if self.move_eligible_place_spans.contains(&value.span) {

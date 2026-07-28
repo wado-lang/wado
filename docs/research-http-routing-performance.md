@@ -91,9 +91,8 @@ Linear memory is touched separately: `cm_lower_string` / `cm_lower_list_u8` /
 CM out-pointers do roughly ten `malloc`/`free` pairs per request, which is why
 the freelist allocator's `fl_unlink` is the most-called guest function.
 
-Four of these are avoidable without changing what the benchmark measures. Items 1
-and 4 are applied to `app.wado`, item 3 to the value-copy planner; item 2 is the
-compiler work left.
+All four are avoidable without changing what the benchmark measures. Items 1 and
+4 are applied to `app.wado`, items 2 and 3 to the value-copy planner.
 
 1. Constant `collect()` in the hot path: `"literal".bytes().collect()` allocated
    a `List` and four arrays every evaluation, because `FromIterator` for a list
@@ -101,12 +100,12 @@ compiler work left.
    has no size hint to reserve from. The app now writes `b"application/json"`,
    which lowers to one `struct.new` over `array.new_data`. The two objects left
    per request are what constant globalization should remove; see below.
-2. Redundant clone when lifting a CM string: the generated binding calls
-   `core:rt/memory_to_gc_array`, which allocates a fresh array and copies the
-   bytes in, and then clones that fresh array into another one before wrapping it
-   in a `String` — `core:rt/memory_to_gc_string` already does the right thing.
-   Freshness analysis does not see through the helper. One extra array per lifted
-   string, per request.
+2. Redundant clone when lifting a CM string: the binding allocates a fresh array
+   from linear memory and then clones it into another one before wrapping it in a
+   `String`. The culprit is the newtype cast in `String { repr: bytes as
+ByteArray, used: len }` — freshness read through a cast but the move side did
+   not, so the cast alone forced the copy. Fixed, which also drops the second
+   allocation in `String::substring`, the per-parameter path-capture cost.
 3. `resp.body` copied on last use: `body_tx.write(resp.body)` compiled to an
    `array_new` + `array_copy` of the body even though `resp` is dead afterwards.
    Two freshness gaps caused it — an indirect (closure) call counted as borrowed,
@@ -176,7 +175,7 @@ map; take timing from ablation A/Bs.
 ## Next steps, in payoff order
 
 1. Optimizer: stop the value-copy planner from copying a read-only global back
-   into a local, and drop the CM-lift clone (item 2).
+   into a local — the last known copy of a value that was already fresh.
 2. Router: `match_dynamic` allocates `ranges`, `PathParams`, and `RouteMatch` per
    hit while `match_static` returns a pre-built shell. A `ranges` buffer owned by
    the router (or a fixed inline capacity) would make dynamic hits allocation-free

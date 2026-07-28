@@ -1,0 +1,53 @@
+// A newtype cast must not turn a move into a deep copy (WEP 2026-05-21).
+//
+// A newtype shares its base type's runtime representation (WEP 2026-01-29), so
+// `b as Bytes` hands over the storage `b` already holds. Freshness always read
+// through a cast; the move side did not, so a conversion as thin as
+// `String { repr: bytes as ByteArray, used: len }` — how `core:rt`'s CM string
+// lift and `String::substring` build their result — deep-copied an array the
+// caller had just allocated, once per lifted string and once per substring.
+//
+// `build_cast` is the shape under test and `build_plain` the control: before
+// the fix only the former copied. `#[inline(never)]` keeps both calls intact,
+// and nothing else in this program deep-copies, so any `__array_clone_len` in
+// the module is a regression.
+
+use { println, Stdout } from "core:cli";
+
+type Bytes = List<u8>;
+
+struct S {
+    data: Bytes,
+    n: i32,
+}
+
+#[inline(never)]
+fn build_cast(b: List<u8>, n: i32) -> S {
+    return S { data: b as Bytes, n };
+}
+
+#[inline(never)]
+fn build_plain(b: Bytes, n: i32) -> S {
+    return S { data: b, n };
+}
+
+#[inline(never)]
+fn fresh(n: i32) -> List<u8> {
+    let mut b: List<u8> = [];
+    for let mut i = 0; i < n; i += 1 {
+        b.push(i as u8);
+    }
+    return b;
+}
+
+export fn run() with Stdout {
+    let a = build_cast(fresh(3), 3);
+    let c = build_plain(fresh(5) as Bytes, 5);
+    println(`${a.data.len()} ${a.n} ${c.data.len()} ${c.n}`);
+}
+
+__DATA__
+{
+    "stdout": "3 3 5 5\n",
+    "wir_not_expect:O2": ["__array_clone_len"]
+}

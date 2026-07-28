@@ -216,6 +216,12 @@ where it cannot prove move / share / fresh; no elision pass):
   call's own signature narrows them to one return type. The verdict is derived
   from the return-convention fixpoint and so is computed after it, never inside
   it.
+- Representation-preserving casts — a newtype shares its base type's
+  representation (WEP 2026-01-29), so `bytes as ByteArray` hands over the same
+  storage and the move side reads through it, as freshness always did. Without
+  that, `String { repr: bytes as ByteArray, used: len }` — how the CM string
+  lift and `String::substring` build their result — deep-copies an array the
+  caller just allocated.
 - Branch results — a block's value is its tail expression and an `if`'s is the
   tail of whichever branch runs, so each is fresh exactly when those tails are,
   the rule `match` arms already followed. A router dispatch — a response bound
@@ -304,6 +310,8 @@ Verified against the tree.
       materialization out of a dead aggregate); receiver-storing precision so a
       value-storing `&mut self` method does not pin its receiver.
 - [x] Freshness through an indirect call and through block / `if` results.
+- [x] Move through a newtype cast (`bytes as ByteArray`), which the freshness
+      side already read through.
 - [ ] Pin representative move / copy / share decisions as e2e fixtures.
 
 ## Deferred: the `move` and `unique` keywords

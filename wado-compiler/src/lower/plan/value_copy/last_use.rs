@@ -1103,6 +1103,7 @@ impl Analyzer<'_> {
         let mut mats: IndexMap<u32, Vec<(Option<u32>, crate::token::Span)>> = IndexMap::default();
         let mut conflict: IndexSet<u32> = IndexSet::default();
         for child in children {
+            let child = strip_casts(child);
             if let Some((base, top)) = as_materialize(child) {
                 mats.entry(base).or_default().push((top, child.span));
             } else {
@@ -1597,6 +1598,21 @@ fn as_materialize(expr: &TirExpr) -> Option<(u32, Option<u32>)> {
         TirExprKind::FieldAccess { .. } => Some((clean_root(expr)?, Some(top_field_of(expr)?))),
         _ => None,
     }
+}
+
+/// Peel representation-preserving casts off a materialization.
+///
+/// A newtype shares its base type's runtime representation (WEP 2026-01-29), so
+/// `bytes as ByteArray` hands over the same storage the local holds — it is the
+/// same materialization, not a new value. Freshness already reads through a cast
+/// ([`super::analyze::is_owned_value`]); the move side has to agree, or a
+/// conversion as thin as `String { repr: bytes as ByteArray, used: len }` forces
+/// a deep copy of what the caller just built.
+pub fn strip_casts(mut expr: &TirExpr) -> &TirExpr {
+    while let TirExprKind::Cast { expr: inner, .. } = &expr.kind {
+        expr = inner;
+    }
+    expr
 }
 
 /// The immediate operand sub-expressions of `expr`, in evaluation order. The
