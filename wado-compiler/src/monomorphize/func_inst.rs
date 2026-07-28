@@ -164,11 +164,16 @@ pub(super) fn blanket_impl_args_with_projected_packs(
     else {
         return out;
     };
+    // All or nothing, the rule the emit side applies: appending a subset would
+    // key this instance under an argument list the template never declared.
+    let mut packs = Vec::new();
     for (bound_trait, assoc) in trait_env.pack_assocs_of_blanket(blanket) {
-        if let Some(ty) = type_table.resolve_trait_assoc_type(receiver, &bound_trait, &assoc) {
-            out.push(ty);
-        }
+        let Some(ty) = type_table.resolve_trait_assoc_type(receiver, &bound_trait, &assoc) else {
+            return out;
+        };
+        packs.push(ty);
     }
+    out.extend(packs);
     out
 }
 
