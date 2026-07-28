@@ -5704,6 +5704,10 @@ impl Parser {
     /// trait Display {
     ///     fn display(&self) -> String;
     /// }
+    ///
+    /// trait Ord: Eq {
+    ///     fn cmp(&self, other: &Self) -> Ordering;
+    /// }
     /// ```
     fn parse_trait_decl(
         &mut self,
@@ -5718,6 +5722,20 @@ impl Parser {
 
         // Parse generic parameters like <T>
         let type_params = self.parse_generic_params()?;
+
+        let supertraits = if self.check(&TokenKind::Colon) {
+            self.advance();
+            let bounds = self.parse_trait_bounds()?;
+            if let Some(bound) = bounds.iter().find(|b| b.fn_signature.is_some()) {
+                return Err(self.error_at_span(
+                    bound.span,
+                    "a `fn` signature cannot be a supertrait: only a trait a type can implement",
+                ));
+            }
+            bounds
+        } else {
+            Vec::new()
+        };
 
         self.expect(&TokenKind::LBrace)?;
 
@@ -5768,6 +5786,7 @@ impl Parser {
             name_span,
             visibility,
             type_params,
+            supertraits,
             associated_types,
             methods,
             attrs,
@@ -8610,5 +8629,58 @@ line 2
         let source = "fn f() { let x = 1; }";
         let module = parse(source).unwrap();
         assert!(first_let_stmt(&module).else_block.is_none());
+    }
+
+    fn parse_trait(source: &str) -> TraitDecl {
+        let module = parse(source).unwrap();
+        let Item::Trait(decl) = &module.items[0] else {
+            panic!("expected a trait declaration");
+        };
+        decl.clone()
+    }
+
+    #[test]
+    fn trait_supertrait_clause_parses() {
+        let decl = parse_trait("trait Ord: Eq { fn cmp(&self) -> i32; }");
+        let names: Vec<&str> = decl.supertraits.iter().map(|b| b.name.as_str()).collect();
+        assert_eq!(names, ["Eq"]);
+    }
+
+    #[test]
+    fn trait_supertrait_clause_takes_a_bound_list() {
+        let decl = parse_trait("trait Circle: Shape + Display<Item = i32> {}");
+        let names: Vec<&str> = decl.supertraits.iter().map(|b| b.name.as_str()).collect();
+        assert_eq!(names, ["Shape", "Display"]);
+        let assoc = &decl.supertraits[1].assoc_types;
+        assert_eq!(assoc.len(), 1);
+        assert_eq!(assoc[0].name, "Item");
+    }
+
+    #[test]
+    fn trait_supertrait_clause_follows_generic_params() {
+        let decl = parse_trait("trait Sink<T>: Collect<Item = T> {}");
+        assert_eq!(decl.type_params.len(), 1);
+        let names: Vec<&str> = decl.supertraits.iter().map(|b| b.name.as_str()).collect();
+        assert_eq!(names, ["Collect"]);
+    }
+
+    #[test]
+    fn trait_without_supertraits_has_an_empty_clause() {
+        assert!(
+            parse_trait("trait Shape { fn area(&self) -> i32; }")
+                .supertraits
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn trait_supertrait_clause_rejects_a_fn_bound() {
+        let err = parse("trait Apply: fn(i32) -> i32 {}")
+            .expect_err("a callable signature is not a trait a type can implement");
+        assert!(
+            err.message.contains("supertrait"),
+            "unexpected message: {}",
+            err.message
+        );
     }
 }

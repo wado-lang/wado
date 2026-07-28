@@ -1,0 +1,36 @@
+// A supertrait named through a `use ... as` alias. The alias lives only in
+// this module's import scope, so resolving the clause has to consult it.
+use { Base as B } from "./sub/trait_supertrait_alias_dep.wado";
+
+trait Derived: B {
+    fn derived(&self) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl B for S {
+    fn base(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Derived for S {
+    fn derived(&self) -> i32 {
+        return self.v * 2;
+    }
+}
+
+// `T: Derived` must carry `Base` even though this module only ever wrote `B`.
+fn total<T: Derived>(x: &T) -> i32 {
+    return x.base() + x.derived();
+}
+
+export fn run() {
+    let s = S { v: 4 };
+    assert total(&s) == 12;
+}
+
+__DATA__
+{"stdout": ""}

@@ -43,7 +43,7 @@ Types implementing this trait can be compared with `==` and `!=` operators.
 
 Returns true if self equals other.
 
-### `pub trait Ord`
+### `pub trait Ord: Eq`
 
 Trait for ordering comparisons.
 Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
@@ -383,7 +383,7 @@ Types implementing this trait can be compared with `==` and `!=` operators.
 
 Returns true if self equals other.
 
-### `pub trait Ord`
+### `pub trait Ord: Eq`
 
 Trait for ordering comparisons.
 Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.

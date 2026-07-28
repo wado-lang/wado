@@ -1,0 +1,42 @@
+// A trait method on a `&T` receiver, monomorphized to a primitive, becomes a
+// direct Wasm binary op, whose operands are values. The receivers here are
+// reference *values* — a `&T` parameter, and `T` itself bound to `&i32` — with
+// no `&` node to drop.
+fn same<T: Eq>(a: &T, b: &T) -> bool {
+    return a.eq(b);
+}
+
+fn ordered<T: Ord>(a: &T, b: &T) -> bool {
+    return a.cmp(b) == Ordering::Less;
+}
+
+fn sum<T: Add<Output = T>>(a: &T, b: &T) -> T {
+    return a.add(b);
+}
+
+// `T` itself instantiated at a reference type: the `&` node comes off and the
+// value underneath is still a reference, so one deref is not enough.
+fn same_value<T: Eq>(a: T, b: T) -> bool {
+    return a == b;
+}
+
+export fn run() {
+    assert same(&1, &1);
+    assert !same(&1, &2);
+    assert ordered(&1, &2);
+    assert !ordered(&2, &1);
+    assert sum(&3, &4) == 7;
+
+    let x: f64 = 1.5;
+    let y: f64 = 1.5;
+    assert same(&x, &y);
+
+    let n: i32 = 5;
+    let m: i32 = 6;
+    assert same_value(&n, &n);
+    assert !same_value(&n, &m);
+    assert same(&(&n), &(&n));
+}
+
+__DATA__
+{"stdout": ""}

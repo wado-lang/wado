@@ -875,7 +875,7 @@ Traits use static dispatch. Use `Self::TypeName` to refer to associated types.
 trait Eq { fn eq(&self, other: &Self) -> bool; }
 
 // For <, <=, >, >= operators
-trait Ord { fn cmp(&self, other: &Self) -> Ordering; }
+trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }
 
 // For default value (implemented for primitives, String, List<T>,
 // Option<T>, TreeMap<K, V>; not Result)
