@@ -1763,7 +1763,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if return_type == TypeTable::UNKNOWN
             && let Some(resolved) = self.resolve_blanket_static_method(
                 target_type_id,
-                &struct_name,
                 &static_call.method,
                 static_call.id,
                 &method_type_args,
@@ -1892,7 +1891,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_blanket_static_method(
         &mut self,
         receiver_type_id: TypeId,
-        receiver_name: &str,
         method: &str,
         call_id: AstId,
         method_type_args: &[TypeId],
@@ -1928,7 +1926,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
             .collect();
         let method_info = LocalMethodName::new(
-            FqTypeName::from_mangled(receiver_name),
+            self.tysys.fq_receiver_head(receiver_type_id),
             Some(trait_name.clone()),
             method.to_string(),
         )
@@ -2927,12 +2925,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For newtypes, check if the newtype itself has the method first,
         // then fall back to the base type's static method
         let mut newtype_dispatch: Option<(TypeId, TypeId, Vec<TypeId>)> = None;
-        let (actual_struct_name, actual_mangled_name) = if let Some(newtype_id) =
+        // The written name keys the impl indices; the fq form names the method.
+        let (actual_struct_name, actual_struct_fq, actual_mangled_name) = if let Some(newtype_id) =
             self.lookup_newtype(struct_name)
         {
             // First check if the newtype itself has this static method
             if self.has_static_method_direct(struct_name, method_name) {
-                (struct_name.to_string(), mangled_func_name.to_string())
+                (
+                    struct_name.to_string(),
+                    qualified_struct_name.clone(),
+                    mangled_func_name.to_string(),
+                )
             } else {
                 let base_type_id = match self.tysys.type_table.borrow().get(newtype_id).clone() {
                     ResolvedType::Newtype { .. } => Some(
@@ -2957,17 +2960,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         _ => vec![],
                     };
                     newtype_dispatch = Some((newtype_id, base_type_id, base_args));
-                    let mangled = MethodName::format_local(&FqTypeName::from_mangled(base_name.clone()), None, method_name);
-                    (base_name, mangled)
+                    let base_fq = self.tysys.fq_receiver_head(base_type_id);
+                    let mangled = MethodName::format_local(&base_fq, None, method_name);
+                    (base_name, base_fq, mangled)
                 } else if let Some(base_name) = base_name {
-                    let mangled = MethodName::format_local(&FqTypeName::from_mangled(base_name.clone()), None, method_name);
-                    (base_name, mangled)
+                    let base_fq = self.qualified_receiver_name(&base_name);
+                    let mangled = MethodName::format_local(&base_fq, None, method_name);
+                    (base_name, base_fq, mangled)
                 } else {
-                    (struct_name.to_string(), mangled_func_name.to_string())
+                    (
+                        struct_name.to_string(),
+                        qualified_struct_name.clone(),
+                        mangled_func_name.to_string(),
+                    )
                 }
             }
         } else {
-            (struct_name.to_string(), mangled_func_name.to_string())
+            (
+                struct_name.to_string(),
+                qualified_struct_name.clone(),
+                mangled_func_name.to_string(),
+            )
         };
 
         let impl_type_args_owned: Vec<TypeId> = match &newtype_dispatch {
@@ -3004,7 +3017,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Use trait-qualified mangled name if this is a trait method
         let final_mangled_name = if let Some(ref trait_name) = method_ref.trait_name {
-            MethodName::format_local(&FqTypeName::from_mangled(actual_struct_name.clone()), Some(trait_name), method_name)
+            MethodName::format_local(&actual_struct_fq, Some(trait_name), method_name)
         } else {
             actual_mangled_name
         };
@@ -3062,12 +3075,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: final_mangled_name,
             monomorph_info,
             method_info: Some({
-                // `actual_struct_name` is the written receiver, so it goes
-                // through the receiver rule — `from_mangled` would pass a bare
-                // name straight through and key the instantiation under a name
-                // the emitted call never looks up.
                 let mut m = LocalMethodName::new(
-                    self.qualified_receiver_name(&actual_struct_name),
+                    actual_struct_fq,
                     trait_name_opt,
                     method_name.to_string(),
                 );

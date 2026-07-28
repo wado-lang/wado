@@ -1354,13 +1354,13 @@ fn method_name_for_type(
     // `generic_dispatch_components`. The `_` fallback below would instead mangle
     // the full `Array<i32>` / `List<i32>` spelling and trip
     // `LocalMethodName::new`'s no-`<` invariant.
-    if let Some((name, type_args)) = tt_ref.generic_dispatch_components(type_id) {
+    if let Some((_, type_args)) = tt_ref.generic_dispatch_components(type_id) {
         let arg_names: Vec<String> = type_args
             .iter()
             .map(|t| tt_ref.mangle_type_name(*t))
             .collect();
         return LocalMethodName::new(
-            FqTypeName::from_mangled(name),
+            tt_ref.fq_base_type_name(type_id),
             Some(trait_name.to_string()),
             method_name.to_string(),
         )
@@ -1390,20 +1390,17 @@ fn method_name_for_type(
             let type_args =
                 crate::name::fn_type_arg_names(params.len(), &tt_ref.mangle_type_name(return_type));
             LocalMethodName::new(
-                FqTypeName::binder(crate::name::CLOSURE_FN_TRAIT),
+                FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),
                 Some(trait_name.to_string()),
                 method_name.to_string(),
             )
             .with_struct_type_args(&type_args)
         }
-        _ => {
-            let name = tt_ref.mangle_type_name(type_id);
-            LocalMethodName::new(
-                FqTypeName::from_mangled(name),
-                Some(trait_name.to_string()),
-                method_name.to_string(),
-            )
-        }
+        _ => LocalMethodName::new(
+            tt_ref.fq_base_type_name(type_id),
+            Some(trait_name.to_string()),
+            method_name.to_string(),
+        ),
     }
 }
 

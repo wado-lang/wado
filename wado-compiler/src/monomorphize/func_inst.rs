@@ -954,12 +954,19 @@ impl Monomorphizer {
                     } else {
                         false
                     };
-                    names_to_try.push(MethodName::format_local(&FqTypeName::from_mangled(base_struct.clone()), None, &method_name));
+                    // A struct-instantiation key names its template without a
+                    // module; the method template is named after the receiver.
+                    let receiver_head = type_table.fq_base_type_name(receiver.type_id);
+                    names_to_try.push(MethodName::format_local(
+                        &receiver_head,
+                        None,
+                        &method_name,
+                    ));
                     if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
                     {
                         names_to_try.push(MethodName::format_local(
-                            &FqTypeName::from_mangled(base_struct.clone()),
+                            &receiver_head,
                             Some(trait_name),
                             &method_name,
                         ));
@@ -1087,14 +1094,17 @@ impl Monomorphizer {
                 {
                     let base_struct = &struct_key.name;
                     let impl_type_args = struct_key.impl_type_args.clone();
+                    // A struct-instantiation key names its template without a
+                    // module; the method template is named after the receiver.
+                    let receiver_head = type_table.fq_base_type_name(receiver.type_id);
 
                     let mut names_to_try =
-                        vec![MethodName::format_local(&FqTypeName::from_mangled(base_struct.clone()), None, &method_name)];
+                        vec![MethodName::format_local(&receiver_head, None, &method_name)];
                     if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
                     {
                         names_to_try.push(MethodName::format_local(
-                            &FqTypeName::from_mangled(base_struct),
+                            &receiver_head,
                             Some(trait_name),
                             &method_name,
                         ));

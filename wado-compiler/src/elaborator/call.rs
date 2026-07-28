@@ -906,7 +906,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let receiver_ty = self.resolve_named_type(prefix, call.span, false);
                 if let Some(return_type) = self.resolve_blanket_static_method(
                     receiver_ty,
-                    prefix,
                     suffix,
                     call.id,
                     &[],

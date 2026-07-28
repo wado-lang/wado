@@ -1060,15 +1060,14 @@ fn build_resource_fallback_call(
     // `base_struct_name = "Stream"` (bare), mirroring the elaborator
     // convention so cm_binding sees a familiar shape.
     let _ = type_table;
-    let mangled_method_name = format!("{label}::{}", op.name);
+    // The receiver is the resource declaration, so both the base head and the
+    // instantiation label carry the module that declares it.
+    let base_fq = crate::name::FqTypeName::declared(effect_module, base_name);
+    let label_fq = crate::name::FqTypeName::declared(effect_module, label);
+    let mangled_method_name = crate::name::MethodName::format_local(&label_fq, None, &op.name);
 
-    let mut method_info =
-        crate::name::LocalMethodName::new(
-            crate::name::FqTypeName::from_mangled(base_name.to_string()),
-            None,
-            op.name.clone(),
-        );
-    method_info.struct_name = label.to_string();
+    let mut method_info = crate::name::LocalMethodName::new(base_fq, None, op.name.clone());
+    method_info.struct_name = label_fq.into_string();
     method_info.cm_name = Some(cm_name);
 
     // Carry the resource instantiation's type args as the call's

@@ -579,6 +579,9 @@ impl Monomorphizer {
                 .as_ref()
                 .is_some_and(|m| m.is_blanket)
         {
+            // A struct-instantiation key names its template without a module;
+            // the method template is named after the receiver.
+            let receiver_head = type_table.fq_base_type_name(receiver.type_id);
             // Try trait method name format first (e.g., Triple^IndexValue::index_value)
             let mut possible_keys = Vec::new();
             if let Some(info) = method_func.method_info.as_ref()
@@ -611,11 +614,7 @@ impl Monomorphizer {
                     });
                 }
                 let trait_method_name =
-                    MethodName::format_local(
-                        &FqTypeName::from_mangled(base_struct.clone()),
-                        Some(trait_name),
-                        &method_name,
-                    );
+                    MethodName::format_local(&receiver_head, Some(trait_name), &method_name);
                 possible_keys.push(InstantiationKey {
                     name: trait_method_name,
                     module_source: method_func.module_source.clone(),
@@ -626,7 +625,7 @@ impl Monomorphizer {
             }
             // Also try regular method format
             possible_keys.push(InstantiationKey {
-                name: MethodName::format_local(&FqTypeName::from_mangled(base_struct.clone()), None, &method_name),
+                name: MethodName::format_local(&receiver_head, None, &method_name),
                 module_source: method_func.module_source.clone(),
                 impl_type_args,
                 method_type_args: vec![],
