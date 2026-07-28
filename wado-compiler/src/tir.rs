@@ -3227,25 +3227,58 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::Primitive(prim) => TypeNameInfo::Primitive(prim.as_str().to_string()),
             ResolvedType::Unit => TypeNameInfo::Unit,
-            ResolvedType::Struct { name, .. }
-            | ResolvedType::Enum { name, .. }
-            | ResolvedType::Resource { name, .. }
-            | ResolvedType::Variant { name, .. }
-            | ResolvedType::Newtype { name, .. }
-            | ResolvedType::Flags { name, .. }
-            | ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
+            // A declared type is named by its declaring module too: two modules
+            // may declare the same simple name, and a mangled name that omits
+            // the module collapses them onto one identity — the hazard
+            // `mangle_type_arg_for_generic` documents, reached from here as
+            // well.
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Enum {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Resource {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Variant {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Flags {
+                name,
+                module_source,
+                ..
+            } => TypeNameInfo::Named(format!("{module_source}/{name}")),
+            // A type parameter is a template's own binder, not a declaration.
+            ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
             ResolvedType::GenericInstance {
-                name, type_args, ..
+                name,
+                type_args,
+                module_source,
             } => {
                 let args: Vec<String> = type_args
                     .iter()
                     .map(|t| self.mangle_type_arg_for_generic(*t))
                     .collect();
+                // A tuple is module-independent; its elements stay qualified.
                 if Self::is_tuple_type(name) {
                     return TypeNameInfo::Tuple(args);
                 }
                 TypeNameInfo::Generic {
-                    name: name.clone(),
+                    name: format!("{module_source}/{name}"),
                     args,
                 }
             }
