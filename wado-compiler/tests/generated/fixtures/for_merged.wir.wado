@@ -125,7 +125,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(50)
 
-type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(51)
+type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(51)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -240,7 +240,7 @@ fn "for_merged.wado/__test_3_for_let_pattern"() {
         l10: loop {
             let __sroa___match_14_discriminant: i32;
             let __sroa___match_14_payload_0: i32;
-            multivalue_bind [__sroa___match_14_discriminant, __sroa___match_14_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(iter);
+            multivalue_bind [__sroa___match_14_discriminant, __sroa___match_14_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(iter);
             if __sroa___match_14_discriminant == 0 {
                 sum = sum + __sroa___match_14_payload_0;
                 count = count + 1;
@@ -663,9 +663,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(self) {
     let item: i32;
-    if self.index >= self.end {
+    if self.index >= 3 {
         return 1, 0;
     }
     item = builtin::array_get<i32>(self.repr, self.index);

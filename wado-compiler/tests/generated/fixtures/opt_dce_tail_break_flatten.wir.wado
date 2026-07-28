@@ -121,7 +121,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(47)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(48)
 
-type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(49)
+type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(49)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -162,7 +162,7 @@ fn "opt_dce_tail_break_flatten.wado/run"() with Stdout {
         l1: loop {
             let __sroa___local_4_discriminant: i32;
             let __sroa___local_4_payload_0: i32;
-            multivalue_bind [__sroa___local_4_discriminant, __sroa___local_4_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
+            multivalue_bind [__sroa___local_4_discriminant, __sroa___local_4_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(__iter_2);
             if __sroa___local_4_discriminant == 0 {
                 total = total + __sroa___local_4_payload_0;
             } else {
@@ -595,9 +595,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(self) {
     let item: i32;
-    if self.index >= self.end {
+    if self.index >= 5 {
         return 1, 0;
     }
     item = builtin::array_get<i32>(self.repr, self.index);

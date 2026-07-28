@@ -45,7 +45,7 @@ A function gate lets every loop pass skip functions unchanged since it last ran;
 `optimize.rs` orchestrates the NIR stages; `wir_optimize.rs` runs the WIR stages.
 
 1. Early DCE — remove unreachable functions/types/globals.
-2. Fixed-point loop (skipped at `-O0`): container SROA, peephole (pre-inline), value-copy demotion, parameter SROA, inlining, peephole (post-inline), SROA, copy propagation, dead-argument and dead-return elimination, constant folding, LICM, template hoisting.
+2. Fixed-point loop (skipped at `-O0`): container SROA, peephole (pre-inline), value-copy demotion, parameter SROA, inlining, peephole (post-inline), SROA, copy propagation, dead-argument and dead-return elimination, constant folding, parameter specialization, LICM, template hoisting.
 3. Post-loop, once: field scalarization, store-load forwarding, template-wrapper cleanup, constant-object globalization, and a final folding pass.
 4. Final DCE.
 5. Backend-required rewrites (all levels): select lowering, multi-value returns.
@@ -73,12 +73,14 @@ Variant and reference:
 Scalar and dataflow:
 
 - `copy_prop` — propagate trivial copies (`let x = y`) and drop the binding.
+- `param_spec` — interprocedural constant propagation over struct fields, by cloning: a callee reached with a by-reference config struct whose fields are compile-time constants gets a clone with those reads substituted, and the call site is retargeted. Legal only for a field the callee never writes — directly or through any call it forwards the reference to — so the write set is a fixed point over the call graph. Each clone records the constants its own parameters carry, so the next fixed-point iteration specializes one call deeper; the clone cache keys on callee plus bindings, so a recursive call resolves to the same clone. Bounded by per-callee, whole-module, and body-size caps. This is what lets a template's `Formatter` (`width`, `precision`, `sign_plus`, …) reach `fmt_decimal` → `prepare_int_write` → `write_char_n`, where the constants fold away the padding and alignment paths entirely.
 - `dae` — drop parameters never read by the callee, and the pure argument at every call site.
 - `drve` — make a function void-returning when its result is dropped at every call site.
 - `store_load_forward` — forward a stored literal to a later unmodified load.
 - `elide_local` — drop a binding that is never read (keeping its value if impure).
 - `const_folding` — partial evaluation: constant arithmetic, compile-time execution, immutable-global reads, constant-branch collapse, and constant struct / tuple values (field projection, aggregate arguments and results of a compile-time call, and struct / tuple patterns over a constant scrutinee, with the arm's bindings and guard). A compile-time call runs the callee's statements — `let` sequences, assignment to a local, decided branches, early returns, and loops — bounded by a work budget rather than by a constant trip count, and abandons the call rather than stepping past a statement it cannot perform.
 - `const_branch_prune` — simplify trivial blocks and fold a constant-condition `if` to its taken arm.
+- Short-circuit simplification (in `const_folding`) — `false && x` / `true || x` keep `x`; in the absorbing direction (`true || x`, `false && x`, and their mirrors) the constant is the result, provided the discarded operand is speculatable.
 
 Loop and field:
 
@@ -130,16 +132,9 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 - [ ] Dead store elimination.
 - [ ] Strength reduction; reassociation; jump threading; SimplifyCFG.
 - [ ] Cross-block copy propagation.
-- [ ] Function specialization / argument promotion. High value: a hot caller
-      often passes a by-reference config struct whose fields are compile-time
-      constants — e.g. a template's `Formatter` (`precision`, `width`,
-      `sign_plus`, …) threaded through `fmt_into` → `fmt_fixed`. Because those
-      callees are above the inline threshold the constants never propagate, so
-      dead branches (`if f.sign_plus`, `if f.width > 0`) and redundant GC field
-      reloads survive across the whole format path. Specializing a callee on a
-      constant by-ref struct argument (interprocedural constant propagation over
-      struct fields) would fold them. Big change, but a real win for formatting
-      and other config-struct-driven hot paths.
+- [ ] Argument promotion — pass a by-reference parameter's fields by value when
+      the callee only reads them. `param_spec` covers the constant case; a
+      non-constant field still costs a GC load per read.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 

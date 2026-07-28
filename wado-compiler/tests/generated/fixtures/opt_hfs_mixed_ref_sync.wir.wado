@@ -47,13 +47,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//opt_hfs_mixed_ref_sync.wado/read_counter" = fn(ref "opt_hfs_mixed_ref_sync.wado//Counter") -> i32;  // TypeId(14)
+type "functype//opt_hfs_mixed_ref_sync.wado/scale_x" = fn(ref "opt_hfs_mixed_ref_sync.wado//Counter", i32);  // TypeId(14)
 
-type "functype//opt_hfs_mixed_ref_sync.wado/scale_x" = fn(ref "opt_hfs_mixed_ref_sync.wado//Counter", i32);  // TypeId(15)
+type "functype//opt_hfs_mixed_ref_sync.wado/run" = fn();  // TypeId(15)
 
-type "functype//opt_hfs_mixed_ref_sync.wado/run" = fn();  // TypeId(16)
+type "functype//opt_hfs_mixed_ref_sync.wado/__cm_export__run" = fn();  // TypeId(16)
 
-type "functype//opt_hfs_mixed_ref_sync.wado/__cm_export__run" = fn();  // TypeId(17)
+type "functype//opt_hfs_mixed_ref_sync.wado/read_counter$spec0" = fn(ref "opt_hfs_mixed_ref_sync.wado//Counter") -> i32;  // TypeId(17)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(18)
 
@@ -128,10 +128,6 @@ global global:opt_hfs_mixed_ref_sync.wado::__const_obj_1: ref null "core:prelude
 global global:opt_hfs_mixed_ref_sync.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
 global global:opt_hfs_mixed_ref_sync.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 116, 111, 116, 97, 108, 32, 61, 61, 32, 51, 57, 48, 10), used: 25 };
 
-fn "opt_hfs_mixed_ref_sync.wado/read_counter"(c) {
-    return c.x + c.y;
-}
-
 fn "opt_hfs_mixed_ref_sync.wado/scale_x"(c, factor) {
     c.x = c.x * factor;
 }
@@ -162,7 +158,7 @@ fn "opt_hfs_mixed_ref_sync.wado/run"() {
             __hfs_x_11 = __hfs_x_11 + 1;
             total = local.tee total(total + __hfs_x_11) + __hfs_x_11;
             c.x = __hfs_x_11;
-            total = total + "opt_hfs_mixed_ref_sync.wado/read_counter"(c);
+            total = total + "opt_hfs_mixed_ref_sync.wado/read_counter$spec0"(c);
             "opt_hfs_mixed_ref_sync.wado/scale_x"(c, 2);
             __hfs_x_11 = c.x;
             total = total + __hfs_x_11;
@@ -192,6 +188,10 @@ fn "opt_hfs_mixed_ref_sync.wado/__cm_export__run"() {
     };
     "opt_hfs_mixed_ref_sync.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "opt_hfs_mixed_ref_sync.wado/read_counter$spec0"(c) {
+    return c.x + 100;
 }
 
 fn "core:prelude/primitive.wado/count_digits_i64"(val) {

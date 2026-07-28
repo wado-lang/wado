@@ -1,0 +1,60 @@
+// `param_spec` propagation depth: the constants reach a callee two calls away.
+//
+// `outer` reads none of the constant fields itself — it only forwards the
+// reference to `inner`. The clone of `outer` carries the constants so the next
+// fixed-point iteration specializes `inner` too, killing the `st.upper` branch
+// and the marker it guards.
+
+use { println, Stdout } from "core:cli";
+
+struct Style {
+    quoted: bool,
+    upper: bool,
+}
+
+#[inline(never)]
+fn upper_marker(out: &mut String, b: u8) {
+    out.push_str(&"UPPER");
+    out.push_ascii_unchecked(b);
+}
+
+#[inline(never)]
+fn inner(st: &Style, out: &mut String, word: &String) {
+    if st.quoted {
+        out.push('"');
+    }
+    let mut i = 0;
+    while i < word.len() {
+        let b = word.get_byte_unchecked(i);
+        if st.upper {
+            upper_marker(out, b);
+        } else {
+            out.push_ascii_unchecked(b);
+        }
+        i = i + 1;
+    }
+    if st.quoted {
+        out.push('"');
+    }
+}
+
+#[inline(never)]
+fn outer(st: &Style, out: &mut String, word: &String) {
+    out.push('[');
+    inner(st, out, word);
+    out.push(']');
+}
+
+export fn run() with Stdout {
+    let st = Style { quoted: false, upper: false };
+    let mut out = String::with_capacity(32);
+    outer(&st, &mut out, &"ab");
+    outer(&st, &mut out, &"cd");
+    println(out);
+}
+
+__DATA__
+{
+    "stdout": "[ab][cd]\n",
+    "wir_not_expect:O2": ["upper_marker"]
+}

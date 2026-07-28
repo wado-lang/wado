@@ -1,0 +1,42 @@
+// `param_spec` legality, caller side: a field the caller reassigns to a
+// different value between calls is not constant, so it must not be substituted
+// even though its initializer is a literal.
+//
+// `mode` is `1` at the first call and `2` at the second; freezing either value
+// would print the same branch twice.
+
+use { println, Stdout } from "core:cli";
+
+struct Options {
+    mode: i32,
+    repeat: i32,
+}
+
+fn emit(opt: &Options, out: &mut String) {
+    let mut i = 0;
+    while i < opt.repeat {
+        if opt.mode == 1 {
+            out.push('a');
+        } else {
+            if opt.mode == 2 {
+                out.push('b');
+            } else {
+                out.push('?');
+            }
+        }
+        i = i + 1;
+    }
+    out.push('/');
+}
+
+export fn run() with Stdout {
+    let mut opt = Options { mode: 1, repeat: 2 };
+    let mut out = String::with_capacity(16);
+    emit(&opt, &mut out);
+    opt.mode = 2;
+    emit(&opt, &mut out);
+    println(out);
+}
+
+__DATA__
+{"stdout": "aa/bb/\n"}

@@ -5,7 +5,9 @@
 // that wrapper once the field becomes nullable; the multi-value `Return { Seq }`
 // — lifted from the `StructNew` in wir_build — used to keep it, so returning
 // `None` (null) trapped with `wasm trap: null reference`. `split` is
-// `inline("never")` so the call survives to exercise the lifted ABI.
+// `inline("never")` so the call survives to exercise the lifted ABI. The
+// signature is matched without the callee's name: `param_spec` may clone
+// `split` on the constant `tok.used`, and the ABI is what this pins.
 
 struct Opt {
     raw: String,
@@ -42,6 +44,6 @@ __DATA__
 {
     "stdout": "",
     "wir_expect:O2": [
-        "split\" = fn(ref \"core:prelude/string.wado//String\") -> [ref \"core:prelude/string.wado//String\", ref null \"core:prelude/string.wado//String\"]"
+        " = fn(ref \"core:prelude/string.wado//String\") -> [ref \"core:prelude/string.wado//String\", ref null \"core:prelude/string.wado//String\"]"
     ]
 }
