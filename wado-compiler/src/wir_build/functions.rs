@@ -555,16 +555,51 @@ fn register_literal_data(ctx: &mut WirContext<'_>) {
     // reference lets us iterate the source literals while calling `&mut self`.
     let package = ctx.package;
     let threshold = package.string_inline_max_bytes;
-    let payloads = package
+    let recorded: Vec<&[u8]> = package
         .string_literals
         .iter()
         .map(String::as_bytes)
-        .chain(package.bytes_literals.iter().map(Vec::as_slice));
-    for payload in payloads {
-        if payload.len() > threshold {
-            ctx.register_packed_data(payload);
+        .chain(package.bytes_literals.iter().map(Vec::as_slice))
+        .filter(|payload| payload.len() > threshold)
+        .collect();
+    for payload in recorded {
+        ctx.register_packed_data(payload);
+    }
+    for payload in synthesized_packed_payloads(ctx.package, threshold) {
+        ctx.register_packed_data(&payload);
+    }
+}
+
+/// Every `PackedArray` payload in the program that needs a segment.
+///
+/// The lower phase's recorded literal lists are not the whole set: the
+/// optimizer writes literals back that no source literal accounts for — a
+/// compile-time call producing a constant `String` becomes one — so the NIR is
+/// the authority. Registering after the recorded lists keeps their segment
+/// indices, appending only what they missed.
+fn synthesized_packed_payloads(
+    package: &crate::nir_package::NirPackage,
+    threshold: usize,
+) -> Vec<Vec<u8>> {
+    fn collect(body: &crate::nir_arena::Body, threshold: usize, out: &mut Vec<Vec<u8>>) {
+        for (_, node) in &body.exprs {
+            if let crate::nir_arena::ExprKind::PackedArray(bytes) = &node.kind
+                && bytes.len() > threshold
+            {
+                out.push(bytes.clone());
+            }
         }
     }
+    let mut out = Vec::new();
+    for func in &package.functions {
+        if let Some(body) = func.borrow().body.as_ref() {
+            collect(body, threshold, &mut out);
+        }
+    }
+    for global in &package.globals {
+        collect(global.init.slot_expr().body(), threshold, &mut out);
+    }
+    out
 }
 
 /// Register function exports (world exports like "run").
