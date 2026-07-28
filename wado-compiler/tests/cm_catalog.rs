@@ -1415,6 +1415,23 @@ fn cm_lib_rejects_export_name_colliding_with_type_name() {
     );
 }
 
+/// The interface name check walks every export signature through the CM type
+/// engine, which recurses without a depth guard. It has to run behind the
+/// boundary-representability check, or a recursive type overflows the stack
+/// instead of getting the diagnostic that already exists for it.
+#[test]
+fn cm_lib_rejects_recursive_type_before_the_name_check_walks_it() {
+    let err = try_compile_lib(
+        "pub struct Node {\n    next: Option<Node>,\n    value: u32,\n}\n\
+         export fn depth(n: Node) -> u32 {\n    return n.value;\n}\n",
+    )
+    .expect_err("a recursive boundary type should fail to compile");
+    assert!(
+        err.contains("recursive") && err.contains("Node"),
+        "expected the recursive-type boundary diagnostic, got: {err}"
+    );
+}
+
 /// Two type names that differ only in a way kebab-casing erases land on the same
 /// CM name with no function involved at all.
 #[test]

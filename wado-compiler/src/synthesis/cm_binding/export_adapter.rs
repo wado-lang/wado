@@ -1769,18 +1769,31 @@ pub(super) fn post_return_func_name(export_name: &str) -> String {
 }
 
 /// Synthesize the `post-return` function for a sync-lifted export, or `None`
-/// when its result owns no linear memory and there is nothing to reclaim.
+/// when the export returns nothing for the guest to reclaim.
 ///
-/// The canonical ABI calls it with the lifted core function's results, which
-/// for a memory-owning result is the single out-pointer: owning memory implies
-/// more than one flat result, and more than one flat result is returned
-/// indirectly. It frees what the value points at, then the out-pointer buffer
-/// itself.
+/// The gate is the indirect return, not memory ownership: a result flattening to
+/// more than one core value is returned through a guest-allocated area, and that
+/// area needs freeing even when nothing hangs off it — a record of two `u32`
+/// owns no memory yet still leaks its eight bytes per call. Ownership only
+/// decides whether the walk that reaches nested buffers emits anything.
+///
+/// The canonical ABI calls the function with the lifted core function's results,
+/// which in the indirect case is that single out-pointer.
 pub(super) fn synthesize_post_return(
     export_name: &str,
     env: &ExportBindingEnv<'_>,
 ) -> Option<Rc<RefCell<TirFunction>>> {
     let ty = env.world_return?;
+    let flat_count = {
+        let tt = env.type_table.borrow();
+        compute_export_flat_return_types(ty, env.tir_modules, &tt).len()
+    };
+    // Matches `push_sync_return_epilogue`, which allocates the return area under
+    // exactly this condition.
+    if flat_count <= 1 {
+        return None;
+    }
+
     let names = super::types::CmStdlibNames::from_compiler_items(
         env.type_table.borrow().compiler_items(),
     );
@@ -1790,20 +1803,6 @@ pub(super) fn synthesize_post_return(
         names: &names,
     };
     let shape = cm_shape(ty, &shape_ctx);
-    if !shape.owns_memory() {
-        return None;
-    }
-
-    let flat_count = {
-        let tt = env.type_table.borrow();
-        compute_export_flat_return_types(ty, env.tir_modules, &tt).len()
-    };
-    assert!(
-        flat_count > 1,
-        "`{export_name}` returns a memory-owning value that flattens to \
-         {flat_count} core value(s); the Canonical ABI returns anything wider \
-         than one value indirectly, so post-return has no out-pointer to free"
-    );
 
     let ptr = param_local("__ret_ptr", TypeTable::I32, false);
     let mut locals = vec![ptr];

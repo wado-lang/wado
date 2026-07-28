@@ -509,9 +509,6 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
     let is_kiln_generator = project
         .world_registry
         .is_generator_world(&project.target_world);
-    if is_lib_world {
-        validate_lib_interface_names(&world_info, &project.cm_interface_registry)?;
-    }
     let entry_type_table = entry_type_table(project);
 
     // Collect adapters in a read-only pass (synthesize_export_binding needs &tir_modules)
@@ -633,6 +630,15 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                 ));
             }
         }
+    }
+
+    // After the per-export loop: the name check walks every export signature
+    // through the CM type engine, which recurses without a depth guard, so it
+    // must not see a signature `validate_boundary_representable` would have
+    // rejected. A recursive type reaches the engine only if this runs first,
+    // and overflows the stack instead of producing that diagnostic.
+    if is_lib_world {
+        validate_lib_interface_names(&world_info, &project.cm_interface_registry)?;
     }
 
     let entry_module = project

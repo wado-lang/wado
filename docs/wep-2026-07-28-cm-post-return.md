@@ -31,16 +31,24 @@ equivalent leak is D2 below.
 
 ## Decision
 
-Emit `post-return` on a synchronous lift whose result owns linear memory, and
+Emit `post-return` on a synchronous lift that returns its result indirectly, and
 synthesize the function it names.
+
+### When it is emitted
+
+The gate is the indirect return, not memory ownership. Anything wider than one
+core value comes back through a guest-allocated area, and that area leaks without
+`post-return` even when nothing hangs off it — a record of two `u32` owns no
+memory and still loses eight bytes per call. A result that fits in a core value
+allocates nothing and needs no option.
 
 ### What gets freed
 
 `post-return` receives only the outer pointer, so reclamation is a recursive,
 type-driven walk of the value in linear memory: a `list<string>` owns its element
 array _and_ one payload per element. The walk covers strings, lists, records,
-tuples, variants, options and results, and ends by releasing the out-pointer
-buffer itself.
+tuples, variants, options and results, and ends by releasing the return area
+itself.
 
 Two rules shape it.
 
@@ -48,9 +56,8 @@ Handles are never touched. Lifting _transfers_ an `own<r>` to the host, so
 dropping one here would be a double-drop. Handles count as owning nothing — the
 distinction is "owns no memory", not "is not four bytes wide".
 
-A part that owns no memory produces no code, so a scalar-only result contributes
-nothing beyond the outer free, and an export that owns nothing at all gets no
-`post-return` option.
+A part that owns no memory produces no code, so a result of scalars reduces to
+the single free of its return area.
 
 ### Staying in step with lowering
 
@@ -76,16 +83,21 @@ they pin both halves of correctness:
   or covers too much corrupts data the test reads back.
 
 The regression tests are a memory-capped reproduction of the leak, an assertion
-that the canonical option appears only where something is owned, and the CM type
-catalog round-tripped twice under `freelist` — the widest shape corpus available,
-covering strings, nested lists, tuples, options, results, records, variants,
-flags, enums and newtypes.
+that the canonical option tracks the indirect return rather than memory
+ownership, and the CM type catalog round-tripped twice under `freelist` — the
+widest shape corpus available, covering strings, nested lists, tuples, options,
+results, records, variants, flags, enums and newtypes.
+
+Where a leak can be pinned by inspecting the emitted component, that is preferred
+to exhausting a memory cap: the inspection is exact and cheap, while an
+exhaustion test has to guess allocator block arithmetic to stay meaningful and
+costs real time on a loaded machine.
 
 ## Consequences
 
-An export whose result owns no memory is unaffected: its component is unchanged,
-and no code size is spent where there is nothing to free. An export that does own
-memory pays one extra core function and one call per invocation.
+An export whose result fits in a core value is unaffected: its component is
+unchanged, and no code size is spent where nothing was allocated. An export
+returning indirectly pays one extra core function and one call per invocation.
 
 Under `bump` the emitted frees are no-ops, since that allocator never reclaims, so
 a `--lib --allocator bump` build pays the call cost for no benefit. Making the

@@ -213,22 +213,36 @@ fn lib_sync_lift_param_buffer_is_reclaimed_o2() {
 }
 
 /// One memory-owning result and one that owns nothing, so the assertion below
-/// pins both directions of the canonical option in a single component.
+/// pins every direction of the canonical option in a single component: a result
+/// that owns a buffer, one that owns nothing but is still returned indirectly,
+/// and one returned in a core result with no allocation at all.
 const OPTION_SOURCE: &str = r#"
+struct Pair {
+    a: u32,
+    b: u32,
+}
+
 export fn owns_memory(n: u32) -> List<u32> {
     return [n];
 }
 
-export fn owns_nothing(n: u32) -> u32 {
+export fn indirect_scalars(n: u32) -> Pair {
+    return Pair { a: n, b: n };
+}
+
+export fn direct(n: u32) -> u32 {
     return n;
 }
 "#;
 
-/// `post-return` is emitted only where there is something to reclaim: a lift
-/// whose result owns no linear memory keeps the option off, so components that
-/// cannot leak stay byte-identical to what they were before it existed.
+/// `post-return` tracks the indirect return, not memory ownership.
+///
+/// Anything wider than one core value comes back through a guest-allocated area,
+/// and that area leaks without the option even when nothing hangs off it. A
+/// result that fits in a core value allocates nothing, so its lift keeps the
+/// option off and its component stays as it was before `post-return` existed.
 #[test]
-fn post_return_is_emitted_only_for_memory_owning_results() {
+fn post_return_tracks_the_indirect_return() {
     let wasm = compile_lib(OPTION_SOURCE, OptLevel::O0);
     let wat = wasmprinter::print_bytes(&wasm).expect("print component");
 
@@ -246,10 +260,18 @@ fn post_return_is_emitted_only_for_memory_owning_results() {
          free it, so its lift needs `post-return`:\n{owning}"
     );
 
-    let scalar = lift_of("owns-nothing");
+    let indirect = lift_of("indirect-scalars");
     assert!(
-        !scalar.contains("post-return"),
-        "a `u32` result owns no memory, so its lift must carry no \
-         `post-return`:\n{scalar}"
+        indirect.contains("post-return"),
+        "a record of two `u32` owns no memory, but still comes back through a \
+         guest-allocated area that leaks without `post-return`:\n{indirect}"
+    );
+
+    let direct = lift_of("direct");
+    assert!(
+        !direct.contains("post-return"),
+        "a `u32` result is returned in a core result and allocates nothing, so \
+         its lift must carry no `post-return`:\n{direct}"
     );
 }
+
