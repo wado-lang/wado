@@ -2706,23 +2706,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // binding's real `AstId`) and walks the body for its facts.
         ctx.enter_scope();
         // `for let mut x of …` carries the `mut` on the statement, and the
-        // pattern walker only reads it off a `MutIdent`. Normalize before
-        // binding, or the loop variable binds immutable and a write through it
-        // is rejected.
-        let binding = match (&for_of.binding, for_of.is_mut) {
-            (
-                Pattern::Ident {
-                    id,
-                    name,
-                    span: name_span,
-                },
-                true,
-            ) => Pattern::MutIdent {
-                id: *id,
-                name: name.clone(),
-                span: *name_span,
-            },
-            _ => for_of.binding.clone(),
+        // pattern walker only reads it off a `MutIdent`. Push it onto the
+        // pattern's leaves before binding, or the loop variable binds immutable
+        // and a write through it is rejected.
+        let binding = if for_of.is_mut {
+            mut_bindings_of(&for_of.binding)
+        } else {
+            for_of.binding.clone()
         };
         self.resolve_if_pattern_inner(&binding, item_type, ctx, span, RefBinding::None);
         self.resolve_block(&for_of.body, ctx, None);
@@ -3084,6 +3074,42 @@ fn format_pattern_qualifier_type(ty: &Type) -> String {
         Type::TypePackSpread(name, _) => format!("..{name}"),
         Type::Infer(_) => "_".to_string(),
         Type::Error(_) => "<error>".to_string(),
+    }
+}
+
+/// The pattern with every identifier leaf made mutable.
+///
+/// `for let mut …` carries the `mut` on the statement while the pattern walker
+/// reads it off a `MutIdent`, so a destructuring binding needs it pushed down
+/// to the names it introduces.
+fn mut_bindings_of(pattern: &Pattern) -> Pattern {
+    match pattern {
+        Pattern::Ident { id, name, span } => Pattern::MutIdent {
+            id: *id,
+            name: name.clone(),
+            span: *span,
+        },
+        Pattern::Tuple(elements, has_rest) => {
+            Pattern::Tuple(elements.iter().map(mut_bindings_of).collect(), *has_rest)
+        }
+        Pattern::Struct {
+            type_name,
+            fields,
+            has_rest,
+            span,
+        } => Pattern::Struct {
+            type_name: type_name.clone(),
+            fields: fields
+                .iter()
+                .map(|f| crate::ast::StructPatternField {
+                    pattern: mut_bindings_of(&f.pattern),
+                    ..f.clone()
+                })
+                .collect(),
+            has_rest: *has_rest,
+            span: *span,
+        },
+        other => other.clone(),
     }
 }
 
