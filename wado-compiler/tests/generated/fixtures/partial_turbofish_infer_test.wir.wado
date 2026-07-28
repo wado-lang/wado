@@ -505,7 +505,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global global:core:cbor::SERIALIZE_BUFFER_CAPACITY: i32 = 64;
 global global:core:cbor::I128_MAX_AS_U128: ref null "core:prelude/int128.wado//u128" = struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: 9223372036854775807_i64 };
 global mut global:core:cbor::MSG_EXPECTED_ARRAY: ref null "core:prelude/string.wado//String" = ref.null none;
 global mut global:core:cbor::MSG_EXPECTED_MAP_FOR_STRUCT: ref null "core:prelude/string.wado//String" = ref.null none;
@@ -1129,8 +1128,7 @@ fn "core:cbor/core/cbor/to_bytes<partial_turbofish_infer_test.wado/Blob>"(value)
     let buf: ref "core:prelude//List<u8>";
     let __qm_e: ref "core:serde//SerializeError";
     let __match_5: ref null "core:serde//SerializeError";
-    let capacity: i32;
-    buf = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee capacity(global:core:cbor::SERIALIZE_BUFFER_CAPACITY)), used: 0 };
+    buf = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(64), used: 0 };
     __match_5 = "partial_turbofish_infer_test.wado/Blob^Serialize::serialize<core:cbor/CborSerializer>"(value, buf);
     if @likely(ref.is_null(__match_5)) {
     } else {

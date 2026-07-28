@@ -403,10 +403,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global global:./sub/wir_xmodule_return_parser.wado::TK_EOF: i32 = 2;
-global global:./sub/wir_xmodule_return_parser.wado::TK_ERROR: i32 = 3;
-global global:./sub/wir_xmodule_return_parser.wado::RK_PROG: i32 = 0;
-global global:./sub/wir_xmodule_return_parser.wado::RK_EXPR: i32 = 1;
 global mut global:wir_xmodule_return_xmod.wado::__modules_initialized: bool = 0;
 global global:./sub/wir_xmodule_return_parser.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 101, 108, 102, 46, 117, 115, 101, 100, 58, 32), used: 11 };
 global global:./sub/wir_xmodule_return_parser.wado::__const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 110, 100, 101, 120, 32, 60, 32, 115, 101, 108, 102, 46, 117, 115, 101, 100, 10), used: 30 };
@@ -419,7 +415,6 @@ global global:./sub/wir_xmodule_return_parser.wado::__const_obj_98: ref null "co
 
 fn "wir_xmodule_return_xmod.wado/__cm_export____test_0_cross_module_by_value_struct_return_keeps_its_gc_ref_local"() {
     let __v0: i32;
-    let __v1: i32;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let input_6: ref "core:prelude/string.wado//String";
@@ -436,12 +431,11 @@ fn "wir_xmodule_return_xmod.wado/__cm_export____test_0_cross_module_by_value_str
     let r_mv_diagnostics: ref "core:prelude//List<./sub/wir_xmodule_return_parser.wado/Diagnostic>";
     multivalue_bind [r_mv_root, r_mv_tokens, r_mv_diagnostics] = "wir_xmodule_return_xmod.wado/_run_parse_entry$__Closure_2"(input_6, 2147483647, struct.new "wir_xmodule_return_xmod.wado//__Closure_2" {  });
     __v0 = r_mv_root.kind;
-    __v1 = global:./sub/wir_xmodule_return_parser.wado::RK_PROG;
-    if @unlikely(__v0 != __v1) {
+    if @unlikely((__v0 == 0) == 0) {
         cold_path;
         "core:rt/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(170); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_cross_module_by_value_struct_return_keeps_its_gc_ref_local"), used: 67 }); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 116); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wir_xmodule_return_xmod.wado"), used: 28 }); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 13 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: top.kind == mini::RK_PROG
-"), used: 38 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("top.kind: "), used: 10 }); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "./sub/wir_xmodule_return_parser.wado/NodeKind^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0 }, __local_5); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 10); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mini::RK_PROG: "), used: 15 }); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "./sub/wir_xmodule_return_parser.wado/NodeKind^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v1 }, __local_5); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 10); __local_4);
+"), used: 38 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("top.kind: "), used: 10 }); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "./sub/wir_xmodule_return_parser.wado/NodeKind^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0 }, __local_5); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 10); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mini::RK_PROG: "), used: 15 }); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "./sub/wir_xmodule_return_parser.wado/NodeKind^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }, __local_5); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 10); __local_4);
         unreachable;
     }
     "wasi/task-return"(0);
@@ -1018,8 +1012,6 @@ fn "./sub/wir_xmodule_return_parser.wado/tokenize"(input) {
     let self_14: ref "core:prelude/string.wado//StrCharIter";
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    let kind_28: i32;
-    let kind_46: i32;
     let _licm_used_54: i32;
     let _licm_repr_55: ref Array<char>;
     let __sroa_lexer_chars: ref "core:prelude//List<char>";
@@ -1038,7 +1030,7 @@ fn "./sub/wir_xmodule_return_parser.wado/tokenize"(input) {
             break_if b67 __sroa_lexer_pos >= _licm_used_61;
             start_4 = __sroa_lexer_pos;
             best_end = -1;
-            best_kind = global:./sub/wir_xmodule_return_parser.wado::TK_ERROR;
+            best_kind = 3;
             end_7 = -1;
             if @unlikely(start_4 >= _licm_used_54) {
                 cold_path;
@@ -1094,8 +1086,7 @@ fn "./sub/wir_xmodule_return_parser.wado/tokenize"(input) {
                 }
             }
             if best_end <= start_4 {
-                kind_28 = global:./sub/wir_xmodule_return_parser.wado::TK_ERROR;
-                drop("./sub/wir_xmodule_return_parser.wado/TokenStream::push_token_flagged"(ts, kind_28, start_4, start_4 + 1, triv_lo_3, ts.triv_kinds.used, 0));
+                drop("./sub/wir_xmodule_return_parser.wado/TokenStream::push_token_flagged"(ts, 3, start_4, start_4 + 1, triv_lo_3, ts.triv_kinds.used, 0));
                 triv_lo_3 = ts.triv_kinds.used;
                 __sroa_lexer_pos = start_4 + 1;
             } else {
@@ -1112,8 +1103,7 @@ fn "./sub/wir_xmodule_return_parser.wado/tokenize"(input) {
             continue l68;
         };
     };
-    kind_46 = global:./sub/wir_xmodule_return_parser.wado::TK_EOF;
-    drop("./sub/wir_xmodule_return_parser.wado/TokenStream::push_token_flagged"(ts, kind_46, __sroa_lexer_pos, __sroa_lexer_pos, triv_lo_3, ts.triv_kinds.used, 0));
+    drop("./sub/wir_xmodule_return_parser.wado/TokenStream::push_token_flagged"(ts, 2, __sroa_lexer_pos, __sroa_lexer_pos, triv_lo_3, ts.triv_kinds.used, 0));
     return ts;
 }
 
@@ -1162,7 +1152,7 @@ fn "./sub/wir_xmodule_return_parser.wado/_parse_prog__inner"(p) {
     let __sroa___match_scrut_1_discriminant: i32;
     let __sroa___match_scrut_1_case0_payload_0: i32;
     let __sroa___match_scrut_1_case1_payload_0: ref null "./sub/wir_xmodule_return_parser.wado//ParseError";
-    multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "./sub/wir_xmodule_return_parser.wado/Parser::expect"(p, global:./sub/wir_xmodule_return_parser.wado::TK_EOF);
+    multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "./sub/wir_xmodule_return_parser.wado/Parser::expect"(p, 2);
     drop((if @likely(__sroa___match_scrut_1_discriminant == 0) -> i32 {
         local.tee __qm_v_5(__sroa___match_scrut_1_case0_payload_0);
     } else {
@@ -1182,7 +1172,6 @@ fn "./sub/wir_xmodule_return_parser.wado/_parse_prog"(p) {
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let self_13: ref "core:prelude//List<./sub/wir_xmodule_return_parser.wado/BuildEvent>";
-    let kind: i32;
     let self_16: ref "core:prelude//List<./sub/wir_xmodule_return_parser.wado/BuildEvent>";
     let end: i32;
     index_7 = p.pos;
@@ -1194,8 +1183,7 @@ fn "./sub/wir_xmodule_return_parser.wado/_parse_prog"(p) {
     }
     _start = builtin::array_get<i32>(p.tokens.starts.repr, index_7);
     self_13 = p.b.events;
-    kind = global:./sub/wir_xmodule_return_parser.wado::RK_PROG;
-    "core:prelude/list.wado/List<./sub/wir_xmodule_return_parser.wado/BuildEvent>::push"(self_13, struct.new "./sub/wir_xmodule_return_parser.wado//BuildEvent::Open" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: kind, 1: _start } });
+    "core:prelude/list.wado/List<./sub/wir_xmodule_return_parser.wado/BuildEvent>::push"(self_13, struct.new "./sub/wir_xmodule_return_parser.wado//BuildEvent::Open" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: 0, 1: _start } });
     r = "./sub/wir_xmodule_return_parser.wado/_parse_prog__inner"(p);
     self_16 = p.b.events;
     end = "./sub/wir_xmodule_return_parser.wado/Parser::last_end"(p);
@@ -1296,7 +1284,6 @@ fn "./sub/wir_xmodule_return_parser.wado/_parse_expr"(p) {
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let self_13: ref "core:prelude//List<./sub/wir_xmodule_return_parser.wado/BuildEvent>";
-    let kind: i32;
     let self_16: ref "core:prelude//List<./sub/wir_xmodule_return_parser.wado/BuildEvent>";
     let end: i32;
     index_7 = p.pos;
@@ -1308,8 +1295,7 @@ fn "./sub/wir_xmodule_return_parser.wado/_parse_expr"(p) {
     }
     _start = builtin::array_get<i32>(p.tokens.starts.repr, index_7);
     self_13 = p.b.events;
-    kind = global:./sub/wir_xmodule_return_parser.wado::RK_EXPR;
-    "core:prelude/list.wado/List<./sub/wir_xmodule_return_parser.wado/BuildEvent>::push"(self_13, struct.new "./sub/wir_xmodule_return_parser.wado//BuildEvent::Open" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: kind, 1: _start } });
+    "core:prelude/list.wado/List<./sub/wir_xmodule_return_parser.wado/BuildEvent>::push"(self_13, struct.new "./sub/wir_xmodule_return_parser.wado//BuildEvent::Open" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: 1, 1: _start } });
     r = "./sub/wir_xmodule_return_parser.wado/_parse_expr__inner"(p);
     self_16 = p.b.events;
     end = "./sub/wir_xmodule_return_parser.wado/Parser::last_end"(p);
@@ -1573,7 +1559,7 @@ fn "./sub/wir_xmodule_return_parser.wado/Parser::expect"(self, kind) {
     let __local_5_101: ref "core:prelude/string.wado//String";
     let __local_6_102: ref "core:prelude/format.wado//Formatter";
     if builtin::array_get<i32>(self.kinds, self.pos) == kind {
-        if kind == global:./sub/wir_xmodule_return_parser.wado::TK_EOF {
+        if kind == 2 {
             self_8 = self.b.events;
             "core:prelude/list.wado/List<./sub/wir_xmodule_return_parser.wado/BuildEvent>::push"(self_8, struct.new "./sub/wir_xmodule_return_parser.wado//BuildEvent::Tok" { discriminant: 2, payload_0: self.pos });
             return 0, self.pos, ref.null none;

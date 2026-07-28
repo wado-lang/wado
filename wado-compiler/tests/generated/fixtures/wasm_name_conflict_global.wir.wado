@@ -99,8 +99,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global global:./sub/wasm_name_conflict_global_mod_a.wado::LIMIT: i32 = 100;
-global global:./sub/wasm_name_conflict_global_mod_b.wado::LIMIT: i32 = 999;
 global mut global:wasm_name_conflict_global.wado::__modules_initialized: bool = 0;
 
 fn "wasm_name_conflict_global.wado/run"() with Stdout {
@@ -111,19 +109,17 @@ fn "wasm_name_conflict_global.wado/run"() with Stdout {
     let start_7: i32;
     let start_16: i32;
     let start_25: i32;
-    let self_35: i32;
     let start_40: i32;
     let start_49: i32;
     let start_58: i32;
-    let self_68: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:wasm_name_conflict_global.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:wasm_name_conflict_global.wado::__modules_initialized = 1;
     };
-    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }; start_7 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_0, 1); builtin::array_set_u8(__local_0.repr, start_7, 97); start_16 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_0, 1); builtin::array_set_u8(__local_0.repr, start_16, 58); start_25 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_0, 1); builtin::array_set_u8(__local_0.repr, start_25, 32); __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_35(global:./sub/wasm_name_conflict_global_mod_a.wado::LIMIT), __local_1); __local_0);
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }; start_40 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_40, 98); start_49 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_49, 58); start_58 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_58, 32); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_68(global:./sub/wasm_name_conflict_global_mod_b.wado::LIMIT), __local_3); __local_2);
+    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }; start_7 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_0, 1); builtin::array_set_u8(__local_0.repr, start_7, 97); start_16 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_0, 1); builtin::array_set_u8(__local_0.repr, start_16, 58); start_25 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_0, 1); builtin::array_set_u8(__local_0.repr, start_25, 32); __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; "core:prelude/primitive.wado/i32::fmt_decimal"(100, __local_1); __local_0);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }; start_40 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_40, 98); start_49 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_49, 58); start_58 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_58, 32); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(999, __local_3); __local_2);
 }
 
 fn "wasm_name_conflict_global.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
