@@ -821,12 +821,11 @@ impl LocalMethodName {
     /// identifies them by name alone.
     #[must_use]
     pub fn new(struct_name: FqTypeName, trait_name: Option<String>, method_name: String) -> Self {
-        let struct_name = struct_name.into_string();
-        debug_assert!(
-            !struct_name.contains('<'),
-            "LocalMethodName::new() expects base struct name without type params, got: {struct_name}"
-        );
-        Self::of(Receiver::Type(struct_name), trait_name, method_name)
+        Self::of(
+            Receiver::Type(struct_name.into_string()),
+            trait_name,
+            method_name,
+        )
     }
 
     /// Construct a method name for a `&T` / `&mut T` ref-impl receiver.
@@ -2196,6 +2195,11 @@ pub struct FqTypeName(String);
 impl FqTypeName {
     /// A declared type, named by the module that declares it. `module` must be
     /// the *declaring* module, not the use site's.
+    ///
+    /// `name` is the declaration's own name: a base name carries no type
+    /// arguments, which `with_struct_type_args` appends once the receiver is
+    /// instantiated. (A module source may itself contain `<`, so this is the
+    /// only place the distinction is still visible.)
     #[must_use]
     pub fn declared(module: &crate::module_source::ModuleSource, name: &str) -> Self {
         Self(format!("{module}/{name}"))

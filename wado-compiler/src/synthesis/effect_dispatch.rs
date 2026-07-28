@@ -1632,7 +1632,13 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         });
         let handler_type = binding.handler.type_id;
         let handler_underlying = deref_type(&env.type_table.borrow(), handler_type);
-        let handler_type_name = env.type_table.borrow().type_name(handler_underlying);
+        // `build_handler_impl_index` keys on the impl method's own receiver
+        // name, so the lookup is built the same way — the display name would
+        // drop the declaring module the receiver carries.
+        let handler_type_name = env
+            .type_table
+            .borrow()
+            .mangle_type_arg_for_generic(handler_underlying);
         let impl_key: HandlerImplKey = (
             handler_type_name.clone(),
             effect_module.clone(),
@@ -1645,9 +1651,9 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         // Keying the fallback on the head exactly hits only the template, never
         // a concrete sibling like `Holder<u8>`.
         let impl_info = env.impl_index.get(&impl_key).or_else(|| {
-            let head = crate::name::split_base_name(&handler_type_name);
+            let head = env.type_table.borrow().fq_base_type_name(handler_underlying);
             env.impl_index.get(&(
-                head.to_string(),
+                head.into_string(),
                 effect_module.clone(),
                 interface_name.clone(),
                 trait_type_args.clone(),
