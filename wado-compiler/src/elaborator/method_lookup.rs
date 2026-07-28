@@ -165,7 +165,11 @@ impl TypeSystem {
                 if self.is_known_type_name_in(impl_module, &named.name)
                     && !impl_params.iter().any(|p| p.name == named.name)
                 {
-                    Some(named.name.clone())
+                    // The receiver side is mangled, and a mangler names a
+                    // declared type by its declaring module. Resolve the
+                    // written name against the impl's own module and mangle it
+                    // the same way, so the two sides are comparable.
+                    Some(self.mangled_decl_name_in(impl_module, &named.name))
                 } else {
                     None
                 }
@@ -176,10 +180,25 @@ impl TypeSystem {
                     .iter()
                     .map(|a| self.concrete_arg_mangled(a, impl_params, impl_module))
                     .collect::<Option<Vec<String>>>()?;
-                Some(format!("{}<{}>", g.name, parts.join(",")))
+                let head = if impl_params.iter().any(|p| p.name == g.name) {
+                    g.name.clone()
+                } else {
+                    self.mangled_decl_name_in(impl_module, &g.name)
+                };
+                Some(crate::name::mangle_generic_name(&head, &parts))
             }
             _ => None,
         }
+    }
+
+    /// The mangled name of the declaration `name` refers to from
+    /// `impl_module`'s perspective. Falls back to the written name when the
+    /// type table has no entry — a builtin shape spells itself.
+    fn mangled_decl_name_in(&self, impl_module: &ModuleSource, name: &str) -> String {
+        let tt = self.type_table.borrow();
+        tt.find_decl_type_by_name(name, impl_module)
+            .map(|id| tt.mangle_type_name(id))
+            .unwrap_or_else(|| name.to_string())
     }
 }
 

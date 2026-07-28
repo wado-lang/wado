@@ -444,12 +444,19 @@ impl Monomorphizer {
         trait_name: Option<&str>,
     ) -> Option<String> {
         let trait_name = trait_name?;
-        self.newtype_own_name(type_id, type_table, |own, _| {
-            self.functions
-                .trait_env
-                .impl_module_for(own, trait_name, None)
-                .is_some()
+        self.newtype_own_name(type_id, type_table, |_, tid| {
+            self.has_own_trait_impl(type_table, tid, trait_name)
         })
+    }
+
+    /// Whether the declaration `tid` names carries its own `impl <trait> for`
+    /// block. The impl index keys the head as source writes it, so the query
+    /// goes through [`TypeTable::impl_receiver_key`] rather than a mangled
+    /// name — which would carry the declaring module the index never stores.
+    fn has_own_trait_impl(&self, type_table: &TypeTable, tid: TypeId, trait_name: &str) -> bool {
+        self.functions
+            .trait_env
+            .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(tid), trait_name)
     }
 
     /// Peel refs/newtypes to the first newtype level satisfying `has_own_impl`
@@ -485,11 +492,8 @@ impl Monomorphizer {
         info: &LocalMethodName,
     ) -> bool {
         let own = match info.trait_name.as_deref() {
-            Some(trait_name) => self.newtype_own_name(receiver_type_id, type_table, |own, _| {
-                self.functions
-                    .trait_env
-                    .impl_module_for(own, trait_name, None)
-                    .is_some()
+            Some(trait_name) => self.newtype_own_name(receiver_type_id, type_table, |_, tid| {
+                self.has_own_trait_impl(type_table, tid, trait_name)
             }),
             None => self.newtype_own_name(receiver_type_id, type_table, |_, tid| {
                 self.functions.trait_env.has_inherent_method_by_receiver(
