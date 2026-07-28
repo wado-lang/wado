@@ -307,6 +307,12 @@ impl Monomorphizer {
         // Store in module for later phases
         module.generic_functions.clone_from(&generic_functions);
 
+        // Hand the same registry to the monomorphizer: variadic-for-of
+        // expansion reads it to tell a callee's method type params from its
+        // ordinary parameters. Grow-only above this point, so one snapshot
+        // shared by `Rc` serves the whole run.
+        self.functions.templates = Rc::new(generic_functions.clone());
+
         // Phase 8: Collect function instantiation sites from Call expressions
         self.collect_function_instantiation_sites(&module, &generic_functions);
 

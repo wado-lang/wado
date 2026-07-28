@@ -458,14 +458,27 @@ fn expr_reads_local(expr: &TirExpr, index: u32) -> bool {
 /// monomorphized as its own function, so its calls are inferred there, and
 /// (matching the original walker) this pass leaves them alone.
 ///
-/// Only a call whose argument comes from the loop binding is inferred. That is
-/// the one shape the elaborator could not pin — the argument's type was a pack
-/// element. Every other empty `type_args` is empty because the callee declares
-/// no method type params, and filling one in would name an instance by an
-/// ordinary parameter's type, which no call site spells.
+/// Two conditions gate the inference, and both are needed. The argument must
+/// read the loop binding — that is the one shape the elaborator could not pin,
+/// because the argument's type was a pack element. And the callee must actually
+/// declare a method type param: `f.write_str(&field.name())` reads the binding
+/// too, yet `write_str` takes a plain `&String`, and naming its instance after
+/// an ordinary parameter's type spells a name no call site uses. The callee's
+/// template is the authority on which is which.
 struct MethodTypeArgInferer<'a> {
     type_table: &'a TypeTable,
     binding_local: u32,
+    templates: &'a IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
+}
+
+impl MethodTypeArgInferer<'_> {
+    /// Whether the callee declares a method-level type param. Only generic
+    /// functions are registered as templates, so a miss is a definite "no".
+    fn callee_is_method_generic(&self, func: &FunctionRef) -> bool {
+        self.templates
+            .get(&(func.module_source.clone(), func.name.clone()))
+            .is_some_and(|t| t.borrow().has_real_type_params())
+    }
 }
 
 impl TirMutVisitor for MethodTypeArgInferer<'_> {
@@ -502,6 +515,11 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
             return;
         };
         if !expr_reads_local(&first_arg.expr, self.binding_local) {
+            return;
+        }
+        // A callee with no method-level type params has no method type arg to
+        // infer, whatever its arguments happen to be.
+        if !self.callee_is_method_generic(func) {
             return;
         }
         // Infer T from the first non-self argument's inner type. For
@@ -3655,7 +3673,7 @@ impl Monomorphizer {
             // Inside variadic for-of, method calls like `seq.element(&v)` have empty type_args
             // because T was inferred from a TypePack at resolution time. Now that types are
             // concrete, fill in type_args so the monomorphizer can instantiate the generic method.
-            Self::infer_method_call_type_args(&mut elem_body, type_table, binding_local_idx);
+            self.infer_method_call_type_args(&mut elem_body, type_table, binding_local_idx);
 
             // Rewrite binding_local_idx → iter_binding in the body
             for s in &mut elem_body.stmts {
@@ -3751,6 +3769,7 @@ impl Monomorphizer {
     /// (post variadic-for-of-expansion) block. Delegates to
     /// [`MethodTypeArgInferer`] so the traversal is exhaustive.
     fn infer_method_call_type_args(
+        &self,
         block: &mut TirBlock,
         type_table: &TypeTable,
         binding_local: u32,
@@ -3758,6 +3777,7 @@ impl Monomorphizer {
         MethodTypeArgInferer {
             type_table,
             binding_local,
+            templates: &self.functions.templates,
         }
         .visit_block(block);
     }

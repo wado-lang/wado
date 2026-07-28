@@ -1,12 +1,14 @@
 //! Monomorphizer state: instantiation tracking and name generation.
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
-use crate::tir::{InstantiationKey, ResolvedType, TypeId, TypeTable};
+use crate::tir::{InstantiationKey, ResolvedType, TirFunction, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state
 pub(super) struct StructInstState {
@@ -41,6 +43,15 @@ pub(super) struct FuncInstState {
     /// module that owns `impl <trait> for <type>` without rebuilding a
     /// parallel "mangled name → module" index.
     pub trait_env: Arc<TraitEnv>,
+    /// Every generic function template in the project, keyed as
+    /// `collect_function_instantiation_sites` keys them. Read-only for the
+    /// whole run and shared rather than cloned.
+    ///
+    /// A template is registered only when it declares type params, so absence
+    /// is the answer "this callee is not generic" — which is what the
+    /// post-variadic-expansion type-arg inference needs in order to tell a
+    /// method type param from an ordinary parameter.
+    pub templates: Rc<IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>>,
 }
 
 impl FuncInstState {
@@ -182,6 +193,7 @@ impl Monomorphizer {
                 instantiated_names: IndexSet::default(),
                 pending: Vec::new(),
                 trait_env,
+                templates: Rc::new(IndexMap::default()),
             },
             current_impl_type_param_count: 0,
             current_impl_struct_name: None,
