@@ -1,5 +1,5 @@
-// Two shapes that made a freshly produced aggregate look borrowed, so the last
-// use of one of its fields was deep-copied instead of moved (WEP 2026-05-21).
+// Two shapes that produce a fresh aggregate, so the last use of one of its
+// fields is a move rather than a deep copy (WEP 2026-05-21).
 //
 // - An indirect (closure) call. `lower::plan::closure` rewrites every callable
 //   value — a closure literal and a bare `FuncRef` alike — into a functor whose
@@ -10,13 +10,13 @@
 //   runs, so it is owned exactly when those tails are — the rule `match` arms
 //   already followed.
 //
-// Together they are the `wado serve` response shape: `let resp = if let Some(m)
-// = router.match_request(…) { (m.handler)(…) } else { … };` then
-// `body_tx.write_raw(resp.body.as_slice())`, which copied the body per request.
+// Together they are the `wado serve` response shape — a handler dispatched
+// through an `if let` over the matched route, whose body is then written to the
+// response stream — where a copy would land on every request.
 //
-// The functions are `#[inline(never)]` so the calls survive to the fold, and the
-// program is small enough that any `__array_clone_src` in the module would be
-// one of the copies under test.
+// The functions are `#[inline(never)]` so the calls survive to the fold, and
+// nothing else in this program deep-copies: an `__array_clone_src` in the
+// module is a regression.
 
 use { println, Stdout } from "core:cli";
 

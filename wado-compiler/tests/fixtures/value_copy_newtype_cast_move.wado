@@ -1,16 +1,15 @@
 // A newtype cast must not turn a move into a deep copy (WEP 2026-05-21).
 //
 // A newtype shares its base type's runtime representation (WEP 2026-01-29), so
-// `b as Bytes` hands over the storage `b` already holds. Freshness always read
-// through a cast; the move side did not, so a conversion as thin as
-// `String { repr: bytes as ByteArray, used: len }` — how `core:rt`'s CM string
-// lift and `String::substring` build their result — deep-copied an array the
-// caller had just allocated, once per lifted string and once per substring.
+// `b as Bytes` hands over the storage `b` already holds — both the freshness
+// and the move side read through it. A conversion as thin as
+// `String { repr: bytes as ByteArray, used: len }` is how `core:rt`'s CM string
+// lift and `String::substring` build their result, so a copy there costs an
+// array per lifted string and per substring.
 //
-// `build_cast` is the shape under test and `build_plain` the control: before
-// the fix only the former copied. `#[inline(never)]` keeps both calls intact,
-// and nothing else in this program deep-copies, so any `__array_clone_len` in
-// the module is a regression.
+// `build_cast` is the shape under test and `build_plain` the control.
+// `#[inline(never)]` keeps both calls intact, and nothing else in this program
+// deep-copies: an `__array_clone_len` in the module is a regression.
 
 use { println, Stdout } from "core:cli";
 

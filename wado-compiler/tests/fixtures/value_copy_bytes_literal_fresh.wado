@@ -1,11 +1,9 @@
 // A bytes literal is a fresh value, so passing one by value to a callee that
 // writes its parameter needs no defensive copy (WEP 2026-05-21).
 //
-// `is_owned_value` listed `StringLiteral` but not `BytesLiteral`, so every
-// `b"…"` handed to a mutating callee was deep-copied first. Both lower to the
-// same fresh `StructLiteral` over a packed array (`translate::seq_literal`), so
-// each evaluation already materializes its own storage — the copy protected
-// nothing.
+// A bytes literal lowers to the same fresh `StructLiteral` over a packed array
+// (`translate::seq_literal`) a string literal does, so each evaluation
+// materializes its own storage and a defensive copy would protect nothing.
 //
 // `bump_first` writes its parameter and is called three times with the same
 // literal: identical results prove each call still gets its own array.

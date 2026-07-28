@@ -1,11 +1,11 @@
 // A callee that hands a projection of its by-value parameter back is not
 // read-only, so a constant argument must not be hoisted into a shared global.
 //
-// `is_readonly_body` rejects a bare whole-value read of the binding but admits
-// `return s.data`. Under value semantics a by-value parameter is the callee's
-// own copy, so the return-convention fixpoint calls that owned and the caller
-// keeps no defensive copy — with the argument hoisted, the "owned" value it
-// receives is the shared global's storage, and the first `push` mutates the
+// Reading a field of a by-value parameter is a read, so the read-only gate
+// alone admits `return s.data`: under value semantics the parameter is the
+// callee's own copy, and the return-convention fixpoint calls the result owned,
+// so the caller keeps no defensive copy of it. Hoist the argument and that
+// "owned" value is the shared global's storage — the first `push` mutates the
 // constant for every later call.
 //
 // Four routes to the same storage, each of which the guard has to see:
@@ -18,7 +18,7 @@
 //   like a bare projection.
 //
 // Each is called three times and the caller pushes onto the result: identical
-// lengths are the check — before the fix these printed `4 5 6`.
+// lengths are the check; a regression prints `4 5 6`.
 
 use { println, Stdout } from "core:cli";
 
