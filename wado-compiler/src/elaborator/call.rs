@@ -1001,12 +1001,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Static method call on a type from the namespace module.
-                    // Use the namespace module source so codegen finds the right impl.
-                    let mangled_name = MethodName::format_local(
-                        &self.qualified_receiver_name(type_name),
-                        None,
-                        method_name,
-                    );
                     let method_type_args: Vec<TypeId> = call
                         .type_args
                         .iter()
@@ -1032,15 +1026,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let trait_name = method_ref.trait_name.clone();
                     let struct_module = method_ref.module.clone();
 
-                    let final_mangled = if let Some(ref tn) = method_ref.trait_name {
-                        MethodName::format_local(
-                            &self.qualified_receiver_name(type_name),
-                            Some(tn),
-                            method_name,
-                        )
-                    } else {
-                        mangled_name
-                    };
+                    // Qualify the receiver by the module the impl was located
+                    // in, not by this module's perspective: `helper::Pair` and
+                    // a local `Pair` are different declarations, and resolving
+                    // the written name here would name the local one and miss
+                    // the definition entirely.
+                    let final_mangled = MethodName::format_local(
+                        &crate::name::FqTypeName::of_head(&struct_module, type_name),
+                        method_ref.trait_name.as_deref(),
+                        method_name,
+                    );
 
                     let mut return_type =
                         self.lookup_static_method_return_type(&method_ref, &final_mangled);
