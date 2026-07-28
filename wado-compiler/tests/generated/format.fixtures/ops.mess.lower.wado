@@ -6544,11 +6544,11 @@ pub fn "()::to_string"(self: &()) -> String {
 }
 
 fn bool::fmt_into(self: Box<bool>, f: &mut Formatter) {
-    f.Formatter::pad("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(if self.value {
+    f.Formatter::pad(if self.value {
         String { repr: packed"true", used: 4 };
     } else {
         String { repr: packed"false", used: 5 };
-    }));
+    });
 }
 
 pub fn bool::to_string(self: Box<bool>) -> String {
@@ -9476,7 +9476,7 @@ fn decode_utf8_scalar(bytes: ArraySlice<u8>, start: i32, len: i32) -> Utf8Scalar
 fn substring(repr: &Array<u8>, start: i32, len: i32) -> String {
     let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
     "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, repr, start, len);
-    return String { repr: "ops.mess_dirty.wado::$value_copy$Array<u8>"(part as Array<u8>), used: len };
+    return String { repr: part as Array<u8>, used: len };
 }
 
 #[inline]
@@ -10876,7 +10876,7 @@ fn String::internal_raw_bytes_mut(self: &mut String) -> &mut Array<u8> {
 }
 
 fn String::internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {
-    return String { repr: "ops.mess_dirty.wado::$value_copy$Array<u8>"(bytes as Array<u8>), used: len };
+    return String { repr: bytes as Array<u8>, used: len };
 }
 
 fn String::realloc_to(self: &mut String, new_capacity: i32) {
@@ -11642,7 +11642,7 @@ pub fn String::repeat(self: &String, n: i32) -> String {
         }
         r = (r + 1);
     }
-    return String { repr: "ops.mess_dirty.wado::$value_copy$Array<u8>"(repr as Array<u8>), used: total };
+    return String { repr: repr as Array<u8>, used: total };
 }
 
 pub fn String::replace(self: &String, from: String, to: String) -> String {
@@ -11725,12 +11725,12 @@ pub fn String::is_valid_utf8(bytes: ArraySlice<u8>) -> bool {
 
 pub fn String::split(self: &String, sep: String) -> StrSplitIter with stores[self] {
     let sep_len: i32 = sep.String::len();
-    return StrSplitIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, sep_repr: "ops.mess_dirty.wado::$value_copy$Array<u8>"(sep.repr as Array<u8>), sep_len: sep_len, finished: false };
+    return StrSplitIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, sep_repr: sep.repr as Array<u8>, sep_len: sep_len, finished: false };
 }
 
 pub fn String::splitn(self: &String, n: i32, sep: String) -> StrSplitNIter with stores[self] {
     let sep_len: i32 = sep.String::len();
-    return StrSplitNIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, sep_repr: "ops.mess_dirty.wado::$value_copy$Array<u8>"(sep.repr as Array<u8>), sep_len: sep_len, remaining: n, finished: (n <= 0) };
+    return StrSplitNIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, sep_repr: sep.repr as Array<u8>, sep_len: sep_len, remaining: n, finished: (n <= 0) };
 }
 
 pub fn String::split_whitespace(self: &String) -> StrSplitWhitespaceIter with stores[self] {

@@ -1042,7 +1042,10 @@ impl Gate<'_> {
         };
         let f = f.borrow();
         f.params.first().is_some_and(|p0| {
-            matches!(self.type_table.borrow().get(p0.type_id), ResolvedType::Ref(_))
+            matches!(
+                self.type_table.borrow().get(p0.type_id),
+                ResolvedType::Ref(_)
+            )
         })
     }
 
@@ -1229,12 +1232,7 @@ fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
     roots
 }
 
-fn delivers_projection_operand(
-    body: &Body,
-    op: Operand,
-    roots: &[u32],
-    gate: &Gate<'_>,
-) -> bool {
+fn delivers_projection_operand(body: &Body, op: Operand, roots: &[u32], gate: &Gate<'_>) -> bool {
     op.as_expr()
         .is_some_and(|e| delivers_projection(body, e, roots, gate))
 }
