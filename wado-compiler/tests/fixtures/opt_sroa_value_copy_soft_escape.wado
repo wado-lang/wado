@@ -10,6 +10,7 @@
 // reconstructed only inside the copy (which then copies a fresh literal — a
 // redundant, sound no-op that later passes demote).
 use { println, Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
 
 struct P { x: i32, y: i32 }
 
@@ -27,8 +28,12 @@ fn f(n: i32) -> i32 {
     return a + s.y;       // non-move: s.y read after consume
 }
 
-export fn run() with Stdout {
-    assert f(5) == 714;
+export fn run() with Stdout, MonotonicClock {
+    // Opaque at compile time, 5 at run time: a constant argument would let
+    // `niri` evaluate the whole call and leave no `f` for SROA to act on.
+    let now = MonotonicClock::now();
+    let n = if now != now { 0 } else { 5 };
+    assert f(n) == 714;
     println("ok");
 }
 
