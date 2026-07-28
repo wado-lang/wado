@@ -268,25 +268,35 @@ against. `#[compiler_item]` is where that comes from, as it already does for
 `push_str` — the rewrite expanding `buf.push_str("abc")` into per-byte `push`
 is licensed by the marker, not by an analysis of either body.
 
-Mark `Formatter`'s write primitives, not `Display::fmt`. A marked `write_str` /
-`write_char` / `pad` / `prepare_int_write` is one small stdlib function whose
-declared meaning — these bytes go on the end, nothing already in the buffer is
-read or moved — is checkable by reading it, the same size of obligation
-`push_str` already carries. What any particular `fmt` body does is then derived
-rather than declared: run it against an empty buffer, and admit the result only
-if every buffer touch went through a marked primitive. A body reaching the
-buffer any other way — `f.buf` directly, `internal_raw_bytes_mut` — is refused,
-which is a condition the engine checks rather than an invariant it hopes for.
-Marking `Display::fmt` instead would extend the trust across every user-written
-impl, where nothing is checkable at all.
+Mark `Formatter`'s write primitives, not `Display::fmt`. Marking the trait
+would extend the trust across every user-written impl, where nothing is
+checkable; a primitive is one small stdlib function a reader can confirm, the
+same obligation `push_str` already carries.
+
+What a marked primitive declares is a region append: everything it does to the
+buffer happens at or above the length the buffer had on entry, and what lies
+below is neither read nor moved. That is the stdlib's formatting idiom as
+written — `prepare_int_write` reserves a region the digit writers fill
+backwards, `mark` / `apply_padding` appends content and then shifts it to make
+room for alignment, and `fpfmt`'s writers reserve and slide a fractional tail
+to insert the point. A strictly-append contract, where bytes land on the end
+and are never revisited, would be lighter to state but is not free to reach:
+the digit loops would have to emit most-significant-first, and a padded float
+would need a scratch buffer to learn its length before appending. Region append
+costs nothing, covers all three idioms, and is still one sentence.
+
+What any particular `fmt` body does is then derived rather than declared: run it
+against a buffer the engine constructed, and admit the result when every buffer
+access either went through a marked primitive or landed inside a region one of
+them just returned. A body that reads the buffer's prior length for its own
+purposes, or reaches `f.buf` outside that, is refused — a condition the engine
+checks rather than an invariant it hopes for.
 
 The markers also keep the buffer plumbing out of the interpreter: a marked
 `push_str` is applied by its declared meaning, so `grow`'s undecidable capacity
-test and `realloc_to`'s prefix copy are never interpreted. `prepare_int_write`
-is the one primitive that needs more than a byte list — it reserves a region
-and returns its offset for the digit writers to fill — so what it declares is a
-place at the end of the buffer, which is the same place the frame store hands
-out.
+test and `realloc_to`'s prefix copy are never interpreted. The reserved region a
+primitive hands back is the same place the frame store hands out, so the two
+capabilities want the same representation.
 
 Milestones, each red/green with the fixture first:
 
@@ -358,10 +368,10 @@ question, not a design-time one.
 - Where does the wasm-CTFE module cache live — per `compile` invocation or per
   process? Per-invocation is simpler; per-process speeds up watch-mode
   workflows but needs eviction.
-- Which `Formatter` primitives make the marked set, and does the reserve-and-
-  fill idiom survive? `prepare_int_write` hands its caller a raw region, so
-  every integer `fmt` reaches the buffer outside the marked primitives and is
-  refused by the check above unless the reserved place counts as part of the
-  append. Declaring the place is one answer; a stdlib append primitive that
-  hides the reserve is the other, and it would shrink the marked set to
-  byte-list appends alone.
+- Is a strictly-append `Formatter` worth its cost? Region append asks nothing of
+  the stdlib; narrowing to pure append would let the marked set be byte-list
+  appends alone and would put `internal_raw_bytes_mut` out of `Formatter`'s
+  reach entirely, at the price of most-significant-first digit loops and a
+  scratch buffer on the padded float path. It buys the engine nothing extra —
+  both forms license the same fold — so it is a stdlib-clarity trade, to be
+  decided against a benchmark rather than on taste.
