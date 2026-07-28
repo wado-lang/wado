@@ -92,7 +92,8 @@ CM out-pointers do roughly ten `malloc`/`free` pairs per request, which is why
 the freelist allocator's `fl_unlink` is the most-called guest function.
 
 Four of these are avoidable without changing what the benchmark measures. Items 1
-and 4 are now applied to `app.wado`; 2 and 3 are compiler work.
+and 4 are applied to `app.wado`, item 3 to the value-copy planner; item 2 is the
+compiler work left.
 
 1. Constant `collect()` in the hot path: `"literal".bytes().collect()` allocated
    a `List` and four arrays every evaluation, because `FromIterator` for a list
@@ -106,13 +107,17 @@ and 4 are now applied to `app.wado`; 2 and 3 are compiler work.
    in a `String` — `core:rt/memory_to_gc_string` already does the right thing.
    Freshness analysis does not see through the helper. One extra array per lifted
    string, per request.
-3. `resp.body` copied on last use: `body_tx.write(resp.body)` compiles to an
-   `array_new` + `array_copy` of the body even though `resp` is dead afterwards;
-   a last-use move would drop it.
+3. `resp.body` copied on last use: `body_tx.write(resp.body)` compiled to an
+   `array_new` + `array_copy` of the body even though `resp` is dead afterwards.
+   Two freshness gaps caused it — an indirect (closure) call counted as borrowed,
+   and so did the value of an `if` / `if let` expression — and `resp` is bound
+   from exactly that shape. Both are fixed; the body now reaches
+   `cm_lower_list_u8` straight out of the handler's struct.
 4. `StreamWritable::write` takes `List<u8>` by value, so the body was deep-copied
    into the CM lowering. The app now calls `write_raw(resp.body.as_slice())`,
-   which lowers the slice directly. The value copy of `resp.body` itself (item 3)
-   survives it, because the field read copies before `as_slice()` sees anything.
+   which lowers the slice directly. On its own that left the value copy of
+   `resp.body` (item 3) in place — the field read copies before `as_slice()` sees
+   anything — so the two only pay off together.
 
 ## Measured levers
 
@@ -148,14 +153,11 @@ that shape too, gated on the callee's parameter being read-only in the callee's
 own body, and the header value compiles to an eager `array.new_fixed` global read
 straight into `Fields::append`: zero per-request allocations for the header.
 
-Two related copies remain, both in the WIR:
-
-- The body still goes through `resp.body`'s last-use copy (item 3 above).
-- A constant handed to a callee that writes its parameter still gets a
-  caller-side defensive copy of a value that was already fresh — an
-  `array.new_data` cloned into another array. That copy is also what currently
-  blocks hoisting for such callees, which is why the callee gate above has to
-  stand on its own.
+One related copy remains: a constant handed to a callee that writes its
+parameter still gets a caller-side defensive copy of a value that was already
+fresh — an `array.new_data` cloned into another array. That copy is also what
+currently blocks hoisting for such callees, which is why the callee gate above
+has to stand on its own.
 
 ## Profiler caveat
 
@@ -167,9 +169,8 @@ map; take timing from ablation A/Bs.
 
 ## Next steps, in payoff order
 
-1. Optimizer: globalize a constant aggregate in argument position, and stop the
-   value-copy pass from copying a read-only global back into a local. Then the
-   last-use copy of `resp.body` (item 3) and the CM-lift clone (item 2).
+1. Optimizer: stop the value-copy planner from copying a read-only global back
+   into a local, and drop the CM-lift clone (item 2).
 2. Router: `match_dynamic` allocates `ranges`, `PathParams`, and `RouteMatch` per
    hit while `match_static` returns a pre-built shell. A `ranges` buffer owned by
    the router (or a fixed inline capacity) would make dynamic hits allocation-free

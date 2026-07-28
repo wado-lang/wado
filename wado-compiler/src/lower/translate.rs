@@ -340,7 +340,8 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             let oracle = value_copy::ownership::OwnedCalls::new(
                 &base.value_copy.returns_owned,
                 &base.value_copy.returns_self_projection,
-            );
+            )
+            .with_indirect(&base.value_copy.indirect_owned_returns);
             value_copy::last_use::compute_move_eligible(
                 func,
                 &oracle,
@@ -626,7 +627,8 @@ impl FunctionTranslator<'_, '_> {
         let oracle = value_copy::ownership::OwnedCalls::new(
             &self.base.value_copy.returns_owned,
             &self.base.value_copy.returns_self_projection,
-        );
+        )
+        .with_indirect(&self.base.value_copy.indirect_owned_returns);
         value_copy::analyze::should_wrap(value, &self.base.type_table.borrow(), &oracle)
     }
 

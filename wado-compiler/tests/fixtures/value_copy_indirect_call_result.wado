@@ -1,0 +1,66 @@
+// Two shapes that made a freshly produced aggregate look borrowed, so the last
+// use of one of its fields was deep-copied instead of moved (WEP 2026-05-21).
+//
+// - An indirect (closure) call. `lower::plan::closure` rewrites every callable
+//   value — a closure literal and a bare `FuncRef` alike — into a functor whose
+//   `__call` is an ordinary function, so the return-convention fixpoint already
+//   covers every possible target: the call is owned when every `__call` of that
+//   return type is.
+// - An `if` / `if let` expression. Its value is the tail of whichever branch
+//   runs, so it is owned exactly when those tails are — the rule `match` arms
+//   already followed.
+//
+// Together they are the `wado serve` response shape: `let resp = if let Some(m)
+// = router.match_request(…) { (m.handler)(…) } else { … };` then
+// `body_tx.write_raw(resp.body.as_slice())`, which copied the body per request.
+//
+// The functions are `#[inline(never)]` so the calls survive to the fold, and the
+// program is small enough that any `__array_clone_src` in the module would be
+// one of the copies under test.
+
+use { println, Stdout } from "core:cli";
+
+struct R {
+    status: u16,
+    body: List<u8>,
+}
+
+#[inline(never)]
+fn make(n: i32) -> R {
+    return R { status: 200, body: [n as u8, 2, 3] as List<u8> };
+}
+
+#[inline(never)]
+fn sink(v: List<u8>) -> i32 {
+    return v.len();
+}
+
+type H = fn(i32) -> R;
+
+global HANDLER: H = |n| make(n);
+
+#[inline(never)]
+fn via_closure(n: i32) -> i32 {
+    let r = (HANDLER)(n);
+    return sink(r.body);
+}
+
+#[inline(never)]
+fn via_if(n: i32) -> i32 {
+    let r = if n > 0 {
+        (HANDLER)(n);
+    } else {
+        R { status: 500, body: [] as List<u8> };
+    };
+    return sink(r.body);
+}
+
+export fn run() with Stdout {
+    println(`${via_closure(1)} ${via_if(1)} ${via_if(-1)}`);
+}
+
+__DATA__
+{
+    "stdout": "3 3 0\n",
+    "wir_not_expect:O2": ["__array_clone_src"]
+}
