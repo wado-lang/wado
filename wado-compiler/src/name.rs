@@ -668,7 +668,7 @@ impl RefKind {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Receiver {
     /// A named type or type parameter: `Point`, `List`, `T`.
-    Type(String),
+    Type(FqTypeName),
     /// A universal reference receiver `&T` / `&mut T`; the pointee rides in the
     /// receiver's type-arg list, not here.
     Ref(RefKind),
@@ -677,11 +677,28 @@ pub enum Receiver {
 }
 
 impl Receiver {
-    /// The canonical head string — identity key and mangle base.
+    /// The canonical head string — identity key and mangle base. Module
+    /// qualified, because that is what a mangled name embeds.
     #[must_use]
     pub fn head_key(&self) -> Cow<'_, str> {
         match self {
-            Receiver::Type(n) => Cow::Borrowed(n),
+            Receiver::Type(n) => Cow::Owned(n.to_mangled()),
+            Receiver::Ref(k) => Cow::Borrowed(k.prefix()),
+            Receiver::Projection { base, assoc } => Cow::Owned(format!("{base}::{assoc}")),
+        }
+    }
+
+    /// The name an `impl` header writes its target as — no module, no type
+    /// arguments.
+    ///
+    /// A different namespace from [`Self::head_key`], and keeping the two
+    /// apart is the point: an impl-header scan compares against this one, and
+    /// feeding it a mangled head matched nothing (silently losing a trait
+    /// segment, a resource requirement, or a go-to-definition edge).
+    #[must_use]
+    pub fn decl_key(&self) -> Cow<'_, str> {
+        match self {
+            Receiver::Type(n) => Cow::Borrowed(n.decl_name()),
             Receiver::Ref(k) => Cow::Borrowed(k.prefix()),
             Receiver::Projection { base, assoc } => Cow::Owned(format!("{base}::{assoc}")),
         }
@@ -849,12 +866,27 @@ impl LocalMethodName {
         self.receiver.head_key().into_owned()
     }
 
-    /// [`Self::base_struct_name`] as the receiver form a mangled name embeds.
-    /// A name stored on a `LocalMethodName` came in through a [`FqTypeName`],
-    /// so reading it back yields one — no re-derivation from a raw string.
+    /// [`Self::base_struct_name`] as the receiver form a mangled name embeds —
+    /// read straight off the typed receiver, never re-derived from a string.
     #[must_use]
     pub fn fq_base_struct_name(&self) -> FqTypeName {
-        FqTypeName::from_mangled(self.base_struct_name())
+        match &self.receiver {
+            Receiver::Type(fq) => fq.clone(),
+            // A `&` / `&mut` head and a projection name no declaration, so no
+            // module qualifies them.
+            Receiver::Ref(kind) => FqTypeName::builtin(kind.prefix()),
+            Receiver::Projection { base, assoc } => {
+                FqTypeName::builtin(&format!("{base}::{assoc}"))
+            }
+        }
+    }
+
+    /// The receiver's declaration name — what an `impl` header writes. See
+    /// [`Receiver::decl_key`] for why this is a different namespace from
+    /// [`Self::base_struct_name`].
+    #[must_use]
+    pub fn receiver_decl_key(&self) -> String {
+        self.receiver.decl_key().into_owned()
     }
 
     /// [`Self::struct_name`] as the receiver form a mangled name embeds.
@@ -869,7 +901,7 @@ impl LocalMethodName {
     /// to reach it by the declared name alone.
     #[must_use]
     pub fn receiver_decl_name(&self) -> String {
-        self.fq_base_struct_name().simple_name().to_string()
+        self.fq_base_struct_name().decl_name().to_string()
     }
 
     /// The receiver's reference kind, or `None` for a value receiver.
@@ -898,11 +930,7 @@ impl LocalMethodName {
     /// identifies them by name alone.
     #[must_use]
     pub fn new(struct_name: FqTypeName, trait_name: Option<String>, method_name: String) -> Self {
-        Self::of(
-            Receiver::Type(struct_name.into_string()),
-            trait_name,
-            method_name,
-        )
+        Self::of(Receiver::Type(struct_name), trait_name, method_name)
     }
 
     /// Construct a method name for a `&T` / `&mut T` ref-impl receiver.
@@ -1046,13 +1074,14 @@ impl LocalMethodName {
     /// Create a version with the struct name directly substituted (not wrapped with type args).
     /// Used when the struct name is a type parameter (e.g., `T^Ord::cmp` → `i32^Ord::cmp`).
     ///
-    /// `new_name` is the full mangled name (e.g., `"Option<String>"`).
-    /// `base_name` is the name without type parameters (e.g., `"Option"`).
+    /// `resolved` is the receiver the parameter resolved to; the instantiated
+    /// spelling and the base head both come from it, so they cannot disagree —
+    /// passing them as two separate strings is how they used to.
     #[must_use]
-    pub fn with_substituted_struct_name(&self, new_name: &str, base_name: &str) -> Self {
+    pub fn with_substituted_struct_name(&self, resolved: &FqTypeName) -> Self {
         Self {
-            struct_name: new_name.to_string(),
-            receiver: Receiver::Type(base_name.to_string()),
+            struct_name: resolved.to_mangled(),
+            receiver: Receiver::Type(resolved.head_only()),
             trait_name: self.trait_name.clone(),
             base_trait_name: self.base_trait_name.clone(),
             base_trait_module: self.base_trait_module.clone(),
@@ -1132,7 +1161,7 @@ impl LocalMethodName {
         self.method_name == CLOSURE_CALL_METHOD
             && self
                 .fq_struct_name()
-                .simple_name()
+                .decl_name()
                 .starts_with(CLOSURE_STRUCT_PREFIX)
     }
 }
@@ -2289,35 +2318,99 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
 /// source text or off a `ResolvedType`'s `name` field cannot become a mangled
 /// name by accident — it has to pass through one of the constructors below,
 /// each of which states why its input is already fq.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct FqTypeName(String);
+/// The mangled spelling is a *rendering* ([`Self::to_mangled`]), produced on
+/// demand and never parsed back. Every question a caller used to answer by
+/// splitting the string — the declaring module, the declaration name, the type
+/// arguments — is a field access here.
+///
+/// Splitting a rendered name apart is what this type exists to prevent. A
+/// `ModuleSource` may itself contain `/` and `<`, and a type argument carries
+/// its own module path, so no split on `/`, `<` or `,` is correct in general.
+/// A rendered name is also not reversible: `ModuleSource` cannot be rebuilt
+/// without the interner, so there is deliberately no constructor from a
+/// mangled string.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FqTypeName {
+    /// Outermost `&` / `&mut`, when the receiver is a reference shape.
+    reference: Option<RefKind>,
+    head: TypeHead,
+    /// Type arguments, already fq themselves.
+    args: Vec<FqTypeName>,
+}
+
+/// What an [`FqTypeName`]'s head names. The three cases differ in whether a
+/// module qualifies them — the distinction a bare `String` loses, and the one
+/// every mis-dispatch in this area turned on.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TypeHead {
+    /// A declaration, named by the module that declares it.
+    Declared {
+        module: crate::module_source::ModuleSource,
+        name: String,
+    },
+    /// A shape no module declares — a primitive, `()`, `!`, the raw GC `Array`,
+    /// a tuple, a function type. Every mangler spells one the same way.
+    Builtin(String),
+    /// A template's own type-parameter binder (`T`, a pack member `F`). Not a
+    /// declaration, so it has no module.
+    Binder(String),
+}
+
+impl TypeHead {
+    /// The head's own name, as its declaration writes it.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Declared { name, .. } => name,
+            Self::Builtin(name) | Self::Binder(name) => name,
+        }
+    }
+
+    /// The declaring module, or `None` for a head no module declares.
+    #[must_use]
+    pub fn module(&self) -> Option<&crate::module_source::ModuleSource> {
+        match self {
+            Self::Declared { module, .. } => Some(module),
+            Self::Builtin(_) | Self::Binder(_) => None,
+        }
+    }
+}
 
 impl FqTypeName {
+    fn of_head_kind(head: TypeHead) -> Self {
+        Self {
+            reference: None,
+            head,
+            args: Vec::new(),
+        }
+    }
+
     /// A declared type, named by the module that declares it. `module` must be
     /// the *declaring* module, not the use site's.
     ///
-    /// `name` is the declaration's own name: a base name carries no type
-    /// arguments, which `with_struct_type_args` appends once the receiver is
-    /// instantiated. (A module source may itself contain `<`, so this is the
-    /// only place the distinction is still visible.)
+    /// `name` is the declaration's own name and carries no type arguments;
+    /// [`Self::with_args`] adds them once the receiver is instantiated.
     #[must_use]
     pub fn declared(module: &crate::module_source::ModuleSource, name: &str) -> Self {
-        Self(format!("{module}/{name}"))
+        Self::of_head_kind(TypeHead::Declared {
+            module: module.clone(),
+            name: name.to_string(),
+        })
     }
 
     /// A template's own type-parameter binder (`T` in `impl<T: Bound> Trait for
     /// T`, a pack member `F`). A binder is not a declaration and has no module.
     #[must_use]
     pub fn binder(name: &str) -> Self {
-        Self(name.to_string())
+        Self::of_head_kind(TypeHead::Binder(name.to_string()))
     }
 
     /// A builtin shape — a primitive, `()`, `!`, the raw GC `Array`, a tuple, a
     /// reference, a function type. No module declares one, and every mangler
-    /// spells it bare, so the spelling already is the fq name.
+    /// spells it bare.
     #[must_use]
     pub fn builtin(name: &str) -> Self {
-        Self(name.to_string())
+        Self::of_head_kind(TypeHead::Builtin(name.to_string()))
     }
 
     /// A head written in source, resolved against the module that declares it:
@@ -2333,37 +2426,111 @@ impl FqTypeName {
         }
     }
 
-    /// A name a `TypeTable` mangler already produced. Those qualify their named
-    /// kinds, so their output is fq by construction — this is the bridge for
-    /// callers that hold a mangle rather than a `(module, name)` pair.
+    /// The same head instantiated with `args`.
     #[must_use]
-    pub fn from_mangled(mangled: impl Into<String>) -> Self {
-        Self(mangled.into())
+    pub fn with_args(mut self, args: Vec<FqTypeName>) -> Self {
+        self.args = args;
+        self
+    }
+
+    /// The same name behind a `&` / `&mut`.
+    #[must_use]
+    pub fn with_reference(mut self, kind: RefKind) -> Self {
+        self.reference = Some(kind);
+        self
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
+    pub fn head(&self) -> &TypeHead {
+        &self.head
     }
 
-    /// The declared name without its module — what the source wrote. Use it to
-    /// branch on which declaration this is, or to key a registry that knows
-    /// nothing of Wado modules (the WIT-derived CM interface registry), never
-    /// to build another mangled name.
+    /// The same head with its type arguments dropped — the base receiver a
+    /// dispatch template is named after.
     #[must_use]
-    pub fn simple_name(&self) -> &str {
-        self.0.rsplit('/').next().unwrap_or(&self.0)
+    pub fn head_only(&self) -> Self {
+        Self {
+            reference: self.reference,
+            head: self.head.clone(),
+            args: Vec::new(),
+        }
+    }
+
+    /// The declaration name of the head: no module, no type arguments. This is
+    /// the form an `impl` header writes its target as, so it is what an
+    /// impl-header scan compares against.
+    #[must_use]
+    pub fn decl_name(&self) -> &str {
+        self.head.name()
+    }
+
+    /// The module that declares this type, or `None` for a builtin or binder.
+    #[must_use]
+    pub fn module(&self) -> Option<&crate::module_source::ModuleSource> {
+        self.head.module()
+    }
+
+    #[must_use]
+    pub fn args(&self) -> &[FqTypeName] {
+        &self.args
+    }
+
+    #[must_use]
+    pub fn reference(&self) -> Option<RefKind> {
+        self.reference
+    }
+
+    /// The mangled spelling embedded in a mangled method name.
+    #[must_use]
+    pub fn to_mangled(&self) -> String {
+        let mut out = String::new();
+        if let Some(kind) = self.reference {
+            out.push_str(kind.prefix());
+            out.push(' ');
+        }
+        match &self.head {
+            TypeHead::Declared { module, name } => {
+                out.push_str(&format!("{module}/{name}"));
+            }
+            TypeHead::Builtin(name) | TypeHead::Binder(name) => out.push_str(name),
+        }
+        if !self.args.is_empty() {
+            let args: Vec<String> = self.args.iter().map(FqTypeName::to_mangled).collect();
+            out.push('<');
+            out.push_str(&args.join(","));
+            out.push('>');
+        }
+        out
+    }
+
+    /// The name as source writes it: modules dropped from the head and,
+    /// recursively, from every type argument. Diagnostics only.
+    #[must_use]
+    pub fn to_display(&self) -> String {
+        let mut out = String::new();
+        if let Some(kind) = self.reference {
+            out.push_str(kind.prefix());
+            out.push(' ');
+        }
+        out.push_str(self.head.name());
+        if !self.args.is_empty() {
+            let args: Vec<String> = self.args.iter().map(FqTypeName::to_display).collect();
+            out.push('<');
+            out.push_str(&args.join(","));
+            out.push('>');
+        }
+        out
     }
 
     #[must_use]
     pub fn into_string(self) -> String {
-        self.0
+        self.to_mangled()
     }
 }
 
 impl std::fmt::Display for FqTypeName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(&self.to_mangled())
     }
 }
 

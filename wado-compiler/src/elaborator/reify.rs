@@ -9154,7 +9154,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             _ => return None,
         };
 
-        let parse_result = if name.simple_name() == "u128" {
+        let parse_result = if name.decl_name() == "u128" {
             super::util::parse_u128_literal(&repr).map(|v| v as i128)
         } else if negated {
             super::util::parse_i128_literal(&format!("-{repr}"))
@@ -9201,7 +9201,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }) = &cast.expr
             && !super::util::is_float_only_literal(repr)
         {
-            let parsed = if name.simple_name() == "u128" {
+            let parsed = if name.decl_name() == "u128" {
                 super::util::parse_u128_literal(repr).map(|v| v as i128)
             } else {
                 super::util::parse_i128_literal(repr)
@@ -9219,7 +9219,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         // Negated literal operand (i128 only): `-170... as i128`.
-        if name.simple_name() == "i128"
+        if name.decl_name() == "i128"
             && let ast::Expr::Unary(unary) = &cast.expr
             && unary.op == ast::UnaryOp::Neg
             && let ast::Expr::Literal(ast::LiteralExpr {
@@ -9258,7 +9258,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 cast.span,
             ));
         }
-        let intermediate_type = if name.simple_name() == "u128" {
+        let intermediate_type = if name.decl_name() == "u128" {
             crate::tir::TypeTable::U64
         } else {
             crate::tir::TypeTable::I64

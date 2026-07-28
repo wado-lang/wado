@@ -893,7 +893,7 @@ pub(super) fn build_int128_from_pair(
             value: high.cast_unsigned(),
             repr: high.to_string(),
         },
-        if type_name.simple_name() == "u128" {
+        if type_name.decl_name() == "u128" {
             TypeTable::U64
         } else {
             TypeTable::I64
@@ -938,14 +938,14 @@ pub(super) fn build_int128_literal_call(
     span: Span,
 ) -> TirExpr {
     let use_small = allow_small
-        && if name.simple_name() == "u128" {
+        && if name.decl_name() == "u128" {
             u64::try_from(value).is_ok()
         } else {
             i64::try_from(value).is_ok()
         };
 
     if use_small {
-        let (inner_type, method_name, store_value) = if name.simple_name() == "u128" {
+        let (inner_type, method_name, store_value) = if name.decl_name() == "u128" {
             (
                 TypeTable::U64,
                 "from_u64",
@@ -1003,7 +1003,7 @@ pub(super) fn build_int128_from_intermediate(
     target_type: TypeId,
     span: Span,
 ) -> TirExpr {
-    let method_name = if name.simple_name() == "u128" {
+    let method_name = if name.decl_name() == "u128" {
         "from_u64"
     } else {
         "from_i64"

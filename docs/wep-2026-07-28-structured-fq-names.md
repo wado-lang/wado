@@ -83,12 +83,38 @@ Measured surface: `.struct_name` 108, `base_struct_name()` 55,
 
 Order:
 
-1. `FqTypeName` / `TypeHead` + `TypeTable::fq_type_name`.
-2. `Receiver::Type(FqTypeName)`; `head_key()` returns `&FqTypeName`.
-3. `LocalMethodName` stores `struct_type_args: Vec<FqTypeName>`;
-   `struct_name` becomes a method.
-4. Delete `from_mangled`, `simple_name`, and the `split_base_name` /
-   `rsplit('/')` helpers. Nothing should parse a rendered name afterwards.
+1. **Done.** `FqTypeName` / `TypeHead` + `TypeTable::fq_type_name`.
+   `from_mangled`, `as_str` and `simple_name` are gone; `decl_name`,
+   `module`, `args`, `to_mangled`, `to_display` replace them.
+2. **Done.** `Receiver::Type(FqTypeName)`, with `head_key` (mangled identity)
+   and `decl_key` (what an impl header writes) as separate accessors —
+   conflating those two was the direct cause of several mis-dispatches.
+   `with_substituted_struct_name` now takes one `FqTypeName` instead of an
+   (instantiated, base) string pair that could disagree.
+3. **In progress.** `LocalMethodName` stores `struct_type_args:
+   Vec<FqTypeName>`; `struct_name` becomes a method. `with_type_args` still
+   takes `&[String]`, so its callers are the next wave.
+4. Delete the remaining `split_base_name` / `rsplit('/')` helpers and
+   `display_type_name`. Nothing should parse a rendered name afterwards.
 
 Step 4 is the point of the exercise: while a parser exists, the next caller
 will reach for it.
+
+## Status
+
+The build is red mid-migration, by design — the type errors are the worklist.
+63 errors across 18 files, each one a site that was handed a rendered name and
+must now be handed structure. The frontier, largest first:
+
+| file | errors |
+|---|---|
+| `elaborator/reify.rs` | 9 |
+| `elaborator/method_call.rs` | 9 |
+| `tir.rs` | 7 |
+| `monomorphize/func_inst.rs` | 6 |
+| `elaborator/trait_query.rs` | 6 |
+| `elaborator/coercion.rs` | 4 |
+| others (12 files) | ≤3 each |
+
+Most resolve the same way: the caller holds a `TypeId`, so it calls
+`type_table.fq_type_name(id)` instead of `mangle_type_name(id)`.

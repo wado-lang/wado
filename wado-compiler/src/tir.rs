@@ -3381,6 +3381,82 @@ impl TypeTable {
     /// This separates type resolution (here in tir.rs) from name formatting
     /// (in name.rs), following the principle that name format details belong
     /// in name.rs.
+    /// The structured fq name of `id`.
+    ///
+    /// The type table is the only thing that knows a declaration's module, so
+    /// it hands back structure and lets the caller render or inspect. Rendering
+    /// here and re-deriving the module from the string later is not possible —
+    /// a `ModuleSource` cannot be rebuilt without the interner — which is why
+    /// the name stays structured all the way to its consumers.
+    #[must_use]
+    pub fn fq_type_name(&self, id: TypeId) -> crate::name::FqTypeName {
+        use crate::name::FqTypeName;
+        let args_of = |type_args: &[TypeId]| -> Vec<FqTypeName> {
+            type_args.iter().map(|t| self.fq_type_name(*t)).collect()
+        };
+        match self.get(id) {
+            ResolvedType::Primitive(prim) => FqTypeName::builtin(prim.as_str()),
+            ResolvedType::Unit => FqTypeName::builtin(Self::UNIT_TYPE_NAME),
+            ResolvedType::Never => FqTypeName::builtin("!"),
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Enum {
+                name,
+                module_source,
+            }
+            | ResolvedType::Resource {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Variant {
+                name,
+                module_source,
+            }
+            | ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Flags {
+                name,
+                module_source,
+            } => FqTypeName::declared(module_source, name),
+            ResolvedType::TypeParam { name, .. } => FqTypeName::binder(name),
+            ResolvedType::GenericInstance {
+                name,
+                type_args,
+                module_source,
+            } => {
+                let args = args_of(type_args);
+                if Self::is_tuple_type(name) {
+                    FqTypeName::builtin(Self::TUPLE_TYPE_NAME).with_args(args)
+                } else {
+                    FqTypeName::declared(module_source, name).with_args(args)
+                }
+            }
+            ResolvedType::GenericResource {
+                name, type_args, ..
+            } => FqTypeName::builtin(name).with_args(args_of(type_args)),
+            ResolvedType::BuiltinArray(elem) => {
+                FqTypeName::builtin(Self::ARRAY_TYPE_NAME).with_args(vec![self.fq_type_name(*elem)])
+            }
+            ResolvedType::Ref(inner) => self
+                .fq_type_name(*inner)
+                .with_reference(crate::name::RefKind::Shared),
+            ResolvedType::MutRef(inner) => self
+                .fq_type_name(*inner)
+                .with_reference(crate::name::RefKind::Mut),
+            // Shapes that name no declaration — assoc-type projections, packs,
+            // `Unknown`. They carry no module, so the rendered spelling is
+            // already their whole identity.
+            _ => FqTypeName::builtin(&self.mangle_type_name(id)),
+        }
+    }
+
     fn get_type_name_info(&self, id: TypeId) -> TypeNameInfo {
         match self.get(id) {
             ResolvedType::Primitive(prim) => TypeNameInfo::Primitive(prim.as_str().to_string()),
