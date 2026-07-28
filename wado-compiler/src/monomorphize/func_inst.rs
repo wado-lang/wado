@@ -8,7 +8,7 @@ use std::sync::Arc;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp,
     TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern,
@@ -176,6 +176,22 @@ pub(super) fn blanket_pack_dispatch_args(
         out.push(type_table.resolve_trait_assoc_type(receiver, &bound_trait, &assoc)?);
     }
     Some(out)
+}
+
+/// The method type args an instantiation keys on.
+///
+/// A call site's `type_args` are method type args only when the callee declares
+/// method-level type params. After variadic expansion they are filled in by
+/// inferring from argument types, which cannot tell a method type param from an
+/// ordinary parameter — so the callee's declaration decides, and a callee
+/// declaring none has none. Honouring the call site otherwise bakes an argument
+/// type into the instance name that no call site spells.
+fn declared_method_type_args(generic: &TirFunction, type_args: &[TypeId]) -> Vec<TypeId> {
+    if generic.has_real_type_params() {
+        type_args.to_vec()
+    } else {
+        Vec::new()
+    }
 }
 
 /// Whether any of `trait_name`'s blanket impls may claim the receiver — the
@@ -410,6 +426,30 @@ impl TirRefVisitor for LocalTypeFinder {
     }
 }
 
+/// Whether `expr` reads local `index` anywhere inside it.
+struct LocalReadFinder {
+    index: u32,
+    found: bool,
+}
+
+impl TirRefVisitor for LocalReadFinder {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if matches!(expr.kind, TirExprKind::Local { index, .. } if index == self.index) {
+            self.found = true;
+        }
+        self.walk_expr(expr);
+    }
+}
+
+fn expr_reads_local(expr: &TirExpr, index: u32) -> bool {
+    let mut finder = LocalReadFinder {
+        index,
+        found: false,
+    };
+    finder.visit_expr(expr);
+    finder.found
+}
+
 /// Fills in inferred method-level `type_args` on `MethodCall` nodes whose type
 /// arguments were left empty (T inferred from a `TypePack` element at resolution
 /// time, only concrete after variadic expansion). Rides the shared mutable walk
@@ -417,8 +457,15 @@ impl TirRefVisitor for LocalTypeFinder {
 /// the hand-enumerated few. Stops at `Closure` boundaries: a closure body is
 /// monomorphized as its own function, so its calls are inferred there, and
 /// (matching the original walker) this pass leaves them alone.
+///
+/// Only a call whose argument comes from the loop binding is inferred. That is
+/// the one shape the elaborator could not pin — the argument's type was a pack
+/// element. Every other empty `type_args` is empty because the callee declares
+/// no method type params, and filling one in would name an instance by an
+/// ordinary parameter's type, which no call site spells.
 struct MethodTypeArgInferer<'a> {
     type_table: &'a TypeTable,
+    binding_local: u32,
 }
 
 impl TirMutVisitor for MethodTypeArgInferer<'_> {
@@ -454,6 +501,9 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
         let Some(first_arg) = args.first() else {
             return;
         };
+        if !expr_reads_local(&first_arg.expr, self.binding_local) {
+            return;
+        }
         // Infer T from the first non-self argument's inner type. For
         // `element<T: Serialize>(&mut self, value: &T)` the first arg is `&T`,
         // so unwrap references (and an auto-boxed `Box<T>`) to reach T.
@@ -797,11 +847,13 @@ impl Monomorphizer {
                                         )
                                     });
                                 let template_module = gf.borrow().module_source.clone();
+                                let method_type_args =
+                                    declared_method_type_args(&gf.borrow(), type_args);
                                 let key = InstantiationKey {
                                     name: full_method_name.clone(),
                                     module_source: template_module,
                                     impl_type_args: vec![],
-                                    method_type_args: type_args.clone(),
+                                    method_type_args,
                                     method_info: Some(method_info),
                                 };
                                 let mangled = self.method_instantiation_name(&key, type_table);
@@ -908,7 +960,10 @@ impl Monomorphizer {
                                                 name: generic_method_name.clone(),
                                                 module_source: template_module,
                                                 impl_type_args,
-                                                method_type_args: type_args.clone(),
+                                                method_type_args: declared_method_type_args(
+                                                    &generic_func,
+                                                    type_args,
+                                                ),
                                                 method_info: Some(method_info),
                                             };
                                             let mangled =
@@ -1058,8 +1113,6 @@ impl Monomorphizer {
                             } else {
                                 effective_impl_type_args
                             };
-                            // Check if method has its own type params (double generics)
-                            let has_method_type_params = generic_func.has_real_type_params();
                             // Queue if we have at least enough impl type args.
                             // impl_type_args may be longer than impl_type_params when the impl
                             // fixes some struct type params to concrete types
@@ -1067,11 +1120,7 @@ impl Monomorphizer {
                             if effective_impl_type_args.len() >= generic_func.impl_type_params.len()
                             {
                                 let method_type_args_for_key =
-                                    if has_method_type_params && !type_args.is_empty() {
-                                        type_args.clone()
-                                    } else {
-                                        vec![]
-                                    };
+                                    declared_method_type_args(&generic_func, type_args);
                                 let method_info = generic_func.method_info.clone();
                                 let template_module = generic_func.module_source.clone();
                                 let key = InstantiationKey {
@@ -1145,14 +1194,9 @@ impl Monomorphizer {
                             Some((receiver.type_id, type_table)),
                         ) {
                             let generic_func = generic_func_rc.borrow();
-                            let has_method_type_params = generic_func.has_real_type_params();
                             if impl_type_args.len() >= generic_func.impl_type_params.len() {
                                 let method_type_args_for_key =
-                                    if has_method_type_params && !type_args.is_empty() {
-                                        type_args.clone()
-                                    } else {
-                                        vec![]
-                                    };
+                                    declared_method_type_args(&generic_func, type_args);
                                 let method_info = generic_func.method_info.clone();
                                 // The instantiation lives in the template's
                                 // home module — that's what the lookup at
@@ -1242,11 +1286,12 @@ impl Monomorphizer {
                     // method_type_args comes from the MethodCall's type_args field.
                     // If method_type_args is empty but the callee has type params, infer from args.
                     let impl_ta = pack_args.unwrap_or_else(|| mono.impl_type_args.clone());
-                    let method_ta = if !type_args.is_empty() {
+                    let method_ta = if !generic_func.has_real_type_params() {
+                        // See `declared_method_type_args`: the callee declares none.
+                        Vec::new()
+                    } else if !type_args.is_empty() {
                         type_args.clone()
-                    } else if mono.method_type_args.is_empty()
-                        && generic_func.has_real_type_params()
-                    {
+                    } else if mono.method_type_args.is_empty() {
                         // Infer method type args from argument types
                         let method_params = &generic_func.params;
                         let mut inferred_method_args = Vec::new();
@@ -1450,12 +1495,7 @@ impl Monomorphizer {
         let Some(trait_name) = &info.trait_name else {
             return tid;
         };
-        let newtype_name = type_table.mangle_type_name(tid);
-        if self
-            .functions
-            .trait_env
-            .has_any_methodful_impl_by_receiver(&Receiver::Type(newtype_name), trait_name)
-        {
+        if self.has_own_trait_impl(type_table, tid, trait_name) {
             return tid;
         }
         base
@@ -3615,7 +3655,7 @@ impl Monomorphizer {
             // Inside variadic for-of, method calls like `seq.element(&v)` have empty type_args
             // because T was inferred from a TypePack at resolution time. Now that types are
             // concrete, fill in type_args so the monomorphizer can instantiate the generic method.
-            Self::infer_method_call_type_args(&mut elem_body, type_table);
+            Self::infer_method_call_type_args(&mut elem_body, type_table, binding_local_idx);
 
             // Rewrite binding_local_idx → iter_binding in the body
             for s in &mut elem_body.stmts {
@@ -3710,8 +3750,16 @@ impl Monomorphizer {
     /// Populate inferred method-level `type_args` on every `MethodCall` in a
     /// (post variadic-for-of-expansion) block. Delegates to
     /// [`MethodTypeArgInferer`] so the traversal is exhaustive.
-    fn infer_method_call_type_args(block: &mut TirBlock, type_table: &TypeTable) {
-        MethodTypeArgInferer { type_table }.visit_block(block);
+    fn infer_method_call_type_args(
+        block: &mut TirBlock,
+        type_table: &TypeTable,
+        binding_local: u32,
+    ) {
+        MethodTypeArgInferer {
+            type_table,
+            binding_local,
+        }
+        .visit_block(block);
     }
 
     /// Rewrite types in the body of a variadic for-of iteration.

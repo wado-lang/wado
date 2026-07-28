@@ -453,7 +453,12 @@ impl Monomorphizer {
     /// block. The impl index keys the head as source writes it, so the query
     /// goes through [`TypeTable::impl_receiver_key`] rather than a mangled
     /// name — which would carry the declaring module the index never stores.
-    fn has_own_trait_impl(&self, type_table: &TypeTable, tid: TypeId, trait_name: &str) -> bool {
+    pub(super) fn has_own_trait_impl(
+        &self,
+        type_table: &TypeTable,
+        tid: TypeId,
+        trait_name: &str,
+    ) -> bool {
         self.functions
             .trait_env
             .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(tid), trait_name)
