@@ -167,9 +167,18 @@ interning untouched because the newtype hashes and compares as its `String`.
 Measured, with the `PartialEq<str>` / `Display` conveniences already in place:
 179 sites need to say which spelling they are taking. That is mechanical and
 carries no behaviour change, but it is a single uninterruptible edit — the crate
-does not compile between the first site and the last — so it wants a session
-that can run it to completion and then the e2e suite. Landing it half-done would
-block work on the five open regressions entirely.
+does not compile between the first site and the last.
+
+Driving it from `rustc`'s own diagnostics was tried and does not work
+unsupervised. A fixer that appends the right accessor at each primary span
+cleared 70 of the 179, then stalled: the remaining classes need the expression
+*wrapped* (`&String` → `&MangledName`), not suffixed, and — the reason to stop —
+spans that name a *pattern* binding get the accessor spliced into the pattern,
+which is not valid Rust. `ResolvedType::Struct { name.as_mangled_str(), .. }` is
+what that produces. So the edit needs a hand on each site, or a rewriter that
+understands pattern vs expression position; `rustc`'s machine-applicable
+suggestions cover only 49 of them and some of those wrap in the newtype's
+private tuple field.
 
 ## Consequences
 
