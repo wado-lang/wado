@@ -201,15 +201,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => (name.clone(), module_source.clone()),
+            } => (crate::name::MangledName::new(name.clone()), module_source.clone()),
             ResolvedType::Flags {
                 name,
                 module_source,
-            } => (name.clone(), module_source.clone()),
+            } => (crate::name::MangledName::new(name.clone()), module_source.clone()),
             // Raw GC array `Array<T>`: inherent methods live in
             // `impl Array<T>` (core:prelude/array.wado), keyed by "Array".
             ResolvedType::BuiltinArray(_) => (
-                TypeTable::ARRAY_TYPE_NAME.to_string(),
+                crate::name::MangledName::new(TypeTable::ARRAY_TYPE_NAME),
                 ModuleSource::array(),
             ),
             _ => (
