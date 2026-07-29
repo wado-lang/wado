@@ -75,9 +75,17 @@ This step alone makes five of the six failures above fail to compile.
 ### 2. `LocalMethodName` derives its rendered name
 
 It stores `struct_name: String` alongside `receiver` and `struct_type_args`, with
-an unenforced invariant `struct_name == receiver.mangle(struct_type_args)`. The
-monomorphized-struct bug was exactly that invariant breaking. `struct_name`
-becomes a method over the two structural fields, and the illegal state is gone.
+an unenforced invariant `struct_name == receiver.mangle(struct_type_args)`.
+`struct_name` becomes a method over the two structural fields, and the illegal
+state is gone.
+
+Measured before attempting it: with the divergence reported from
+`to_mangled_name` on every name the compiler emits, the fixtures still open
+produce **no** divergence — the invariant holds today. The monomorphized-struct
+defect was `fq_type_name` not knowing the arguments, which recording them at the
+instantiation site already fixed. So this step is mechanical and
+behaviour-preserving, not the risky one it looked like: ~108 `.struct_name`
+field reads become calls, and the field and its hand-written initialisers go.
 
 ### 3. One encoding of "which type owns this method"
 
