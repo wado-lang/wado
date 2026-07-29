@@ -24,11 +24,8 @@ impl FrameState {
     /// The state a call's body runs under: what `body` lets a frame track, with
     /// the parameters already bound. A parameter the body can reach through
     /// another handle binds nothing, so a stale constant cannot outlive the
-    /// write.
-    ///
-    /// `ref_global_aliases` starts empty because it is keyed by the caller's
-    /// local indices, and `scratch_folds` because ids never cross scratch
-    /// bodies.
+    /// write. Nothing keyed by the caller's local or expression ids carries
+    /// over.
     fn for_call(
         body: &Body,
         reached: &Reached,
@@ -96,7 +93,6 @@ impl LoopSnapshot {
                     NodeRef::Expr(e) => self.exprs.push(e),
                     NodeRef::Stmt(s) => self.stmts.push(s),
                     NodeRef::Block(b) => self.blocks.push(b),
-                    // Patterns are matched, never rewritten.
                     NodeRef::Pat(_) => {}
                 }
                 self.walk_node(body, node);
@@ -136,6 +132,16 @@ impl LoopSnapshot {
             body.blocks[*b].stmts.clone_from(stmts);
         }
     }
+}
+
+/// Whether two `&mut` arguments name overlapping storage. Each parameter binds
+/// its own snapshot and each write-back replays whole, so the later write would
+/// undo the earlier. Wado has no borrow checker, so this is ordinary source: the
+/// frame declines to run the call rather than mis-run it.
+fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u32>)]) -> bool {
+    targets
+        .iter()
+        .any(|(_, root, path)| overlapping_places(places, *root, path) > 1)
 }
 
 impl Interpreter<'_> {
@@ -188,9 +194,6 @@ impl Interpreter<'_> {
             }
             StmtKind::Return { value } => match *value {
                 None => Flow::Return(Lattice::Unevaluated),
-                // A returned expression the frame could not evaluate is one
-                // it stepped over, along with whatever that expression would
-                // have written.
                 Some(op) => match self.eval_operand(body, op) {
                     lattice @ (Lattice::Const(_) | Lattice::NonConst) => Flow::Return(lattice),
                     Lattice::Unevaluated => Flow::Bail,
@@ -255,7 +258,6 @@ impl Interpreter<'_> {
             self.step_budget -= 1;
             match self.exec_block(body, block) {
                 Flow::Fallthrough(_) | Flow::Continue => {}
-                // A labeled `break` belongs to an enclosing labeled block.
                 Flow::Break { label: None, .. } => {
                     return Flow::Fallthrough(Lattice::Unevaluated);
                 }
@@ -457,8 +459,6 @@ impl Interpreter<'_> {
         if let lattice @ (Lattice::Const(_) | Lattice::NonConst) =
             self.try_ctfe_builtin_fold(body, e)
         {
-            // `NonConst` here is an out-of-range read: keep the call so the
-            // trap survives.
             return match lattice {
                 Lattice::Const(v) => Lattice::Const(v),
                 Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
@@ -502,6 +502,9 @@ impl Interpreter<'_> {
     /// `may_write` is the caller's promise to apply the write-backs. Without it
     /// a callee taking a `&mut` parameter is refused outright, since running it
     /// would produce writes with nowhere to go.
+    ///
+    /// The body runs on a scratch copy, so the callee's shared arena — held
+    /// under an immutable borrow — is never mutated.
     fn run_call(&mut self, body: &Body, e: ExprId, may_write: bool) -> Option<CallRun> {
         let callees = self.callees?;
         let (key, args) = self.call_target(body, e)?;
@@ -520,9 +523,6 @@ impl Interpreter<'_> {
         if self.step_budget == 0 {
             return None;
         }
-        // A unit callee denotes nothing, whatever its last statement
-        // computed. Handing that value back would leave it on the stack where
-        // the call stood and the module would fail to validate.
         let returns_unit = callee.return_type == crate::tir::TypeTable::UNIT;
 
         let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());
@@ -541,27 +541,15 @@ impl Interpreter<'_> {
             places.extend(place);
             bound.push((param.local_index, value));
         }
-        // Each parameter binds its own snapshot and each write-back replays
-        // whole, so two arguments naming the same storage would let the later
-        // undo the earlier. Wado has no borrow checker, so that is ordinary
-        // source: the frame declines it and the call runs.
-        if targets
-            .iter()
-            .any(|(_, root, path)| overlapping_places(&places, *root, path) > 1)
-        {
+        if aliased_write_targets(&targets, &places) {
             return None;
         }
 
         self.step_budget -= 1;
         self.call_stack.push(key);
-        // Execute on a scratch copy so the shared callee body, held under an
-        // immutable `Ref`, is not mutated.
         let mut scratch = callee_body.nodes_only_clone();
         let reached = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
         let caller = self.swap_frame(FrameState::for_call(&scratch, &reached, bound));
-        // Everything fallible is inside this one call: the caller's frame goes
-        // back on the next line whatever it decides, and no `?` can be
-        // introduced between the two.
         let run = self.exec_frame(&mut scratch, targets, returns_unit);
         self.swap_frame(caller);
         self.call_stack.pop();
@@ -574,6 +562,13 @@ impl Interpreter<'_> {
     /// `None` rather than an empty write list when a `&mut` parameter the
     /// callee left untrackable has no value to write: losing it would leave
     /// the caller's place holding what the program never produced.
+    ///
+    /// A unit callee denotes nothing whatever its last statement computed, so
+    /// `returns_unit` discards the result — handing it back would leave a value
+    /// on the stack where the call stood and the module would fail to validate.
+    ///
+    /// Every fallible step of a call lives here, so the caller restores its own
+    /// frame unconditionally on return.
     fn exec_frame(
         &mut self,
         scratch: &mut Body,
@@ -582,7 +577,6 @@ impl Interpreter<'_> {
     ) -> Option<CallRun> {
         let root = scratch.root;
         let flow = self.exec_block(scratch, root);
-        // Only a body that ran to the end leaves parameters worth reading.
         let completed = matches!(flow, Flow::Return(_) | Flow::Fallthrough(_));
         let result = match flow {
             Flow::Return(lattice) | Flow::Fallthrough(lattice) if !returns_unit => lattice,

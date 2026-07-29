@@ -16,6 +16,13 @@ impl Interpreter<'_> {
     /// pattern binds and the sub-values they take. `binds` is only meaningful
     /// on [`PatternMatch::Yes`]; a rejected alternative may have left entries
     /// behind.
+    ///
+    /// An `Or` alternative preceded by an undecided one binds nothing: the
+    /// earlier alternative is tried first at run time and would bind from its
+    /// own positions.
+    ///
+    /// A tuple rest (`(a, ..)`) leaves its trailing sub-patterns without a
+    /// fixed element index, so only the exact-arity form is decided.
     pub(super) fn pattern_matches(
         &self,
         body: &Body,
@@ -55,9 +62,6 @@ impl Interpreter<'_> {
                     let mut alt_binds = PatBindings::new();
                     match self.pattern_matches(body, value, *alt, &mut alt_binds) {
                         PatternMatch::Yes => {
-                            // Alternatives are tried in order at run time, so an
-                            // undecided earlier one may be the one that matches
-                            // — and it would bind from its own positions.
                             if any_unknown && !alt_binds.is_empty() {
                                 return PatternMatch::Unknown;
                             }
@@ -111,8 +115,6 @@ impl Interpreter<'_> {
                 fields.iter().map(|f| (f.field_index, f.pattern)),
                 binds,
             ),
-            // A tuple rest (`(a, ..)`) leaves the trailing sub-patterns without
-            // a fixed element index, so only the exact-arity form is modelled.
             PatKind::Tuple(pats, has_rest) if !*has_rest => self.all_fields_match(
                 body,
                 value,
@@ -160,18 +162,10 @@ impl Interpreter<'_> {
     }
 }
 
-/// Outcome of testing a pattern against a constant scrutinee
-/// [`Value`]. The three states mirror the pattern's contribution to
-/// SCCP feasibility in [`Interpreter::match_lattice`]:
+/// Outcome of testing a pattern against a constant scrutinee.
 ///
-/// - `Yes` — the pattern provably matches; later arms are infeasible
-///   edges.
-/// - `No` — the pattern provably does not match; this arm is an
-///   infeasible edge.
-/// - `Unknown` — the engine cannot decide (an unmodelled pattern
-///   shape, a guard the engine doesn't analyze, a `ConstantValue`
-///   whose inner expression doesn't reduce). The arm stays in play
-///   and contributes to the join with all later arms.
+/// `Yes` makes every later arm an infeasible edge, `No` makes this arm one, and
+/// `Unknown` leaves the arm in play — it joins with all later arms.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum PatternMatch {
     Yes,
@@ -187,9 +181,8 @@ pub(super) fn bool_to_match(b: bool) -> PatternMatch {
     }
 }
 
-/// Compare an integer value (raw bits + prim) against a signed i128
-/// pattern literal. Returns `true` iff the values are equal under
-/// the prim's signedness interpretation.
+/// Whether a (raw bits, prim) integer equals a signed pattern literal, under
+/// the prim's signedness.
 pub(super) fn int_value_matches_i128(value: u64, prim: PrimitiveType, pat: i128) -> bool {
     let Some(v) = int_value_as_i128(value, prim) else {
         return false;
@@ -197,12 +190,10 @@ pub(super) fn int_value_matches_i128(value: u64, prim: PrimitiveType, pat: i128)
     v == pat
 }
 
-/// Compare an integer value (raw bits + prim) against an unsigned
-/// u128 pattern literal.
+/// Whether a (raw bits, prim) integer equals an unsigned pattern literal. A
+/// negative signed value matches nothing.
 pub(super) fn int_value_matches_u128(value: u64, prim: PrimitiveType, pat: u128) -> bool {
     if is_signed_int(prim) {
-        // Signed value cannot represent values outside i64 range
-        // anyway; reinterpret as unsigned for comparison.
         let v = value as i64;
         if v < 0 {
             return false;
@@ -213,26 +204,35 @@ pub(super) fn int_value_matches_u128(value: u64, prim: PrimitiveType, pat: u128)
     }
 }
 
-/// Convert a (raw bits, prim) integer into an i128, sign- or
-/// zero-extending per the prim's signedness. Returns `None` for
-/// non-integer prims.
+/// A (raw bits, prim) integer widened to i128, sign- or zero-extending per the
+/// prim's signedness. `None` for a non-integer prim.
 pub(super) fn int_value_as_i128(value: u64, prim: PrimitiveType) -> Option<i128> {
     if !is_int_prim(prim) {
         return None;
     }
     if is_signed_int(prim) {
-        // Stored as sign-extended i64 → widen to i128.
         Some(i128::from(value as i64))
     } else {
         Some(i128::from(value))
     }
 }
 
-/// Decide whether a (raw bits, prim) integer falls inside a range
-/// pattern. Returns `false` for non-integer prims and for negative
-/// signed values against an unsigned-typed range (which by
-/// construction starts at zero or higher); otherwise returns the
-/// usual half-open / closed range membership test in i128 space.
+/// The i128 a range test compares in: zero-extended where the value is
+/// unsigned, sign-extended otherwise. `None` for a negative signed value
+/// against an unsigned-typed range, whose bounds start at zero or higher.
+fn range_comparison_value(value: u64, prim: PrimitiveType, is_unsigned_pat: bool) -> Option<i128> {
+    if !is_signed_int(prim) {
+        return Some(i128::from(value));
+    }
+    if !is_unsigned_pat {
+        return Some(i128::from(value as i64));
+    }
+    let signed = i128::from(value as i64);
+    (signed >= 0).then_some(signed)
+}
+
+/// Whether a (raw bits, prim) integer falls inside a range pattern. `false` for
+/// a non-integer prim.
 pub(super) fn range_matches_int(
     value: u64,
     prim: PrimitiveType,
@@ -244,24 +244,8 @@ pub(super) fn range_matches_int(
     if !is_int_prim(prim) {
         return false;
     }
-    let v: i128 = if is_unsigned_pat || !is_signed_int(prim) {
-        // Treat the value as unsigned. For a signed prim with negative
-        // bits, the unsigned reinterpretation differs — fall back to
-        // sign-extended comparison, then ensure it stays nonneg before
-        // entering an unsigned range check.
-        if is_signed_int(prim) {
-            let signed = i128::from(value as i64);
-            if signed < 0 {
-                // The pattern is unsigned; a negative scrutinee can't
-                // be in `[start, end]` when start ≥ 0.
-                return false;
-            }
-            signed
-        } else {
-            i128::from(value)
-        }
-    } else {
-        i128::from(value as i64)
+    let Some(v) = range_comparison_value(value, prim, is_unsigned_pat) else {
+        return false;
     };
     if inclusive {
         v >= start && v <= end

@@ -17,6 +17,21 @@ use super::{CalleeMap, CtfeBuiltinMap, reachable_exprs};
 /// A method's receiver is its first parameter.
 const RECEIVER: usize = 0;
 
+/// The expressions a walk carries out: the operand each statement performs.
+fn performed_exprs(body: &Body) -> IndexSet<ExprId> {
+    let mut performed = IndexSet::default();
+    for (_, stmt) in &body.stmts {
+        let op = match &stmt.kind {
+            StmtKind::Expr(op) | StmtKind::Let { value: op, .. } => *op,
+            _ => continue,
+        };
+        if let Some(e) = op.as_expr() {
+            performed.insert(e);
+        }
+    }
+    performed
+}
+
 /// The places a walk reaches, and how. A mention it does not reach disqualifies
 /// the local that mention roots at.
 #[derive(Default)]
@@ -33,16 +48,7 @@ impl Reached {
         ctfe_builtins: Option<&CtfeBuiltinMap>,
         callees: Option<&CalleeMap>,
     ) -> Self {
-        let mut performed: IndexSet<ExprId> = IndexSet::default();
-        for (_, stmt) in &body.stmts {
-            let op = match &stmt.kind {
-                StmtKind::Expr(op) | StmtKind::Let { value: op, .. } => *op,
-                _ => continue,
-            };
-            if let Some(e) = op.as_expr() {
-                performed.insert(e);
-            }
-        }
+        let performed = performed_exprs(body);
         let mut reached = Self::collect(body, ctfe_builtins, callees, &performed);
         for e in &performed {
             if let ExprKind::Assign { target, .. } = &body.exprs[*e].kind
@@ -54,16 +60,19 @@ impl Reached {
         reached
     }
 
-    /// An ordinary walk performs nothing, so no position is one a write is
-    /// carried out at. Passing an empty set is what says so: the collectors
-    /// record a write only where the walk performs it, and a read wherever it
-    /// appears, so this leaves the reads and nothing else.
+    /// An ordinary walk performs nothing, so nothing it reaches is a write it
+    /// carries out. The reads are collected as [`Self::in_frame`] collects them:
+    /// what a statement-position write builtin reads is read wherever that
+    /// mention appears, whoever performs the write.
     pub(super) fn outside_frame(
         body: &Body,
         ctfe_builtins: Option<&CtfeBuiltinMap>,
         callees: Option<&CalleeMap>,
     ) -> Self {
-        Self::collect(body, ctfe_builtins, callees, &IndexSet::default())
+        Self {
+            reads: Self::collect(body, ctfe_builtins, callees, &performed_exprs(body)).reads,
+            ..Self::default()
+        }
     }
 
     /// What the walk reaches, given the expressions it performs.

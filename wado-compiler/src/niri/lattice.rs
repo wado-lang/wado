@@ -5,6 +5,9 @@
 //! `&self`, and that is load-bearing rather than incidental — the engine walks
 //! the same node any number of times, so anything performed here would be
 //! performed again. What has to happen once belongs to the frame.
+//!
+//! A reference denotes its referent's value: the engine has no reference
+//! values, so borrowing and dereferencing change nothing about what is denoted.
 
 use crate::compiler_item::SeqField;
 use crate::const_eval::{
@@ -33,9 +36,8 @@ impl Interpreter<'_> {
         }
     }
 
-    /// Convert a promoted pure value to a `Lattice::Const` when it is a constant
-    /// kind of a known primitive type; `Unevaluated` otherwise (a derived
-    /// `Binary` / `Opaque` / non-primitive value niri does not evaluate here).
+    /// A promoted pure value as a `Lattice::Const` when it is a constant kind of
+    /// a known primitive type; `Unevaluated` otherwise.
     fn value_to_lattice(&self, body: &Body, v: ValueId) -> Lattice {
         let Some(ty) = body.values.type_of(v) else {
             return Lattice::Unevaluated;
@@ -176,8 +178,28 @@ impl Interpreter<'_> {
         Lattice::Const(Value::aggregate(type_id, values))
     }
 
+    /// An array literal denotes the whole container, not just its elements:
+    /// `wir_build` lowers it to `{ backing: array.new_fixed, len: N }`.
+    fn array_literal_lattice(&self, body: &Body, type_id: TypeId, elements: &[Operand]) -> Lattice {
+        match self.seq_lattice(body, type_id, elements) {
+            Lattice::Const(backing) => Lattice::Const(Value::aggregate(
+                type_id,
+                vec![
+                    (SeqField::Backing.index(), backing),
+                    (
+                        SeqField::Len.index(),
+                        Value::Int {
+                            value: elements.len() as u64,
+                            prim: PrimitiveType::I32,
+                        },
+                    ),
+                ],
+            )),
+            other => other,
+        }
+    }
+
     pub fn expr_to_lattice(&self, body: &Body, e: ExprId) -> Lattice {
-        // A scratch-CTFE fold memoized for `e` (no node form for pure scalars).
         if let Some(v) = self.frame.scratch_folds.get(&e) {
             return Lattice::Const(v.clone());
         }
@@ -207,25 +229,8 @@ impl Interpreter<'_> {
                     .enumerate()
                     .map(|(i, op)| (u32::try_from(i).expect("tuple arity fits u32"), *op)),
             ),
-            // An array literal denotes the whole container: `wir_build` lowers
-            // it to `{ repr: array.new_fixed, used: N }`.
             ExprKind::ArrayLiteral { elements } => {
-                match self.seq_lattice(body, node.type_id, elements) {
-                    Lattice::Const(backing) => Lattice::Const(Value::aggregate(
-                        node.type_id,
-                        vec![
-                            (SeqField::Backing.index(), backing),
-                            (
-                                SeqField::Len.index(),
-                                Value::Int {
-                                    value: elements.len() as u64,
-                                    prim: PrimitiveType::I32,
-                                },
-                            ),
-                        ],
-                    )),
-                    other => other,
-                }
+                self.array_literal_lattice(body, node.type_id, elements)
             }
             ExprKind::PackedArray(bytes) => {
                 let elements = bytes
@@ -238,11 +243,7 @@ impl Interpreter<'_> {
                 Value::seq(node.type_id, elements).map_or(Lattice::NonConst, Lattice::Const)
             }
             ExprKind::Index { expr: inner, index } => self.index_lattice(body, *inner, *index),
-            // Answered here rather than after a rewrite: an allocation has no
-            // literal node form to be rewritten to.
             ExprKind::Call { .. } => self.try_ctfe_builtin_fold(body, e),
-            // Referents are modelled by value, so neither step changes what is
-            // denoted.
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::Deref,
                 expr: inner,
@@ -282,8 +283,6 @@ impl Interpreter<'_> {
                 arms,
             } => match scrutinee.as_expr() {
                 Some(e) => self.match_lattice(body, e, arms),
-                // A promoted-constant scrutinee is not evaluated here; the
-                // flow-fold visitor collapses constant matches structurally.
                 None => Lattice::Unevaluated,
             },
             _ => Lattice::Unevaluated,
@@ -291,7 +290,12 @@ impl Interpreter<'_> {
     }
 
     /// Fold a `Binary` / `Unary` / `Cast` of constant operands to a value;
-    /// `NonConst` (not `Unevaluated`) when the op would trap, so the node survives.
+    /// `NonConst` (not `Unevaluated`) when the op would trap, so the node
+    /// survives.
+    ///
+    /// A shared borrow is excluded: it denotes its referent rather than
+    /// operating on it, and `eval_unary` would bury the referent's own constant
+    /// as non-constant.
     pub fn try_fold(&self, body: &Body, e: ExprId) -> Lattice {
         let node = &body.exprs[e];
         match &node.kind {
@@ -306,9 +310,6 @@ impl Interpreter<'_> {
                 };
                 option_to_lattice(eval_binary(l, *op, r))
             }
-            // A shared borrow denotes what it points at rather than operating
-            // on it. `eval_unary` has no rule for that and would bury the
-            // referent's own constant as non-constant.
             ExprKind::Unary {
                 op: NirUnaryOp::Ref,
                 ..
@@ -347,6 +348,9 @@ impl Interpreter<'_> {
 
     /// The lattice of a `match`: the chosen arm under a constant scrutinee,
     /// else the join over the feasible arms.
+    ///
+    /// A guarded arm is undecided here. Deciding one means scoping the
+    /// pattern's bindings, which only the rewrite path can do.
     fn match_lattice(&self, body: &Body, scrutinee: ExprId, arms: &[ArmData]) -> Lattice {
         let scrut_const = self.expr_to_lattice(body, scrutinee).as_const();
         if arms.is_empty() {
@@ -356,8 +360,6 @@ impl Interpreter<'_> {
             let mut candidates = Vec::<Lattice>::new();
             let mut yes_found = false;
             for arm in arms {
-                // Guards are decided by the rewrite path, which can scope the
-                // pattern's bindings; here they leave the arm undecided.
                 let pm = if arm.guard.is_some() {
                     PatternMatch::Unknown
                 } else {
@@ -400,6 +402,9 @@ impl Interpreter<'_> {
     /// sequence, or the sequence `array_new(len)` allocates. A read's argument
     /// is a reference to the array, and a reference to a constant reads as that
     /// constant, so no separate deref step is needed.
+    ///
+    /// A write denotes nothing — the executor performs it as a statement — and
+    /// nor does a hint, which it steps past.
     pub(super) fn try_ctfe_builtin_fold(&self, body: &Body, e: ExprId) -> Lattice {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return Lattice::Unevaluated;
@@ -407,8 +412,6 @@ impl Interpreter<'_> {
         let Some(builtin) = self.ctfe_builtins.and_then(|m| m.get(func_id)) else {
             return Lattice::Unevaluated;
         };
-        // Matched on the builtin alone, so each arity is stated once. Pairing
-        // the two would make every arm re-list the builtins the others named.
         let args = args.as_slice();
         match builtin {
             CtfeBuiltin::ArrayLen => {
@@ -439,8 +442,6 @@ impl Interpreter<'_> {
                 }
                 _ => Lattice::Unevaluated,
             },
-            // A write denotes nothing; the executor performs it as a
-            // statement. Nor does a hint, which it steps past.
             CtfeBuiltin::ArraySet | CtfeBuiltin::ArrayCopy | CtfeBuiltin::ColdPath => {
                 Lattice::Unevaluated
             }
@@ -490,8 +491,6 @@ impl Interpreter<'_> {
         ) else {
             return Lattice::Unevaluated;
         };
-        // Before building: an allocation the value model rejects must not be
-        // walked element by element first.
         if len > MAX_SEQ_ELEMENTS {
             return Lattice::Unevaluated;
         }
@@ -523,10 +522,9 @@ impl Interpreter<'_> {
     }
 }
 
-/// `Some(v)` ↦ `Const(v)`, `None` ↦ `NonConst`. Used at the boundary
-/// where a numeric-evaluation helper that still returns `Option<Value>`
-/// (because its failure modes are runtime traps, not "haven't tried")
-/// flows back into the lattice surface.
+/// `Some(v)` ↦ `Const(v)`, `None` ↦ `NonConst` — the boundary where a
+/// numeric-evaluation helper returns, whose `None` means a runtime trap rather
+/// than "not yet tried".
 pub(super) fn option_to_lattice(opt: Option<Value>) -> Lattice {
     match opt {
         Some(v) => Lattice::Const(v),
@@ -544,20 +542,11 @@ pub(super) fn join_all(lats: &[Lattice]) -> Lattice {
     acc
 }
 
-/// Adjust a block's raw lattice value before feeding it into an
-/// arm-feasible-join (the `if` non-constant-condition path).
+/// Promote an arm's `Unevaluated` to `NonConst` before joining it.
 ///
-/// `Lattice::Unevaluated` from `block_lattice` means "we couldn't
-/// analyze this block's value" — which is fine when the block is the
-/// chosen branch of a constant-condition `if` (the other arm is an
-/// infeasible edge, so the result really is "we don't know"), but
-/// becomes unsound under a non-constant condition: that arm is
-/// reachable, the absence of a known value means SCCP-Top
-/// (`NonConst`), not infeasibility. Promote here so that a subsequent
-/// `Lattice::join` cannot let an `Unevaluated` arm be silently
-/// absorbed by a `Const` peer (`join(Unevaluated, Const(v)) → Const(v)`
-/// is the infeasible-edge rule, valid only when the Unevaluated edge
-/// really is unreachable).
+/// `join` absorbs an `Unevaluated` operand, which is the infeasible-edge rule
+/// and holds only where that arm really is unreachable. A reachable arm whose
+/// value is simply unknown is SCCP-Top, so it must reach the join as such.
 pub(super) fn arm_lattice_for_feasible_join(lat: Lattice) -> Lattice {
     match lat {
         Lattice::Unevaluated => Lattice::NonConst,

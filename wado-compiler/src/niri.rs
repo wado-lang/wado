@@ -36,40 +36,28 @@ use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{TypeId, TypeTable};
 
-/// Three-state lattice over compile-time evaluation results.
+/// Three-state lattice over compile-time evaluation results, ordered
+/// `Unevaluated` ⊑ `Const(v)` ⊑ `NonConst` — the SCCP lattice with
+/// `Unevaluated` as Bottom and `NonConst` as Top.
 ///
-/// Ordering: `Unevaluated` ⊑ `Const(v)` ⊑ `NonConst`. Equivalent to the
-/// classical SCCP lattice (Wegman & Zadeck, 1991): `Unevaluated` ↔
-/// `Bottom`, `NonConst` ↔ `Top`. Names favour readability over the
-/// academic terms — readers familiar with the abstract-interpretation
-/// literature can mentally substitute Bottom/Top.
-///
-/// Three states rather than `Option<Value>`: collapsing "not computed yet"
-/// and "known not to be a constant" into one `None` makes memoization
-/// unsound, since a cached `None` cannot say whether a re-attempt would
-/// succeed.
+/// Three states rather than `Option<Value>`: one `None` for both "not computed
+/// yet" and "known not to be a constant" cannot say whether a re-attempt would
+/// succeed, which makes memoization unsound.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Lattice {
-    /// No information yet. Default for un-bound locals and NIR kinds
-    /// the engine doesn't currently understand (e.g. a `Call` whose
-    /// callee isn't pure-foldable, `Block` past a single tail
-    /// expression).
+    /// No information yet. Default for un-bound locals and for node kinds the
+    /// engine does not evaluate.
     Unevaluated,
     /// Provably reduces to this value.
     Const(Value),
-    /// Cannot be a reusable constant: a `let mut` binding, the result
-    /// of a runtime-only operation (e.g. `x = …`, division by zero),
-    /// or a fold whose operands are themselves `NonConst`.
+    /// Cannot be a reusable constant: a `let mut` binding, a runtime-only
+    /// result, or a fold over `NonConst` operands.
     NonConst,
 }
 
 impl Lattice {
-    /// Project to `Some(v)` only when the result is `Const`. The right
-    /// shorthand for callers whose only question is "do you have a
-    /// literal for me?" — the `Unevaluated` / `NonConst` distinction
-    /// is collapsed into `None`. When that distinction matters
-    /// (memoization, SCCP-style joins), pattern-match the variant
-    /// directly instead of going through this projection.
+    /// The value when `Const`, else `None`. Pattern-match the variant instead
+    /// where the `Unevaluated` / `NonConst` distinction matters.
     #[must_use]
     pub fn as_const(&self) -> Option<Value> {
         match self {
@@ -96,35 +84,18 @@ impl Lattice {
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Callee map
-// ──────────────────────────────────────────────────────────────────────────────
-
-/// Identity of a callee in the [`CalleeMap`]. Mirrors the shape produced
-/// by `FunctionRef::full_name` so the interpreter can look up a `Call`
-/// node's target without re-deriving the format.
+/// Identity of a callee in the [`CalleeMap`].
 pub type CalleeKey = crate::nir::FuncId;
 
-/// Map of CTFE-eligible callees, keyed by canonical [`crate::nir::FuncId`].
-///
-/// Values are [`Rc<RefCell<NirFunction>>`] handles aliased with
-/// [`crate::flat_package::FlatPackage::functions`], not body clones, so
-/// rebuilding the map every optimizer iteration costs only refcount
-/// bumps. The interpreter reads each callee via
-/// [`std::cell::RefCell::try_borrow`]; the failure path catches the
-/// case where the visitor is currently holding `borrow_mut` on this
-/// same function (i.e. self-recursive calls inside the function being
-/// walked). CTFE-internal recursion across nested folds is handled
-/// separately by `Interpreter::call_stack`, since `try_borrow` permits
-/// concurrent immutable borrows.
+/// The callees a compile-time frame may run.
 ///
 /// Membership answers whether a frame may *run* the callee at all —
 /// [`is_ctfe_runnable`], decided once at construction and never re-checked.
-/// Whether the call's value may be substituted for it is a different
-/// question, and it is answered per call: a unit callee denotes nothing, and
-/// one writing through a `&mut` parameter runs only at statement position,
-/// where the executor applies the write-backs. Arity, argument reduction and
-/// body shape are likewise checked at fold time.
+/// Whether the call's value may be substituted for it is a different question,
+/// answered per call: a unit callee denotes nothing, and one writing through a
+/// `&mut` parameter runs only at statement position, where the executor applies
+/// the write-backs. Arity, argument reduction and body shape are likewise
+/// checked at fold time.
 pub type CalleeMap = IndexMap<CalleeKey, Callee>;
 
 /// A callee the engine may run, with the parameter facts the trackability
@@ -163,8 +134,8 @@ impl Callee {
     }
 
     /// A `&mut T` borrow is the only parameter kind that reaches the caller's
-    /// storage. An index the signature does not have answers as one that does:
-    /// nothing about a call the map cannot account for is exempt.
+    /// storage. An index the signature does not have answers as one that does,
+    /// so a call the map cannot account for is exempt from nothing.
     fn writes_param(&self, index: usize) -> bool {
         self.mut_params.get(index).copied().unwrap_or(true)
     }
@@ -206,13 +177,7 @@ impl CtfeBuiltin {
 /// Which sequence builtin each callee id is, for the ids that are one.
 pub type CtfeBuiltinMap = IndexMap<CalleeKey, CtfeBuiltin>;
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Global env
-// ──────────────────────────────────────────────────────────────────────────────
-
-/// Identity of a global variable in the [`GlobalEnv`]. Mirrors the
-/// `(module_source, name)` shape carried by `ExprKind::GlobalVarGet`
-/// so the interpreter can look up a `GlobalVarGet` node directly.
+/// Identity of a module-scope global, as `ExprKind::GlobalVarGet` names one.
 pub type GlobalKey = (ModuleSource, String);
 
 /// Lattice values for module-scope globals, built once per pass by reducing
@@ -222,11 +187,8 @@ pub type GlobalKey = (ModuleSource, String);
 pub type GlobalEnv = IndexMap<GlobalKey, Lattice>;
 
 /// Known constant field values of module-scope globals, keyed by global then
-/// field name. It lets
-/// `FieldAccess(GlobalVarGet(X), f)` fold to a constant when `X` is an
-/// immutable global whose `f` field is statically known — e.g. the
-/// [`SeqField::Len`](crate::compiler_item::SeqField) length of an immutable
-/// sequence global hoisted by body globalization.
+/// field name. It knows fields no initializer shows — such as the length body
+/// globalization records for a hoisted sequence.
 pub type GlobalFieldEnv = IndexMap<GlobalKey, IndexMap<String, Value>>;
 
 /// Ceiling on total CTFE work, charged per call entry, statement, and loop
@@ -256,13 +218,10 @@ pub(crate) trait EditSink {
     /// `e` (literals have none); use [`EditSink::become_expr`] to move an
     /// existing node's content into `e`.
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind);
-    /// Promote `e` to the folded pure scalar `value`, returning whether the edit
-    /// was applied (WEP: The Live `ValueGraph`). The engine backend swaps `e`'s
-    /// parent operand to an `Operand::Value`, and declines an aggregate value —
-    /// the pool models scalars only, so a constant struct stays in skeleton form
-    /// and only the scalars projected out of it are promoted. The scratch CTFE
-    /// backend is a no-op (`false`) — its reads recompute the value through the
-    /// value lattice, so it needs no node write-back.
+    /// Promote `e` to the folded pure scalar `value`, reporting whether the edit
+    /// was applied (WEP: The Live `ValueGraph`). An aggregate is declined — the
+    /// pool models scalars only — as is every value on the scratch backend,
+    /// whose reads recompute through the lattice and need no write-back.
     fn replace_with_value(&mut self, e: ExprId, value: Value) -> bool;
     /// Intern a constant into the function's value pool and return it as an
     /// operand. A scalar has no literal-node form, so a synthesized one in an
@@ -291,18 +250,12 @@ impl EditSink for BodySink<'_> {
         self.body.exprs[e].kind = kind;
     }
     fn replace_with_value(&mut self, _e: ExprId, _value: Value) -> bool {
-        // Scratch CTFE has no parent map to promote a constant into and pure
-        // scalars no longer have a literal-node form; the value is recomputed on
-        // read (`reduce_to_lattice` → `try_fold` over operands + env), so the
-        // write-back is a no-op here.
         false
     }
     fn const_operand(&mut self, kind: ValueKind, type_id: TypeId) -> Operand {
         Operand::Value(self.body.values.alloc_unshared(kind, type_id))
     }
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
-        // The scratch body is discarded, so the shared child references and
-        // the still-live `src` node are harmless.
         let node = self.body.exprs[src].clone();
         self.body.exprs[dst] = node;
     }
@@ -328,14 +281,11 @@ impl EditSink for BodySink<'_> {
 /// `type_params` and `impl_type_params` empty, since CTFE runs after
 /// monomorphization.
 ///
-/// `inline_hint` is deliberately not consulted: `#[inline(never)]` asks the
-/// optimizer to keep the body out of line, which says nothing about whether
-/// the result is knowable at compile time.
+/// `inline_hint` is not consulted: `#[inline(never)]` asks the optimizer to keep
+/// the body out of line, which says nothing about compile-time knowability.
 ///
-/// Nor is `stores`. The engine has no reference values — an argument reduces to
-/// its referent's value — so what the callee keeps is a snapshot, sound exactly
-/// while nothing can write the referent afterwards. `Reached` is what
-/// holds that: a stored argument is the one read it does not exempt.
+/// Nor is `stores`. What a callee keeps is a snapshot, sound exactly while
+/// nothing can write the referent afterwards; `Reached` is what holds that.
 #[must_use]
 pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
     func.effects.is_empty()
@@ -359,15 +309,10 @@ pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
 /// a pure call's result to a global, where nothing remains to write through.
 #[must_use]
 pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
-    // A unit call has no value to substitute for it.
     func.return_type != crate::tir::TypeTable::UNIT
         && func.stores.is_empty()
         && is_ctfe_runnable(func)
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Interpreter
-// ──────────────────────────────────────────────────────────────────────────────
 
 /// Everything the engine knows keyed by local index, which is per-function, so
 /// entering a body means replacing the whole group and leaving one means
@@ -376,10 +321,8 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
 /// its siblings would let one body read another's locals.
 #[derive(Default)]
 struct FrameState {
-    /// Lattice values for the `let`-bound locals of the body being walked.
-    /// Populated by the driving visitor via [`Interpreter::bind_local`] /
-    /// [`Interpreter::invalidate_local`]. Absent locals read as
-    /// [`Lattice::Unevaluated`].
+    /// Lattice values for the `let`-bound locals of the body being walked. An
+    /// absent local reads as [`Lattice::Unevaluated`].
     env: IndexMap<u32, Lattice>,
     ref_global_aliases: IndexMap<u32, GlobalKey>,
     /// The body's [`aggregate_safe_locals`] — the only locals that may bind an
@@ -388,19 +331,14 @@ struct FrameState {
     /// Locals a compile-time frame cannot track — see [`clobbered_locals`].
     /// Empty outside a frame.
     ctfe_clobbered: LocalSet,
-    /// CTFE scratch-body fold memo: `expr → folded constant`. The scratch
-    /// [`BodySink`] cannot promote a fold to an `Operand::Value` (no parent map)
-    /// and pure scalars have no literal-node form, so a fold is recorded here
-    /// and read back by [`Interpreter::expr_to_lattice`]. Empty during
-    /// real-body folding, where rewrites promote through the engine instead.
+    /// CTFE scratch-body fold memo, read back by
+    /// [`Interpreter::expr_to_lattice`]. The scratch [`BodySink`] promotes
+    /// nothing, so a fold has nowhere else to be recorded. Empty during
+    /// real-body folding, where rewrites promote through the engine.
     scratch_folds: IndexMap<ExprId, Value>,
 }
 
 /// Partial evaluator over the arena `Body`.
-///
-/// Holds the type table needed to resolve operand widths, the `FrameState` of
-/// the body being walked, an optional [`CalleeMap`] of runnable callees, a step
-/// budget, and a `call_stack` of in-flight CTFE frames for recursion detection.
 pub struct Interpreter<'a> {
     type_table: &'a TypeTable,
     frame: FrameState,
@@ -413,17 +351,14 @@ pub struct Interpreter<'a> {
     /// When `None`, `FieldAccess(GlobalVarGet(_), _)` stays
     /// [`Lattice::Unevaluated`].
     global_fields: Option<&'a GlobalFieldEnv>,
-    /// Hard ceiling on the number of productive CTFE call entries
-    /// before bailing. Decremented once per successful body evaluation;
-    /// on zero, further attempts return `Unevaluated`.
+    /// Hard ceiling on CTFE work before bailing. On zero, further attempts
+    /// return `Unevaluated`.
     step_budget: u32,
-    /// Keys of the callees whose bodies the engine is currently
-    /// evaluating, in entry order. A `Call` to a key already on the
-    /// stack reports `Unevaluated` immediately, so direct (`f → f`)
-    /// and indirect (`f → g → f`) recursion terminate without
-    /// consuming budget. The `RefCell` borrow guard cannot serve this
-    /// role on its own because `try_borrow` permits concurrent
-    /// immutable borrows.
+    /// The callees whose bodies the engine is currently evaluating, in entry
+    /// order. A `Call` to a key already on the stack reports `Unevaluated`
+    /// immediately, so direct (`f → f`) and indirect (`f → g → f`) recursion
+    /// terminate without consuming budget. The `RefCell` borrow guard cannot
+    /// serve this role, since it permits concurrent immutable borrows.
     call_stack: Vec<CalleeKey>,
 }
 
@@ -466,7 +401,8 @@ struct CallRun {
     writes: Vec<(u32, Vec<u32>, Value)>,
 }
 
-/// Every expression id reachable from the body root, in arena order.
+/// Every expression id reachable from the body root, in arena order — or every
+/// expression, for a bare-expression body with no block structure.
 pub(crate) fn reachable_exprs(body: &Body) -> Vec<ExprId> {
     struct Collect(Vec<ExprId>);
     impl NirRefVisitor for Collect {
@@ -477,7 +413,6 @@ pub(crate) fn reachable_exprs(body: &Body) -> Vec<ExprId> {
             self.walk_node(body, node);
         }
     }
-    // A body with no block structure is a bare expression, nothing orphaned.
     if body.blocks.is_empty() {
         return body.exprs.iter().map(|(e, _)| e).collect();
     }
@@ -507,13 +442,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Install the [`CalleeMap`]. Without this, every `Call` node
-    /// remains [`Lattice::Unevaluated`] — the engine has no body to
-    /// look up.
-    ///
-    /// Lifetime: the map outlives this interpreter (the visitor builds
-    /// it once per pass, hands a borrow in, and discards both at end of
-    /// pass).
+    /// Install the [`CalleeMap`]. Without it, every `Call` node remains
+    /// [`Lattice::Unevaluated`] — the engine has no body to look up.
     pub fn with_callees(&mut self, callees: &'a CalleeMap) -> &mut Self {
         self.callees = Some(callees);
         self
@@ -526,15 +456,9 @@ impl<'a> Interpreter<'a> {
         self
     }
 
-    /// Install the [`GlobalEnv`]. Without this, every `GlobalVarGet`
-    /// node remains [`Lattice::Unevaluated`] — the engine has no
-    /// initializer lattice to look up.
-    ///
-    /// Lifetime: the map outlives this interpreter (the visitor builds
-    /// it once per pass, hands a borrow in, and discards both at end of
-    /// pass), mirroring [`with_callees`].
-    ///
-    /// [`with_callees`]: Self::with_callees
+    /// Install the [`GlobalEnv`]. Without it, every `GlobalVarGet` node remains
+    /// [`Lattice::Unevaluated`] — the engine has no initializer lattice to look
+    /// up.
     pub fn with_globals(&mut self, globals: &'a GlobalEnv) -> &mut Self {
         self.globals = Some(globals);
         self
@@ -549,8 +473,7 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Override the per-pass CTFE step budget (default
-    /// [`DEFAULT_STEP_BUDGET`]). Called rarely — primarily by tests
-    /// exercising the budget-exhaustion path.
+    /// [`DEFAULT_STEP_BUDGET`]).
     pub fn set_step_budget(&mut self, budget: u32) -> &mut Self {
         self.step_budget = budget;
         self
@@ -593,16 +516,13 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Reset the per-function environment. The driving visitor must call
-    /// this before walking each function body; otherwise a previous
-    /// function's bindings would leak into the next one (local indices
-    /// are unique per function, not project-wide).
+    /// Reset the per-function state. The driving visitor must call this before
+    /// walking each function body: local indices are unique per function, not
+    /// project-wide, so a previous function's bindings would otherwise read as
+    /// this one's.
     ///
-    /// Asserts the recursion guard is clear — a leaked entry would mean
-    /// a previous walk panicked mid-call.
-    ///
-    /// The step budget resets here, so one function with a long compile-time
-    /// loop cannot decide whether the functions walked after it fold.
+    /// The step budget resets here too, so one function with a long
+    /// compile-time loop cannot decide whether the next one folds.
     pub fn enter_function(&mut self) {
         self.step_budget = DEFAULT_STEP_BUDGET;
         self.frame = FrameState::default();
@@ -612,11 +532,9 @@ impl<'a> Interpreter<'a> {
         );
     }
 
-    /// Record a lattice value for a `let`-bound local. The driving
-    /// visitor calls this after walking a `Let` statement: pass
-    /// [`Lattice::Const`] for an immutable binding whose RHS reduced,
-    /// [`Lattice::NonConst`] for `let mut` or any RHS that could not be
-    /// reduced.
+    /// Record a lattice value for a `let`-bound local: [`Lattice::Const`] for an
+    /// immutable binding whose RHS reduced, [`Lattice::NonConst`] for `let mut`
+    /// or an RHS that did not.
     ///
     /// An aggregate constant is only recorded for a local
     /// [`Self::record_aggregate_locals`] proved unreachable through any other
@@ -634,9 +552,7 @@ impl<'a> Interpreter<'a> {
 
     /// The locals a match arm's pattern binds, with the values they take under
     /// a constant `scrutinee`. Empty unless the pattern definitely matches — an
-    /// undecided pattern binds nothing knowable. The walker installs these
-    /// ([`Self::enter_arm`]) around the arm's guard and body so both reduce
-    /// under the values the arm would see at runtime.
+    /// undecided pattern binds nothing knowable.
     #[must_use]
     pub fn arm_bindings(&self, body: &Body, scrutinee: Operand, pattern: PatId) -> PatBindings {
         let Lattice::Const(value) = self.operand_to_lattice(body, scrutinee) else {
@@ -688,10 +604,9 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Mark a local as definitely non-constant from this point on. The
-    /// driving visitor calls this when it sees an `x = expr` assignment.
-    /// Conservative — we don't track flow-sensitive new values, just
-    /// invalidate the prior binding.
+    /// Mark a local as definitely non-constant from this point on, as an
+    /// `x = expr` assignment makes it. The new value is not tracked; only the
+    /// prior binding is dropped.
     pub fn invalidate_local(&mut self, index: u32) {
         self.frame.env.insert(index, Lattice::NonConst);
     }
