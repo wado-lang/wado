@@ -927,11 +927,11 @@ impl<'a> Emitter<'a> {
         match self.types.get(id) {
             ResolvedType::Primitive(p) => map_primitive(*p),
             ResolvedType::Struct { name, .. } if name == "String" => Ok(Type::String),
-            ResolvedType::Struct { name, .. }
-            | ResolvedType::Enum { name, .. }
+            ResolvedType::Struct { name, .. } => Ok(self.named(name.as_mangled_str(), id)),
+            ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. }
             | ResolvedType::Flags { name, .. }
-            | ResolvedType::Newtype { name, .. } => Ok(self.named(name.as_mangled_str(), id)),
+            | ResolvedType::Newtype { name, .. } => Ok(self.named(name, id)),
             ResolvedType::Resource { name, .. } => Ok(Type::named(to_kebab(name))),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let inner = *inner;

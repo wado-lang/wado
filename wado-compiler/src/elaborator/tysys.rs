@@ -325,8 +325,8 @@ impl TypeSystem {
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
     pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {
-            ResolvedType::Struct { name, .. }
-            | ResolvedType::GenericInstance { name, .. }
+            ResolvedType::Struct { name, .. } => Some(name.to_string()),
+            ResolvedType::GenericInstance { name, .. }
             | ResolvedType::Newtype { name, .. }
             | ResolvedType::Flags { name, .. } => Some(name.clone().to_string()),
             _ => None,
