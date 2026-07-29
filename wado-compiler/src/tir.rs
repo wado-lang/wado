@@ -738,7 +738,7 @@ impl TypeTable {
     /// writable type name, so it can never collide with a user-defined
     /// `struct Tuple` — that is what makes the name-only [`Self::is_tuple_type`]
     /// check sound. User-facing spelling is `[T1, T2, …]`.
-    pub const TUPLE_TYPE_NAME: &'static str = "[]";
+    pub const TUPLE_TYPE_NAME: &'static str = crate::name::TUPLE_TYPE_NAME;
 
     /// Canonical name for the unit type `()` used in method lookup and impl indexing.
     /// Must match what `format_type_name(TypeNameInfo::Unit)` returns, and matches
@@ -3506,7 +3506,7 @@ impl TypeTable {
             } => {
                 let args = args_of(type_args);
                 if Self::is_tuple_type(name) {
-                    FqTypeName::builtin(Self::TUPLE_TYPE_NAME).with_args(args)
+                    FqTypeName::tuple(args)
                 } else {
                     FqTypeName::declared(module_source, name).with_args(args)
                 }

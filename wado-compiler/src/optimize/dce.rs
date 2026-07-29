@@ -1305,7 +1305,7 @@ impl<'a> DceWalker<'a> {
                     .collect();
                 let method_id = FunctionId::Method(MethodName::new(
                     self.current_module.clone(),
-                    FqTypeName::builtin(TypeTable::TUPLE_TYPE_NAME).with_args(elements),
+                    FqTypeName::tuple(elements),
                     trait_name,
                     method_name,
                 ));

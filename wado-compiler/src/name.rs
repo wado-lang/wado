@@ -1704,6 +1704,10 @@ pub fn mangle_tuple_type(elems: &[String]) -> String {
     format!("[{}]", elems.join(","))
 }
 
+/// The head name of a tuple type. Name formats live here, so
+/// [`crate::tir::TypeTable::TUPLE_TYPE_NAME`] reads it from this one place.
+pub const TUPLE_TYPE_NAME: &str = "[]";
+
 /// Build a monomorphized method name from struct name, type args, and method name.
 ///
 /// Examples:
@@ -2362,11 +2366,15 @@ pub enum TypeHead {
         name: String,
     },
     /// A shape no module declares — a primitive, `()`, `!`, the raw GC `Array`,
-    /// a tuple, a function type. Every mangler spells one the same way.
+    /// a function type. Every mangler spells one the same way.
     Builtin(String),
     /// A template's own type-parameter binder (`T`, a pack member `F`). Not a
     /// declaration, so it has no module.
     Binder(String),
+    /// A tuple. Its own head, because a tuple is spelled `[a,b]` — not
+    /// `Head<a,b>` like every other instantiated shape, which is what a
+    /// `Builtin("[]")` carrying arguments would render as.
+    Tuple,
 }
 
 impl TypeHead {
@@ -2376,6 +2384,7 @@ impl TypeHead {
         match self {
             Self::Declared { name, .. } => name,
             Self::Builtin(name) | Self::Binder(name) => name,
+            Self::Tuple => TUPLE_TYPE_NAME,
         }
     }
 
@@ -2384,7 +2393,7 @@ impl TypeHead {
     pub fn module(&self) -> Option<&crate::module_source::ModuleSource> {
         match self {
             Self::Declared { module, .. } => Some(module),
-            Self::Builtin(_) | Self::Binder(_) => None,
+            Self::Builtin(_) | Self::Binder(_) | Self::Tuple => None,
         }
     }
 }
@@ -2418,9 +2427,16 @@ impl FqTypeName {
         Self::of_head_kind(TypeHead::Binder(name.to_string()))
     }
 
-    /// A builtin shape — a primitive, `()`, `!`, the raw GC `Array`, a tuple, a
+    /// A tuple of `elems`, spelled `[a,b]`.
+    #[must_use]
+    pub fn tuple(elems: Vec<FqTypeName>) -> Self {
+        Self::of_head_kind(TypeHead::Tuple).with_args(elems)
+    }
+
+    /// A builtin shape — a primitive, `()`, `!`, the raw GC `Array`, a
     /// reference, a function type. No module declares one, and every mangler
-    /// spells it bare.
+    /// spells it bare. A tuple has its own [`Self::tuple`]: it is not spelled
+    /// `Head<args>`.
     #[must_use]
     pub fn builtin(name: &str) -> Self {
         Self::of_head_kind(TypeHead::Builtin(name.to_string()))
@@ -2508,11 +2524,17 @@ impl FqTypeName {
             out.push_str(kind.prefix());
             out.push(' ');
         }
+        if let TypeHead::Tuple = self.head {
+            let elems: Vec<String> = self.args.iter().map(FqTypeName::to_mangled).collect();
+            out.push_str(&mangle_tuple_type(&elems));
+            return out;
+        }
         match &self.head {
             TypeHead::Declared { module, name } => {
                 out.push_str(&format!("{module}/{name}"));
             }
             TypeHead::Builtin(name) | TypeHead::Binder(name) => out.push_str(name),
+            TypeHead::Tuple => unreachable!("handled above"),
         }
         if !self.args.is_empty() {
             let args: Vec<String> = self.args.iter().map(FqTypeName::to_mangled).collect();
@@ -2532,9 +2554,13 @@ impl FqTypeName {
             out.push_str(kind.prefix());
             out.push(' ');
         }
+        let args: Vec<String> = self.args.iter().map(FqTypeName::to_display).collect();
+        if let TypeHead::Tuple = self.head {
+            out.push_str(&mangle_tuple_type(&args));
+            return out;
+        }
         out.push_str(self.head.name());
-        if !self.args.is_empty() {
-            let args: Vec<String> = self.args.iter().map(FqTypeName::to_display).collect();
+        if !args.is_empty() {
             out.push('<');
             out.push_str(&args.join(","));
             out.push('>');
