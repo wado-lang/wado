@@ -1801,6 +1801,13 @@ impl MangledName {
         &self.0
     }
 
+    /// Whether the name is the empty spelling — the placeholder a few
+    /// synthesis paths use before a real name is known.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     #[must_use]
     pub fn into_string(self) -> String {
         self.0

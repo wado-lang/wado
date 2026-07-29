@@ -1242,7 +1242,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => (name, module_source),
+            } => (crate::name::MangledName::new(name), module_source),
             _ => return,
         };
 
@@ -1256,7 +1256,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (fname, _, vis) in &struct_info.fields {
                 if fname == field_name && !vis.reachable_from(same_package) {
                     let _ = self.emit(TypeError::PrivateFieldAccess {
-                        struct_name: struct_name.clone(),
+                        struct_name: struct_name.clone.to_string()(),
                         field_name: field_name.to_string(),
                         visibility: *vis,
                         span,

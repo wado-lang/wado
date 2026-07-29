@@ -171,31 +171,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => (name.clone(), module_source.clone()),
+            } => (crate::name::MangledName::new(name.clone()), module_source.clone()),
             // Primitive types have impl blocks in core:prelude/primitive
-            ResolvedType::Primitive(_) => (
+            ResolvedType::Primitive(_) => (crate::name::MangledName::new(
                 self.tysys
                     .type_table
                     .borrow()
-                    .mangle_type_name(base_type_id),
+                    .mangle_type_name(base_type_id)),
                 ModuleSource::primitive(),
             ),
             // Unit type () has impl blocks in core:prelude/primitive
-            ResolvedType::Unit => (
-                TypeTable::UNIT_TYPE_NAME.to_string(),
+            ResolvedType::Unit => (crate::name::MangledName::new(
+                TypeTable::UNIT_TYPE_NAME.to_string()),
                 ModuleSource::primitive(),
             ),
             // Enum types - use enum name and its defining module
             ResolvedType::Enum {
                 name,
                 module_source,
-            } => (name.clone(), module_source.clone()),
+            } => (crate::name::MangledName::new(name.clone()), module_source.clone()),
             // Generic resource types (Future<T>, Stream<T>, etc.) - use resource name and module
             ResolvedType::GenericResource {
                 name,
                 module_source,
                 ..
-            } => (name.clone(), module_source.clone()),
+            } => (crate::name::MangledName::new(name.clone()), module_source.clone()),
             // Newtype/Flags - use the type's own name and defining module
             ResolvedType::Newtype {
                 name,
@@ -1780,7 +1780,7 @@ ResolvedType::Resource {
 
         let method_ref = StaticMethodRef::new(
             struct_module.clone(),
-            struct_name.clone(),
+            struct_name.clone.to_string()(),
             static_call.method.clone(),
             trait_name_opt.clone(),
         );
