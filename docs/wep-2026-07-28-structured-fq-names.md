@@ -127,7 +127,32 @@ found (`entries=1`, header name matches, `inherent_impl_applies` true) for all
 three receivers, but `inherent_method_info` answers `None` for one of them —
 that call is the one that falls through to the base.
 
-Next step: find which receiver arguments make `inherent_method_info` miss.
+Ruled out since: the elaborator's scan finds the `MyArray` impl for every
+receiver (the one `inherent_method_info` miss is `self.len()`, correctly
+inherited), the monomorphized TIR does contain
+`newtype_generic_own_method.wado/MyArray<i32>::second`, and neither
+`newtype_aware_method_names` nor `receiver_keeps_newtype_own_impl` changes the
+outcome once corrected.
+
+Erasure is not involved: at rewrite time the receiver still reads as
+`Newtype { name: "MyArray<i32>" }` for all three calls. What differs is the
+name the *elaborator* already put on them — printing every `second` call as it
+reaches the rewrite gives
+
+    recv=Newtype "MyArray<String>"  struct_name=…/MyArray<String>       ✓
+    recv=Newtype "MyArray<i32>"     struct_name=…/MyArray<i32>          ✓
+    recv=Newtype "MyArray<i32>"     struct_name=core:prelude/…/List<i32> ✗
+
+so one of the three call sites is named after the base before monomorphize ever
+runs, and everything downstream is behaving correctly on bad input. The fixture
+has exactly one `second` call inside a generic function (`via_generic<U>`),
+which is the obvious candidate.
+
+Next step: find why `lookup_method_info` reports that call as inherited when
+the same receiver type resolves to the newtype's own impl at the other two
+sites — `lookup_method_info` caches by `(base_type_id, method_name)`, so start
+by checking whether the generic-function call peels to a different
+`base_type_id`.
 
 Root cause of the three serde regressions, established by instrumentation.
 
