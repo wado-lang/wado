@@ -1597,7 +1597,7 @@ impl TypeTable {
     pub fn find_struct_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
         // Use the existing intern_map for O(1) lookup
         let key = ResolvedType::Struct {
-            name: name.to_string(),
+            name: crate::name::MangledName::new(name.to_string()),
             module_source: module_source.clone(),
             base_name: None,
         };

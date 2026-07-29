@@ -1417,23 +1417,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (List implements IndexValue<i32> with type Output = T)
         let struct_name = match &base_type {
             ResolvedType::Struct { name, .. } => name.clone(),
-            ResolvedType::GenericInstance { name, .. } => name.clone(),
-            ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name.clone(),
+            ResolvedType::GenericInstance { name, .. } => crate::name::MangledName::new(name.clone()),
+            ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => crate::name::MangledName::new(name.clone()),
             // The raw GC array dispatches `[]` through `impl IndexValue /
             // IndexAssign for Array<T>`, keyed by the base name "Array".
-            ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
-            _ => String::new(),
+            ResolvedType::BuiltinArray(_) => crate::name::MangledName::new(TypeTable::ARRAY_TYPE_NAME.to_string()),
+            _ => crate::name::MangledName::new(String::new()),
         };
 
         // For newtypes, also resolve the base type name for trait impl lookup
         let (lookup_name, lookup_type_id) =
-            self.tysys.newtype_base_lookup(&struct_name, base_type_id);
+            self.tysys.newtype_base_lookup(&struct_name.as_mangled_str(), base_type_id);
 
         if !struct_name.is_empty() {
             let expected_key = Self::is_coercible_compound_literal(&index.index)
                 .then(|| {
                     self.index_lookup_or_newtype_base(
-                        &struct_name,
+                        &struct_name.as_mangled_str(),
                         base_type_id,
                         &lookup_name,
                         lookup_type_id,
@@ -1456,7 +1456,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let index_trait_info = (!self.uses_intrinsic_index_dispatch(base_type_id))
                 .then(|| {
                     self.index_lookup_or_newtype_base(
-                        &struct_name,
+                        &struct_name.as_mangled_str(),
                         base_type_id,
                         &lookup_name,
                         lookup_type_id,
@@ -1514,7 +1514,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             let index_value_info = self.index_lookup_or_newtype_base(
-                &struct_name,
+                &struct_name.as_mangled_str(),
                 base_type_id,
                 &lookup_name,
                 lookup_type_id,
@@ -1596,16 +1596,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::GenericInstance { name, .. }
             | ResolvedType::Newtype { name, .. }
             | ResolvedType::Flags { name, .. } => name,
-            ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
+            ResolvedType::BuiltinArray(_) => crate::name::MangledName::new(TypeTable::ARRAY_TYPE_NAME.to_string()),
             _ => return None,
         };
         if struct_name.is_empty() {
             return None;
         }
         let (lookup_name, lookup_type_id) =
-            self.tysys.newtype_base_lookup(&struct_name, base_type_id);
+            self.tysys.newtype_base_lookup(&struct_name.as_mangled_str(), base_type_id);
         self.index_lookup_or_newtype_base(
-            &struct_name,
+            &struct_name.as_mangled_str(),
             base_type_id,
             &lookup_name,
             lookup_type_id,
@@ -1614,7 +1614,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         .and_then(|(i, _)| i.index_type)
         .or_else(|| {
             self.index_lookup_or_newtype_base(
-                &struct_name,
+                &struct_name.as_mangled_str(),
                 base_type_id,
                 &lookup_name,
                 lookup_type_id,

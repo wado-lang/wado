@@ -10341,10 +10341,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let scrutinee_struct_name =
             match self.tysys.type_table.borrow().get(peeled_scrutinee).clone() {
                 ResolvedType::Struct { name, .. } => name,
-                ResolvedType::GenericInstance { name, .. } => name,
-                _ => String::new(),
+                ResolvedType::GenericInstance { name, .. } => crate::name::MangledName::new(name),
+                _ => crate::name::MangledName::new(String::new()),
             };
-        let lookup_name = type_name.unwrap_or(&scrutinee_struct_name);
+        let lookup_name = type_name.unwrap_or(&scrutinee_struct_name.as_mangled_str());
 
         // Decl-interned struct info for field-name → (index, type)
         // lookup. Falls back to UNKNOWN-typed sub-patterns for

@@ -1702,7 +1702,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     _ => {
                                         let fq =
                                             FqTypeName::declared(&newtype_module, &newtype_name);
-                                        break (newtype_name, newtype_module, fq, vec![]);
+                                        break (crate::name::MangledName::new(newtype_name), newtype_module, fq, vec![]);
                                     }
                                 }
                             }

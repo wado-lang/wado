@@ -3026,13 +3026,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Struct { name, .. } => name,
-            ResolvedType::GenericInstance { name, .. } => name,
+            ResolvedType::GenericInstance { name, .. } => crate::name::MangledName::new(name),
             _ => return None, // Not a struct type
         };
 
         let index_type = self.resolve_expr(&index_expr.index, ctx, None);
 
-        let index_mut_info = self.find_index_mut_trait_impl(&struct_name, base_type_id)?;
+        let index_mut_info = self.find_index_mut_trait_impl(&struct_name.as_mangled_str(), base_type_id)?;
 
         if let Some(key_type) = index_mut_info.index_type
             && key_type != index_type
