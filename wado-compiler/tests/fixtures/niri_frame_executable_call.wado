@@ -1,0 +1,34 @@
+// A container filled at compile time is a compile-time value, so the helper
+// that fills it never reaches run time.
+//
+// Everything `push` needs opens at once: it returns nothing, so the caller's
+// place is the only thing running it produces; it is a method, not a free call;
+// and it carries `stores[value]`. Its grow path allocates and splices through
+// `array_new` / `array_copy`, with `cold_path()` sitting on that very path — a
+// hint the frame could not step past would end the run one statement before the
+// growth it guards.
+//
+// `#[inline(never)]` keeps the inliner out, so the fold is attributable to
+// niri.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn filled_list() -> List<u8> {
+    let mut out: List<u8> = [];
+    out.push(11);
+    out.push(22);
+    return out;
+}
+
+export fn run() with Stdout {
+    let b = filled_list();
+    assert b.len() == 2;
+    println(`${b[0]} ${b[1]}`);
+}
+
+__DATA__
+{
+    "stdout": "11 22\n",
+    "wir_not_expect:O2": ["filled_list"]
+}

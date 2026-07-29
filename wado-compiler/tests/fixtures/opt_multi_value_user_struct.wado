@@ -16,7 +16,8 @@ fn make_point(x: i32, y: i32) -> Point {
 
 #[inline("never")]
 fn sum_point() -> i32 {
-    let p = make_point(10, 20);
+    // Opaque, or the call folds away and there is no ABI left to lift.
+    let p = make_point(builtin::black_box(10), builtin::black_box(20));
     return p.x + p.y;
 }
 

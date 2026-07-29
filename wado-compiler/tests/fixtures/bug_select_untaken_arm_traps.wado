@@ -1,0 +1,28 @@
+// `select` evaluates both arms, so folding it must keep what the arm not taken
+// would have done. Picking the taken arm's constant deleted the other outright,
+// and with it the divide-by-zero the program traps on. A constant arm computes
+// nothing, which is why the fold waits for both to be one.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn both_constant() -> i32 {
+    return builtin::select(true, 7, 11);
+}
+
+#[inline(never)]
+fn untaken_arm_traps() -> i32 {
+    let zero = 0;
+    return builtin::select(true, 7, 100 / zero);
+}
+
+export fn run() with Stdout {
+    println(`${both_constant()}`);
+    println(`${untaken_arm_traps()}`);
+}
+
+__DATA__
+{
+    "stdout": "7\n",
+    "trapped": true,
+    "wir_not_expect:O2": ["both_constant"]
+}

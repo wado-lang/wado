@@ -1,0 +1,30 @@
+// A container a call writes must not stay bound across it.
+//
+// Container SROA rewrites the tuple list into parallel lists whose locals are
+// assigned rather than declared `mut`, so the walk tracks them. It runs
+// nothing, though: a container held across a push answers `len()` with the
+// length before it, the bounds check folds against that answer, and the
+// program traps on an index it does hold.
+//
+// A container the frame fills is the other case — there the executor performs
+// the write or abandons the evaluation.
+use { println, Stdout } from "core:cli";
+
+#[inline("never")]
+fn pushed_then_indexed() -> i32 {
+    let mut v: List<[i32, i32]> = [];
+    v.push([1, 10]);
+    v.push([2, 20]);
+    return v[1].0 + v[1].1;
+}
+
+export fn run() with Stdout {
+    assert pushed_then_indexed() == 22;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "trapped": false
+}

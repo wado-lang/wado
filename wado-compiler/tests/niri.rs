@@ -13,6 +13,7 @@ use std::rc::Rc;
 
 use wado_compiler::Span;
 use wado_compiler::compiler_item::SeqField;
+use wado_compiler::const_eval::{MAX_SEQ_ELEMENTS, Value};
 use wado_compiler::hashmap::IndexSet;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::nir::{
@@ -25,7 +26,7 @@ use wado_compiler::nir_arena::{
 };
 use wado_compiler::nir_value_graph::ValueKind;
 use wado_compiler::niri::{
-    CalleeMap, GlobalEnv, Interpreter, Lattice, MAX_SEQ_ELEMENTS, SeqBuiltin, SeqBuiltinMap, Value,
+    Callee, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, GlobalEnv, Interpreter, Lattice,
     is_ctfe_eligible,
 };
 use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
@@ -3425,6 +3426,27 @@ fn assign_local_stmt_b(local_index: u32, type_id: TypeId, value: Build) -> StmtB
     })
 }
 
+/// `target = value` as an expression statement, for a target that is a
+/// projection rather than a bare local.
+fn assign_stmt_b(target: Build, value: Build) -> StmtBuild {
+    Rc::new(move |b| {
+        let target = target(b)
+            .as_expr()
+            .expect("a store target is a skeleton expression");
+        let value = value(b);
+        let assign = pe(b, ExprKind::Assign { target, value }, TypeTable::UNIT);
+        ps(b, StmtKind::Expr(Operand::Expr(assign)))
+    })
+}
+
+fn index_expr(receiver: Build, index: Build, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let expr = receiver(b);
+        let index = index(b);
+        Operand::Expr(pe(b, ExprKind::Index { expr, index }, type_id))
+    })
+}
+
 fn block_of(b: &mut Body, stmts: &[StmtBuild]) -> BlockId {
     let ids: Vec<StmtId> = stmts.iter().map(|s| s(b)).collect();
     b.blocks.push(BlockNode {
@@ -3485,8 +3507,45 @@ fn shared_ref(inner: Build, type_id: TypeId) -> Build {
     })
 }
 
+fn mut_ref(inner: Build, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let inner = inner(b);
+        Operand::Expr(pe(
+            b,
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            },
+            type_id,
+        ))
+    })
+}
+
+/// `array_set(&mut place, i, v)`: the first argument is the mutable one.
+fn seq_write_call(func_id: wado_compiler::nir::FuncId, args: Vec<Build>, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let args = args
+            .iter()
+            .enumerate()
+            .map(|(i, a)| wado_compiler::nir_arena::ArenaCallArg {
+                expr: a(b),
+                is_mut: i == 0,
+            })
+            .collect();
+        Operand::Expr(pe(
+            b,
+            ExprKind::Call {
+                func_id,
+                type_args: Vec::new(),
+                args,
+            },
+            type_id,
+        ))
+    })
+}
+
 /// A call to a synthetic builtin id, paired with the map that classifies it.
-fn seq_builtin_call(
+fn ctfe_builtin_call(
     func_id: wado_compiler::nir::FuncId,
     args: Vec<Build>,
     type_id: TypeId,
@@ -3511,8 +3570,8 @@ fn seq_builtin_call(
     })
 }
 
-fn seq_builtin_map(func_id: wado_compiler::nir::FuncId, builtin: SeqBuiltin) -> SeqBuiltinMap {
-    let mut map = SeqBuiltinMap::default();
+fn ctfe_builtin_map(func_id: wado_compiler::nir::FuncId, builtin: CtfeBuiltin) -> CtfeBuiltinMap {
+    let mut map = CtfeBuiltinMap::default();
     map.insert(func_id, builtin);
     map
 }
@@ -3541,6 +3600,991 @@ fn array_literal_reduces_to_the_container_it_denotes() {
     assert_eq!(
         backing.element(1).and_then(Value::as_int).map(|(n, _)| n),
         Some(20)
+    );
+}
+
+/// The shape the lower phase emits for a source string: a container struct
+/// over a packed byte array plus its length.
+fn seq_lit(type_id: TypeId, bytes: Vec<u8>) -> Build {
+    Rc::new(move |b| {
+        let backing = packed_array(bytes.clone(), type_id)(b);
+        let used = int_lit(bytes.len() as u64, TypeTable::I32, "len")(b);
+        Operand::Expr(pe(
+            b,
+            ExprKind::StructLiteral {
+                struct_type: type_id,
+                struct_name: "String".to_string(),
+                fields: vec![
+                    ArenaStructField {
+                        name: SeqField::Backing.field_name().to_string(),
+                        value: backing,
+                        field_index: SeqField::Backing.index(),
+                    },
+                    ArenaStructField {
+                        name: SeqField::Len.field_name().to_string(),
+                        value: used,
+                        field_index: SeqField::Len.index(),
+                    },
+                ],
+            },
+            type_id,
+        ))
+    })
+}
+
+/// Register the container items `materialize_seq_via` identifies by, and the
+/// `Array<u8>` the literal it writes names. A bare table has neither, and the
+/// compiler's own has both.
+fn register_seq_containers(table: &mut TypeTable) {
+    table.make_builtin_array(TypeTable::U8);
+    for (item, name) in [
+        (wado_compiler::compiler_item::CompilerItem::String, "String"),
+        (wado_compiler::compiler_item::CompilerItem::List, "List"),
+    ] {
+        table
+            .compiler_items_mut()
+            .register(
+                item,
+                wado_compiler::compiler_item::Resolved::Struct {
+                    module_source: ModuleSource::default(),
+                    name: name.to_string(),
+                },
+            )
+            .expect("a struct item takes a struct");
+    }
+}
+
+#[test]
+fn a_constant_string_call_result_becomes_a_literal() {
+    // A CTFE call returning a `String` reduces to the container it denotes, and
+    // the exit writes that container back as the literal the lower phase emits
+    // for a source string — instead of discarding it for not being a scalar.
+    let mut table = TypeTable::new();
+    register_seq_containers(&mut table);
+    let string_ty = table.make_struct("String".to_string(), ModuleSource::default());
+    let greeting = make_pure_fn(
+        "greeting",
+        vec![],
+        string_ty,
+        return_stmt(seq_lit(string_ty, b"hi".to_vec())),
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&greeting));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    let (changed, body, e) = reduce_local_into(&mut interp, &call_expr(&greeting, vec![]));
+    assert!(changed, "a constant String call folds");
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[e].kind else {
+        panic!("the folded call is the container literal");
+    };
+    let backing = fields
+        .iter()
+        .find(|f| f.field_index == SeqField::Backing.index())
+        .and_then(|f| f.value.as_expr())
+        .expect("a backing operand");
+    assert!(matches!(&body.exprs[backing].kind, ExprKind::PackedArray(b) if b == b"hi"));
+    assert_eq!(
+        fields
+            .iter()
+            .find(|f| f.field_index == SeqField::Len.index())
+            .map(|f| op_int(&body, f.value)),
+        Some(2),
+    );
+}
+
+#[test]
+fn a_write_through_a_frame_owned_place_is_read_back() {
+    // `array_set` through a `&mut` place the frame built updates the container,
+    // so a later read of that element sees the written value rather than
+    // abandoning the evaluation.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let backing = || {
+        field_access(
+            local_expr(0, list_ty),
+            SeqField::Backing.index(),
+            "repr",
+            list_ty,
+        )
+    };
+    let set_then_get = make_pure_fn_stmts(
+        "set_then_get",
+        vec![],
+        TypeTable::U8,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    mut_ref(backing(), list_ty),
+                    int_lit(1, TypeTable::I32, "1"),
+                    int_lit(7, TypeTable::U8, "7"),
+                ],
+                TypeTable::UNIT,
+            )),
+            return_stmt(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(backing(), list_ty),
+                    int_lit(1, TypeTable::I32, "1"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&set_then_get));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_ctfe_builtins(&builtins);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&set_then_get, vec![])),
+        Some(Value::Int {
+            value: 7,
+            prim: PrimitiveType::U8,
+        }),
+    );
+}
+
+#[test]
+fn a_write_through_a_place_the_frame_does_not_own_is_refused() {
+    // The same write rooted at a global: the frame holds no value for that
+    // root, so the statement abandons the evaluation instead of stepping past a
+    // write it did not apply — the constant the body would return does not come
+    // out either.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+
+    let write_global = make_pure_fn_stmts(
+        "write_global",
+        vec![],
+        TypeTable::U8,
+        vec![
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    mut_ref(
+                        field_access(
+                            global_get(ModuleSource::default(), "BUF", list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            list_ty,
+                        ),
+                        list_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                    int_lit(7, TypeTable::U8, "7"),
+                ],
+                TypeTable::UNIT,
+            )),
+            return_stmt(int_lit(7, TypeTable::U8, "7")),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&write_global));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_ctfe_builtins(&builtins);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&write_global, vec![])),
+        None
+    );
+}
+
+#[test]
+fn a_field_store_through_a_frame_owned_place_is_read_back() {
+    // A store into a field of a container the frame built updates the frame's
+    // value for it, so a later read of that field sees what was written.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+
+    let used = || {
+        field_access(
+            local_expr(0, list_ty),
+            SeqField::Len.index(),
+            "used",
+            TypeTable::I32,
+        )
+    };
+    let store_then_read = make_pure_fn_stmts(
+        "store_then_read",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            assign_stmt_b(used(), int_lit(1, TypeTable::I32, "1")),
+            return_stmt(used()),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&store_then_read));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&store_then_read, vec![])),
+        Some(Value::Int {
+            value: 1,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn a_store_through_a_projection_that_is_not_a_place_is_refused() {
+    // An element position is not a field path, so the target names no place the
+    // frame can update — the write is refused rather than stepped past.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+
+    let store_through_index = make_pure_fn_stmts(
+        "store_through_index",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            assign_stmt_b(
+                field_access(
+                    index_expr(
+                        local_expr(0, list_ty),
+                        int_lit(0, TypeTable::I32, "0"),
+                        list_ty,
+                    ),
+                    SeqField::Len.index(),
+                    "used",
+                    TypeTable::I32,
+                ),
+                int_lit(1, TypeTable::I32, "1"),
+            ),
+            return_stmt(int_lit(7, TypeTable::I32, "7")),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&store_through_index));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&store_through_index, vec![])),
+        None,
+    );
+}
+
+/// A container over a freshly allocated backing array of `capacity` bytes,
+/// holding `used` of them — the shape `List::with_capacity` returns.
+fn allocated_container(
+    list_ty: TypeId,
+    array_ty: TypeId,
+    new_id: wado_compiler::nir::FuncId,
+    capacity: u64,
+    used: u64,
+) -> Build {
+    struct_lit(
+        list_ty,
+        vec![
+            (
+                SeqField::Backing.index(),
+                "repr",
+                ctfe_builtin_call(
+                    new_id,
+                    vec![int_lit(capacity, TypeTable::I32, "capacity")],
+                    array_ty,
+                ),
+            ),
+            (
+                SeqField::Len.index(),
+                "used",
+                int_lit(used, TypeTable::I32, "used"),
+            ),
+        ],
+    )
+}
+
+#[test]
+fn array_new_denotes_a_zero_filled_sequence() {
+    // A fresh allocation is every element's default, so reading one back gives
+    // zero instead of abandoning the evaluation.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let array_ty = table.make_builtin_array(TypeTable::U8);
+    let new_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(new_id, CtfeBuiltin::ArrayNew);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let new_then_read = make_pure_fn_stmts(
+        "new_then_read",
+        vec![],
+        TypeTable::U8,
+        vec![
+            let_stmt_b(
+                "c",
+                0,
+                list_ty,
+                allocated_container(list_ty, array_ty, new_id, 3, 3),
+            ),
+            return_stmt(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(
+                        field_access(
+                            local_expr(0, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            array_ty,
+                        ),
+                        array_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&new_then_read));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_ctfe_builtins(&builtins);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&new_then_read, vec![])),
+        Some(Value::Int {
+            value: 0,
+            prim: PrimitiveType::U8,
+        }),
+    );
+}
+
+#[test]
+fn an_allocation_past_the_element_cap_is_not_a_sequence() {
+    // Building the value would walk every element, so past the cap the
+    // allocation is simply not a constant here and the call stays.
+    let mut table = TypeTable::new();
+    let array_ty = table.make_builtin_array(TypeTable::U8);
+    let new_id = next_test_func_id();
+    let builtins = ctfe_builtin_map(new_id, CtfeBuiltin::ArrayNew);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_ctfe_builtins(&builtins);
+    let oversized = ctfe_builtin_call(
+        new_id,
+        vec![int_lit(
+            MAX_SEQ_ELEMENTS as u64 + 1,
+            TypeTable::I32,
+            "capacity",
+        )],
+        array_ty,
+    );
+
+    assert_eq!(reduce_lat(&mut interp, &oversized), Lattice::Unevaluated);
+}
+
+#[test]
+fn a_container_the_frame_never_filled_stays_an_allocation() {
+    // Materializing it would write the reservation back as an empty literal,
+    // trading a capacity the source asked for against nothing.
+    let mut table = TypeTable::new();
+    register_seq_containers(&mut table);
+    let string_ty = table.make_struct("String".to_string(), ModuleSource::default());
+    let array_ty = table.make_builtin_array(TypeTable::U8);
+    let new_id = next_test_func_id();
+    let builtins = ctfe_builtin_map(new_id, CtfeBuiltin::ArrayNew);
+
+    let with_capacity = make_pure_fn(
+        "with_capacity",
+        vec![],
+        string_ty,
+        return_stmt(allocated_container(string_ty, array_ty, new_id, 8, 0)),
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&with_capacity));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_ctfe_builtins(&builtins);
+
+    let (changed, body, e) = reduce_local_into(&mut interp, &call_expr(&with_capacity, vec![]));
+    assert!(!changed, "a reservation is not written back as a literal");
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+}
+
+#[test]
+fn a_copy_into_a_frame_owned_place_splices_the_source() {
+    // `array_copy` at statement position lands in the frame's container, so a
+    // later read of a copied element sees the source's byte.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let array_ty = table.make_builtin_array(TypeTable::U8);
+    let copy_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(copy_id, CtfeBuiltin::ArrayCopy);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let backing = move || {
+        field_access(
+            local_expr(0, list_ty),
+            SeqField::Backing.index(),
+            "repr",
+            array_ty,
+        )
+    };
+    let copy_then_read = make_pure_fn_stmts(
+        "copy_then_read",
+        vec![],
+        TypeTable::U8,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0, 0, 0])),
+            expr_stmt_b(seq_write_call(
+                copy_id,
+                vec![
+                    mut_ref(backing(), array_ty),
+                    int_lit(1, TypeTable::I32, "1"),
+                    shared_ref(packed_array(vec![7, 8], array_ty), array_ty),
+                    int_lit(0, TypeTable::I32, "0"),
+                    int_lit(2, TypeTable::I32, "2"),
+                ],
+                TypeTable::UNIT,
+            )),
+            return_stmt(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(backing(), array_ty),
+                    int_lit(2, TypeTable::I32, "2"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&copy_then_read));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_ctfe_builtins(&builtins);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&copy_then_read, vec![])),
+        Some(Value::Int {
+            value: 8,
+            prim: PrimitiveType::U8,
+        }),
+    );
+}
+
+#[test]
+fn a_copy_past_the_end_of_the_destination_is_refused() {
+    // The run traps at run time, so the evaluation is abandoned rather than
+    // producing a container the write never made.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let array_ty = table.make_builtin_array(TypeTable::U8);
+    let copy_id = next_test_func_id();
+    let builtins = ctfe_builtin_map(copy_id, CtfeBuiltin::ArrayCopy);
+
+    let overrun = make_pure_fn_stmts(
+        "overrun",
+        vec![],
+        TypeTable::U8,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            expr_stmt_b(seq_write_call(
+                copy_id,
+                vec![
+                    mut_ref(
+                        field_access(
+                            local_expr(0, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            array_ty,
+                        ),
+                        array_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                    shared_ref(packed_array(vec![7, 8], array_ty), array_ty),
+                    int_lit(0, TypeTable::I32, "0"),
+                    int_lit(2, TypeTable::I32, "2"),
+                ],
+                TypeTable::UNIT,
+            )),
+            return_stmt(int_lit(7, TypeTable::U8, "7")),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&overrun));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_ctfe_builtins(&builtins);
+
+    assert_eq!(flow_fold(&mut interp, &call_expr(&overrun, vec![])), None);
+}
+
+/// `c.used` for the container held in local 0.
+fn used_of_local(list_ty: TypeId) -> Build {
+    field_access(
+        local_expr(0, list_ty),
+        SeqField::Len.index(),
+        "used",
+        TypeTable::I32,
+    )
+}
+
+/// A statement incrementing the container in local 0.
+fn bump_used(list_ty: TypeId) -> StmtBuild {
+    assign_stmt_b(
+        used_of_local(list_ty),
+        binary(
+            NirBinaryOp::Add,
+            used_of_local(list_ty),
+            int_lit(1, TypeTable::I32, "1"),
+            TypeTable::I32,
+        ),
+    )
+}
+
+#[test]
+fn a_call_writing_through_a_mut_ref_updates_the_caller_place() {
+    // What the run produces is the caller's place: the callee returns nothing,
+    // so a run whose writes went nowhere would be a run for nothing.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+
+    let bump = with_mut_ref_params(
+        make_pure_fn_stmts(
+            "bump",
+            vec![("c", list_ty)],
+            TypeTable::UNIT,
+            vec![bump_used(list_ty)],
+        ),
+        &[0],
+    );
+    let caller = make_pure_fn_stmts(
+        "caller",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            expr_stmt_b(call_expr_args(
+                &bump,
+                vec![(mut_ref(local_expr(0, list_ty), list_ty), true)],
+            )),
+            return_stmt(used_of_local(list_ty)),
+        ],
+    );
+    let callees = build_callee_map_test(&[bump, caller.clone()]);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&caller, vec![])),
+        Some(Value::Int {
+            value: 3,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn a_method_call_writes_back_through_its_receiver() {
+    // A method names its receiver directly rather than through `&mut`, and
+    // what fills a container is always a method.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+
+    let bump = with_mut_ref_params(
+        make_pure_fn_stmts(
+            "List<u8>::bump",
+            vec![("self", list_ty)],
+            TypeTable::UNIT,
+            vec![bump_used(list_ty)],
+        ),
+        &[0],
+    );
+    let caller = make_pure_fn_stmts(
+        "caller",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            expr_stmt_b(method_call_expr(&bump, local_expr(0, list_ty), Vec::new())),
+            return_stmt(used_of_local(list_ty)),
+        ],
+    );
+    let callees = build_callee_map_test(&[bump, caller.clone()]);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&caller, vec![])),
+        Some(Value::Int {
+            value: 3,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn a_mutating_call_outside_statement_position_is_not_run() {
+    // The lattice projection is re-entrant, so a write applied there could
+    // land twice. Only the executor runs a mutating call, and only where it
+    // runs exactly once.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+
+    let bump_get = with_mut_ref_params(
+        make_pure_fn_stmts(
+            "bump_get",
+            vec![("c", list_ty)],
+            TypeTable::I32,
+            vec![bump_used(list_ty), return_stmt(used_of_local(list_ty))],
+        ),
+        &[0],
+    );
+    let caller = make_pure_fn_stmts(
+        "caller",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            return_stmt(binary(
+                NirBinaryOp::Add,
+                call_expr_args(
+                    &bump_get,
+                    vec![(mut_ref(local_expr(0, list_ty), list_ty), true)],
+                ),
+                used_of_local(list_ty),
+                TypeTable::I32,
+            )),
+        ],
+    );
+    let callees = build_callee_map_test(&[bump_get, caller.clone()]);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(flow_fold(&mut interp, &call_expr(&caller, vec![])), None);
+}
+
+#[test]
+fn a_mutating_call_bound_by_a_let_writes_back() {
+    // A `let` runs its value exactly once, so a call that both returns and
+    // writes is at home there.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+
+    let bump_get = with_mut_ref_params(
+        make_pure_fn_stmts(
+            "bump_get",
+            vec![("c", list_ty)],
+            TypeTable::I32,
+            vec![bump_used(list_ty), return_stmt(used_of_local(list_ty))],
+        ),
+        &[0],
+    );
+    let caller = make_pure_fn_stmts(
+        "caller",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_stmt_b(
+                "a",
+                1,
+                TypeTable::I32,
+                call_expr_args(
+                    &bump_get,
+                    vec![(mut_ref(local_expr(0, list_ty), list_ty), true)],
+                ),
+            ),
+            return_stmt(binary(
+                NirBinaryOp::Add,
+                binary(
+                    NirBinaryOp::Mul,
+                    local_expr(1, TypeTable::I32),
+                    int_lit(10, TypeTable::I32, "10"),
+                    TypeTable::I32,
+                ),
+                used_of_local(list_ty),
+                TypeTable::I32,
+            )),
+        ],
+    );
+    let callees = build_callee_map_test(&[bump_get, caller.clone()]);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&caller, vec![])),
+        Some(Value::Int {
+            value: 33,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn a_run_that_bails_part_way_writes_nothing() {
+    // The callee's first statement lands, its second is one the frame cannot
+    // perform. Stepping past that with the first write applied would hand the
+    // caller a container the callee never produced.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+
+    let half = with_mut_ref_params(
+        make_pure_fn_stmts(
+            "half",
+            vec![("c", list_ty)],
+            TypeTable::UNIT,
+            vec![
+                bump_used(list_ty),
+                assign_stmt_b(
+                    field_access(
+                        index_expr(
+                            local_expr(0, list_ty),
+                            int_lit(0, TypeTable::I32, "0"),
+                            list_ty,
+                        ),
+                        SeqField::Len.index(),
+                        "used",
+                        TypeTable::I32,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                ),
+            ],
+        ),
+        &[0],
+    );
+    let caller = make_pure_fn_stmts(
+        "caller",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            expr_stmt_b(call_expr_args(
+                &half,
+                vec![(mut_ref(local_expr(0, list_ty), list_ty), true)],
+            )),
+            return_stmt(used_of_local(list_ty)),
+        ],
+    );
+    let callees = build_callee_map_test(&[half, caller.clone()]);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(flow_fold(&mut interp, &call_expr(&caller, vec![])), None);
+}
+
+#[test]
+fn a_stores_clause_does_not_stop_a_run() {
+    // `stores` constrains a *reference* the callee keeps, and the engine has
+    // no references: an argument reduces to its referent's value, and a
+    // referent it can bind is one nothing in the frame can go on to change.
+    let table = TypeTable::new();
+    let mut keeper = make_pure_fn(
+        "keep",
+        vec![("value", TypeTable::I32)],
+        TypeTable::I32,
+        return_stmt(local_expr(0, TypeTable::I32)),
+    );
+    keeper.stores = vec!["value".to_string()];
+    let callees = build_callee_map_test(std::slice::from_ref(&keeper));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(
+        flow_fold(
+            &mut interp,
+            &call_expr(&keeper, vec![int_lit(7, TypeTable::I32, "7")])
+        ),
+        Some(Value::Int {
+            value: 7,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn an_argument_still_spelled_as_arithmetic_binds() {
+    // A call runs before the walk has folded its arguments, so binding a
+    // parameter has to fold what it is handed rather than read a literal.
+    let table = TypeTable::new();
+    let plus_one = make_pure_fn(
+        "plus_one",
+        vec![("n", TypeTable::I32)],
+        TypeTable::I32,
+        return_stmt(binary(
+            NirBinaryOp::Add,
+            local_expr(0, TypeTable::I32),
+            int_lit(1, TypeTable::I32, "1"),
+            TypeTable::I32,
+        )),
+    );
+    let caller = make_pure_fn_stmts(
+        "caller",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_stmt_b("k", 0, TypeTable::I32, int_lit(3, TypeTable::I32, "3")),
+            let_stmt_b(
+                "a",
+                1,
+                TypeTable::I32,
+                call_expr(
+                    &plus_one,
+                    vec![binary(
+                        NirBinaryOp::Mul,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(2, TypeTable::I32, "2"),
+                        TypeTable::I32,
+                    )],
+                ),
+            ),
+            return_stmt(local_expr(1, TypeTable::I32)),
+        ],
+    );
+    let callees = build_callee_map_test(&[plus_one, caller.clone()]);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&caller, vec![])),
+        Some(Value::Int {
+            value: 7,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn a_shared_receiver_leaves_the_container_trackable() {
+    // Reading through `&self` cannot write, so a container stays trackable
+    // across the very `len()` calls a caller reads it with — and `push` reads
+    // its own capacity that way on every call.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+
+    let bump = with_mut_ref_params(
+        make_pure_fn_stmts(
+            "List<u8>::bump",
+            vec![("self", list_ty)],
+            TypeTable::UNIT,
+            vec![bump_used(list_ty)],
+        ),
+        &[0],
+    );
+    let len = make_pure_fn(
+        "List<u8>::len",
+        vec![("self", list_ty)],
+        TypeTable::I32,
+        return_stmt(used_of_local(list_ty)),
+    );
+    let caller = make_pure_fn_stmts(
+        "caller",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            expr_stmt_b(method_call_expr(&bump, local_expr(0, list_ty), Vec::new())),
+            return_stmt(method_call_expr(&len, local_expr(0, list_ty), Vec::new())),
+        ],
+    );
+    let callees = build_callee_map_test(&[bump, len, caller.clone()]);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&caller, vec![])),
+        Some(Value::Int {
+            value: 3,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn select_picks_the_arm_its_condition_names() {
+    // A comparison collapses to branchless `select` before niri sees it, and
+    // that is what stands between a container and the capacity it grows to.
+    let table = TypeTable::new();
+    let select_id = next_test_func_id();
+    let builtins = ctfe_builtin_map(select_id, CtfeBuiltin::Select);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_ctfe_builtins(&builtins);
+
+    let pick = |condition: bool| {
+        ctfe_builtin_call(
+            select_id,
+            vec![
+                bool_lit(condition),
+                int_lit(10, TypeTable::I32, "10"),
+                int_lit(20, TypeTable::I32, "20"),
+            ],
+            TypeTable::I32,
+        )
+    };
+
+    assert_eq!(
+        reduce_lat(&mut interp, &pick(true)),
+        Lattice::Const(Value::Int {
+            value: 10,
+            prim: PrimitiveType::I32,
+        }),
+    );
+    assert_eq!(
+        reduce_lat(&mut interp, &pick(false)),
+        Lattice::Const(Value::Int {
+            value: 20,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn a_branch_hint_is_stepped_past() {
+    // `cold_path()` computes nothing, and it sits on the very path that grows
+    // a container — a frame that could not step past it would stop one
+    // statement before the growth it guards.
+    let table = TypeTable::new();
+    let hint_id = next_test_func_id();
+    let builtins = ctfe_builtin_map(hint_id, CtfeBuiltin::ColdPath);
+
+    let hinted = make_pure_fn_stmts(
+        "hinted",
+        vec![],
+        TypeTable::I32,
+        vec![
+            expr_stmt_b(ctfe_builtin_call(hint_id, Vec::new(), TypeTable::UNIT)),
+            return_stmt(int_lit(7, TypeTable::I32, "7")),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&hinted));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_ctfe_builtins(&builtins);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&hinted, vec![])),
+        Some(Value::Int {
+            value: 7,
+            prim: PrimitiveType::I32,
+        }),
     );
 }
 
@@ -3576,13 +4620,13 @@ fn a_sequence_over_the_cap_is_not_modelled() {
 #[test]
 fn array_get_folds_an_element() {
     let func_id = next_test_func_id();
-    let map = seq_builtin_map(func_id, SeqBuiltin::Get);
+    let map = ctfe_builtin_map(func_id, CtfeBuiltin::ArrayGet);
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    interp.with_seq_builtins(&map);
+    interp.with_ctfe_builtins(&map);
     // `arr[i]` lowers to the builtin over the backing array projected out of
     // the container.
-    let call = seq_builtin_call(
+    let call = ctfe_builtin_call(
         func_id,
         vec![
             field_access(
@@ -3608,11 +4652,11 @@ fn array_get_folds_an_element() {
 #[test]
 fn array_get_reads_through_a_shared_reference() {
     let func_id = next_test_func_id();
-    let map = seq_builtin_map(func_id, SeqBuiltin::Get);
+    let map = ctfe_builtin_map(func_id, CtfeBuiltin::ArrayGet);
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    interp.with_seq_builtins(&map);
-    let call = seq_builtin_call(
+    interp.with_ctfe_builtins(&map);
+    let call = ctfe_builtin_call(
         func_id,
         vec![
             shared_ref(
@@ -3636,11 +4680,11 @@ fn array_get_reads_through_a_shared_reference() {
 fn array_get_past_the_end_is_left_alone() {
     // Folding the read would delete the run-time trap.
     let func_id = next_test_func_id();
-    let map = seq_builtin_map(func_id, SeqBuiltin::Get);
+    let map = ctfe_builtin_map(func_id, CtfeBuiltin::ArrayGet);
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    interp.with_seq_builtins(&map);
-    let call = seq_builtin_call(
+    interp.with_ctfe_builtins(&map);
+    let call = ctfe_builtin_call(
         func_id,
         vec![
             array_literal(TypeTable::I32, vec![int_lit(10, TypeTable::I32, "10")]),
@@ -3656,11 +4700,11 @@ fn array_get_past_the_end_is_left_alone() {
 #[test]
 fn array_len_folds_to_the_element_count() {
     let func_id = next_test_func_id();
-    let map = seq_builtin_map(func_id, SeqBuiltin::Len);
+    let map = ctfe_builtin_map(func_id, CtfeBuiltin::ArrayLen);
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    interp.with_seq_builtins(&map);
-    let call = seq_builtin_call(
+    interp.with_ctfe_builtins(&map);
+    let call = ctfe_builtin_call(
         func_id,
         vec![packed_array(b"hello".to_vec(), TypeTable::I32)],
         TypeTable::I32,
@@ -3673,7 +4717,7 @@ fn a_sequence_without_the_builtin_map_stays_a_call() {
     let func_id = next_test_func_id();
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let call = seq_builtin_call(
+    let call = ctfe_builtin_call(
         func_id,
         vec![
             array_literal(TypeTable::I32, vec![int_lit(10, TypeTable::I32, "10")]),
@@ -3714,7 +4758,7 @@ fn array_get_reads_an_element_out_of_a_constant_global() {
     // `TABLE[1]` on `global TABLE: List<i32> = [10, 31];` — the container is
     // known through the global env, so the element reads out of it.
     let func_id = next_test_func_id();
-    let map = seq_builtin_map(func_id, SeqBuiltin::Get);
+    let map = ctfe_builtin_map(func_id, CtfeBuiltin::ArrayGet);
     let table = TypeTable::new();
     let module = ModuleSource::default();
     let backing = Value::seq(
@@ -3749,9 +4793,9 @@ fn array_get_reads_an_element_out_of_a_constant_global() {
         )),
     );
     let mut interp = Interpreter::new(&table);
-    interp.with_seq_builtins(&map);
+    interp.with_ctfe_builtins(&map);
     interp.with_globals(&globals);
-    let call = seq_builtin_call(
+    let call = ctfe_builtin_call(
         func_id,
         vec![
             shared_ref(
@@ -3890,6 +4934,15 @@ fn make_pure_fn(
     return_type: TypeId,
     body_stmt: StmtBuild,
 ) -> NirFunction {
+    make_pure_fn_stmts(name, params, return_type, vec![body_stmt])
+}
+
+fn make_pure_fn_stmts(
+    name: &str,
+    params: Vec<(&str, TypeId)>,
+    return_type: TypeId,
+    body_stmts: Vec<StmtBuild>,
+) -> NirFunction {
     let span = Span::default();
     let tir_params: Vec<NirParam> = params
         .iter()
@@ -3945,7 +4998,7 @@ fn make_pure_fn(
         kind: FunctionKind::Regular,
         return_abi: ReturnAbi::Single,
     };
-    set_arena_body(&mut f, vec![body_stmt]);
+    set_arena_body(&mut f, body_stmts);
     f
 }
 
@@ -3974,13 +5027,72 @@ fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
     })
 }
 
+/// A call whose arguments carry their `is_mut` flags — the shape a `&mut`
+/// argument takes at a call site.
+fn call_expr_args(func: &NirFunction, args: Vec<(Build, bool)>) -> Build {
+    let func_id = func.id.expect("test function must have an id");
+    let return_type = func.return_type;
+    Rc::new(move |b| {
+        let call_args = args
+            .iter()
+            .map(|(e, is_mut)| wado_compiler::nir_arena::ArenaCallArg {
+                expr: e(b),
+                is_mut: *is_mut,
+            })
+            .collect();
+        Operand::Expr(pe(
+            b,
+            ExprKind::Call {
+                func_id,
+                type_args: Vec::new(),
+                args: call_args,
+            },
+            return_type,
+        ))
+    })
+}
+
+/// A method call, whose receiver is the callee's first parameter.
+fn method_call_expr(func: &NirFunction, receiver: Build, args: Vec<Build>) -> Build {
+    let func_id = func.id.expect("test function must have an id");
+    let return_type = func.return_type;
+    Rc::new(move |b| {
+        let receiver = receiver(b);
+        let call_args = args
+            .iter()
+            .map(|e| wado_compiler::nir_arena::ArenaCallArg {
+                expr: e(b),
+                is_mut: false,
+            })
+            .collect();
+        Operand::Expr(pe(
+            b,
+            ExprKind::MethodCall {
+                receiver,
+                func_id,
+                type_args: Vec::new(),
+                args: call_args,
+            },
+            return_type,
+        ))
+    })
+}
+
+/// `func` with the listed parameters declared `&mut T`.
+fn with_mut_ref_params(mut func: NirFunction, indices: &[usize]) -> NirFunction {
+    for i in indices {
+        func.params[*i].is_mut_ref = true;
+    }
+    func
+}
+
 /// Build a `CalleeMap` from the supplied functions, wrapping each in
 /// `Rc<RefCell<...>>` to match the production map shape.
 fn build_callee_map_test(funcs: &[NirFunction]) -> CalleeMap {
     let mut map = CalleeMap::default();
     for f in funcs {
         let key = f.id.expect("test function must have an id");
-        map.insert(key, Rc::new(RefCell::new(f.clone())));
+        map.insert(key, Callee::new(Rc::new(RefCell::new(f.clone()))));
     }
     map
 }
@@ -5799,6 +6911,51 @@ fn aggregate_binding_needs_a_read_only_local() {
     interp.bind_local(0, Lattice::Const(point_value(point)));
     let reread = field_access(local_expr(0, point), 0, "x", TypeTable::I32);
     assert_eq!(reduce_lat(&mut interp, &reread), Lattice::NonConst);
+}
+
+#[test]
+fn a_walk_that_performs_nothing_drops_a_container_a_call_writes() {
+    // The exemptions belong to a compile-time frame, which performs the write
+    // or abandons the evaluation. An ordinary walk performs nothing: it steps
+    // over the call, so a container bound across one would answer `len()` with
+    // the length the push already changed — and the bounds check folds against
+    // that answer.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+
+    let bump = with_mut_ref_params(
+        make_pure_fn_stmts(
+            "List<u8>::bump",
+            vec![("self", list_ty)],
+            TypeTable::UNIT,
+            vec![bump_used(list_ty)],
+        ),
+        &[0],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&bump));
+
+    let written: Build = Rc::new(move |b| {
+        used_of_local(list_ty)(b);
+        method_call_expr(&bump, local_expr(0, list_ty), Vec::new())(b)
+    });
+    let (body, _) = into_body(&written);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.enter_function();
+    interp.record_aggregate_locals(&body);
+    interp.bind_local(
+        0,
+        Lattice::Const(Value::aggregate(
+            list_ty,
+            vec![(SeqField::Len.index(), int(2))],
+        )),
+    );
+
+    assert_eq!(
+        reduce_lat(&mut interp, &used_of_local(list_ty)),
+        Lattice::NonConst,
+    );
 }
 
 #[test]

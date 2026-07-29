@@ -47,6 +47,12 @@ needs to know _which_ definition reaches a use belongs to the `ValueGraph`,
 and a proposal to teach `niri` about control flow between statements should be
 read as a sign the fact belongs on the other side of this line.
 
+What the line does not forbid is a store over the values the engine itself
+constructed. Inside a frame `niri` already executes statements in order, so a
+value built there — and reachable from nothing the frame did not build — can be
+written through and read back without asking which definition reaches a use.
+The program's heap stays the `ValueGraph`'s; the engine's own is the engine's.
+
 ### Effects are the purity gate
 
 CTFE soundness rests on effect inference: a function admitted for
@@ -62,8 +68,9 @@ Value model:
   bitwise and unary operators over them, and casts between them.
 - Structs and tuples whose every field is constant, and field reads
   projecting back out of them — out of a literal, a local, an immutable
-  global, or a compile-time call result. Aggregates never leave the engine;
-  what reaches the IR is the scalars projected out of them.
+  global, or a compile-time call result. An aggregate leaves the engine only
+  where it has a literal shape to be written as; otherwise what reaches the IR
+  is the scalars projected out of it.
 - A three-state lattice — unevaluated, constant, non-constant — with a join,
   so an unreachable branch contributes nothing to the result and a trapping
   arm does not contaminate a fold.
@@ -159,6 +166,23 @@ Sequences:
   out of a global, whose container the engine recovers from the assignment that
   fills its slot. Only a scalar element reaches the IR; an aggregate one stays
   inside the engine, as every aggregate does.
+- An element write lands. `array_set` through a `&mut` reaching a place the
+  frame owns — a local it bound to a constant, plus the field path into it —
+  updates that local's value, so a later read sees what was written. The write
+  is performed, not folded: it only counts at statement position, where the
+  executor runs it. A place rooted anywhere else — a parameter, a global,
+  anything the frame did not build — has no current value to update and
+  abandons the evaluation rather than being stepped past.
+- A borrow handed to a sequence builtin does not make its root stale: the
+  executor performs the write itself, and a read cannot write at all. Every
+  other borrow still does.
+- A byte-sequence container a compile-time call produced is written back as the
+  literal the lower phase emits for a source string — a struct over a packed
+  byte array and its length. The bytes are the container's first `used`, since
+  a grown container's capacity outruns what it holds and capacity is not
+  observable. Only a call is rewritten this way: the literal denotes the value
+  it replaced, so materializing one again would report a change at every visit
+  and the worklist would never settle.
 
 ## TODO
 
@@ -167,6 +191,11 @@ Sequences:
 - Enum and variant values with their payloads. Today an enum or variant
   pattern cannot be decided, so an `Option` / `Result` accessor exposed by
   inlining leaves a residual match the engine walks past.
+- An aggregate that is not a byte sequence has no way back into the IR. A
+  `List<T>` of scalars would want the `ArrayLiteral` shape, and a plain struct
+  a `StructLiteral` over its materialized fields; both are exits to add beside
+  the byte-sequence one, and both inherit its `Call`-only restriction until
+  something establishes the value did not come from the node being rewritten.
 - Comparing two literal strings. A string pattern reaches the engine as a
   guard, and deciding it means running the comparison — which is a method call
   taking references, so it waits on the two entries below rather than on the
@@ -178,7 +207,13 @@ Sequences:
   containing one is abandoned.
 - Method calls, excluded because a `&mut self` receiver mutates through the
   call. Worth revisiting now that mod-ref and alias analysis can prove a
-  receiver is not written.
+  receiver is not written — and unnecessary for a receiver the frame owns, which
+  the store below can simply update.
+- A call that returns nothing. Eligibility asks for a value to substitute, which
+  is the right question for replacing a call and the wrong one for running it:
+  a call whose every write lands in a place the frame owns is executable as a
+  statement whatever it returns. Splitting the two — value-CTFE and
+  frame-executable — is what lets a builder-style helper run.
 - Closure calls: an indirect call whose closure is known at the call site is
   never resolved to a direct call, so neither inlining nor CTFE can reach
   through it.
@@ -198,10 +233,127 @@ Sequences:
 
 ### Sequences
 
-- Writes. A sequence is read-only to the engine: an element or spine mutation
-  leaves the container non-constant instead of producing the updated value. A
-  compile-time call that fills a table in a loop therefore does not fold, which
-  is the workload the wasm-CTFE backend below is meant to take.
+- The rest of the spine. Element and field writes land, an allocation denotes a
+  zero-filled sequence and a copy a spliced one; what remains is a `&mut`
+  argument writing back into the caller frame's place on return. Without it a
+  buffer that grows — which is what `String` does the moment it outruns its
+  capacity — still abandons the evaluation, because `grow` reshapes the
+  caller's container from a frame of its own. What will not fit even then — a
+  table past the length cap, a fill loop past the step budget — stays the
+  wasm-CTFE backend's case.
+
+### Regions
+
+- A closed block is not evaluated, only a call is. A block that builds a value
+  in locals of its own, writes only to those locals, and yields one of them is
+  as self-contained as a call body and needs no more machinery to run — the
+  difference is that the caller wrote it inline. Recognizing that shape is what
+  turns the string-template case below from a call-level problem, which needs a
+  contract about the caller's buffer, into a frame the engine starts from
+  scratch.
+
+### Compile-time string formatting
+
+A template whose interpolations are all constant still formats at run time.
+`` `n=${42}` `` reaches the end of the optimizer as a buffer allocation, two
+byte pushes, a `Formatter` literal, and a call to `i32::fmt_decimal`, paying a
+digit-count loop and a division loop per evaluation — and keeping the
+formatting code alive in the binary — for four bytes decided at compile time.
+The same string written `"n=42"` folds to a deduplicated constant global.
+Every `${}` over constants, every `to_string()` on a literal, every constant
+`assert` message, and every constant `${x:?}` pays this.
+
+Nothing here waits on trait dispatch: `Display::fmt` is monomorphized and
+devirtualized to a free call before the optimizer runs. What it waits on is the
+four entries above — the aggregate exit, the store, the frame-executable call,
+and region recognition. Together they fold the region to the literal the source
+could have written, after which constant-object globalization deduplicates it
+and DCE drops the formatting functions no live call reaches.
+
+Fold the region, not the call. A region constructs its own buffer, so every
+value inside it is concrete and nothing is assumed about it.
+
+The call-level fold — rewriting one `fmt` over a constant into
+`push_str(<literal>)`, which is what a template mixing constant and runtime
+interpolations needs — claims more than one concrete evaluation shows: that the
+callee appends the same bytes to every buffer, not just to the one it ran
+against. `#[compiler_item]` is where that comes from, as it already does for
+`push_str` — the rewrite expanding `buf.push_str("abc")` into per-byte `push`
+is licensed by the marker, not by an analysis of either body.
+
+Mark `Formatter`'s write primitives, not `Display::fmt`. Marking the trait
+would extend the trust across every user-written impl, where nothing is
+checkable; a primitive is one small stdlib function a reader can confirm, the
+same obligation `push_str` already carries.
+
+What a marked primitive declares is a region append: everything it does to the
+buffer happens at or above the length the buffer had on entry, and what lies
+below is neither read nor moved. That is the stdlib's formatting idiom as
+written — `prepare_int_write` reserves a region the digit writers fill
+backwards, `mark` / `apply_padding` appends content and then shifts it to make
+room for alignment, and `fpfmt`'s writers reserve and slide a fractional tail
+to insert the point. A strictly-append contract, where bytes land on the end
+and are never revisited, is not the design: a padded float cannot learn its
+length before appending, so reaching it would mean formatting through an
+intermediate buffer, which costs more at run time than the contract is worth.
+Region append covers all three idioms unchanged and is still one sentence.
+
+What any particular `fmt` body does is then derived rather than declared: run it
+against a buffer the engine constructed, and admit the result when every buffer
+access either went through a marked primitive or landed inside a region one of
+them just returned. A body that reads the buffer's prior length for its own
+purposes, or reaches `f.buf` outside that, is refused — a condition the engine
+checks rather than an invariant it hopes for.
+
+The markers also keep the buffer plumbing out of the interpreter: a marked
+`push_str` is applied by its declared meaning, so `grow`'s undecidable capacity
+test and `realloc_to`'s prefix copy are never interpreted. The reserved region a
+primitive hands back is the same place the frame store hands out, so the two
+capabilities want the same representation.
+
+Milestones, each red/green with the fixture first:
+
+- [x] The aggregate exit. A compile-time call returning a constant `String`
+      folds. No cap of its own is needed: `MAX_SEQ_ELEMENTS` already bounds what
+      becomes a sequence value, and a payload past the inline threshold reaches
+      the binary as a data segment rather than as code. A container the frame
+      never filled stays as the source wrote it: an empty one is a reservation
+      rather than a result, and a literal cannot carry the capacity it asked
+      for.
+- [x] Places and the frame store. Element writes, field stores, allocations and
+      copies all land through a frame-owned place.
+- [x] Frame-executable calls. A call writing through a `&mut` parameter runs
+      and writes back into the caller frame's place, so a compile-time call that
+      fills and returns a `List<u8>` folds, growth included. The write-back is
+      not separable from running the call: what fills a container is `push`,
+      which returns nothing, so the caller's place is the only thing the run
+      produces.
+
+      It is confined to statement and `let` position, where the executor runs a
+      call exactly once. The lattice projection is re-entrant, so a mutating
+      call is refused there outright — a write applied twice is worse than a
+      fold missed.
+
+      Which places stay trackable divides on what reaches them, not on where
+      the question is asked. A shared receiver, a by-value argument and a
+      builtin's source cannot be written through, so they are exempt wherever
+      they appear; that is what carries a container through the `&self` reads
+      `push` makes of its own capacity. A `&mut` one is exempt only inside a
+      frame, which performs the write or abandons the evaluation. An ordinary
+      walk performs nothing, and a write it steps over leaves its target stale.
+- [ ] Region recognition. `` `ab` `` and `` `a${"b"}` `` fold to one literal.
+- [ ] Coverage, in order of engine cost: `bool` / `char` / `String`, then
+      integers, then width / zero-pad / radix specs, then `Inspect`, then
+      floats. Each step measures what it spends against the step budget:
+      integer formatting is two short loops and fits, and `fpfmt` is the
+      candidate for overrunning it — if it does, floats are the wasm-CTFE
+      backend's case rather than a reason to raise the budget.
+- [ ] A remark for a region that nearly folded — one runtime interpolation, or
+      an exhausted budget — so a missed fold is visible instead of silent, plus
+      a `wasm-size` and `benchmark` run to record what the whole thing bought.
+
+A template with any runtime interpolation keeps today's imperative form,
+including the loop-buffer reuse `tmpl_hoist` gives it.
 
 ### wasm-CTFE backend
 
@@ -252,3 +404,7 @@ question, not a design-time one.
 - Where does the wasm-CTFE module cache live — per `compile` invocation or per
   process? Per-invocation is simpler; per-process speeds up watch-mode
   workflows but needs eviction.
+- Which primitives make the marked set. Every buffer touch in the formatting
+  path has to reach one, so the set is whatever `write_str`, `write_char`,
+  `pad`, `mark` / `apply_padding`, `prepare_int_write`, and `fpfmt`'s reserving
+  writers turn out to factor into.

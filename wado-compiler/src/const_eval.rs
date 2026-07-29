@@ -77,6 +77,104 @@ impl Value {
             .map(|pos| &fields[pos].1)
     }
 
+    /// This aggregate with field `index` replaced. `None` for a scalar or an
+    /// absent field — a NIR aggregate literal lists every field, so an absent
+    /// one means the value is not the aggregate the write assumed.
+    #[must_use]
+    pub fn with_field(&self, index: u32, value: Self) -> Option<Self> {
+        let Self::Aggregate { type_id, fields } = self else {
+            return None;
+        };
+        let pos = fields.binary_search_by_key(&index, |(i, _)| *i).ok()?;
+        let mut fields = fields.to_vec();
+        fields[pos].1 = value;
+        Some(Self::Aggregate {
+            type_id: *type_id,
+            fields: fields.into(),
+        })
+    }
+
+    /// This aggregate with the value at `path` replaced. `None` when the path
+    /// does not reach a field the value has.
+    #[must_use]
+    pub fn with_path(&self, path: &[u32], value: Self) -> Option<Self> {
+        let Some((head, rest)) = path.split_first() else {
+            return Some(value);
+        };
+        let updated = self.field(*head)?.with_path(rest, value)?;
+        self.with_field(*head, updated)
+    }
+
+    /// This sequence with element `index` replaced. `None` for a non-sequence
+    /// or an index past the end, where the write traps at run time.
+    #[must_use]
+    pub fn with_element(&self, index: u64, value: Self) -> Option<Self> {
+        let Self::Seq { type_id, elements } = self else {
+            return None;
+        };
+        let index = usize::try_from(index).ok()?;
+        if index >= elements.len() {
+            return None;
+        }
+        let mut elements = elements.to_vec();
+        elements[index] = value;
+        Some(Self::Seq {
+            type_id: *type_id,
+            elements: elements.into(),
+        })
+    }
+
+    /// This sequence with `len` of `source`'s elements from `from` written at
+    /// `at`. `None` for a non-sequence or a run either side cannot supply,
+    /// where the copy traps at run time.
+    #[must_use]
+    pub fn with_run(&self, at: u64, source: &Self, from: u64, len: u64) -> Option<Self> {
+        let (
+            Self::Seq { type_id, elements },
+            Self::Seq {
+                elements: source, ..
+            },
+        ) = (self, source)
+        else {
+            return None;
+        };
+        let (at, from, len) = (
+            usize::try_from(at).ok()?,
+            usize::try_from(from).ok()?,
+            usize::try_from(len).ok()?,
+        );
+        let source = source.get(from..from.checked_add(len)?)?;
+        let mut elements = elements.to_vec();
+        elements
+            .get_mut(at..at.checked_add(len)?)?
+            .clone_from_slice(source);
+        Some(Self::Seq {
+            type_id: *type_id,
+            elements: elements.into(),
+        })
+    }
+
+    /// The value `array.new_default` leaves in an element of this primitive
+    /// type. `None` for the widths the value model does not carry, and for a
+    /// reference element, whose default is null.
+    #[must_use]
+    pub fn default_of(prim: PrimitiveType) -> Option<Self> {
+        match prim {
+            PrimitiveType::I8
+            | PrimitiveType::I16
+            | PrimitiveType::I32
+            | PrimitiveType::I64
+            | PrimitiveType::U8
+            | PrimitiveType::U16
+            | PrimitiveType::U32
+            | PrimitiveType::U64 => Some(Self::Int { value: 0, prim }),
+            PrimitiveType::F32 | PrimitiveType::F64 => Some(Self::Float { value: 0.0, prim }),
+            PrimitiveType::Bool => Some(Self::Bool(false)),
+            PrimitiveType::Char => Some(Self::Char('\0')),
+            PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128 => None,
+        }
+    }
+
     /// `None` when longer than [`MAX_SEQ_ELEMENTS`].
     #[must_use]
     pub fn seq(type_id: TypeId, elements: Vec<Value>) -> Option<Self> {

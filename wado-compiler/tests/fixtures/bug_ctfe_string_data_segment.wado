@@ -1,0 +1,21 @@
+// A compile-time call producing a constant `String` becomes a `PackedArray`
+// node no source literal accounts for. When its payload is longer than the
+// inline threshold it needs a data segment, so registration has to read the
+// literals off the NIR rather than off the lower phase's recorded lists —
+// otherwise WIR build finds no segment for it and panics.
+use { println, Stdout } from "core:cli";
+
+fn classify(n: i32) -> String {
+    if n < 0 {
+        return "negative";
+    }
+    return "non-negative";
+}
+
+export fn run() with Stdout {
+    println(classify(-5));
+    println(classify(7));
+}
+
+__DATA__
+{"stdout": "negative\nnon-negative\n"}

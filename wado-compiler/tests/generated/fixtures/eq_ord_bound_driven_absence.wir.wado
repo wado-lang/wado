@@ -6,26 +6,15 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(1)
 
-type "functype//eq_ord_bound_driven_absence.wado/run" = fn();  // TypeId(2)
+type "functype//eq_ord_bound_driven_absence.wado/__cm_export__run" = fn();  // TypeId(2)
 
-type "functype//eq_ord_bound_driven_absence.wado/__cm_export__run" = fn();  // TypeId(3)
-
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(4)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(3)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
 global mut global:eq_ord_bound_driven_absence.wado::__modules_initialized: bool = 0;
-
-fn "eq_ord_bound_driven_absence.wado/run"() {
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:eq_ord_bound_driven_absence.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:eq_ord_bound_driven_absence.wado::__modules_initialized = 1;
-    };
-}
 
 fn "eq_ord_bound_driven_absence.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
@@ -34,7 +23,12 @@ fn "eq_ord_bound_driven_absence.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:eq_ord_bound_driven_absence.wado::__modules_initialized = 1;
     };
-    "eq_ord_bound_driven_absence.wado/run"();
+    __inline_run_0____inline___initialize_modules_0: block {
+        break_if __inline_run_0____inline___initialize_modules_0 @likely(global:eq_ord_bound_driven_absence.wado::__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:eq_ord_bound_driven_absence.wado::__modules_initialized = 1;
+    };
     "wasi/task-return"(0);
 }
 

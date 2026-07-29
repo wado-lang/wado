@@ -28,7 +28,9 @@ fn f(n: i32) -> i32 {
 }
 
 export fn run() with Stdout {
-    assert f(5) == 714;
+    // Opaque, or `niri` evaluates the whole call and leaves no `f` for SROA to
+    // act on.
+    assert f(builtin::black_box(5)) == 714;
     println("ok");
 }
 

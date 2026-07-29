@@ -97,7 +97,7 @@ fn "tir_optimize_early_exit_guard.wado/run"() with Stdout {
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     let c_24: char;
-    let c_30: char;
+    let start: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:tir_optimize_early_exit_guard.wado::__modules_initialized);
         cold_path;
@@ -106,7 +106,7 @@ fn "tir_optimize_early_exit_guard.wado/run"() with Stdout {
     };
     a = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(97, 98, 99), used: 3 };
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; c_24 = "tir_optimize_early_exit_guard.wado/safe_get"(struct.new "core:prelude//List<char>" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<char>; __array_clone_src_6 = a.repr; let __array_clone_len_6: i32; __array_clone_len_6 = builtin::array_len(__array_clone_src_6); let __array_clone_dst_6: ref Array<char>; __array_clone_dst_6 = builtin::array_new<char>(__array_clone_len_6); builtin::array_copy<char>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: 3 }, 1); "core:prelude/string.wado/String::push"(__local_2, c_24); __local_2);
-    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; c_30 = "tir_optimize_early_exit_guard.wado/safe_get"(a, 10); "core:prelude/string.wado/String::push"(__local_4, c_30); __local_4);
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; start = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start, 63); __local_4);
 }
 
 fn "tir_optimize_early_exit_guard.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

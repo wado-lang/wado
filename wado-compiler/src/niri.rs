@@ -1,125 +1,39 @@
 //! NIR Interpreter (niri).
 //!
-//! Compile-time partial evaluator for Wado NIR, operating on the arena `Body`.
-//! [`Interpreter::reduce_local_a`] rewrites one node in place toward literal
-//! form, [`Interpreter::reduce_to_lattice_a`] projects a node to a [`Lattice`],
-//! and [`Interpreter::reduce_in_place_a`] reduces a whole subtree bottom-up.
-//! Constant folding is the primary consumer; branch pruning, constant
-//! propagation, and compile-time function evaluation reuse the same engine.
+//! Compile-time partial evaluator over the arena `Body`: it reduces what it can
+//! and leaves a residual otherwise. Constant folding is the primary consumer;
+//! branch pruning, constant propagation and compile-time function evaluation
+//! reuse the same engine.
 //!
-//! Reduction is **monotone** — it only moves expressions toward literal form,
-//! never the reverse — and **idempotent**. Literal leaves are preserved as-is
-//! so the original lexical repr (e.g. `0xFF`) survives a no-op pass.
+//! Reduction is monotone — an expression only moves toward literal form, never
+//! back — and idempotent. A literal leaf is left as written, so the source repr
+//! (`0xFF`) survives a no-op pass.
 //!
-//! The engine handles:
+//! Each module below answers one question:
 //!
-//! - Integer arithmetic: Add, Sub, Mul, Div, Mod
-//! - Integer comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
-//! - Integer bitwise: `BitAnd`, `BitOr`, `BitXor`, Shl, Shr
-//! - Integer unary: Neg, `BitNot`
-//! - Integer types: i8, i16, i32, i64, u8, u16, u32, u64
-//! - Float arithmetic: Add, Sub, Mul, Div (skipped when result is NaN)
-//! - Float comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
-//! - Float unary: Neg (via sign-bit flip, safe for all values including NaN)
-//! - Float types: f32, f64
-//! - Boolean logical: And, Or (including identity rules `false || X → X`,
-//!   `true && X → X`, `X || false → X`, `X && true → X`)
-//! - Boolean equality and ordering: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
-//!   (`false < true`)
-//! - Boolean unary: Not
-//! - Char comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq` (codepoint
-//!   order)
-//! - Casts (`expr as T`):
-//!   - int ↔ int (truncation / sign- or zero-extension)
-//!   - int ↔ float (signed / unsigned conversion; float → int uses
-//!     Wasm `trunc_sat` semantics: NaN ↦ 0, ±∞ saturate to MIN/MAX)
-//!   - f32 ↔ f64 (rounding on demote, exact on promote)
-//!   - bool → int / float (true ↦ 1 / 1.0, false ↦ 0 / 0.0)
-//!   - char → int (codepoint, then truncated to target width)
-//!   - u8 → char (the only int → char form the elaborator permits)
-//! - Local variables: immutable `let` bindings whose RHS reduces to a
-//!   constant flow into the env and are read back as that constant at
-//!   each use site. `let mut` and post-assign locals stay `NonConst`.
-//!   The driving visitor populates the env via
-//!   [`Interpreter::bind_local`] / [`Interpreter::invalidate_local`].
-//! - Global variables: immutable `global FOO: T = …;` declarations
-//!   whose initializer reduces to a constant flow into a project-wide
-//!   [`GlobalEnv`] and are read back at every `GlobalVarGet` site.
-//!   Mutable globals are recorded as `NonConst` so a parent fold like
-//!   `GLOBAL_MUT + 1` reports `NonConst` rather than `Unevaluated`. The
-//!   driving visitor builds the env once per pass via
-//!   [`Interpreter::with_globals`].
-//! - `if` expressions: a constant condition collapses to the chosen
-//!   arm; a non-constant condition with both arms reducing to the same
-//!   lattice constant (and an effect-free condition) folds to that
-//!   constant. The unreachable arm of a constant-condition `if` is
-//!   treated as an SCCP infeasible edge, so a trapping branch
-//!   (`else { panic(…) }`) does not contaminate the result.
-//! - `if` statements: a constant condition splices the chosen branch's
-//!   stmts into the parent block via
-//!   [`Interpreter::reduce_local_block`].
-//! - `match` expressions: a constant scrutinee collapses to the first
-//!   arm whose pattern provably matches (later arms become infeasible
-//!   edges); a non-constant speculatable scrutinee with every arm
-//!   reducing to the same lattice constant collapses to that constant.
-//!   Modelled patterns: `_`, a binding, integer / bool / char literal,
-//!   integer range (signed and unsigned), or-of the above,
-//!   `ConstantValue` whose inner expression reduces to a `Value`, and
-//!   struct / exact-arity tuple patterns whose every field pattern is
-//!   itself modelled. Tuple-with-rest, `Variant`, `Enum`, and string /
-//!   null literal patterns report `Unknown` — they never wrongly commit
-//!   a match and never wrongly drop a later arm. A definite field
-//!   mismatch still rules an arm out even when a sibling field binds,
-//!   and an arm's guard is decided with its bindings in scope.
-//! - Struct / tuple literals: an aggregate whose every field reduces to
-//!   a constant is itself a constant ([`Value::Aggregate`]), and
-//!   `receiver.field` projects a field back out — including out of a
-//!   CTFE-folded call result. Aggregates never leave the engine (the
-//!   value pool models pure scalars), so what reaches the IR is the
-//!   scalars projected out of them. A local carries an aggregate
-//!   constant only when every mention of it merely reads the value; see
-//!   [`Interpreter::record_aggregate_locals`].
-//! - Pure-call evaluation: a free `Call` whose args all reduce to
-//!   constants and whose callee was admitted to the [`CalleeMap`]
-//!   (pure, non-async, monomorphic — see [`is_ctfe_eligible`]) runs the
-//!   callee's body with the args bound into a fresh local environment.
-//!   The body is executed statement by statement — `let` bindings,
-//!   assignment to a local, a decidable `if`, an early `return`, a
-//!   labeled block completed by its `break`, and a loop run until it
-//!   breaks. Anything else abandons the evaluation, leaving the
-//!   original call — and any runtime trap inside it — in place. The
-//!   `call_stack` blocks recursive re-entry and the step budget caps
-//!   total work, so a loop needs no constant trip count.
-//!   `MethodCall` / `IndirectCall` / `CmRawCall` are out of scope.
+//! - `lattice` — what an expression denotes.
+//! - `frame` — what running a body does.
+//! - `rewrite` — what becomes of an expression once its value is known.
+//! - `trackability` — which locals a walk may hold a value for.
+//! - `pattern` — whether a pattern matches a value.
+//! - `place` — what a borrow or lvalue chain names.
 //!
-//! Float arithmetic uses native Rust IEEE 754 ops (same as Wasm), following
-//! cranelift's approach: fold the result, but skip if it is NaN since NaN
-//! bit patterns are nondeterministic across architectures.
-//!
-//! Integer division/modulo by zero and signed `MIN / -1` are left
-//! unfolded so the runtime trap is preserved.
-//!
-//! See `docs/wep-2026-04-27-nir-interpreter.md` for the design.
+//! What the engine can evaluate is the WEP's to state, and it is maintained
+//! there rather than here: `docs/wep-2026-04-27-nir-interpreter.md`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::const_eval::{
-    eval_binary, eval_cast, eval_unary, is_f32_type, is_int_prim, is_signed_int, prim_of,
-};
-// `Value` lives in `const_eval`; re-export it so `niri::Value` resolves for
-// the public API and tests.
-use crate::compiler_item::SeqField;
-pub use crate::const_eval::{MAX_SEQ_ELEMENTS, Value};
+use crate::const_eval::{Value, is_int_prim, is_signed_int, prim_of};
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::nir::{NirBinaryOp, NirFunction, NirLiteralPattern, NirUnaryOp};
+use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
     PatKind, StmtId, StmtKind, StmtNode,
 };
-use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
@@ -223,18 +137,90 @@ pub type CalleeKey = crate::nir::FuncId;
 /// it. Body-shape and per-call validity (arity match, all args
 /// reduce, single recognized tail expression) are checked at fold
 /// time, not here.
-pub type CalleeMap = IndexMap<CalleeKey, Rc<RefCell<NirFunction>>>;
+pub type CalleeMap = IndexMap<CalleeKey, Callee>;
 
-/// The array builtins the engine can evaluate over a constant sequence. An
-/// element read reaches NIR as a call to one of these, not as an `Index` node.
+/// A callee the engine may run, with the parameter facts the trackability
+/// analysis needs answered without a borrow. Asking the function later answers
+/// only when nobody holds `borrow_mut` on it, and a fold must not turn on
+/// which function the visitor happens to be walking.
+pub struct Callee {
+    pub func: Rc<RefCell<NirFunction>>,
+    pub mut_params: Vec<bool>,
+    pub stored_params: Vec<bool>,
+}
+
+impl Callee {
+    #[must_use]
+    pub fn new(func: Rc<RefCell<NirFunction>>) -> Self {
+        let (mut_params, stored_params) = {
+            let borrowed = func.borrow();
+            (
+                borrowed.params.iter().map(|p| p.is_mut_ref).collect(),
+                borrowed
+                    .params
+                    .iter()
+                    .map(|p| borrowed.stores.contains(&p.name))
+                    .collect(),
+            )
+        };
+        Self {
+            func,
+            mut_params,
+            stored_params,
+        }
+    }
+
+    fn writes_receiver(&self) -> bool {
+        self.writes_param(0)
+    }
+
+    fn arity(&self) -> usize {
+        self.mut_params.len()
+    }
+
+    /// A `&mut T` borrow is the only parameter kind that reaches the caller's
+    /// storage. An index the signature does not have answers as one that does:
+    /// nothing about a call the map cannot account for is exempt.
+    fn writes_param(&self, index: usize) -> bool {
+        self.mut_params.get(index).copied().unwrap_or(true)
+    }
+
+    /// A stored parameter outlives the call, so naming its referent is not the
+    /// passing read the other arguments are.
+    fn reads_only(&self, index: usize) -> bool {
+        self.stored_params.get(index).is_some_and(|stored| !stored)
+    }
+}
+
+/// The builtins the engine evaluates. An element read or write reaches NIR as
+/// a call to one of these, not as an `Index` node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SeqBuiltin {
-    Get,
-    Len,
+pub enum CtfeBuiltin {
+    ArrayGet,
+    ArrayLen,
+    ArrayNew,
+    ArraySet,
+    ArrayCopy,
+    ColdPath,
+    Select,
+}
+
+impl CtfeBuiltin {
+    /// Whether the builtin writes its first argument. A write is performed at
+    /// statement position rather than folded, and only by a frame that owns
+    /// the place it lands in.
+    fn is_write(self) -> bool {
+        match self {
+            Self::ArraySet | Self::ArrayCopy => true,
+            Self::ArrayGet | Self::ArrayLen | Self::ArrayNew | Self::ColdPath | Self::Select => {
+                false
+            }
+        }
+    }
 }
 
 /// Which sequence builtin each callee id is, for the ids that are one.
-pub type SeqBuiltinMap = IndexMap<CalleeKey, SeqBuiltin>;
+pub type CtfeBuiltinMap = IndexMap<CalleeKey, CtfeBuiltin>;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Global env
@@ -276,6 +262,15 @@ pub const DEFAULT_STEP_BUDGET: u32 = 10_000;
 // ──────────────────────────────────────────────────────────────────────────────
 // Field knowledge
 // ──────────────────────────────────────────────────────────────────────────────
+
+mod frame;
+mod lattice;
+mod pattern;
+mod place;
+mod rewrite;
+mod trackability;
+
+use trackability::{Reached, aggregate_safe_locals};
 
 /// A dense set of local indices, backed by a bitset indexed by the local
 /// index itself.
@@ -362,22 +357,6 @@ pub struct AliasInfo {
     pub alias_groups: IndexMap<u32, IndexSet<u32>>,
 }
 
-/// Decide whether a function may be evaluated at compile time.
-///
-/// The check is a conservative pure-and-safe gate, applied once when the
-/// driving visitor builds the [`CalleeMap`]:
-///
-/// - `effects.is_empty()` — no `with` clauses (the effect system's purity
-///   witness, modulo trap effects which Wado tracks separately).
-/// - `body.is_some()` — has a Wado-source body. External / CM-import
-///   functions have no inspectable body.
-/// - `!is_cm_binding && !is_dispatch_wrapper && !is_cm_export` —
-///   synthesized ABI bridges aren't real Wado functions.
-/// - `!is_async && task_return_type.is_none()` — async functions
-///   participate in the CM async runtime; not CTFE-safe.
-/// - `stores.is_empty()` — `stores[...]` is moot for CTFE (we don't pass
-///   refs), but bail conservatively.
-///
 /// Commit sink for niri's body rewrites. The rewrite logic reads through
 /// [`EditSink::body`] and commits every edit through the sink, so two backends
 /// can share it: [`BodySink`] mutates a `Body` in place — used for throwaway
@@ -398,6 +377,10 @@ pub(crate) trait EditSink {
     /// backend is a no-op (`false`) — its reads recompute the value through the
     /// value lattice, so it needs no node write-back.
     fn replace_with_value(&mut self, e: ExprId, value: Value) -> bool;
+    /// Intern a constant into the function's value pool and return it as an
+    /// operand. A scalar has no literal-node form, so a synthesized one in an
+    /// operand position goes through the pool.
+    fn const_operand(&mut self, kind: ValueKind, type_id: TypeId) -> Operand;
     /// Make `dst` take `src`'s content (`dst` becomes `src`).
     fn become_expr(&mut self, dst: ExprId, src: ExprId);
     fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId;
@@ -427,6 +410,9 @@ impl EditSink for BodySink<'_> {
         // write-back is a no-op here.
         false
     }
+    fn const_operand(&mut self, kind: ValueKind, type_id: TypeId) -> Operand {
+        Operand::Value(self.body.values.alloc_unshared(kind, type_id))
+    }
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         // Clone src's whole node into dst (the original short-circuit rewrite
         // did `body.exprs[e] = body.exprs[keep].clone()`); the scratch body is
@@ -453,27 +439,39 @@ impl EditSink for BodySink<'_> {
     }
 }
 
-/// Whether `func` can be evaluated at compile time: pure, and concrete —
+/// Whether a compile-time frame can run `func`'s body: pure, and concrete —
 /// `type_params` and `impl_type_params` empty, since CTFE runs after
 /// monomorphization.
 ///
 /// `inline_hint` is deliberately not consulted: `#[inline(never)]` asks the
 /// optimizer to keep the body out of line, which says nothing about whether
 /// the result is knowable at compile time.
+///
+/// Nor is `stores`. The engine has no reference values — an argument reduces to
+/// its referent's value — so what the callee keeps is a snapshot, sound exactly
+/// while nothing can write the referent afterwards. [`Reached`] is what
+/// holds that: a stored argument is the one read it does not exempt.
 #[must_use]
-pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
-    // A unit call has no value to substitute for it.
-    func.return_type != crate::tir::TypeTable::UNIT
-        && func.effects.is_empty()
+pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
+    func.effects.is_empty()
         && func.body.is_some()
         && !func.is_cm_binding
         && !func.is_dispatch_wrapper
         && !func.is_cm_export
         && !func.is_async
         && func.task_return_type.is_none()
-        && func.stores.is_empty()
         && func.type_params.is_empty()
         && func.impl_type_params.is_empty()
+}
+
+/// Whether `func`'s call can be replaced by the value it computes: runnable,
+/// and producing a value at all.
+#[must_use]
+pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
+    // A unit call has no value to substitute for it.
+    func.return_type != crate::tir::TypeTable::UNIT
+        && func.stores.is_empty()
+        && is_ctfe_runnable(func)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -521,7 +519,7 @@ pub struct Interpreter<'a> {
     /// [`with_callees`]: Self::with_callees
     callees: Option<&'a CalleeMap>,
     /// When `None`, an `array_get` / `array_len` call is just an opaque call.
-    seq_builtins: Option<&'a SeqBuiltinMap>,
+    ctfe_builtins: Option<&'a CtfeBuiltinMap>,
     /// Pre-built lattice values for module-scope globals. When `None`,
     /// every `GlobalVarGet` stays [`Lattice::Unevaluated`]. The visitor
     /// populates this once per pass via [`with_globals`].
@@ -580,24 +578,15 @@ fn let_ref_global(body: &Body, stmt: &StmtKind) -> Option<(u32, GlobalKey)> {
     Some((*local_index, (module_source.clone(), name.clone())))
 }
 
-/// The local an lvalue or borrow chain roots at: `x`, `x.f`, `x[i]`, `*x`, and
-/// any nesting of those.
-fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
-    match &body.exprs[op.as_expr()?].kind {
-        ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
-            lvalue_root_local(body, *inner)
-        }
-        ExprKind::Unary {
-            op: NirUnaryOp::Deref,
-            expr: inner,
-        } => lvalue_root_local(body, *inner),
-        _ => None,
-    }
+/// What running a call left behind: the value it returned, and what each `&mut`
+/// parameter holds at return, paired with the caller place it belongs in.
+struct CallRun {
+    result: Lattice,
+    writes: Vec<(u32, Vec<u32>, Value)>,
 }
 
 /// Every expression id reachable from the body root, in arena order.
-fn reachable_exprs(body: &Body) -> Vec<ExprId> {
+pub(crate) fn reachable_exprs(body: &Body) -> Vec<ExprId> {
     struct Collect(Vec<ExprId>);
     impl NirRefVisitor for Collect {
         fn visit_node(&mut self, body: &Body, node: NodeRef) {
@@ -614,70 +603,6 @@ fn reachable_exprs(body: &Body) -> Vec<ExprId> {
     let mut collect = Collect(Vec::new());
     collect.visit_node(body, NodeRef::Block(body.root));
     collect.0
-}
-
-/// Locals of `body` that may bind an aggregate constant: every mention only
-/// reads the value — as a field read's receiver or a `match` / `switch`
-/// scrutinee — and no store target, mutable borrow, method receiver, or
-/// mutable argument roots at them.
-///
-/// Only the reachable body is scanned: a mention orphaned by an earlier rewrite
-/// cannot run, so it must not disqualify a local.
-fn aggregate_safe_locals(body: &Body) -> LocalSet {
-    fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
-        if let Some(index) = lvalue_root_local(body, op) {
-            set.insert(index);
-        }
-    }
-    let mut value_reads: IndexSet<ExprId> = IndexSet::default();
-    let mut local_mentions: Vec<(ExprId, u32)> = Vec::new();
-    let mut disqualified = LocalSet::default();
-    for e in reachable_exprs(body) {
-        let node = &body.exprs[e];
-        match &node.kind {
-            ExprKind::Local { index, .. } => local_mentions.push((e, *index)),
-            ExprKind::FieldAccess { expr, .. }
-            | ExprKind::Match { expr, .. }
-            | ExprKind::Switch {
-                scrutinee: expr, ..
-            } => {
-                if let Some(read) = expr.as_expr() {
-                    value_reads.insert(read);
-                }
-            }
-            ExprKind::Assign { target, .. } => {
-                disqualify_root(body, (*target).into(), &mut disqualified);
-            }
-            ExprKind::Unary {
-                op: NirUnaryOp::MutRef,
-                expr,
-            } => disqualify_root(body, *expr, &mut disqualified),
-            ExprKind::MethodCall { receiver, args, .. } => {
-                disqualify_root(body, *receiver, &mut disqualified);
-                for arg in args.iter().filter(|a| a.is_mut) {
-                    disqualify_root(body, arg.expr, &mut disqualified);
-                }
-            }
-            ExprKind::Call { args, .. } => {
-                for arg in args.iter().filter(|a| a.is_mut) {
-                    disqualify_root(body, arg.expr, &mut disqualified);
-                }
-            }
-            _ => {}
-        }
-    }
-    for (e, index) in &local_mentions {
-        if !value_reads.contains(e) {
-            disqualified.insert(*index);
-        }
-    }
-    let mut safe = LocalSet::default();
-    for (_, index) in local_mentions {
-        if !disqualified.contains(index) {
-            safe.insert(index);
-        }
-    }
-    safe
 }
 
 fn local_binds_to_global_ref(body: &Body, local: u32, key: &GlobalKey) -> bool {
@@ -697,7 +622,7 @@ impl<'a> Interpreter<'a> {
             ctfe_clobbered: LocalSet::default(),
             scratch_folds: IndexMap::default(),
             callees: None,
-            seq_builtins: None,
+            ctfe_builtins: None,
             globals: None,
             global_fields: None,
             step_budget: DEFAULT_STEP_BUDGET,
@@ -719,8 +644,8 @@ impl<'a> Interpreter<'a> {
 
     /// Install the sequence-builtin lookup. Without it, an element or length
     /// read stays opaque.
-    pub fn with_seq_builtins(&mut self, seq_builtins: &'a SeqBuiltinMap) -> &mut Self {
-        self.seq_builtins = Some(seq_builtins);
+    pub fn with_ctfe_builtins(&mut self, ctfe_builtins: &'a CtfeBuiltinMap) -> &mut Self {
+        self.ctfe_builtins = Some(ctfe_builtins);
         self
     }
 
@@ -765,7 +690,8 @@ impl<'a> Interpreter<'a> {
     /// Record `body`'s [`aggregate_safe_locals`]. The driving visitor calls
     /// this once per function, next to [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
-        self.aggregate_locals = aggregate_safe_locals(body);
+        let writes = Reached::outside_frame(body, self.ctfe_builtins, self.callees);
+        self.aggregate_locals = aggregate_safe_locals(body, &writes);
     }
 
     pub fn record_ref_global_aliases(&mut self, body: &Body) {
@@ -888,1386 +814,6 @@ impl<'a> Interpreter<'a> {
     pub fn invalidate_local(&mut self, index: u32) {
         self.env.insert(index, Lattice::NonConst);
     }
-
-    /// Reads the bound env for locals and takes the SCCP join over
-    /// `if` / `match` arms.
-    /// Lattice value of an operand: the promoted constant for `Operand::Value`,
-    /// else the skeleton subtree's lattice. Promoted pure values live in
-    /// `body.values`, so a literal that left the skeleton still folds.
-    pub fn operand_to_lattice_a(&self, body: &Body, op: Operand) -> Lattice {
-        match op {
-            Operand::Expr(e) => self.expr_to_lattice_a(body, e),
-            Operand::Value(v) => self.value_to_lattice(body, v),
-        }
-    }
-
-    /// Convert a promoted pure value to a `Lattice::Const` when it is a constant
-    /// kind of a known primitive type; `Unevaluated` otherwise (a derived
-    /// `Binary` / `Opaque` / non-primitive value niri does not evaluate here).
-    fn value_to_lattice(&self, body: &Body, v: ValueId) -> Lattice {
-        let Some(ty) = body.values.type_of(v) else {
-            return Lattice::Unevaluated;
-        };
-        match body.values.kind(v) {
-            ValueKind::Bool(b) => Lattice::Const(Value::Bool(*b)),
-            ValueKind::Char(c) => Lattice::Const(Value::Char(*c)),
-            ValueKind::Int(value, _) => {
-                let Some(prim) = prim_of(ty, self.type_table).filter(|p| is_int_prim(*p)) else {
-                    return Lattice::Unevaluated;
-                };
-                Lattice::Const(Value::Int {
-                    value: *value,
-                    prim,
-                })
-            }
-            ValueKind::Float(bits, _) => {
-                let prim = if is_f32_type(ty, self.type_table) {
-                    PrimitiveType::F32
-                } else {
-                    PrimitiveType::F64
-                };
-                Lattice::Const(Value::Float {
-                    value: f64::from_bits(*bits),
-                    prim,
-                })
-            }
-            _ => Lattice::Unevaluated,
-        }
-    }
-
-    /// The global a field read resolves against: a direct `GLOBAL.f`, or a
-    /// local bound to `&GLOBAL` earlier in this body.
-    fn global_receiver_key(&self, body: &Body, inner: Operand) -> Option<GlobalKey> {
-        match inner.as_expr().map(|e| &body.exprs[e].kind)? {
-            ExprKind::GlobalVarGet {
-                module_source,
-                name,
-            } => Some((module_source.clone(), name.clone())),
-            ExprKind::Local { index, .. } => {
-                let key = self.ref_global_aliases.get(index)?;
-                debug_assert!(
-                    local_binds_to_global_ref(body, *index, key),
-                    "ref_global_aliases[{index}] = {key:?} is stale: the body being folded does \
-                     not bind local {index} to that reference — per-function alias state leaked \
-                     across a body boundary (e.g. a CTFE scratch reduction that did not \
-                     save/clear it)",
-                );
-                Some(key.clone())
-            }
-            _ => None,
-        }
-    }
-
-    /// The lattice of `receiver.field`: the [`GlobalFieldEnv`] entry for a
-    /// global receiver, else the field projected out of a constant aggregate
-    /// receiver (a literal, an env-bound local, or a CTFE-folded call result).
-    ///
-    /// The field env wins where it has an answer — it knows fields no
-    /// initializer shows, such as the length body globalization records for a
-    /// hoisted sequence — and otherwise the receiver's own value decides.
-    fn field_access_lattice(
-        &self,
-        body: &Body,
-        inner: Operand,
-        field_index: u32,
-        field_name: &str,
-    ) -> Lattice {
-        if let Some(key) = self.global_receiver_key(body, inner) {
-            let known = self.global_field(&key, field_name);
-            if !matches!(known, Lattice::Unevaluated) {
-                return known;
-            }
-        }
-        match self.operand_to_lattice_a(body, inner) {
-            Lattice::Const(receiver) => receiver
-                .field(field_index)
-                .cloned()
-                .map_or(Lattice::Unevaluated, Lattice::Const),
-            Lattice::NonConst => Lattice::NonConst,
-            Lattice::Unevaluated => Lattice::Unevaluated,
-        }
-    }
-
-    /// Read an element out of a constant sequence. An index past the end is
-    /// `NonConst`, so the run-time trap survives.
-    fn index_lattice(&self, body: &Body, receiver: Operand, index: Operand) -> Lattice {
-        let (Lattice::Const(receiver), Lattice::Const(index)) = (
-            self.operand_to_lattice_a(body, receiver),
-            self.operand_to_lattice_a(body, index),
-        ) else {
-            return Lattice::Unevaluated;
-        };
-        let Some((index, _)) = index.as_int() else {
-            return Lattice::Unevaluated;
-        };
-        receiver
-            .element(index)
-            .cloned()
-            .map_or(Lattice::NonConst, Lattice::Const)
-    }
-
-    /// `Const` only when every element is itself constant, and only up to
-    /// [`MAX_SEQ_ELEMENTS`].
-    fn seq_lattice(&self, body: &Body, type_id: TypeId, elements: &[Operand]) -> Lattice {
-        let mut values = Vec::with_capacity(elements.len());
-        for op in elements {
-            match self.operand_to_lattice_a(body, *op) {
-                Lattice::Const(v) => values.push(v),
-                Lattice::NonConst => return Lattice::NonConst,
-                Lattice::Unevaluated => return Lattice::Unevaluated,
-            }
-        }
-        Value::seq(type_id, values).map_or(Lattice::NonConst, Lattice::Const)
-    }
-
-    /// The lattice of a struct / tuple literal: `Const` only when every field
-    /// is itself constant, since a partially-known aggregate is not a value the
-    /// engine can substitute or compare.
-    fn aggregate_lattice(
-        &self,
-        body: &Body,
-        type_id: TypeId,
-        fields: impl Iterator<Item = (u32, Operand)>,
-    ) -> Lattice {
-        let mut values = Vec::new();
-        let mut has_non_const = false;
-        for (field_index, op) in fields {
-            match self.operand_to_lattice_a(body, op) {
-                Lattice::Const(v) => values.push((field_index, v)),
-                Lattice::NonConst => has_non_const = true,
-                Lattice::Unevaluated => return Lattice::Unevaluated,
-            }
-        }
-        if has_non_const {
-            return Lattice::NonConst;
-        }
-        Lattice::Const(Value::aggregate(type_id, values))
-    }
-
-    pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
-        // A scratch-CTFE fold memoized for `e` (no node form for pure scalars).
-        if let Some(v) = self.scratch_folds.get(&e) {
-            return Lattice::Const(v.clone());
-        }
-        let node = &body.exprs[e];
-        match &node.kind {
-            ExprKind::Local { index, .. } => {
-                self.env.get(index).cloned().unwrap_or(Lattice::Unevaluated)
-            }
-            ExprKind::FieldAccess {
-                expr: inner,
-                field_index,
-                field_name,
-            } => self.field_access_lattice(body, *inner, *field_index, field_name),
-            ExprKind::StructLiteral { fields, .. } => self.aggregate_lattice(
-                body,
-                node.type_id,
-                fields.iter().map(|f| (f.field_index, f.value)),
-            ),
-            ExprKind::TupleLiteral { elements } => self.aggregate_lattice(
-                body,
-                node.type_id,
-                elements
-                    .iter()
-                    .enumerate()
-                    .map(|(i, op)| (u32::try_from(i).expect("tuple arity fits u32"), *op)),
-            ),
-            // An array literal denotes the whole container: `wir_build` lowers
-            // it to `{ repr: array.new_fixed, used: N }`.
-            ExprKind::ArrayLiteral { elements } => {
-                match self.seq_lattice(body, node.type_id, elements) {
-                    Lattice::Const(backing) => Lattice::Const(Value::aggregate(
-                        node.type_id,
-                        vec![
-                            (SeqField::Backing.index(), backing),
-                            (
-                                SeqField::Len.index(),
-                                Value::Int {
-                                    value: elements.len() as u64,
-                                    prim: PrimitiveType::I32,
-                                },
-                            ),
-                        ],
-                    )),
-                    other => other,
-                }
-            }
-            ExprKind::PackedArray(bytes) => {
-                let elements = bytes
-                    .iter()
-                    .map(|b| Value::Int {
-                        value: u64::from(*b),
-                        prim: PrimitiveType::U8,
-                    })
-                    .collect();
-                Value::seq(node.type_id, elements).map_or(Lattice::NonConst, Lattice::Const)
-            }
-            ExprKind::Index { expr: inner, index } => self.index_lattice(body, *inner, *index),
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref,
-                expr: inner,
-            } => self.operand_to_lattice_a(body, *inner),
-            ExprKind::GlobalVarGet {
-                module_source,
-                name,
-            } => self.global_lattice(module_source, name),
-            ExprKind::Block(b) => self.block_lattice_a(body, *b),
-            ExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                let cond = self.operand_to_lattice_a(body, *condition);
-                match cond {
-                    Lattice::Const(Value::Bool(true)) => self.block_lattice_a(body, *then_branch),
-                    Lattice::Const(Value::Bool(false)) => match else_branch {
-                        Some(eb) => self.block_lattice_a(body, *eb),
-                        None => Lattice::Unevaluated,
-                    },
-                    _ => {
-                        let then_lat =
-                            arm_lattice_for_feasible_join(self.block_lattice_a(body, *then_branch));
-                        let else_lat = match else_branch {
-                            Some(eb) => {
-                                arm_lattice_for_feasible_join(self.block_lattice_a(body, *eb))
-                            }
-                            None => Lattice::NonConst,
-                        };
-                        then_lat.join(else_lat)
-                    }
-                }
-            }
-            ExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => match scrutinee.as_expr() {
-                Some(e) => self.match_lattice_a(body, e, arms),
-                // A promoted-constant scrutinee is not evaluated here; the
-                // flow-fold visitor collapses constant matches structurally.
-                None => Lattice::Unevaluated,
-            },
-            _ => Lattice::Unevaluated,
-        }
-    }
-
-    /// Fold a `Binary` / `Unary` / `Cast` of constant operands to a value;
-    /// `NonConst` (not `Unevaluated`) when the op would trap, so the node survives.
-    pub fn try_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
-        let node = &body.exprs[e];
-        match &node.kind {
-            ExprKind::Binary { left, op, right } => {
-                let l = match self.operand_to_lattice_a(body, *left) {
-                    Lattice::Const(v) => v,
-                    other => return other,
-                };
-                let r = match self.operand_to_lattice_a(body, *right) {
-                    Lattice::Const(v) => v,
-                    other => return other,
-                };
-                option_to_lattice(eval_binary(l, *op, r))
-            }
-            // A shared borrow denotes what it points at rather than operating
-            // on it. `eval_unary` has no rule for that and would bury the
-            // referent's own constant as non-constant.
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref,
-                ..
-            } => Lattice::Unevaluated,
-            ExprKind::Unary { op, expr: inner } => {
-                let v = match self.operand_to_lattice_a(body, *inner) {
-                    Lattice::Const(v) => v,
-                    other => return other,
-                };
-                option_to_lattice(eval_unary(*op, v))
-            }
-            ExprKind::Cast { expr: inner, .. } => {
-                let Some(target) = prim_of(node.type_id, self.type_table) else {
-                    return Lattice::Unevaluated;
-                };
-                match self.operand_to_lattice_a(body, *inner) {
-                    Lattice::Const(v) => option_to_lattice(eval_cast(v, target)),
-                    other => other,
-                }
-            }
-            _ => Lattice::Unevaluated,
-        }
-    }
-
-    /// The lattice of a block: its single tail `Expr`, else `Unevaluated`.
-    fn block_lattice_a(&self, body: &Body, b: BlockId) -> Lattice {
-        match body.blocks[b].stmts.as_slice() {
-            [] => Lattice::Unevaluated,
-            [single] => match &body.stmts[*single].kind {
-                StmtKind::Expr(e) => self.operand_to_lattice_a(body, *e),
-                _ => Lattice::Unevaluated,
-            },
-            _ => Lattice::Unevaluated,
-        }
-    }
-
-    /// The lattice of a `match`: the chosen arm under a constant scrutinee,
-    /// else the join over the feasible arms.
-    fn match_lattice_a(&self, body: &Body, scrutinee: ExprId, arms: &[ArmData]) -> Lattice {
-        let scrut_const = self.expr_to_lattice_a(body, scrutinee).as_const();
-        if arms.is_empty() {
-            return Lattice::Unevaluated;
-        }
-        if let Some(scrut_v) = scrut_const {
-            let mut candidates = Vec::<Lattice>::new();
-            let mut yes_found = false;
-            for arm in arms {
-                // Guards are decided by the rewrite path, which can scope the
-                // pattern's bindings; here they leave the arm undecided.
-                let pm = if arm.guard.is_some() {
-                    PatternMatch::Unknown
-                } else {
-                    self.pattern_matches_a(body, &scrut_v, arm.pattern, &mut PatBindings::new())
-                };
-                let body_lat =
-                    arm_lattice_for_feasible_join(self.operand_to_lattice_a(body, arm.body));
-                match pm {
-                    PatternMatch::No => {}
-                    PatternMatch::Yes => {
-                        if candidates.is_empty() {
-                            return self.operand_to_lattice_a(body, arm.body);
-                        }
-                        candidates.push(body_lat);
-                        yes_found = true;
-                        break;
-                    }
-                    PatternMatch::Unknown => candidates.push(body_lat),
-                }
-            }
-            if !yes_found {
-                return Lattice::NonConst;
-            }
-            join_all(&candidates)
-        } else {
-            if !is_provably_exhaustive_a(body, arms) {
-                return Lattice::NonConst;
-            }
-            let mut acc = Lattice::Unevaluated;
-            for arm in arms {
-                acc = acc.join(arm_lattice_for_feasible_join(
-                    self.operand_to_lattice_a(body, arm.body),
-                ));
-            }
-            acc
-        }
-    }
-
-    /// Whether `value` matches `pat`, recording into `binds` the locals the
-    /// pattern binds and the sub-values they take. `binds` is only meaningful
-    /// on [`PatternMatch::Yes`]; a rejected alternative may have left entries
-    /// behind.
-    fn pattern_matches_a(
-        &self,
-        body: &Body,
-        value: &Value,
-        pat: PatId,
-        binds: &mut PatBindings,
-    ) -> PatternMatch {
-        match &body.pats[pat].kind {
-            PatKind::Wildcard => PatternMatch::Yes,
-            PatKind::Binding { local_index, .. } => {
-                binds.push((*local_index, value.clone()));
-                PatternMatch::Yes
-            }
-            PatKind::Literal(lit) => match (lit, value) {
-                (NirLiteralPattern::I128(p), Value::Int { value: v, prim }) => {
-                    bool_to_match(int_value_matches_i128(*v, *prim, *p))
-                }
-                (NirLiteralPattern::U128(p), Value::Int { value: v, prim }) => {
-                    bool_to_match(int_value_matches_u128(*v, *prim, *p))
-                }
-                (NirLiteralPattern::Bool(p), Value::Bool(v)) => bool_to_match(p == v),
-                (NirLiteralPattern::Char(p), Value::Char(v)) => bool_to_match(p == v),
-                (
-                    NirLiteralPattern::I128(_)
-                    | NirLiteralPattern::U128(_)
-                    | NirLiteralPattern::Bool(_)
-                    | NirLiteralPattern::Char(_),
-                    _,
-                ) => PatternMatch::No,
-                (NirLiteralPattern::String(_) | NirLiteralPattern::Null, _) => {
-                    PatternMatch::Unknown
-                }
-            },
-            PatKind::Or(alts) => {
-                let mut any_unknown = false;
-                for alt in alts {
-                    let mut alt_binds = PatBindings::new();
-                    match self.pattern_matches_a(body, value, *alt, &mut alt_binds) {
-                        PatternMatch::Yes => {
-                            // Alternatives are tried in order at run time, so an
-                            // undecided earlier one may be the one that matches
-                            // — and it would bind from its own positions.
-                            if any_unknown && !alt_binds.is_empty() {
-                                return PatternMatch::Unknown;
-                            }
-                            binds.append(&mut alt_binds);
-                            return PatternMatch::Yes;
-                        }
-                        PatternMatch::No => {}
-                        PatternMatch::Unknown => any_unknown = true,
-                    }
-                }
-                if any_unknown {
-                    PatternMatch::Unknown
-                } else {
-                    PatternMatch::No
-                }
-            }
-            PatKind::Range {
-                start,
-                end,
-                inclusive,
-                is_unsigned,
-            } => match value {
-                Value::Int { value: v, prim } => bool_to_match(range_matches_int(
-                    *v,
-                    *prim,
-                    *start,
-                    *end,
-                    *inclusive,
-                    *is_unsigned,
-                )),
-                Value::Char(c) => {
-                    let cp = i128::from(u32::from(*c));
-                    bool_to_match(if *inclusive {
-                        cp >= *start && cp <= *end
-                    } else {
-                        cp >= *start && cp < *end
-                    })
-                }
-                _ => PatternMatch::No,
-            },
-            PatKind::ConstantValue { expr } => {
-                match self.operand_to_lattice_a(body, *expr).as_const() {
-                    Some(v) if &v == value => PatternMatch::Yes,
-                    Some(_) => PatternMatch::No,
-                    None => PatternMatch::Unknown,
-                }
-            }
-            PatKind::Struct { fields, .. } => self.all_fields_match(
-                body,
-                value,
-                fields.iter().map(|f| (f.field_index, f.pattern)),
-                binds,
-            ),
-            // A tuple rest (`(a, ..)`) leaves the trailing sub-patterns without
-            // a fixed element index, so only the exact-arity form is modelled.
-            PatKind::Tuple(pats, has_rest) if !*has_rest => self.all_fields_match(
-                body,
-                value,
-                pats.iter()
-                    .enumerate()
-                    .map(|(i, p)| (u32::try_from(i).expect("tuple arity fits u32"), *p)),
-                binds,
-            ),
-            PatKind::Tuple(_, _) | PatKind::Variant { .. } | PatKind::Enum { .. } => {
-                PatternMatch::Unknown
-            }
-        }
-    }
-
-    /// Conjunction of the sub-pattern results over an aggregate's fields:
-    /// definitely-no as soon as one field rules the pattern out, definitely-yes
-    /// only when every listed field matches. A field the value does not carry —
-    /// or a sub-pattern the engine does not model — makes the whole pattern
-    /// `Unknown`. A value that is not an aggregate is `Unknown` rather than
-    /// vacuously matching a field-less pattern.
-    fn all_fields_match(
-        &self,
-        body: &Body,
-        value: &Value,
-        fields: impl Iterator<Item = (u32, PatId)>,
-        binds: &mut PatBindings,
-    ) -> PatternMatch {
-        if !matches!(value, Value::Aggregate { .. }) {
-            return PatternMatch::Unknown;
-        }
-        let mut any_unknown = false;
-        for (field_index, pat) in fields {
-            let Some(field_value) = value.field(field_index) else {
-                return PatternMatch::Unknown;
-            };
-            match self.pattern_matches_a(body, field_value, pat, binds) {
-                PatternMatch::No => return PatternMatch::No,
-                PatternMatch::Unknown => any_unknown = true,
-                PatternMatch::Yes => {}
-            }
-        }
-        if any_unknown {
-            PatternMatch::Unknown
-        } else {
-            PatternMatch::Yes
-        }
-    }
-
-    // ───────────────────────────────────────────────────────────────────────
-    // Arena rewriter. The arena counterparts of `reduce_local` /
-    // `reduce_local_block` / `rewrite_if_expr` / `rewrite_match_expr` /
-    // `try_call_fold`, mutating the `Body` the const-fold visitor walks.
-    // ───────────────────────────────────────────────────────────────────────
-
-    /// The single-node rewrites at `e` (no recursion into children).
-    pub(crate) fn reduce_local_block_via<S: EditSink>(
-        &mut self,
-        sink: &mut S,
-        block: BlockId,
-    ) -> bool {
-        let body = sink.body();
-        let has_constant_if = body.blocks[block].stmts.iter().any(|s| {
-            matches!(
-                &body.stmts[*s].kind,
-                StmtKind::If { condition, .. }
-                    if operand_bool(body, *condition).is_some()
-            )
-        });
-        if !has_constant_if {
-            return false;
-        }
-        let old_stmts = body.blocks[block].stmts.clone();
-        let mut new_stmts: Vec<StmtId> = Vec::new();
-        for s in old_stmts {
-            let body = sink.body();
-            let spliced = if let StmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } = &body.stmts[s].kind
-            {
-                operand_bool(body, *condition).map(|value| (value, *then_block, *else_block))
-            } else {
-                None
-            };
-            if let Some((value, then_block, else_block)) = spliced {
-                if value {
-                    new_stmts.extend(sink.body().blocks[then_block].stmts.clone());
-                } else if let Some(eb) = else_block {
-                    new_stmts.extend(sink.body().blocks[eb].stmts.clone());
-                }
-                continue;
-            }
-            new_stmts.push(s);
-        }
-        sink.set_block_stmts(block, new_stmts);
-        true
-    }
-
-    /// In-place wrapper over [`Self::reduce_local_via`] for the CTFE
-    /// scratch-body path.
-    pub fn reduce_local_a(&mut self, body: &mut Body, e: ExprId) -> bool {
-        let mut sink = BodySink { body };
-        self.reduce_local_via(&mut sink, e)
-    }
-
-    /// Reduce `e` to its flow-sensitive constant value or collapse a constant
-    /// branch, committing through `sink`. The value substitutions
-    /// ([`Self::flow_fold_kind_a`]) and the structural collapses
-    /// (short-circuit / `if` / `match`) all route through the sink, so the
-    /// engine-routed visitor keeps the parent map / use index coherent and the
-    /// scratch-body CTFE path mutates in place.
-    pub(crate) fn reduce_local_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
-        if let Some(value) = self.flow_fold_value_a(sink.body(), e) {
-            // Promote the folded scalar to an `Operand::Value` in `e`'s parent.
-            if sink.replace_with_value(e, value.clone()) {
-                return true;
-            }
-            // The scratch backend cannot promote (no parent map); memoize the
-            // fold so the scratch's later lattice reads see the constant. Falling
-            // through to the structural rewrites is a no-op for a pure constant.
-            self.scratch_folds.insert(e, value);
-        }
-        if rewrite_short_circuit_via(sink, e) {
-            return true;
-        }
-        if self.rewrite_if_expr_via(sink, e) {
-            return true;
-        }
-        self.rewrite_match_expr_via(sink, e)
-    }
-
-    /// The environment-free constant value of `e`, as the literal [`ExprKind`]
-    /// that should replace it, or `None` when `e` does not fold without
-    /// per-function state.
-    ///
-    /// This is the subset of [`reduce_local_a`](Self::reduce_local_a) that
-    /// depends only on the node and its (already-folded) children plus the
-    /// program-wide [`CalleeMap`]: literal `Binary` / `Unary` / `Cast`
-    /// arithmetic, projection out of a constant aggregate, and pure
-    /// compile-time function evaluation. Only scalars are returned — an
-    /// aggregate has no operand form. Local-bound constants and
-    /// immutable-global reads stay with [`crate::optimize`]'s flow-sensitive
-    /// const-fold walker, which owns the per-function dataflow state — an
-    /// interpreter driving this must keep its `env` empty, since a projection's
-    /// receiver resolves through it.
-    ///
-    /// Because the interpreter's `env` is empty here, `try_fold_a` and
-    /// `try_call_fold_a` only succeed when every operand / argument is already
-    /// a literal; the children a fold discards are therefore literal-only,
-    /// never `Local` mentions. That lets the rewrite engine apply the result
-    /// through its coherent edit API without the use index going stale.
-    ///
-    /// Unlike `reduce_local_a`, this does **not** mutate `body`: the engine rule
-    /// promotes the returned value to an `Operand::Value` via
-    /// `Engine::replace_expr_with_value`.
-    pub fn const_fold_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
-        self.const_fold_candidate_a(body, e)
-            .filter(Value::is_scalar)
-    }
-
-    fn const_fold_candidate_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
-        if let Lattice::Const(v) = self.try_fold_a(body, e) {
-            return Some(v);
-        }
-        if let Some(v) = self.field_projection_value_a(body, e) {
-            return Some(v);
-        }
-        if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
-            return Some(v);
-        }
-        None
-    }
-
-    /// The constant a `receiver.field` node reads, when the receiver is a
-    /// constant aggregate. Discarding the receiver is safe precisely because it
-    /// is constant: a literal aggregate's fields are constants, and a call only
-    /// reduces to one when it is CTFE-eligible (pure), so nothing observable is
-    /// dropped and the read cannot trap on null.
-    ///
-    /// A call receiver is folded here rather than in
-    /// [`Self::field_access_lattice`], which cannot run CTFE from `&self`; that
-    /// is what lets `factory().field` reduce to the field of the constructed
-    /// value.
-    fn field_projection_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
-        let ExprKind::FieldAccess {
-            expr: inner,
-            field_index,
-            field_name,
-        } = &body.exprs[e].kind
-        else {
-            return None;
-        };
-        let (inner, field_index) = (*inner, *field_index);
-        if let Some(v) = self
-            .field_access_lattice(body, inner, field_index, field_name)
-            .as_const()
-        {
-            return Some(v);
-        }
-        let receiver = self.try_call_fold_a(body, inner.as_expr()?).as_const()?;
-        receiver.field(field_index).cloned()
-    }
-
-    /// The flow-sensitive constant value of `e` — `env`-bound locals, immutable
-    /// globals, literal arithmetic, aggregate field projection, and pure CTFE —
-    /// or `None`. The structural rewrites (short-circuit / `if` / `match`
-    /// collapse) are *not* included. The sink promotes the result to an
-    /// `Operand::Value` via [`EditSink::replace_with_value`], so the value is
-    /// always a scalar: a constant aggregate keeps its skeleton node and only
-    /// the scalars projected out of it fold.
-    pub fn flow_fold_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
-        self.flow_fold_candidate_a(body, e).filter(Value::is_scalar)
-    }
-
-    fn flow_fold_candidate_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
-        if let Lattice::Const(v) = self.try_fold_a(body, e) {
-            return Some(v);
-        }
-        if let Some(v) = self.field_projection_value_a(body, e) {
-            return Some(v);
-        }
-        // A bare `Local` read bound to a constant in the flow env (the "env-bound
-        // locals" this doc promises). `try_fold_a` only folds arith; consult the
-        // env here so a `let x = <const>; … x …` that store→load forwarding missed
-        // — a post-`inline` binding the build-once graph never valued — still
-        // folds. Mutable locals are recorded `NonConst` (sound by flow), so this
-        // is immutable-only and cannot stale.
-        if matches!(&body.exprs[e].kind, ExprKind::Local { .. })
-            && let Lattice::Const(v) = self.expr_to_lattice_a(body, e)
-        {
-            return Some(v);
-        }
-        if let ExprKind::GlobalVarGet {
-            module_source,
-            name,
-        } = &body.exprs[e].kind
-            && let Lattice::Const(v) = self.global_lattice(module_source, name)
-        {
-            return Some(v);
-        }
-        if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
-            return Some(v);
-        }
-        None
-    }
-
-    /// Splice a constant-condition `if` statement into its parent block.
-    /// In-place wrapper over [`Self::reduce_local_block_via`] for the CTFE
-    /// scratch-body path; the engine-routed visitor uses the `via` form with
-    /// an `EngineSink`.
-    pub fn reduce_local_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
-        let mut sink = BodySink { body };
-        self.reduce_local_block_via(&mut sink, block)
-    }
-
-    /// Bottom-up reduce the subtree rooted at `e` over the kinds the engine
-    /// understands (Binary / Unary / Cast / If / Match), applying
-    /// [`Self::reduce_local_a`] at each node so a child fold is observable at
-    /// its parent. Used by CTFE (`try_call_fold_a`) to evaluate a callee tail
-    /// whose children no outer walk has pre-reduced.
-    /// Reduce an operand in place: a no-op (`false`) for a promoted pure value
-    /// (already reduced), else reduce the skeleton subtree.
-    fn reduce_in_place_operand_a(&mut self, body: &mut Body, op: Operand) -> bool {
-        op.as_expr()
-            .is_some_and(|e| self.reduce_in_place_a(body, e))
-    }
-
-    pub fn reduce_in_place_a(&mut self, body: &mut Body, e: ExprId) -> bool {
-        let mut changed = match &body.exprs[e].kind {
-            ExprKind::Binary { left, right, .. } => {
-                let (l, r) = (*left, *right);
-                let a = self.reduce_in_place_operand_a(body, l);
-                let b = self.reduce_in_place_operand_a(body, r);
-                a || b
-            }
-            ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-                let i = *inner;
-                self.reduce_in_place_operand_a(body, i)
-            }
-            ExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                let (c, t, e2) = (*condition, *then_branch, *else_branch);
-                let mut ch = self.reduce_in_place_operand_a(body, c);
-                ch |= self.reduce_in_place_block_a(body, t);
-                if let Some(eb) = e2 {
-                    ch |= self.reduce_in_place_block_a(body, eb);
-                }
-                ch
-            }
-            ExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                let scrutinee = *scrutinee;
-                let arm_data: Vec<(Option<Operand>, PatId, Operand)> =
-                    arms.iter().map(|a| (a.guard, a.pattern, a.body)).collect();
-                let mut ch = self.reduce_in_place_operand_a(body, scrutinee);
-                for (guard, pattern, arm_body) in arm_data {
-                    let binds = self.arm_bindings(body, scrutinee, pattern);
-                    let scope = self.enter_arm(&binds);
-                    if let Some(g) = guard {
-                        ch |= self.reduce_in_place_operand_a(body, g);
-                    }
-                    ch |= self.reduce_in_place_operand_a(body, arm_body);
-                    self.leave_arm(scope);
-                }
-                ch
-            }
-            ExprKind::FieldAccess { expr: inner, .. } => {
-                let inner = *inner;
-                self.reduce_in_place_operand_a(body, inner)
-            }
-            ExprKind::StructLiteral { fields, .. } => {
-                let values: Vec<Operand> = fields.iter().map(|f| f.value).collect();
-                let mut ch = false;
-                for v in values {
-                    ch |= self.reduce_in_place_operand_a(body, v);
-                }
-                ch
-            }
-            ExprKind::TupleLiteral { elements } => {
-                let elements = elements.clone();
-                let mut ch = false;
-                for v in elements {
-                    ch |= self.reduce_in_place_operand_a(body, v);
-                }
-                ch
-            }
-            _ => false,
-        };
-        changed |= self.reduce_local_a(body, e);
-        changed
-    }
-
-    /// Block-level recursion for [`Self::reduce_in_place_a`].
-    fn reduce_in_place_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
-        let stmts = body.blocks[block].stmts.clone();
-        let mut changed = false;
-        for s in stmts {
-            changed |= self.reduce_in_place_stmt_a(body, s);
-        }
-        changed |= self.reduce_local_block_a(body, block);
-        changed
-    }
-
-    /// Statement-level recursion for [`Self::reduce_in_place_a`].
-    fn reduce_in_place_stmt_a(&mut self, body: &mut Body, s: StmtId) -> bool {
-        match &body.stmts[s].kind {
-            StmtKind::Expr(e) => {
-                let e = *e;
-                self.reduce_in_place_operand_a(body, e)
-            }
-            StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-                let v = *value;
-                self.reduce_in_place_operand_a(body, v)
-            }
-            StmtKind::Return { value } | StmtKind::Break { value, .. } => match *value {
-                Some(v) => self.reduce_in_place_operand_a(body, v),
-                None => false,
-            },
-            StmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                let (c, t, e2) = (*condition, *then_block, *else_block);
-                let mut ch = c
-                    .as_expr()
-                    .is_some_and(|ce| self.reduce_in_place_a(body, ce));
-                ch |= self.reduce_in_place_block_a(body, t);
-                if let Some(eb) = e2 {
-                    ch |= self.reduce_in_place_block_a(body, eb);
-                }
-                ch
-            }
-            StmtKind::Loop { body: b } => {
-                let b = *b;
-                self.reduce_in_place_block_a(body, b)
-            }
-            StmtKind::LabeledBlock { block, .. } => {
-                let b = *block;
-                self.reduce_in_place_block_a(body, b)
-            }
-            StmtKind::Continue => false,
-        }
-    }
-
-    /// Project `e` to a lattice, assuming its children are already reduced (the
-    /// const-fold visitor walks bottom-up): `try_fold_a` sees folded children
-    /// directly, and a non-foldable node falls through to `expr_to_lattice_a`.
-    pub fn reduce_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
-        match self.try_fold_a(body, e) {
-            Lattice::Unevaluated => self.expr_to_lattice_a(body, e),
-            other => other,
-        }
-    }
-
-    /// Reduce the subtree bottom-up in place (so multi-level constant operands
-    /// fold), then project to a lattice. The standalone entry point for callers
-    /// with an unreduced expression — the `niri` unit tests.
-    pub fn reduce_to_lattice_full_a(&mut self, body: &mut Body, e: ExprId) -> Lattice {
-        self.reduce_in_place_a(body, e);
-        self.reduce_to_lattice_a(body, e)
-    }
-
-    /// Collapse an `if` with a constant condition or equal arms.
-    fn rewrite_if_expr_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
-        let (condition, then_branch, else_branch) = match &sink.body().exprs[e].kind {
-            ExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => (*condition, *then_branch, *else_branch),
-            _ => return false,
-        };
-        let cond_lat = self.operand_to_lattice_a(sink.body(), condition);
-
-        // (1) Constant condition → splice the chosen arm.
-        if let Lattice::Const(Value::Bool(b)) = cond_lat {
-            let span = sink.body().exprs[e].span;
-            let kind = if b {
-                ExprKind::Block(then_branch)
-            } else if let Some(eb) = else_branch {
-                ExprKind::Block(eb)
-            } else {
-                // `if false {}` with no else evaluates to unit; an empty block
-                // is the unit-typed skeleton form (the unit value has no node).
-                ExprKind::Block(sink.alloc_block(Vec::new(), span))
-            };
-            sink.replace_kind(e, kind);
-            return true;
-        }
-
-        // (2)/(3) require both arms Const.
-        let Lattice::Const(t) = self.block_lattice_a(sink.body(), then_branch) else {
-            return false;
-        };
-        let Some(eb) = else_branch else {
-            return false;
-        };
-        let Lattice::Const(ev) = self.block_lattice_a(sink.body(), eb) else {
-            return false;
-        };
-
-        // (2) Bool-arms collapse.
-        if let (Value::Bool(t_b), Value::Bool(e_b)) = (&t, &ev)
-            && t_b != e_b
-        {
-            if *t_b {
-                // `if c { true } else { false }` ≡ `c`. Splice the skeleton
-                // condition in place; a promoted value has no node to clone.
-                let Some(cond_e) = condition.as_expr() else {
-                    return false;
-                };
-                let cond_kind = sink.body().exprs[cond_e].kind.clone();
-                sink.replace_kind(e, cond_kind);
-            } else {
-                sink.replace_kind(
-                    e,
-                    ExprKind::Unary {
-                        op: NirUnaryOp::Not,
-                        expr: condition,
-                    },
-                );
-            }
-            return true;
-        }
-
-        // (3) Both-arms-equal collapse.
-        if t != ev {
-            return false;
-        }
-        if !condition
-            .as_expr()
-            .is_none_or(|ce| is_speculatable_a(sink.body(), ce))
-        {
-            return false;
-        }
-        // Promote both-equal arms to the shared constant. The scratch backend
-        // declines (no parent map); its read path recomputes, so report no change.
-        sink.replace_with_value(e, t)
-    }
-
-    /// Collapse a `match` with a constant scrutinee or a bool-discriminator shape.
-    fn rewrite_match_expr_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
-        let body = sink.body();
-        let scrutinee = match &body.exprs[e].kind {
-            ExprKind::Match { expr, arms } if !arms.is_empty() => *expr,
-            _ => return false,
-        };
-        let arms_data: Vec<(Option<Operand>, PatId, Operand, crate::token::Span)> =
-            match &body.exprs[e].kind {
-                ExprKind::Match { arms, .. } => arms
-                    .iter()
-                    .map(|a| (a.guard, a.pattern, a.body, a.span))
-                    .collect(),
-                _ => unreachable!(),
-            };
-
-        // Rule 1: const scrutinee → splice the chosen arm.
-        if let Lattice::Const(scrut_v) = self.operand_to_lattice_a(sink.body(), scrutinee) {
-            let mut chosen: Option<(usize, PatBindings)> = None;
-            for (i, (guard, pat, _, _)) in arms_data.iter().enumerate() {
-                let mut binds = PatBindings::new();
-                match self.pattern_matches_a(sink.body(), &scrut_v, *pat, &mut binds) {
-                    PatternMatch::No => continue,
-                    PatternMatch::Unknown => return false,
-                    PatternMatch::Yes => {}
-                }
-                // A guard reads the arm's bindings, so it is only meaningful
-                // with them in scope. An undecided one may still be taken,
-                // leaving every later arm unreachable.
-                match guard {
-                    None => {}
-                    Some(g) => match self.guard_under_bindings(sink.body(), *g, &binds) {
-                        Some(true) => {}
-                        Some(false) => continue,
-                        None => return false,
-                    },
-                }
-                chosen = Some((i, binds));
-                break;
-            }
-            let Some((idx, binds)) = chosen else {
-                return false;
-            };
-            let (body_op, arm_span) = (arms_data[idx].2, arms_data[idx].3);
-            // Splicing the arm strips its pattern, so a binding the body still
-            // reads would be left dangling.
-            if operand_reads_any_local(sink.body(), body_op, &binds) {
-                return false;
-            }
-            // The chosen arm's value becomes `e`'s value, wrapped in a block. A
-            // promoted constant arm flows straight into the `Operand` statement
-            // slot — no node materialization (WEP: The Live ValueGraph).
-            let span = match body_op {
-                Operand::Expr(ex) => sink.body().exprs[ex].span,
-                Operand::Value(_) => arm_span,
-            };
-            let stmt = sink.alloc_stmt(StmtKind::Expr(body_op), span);
-            let block = sink.alloc_block(vec![stmt], span);
-            sink.replace_kind(e, ExprKind::Block(block));
-            return true;
-        }
-
-        // Rule 2: `match X { Pat => true, _ => false } → <discriminator>`.
-        // The scrutinee is preserved inside the synthesised `Binary`, and the
-        // `Match` node `e` keeps its own span — only its `kind` is replaced.
-        if let Some(replacement) = try_match_bool_discriminator_a(sink.body(), &arms_data) {
-            let right = sink.alloc_expr(
-                ExprKind::EnumConstruct {
-                    enum_type: replacement.enum_type,
-                    case_index: replacement.case_index,
-                    case_name: replacement.case_name,
-                },
-                replacement.enum_type,
-                replacement.span,
-            );
-            sink.replace_kind(
-                e,
-                ExprKind::Binary {
-                    left: scrutinee,
-                    op: NirBinaryOp::Eq,
-                    right: right.into(),
-                },
-            );
-            return true;
-        }
-
-        // Rule 3: non-const speculatable scrutinee, all-arms-equal. A promoted
-        // `Operand::Value` scrutinee is a constant — trivially speculatable.
-        if let Some(e) = scrutinee.as_expr()
-            && !is_speculatable_a(sink.body(), e)
-        {
-            return false;
-        }
-        if arms_data.iter().any(|(g, _, _, _)| g.is_some()) {
-            return false;
-        }
-        let arms_for_exh: Vec<ArmData> = match &sink.body().exprs[e].kind {
-            ExprKind::Match { arms, .. } => arms.clone(),
-            _ => unreachable!(),
-        };
-        if !is_provably_exhaustive_a(sink.body(), &arms_for_exh) {
-            return false;
-        }
-        let mut common: Option<Value> = None;
-        for (_, _, b, _) in &arms_data {
-            let Lattice::Const(v) = self.operand_to_lattice_a(sink.body(), *b) else {
-                return false;
-            };
-            match common {
-                None => common = Some(v),
-                Some(c) if c != v => return false,
-                Some(_) => {}
-            }
-        }
-        let v = common.expect("at least one arm");
-        // Promote all-equal arms to the shared constant; the scratch backend
-        // declines (recomputes on read), so report its no-change honestly.
-        sink.replace_with_value(e, v)
-    }
-
-    fn exec_block_a(&mut self, body: &mut Body, block: BlockId) -> Flow {
-        let stmts = body.blocks[block].stmts.clone();
-        let mut value = Lattice::Unevaluated;
-        for s in stmts {
-            match self.exec_stmt_a(body, s) {
-                Flow::Fallthrough(v) => value = v,
-                other => return other,
-            }
-        }
-        Flow::Fallthrough(value)
-    }
-
-    /// Execute one statement, charging the step budget.
-    ///
-    /// A statement counts as executed only when everything it evaluates lands
-    /// on a constant. Reducing an expression is not performing it, so anything
-    /// left undone — an unfolded call, a global write, a would-be trap —
-    /// abandons the evaluation rather than being stepped past.
-    fn exec_stmt_a(&mut self, body: &mut Body, s: StmtId) -> Flow {
-        if self.step_budget == 0 {
-            return Flow::Bail;
-        }
-        self.step_budget -= 1;
-        match &body.stmts[s].kind {
-            StmtKind::Let {
-                local_index, value, ..
-            } => {
-                let (index, value) = (*local_index, *value);
-                match self.eval_operand_a(body, value) {
-                    lattice @ Lattice::Const(_) => {
-                        self.bind_ctfe_local(index, lattice);
-                        Flow::Fallthrough(Lattice::Unevaluated)
-                    }
-                    Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
-                }
-            }
-            StmtKind::Expr(op) => {
-                let op = *op;
-                self.exec_expr_stmt_a(body, op)
-            }
-            StmtKind::Return { value } => {
-                let lattice = self.eval_optional_operand_a(body, *value);
-                Flow::Return(lattice)
-            }
-            StmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-                match self.eval_operand_a(body, condition) {
-                    Lattice::Const(Value::Bool(true)) => self.exec_block_a(body, then_block),
-                    Lattice::Const(Value::Bool(false)) => match else_block {
-                        Some(eb) => self.exec_block_a(body, eb),
-                        None => Flow::Fallthrough(Lattice::Unevaluated),
-                    },
-                    Lattice::Const(
-                        Value::Int { .. }
-                        | Value::Float { .. }
-                        | Value::Char(_)
-                        | Value::Aggregate { .. }
-                        | Value::Seq { .. },
-                    )
-                    | Lattice::NonConst
-                    | Lattice::Unevaluated => Flow::Bail,
-                }
-            }
-            StmtKind::Break { label, value } => {
-                let (label, value) = (label.clone(), *value);
-                let value = self.eval_optional_operand_a(body, value);
-                Flow::Break { label, value }
-            }
-            StmtKind::Continue => Flow::Continue,
-            StmtKind::Loop { body: block } => {
-                let block = *block;
-                self.exec_loop_a(body, block)
-            }
-            StmtKind::LabeledBlock { label, block } => {
-                let (label, block) = (label.clone(), *block);
-                match self.exec_block_a(body, block) {
-                    Flow::Break {
-                        label: Some(broke),
-                        value,
-                    } if broke == label => Flow::Fallthrough(value),
-                    other => other,
-                }
-            }
-            StmtKind::LetDestructure { .. } => Flow::Bail,
-        }
-    }
-
-    /// Run a loop until it breaks, control leaves the function, or the budget
-    /// runs out. Termination rests on the budget alone — the per-iteration
-    /// charge covers an empty body too — so no constant trip count is needed.
-    fn exec_loop_a(&mut self, body: &mut Body, block: BlockId) -> Flow {
-        let snapshot = LoopSnapshot::capture(body, block);
-        loop {
-            if self.step_budget == 0 {
-                return Flow::Bail;
-            }
-            self.step_budget -= 1;
-            match self.exec_block_a(body, block) {
-                Flow::Fallthrough(_) | Flow::Continue => {}
-                // A labeled `break` belongs to an enclosing labeled block.
-                Flow::Break { label: None, .. } => {
-                    return Flow::Fallthrough(Lattice::Unevaluated);
-                }
-                other => return other,
-            }
-            snapshot.restore(body);
-            self.scratch_folds.clear();
-        }
-    }
-
-    /// An assignment updates the environment; anything else contributes its
-    /// value as the block's result.
-    fn exec_expr_stmt_a(&mut self, body: &mut Body, op: Operand) -> Flow {
-        if let Some(e) = op.as_expr()
-            && let ExprKind::Assign { target, value } = &body.exprs[e].kind
-        {
-            let (target, value) = (*target, *value);
-            let Some(index) = assign_target_local(body, target) else {
-                return Flow::Bail;
-            };
-            let Lattice::Const(v) = self.eval_operand_a(body, value) else {
-                return Flow::Bail;
-            };
-            self.bind_ctfe_local(index, Lattice::Const(v));
-            return Flow::Fallthrough(Lattice::Unevaluated);
-        }
-        match self.eval_operand_a(body, op) {
-            lattice @ Lattice::Const(_) => Flow::Fallthrough(lattice),
-            Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
-        }
-    }
-
-    fn eval_optional_operand_a(&mut self, body: &mut Body, op: Option<Operand>) -> Lattice {
-        match op {
-            Some(op) => self.eval_operand_a(body, op),
-            None => Lattice::Unevaluated,
-        }
-    }
-
-    /// Reducing in place first is what lets a nested call fold before the
-    /// operand is projected.
-    fn eval_operand_a(&mut self, body: &mut Body, op: Operand) -> Lattice {
-        match op.as_expr() {
-            Some(e) => {
-                self.reduce_in_place_a(body, e);
-                self.reduce_to_lattice_a(body, e)
-            }
-            None => self.operand_to_lattice_a(body, op),
-        }
-    }
-
-    /// Bind a local inside a compile-time frame. A local the frame may reach
-    /// through another handle keeps no value.
-    fn bind_ctfe_local(&mut self, index: u32, lattice: Lattice) {
-        if self.ctfe_clobbered.contains(index) {
-            self.env.insert(index, Lattice::NonConst);
-        } else {
-            self.bind_local(index, lattice);
-        }
-    }
-
-    /// Evaluate `array_get(seq, i)` / `array_len(seq)` over a constant
-    /// sequence. The argument is a reference to the array, and a reference to a
-    /// constant reads as that constant, so no separate deref step is needed.
-    fn try_seq_builtin_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
-        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
-            return Lattice::Unevaluated;
-        };
-        let Some(builtin) = self.seq_builtins.and_then(|m| m.get(func_id)) else {
-            return Lattice::Unevaluated;
-        };
-        match (builtin, args.as_slice()) {
-            (SeqBuiltin::Len, [arr]) => {
-                let Lattice::Const(v) = self.operand_to_lattice_a(body, arr.expr) else {
-                    return Lattice::Unevaluated;
-                };
-                v.seq_len().map_or(Lattice::Unevaluated, |len| {
-                    Lattice::Const(Value::Int {
-                        value: len as u64,
-                        prim: PrimitiveType::I32,
-                    })
-                })
-            }
-            (SeqBuiltin::Get, [arr, index]) => self.index_lattice(body, arr.expr, index.expr),
-            (SeqBuiltin::Len | SeqBuiltin::Get, _) => Lattice::Unevaluated,
-        }
-    }
-
-    /// Fold a pure call whose args are all constant: bind the params, run the
-    /// callee's body, and return `Const(v)` only when it produces a value.
-    /// `Unevaluated` on any miss, so the original call — and any runtime trap
-    /// inside it — survives.
-    fn try_call_fold_a(&mut self, body: &Body, e: ExprId) -> Lattice {
-        if let lattice @ (Lattice::Const(_) | Lattice::NonConst) =
-            self.try_seq_builtin_fold_a(body, e)
-        {
-            // `NonConst` here is an out-of-range read: keep the call so the
-            // trap survives.
-            return match lattice {
-                Lattice::Const(v) => Lattice::Const(v),
-                Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
-            };
-        }
-        let Some(callees) = self.callees else {
-            return Lattice::Unevaluated;
-        };
-        let (key, args): (CalleeKey, Vec<Operand>) = match &body.exprs[e].kind {
-            ExprKind::Call { func_id, args, .. } => {
-                (*func_id, args.iter().map(|a| a.expr).collect())
-            }
-            // Only a free `Call` is a CTFE-eligible in-package callee.
-            _ => return Lattice::Unevaluated,
-        };
-        let Some(callee_rc) = callees.get(&key) else {
-            return Lattice::Unevaluated;
-        };
-        if self.call_stack.iter().any(|k| k == &key) {
-            return Lattice::Unevaluated;
-        }
-        let Ok(callee) = callee_rc.try_borrow() else {
-            return Lattice::Unevaluated;
-        };
-        let mut bound: Vec<Value> = Vec::with_capacity(args.len());
-        for arg in &args {
-            match self.operand_to_lattice_a(body, *arg).as_const() {
-                Some(v) => bound.push(v),
-                None => return Lattice::Unevaluated,
-            }
-        }
-        if bound.len() != callee.params.len() {
-            return Lattice::Unevaluated;
-        }
-        let Some(callee_body) = callee.body.as_ref() else {
-            return Lattice::Unevaluated;
-        };
-        if self.step_budget == 0 {
-            return Lattice::Unevaluated;
-        }
-        self.step_budget -= 1;
-        self.call_stack.push(key);
-        let saved_env = std::mem::take(&mut self.env);
-        // The scratch fold memo is scoped to this reduction; nested CTFE calls
-        // get a fresh map and ids never cross scratch bodies.
-        let saved_folds = std::mem::take(&mut self.scratch_folds);
-        let saved_aliases = std::mem::take(&mut self.ref_global_aliases);
-        // Local indices are per-function, so the caller's read-only-local set
-        // says nothing about the callee's.
-        let saved_aggregates = std::mem::take(&mut self.aggregate_locals);
-        let saved_clobbered = std::mem::take(&mut self.ctfe_clobbered);
-        // Execute on a scratch copy so the shared callee body, held under an
-        // immutable `Ref`, is not mutated.
-        let mut scratch = callee_body.nodes_only_clone();
-        self.record_aggregate_locals(&scratch);
-        self.ctfe_clobbered = clobbered_locals(&scratch);
-        for (i, v) in bound.into_iter().enumerate() {
-            let index = u32::try_from(i).expect("param count fits u32");
-            let lattice = if self.ctfe_clobbered.contains(index) {
-                Lattice::NonConst
-            } else {
-                Lattice::Const(v)
-            };
-            self.env.insert(index, lattice);
-        }
-        let root = scratch.root;
-        let result = match self.exec_block_a(&mut scratch, root) {
-            Flow::Return(lattice) | Flow::Fallthrough(lattice) => lattice,
-            Flow::Break { .. } | Flow::Continue | Flow::Bail => Lattice::Unevaluated,
-        };
-        self.env = saved_env;
-        self.scratch_folds = saved_folds;
-        self.ref_global_aliases = saved_aliases;
-        self.aggregate_locals = saved_aggregates;
-        self.ctfe_clobbered = saved_clobbered;
-        self.call_stack.pop();
-        match result {
-            c @ Lattice::Const(_) => c,
-            Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
-        }
-    }
-
-    /// Look up a `(module_source, name)` global in the installed
-    /// [`GlobalEnv`]. Absent keys default to [`Lattice::Unevaluated`]
-    /// — the engine simply has no information, same convention as
-    /// un-bound locals.
-    ///
-    /// `IndexMap` lookup needs an owned tuple key, so each call clones
-    /// `ModuleSource` (one `String` allocation per variant) and the
-    /// global name. If profiling shows this on a hot path, switch the
-    /// env to `IndexMap<ModuleSource, IndexMap<String, Lattice>>` or
-    /// implement `Borrow`-keyed lookup; it's left flat for now since
-    /// `GlobalVarGet` nodes are sparse compared to local reads.
-    fn global_lattice(&self, module_source: &ModuleSource, name: &str) -> Lattice {
-        let Some(globals) = self.globals else {
-            return Lattice::Unevaluated;
-        };
-        globals
-            .get(&(module_source.clone(), name.to_string()))
-            .cloned()
-            .unwrap_or(Lattice::Unevaluated)
-    }
 }
 
 /// Whether the subtree under `op` reads any of the locals `binds` binds.
@@ -2326,151 +872,6 @@ enum PatternMatch {
     Yes,
     No,
     Unknown,
-}
-
-/// How control left a statement sequence during compile-time execution.
-///
-/// `Break` is not loop-specific: a labeled block is the value-producing shape
-/// a `break L: v` completes, and a loop catches only an unlabeled `break`.
-enum Flow {
-    /// Reached the end, carrying the value of the last statement that
-    /// produced one.
-    Fallthrough(Lattice),
-    Return(Lattice),
-    Break {
-        label: Option<String>,
-        value: Lattice,
-    },
-    Continue,
-    /// The engine could not follow the program: abandon the evaluation so the
-    /// original call survives.
-    Bail,
-}
-
-/// The loop-body nodes one iteration may rewrite, kept so the next iteration
-/// starts from the same program. Reduction rewrites an expression toward the
-/// value it took *this* time round — `acc + 1` becomes the literal `1` on the
-/// first pass — so without restoring, later iterations read the first one's
-/// results.
-struct LoopSnapshot {
-    exprs: Vec<(ExprId, ExprNode)>,
-    stmts: Vec<(StmtId, StmtNode)>,
-    blocks: Vec<(BlockId, Vec<StmtId>)>,
-}
-
-impl LoopSnapshot {
-    fn capture(body: &Body, block: BlockId) -> Self {
-        #[derive(Default)]
-        struct Collect {
-            exprs: Vec<ExprId>,
-            stmts: Vec<StmtId>,
-            blocks: Vec<BlockId>,
-        }
-        impl NirRefVisitor for Collect {
-            fn visit_node(&mut self, body: &Body, node: NodeRef) {
-                match node {
-                    NodeRef::Expr(e) => self.exprs.push(e),
-                    NodeRef::Stmt(s) => self.stmts.push(s),
-                    NodeRef::Block(b) => self.blocks.push(b),
-                    // Patterns are matched, never rewritten.
-                    NodeRef::Pat(_) => {}
-                }
-                self.walk_node(body, node);
-            }
-        }
-        let mut collect = Collect::default();
-        collect.visit_node(body, NodeRef::Block(block));
-        Self {
-            exprs: collect
-                .exprs
-                .into_iter()
-                .map(|e| (e, body.exprs[e].clone()))
-                .collect(),
-            stmts: collect
-                .stmts
-                .into_iter()
-                .map(|s| (s, body.stmts[s].clone()))
-                .collect(),
-            blocks: collect
-                .blocks
-                .into_iter()
-                .map(|b| (b, body.blocks[b].stmts.clone()))
-                .collect(),
-        }
-    }
-
-    /// Put the captured nodes back. Nodes an iteration allocated are left
-    /// behind unreferenced.
-    fn restore(&self, body: &mut Body) {
-        for (e, node) in &self.exprs {
-            body.exprs[*e] = node.clone();
-        }
-        for (s, node) in &self.stmts {
-            body.stmts[*s] = node.clone();
-        }
-        for (b, stmts) in &self.blocks {
-            body.blocks[*b].stmts.clone_from(stmts);
-        }
-    }
-}
-
-/// Locals of `body` that a compile-time frame cannot track, because something
-/// other than a bare assignment at statement position can write them: a
-/// borrow, a mutable argument, a method receiver, a store through a
-/// projection, or an assignment buried inside a larger expression.
-fn clobbered_locals(body: &Body) -> LocalSet {
-    fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
-        if let Some(index) = lvalue_root_local(body, op) {
-            set.insert(index);
-        }
-    }
-    // Assignments the executor applies itself. Any other assignment is only
-    // reduced, never run, so its target would keep a stale value.
-    let mut executed: IndexSet<ExprId> = IndexSet::default();
-    for (_, stmt) in &body.stmts {
-        if let StmtKind::Expr(op) = &stmt.kind
-            && let Some(e) = op.as_expr()
-            && matches!(body.exprs[e].kind, ExprKind::Assign { .. })
-        {
-            executed.insert(e);
-        }
-    }
-    let mut set = LocalSet::default();
-    for (e, node) in &body.exprs {
-        match &node.kind {
-            ExprKind::Assign { target, .. } => {
-                if !executed.contains(&e)
-                    || !matches!(body.exprs[*target].kind, ExprKind::Local { .. })
-                {
-                    disqualify(body, (*target).into(), &mut set);
-                }
-            }
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-                expr,
-            } => disqualify(body, *expr, &mut set),
-            ExprKind::MethodCall { receiver, args, .. } => {
-                disqualify(body, *receiver, &mut set);
-                for arg in args.iter().filter(|a| a.is_mut) {
-                    disqualify(body, arg.expr, &mut set);
-                }
-            }
-            ExprKind::Call { args, .. } => {
-                for arg in args.iter().filter(|a| a.is_mut) {
-                    disqualify(body, arg.expr, &mut set);
-                }
-            }
-            _ => {}
-        }
-    }
-    set
-}
-
-fn assign_target_local(body: &Body, target: ExprId) -> Option<u32> {
-    match &body.exprs[target].kind {
-        ExprKind::Local { index, .. } => Some(*index),
-        _ => None,
-    }
 }
 
 /// The locals a matched pattern binds, paired with the scrutinee sub-values
