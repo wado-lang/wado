@@ -476,15 +476,10 @@ pub(crate) fn float_to_float(value: f64, prim: PrimitiveType, target: PrimitiveT
     }
 }
 
-/// Float → integer with Wasm `trunc_sat` semantics: NaN ↦ 0, ±∞ saturate
-/// to the target's MIN/MAX, finite values truncate toward zero with
-/// saturation. Rust's `as` since 1.45 matches this exactly, so we
-/// dispatch through it for the source/target widths that map directly.
-///
-/// Caller guarantees `target` is one of the i8..u64 primitives (the
-/// dispatch in [`eval_cast`] enforces this); panics otherwise to flag
-/// a bug rather than fabricate a zero.
 /// The integer a float → int cast produces, or `None` where the cast traps.
+///
+/// `target` must be one of the i8..u64 primitives, as [`eval_cast`]'s dispatch
+/// guarantees; anything else panics rather than fabricate a value.
 ///
 /// An F32 source truncates at f32 precision to match the runtime cast; the
 /// stored f64 is bit-equivalent, so the f64 path is a no-op widening otherwise.
