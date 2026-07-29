@@ -484,7 +484,10 @@ fn synthesize_dispatch_wrappers(
             is_open
                 && project
                     .cm_interface_registry
-                    .get_function(&format!("{base_name}::{}", op.name))
+                    .get_function(&crate::name::DeclPath::method_of(
+                        &crate::name::DeclName::new(base_name.clone()),
+                        &op.name,
+                    ))
                     .is_some()
         })
         .collect();
@@ -1060,11 +1063,14 @@ fn build_resource_fallback_call(
     // `base_struct_name = "Stream"` (bare), mirroring the elaborator
     // convention so cm_binding sees a familiar shape.
     let _ = type_table;
-    let mangled_method_name = format!("{label}::{}", op.name);
+    // The receiver is the resource declaration, so both the base head and the
+    // instantiation label carry the module that declares it.
+    let label_fq = crate::name::FqTypeName::declared(effect_module, label);
+    let mangled_method_name = crate::name::MethodName::format_local(&label_fq, None, &op.name);
 
-    let mut method_info =
-        crate::name::LocalMethodName::new(base_name.to_string(), None, op.name.clone());
-    method_info.struct_name = label.to_string();
+    // The label is the receiver: a rendered name has nowhere to be stored now,
+    // and `struct_name()` derives this exact spelling from it.
+    let mut method_info = crate::name::LocalMethodName::new(label_fq, None, op.name.clone());
     method_info.cm_name = Some(cm_name);
 
     // Carry the resource instantiation's type args as the call's
@@ -1629,7 +1635,13 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         });
         let handler_type = binding.handler.type_id;
         let handler_underlying = deref_type(&env.type_table.borrow(), handler_type);
-        let handler_type_name = env.type_table.borrow().type_name(handler_underlying);
+        // `build_handler_impl_index` keys on the impl method's own receiver
+        // name, so the lookup is built the same way — the display name would
+        // drop the declaring module the receiver carries.
+        let handler_type_name = env
+            .type_table
+            .borrow()
+            .mangle_type_arg_for_generic(handler_underlying);
         let impl_key: HandlerImplKey = (
             handler_type_name.clone(),
             effect_module.clone(),
@@ -1642,9 +1654,12 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         // Keying the fallback on the head exactly hits only the template, never
         // a concrete sibling like `Holder<u8>`.
         let impl_info = env.impl_index.get(&impl_key).or_else(|| {
-            let head = crate::name::split_base_name(&handler_type_name);
+            let head = env
+                .type_table
+                .borrow()
+                .fq_base_type_name(handler_underlying);
             env.impl_index.get(&(
-                head.to_string(),
+                head.into_string(),
                 effect_module.clone(),
                 interface_name.clone(),
                 trait_type_args.clone(),
@@ -2430,7 +2445,7 @@ fn rewrite_call_sites_to_wrappers(
     // - `cm_to_wrappers`: keyed `(resource_module, base_name,
     //   cm_name)` and stores every active `(type_args, wrapper_name)`
     //   pair. The rewriter narrows by type args from the receiver
-    //   type (instance) or `method_info.struct_name` (static).
+    //   type (instance) or `method_info.struct_name()` (static).
     // Effects vs resources route through different call shapes:
     //   * effect ops (`Counter::next()`, `MonotonicClock::now()`)
     //     resolve to a `Call` whose `func.module_source` is the
@@ -2647,10 +2662,13 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
             if let Some(method_info) = &func.method_info
                 && let Some(cm_name) = &method_info.cm_name
             {
+                // `cm_to_wrappers` is keyed by the resource declaration as it
+                // is written, with the module alongside — the same namespace
+                // the instance path reads off the receiver type.
                 let base_name = method_info
                     .base_trait_name
                     .clone()
-                    .unwrap_or_else(|| method_info.base_struct_name());
+                    .unwrap_or_else(|| method_info.receiver().decl_key().into_string());
                 let decl_module = func.module_source.clone();
                 // Static resource call: receiver type isn't directly
                 // available, fall back to single-instantiation routing.
@@ -3144,7 +3162,7 @@ fn build_handler_impl_index(
                 continue;
             }
             let key: HandlerImplKey = (
-                method_info.struct_name.clone(),
+                method_info.struct_name().clone(),
                 effect_module.clone(),
                 base_trait_name.clone(),
                 method_info.trait_type_args.clone(),

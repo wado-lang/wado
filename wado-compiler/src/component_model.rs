@@ -98,7 +98,9 @@ pub fn cm_payload_type_from_type_id(
     }
     match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => primitive_to_cm_scalar(prim).map(CmPayloadType::Scalar),
-        ResolvedType::Struct { name, .. } if name == "String" => Some(CmPayloadType::String),
+        ResolvedType::Struct {
+            decl_name: name, ..
+        } if name == "String" => Some(CmPayloadType::String),
         ResolvedType::GenericInstance {
             name, type_args, ..
         } if name == "Result" && type_args.len() == 2 => {
@@ -120,7 +122,7 @@ pub fn cm_payload_type_from_type_id(
         // kiln records keep their own (registry-driven) paths, so they stay
         // `None` here and fall through to the legacy classification.
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } if !is_cm_owned_source(module_source) => Some(CmPayloadType::Named(to_kebab(name))),
@@ -1984,7 +1986,12 @@ impl CmInterfaceRegistry {
     // `.expect("<context>")` to panic loudly if the invariant is violated.
 
     /// Newtype registered at `(interface, name)`, if any.
-    pub fn get_newtype_by_source(&self, interface: &str, name: &str) -> Option<&Type> {
+    pub fn get_newtype_by_source(
+        &self,
+        interface: &str,
+        name: &crate::name::DeclName,
+    ) -> Option<&Type> {
+        let name = name.as_decl_str();
         self.newtypes
             .get(&(interface.to_string(), name.to_string()))
     }
@@ -2196,7 +2203,8 @@ impl CmInterfaceRegistry {
 
     /// Find the source interface of a newtype declared in `wasi:*` by its
     /// Wado name, when exactly one wasi interface registers the name.
-    pub fn find_wasi_newtype_source(&self, name: &str) -> Option<&str> {
+    pub fn find_wasi_newtype_source(&self, name: &crate::name::DeclName) -> Option<&str> {
+        let name = name.as_decl_str();
         find_unique_source_with_prefix(&self.newtypes, "wasi:", name)
     }
 
@@ -2302,7 +2310,7 @@ impl CmInterfaceRegistry {
                 return Some(s);
             }
         }
-        self.find_wasi_newtype_source(&named.name)
+        self.find_wasi_newtype_source(&crate::name::DeclName::new(&named.name))
             .or_else(|| self.find_wasi_resource_source(&named.name))
             .or_else(|| self.find_wasi_struct_source(&named.name))
             .or_else(|| self.find_wasi_variant_source(&named.name))
@@ -2390,7 +2398,7 @@ impl CmInterfaceRegistry {
     /// A source-less reference is not a known newtype here.
     fn resolve_newtype_ref(&self, named: &crate::ast::NamedType) -> Option<&Type> {
         let source = named.source_interface.as_deref()?;
-        self.get_newtype_by_source(source, &named.name)
+        self.get_newtype_by_source(source, &crate::name::DeclName::new(&named.name))
     }
 
     /// The registration source and base type of a *local* newtype — one
@@ -2789,7 +2797,8 @@ impl CmInterfaceRegistry {
 
     /// Whether `name` is a world-level function import (Phase 9).
     #[must_use]
-    pub fn is_world_import_function(&self, name: &str) -> bool {
+    pub fn is_world_import_function(&self, name: &crate::name::DeclPath) -> bool {
+        let name = name.as_decl_str();
         self.world_import_functions.contains(name)
     }
 
@@ -2835,8 +2844,11 @@ impl CmInterfaceRegistry {
     }
 
     /// Get function info by qualified name
-    pub fn get_function(&self, name: &str) -> Option<&CmFunctionInfo> {
-        self.effect_to_func.get(name)
+    /// Keyed in the declaration namespace — `Resource::method` as the WIT
+    /// declares it. A mangled name carries the declaring module, which this
+    /// registry never stores, so the key type says which one is wanted.
+    pub fn get_function(&self, name: &crate::name::DeclPath) -> Option<&CmFunctionInfo> {
+        self.effect_to_func.get(name.as_decl_str())
     }
 
     /// Get all interfaces that need to be imported
@@ -4278,7 +4290,9 @@ pub fn cm_size_with_registry_scoped(
             let Some(source) = registry.resolve_cm_source_for(named, wasi_package) else {
                 return crate::cm_abi::cm_size(ty);
             };
-            if let Some(resolved) = registry.get_newtype_by_source(source, &named.name) {
+            if let Some(resolved) =
+                registry.get_newtype_by_source(source, &crate::name::DeclName::new(&named.name))
+            {
                 return cm_size_with_registry_scoped(resolved, registry, wasi_package);
             }
             if let Some(fields) = registry.get_struct_fields_by_source(source, &named.name) {
@@ -4345,7 +4359,9 @@ pub fn cm_align_with_registry_scoped(
             let Some(source) = registry.resolve_cm_source_for(named, wasi_package) else {
                 return crate::cm_abi::cm_align(ty);
             };
-            if let Some(resolved) = registry.get_newtype_by_source(source, &named.name) {
+            if let Some(resolved) =
+                registry.get_newtype_by_source(source, &crate::name::DeclName::new(&named.name))
+            {
                 return cm_align_with_registry_scoped(resolved, registry, wasi_package);
             }
             if let Some(fields) = registry.get_struct_fields_by_source(source, &named.name) {

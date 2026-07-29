@@ -183,11 +183,14 @@ fn carries_resource_rec(
             return false;
         }
         ResolvedType::Struct {
-            name,
+            decl_name,
             module_source,
-            ..
+            type_args,
         } => sfr
-            .get(&(name, module_source))
+            .get(&(
+                tt.struct_rendered_name(&decl_name, &type_args),
+                module_source,
+            ))
             .map(|fields| fields.iter().map(|(_, _, t)| *t).collect())
             .unwrap_or_default(),
         _ => {
@@ -447,13 +450,16 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
             None => Vec::new(),
         },
         ResolvedType::Struct {
-            name,
+            decl_name,
             module_source,
-            ..
+            type_args,
         } => {
             let fields = cx
                 .struct_fields
-                .get(&(name, module_source))
+                .get(&(
+                    cx.tt.struct_rendered_name(&decl_name, &type_args),
+                    module_source,
+                ))
                 .cloned()
                 .unwrap_or_default();
             drop_projected(scrutinee, &fields, cx)

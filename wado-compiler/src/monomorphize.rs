@@ -164,6 +164,58 @@ pub fn monomorphize(flat: &mut FlatPackage) {
     flat.rebuild_variant_indices();
 }
 
+/// Peel `&`/`&mut` and newtypes off a dispatch receiver — the same
+/// transparency the struct-info lookups apply when they report the struct a
+/// call keys on. A newtype that inherits its base's impl is dispatched through
+/// the base, so keeping the newtype's own identity would name a template that
+/// does not exist.
+fn dispatch_receiver_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
+    let mut tid = tt.peel_refs(type_id);
+    loop {
+        match tt.get_unerased(tid) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => tid = *inner,
+            // A newtype that inherits its base's impl dispatches through the
+            // base; one that declares its own is its own receiver. `flags` is
+            // always the latter — its impls are written against the flags
+            // name, never against the `u32` it erases to.
+            ResolvedType::Newtype { base_type, .. } => tid = *base_type,
+            _ => return tid,
+        }
+    }
+}
+
+/// The declared identity `type_id` names, when erasure has replaced it with a
+/// representation. `fq_base_type_name` reads the erased view, which answers
+/// `u32` for every `flags` type and so names a template no impl declares —
+/// impls on a `flags` type are written against the flags name.
+fn dispatch_receiver_identity(tt: &TypeTable, type_id: TypeId) -> Option<crate::name::FqTypeName> {
+    match tt.get_unerased(type_id) {
+        ResolvedType::Flags {
+            name,
+            module_source,
+        } => Some(crate::name::FqTypeName::declared(module_source, name)),
+        _ => None,
+    }
+}
+
+/// The receiver *head* a dispatch template is named after: no type arguments,
+/// for keys that carry them in `impl_type_args`. Prefer it over a
+/// struct-instantiation key's `name`, which carries no module.
+fn dispatch_receiver_head(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTypeName {
+    let tid = dispatch_receiver_type(tt, type_id);
+    dispatch_receiver_identity(tt, tid).unwrap_or_else(|| tt.fq_base_type_name(tid))
+}
+
+/// The receiver's full instantiated name, for keys whose `impl_type_args` are
+/// empty because the instantiation is spelled into the name itself
+/// (`StructField<Thing,i32>::get`). Using the bare head here would collapse
+/// every instantiation onto one key and mint an instance whose body still
+/// carries the impl's type parameters.
+fn dispatch_receiver_name(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTypeName {
+    let tid = dispatch_receiver_type(tt, type_id);
+    dispatch_receiver_identity(tt, tid).unwrap_or_else(|| tt.fq_type_name(tid))
+}
+
 /// Determine the module where trait implementations for a concrete type are defined.
 /// Used when substituting a type parameter receiver (e.g., `T^Ord::cmp` → `i32^Ord::cmp`)
 /// to set the correct `module_source` so DCE can find the target function.
@@ -174,6 +226,8 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
         ResolvedType::Struct { module_source, .. }
         | ResolvedType::GenericInstance { module_source, .. }
         | ResolvedType::Enum { module_source, .. }
+        | ResolvedType::Flags { module_source, .. }
+        | ResolvedType::Resource { module_source, .. }
         | ResolvedType::Variant { module_source, .. } => Some(module_source.clone()),
         // Newtypes inherit their base type's impls (`type Foo = List<u8>`
         // gets List's methods); the body of the inherited generic
@@ -278,6 +332,12 @@ impl Monomorphizer {
 
         // Store in module for later phases
         module.generic_functions.clone_from(&generic_functions);
+
+        // Hand the same registry to the monomorphizer: variadic-for-of
+        // expansion reads it to tell a callee's method type params from its
+        // ordinary parameters. Grow-only above this point, so one snapshot
+        // shared by `Rc` serves the whole run.
+        self.functions.templates = Rc::new(generic_functions.clone());
 
         // Phase 8: Collect function instantiation sites from Call expressions
         self.collect_function_instantiation_sites(&module, &generic_functions);

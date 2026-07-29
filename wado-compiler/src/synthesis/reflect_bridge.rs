@@ -30,21 +30,29 @@ pub fn synthesize_monomorphized_reflect_bridges(flat: &mut FlatPackage) {
 /// `$field_get$S$F` for each monomorphized struct instantiated from a
 /// `ReflectStruct`-derived generic base.
 fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<TirFunction>>>) {
-    let targets: Vec<(usize, String)> = {
+    let targets: Vec<(usize, String, Vec<TypeId>)> = {
         let tt = flat.type_table.borrow();
         flat.structs
             .iter()
             .enumerate()
             .filter_map(|(i, s)| {
-                let base = &s.monomorph_info.as_ref()?.generic_name;
+                let mono = s.monomorph_info.as_ref()?;
+                let base = &mono.generic_name;
                 let base_decl = tt.decl_by_name(base, &s.module_source)?;
                 tt.has_generic_assoc_type_def_for_decl(base_decl, REFLECT_MEMBERS_ASSOC)
-                    .then(|| (i, base.clone()))
+                    .then(|| (i, base.clone(), mono.impl_type_args.clone()))
             })
             .collect()
     };
 
-    for (index, base_name) in targets {
+    // The subject is the bridge's identity, so a type reached twice — the same
+    // instantiation appearing more than once in `flat.structs` — collapses onto
+    // one helper, as the variant path already does.
+    // Keyed on the subject's mangle, not its `TypeId`: the mangle is what the
+    // helper is named after, so two ids that spell the same way would still
+    // produce one name twice. The variant path keys the same way.
+    let mut seen_subjects: crate::hashmap::IndexSet<String> = crate::hashmap::IndexSet::default();
+    for (index, base_name, impl_type_args) in targets {
         let decl = &flat.structs[index];
         let module_source = decl.module_source.clone();
         let fields: Vec<(String, TypeId, u32)> = decl
@@ -54,11 +62,31 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
             .collect();
         let (subject, ref_subject) = {
             let mut tt = flat.type_table.borrow_mut();
-            let subject =
-                tt.make_monomorphized_struct(decl.name.clone(), module_source.clone(), base_name);
+            // `decl` is an instantiation, so `decl.name` is the rendered name
+            // the struct registry keys on. Minting is the unreached branch, and
+            // it must rebuild the instantiation from its base and arguments —
+            // `make_struct(decl.name)` would register the rendered spelling as a
+            // declaration name, the fusion WEP 2026-07-29 removes.
+            let subject = tt
+                .find_struct_by_name(&decl.name, &module_source)
+                .unwrap_or_else(|| {
+                    tt.make_monomorphized_struct(
+                        decl.name.clone(),
+                        module_source.clone(),
+                        base_name.clone(),
+                        impl_type_args.clone(),
+                    )
+                });
             let ref_subject = tt.make_ref(subject);
             (subject, ref_subject)
         };
+        let subject_mangle = flat
+            .type_table
+            .borrow()
+            .mangle_type_arg_for_generic(subject);
+        if !seen_subjects.insert(subject_mangle) {
+            continue;
+        }
         push_helpers(
             generate_field_bridge_helpers(
                 &flat.type_table,

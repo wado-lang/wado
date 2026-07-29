@@ -10,7 +10,7 @@ use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, mangle_local_trait_method};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_local_trait_method};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, ResolvedType, SynthTrait, SynthesisRequest,
@@ -403,7 +403,7 @@ pub fn synthesize_serde(project: &mut Package) {
             match req.trait_ref {
                 SynthTrait::Serialize => {
                     let key = MethodName::format_local(
-                        &req.target_type_name,
+                        &FqTypeName::declared(&module.module_source, &req.target_type_name),
                         Some(&names.serialize),
                         "serialize",
                     );
@@ -420,7 +420,7 @@ pub fn synthesize_serde(project: &mut Package) {
                 }
                 SynthTrait::Deserialize => {
                     let key = MethodName::format_local(
-                        &req.target_type_name,
+                        &FqTypeName::declared(&module.module_source, &req.target_type_name),
                         Some(&names.deserialize),
                         "deserialize",
                     );
@@ -508,7 +508,7 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         tt.all_types()
             .filter_map(|(id, resolved)| match resolved {
                 ResolvedType::Struct {
-                    name,
+                    decl_name: name,
                     module_source,
                     ..
                 }
@@ -591,7 +591,7 @@ fn type_param_method_call(
 ) -> TirExpr {
     let info = if method_type_args.is_empty() {
         let mut i = LocalMethodName::new(
-            struct_name.to_string(),
+            FqTypeName::binder(struct_name),
             Some(trait_name.to_string()),
             method_name.to_string(),
         );
@@ -599,7 +599,7 @@ fn type_param_method_call(
         i
     } else {
         let mut i = LocalMethodName::with_method_type_args(
-            struct_name.to_string(),
+            FqTypeName::binder(struct_name),
             Some(trait_name.to_string()),
             method_name.to_string(),
             method_type_args,
@@ -949,7 +949,7 @@ fn default_value_for_type(
             (p.as_str().to_string(), ModuleSource::primitive(), vec![])
         }
         crate::tir::ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => {
@@ -980,10 +980,16 @@ fn default_value_for_type(
         .compiler_trait_name(crate::compiler_item::CompilerItem::Default)
         .to_string();
     requested_defaults.push((base_name.clone(), module_source.clone()));
-    let mut method_info =
-        LocalMethodName::new(base_name, Some(default_trait_name), "default".to_string());
+    let mut method_info = LocalMethodName::new(
+        FqTypeName::declared(&module_source, &base_name),
+        Some(default_trait_name),
+        "default".to_string(),
+    );
     if !type_args.is_empty() {
-        let arg_names: Vec<String> = type_args.iter().map(|t| type_table.type_name(*t)).collect();
+        let arg_names: Vec<FqTypeName> = type_args
+            .iter()
+            .map(|t| type_table.fq_type_name(*t))
+            .collect();
         method_info = method_info.with_type_args(&arg_names, &[]);
     }
     let mangled_name = method_info.to_mangled_name();
@@ -1279,13 +1285,13 @@ fn generate_struct_serialize(
         names,
     ));
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(names.serialize.clone()),
         "serialize".to_string(),
     );
-    let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some(&names.serialize), "serialize");
+    let qualified_name = MethodName::format_local(&target, Some(&names.serialize), "serialize");
 
     Some(TirFunction {
         module_source: ModuleSource::default(),
@@ -1430,6 +1436,10 @@ fn generate_struct_deserialize(
         .map(|(_, _, type_id, _)| tt.type_name(*type_id))
         .collect();
     let base_struct_type_name = tt.type_name(base_struct_type);
+    // `next_field::<Type>()` resolves `FieldSchema::lookup` by substituting the
+    // concrete receiver, so the definition must carry the same fq receiver the
+    // substitution builds.
+    let target_fq = tt.fq_base_type_name(req.target_type_id);
 
     let compiler_items = tt.compiler_items().clone();
     drop(tt);
@@ -1448,7 +1458,7 @@ fn generate_struct_deserialize(
     // at monomorphization, so no closure value is constructed or allocated.
     // Positional fields are skipped: they are never matched by name.
     let lookup_func = generate_lookup_function(
-        &req.target_type_name,
+        &target_fq,
         &names.field_schema,
         &fields,
         &positional_flags,
@@ -1462,7 +1472,7 @@ fn generate_struct_deserialize(
     // rank-th positional field to its field index. Empty (always `null`) when
     // the type has no positional fields, so non-args formats are unaffected.
     let positional_at_func = generate_positional_at_function(
-        &req.target_type_name,
+        &target_fq,
         &names.field_schema,
         &positional_flags,
         option_i32,
@@ -1847,16 +1857,13 @@ fn generate_struct_deserialize(
         names,
     ));
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(names.deserialize.clone()),
         "deserialize".to_string(),
     );
-    let qualified_name = MethodName::format_local(
-        &req.target_type_name,
-        Some(&names.deserialize),
-        "deserialize",
-    );
+    let qualified_name = MethodName::format_local(&target, Some(&names.deserialize), "deserialize");
 
     let deser_func = TirFunction {
         module_source: ModuleSource::default(),
@@ -1976,8 +1983,12 @@ fn byte_slice_method_call(
     compiler_items: &crate::compiler_item::CompilerItems,
 ) -> TirExpr {
     let (module_source, owner, name) = compiler_items.require_method(item);
-    let method_info = LocalMethodName::new(owner.to_string(), None, name.to_string())
-        .with_struct_type_args(&["u8".to_string()]);
+    let method_info = LocalMethodName::new(
+        FqTypeName::declared(module_source, owner),
+        None,
+        name.to_string(),
+    )
+    .with_struct_type_args(&[FqTypeName::builtin("u8")]);
     let monomorph_info = crate::tir::MonomorphInfo {
         generic_name: method_info.base_struct_name(),
         impl_type_args: vec![TypeTable::U8],
@@ -2033,7 +2044,7 @@ fn i32_eq(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
 /// differ.
 #[allow(clippy::too_many_arguments)]
 fn field_schema_method_fn(
-    type_name: &str,
+    type_name: &FqTypeName,
     field_schema_trait: &str,
     method: &str,
     param_name: &str,
@@ -2057,7 +2068,7 @@ fn field_schema_method_fn(
         impl_type_params: Vec::new(),
         monomorph_info: None,
         method_info: Some(LocalMethodName::new(
-            type_name.to_string(),
+            type_name.clone(),
             Some(field_schema_trait.to_string()),
             method.to_string(),
         )),
@@ -2091,7 +2102,7 @@ fn field_schema_method_fn(
 }
 
 fn generate_lookup_function(
-    type_name: &str,
+    type_name: &FqTypeName,
     field_schema_trait: &str,
     fields: &[(String, String, TypeId, u32)],
     positional_flags: &[bool],
@@ -2183,7 +2194,7 @@ fn generate_lookup_function(
 /// loop's field indices, so the returned index drives the same `field == i`
 /// assignment as `lookup`.
 fn generate_positional_at_function(
-    type_name: &str,
+    type_name: &FqTypeName,
     field_schema_trait: &str,
     positional_flags: &[bool],
     option_i32: TypeId,
@@ -2334,13 +2345,13 @@ fn generate_enum_serialize(
 
     let stmts = vec![return_stmt(Some(match_expr))];
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(names.serialize.clone()),
         "serialize".to_string(),
     );
-    let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some(&names.serialize), "serialize");
+    let qualified_name = MethodName::format_local(&target, Some(&names.serialize), "serialize");
 
     Some(TirFunction {
         module_source: ModuleSource::default(),
@@ -2486,14 +2497,10 @@ fn generate_variant_family_deserialize(
 
     let (eq_trait_name, string_struct_name) = {
         let tt = module.type_table.borrow();
-        let items = tt.compiler_items();
         (
-            items
-                .trait_name(crate::compiler_item::CompilerItem::Eq)
+            tt.compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
                 .to_string(),
-            items
-                .struct_name(crate::compiler_item::CompilerItem::String)
-                .to_string(),
+            tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::String),
         )
     };
     let mut tt = module.type_table.borrow_mut();
@@ -2877,16 +2884,13 @@ fn generate_variant_family_deserialize(
         names,
     ));
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(names.deserialize.clone()),
         "deserialize".to_string(),
     );
-    let qualified_name = MethodName::format_local(
-        &req.target_type_name,
-        Some(&names.deserialize),
-        "deserialize",
-    );
+    let qualified_name = MethodName::format_local(&target, Some(&names.deserialize), "deserialize");
 
     TirFunction {
         module_source: ModuleSource::default(),
@@ -3190,13 +3194,13 @@ fn generate_variant_serialize(
 
     let stmts = vec![expr_stmt(match_expr)];
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(names.serialize.clone()),
         "serialize".to_string(),
     );
-    let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some(&names.serialize), "serialize");
+    let qualified_name = MethodName::format_local(&target, Some(&names.serialize), "serialize");
 
     Some(TirFunction {
         module_source: ModuleSource::default(),
@@ -3348,8 +3352,7 @@ fn generate_flags_serialize(
     let string_struct_name = module
         .type_table
         .borrow()
-        .compiler_struct_name(crate::compiler_item::CompilerItem::String)
-        .to_string();
+        .compiler_struct_fq_name(crate::compiler_item::CompilerItem::String);
     let mut tt = module.type_table.borrow_mut();
 
     let flags_type = req.target_type_id;
@@ -3452,7 +3455,7 @@ fn generate_flags_serialize(
             &names.serialize_seq,
             &names.m_serialize_seq_element,
             serde_module.clone(),
-            vec![string_struct_name.clone()],
+            vec![string_struct_name.to_mangled()],
             vec![string_type],
             vec![ref_expr(
                 string_lit(member_name, string_type, span),
@@ -3512,13 +3515,13 @@ fn generate_flags_serialize(
         names,
     ));
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(names.serialize.clone()),
         "serialize".to_string(),
     );
-    let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some(&names.serialize), "serialize");
+    let qualified_name = MethodName::format_local(&target, Some(&names.serialize), "serialize");
 
     Some(TirFunction {
         module_source: ModuleSource::default(),
@@ -3593,14 +3596,10 @@ fn generate_flags_deserialize(
 
     let (eq_trait_name, string_struct_name) = {
         let tt = module.type_table.borrow();
-        let items = tt.compiler_items();
         (
-            items
-                .trait_name(crate::compiler_item::CompilerItem::Eq)
+            tt.compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
                 .to_string(),
-            items
-                .struct_name(crate::compiler_item::CompilerItem::String)
-                .to_string(),
+            tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::String),
         )
     };
     let mut tt = module.type_table.borrow_mut();
@@ -3691,7 +3690,7 @@ fn generate_flags_deserialize(
         &names.deserialize_seq,
         &names.m_deserialize_seq_next_element,
         serde_module.clone(),
-        vec![string_struct_name.clone()],
+        vec![string_struct_name.to_mangled()],
         vec![string_type],
         vec![],
         result_option_string_err,
@@ -3902,16 +3901,13 @@ fn generate_flags_deserialize(
         names,
     ));
 
+    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
     let method_info = LocalMethodName::new(
-        req.target_type_name.clone(),
+        target.clone(),
         Some(names.deserialize.clone()),
         "deserialize".to_string(),
     );
-    let qualified_name = MethodName::format_local(
-        &req.target_type_name,
-        Some(&names.deserialize),
-        "deserialize",
-    );
+    let qualified_name = MethodName::format_local(&target, Some(&names.deserialize), "deserialize");
 
     Some(TirFunction {
         module_source: ModuleSource::default(),

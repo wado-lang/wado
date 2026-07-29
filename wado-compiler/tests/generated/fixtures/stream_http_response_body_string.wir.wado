@@ -293,9 +293,9 @@ type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // Typ
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(64)
 
-type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(65)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(65)
 
-type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(66)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(66)
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(67)
 
@@ -309,7 +309,7 @@ type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(71)
 
 type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(72)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(73)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(73)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -341,9 +341,9 @@ fn "stream_http_response_body_string.wado/string_to_bytes"(s) {
         l1: loop {
             let __sroa___match_5_discriminant: i32;
             let __sroa___match_5_payload_0: char;
-            multivalue_bind [__sroa___match_5_discriminant, __sroa___match_5_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_3);
+            multivalue_bind [__sroa___match_5_discriminant, __sroa___match_5_payload_0] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_3);
             if __sroa___match_5_discriminant == 0 {
-                "core:prelude/list.wado/List<u8>::push"(bytes, __sroa___match_5_payload_0 & 255);
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(bytes, __sroa___match_5_payload_0 & 255);
             } else {
                 break b0;
             }
@@ -1332,7 +1332,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
+fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
     if self.byte_index >= self.used {
         return 1, 0;
     }
@@ -1343,18 +1343,18 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
     return 0, __pattern_temp_0_mv_0;
 }
 
-fn "core:prelude/list.wado/List<u8>::push"(self, value) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
     if @unlikely(used >= builtin::array_len(self.repr)) {
         cold_path;
-        "core:prelude/list.wado/List<u8>::grow"(self);
+        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self);
     }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/list.wado/List<u8>::grow"(self) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;

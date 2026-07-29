@@ -85,7 +85,7 @@ export fn run() {}
 #[test]
 fn positional_at_maps_rank_to_declaration_order_index() {
     let tir = monomorphized_tir(SOURCE);
-    let body = function_body(&tir, r#"fn "Cli^FieldSchema::positional_at""#);
+    let body = function_body(&tir, r#"fn "entry.wado/Cli^FieldSchema::positional_at""#);
 
     // rank 0 -> field 0 (input), rank 1 -> field 1 (out), else None.
     assert!(
@@ -110,7 +110,7 @@ fn positional_at_maps_rank_to_declaration_order_index() {
 #[test]
 fn lookup_excludes_positional_fields() {
     let tir = monomorphized_tir(SOURCE);
-    let body = function_body(&tir, r#"fn "Cli^FieldSchema::lookup""#);
+    let body = function_body(&tir, r#"fn "entry.wado/Cli^FieldSchema::lookup""#);
 
     // Nominal fields jobs (index 2) and verbose (index 3) are matched by name.
     assert!(

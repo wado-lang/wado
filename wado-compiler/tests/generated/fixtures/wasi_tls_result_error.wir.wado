@@ -86,9 +86,9 @@ type "functype//core:rt/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // 
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(32)
 
-type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>") -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(33)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>") -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(33)
 
-type "functype//wasi_tls_result_error.wado/__Closure_2::__call" = fn(ref "wasi_tls_result_error.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(34)
+type "functype//wasi_tls_result_error.wado/wasi_tls_result_error.wado/__Closure_2::__call" = fn(ref "wasi_tls_result_error.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(34)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
 
@@ -125,7 +125,7 @@ fn "wasi_tls_result_error.wado/run"() with Stdout, Connector, Error {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:wasi_tls_result_error.wado::__modules_initialized = 1;
     };
-    __match_1 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wasi_tls_result_error.wado/__cm_binding__Connector_connect"(local.tee conn("wasi_tls_result_error.wado/__cm_binding__Connector_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("example.com"), used: 11 }));
+    __match_1 = "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wasi_tls_result_error.wado/__cm_binding__Connector_connect"(local.tee conn("wasi_tls_result_error.wado/__cm_binding__Connector_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("example.com"), used: 11 }));
     if __match_1.discriminant == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("connected"), used: 9 });
     } else {
@@ -301,7 +301,7 @@ fn "core:rt/cm_waitable_set_wait"(ws) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"(self) {
+fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"(self) {
     let handle_1: i32;
     let ws_3: i32;
     let result: ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";
@@ -331,14 +331,14 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls
     return result;
 }
 
-fn "wasi_tls_result_error.wado/__Closure_2::__call"(self, __outptr) {
+fn "wasi_tls_result_error.wado/wasi_tls_result_error.wado/__Closure_2::__call"(self, __outptr) {
     return "wasi_tls_result_error.wado/__cm_lift__Connector_connect"(__outptr);
 }
 
 fn "closure/wasi_tls_result_error.wado/__closure_wrapper_0"(__env, __p0) {
     let __typed_env: ref "wasi_tls_result_error.wado//__Closure_2";
     __typed_env = ref.cast "wasi_tls_result_error.wado//__Closure_2"(__env);
-    return "wasi_tls_result_error.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "wasi_tls_result_error.wado/wasi_tls_result_error.wado/__Closure_2::__call"(__typed_env, __p0);
 }
 
 export fn "wasi_tls_result_error.wado/__cm_export__run" as "run"

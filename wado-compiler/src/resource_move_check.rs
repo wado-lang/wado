@@ -29,7 +29,7 @@ fn type_carries_resource(sem: &Semantics, type_id: TypeId, visited: &mut Vec<Typ
         ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => return true,
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => {

@@ -611,11 +611,11 @@ fn check_cm_boundary_representable_inner(
                 }
                 Ok(())
             }
-            R::Struct { name, .. } => {
-                if name == &names.string {
+            R::Struct { decl_name, .. } => {
+                if decl_name == &names.string {
                     return Ok(());
                 }
-                let name = name.clone();
+                let name = decl_name.clone();
                 match find_struct_decl(&name, tir_modules) {
                     Some(decl) if decl.fields.is_empty() => Err(format!(
                         "record `{name}` has no fields; an empty record has no \
@@ -1096,7 +1096,9 @@ fn flat_types_from_type_id_inner(
             }
         },
         ResolvedType::Unit => {} // no flat values
-        ResolvedType::Struct { name, .. } => {
+        ResolvedType::Struct {
+            decl_name: name, ..
+        } => {
             if name == &names.string {
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
@@ -1361,7 +1363,7 @@ pub(super) fn type_id_to_ast_type(
         ResolvedType::Primitive(p) => named_no_source(p.as_str()),
         ResolvedType::Unit => Type::Tuple(Vec::new()),
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => cm_named(name, module_source),

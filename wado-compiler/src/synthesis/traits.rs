@@ -18,7 +18,7 @@ use crate::hashmap::IndexSet;
 
 use crate::elaborator::trait_env::TraitEnv;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, Receiver, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FnDispatchTrait, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
@@ -30,7 +30,7 @@ use crate::token::Span;
 
 use super::common::{
     deref_expr, make_synthetic_free_function, make_synthetic_method, param_local, ref_expr,
-    synth_span, trait_method_call, write_str_stmt,
+    synth_span, write_str_stmt,
 };
 
 /// Snapshot of every `core:prelude/{traits,format}` symbol name that the
@@ -42,6 +42,9 @@ use super::common::{
 #[derive(Clone, Debug)]
 pub(crate) struct TraitsStdlibNames {
     pub formatter: String,
+    /// `formatter` named by its declaring module — the form a function name
+    /// embeds. The bare `formatter` stays for type-table lookups.
+    pub formatter_fq: FqTypeName,
     pub display: String,
     /// `Display::fmt` method name, resolved via [`Resolved::Trait::method_name`].
     pub display_method: String,
@@ -73,6 +76,10 @@ impl TraitsStdlibNames {
             items.require_enum_case(CompilerItem::OrderingGreater);
         Self {
             formatter: items.struct_name(CompilerItem::Formatter).to_string(),
+            formatter_fq: {
+                let (module, name) = items.require_struct(CompilerItem::Formatter);
+                FqTypeName::declared(module, name)
+            },
             display: items.trait_name(CompilerItem::Display).to_string(),
             display_method: items.trait_method_name(CompilerItem::Display).to_string(),
             display_alt: items.trait_name(CompilerItem::DisplayAlt).to_string(),
@@ -143,9 +150,16 @@ impl TraitPair {
 /// `impl <Trait> for <Type>` blocks populates the module via
 /// `Elaborator::canonical_decl_key` directly into the [`LocalMethodName`]
 /// struct literal.
-fn trait_method_info(struct_name: &str, trait_name: &str, method: &str) -> LocalMethodName {
+/// The receiver is named by the module that declares it, the same rule a
+/// resolved type follows when mangled into any other name.
+fn trait_method_info(
+    module_source: &ModuleSource,
+    struct_name: &str,
+    trait_name: &str,
+    method: &str,
+) -> LocalMethodName {
     LocalMethodName::new(
-        struct_name.to_string(),
+        FqTypeName::of_head(module_source, struct_name),
         Some(trait_name.to_string()),
         method.to_string(),
     )
@@ -359,7 +373,7 @@ pub fn synthesize_traits(project: Package) -> Package {
             trait_env: &trait_env,
             pending: &mut pending,
             requested: &requested,
-            module: module_source,
+            module: module_source.clone(),
             names: &names,
         };
         generate_enum_trait_impls(module, &mut ctx);
@@ -411,16 +425,15 @@ pub fn synthesize_defaults(project: &mut Package) {
             trait_env: &trait_env,
             pending: &mut pending,
             requested: &requested,
-            module: module_source,
+            module: module_source.clone(),
             names: &names,
         };
         generate_struct_default_impls(module, &mut ctx);
     }
 }
 
-/// Generate `Struct^ReflectStruct::type_name()` for each requested struct
-/// (WEP 2026-06-13 §1). Runs after `synthesize_defaults` so any late demand
-/// recorded by other synthesized bodies is captured.
+/// Generate `Struct^ReflectStruct::type_name()` for each eligible struct
+/// (WEP 2026-06-13 §1).
 pub fn synthesize_reflect(project: &mut Package) {
     let trait_env = project.trait_env.clone();
     let first_module = project
@@ -573,6 +586,7 @@ fn generate_struct_reflect_methods(
         .collect();
 
     let type_name_fn = generate_type_name_fn(
+        module_source,
         name,
         env.string_type,
         reflect_trait_name,
@@ -580,7 +594,7 @@ fn generate_struct_reflect_methods(
         span,
     );
 
-    let (struct_type, ref_struct_type, member_types, members_tuple_type) = {
+    let (struct_type, ref_struct_type, member_types, members_tuple_type, fields_tuple_type) = {
         let mut tt = type_table.borrow_mut();
         let struct_type = if is_generic {
             let param_ids = make_type_param_ids(type_params, &mut tt);
@@ -616,10 +630,12 @@ fn generate_struct_reflect_methods(
             ref_struct_type,
             member_types,
             members_tuple_type,
+            fields_tuple_type,
         )
     };
 
     let members_fn = generate_struct_members_fn(
+        module_source,
         type_table,
         env,
         reflect_trait_name,
@@ -629,7 +645,18 @@ fn generate_struct_reflect_methods(
         members_tuple_type,
         span,
     );
+    let from_fields_fn = generate_struct_from_fields_fn(
+        module_source,
+        env,
+        reflect_trait_name,
+        name,
+        struct_type,
+        fields,
+        fields_tuple_type,
+        span,
+    );
     let wire_name_policy_fn = generate_wire_name_policy_fn(
+        module_source,
         name,
         env.case_style_type,
         name_policy,
@@ -638,7 +665,12 @@ fn generate_struct_reflect_methods(
         span,
     );
 
-    let mut functions = vec![type_name_fn, members_fn, wire_name_policy_fn];
+    let mut functions = vec![
+        type_name_fn,
+        members_fn,
+        from_fields_fn,
+        wire_name_policy_fn,
+    ];
     for f in &mut functions {
         f.impl_type_params.clone_from(type_params);
     }
@@ -708,6 +740,7 @@ struct ReflectSynthEnv {
     member_struct_module: ModuleSource,
     type_name_method: String,
     members_method: String,
+    from_fields_method: String,
     wire_name_policy_method: String,
 }
 
@@ -730,6 +763,9 @@ impl ReflectSynthEnv {
                 .to_string(),
             members_method: items
                 .method_name(CompilerItem::ReflectStructMembers)
+                .to_string(),
+            from_fields_method: items
+                .method_name(CompilerItem::ReflectStructFromFields)
                 .to_string(),
             wire_name_policy_method: items
                 .method_name(CompilerItem::ReflectStructWireNamePolicy)
@@ -777,7 +813,7 @@ fn synthesize_reflect_kind(
             trait_env: &trait_env,
             pending: &mut pending,
             requested: &requested,
-            module: module_source,
+            module: module_source.clone(),
             names: &names,
         };
         generate_impls(module, &mut ctx, &trait_name);
@@ -861,6 +897,7 @@ fn reflect_meta_int_field(
 /// is_secret: … }, …];` — one fat member per field, each typed `StructField<S, F_k>`.
 #[allow(clippy::too_many_arguments)]
 fn generate_struct_members_fn(
+    module_source: &ModuleSource,
     type_table: &RefCell<TypeTable>,
     env: &ReflectSynthEnv,
     reflect_trait_name: &str,
@@ -870,7 +907,12 @@ fn generate_struct_members_fn(
     members_tuple_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(struct_name, reflect_trait_name, &env.members_method);
+    let method_info = trait_method_info(
+        module_source,
+        struct_name,
+        reflect_trait_name,
+        &env.members_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let option_string_type = type_table.borrow_mut().make_option(env.string_type);
@@ -965,6 +1007,81 @@ fn generate_struct_members_fn(
     )
 }
 
+/// Build `S^ReflectStruct::from_fields(fields: [F_0, …]) -> S`:
+/// `return S { f_0: fields.0, … };`.
+fn generate_struct_from_fields_fn(
+    module_source: &ModuleSource,
+    env: &ReflectSynthEnv,
+    reflect_trait_name: &str,
+    struct_name: &str,
+    struct_type: TypeId,
+    fields: &[ReflectFieldInfo],
+    fields_tuple_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(
+        module_source,
+        struct_name,
+        reflect_trait_name,
+        &env.from_fields_method,
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let literal_fields = fields
+        .iter()
+        .enumerate()
+        .map(|(position, f)| TirStructField {
+            name: f.name.clone(),
+            value: TirExpr::new(
+                TirExprKind::FieldAccess {
+                    expr: Box::new(local_expr(0, "fields", fields_tuple_type, span)),
+                    field_index: position as u32,
+                    field_name: position.to_string(),
+                },
+                f.type_id,
+                span,
+            ),
+            field_index: f.index,
+        })
+        .collect();
+
+    let literal = TirExpr::new(
+        TirExprKind::StructLiteral {
+            struct_type,
+            struct_name: struct_name.to_string(),
+            fields: literal_fields,
+        },
+        struct_type,
+        span,
+    );
+
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(literal),
+            },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![TirParam {
+            name: "fields".to_string(),
+            type_id: fields_tuple_type,
+            local_index: 0,
+            is_mut: false,
+            is_mut_ref: false,
+            span,
+        }],
+        struct_type,
+        body,
+        vec![],
+    )
+}
+
 /// Map a `#[wire(name_policy)]` string to its `CaseStyle` case
 /// `(index, name)`. Mirrors `serde_synth::apply_rename_all`'s recognised
 /// strategies; any unknown string (and no attribute) falls back to `Identity`.
@@ -986,6 +1103,7 @@ fn case_style_variant(name_policy: &Option<String>) -> (u32, &'static str) {
 /// `CaseStyle` value (casing itself is resolved library-side). Shared by all
 /// four reflect kinds.
 fn generate_wire_name_policy_fn(
+    module_source: &ModuleSource,
     type_name: &str,
     case_style_type: TypeId,
     name_policy: &Option<String>,
@@ -993,7 +1111,12 @@ fn generate_wire_name_policy_fn(
     wire_name_policy_method: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(type_name, reflect_trait_name, wire_name_policy_method);
+    let method_info = trait_method_info(
+        module_source,
+        type_name,
+        reflect_trait_name,
+        wire_name_policy_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let (case_index, case_name) = case_style_variant(name_policy);
@@ -1131,13 +1254,19 @@ fn generate_field_get_helper(
 /// Build `Type^ReflectKind::type_name() -> String { return "Type"; }` —
 /// shared by the struct `ReflectStruct` and variant `ReflectVariant` syntheses.
 fn generate_type_name_fn(
+    module_source: &ModuleSource,
     struct_name: &str,
     string_type: TypeId,
     reflect_trait_name: &str,
     type_name_method: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(struct_name, reflect_trait_name, type_name_method);
+    let method_info = trait_method_info(
+        module_source,
+        struct_name,
+        reflect_trait_name,
+        type_name_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let literal = TirExpr::new(
@@ -1315,6 +1444,7 @@ fn generate_variant_reflect_methods(
     let span = target.span;
 
     let type_name_fn = generate_type_name_fn(
+        module_source,
         &target.name,
         env.string_type,
         variant_trait_name,
@@ -1366,6 +1496,7 @@ fn generate_variant_reflect_methods(
     };
 
     let discriminant_fn = generate_variant_discriminant_fn(
+        module_source,
         &target.name,
         ref_variant_type,
         variant_type,
@@ -1374,6 +1505,7 @@ fn generate_variant_reflect_methods(
         span,
     );
     let cases_fn = generate_variant_cases_fn(
+        module_source,
         type_table,
         env,
         variant_trait_name,
@@ -1384,6 +1516,7 @@ fn generate_variant_reflect_methods(
     );
 
     let wire_name_policy_fn = generate_wire_name_policy_fn(
+        module_source,
         &target.name,
         env.case_style_type,
         &target.wire_name_policy,
@@ -1415,6 +1548,7 @@ fn generate_variant_reflect_methods(
 /// — one fat member per case, each typed `Case<Variant, P_k>` and carrying the
 /// `Member` metadata alongside the payload bridge.
 fn generate_variant_cases_fn(
+    module_source: &ModuleSource,
     type_table: &RefCell<TypeTable>,
     env: &ReflectVariantSynthEnv,
     variant_trait_name: &str,
@@ -1423,7 +1557,12 @@ fn generate_variant_cases_fn(
     members_tuple_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(&target.name, variant_trait_name, &env.cases_method);
+    let method_info = trait_method_info(
+        module_source,
+        &target.name,
+        variant_trait_name,
+        &env.cases_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let option_string_type = type_table.borrow_mut().make_option(env.string_type);
@@ -1795,6 +1934,7 @@ fn generate_case_construct_helper(
 /// Build `Variant^ReflectVariant::discriminant(&self) -> i32` as
 /// `return <tag of *self>;`.
 fn generate_variant_discriminant_fn(
+    module_source: &ModuleSource,
     variant_name: &str,
     ref_variant_type: TypeId,
     variant_type: TypeId,
@@ -1802,7 +1942,12 @@ fn generate_variant_discriminant_fn(
     discriminant_method: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(variant_name, variant_trait_name, discriminant_method);
+    let method_info = trait_method_info(
+        module_source,
+        variant_name,
+        variant_trait_name,
+        discriminant_method,
+    );
     let qualified_name = method_info.to_mangled_name();
     let mut function = make_synthetic_method(
         qualified_name,
@@ -1978,6 +2123,7 @@ fn generate_enum_reflect_methods(
     let span = target.span;
 
     let type_name_fn = generate_type_name_fn(
+        module_source,
         &target.name,
         env.string_type,
         enum_trait_name,
@@ -2016,9 +2162,17 @@ fn generate_enum_reflect_methods(
         )
     };
 
-    let discriminant_fn =
-        generate_enum_discriminant_fn(env, enum_trait_name, target, enum_type, ref_enum_type, span);
+    let discriminant_fn = generate_enum_discriminant_fn(
+        module_source,
+        env,
+        enum_trait_name,
+        target,
+        enum_type,
+        ref_enum_type,
+        span,
+    );
     let from_discriminant_fn = generate_enum_from_discriminant_fn(
+        module_source,
         type_table,
         env,
         enum_trait_name,
@@ -2028,6 +2182,7 @@ fn generate_enum_reflect_methods(
         span,
     );
     let members_fn = generate_enum_members_fn(
+        module_source,
         type_table,
         env,
         enum_trait_name,
@@ -2039,6 +2194,7 @@ fn generate_enum_reflect_methods(
     );
 
     let wire_name_policy_fn = generate_wire_name_policy_fn(
+        module_source,
         &target.name,
         env.case_style_type,
         &target.wire_name_policy,
@@ -2061,6 +2217,7 @@ fn generate_enum_reflect_methods(
 /// wire_override: … }, …];` — one `EnumCase<Enum>` per case, packed into the
 /// homogeneous `Members` tuple.
 fn generate_enum_members_fn(
+    module_source: &ModuleSource,
     type_table: &RefCell<TypeTable>,
     env: &ReflectEnumSynthEnv,
     enum_trait_name: &str,
@@ -2070,7 +2227,12 @@ fn generate_enum_members_fn(
     members_tuple_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(&target.name, enum_trait_name, &env.members_method);
+    let method_info = trait_method_info(
+        module_source,
+        &target.name,
+        enum_trait_name,
+        &env.members_method,
+    );
 
     let option_string_type = type_table.borrow_mut().make_option(env.string_type);
 
@@ -2142,6 +2304,7 @@ fn generate_enum_members_fn(
 /// — an enum value is its i32 discriminant, so a direct cast reads the tag (the
 /// enum analog of `ReflectFlags::bits`'s `*self as u32`).
 fn generate_enum_discriminant_fn(
+    module_source: &ModuleSource,
     env: &ReflectEnumSynthEnv,
     enum_trait_name: &str,
     target: &ReflectEnumTarget,
@@ -2149,7 +2312,12 @@ fn generate_enum_discriminant_fn(
     ref_enum_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(&target.name, enum_trait_name, &env.discriminant_method);
+    let method_info = trait_method_info(
+        module_source,
+        &target.name,
+        enum_trait_name,
+        &env.discriminant_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let as_i32 = crate::synthesis::common::cast(
@@ -2179,6 +2347,7 @@ fn generate_enum_discriminant_fn(
 /// Build `Enum^ReflectEnum::from_discriminant(disc: i32) -> Option<Enum>` as
 /// an `if disc == k { return Some(Case_k); }` chain ending in `None`.
 fn generate_enum_from_discriminant_fn(
+    module_source: &ModuleSource,
     type_table: &RefCell<TypeTable>,
     env: &ReflectEnumSynthEnv,
     enum_trait_name: &str,
@@ -2187,8 +2356,12 @@ fn generate_enum_from_discriminant_fn(
     option_enum_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info =
-        trait_method_info(&target.name, enum_trait_name, &env.from_discriminant_method);
+    let method_info = trait_method_info(
+        module_source,
+        &target.name,
+        enum_trait_name,
+        &env.from_discriminant_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let mut stmts = Vec::new();
@@ -2316,8 +2489,13 @@ fn generate_flags_reflect_impls(
 
     let mut generated = Vec::new();
     for target in &targets {
-        let methods =
-            generate_flags_reflect_methods(&module.type_table, &env, flags_trait_name, target);
+        let methods = generate_flags_reflect_methods(
+            &module_source,
+            &module.type_table,
+            &env,
+            flags_trait_name,
+            target,
+        );
         generated.extend(methods.into_iter().map(|f| Rc::new(RefCell::new(f))));
         ctx.record_impl(&target.name, flags_trait_name);
     }
@@ -2385,6 +2563,7 @@ impl ReflectFlagsSynthEnv {
 /// Synthesize one flags type's `type_name()`, `bits(&self)`, `from_bits(raw)`,
 /// and `members()` methods.
 fn generate_flags_reflect_methods(
+    module_source: &ModuleSource,
     type_table: &RefCell<TypeTable>,
     env: &ReflectFlagsSynthEnv,
     flags_trait_name: &str,
@@ -2393,6 +2572,7 @@ fn generate_flags_reflect_methods(
     let span = target.span;
 
     let type_name_fn = generate_type_name_fn(
+        module_source,
         &target.name,
         env.string_type,
         flags_trait_name,
@@ -2429,8 +2609,16 @@ fn generate_flags_reflect_methods(
         )
     };
 
-    let bits_fn = generate_flags_bits_fn(env, flags_trait_name, target, ref_flags_type, span);
+    let bits_fn = generate_flags_bits_fn(
+        module_source,
+        env,
+        flags_trait_name,
+        target,
+        ref_flags_type,
+        span,
+    );
     let from_bits_fn = generate_flags_from_bits_fn(
+        module_source,
         type_table,
         env,
         flags_trait_name,
@@ -2439,6 +2627,7 @@ fn generate_flags_reflect_methods(
         span,
     );
     let members_fn = generate_flags_members_fn(
+        module_source,
         env,
         flags_trait_name,
         target,
@@ -2448,6 +2637,7 @@ fn generate_flags_reflect_methods(
     );
 
     let wire_name_policy_fn = generate_wire_name_policy_fn(
+        module_source,
         &target.name,
         env.case_style_type,
         &target.wire_name_policy,
@@ -2470,6 +2660,7 @@ fn generate_flags_reflect_methods(
 /// one `FlagsBit<Flags>` per member, packed into the homogeneous `Members`
 /// tuple.
 fn generate_flags_members_fn(
+    module_source: &ModuleSource,
     env: &ReflectFlagsSynthEnv,
     flags_trait_name: &str,
     target: &ReflectFlagsTarget,
@@ -2477,7 +2668,12 @@ fn generate_flags_members_fn(
     members_tuple_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(&target.name, flags_trait_name, &env.members_method);
+    let method_info = trait_method_info(
+        module_source,
+        &target.name,
+        flags_trait_name,
+        &env.members_method,
+    );
 
     let rows = target
         .members
@@ -2525,13 +2721,19 @@ fn generate_flags_members_fn(
 /// Build `Flags^ReflectFlags::bits(&self) -> u64` as
 /// `return (*self as u32) as u64;` — the widening is lossless.
 fn generate_flags_bits_fn(
+    module_source: &ModuleSource,
     env: &ReflectFlagsSynthEnv,
     flags_trait_name: &str,
     target: &ReflectFlagsTarget,
     ref_flags_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(&target.name, flags_trait_name, &env.bits_method);
+    let method_info = trait_method_info(
+        module_source,
+        &target.name,
+        flags_trait_name,
+        &env.bits_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let as_u32 = crate::synthesis::common::cast(
@@ -2563,6 +2765,7 @@ fn generate_flags_bits_fn(
 /// `if (raw & VALID) != raw { return None; } return Some((raw as u32) as F);`
 /// — unknown bits are rejected (CM semantics).
 fn generate_flags_from_bits_fn(
+    module_source: &ModuleSource,
     type_table: &RefCell<TypeTable>,
     env: &ReflectFlagsSynthEnv,
     flags_trait_name: &str,
@@ -2570,7 +2773,12 @@ fn generate_flags_from_bits_fn(
     option_flags_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(&target.name, flags_trait_name, &env.from_bits_method);
+    let method_info = trait_method_info(
+        module_source,
+        &target.name,
+        flags_trait_name,
+        &env.from_bits_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let valid_mask: u64 = target
@@ -2755,6 +2963,15 @@ impl SynthesisCtx<'_, '_, '_> {
         ))
     }
 
+    /// The receiver `type_name` indexes under in [`TraitEnv`]. A sub-pass names
+    /// the declarations of the module it is synthesising, so that module is the
+    /// declaring one; the key is built exactly as
+    /// [`super::super::elaborator::trait_env::ImplTargetKey::receiver`] builds
+    /// the definition side.
+    fn receiver(&self, type_name: &str) -> Receiver {
+        Receiver::Type(FqTypeName::of_head(&self.module, type_name))
+    }
+
     /// `true` when this pass already emitted `<trait_name> for <type_name>`.
     fn pending_has(&self, type_name: &str, trait_name: &str) -> bool {
         self.pending.contains(&(
@@ -2769,7 +2986,7 @@ impl SynthesisCtx<'_, '_, '_> {
     /// `impl Trait for Type;` marker does not count — it must not block the
     /// body it asks for.
     fn has_methodful_impl(&self, type_name: &str, trait_name: &str, scope: ImplScope) -> bool {
-        let type_key = Receiver::Type(type_name.to_string());
+        let type_key = self.receiver(type_name);
         let real = match scope {
             ImplScope::CurrentModule => {
                 self.trait_env
@@ -2801,6 +3018,16 @@ impl SynthesisCtx<'_, '_, '_> {
 enum ImplScope {
     CurrentModule,
     AnyModule,
+}
+
+/// The module declaring a shape's base (`Stream` for `Stream<u8>`), which names
+/// its synthesized impls. `None` for a shape with no declaration to point at.
+fn shape_declaring_module(resolved: &ResolvedType) -> Option<ModuleSource> {
+    match resolved {
+        ResolvedType::GenericInstance { module_source, .. }
+        | ResolvedType::GenericResource { module_source, .. } => Some(module_source.clone()),
+        _ => None,
+    }
 }
 
 /// Resolve type parameter definitions into `TypeIds`.
@@ -2966,8 +3193,14 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         let ref_enum_type = type_table.make_ref(enum_type);
 
         if ctx.should_synthesize(enum_name, &eq_trait_name) {
-            let func =
-                generate_enum_eq_fn(enum_name, enum_type, ref_enum_type, &eq_trait_name, *span);
+            let func = generate_enum_eq_fn(
+                &module_source,
+                enum_name,
+                enum_type,
+                ref_enum_type,
+                &eq_trait_name,
+                *span,
+            );
             generated_functions.push(Rc::new(RefCell::new(func)));
             ctx.record_impl(enum_name, &eq_trait_name);
         }
@@ -2976,6 +3209,7 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
             let ordering_type =
                 type_table.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
             let func = generate_enum_ord_fn(
+                &module_source,
                 enum_name,
                 enum_type,
                 ref_enum_type,
@@ -3163,8 +3397,14 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
             continue;
         }
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
-        let func =
-            generate_struct_default_fn(name, fields, struct_type, &default_trait_name, *span);
+        let func = generate_struct_default_fn(
+            &module_source,
+            name,
+            fields,
+            struct_type,
+            &default_trait_name,
+            *span,
+        );
         generated.push(Rc::new(RefCell::new(func)));
         ctx.record_impl(name, &default_trait_name);
     }
@@ -3176,13 +3416,14 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
 /// Generate `StructName^Default::default() -> StructName` for a non-generic
 /// struct whose fields all have default expressions.
 fn generate_struct_default_fn(
+    module_source: &ModuleSource,
     struct_name: &str,
     fields: &[(String, TypeId, u32, TirExpr)],
     struct_type: TypeId,
     default_trait_name: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(struct_name, default_trait_name, "default");
+    let method_info = trait_method_info(module_source, struct_name, default_trait_name, "default");
     let qualified_name = method_info.to_mangled_name();
 
     let struct_fields = fields
@@ -3306,6 +3547,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     let module_source = module.module_source.clone();
     let mut generated = Vec::new();
     let formatter_name = ctx.names.formatter.clone();
+    let formatter_fq = ctx.names.formatter_fq.clone();
     let inspect_name = ctx.names.inspect.clone();
     let inspect_method = ctx.names.inspect_method.clone();
     let lower_hex_name = ctx.names.lower_hex.clone();
@@ -3324,136 +3566,14 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
 
-    // Enums
-    let enum_infos: Vec<_> = module
-        .enums
-        .iter()
-        .map(|e| {
-            let cases: Vec<_> = e.cases.iter().map(|c| (c.name.clone(), c.index)).collect();
-            (e.name.clone(), cases, e.span)
-        })
-        .collect();
-
-    for (name, cases, espan) in &enum_infos {
-        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
-            continue;
-        }
-        let enum_type = tt.make_enum(name.clone(), module_source.clone());
-        let ref_type = tt.make_ref(enum_type);
-        generated.push(Rc::new(RefCell::new(generate_enum_inspect_fn(
-            name,
-            cases,
-            enum_type,
-            ref_type,
-            fmt_type,
-            string_type,
-            ref_string_type,
-            *espan,
-            &inspect_name,
-            &inspect_method,
-            &formatter_name,
-        ))));
-        ctx.record_impl(name, &inspect_name);
-    }
-
-    // Structs derive Inspect via the `ReflectStruct` blanket in
-    // `core:prelude/traits`, so nothing is emitted for them here. The sealed
-    // member handles carry their own impls in the prelude.
-
-    let variant_infos = collect_variant_cases(module);
-    for (name, cases, vspan) in &variant_infos {
-        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
-            continue;
-        }
-        let variant_type = tt.make_variant(name.clone(), module_source.clone());
-        let ref_type = tt.make_ref(variant_type);
-        generated.push(Rc::new(RefCell::new(generate_variant_inspect_fn(
-            name,
-            &[],
-            cases,
-            variant_type,
-            ref_type,
-            fmt_type,
-            string_type,
-            ref_string_type,
-            ctx.trait_env,
-            &module_source,
-            &mut tt,
-            *vspan,
-            &inspect_name,
-            &inspect_method,
-            &formatter_name,
-        ))));
-        ctx.record_impl(name, &inspect_name);
-    }
-
-    let generic_variant_infos = collect_generic_variant_cases(module);
-    for (name, type_params, cases, vspan) in &generic_variant_infos {
-        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
-            continue;
-        }
-        let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let variant_type =
-            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
-        let ref_type = tt.make_ref(variant_type);
-        generated.push(Rc::new(RefCell::new(generate_variant_inspect_fn(
-            name,
-            type_params,
-            cases,
-            variant_type,
-            ref_type,
-            fmt_type,
-            string_type,
-            ref_string_type,
-            ctx.trait_env,
-            &module_source,
-            &mut tt,
-            *vspan,
-            &inspect_name,
-            &inspect_method,
-            &formatter_name,
-        ))));
-        ctx.record_impl(name, &inspect_name);
-    }
-
-    // Flags types (newtypes over u32)
-    let flags_infos: Vec<_> = module
-        .flags
-        .iter()
-        .map(|f| {
-            let members: Vec<_> = f
-                .members
-                .iter()
-                .map(|m| (m.name.clone(), m.bitmask))
-                .collect();
-            (f.name.clone(), f.type_id, members, f.span)
-        })
-        .collect();
-
-    for (name, flags_type_id, members, fspan) in &flags_infos {
-        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
-            continue;
-        }
-        let ref_type = tt.make_ref(*flags_type_id);
-        generated.push(Rc::new(RefCell::new(generate_flags_inspect_fn(
-            name,
-            *flags_type_id,
-            members,
-            ref_type,
-            fmt_type,
-            string_type,
-            ref_string_type,
-            fspan,
-            &inspect_name,
-            &inspect_method,
-            &formatter_name,
-        ))));
-        ctx.record_impl(name, &inspect_name);
-    }
+    // Enum, variant, and flags types derive Inspect via their kind's blanket
+    // in `core:prelude/traits` (WEP 2026-06-13), so nothing is emitted for
+    // them here — nor for structs. What remains has no reflection: newtypes,
+    // parameterized types, resources, and `Fn` dispatch stubs.
 
     // Newtypes (e.g., `type Meters = f64`)
     for nt in &module.newtypes {
-        // Skip flags (they have their own Inspect generation above)
+        // Flags derive Inspect via the `ReflectFlags` blanket, not as newtypes.
         if module.flags.iter().any(|f| f.type_id == nt.type_id) {
             continue;
         }
@@ -3474,7 +3594,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
             string_type,
             ref_string_type,
             span,
-            &formatter_name,
+            &ctx.names.formatter_fq,
         );
         generated.push(Rc::new(RefCell::new(generate_newtype_fmt_fn(
             &nt.name,
@@ -3498,7 +3618,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     // their dispatch stubs are keyed by `(arity, return_type)`, not `TypeId`.
     let span = synth_span();
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
-        let mangled = crate::name::mangle_generic_name(&base_name, &type_arg_names);
+        let mangled = tt.fq_type_name(type_id).to_mangled();
         if ctx.has_methodful_impl_anywhere(&mangled, &inspect_name) {
             continue;
         }
@@ -3513,6 +3633,16 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
                 // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
             }
             _ => {
+                // One name is one function: the stub belongs to the module
+                // declaring the shape's base, emitted once, there.
+                // A shape with no declaration (a tuple, a reference, a `Fn`)
+                // has no module to be named by, so it keeps a copy per using
+                // module — the same reason the `Fn` arm below does.
+                let shape_module = match shape_declaring_module(&resolved) {
+                    Some(m) if m != module_source => continue,
+                    Some(m) => m,
+                    None => module_source.clone(),
+                };
                 let type_name = tt.type_name(type_id);
                 generated.push(Rc::new(RefCell::new(generate_opaque_inspect_fn(
                     &base_name,
@@ -3524,18 +3654,15 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
                     string_type,
                     ref_string_type,
                     ctx.trait_env,
-                    &module_source,
+                    &shape_module,
                     &mut tt,
                     span,
                     &inspect_name,
                     &inspect_method,
-                    &formatter_name,
+                    &formatter_fq,
                     &lower_hex_name,
                     &lower_hex_method,
                 ))));
-                // Intentionally do NOT `ctx.record_impl` — these per-module
-                // stubs are emitted into every module that uses the shape,
-                // so call sites resolve to a stub in the caller's module.
             }
         }
     }
@@ -3561,7 +3688,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
             *rspan,
             &inspect_name,
             &inspect_method,
-            &formatter_name,
+            &formatter_fq,
             &lower_hex_name,
             &lower_hex_method,
         ))));
@@ -3570,13 +3697,13 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
 
     // `Fn` dispatch stubs — one per canonical `(arity, return_type)`.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled =
-            crate::name::mangle_generic_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
+        let mangled = sig.receiver().to_mangled();
         if ctx.has_methodful_impl_anywhere(&mangled, &inspect_name) {
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
         generated.push(Rc::new(RefCell::new(generate_fn_inspect_fn(
+            &module_source,
             &sig.type_arg_names,
             sig.arity,
             sig.return_type,
@@ -3593,88 +3720,6 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     module.functions.extend(generated);
 }
 
-/// Generate `EnumName^Inspect::inspect(&self, &mut Formatter)`.
-///
-/// Body: if-else chain matching discriminant to type-qualified case names.
-/// ```text
-/// if *self == 0 { f.write_str("Color::Red"); }
-/// else if *self == 1 { f.write_str("Color::Green"); }
-/// ...
-/// ```
-fn generate_enum_inspect_fn(
-    enum_name: &str,
-    cases: &[(String, u32)],
-    enum_type: TypeId,
-    ref_enum_type: TypeId,
-    fmt_type: TypeId,
-    string_type: TypeId,
-    ref_string_type: TypeId,
-    span: Span,
-    inspect_trait: &str,
-    inspect_method: &str,
-    formatter_name: &str,
-) -> TirFunction {
-    let method_info = trait_method_info(enum_name, inspect_trait, inspect_method);
-    let qualified_name = method_info.to_mangled_name();
-
-    let deref_self = || deref_local(0, "self", ref_enum_type, enum_type, span);
-    let fmt = || local_expr(1, "f", fmt_type, span);
-
-    let mut chain: Option<TirExpr> = None;
-    for (case_name, case_index) in cases.iter().rev() {
-        let then_block = TirBlock::new(
-            vec![write_str_stmt(
-                format!("{enum_name}::{case_name}"),
-                fmt(),
-                string_type,
-                ref_string_type,
-                span,
-                formatter_name,
-            )],
-            span,
-        );
-        let cond = TirExpr::new(
-            TirExprKind::Binary {
-                left: Box::new(deref_self()),
-                op: TirBinaryOp::Eq,
-                right: Box::new(TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: u64::from(*case_index),
-                        repr: case_index.to_string(),
-                    },
-                    enum_type,
-                    span,
-                )),
-            },
-            TypeTable::BOOL,
-            span,
-        );
-        let if_expr = TirExpr::new(
-            TirExprKind::If {
-                condition: Box::new(cond),
-                then_branch: then_block,
-                else_branch: chain
-                    .map(|e| TirBlock::new(vec![TirStmt::new(TirStmtKind::Expr(e), span)], span)),
-            },
-            TypeTable::UNIT,
-            span,
-        );
-        chain = Some(if_expr);
-    }
-
-    let stmts = chain.map_or_else(Vec::new, |e| vec![TirStmt::new(TirStmtKind::Expr(e), span)]);
-    let body = TirBlock::new(stmts, span);
-
-    make_synthetic_method(
-        qualified_name,
-        method_info,
-        inspect_params(ref_enum_type, fmt_type, span),
-        TypeTable::UNIT,
-        body,
-        inspect_locals(ref_enum_type, fmt_type),
-    )
-}
-
 /// Auto-derive `EnumName^Display::fmt` writing the bare case name (`Red`),
 /// distinct from `Inspect`'s type-qualified `Color::Red`. Skips enums with a
 /// user-written `Display` impl.
@@ -3687,6 +3732,7 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
     let display_name = ctx.names.display.clone();
     let display_method = ctx.names.display_method.clone();
     let formatter_name = ctx.names.formatter.clone();
+    let formatter_fq = ctx.names.formatter_fq.clone();
 
     let enum_infos: Vec<_> = module
         .enums
@@ -3711,6 +3757,7 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
         let enum_type = tt.make_enum(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(enum_type);
         generated.push(Rc::new(RefCell::new(generate_enum_display_fn(
+            &module_source,
             name,
             cases,
             enum_type,
@@ -3721,7 +3768,7 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
             *espan,
             &display_name,
             &display_method,
-            &formatter_name,
+            &formatter_fq,
         ))));
         ctx.record_impl(name, &display_name);
     }
@@ -3734,6 +3781,7 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
 /// name. Mirrors [`generate_enum_inspect_fn`] but omits the `EnumName::` prefix.
 #[allow(clippy::too_many_arguments)]
 fn generate_enum_display_fn(
+    module_source: &ModuleSource,
     enum_name: &str,
     cases: &[(String, u32)],
     enum_type: TypeId,
@@ -3744,9 +3792,9 @@ fn generate_enum_display_fn(
     span: Span,
     display_trait: &str,
     display_method: &str,
-    formatter_name: &str,
+    formatter_fq: &FqTypeName,
 ) -> TirFunction {
-    let method_info = trait_method_info(enum_name, display_trait, display_method);
+    let method_info = trait_method_info(module_source, enum_name, display_trait, display_method);
     let qualified_name = method_info.to_mangled_name();
 
     let deref_self = || deref_local(0, "self", ref_enum_type, enum_type, span);
@@ -3761,7 +3809,7 @@ fn generate_enum_display_fn(
                 string_type,
                 ref_string_type,
                 span,
-                formatter_name,
+                &formatter_fq,
             )],
             span,
         );
@@ -3806,185 +3854,6 @@ fn generate_enum_display_fn(
         inspect_locals(ref_enum_type, fmt_type),
     )
 }
-/// Generate `VariantName^Inspect::inspect(&self, &mut Formatter)`.
-///
-/// Body: TIR `Match` over `*self` with one arm per case. Each arm writes
-/// the type-qualified case name and, for payload-bearing cases, inspects
-/// the bound payload:
-/// ```text
-/// match *self {
-///     Shape::Circle(payload) => { f.write_str("Shape::Circle("); payload.inspect(f); f.write_str(")"); }
-///     Shape::Point          => { f.write_str("Shape::Point"); }
-///     …
-/// }
-/// ```
-///
-/// Pass an empty `impl_type_params` slice for non-generic variants.
-fn generate_variant_inspect_fn(
-    variant_name: &str,
-    impl_type_params: &[TirTypeParam],
-    cases: &[(String, u32, TypeId)],
-    variant_type: TypeId,
-    ref_variant_type: TypeId,
-    fmt_type: TypeId,
-    string_type: TypeId,
-    ref_string_type: TypeId,
-    trait_env: &TraitEnv,
-    module_source: &ModuleSource,
-    tt: &mut TypeTable,
-    span: Span,
-    inspect_trait: &str,
-    inspect_method: &str,
-    formatter_name: &str,
-) -> TirFunction {
-    let method_info = trait_method_info(variant_name, inspect_trait, inspect_method);
-    let qualified_name = method_info.to_mangled_name();
-
-    // Payload-binding locals (one per non-unit case) live after the two
-    // parameter slots (`self`, `f`). Each case carries its binding slot
-    // through to `build_variant_inspect_body` so the arm body can read
-    // the payload off `Local(binding_idx)`.
-    let mut locals = inspect_locals(ref_variant_type, fmt_type);
-    let mut payload_bindings: Vec<Option<u32>> = Vec::with_capacity(cases.len());
-    for (case_name, _, payload_type) in cases {
-        if *payload_type == TypeTable::UNIT {
-            payload_bindings.push(None);
-        } else {
-            let idx = locals.len() as u32;
-            locals.push(param_local(
-                &format!("__inspect_{case_name}_{idx}"),
-                *payload_type,
-                false,
-            ));
-            payload_bindings.push(Some(idx));
-        }
-    }
-
-    let stmts = build_variant_inspect_body(
-        variant_name,
-        cases,
-        &payload_bindings,
-        variant_type,
-        ref_variant_type,
-        fmt_type,
-        string_type,
-        ref_string_type,
-        trait_env,
-        module_source,
-        tt,
-        span,
-        inspect_trait,
-        inspect_method,
-        formatter_name,
-    );
-    let body = TirBlock::new(stmts, span);
-
-    make_trait_method(
-        qualified_name,
-        method_info,
-        impl_type_params.to_vec(),
-        inspect_params(ref_variant_type, fmt_type, span),
-        TypeTable::UNIT,
-        body,
-        locals,
-        span,
-    )
-}
-
-/// Build the body for variant `Inspect::inspect`: a single TIR `Match`
-/// over `*self` with one arm per case. Each arm writes either
-/// `VariantName::Case` (unit case) or `VariantName::Case(<payload>)`.
-///
-/// `payload_bindings[i]` is `Some(local_index)` for cases whose payload
-/// the arm body needs to read from a binding slot, and `None` for unit
-/// cases. `generate_variant_inspect_fn` allocates the slots so the
-/// emitted `TirPattern::Variant { bindings }` can reference them.
-fn build_variant_inspect_body(
-    variant_name: &str,
-    cases: &[(String, u32, TypeId)],
-    payload_bindings: &[Option<u32>],
-    variant_type: TypeId,
-    ref_variant_type: TypeId,
-    fmt_type: TypeId,
-    string_type: TypeId,
-    ref_string_type: TypeId,
-    trait_env: &TraitEnv,
-    module_source: &ModuleSource,
-    tt: &mut TypeTable,
-    span: Span,
-    inspect_trait: &str,
-    inspect_method: &str,
-    formatter_name: &str,
-) -> Vec<TirStmt> {
-    if cases.is_empty() {
-        return Vec::new();
-    }
-
-    let deref_self = deref_local(0, "self", ref_variant_type, variant_type, span);
-    let fmt = || local_expr(1, "f", fmt_type, span);
-    let write =
-        |s: String| write_str_stmt(s, fmt(), string_type, ref_string_type, span, formatter_name);
-
-    let arms: Vec<TirMatchArm> = cases
-        .iter()
-        .zip(payload_bindings.iter())
-        .map(|((case_name, _, payload_type), binding_idx)| {
-            let mut body_stmts = Vec::new();
-            let bindings: Vec<TirPattern> = if *payload_type == TypeTable::UNIT {
-                body_stmts.push(write(format!("{variant_name}::{case_name}")));
-                Vec::new()
-            } else {
-                body_stmts.push(write(format!("{variant_name}::{case_name}(")));
-                let binding_idx = binding_idx.expect("non-unit case must have a payload binding");
-                let binding_name = format!("__inspect_{case_name}_{binding_idx}");
-                let payload_local = local_expr(binding_idx, &binding_name, *payload_type, span);
-                body_stmts.push(inspect_call(
-                    payload_local,
-                    *payload_type,
-                    fmt(),
-                    trait_env,
-                    module_source,
-                    tt,
-                    span,
-                    inspect_trait,
-                    inspect_method,
-                ));
-                body_stmts.push(write(")".to_string()));
-                vec![TirPattern::Binding {
-                    name: binding_name,
-                    local_index: binding_idx,
-                    type_id: *payload_type,
-                }]
-            };
-            TirMatchArm {
-                pattern: TirPattern::Variant {
-                    enum_type: variant_type,
-                    variant_name: case_name.clone(),
-                    bindings,
-                    payload_type: *payload_type,
-                },
-                guard: None,
-                body: TirExpr::new(
-                    TirExprKind::Block(TirBlock::new(body_stmts, span)),
-                    TypeTable::UNIT,
-                    span,
-                ),
-                span,
-            }
-        })
-        .collect();
-
-    let match_expr = TirExpr::new(
-        TirExprKind::Match {
-            expr: Box::new(deref_self),
-            arms,
-        },
-        TypeTable::UNIT,
-        span,
-    );
-    vec![TirStmt::new(TirStmtKind::Expr(match_expr), span)]
-}
-
 /// Generate `NewtypeName^<Trait>::<method>(&self, &mut Formatter)` for a
 /// newtype: delegate to the base type's same method via `(self as Base).<method>(f)`,
 /// then append `suffix`.
@@ -4006,7 +3875,7 @@ fn generate_newtype_fmt_fn(
     fmt_method: &str,
     suffix: Option<TirStmt>,
 ) -> TirFunction {
-    let method_info = trait_method_info(newtype_name, fmt_trait, fmt_method);
+    let method_info = trait_method_info(module_source, newtype_name, fmt_trait, fmt_method);
     let qualified_name = method_info.to_mangled_name();
 
     let deref_self = deref_local(0, "self", ref_newtype_type, newtype_type, span);
@@ -4042,206 +3911,6 @@ fn generate_newtype_fmt_fn(
     )
 }
 
-/// Generate `FlagsName^Inspect::inspect(&self, &mut Formatter)` for a flags type.
-///
-/// Body: checks each member bit and writes `FlagsName::Member1 | FlagsName::Member2`,
-/// or `FlagsName::none()` if no bits are set.
-fn generate_flags_inspect_fn(
-    flags_name: &str,
-    flags_type: TypeId,
-    members: &[(String, u32)],
-    ref_flags_type: TypeId,
-    fmt_type: TypeId,
-    string_type: TypeId,
-    ref_string_type: TypeId,
-    span: &Span,
-    inspect_trait: &str,
-    inspect_method: &str,
-    formatter_name: &str,
-) -> TirFunction {
-    let method_info = trait_method_info(flags_name, inspect_trait, inspect_method);
-    let qualified_name = method_info.to_mangled_name();
-
-    // Cast deref'd flags value to u32 for bit operations.
-    let self_as_u32 = || {
-        TirExpr::new(
-            TirExprKind::Cast {
-                expr: Box::new(deref_local(0, "self", ref_flags_type, flags_type, *span)),
-                target_type: TypeTable::U32,
-            },
-            TypeTable::U32,
-            *span,
-        )
-    };
-    let fmt_local = || local_expr(1, "f", fmt_type, *span);
-
-    let mut stmts = Vec::new();
-
-    // if (self as u32) == 0 { f.write_str("FlagsName::none()"); }
-    let zero_cond = TirExpr::new(
-        TirExprKind::Binary {
-            op: TirBinaryOp::Eq,
-            left: Box::new(self_as_u32()),
-            right: Box::new(TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: 0,
-                    repr: "0".to_string(),
-                },
-                TypeTable::U32,
-                *span,
-            )),
-        },
-        TypeTable::BOOL,
-        *span,
-    );
-    let zero_branch = TirExpr::new(
-        TirExprKind::If {
-            condition: Box::new(zero_cond),
-            then_branch: TirBlock::new(
-                vec![write_str_stmt(
-                    format!("{flags_name}::none()"),
-                    fmt_local(),
-                    string_type,
-                    ref_string_type,
-                    *span,
-                    formatter_name,
-                )],
-                *span,
-            ),
-            else_branch: None,
-        },
-        TypeTable::UNIT,
-        *span,
-    );
-    stmts.push(TirStmt::new(TirStmtKind::Expr(zero_branch), *span));
-
-    // For each member: if (self as u32) & bitmask != 0 { ... }
-    let mut mask_below: u32 = 0;
-    for (member_name, bitmask) in members {
-        // Check bit: (self as u32) & bitmask != 0
-        let bit_check = TirExpr::new(
-            TirExprKind::Binary {
-                op: TirBinaryOp::NotEq,
-                left: Box::new(TirExpr::new(
-                    TirExprKind::Binary {
-                        op: TirBinaryOp::BitAnd,
-                        left: Box::new(self_as_u32()),
-                        right: Box::new(TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value: u64::from(*bitmask),
-                                repr: bitmask.to_string(),
-                            },
-                            TypeTable::U32,
-                            *span,
-                        )),
-                    },
-                    TypeTable::U32,
-                    *span,
-                )),
-                right: Box::new(TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: 0,
-                        repr: "0".to_string(),
-                    },
-                    TypeTable::U32,
-                    *span,
-                )),
-            },
-            TypeTable::BOOL,
-            *span,
-        );
-
-        let mut then_stmts = Vec::new();
-
-        // Write separator if any previous bits were set
-        if mask_below != 0 {
-            let sep_cond = TirExpr::new(
-                TirExprKind::Binary {
-                    op: TirBinaryOp::NotEq,
-                    left: Box::new(TirExpr::new(
-                        TirExprKind::Binary {
-                            op: TirBinaryOp::BitAnd,
-                            left: Box::new(self_as_u32()),
-                            right: Box::new(TirExpr::new(
-                                TirExprKind::IntLiteral {
-                                    value: u64::from(mask_below),
-                                    repr: mask_below.to_string(),
-                                },
-                                TypeTable::U32,
-                                *span,
-                            )),
-                        },
-                        TypeTable::U32,
-                        *span,
-                    )),
-                    right: Box::new(TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: 0,
-                            repr: "0".to_string(),
-                        },
-                        TypeTable::U32,
-                        *span,
-                    )),
-                },
-                TypeTable::BOOL,
-                *span,
-            );
-            let sep_if = TirExpr::new(
-                TirExprKind::If {
-                    condition: Box::new(sep_cond),
-                    then_branch: TirBlock::new(
-                        vec![write_str_stmt(
-                            " | ",
-                            fmt_local(),
-                            string_type,
-                            ref_string_type,
-                            *span,
-                            formatter_name,
-                        )],
-                        *span,
-                    ),
-                    else_branch: None,
-                },
-                TypeTable::UNIT,
-                *span,
-            );
-            then_stmts.push(TirStmt::new(TirStmtKind::Expr(sep_if), *span));
-        }
-
-        then_stmts.push(write_str_stmt(
-            format!("{flags_name}::{member_name}"),
-            fmt_local(),
-            string_type,
-            ref_string_type,
-            *span,
-            formatter_name,
-        ));
-
-        let member_if = TirExpr::new(
-            TirExprKind::If {
-                condition: Box::new(bit_check),
-                then_branch: TirBlock::new(then_stmts, *span),
-                else_branch: None,
-            },
-            TypeTable::UNIT,
-            *span,
-        );
-        stmts.push(TirStmt::new(TirStmtKind::Expr(member_if), *span));
-
-        mask_below |= bitmask;
-    }
-
-    let body = TirBlock::new(stmts, *span);
-    make_synthetic_method(
-        qualified_name,
-        method_info,
-        inspect_params(ref_flags_type, fmt_type, *span),
-        TypeTable::UNIT,
-        body,
-        inspect_locals(ref_flags_type, fmt_type),
-    )
-}
-
 /// Generate `Fn<N, Ret>^Inspect::inspect(&self, &mut Formatter)` as
 /// an auto-derived dispatch stub.
 ///
@@ -4253,7 +3922,8 @@ fn generate_flags_inspect_fn(
 /// `CanonicalClosure_K`'s `inspect` vtable slot. See WEP: Inspect
 /// (Debug Output) > Closure Inspect via Runtime Dispatch.
 fn generate_fn_inspect_fn(
-    type_arg_names: &[String],
+    module_source: &ModuleSource,
+    type_arg_names: &[FqTypeName],
     arity: usize,
     return_type: TypeId,
     ref_fn_type: TypeId,
@@ -4263,6 +3933,7 @@ fn generate_fn_inspect_fn(
     inspect_method: &str,
 ) -> TirFunction {
     generate_fn_canonical_dispatch_stub(
+        &module_source,
         FnDispatchTrait::Inspect,
         inspect_trait,
         inspect_method,
@@ -4277,7 +3948,8 @@ fn generate_fn_inspect_fn(
 
 /// Twin of [`generate_fn_inspect_fn`] for `Fn<N, Ret>^InspectAlt`.
 fn generate_fn_inspect_alt_fn(
-    type_arg_names: &[String],
+    module_source: &ModuleSource,
+    type_arg_names: &[FqTypeName],
     arity: usize,
     return_type: TypeId,
     ref_fn_type: TypeId,
@@ -4287,6 +3959,7 @@ fn generate_fn_inspect_alt_fn(
     inspect_alt_method: &str,
 ) -> TirFunction {
     generate_fn_canonical_dispatch_stub(
+        &module_source,
         FnDispatchTrait::InspectAlt,
         inspect_alt_trait,
         inspect_alt_method,
@@ -4304,18 +3977,24 @@ fn generate_fn_inspect_alt_fn(
 /// label and the `FnDispatchTrait` carried in `FunctionKind`.
 #[allow(clippy::too_many_arguments)]
 fn generate_fn_canonical_dispatch_stub(
+    module_source: &ModuleSource,
     trait_kind: FnDispatchTrait,
     trait_name: &str,
     method_name: &str,
-    type_arg_names: &[String],
+    type_arg_names: &[FqTypeName],
     arity: usize,
     return_type: TypeId,
     ref_fn_type: TypeId,
     fmt_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(crate::name::CLOSURE_FN_TRAIT, trait_name, method_name)
-        .with_struct_type_args(type_arg_names);
+    let method_info = trait_method_info(
+        module_source,
+        crate::name::CLOSURE_FN_TRAIT,
+        trait_name,
+        method_name,
+    )
+    .with_struct_type_args(type_arg_names);
     let qualified_name = method_info.to_mangled_name();
 
     let mut func = make_synthetic_method(
@@ -4345,7 +4024,7 @@ fn generate_fn_canonical_dispatch_stub(
 #[allow(clippy::too_many_arguments)]
 fn generate_opaque_inspect_fn(
     base_name: &str,
-    type_arg_names: &[String],
+    type_arg_names: &[FqTypeName],
     type_name: &str,
     resource_type: TypeId,
     ref_type: TypeId,
@@ -4358,11 +4037,11 @@ fn generate_opaque_inspect_fn(
     span: Span,
     inspect_trait: &str,
     inspect_method: &str,
-    formatter_name: &str,
+    formatter_fq: &FqTypeName,
     lower_hex_trait: &str,
     lower_hex_method: &str,
 ) -> TirFunction {
-    let method_info = trait_method_info(base_name, inspect_trait, inspect_method)
+    let method_info = trait_method_info(module_source, base_name, inspect_trait, inspect_method)
         .with_struct_type_args(type_arg_names);
     let qualified_name = method_info.to_mangled_name();
 
@@ -4395,7 +4074,7 @@ fn generate_opaque_inspect_fn(
                 string_type,
                 ref_string_type,
                 span,
-                formatter_name,
+                &formatter_fq,
             ),
             hex_stmt,
         ],
@@ -4420,6 +4099,7 @@ fn generate_opaque_inspect_fn(
 fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     let module_source = module.module_source.clone();
     let formatter_name = ctx.names.formatter.clone();
+    let formatter_fq = ctx.names.formatter_fq.clone();
     let inspect_name = ctx.names.inspect.clone();
     let inspect_method = ctx.names.inspect_method.clone();
     let inspect_alt_name = ctx.names.inspect_alt.clone();
@@ -4438,17 +4118,33 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     let ref_string_type = tt.make_ref(string_type);
     let span = synth_span();
 
-    // `Inspect` may be provided either as a trait impl (via TraitEnv / the
-    // synthesis layer) or as a free function with the same mangled name —
-    // the second form survives in legacy stdlib code that predates the
-    // trait synthesis. Both shapes need to qualify a type for an
-    // `InspectAlt` Display-delegate.
-    let has_inspect = |type_name: &str, ctx: &SynthesisCtx<'_, '_, '_>| -> bool {
+    // `Inspect` reaches a type by a trait impl, a free function of the same
+    // mangled name (legacy stdlib), or a `Reflect*` blanket — which leaves no
+    // per-type impl to find. A delegate is warranted for all three.
+    let has_inspect = |type_name: &str,
+                       type_id: TypeId,
+                       ctx: &SynthesisCtx<'_, '_, '_>,
+                       tt: &mut TypeTable|
+     -> bool {
         if ctx.has_impl(type_name, &inspect_name) {
             return true;
         }
-        let mangled = MethodName::format_local(type_name, Some(&inspect_name), &inspect_method);
-        all_fn_names.contains(&mangled)
+        let mangled = MethodName::format_local(
+            &FqTypeName::of_head(&module_source, type_name),
+            Some(&inspect_name),
+            &inspect_method,
+        );
+        if all_fn_names.contains(&mangled) {
+            return true;
+        }
+        crate::synthesis::template::blanket_dispatch_for(
+            ctx.trait_env,
+            type_id,
+            &inspect_name,
+            &inspect_method,
+            tt,
+        )
+        .is_some()
     };
 
     // Enums — delegate to Inspect (no multiline needed for enum names)
@@ -4458,21 +4154,29 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         .map(|e| e.name.clone())
         .collect::<Vec<_>>()
     {
-        if ctx.has_methodful_impl_anywhere(&name, &inspect_alt_name) || !has_inspect(&name, ctx) {
+        if ctx.has_methodful_impl_anywhere(&name, &inspect_alt_name) {
             continue;
         }
         let enum_type = tt.make_enum(name.clone(), module_source.clone());
+        if !has_inspect(&name, enum_type, ctx, &mut tt) {
+            continue;
+        }
         let ref_type = tt.make_ref(enum_type);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(&name, &inspect_alt_name, &inspect_alt_method),
-            trait_method_info(&name, &inspect_name, &inspect_method),
+            trait_method_info(
+                &module_source,
+                &name,
+                &inspect_alt_name,
+                &inspect_alt_method,
+            ),
+            trait_method_info(&module_source, &name, &inspect_name, &inspect_method),
             ref_type,
             enum_type,
             fmt_type,
             ctx.trait_env,
             &module_source,
             vec![],
-            &tt,
+            &mut tt,
             span,
         ))));
         ctx.record_impl(&name, &inspect_alt_name);
@@ -4507,7 +4211,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             *sspan,
             &inspect_alt_name,
             &inspect_alt_method,
-            &formatter_name,
+            &formatter_fq,
         ))));
         ctx.record_impl(name, &inspect_alt_name);
     }
@@ -4536,7 +4240,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             *sspan,
             &inspect_alt_name,
             &inspect_alt_method,
-            &formatter_name,
+            &formatter_fq,
         ))));
         ctx.record_impl(name, &inspect_alt_name);
     }
@@ -4563,7 +4267,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             *vspan,
             &inspect_alt_name,
             &inspect_alt_method,
-            &formatter_name,
+            &formatter_fq,
         ))));
         ctx.record_impl(name, &inspect_alt_name);
     }
@@ -4592,7 +4296,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             *vspan,
             &inspect_alt_name,
             &inspect_alt_method,
-            &formatter_name,
+            &formatter_fq,
         ))));
         ctx.record_impl(name, &inspect_alt_name);
     }
@@ -4605,20 +4309,22 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         .collect();
 
     for (name, flags_type_id) in &flags_infos {
-        if ctx.has_methodful_impl_anywhere(name, &inspect_alt_name) || !has_inspect(name, ctx) {
+        if ctx.has_methodful_impl_anywhere(name, &inspect_alt_name)
+            || !has_inspect(name, *flags_type_id, ctx, &mut tt)
+        {
             continue;
         }
         let ref_type = tt.make_ref(*flags_type_id);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(name, &inspect_alt_name, &inspect_alt_method),
-            trait_method_info(name, &inspect_name, &inspect_method),
+            trait_method_info(&module_source, name, &inspect_alt_name, &inspect_alt_method),
+            trait_method_info(&module_source, name, &inspect_name, &inspect_method),
             ref_type,
             *flags_type_id,
             fmt_type,
             ctx.trait_env,
             &module_source,
             vec![],
-            &tt,
+            &mut tt,
             span,
         ))));
         ctx.record_impl(name, &inspect_alt_name);
@@ -4629,21 +4335,26 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             continue;
         }
         if ctx.has_methodful_impl_anywhere(&nt.name, &inspect_alt_name)
-            || !has_inspect(&nt.name, ctx)
+            || !has_inspect(&nt.name, nt.type_id, ctx, &mut tt)
         {
             continue;
         }
         let ref_type = tt.make_ref(nt.type_id);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(&nt.name, &inspect_alt_name, &inspect_alt_method),
-            trait_method_info(&nt.name, &inspect_name, &inspect_method),
+            trait_method_info(
+                &module_source,
+                &nt.name,
+                &inspect_alt_name,
+                &inspect_alt_method,
+            ),
+            trait_method_info(&module_source, &nt.name, &inspect_name, &inspect_method),
             ref_type,
             nt.type_id,
             fmt_type,
             ctx.trait_env,
             &module_source,
             vec![],
-            &tt,
+            &mut tt,
             span,
         ))));
         ctx.record_impl(&nt.name, &inspect_alt_name);
@@ -4653,9 +4364,9 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // in `core:prelude/tuple.wado`. Opaque resource types delegate to their
     // `Inspect` counterpart. `Fn` signatures are handled separately below.
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
-        let mangled = crate::name::mangle_generic_name(&base_name, &type_arg_names);
+        let mangled = tt.fq_type_name(type_id).to_mangled();
         if ctx.has_methodful_impl_anywhere(&mangled, &inspect_alt_name)
-            || !has_inspect(&mangled, ctx)
+            || !has_inspect(&mangled, type_id, ctx, &mut tt)
         {
             continue;
         }
@@ -4665,21 +4376,31 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
             continue;
         }
+        let shape_module = match shape_declaring_module(&resolved) {
+            Some(m) if m != module_source => continue,
+            Some(m) => m,
+            None => module_source.clone(),
+        };
         let ref_type = tt.make_ref(type_id);
         // Opaque resource types (Future, Stream, etc.): delegate to
         // Inspect via the stock `display_fallback`.
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(&base_name, &inspect_alt_name, &inspect_alt_method)
-                .with_struct_type_args(&type_arg_names),
-            trait_method_info(&base_name, &inspect_name, &inspect_method)
+            trait_method_info(
+                &shape_module,
+                &base_name,
+                &inspect_alt_name,
+                &inspect_alt_method,
+            )
+            .with_struct_type_args(&type_arg_names),
+            trait_method_info(&shape_module, &base_name, &inspect_name, &inspect_method)
                 .with_struct_type_args(&type_arg_names),
             ref_type,
             type_id,
             fmt_type,
             ctx.trait_env,
-            &module_source,
+            &shape_module,
             vec![],
-            &tt,
+            &mut tt,
             span,
         ))));
         // Per-module: do not `ctx.record_impl`.
@@ -4692,15 +4413,15 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // delegate would let the optimizer collapse InspectAlt to Inspect
     // before WIR build runs, defeating the per-literal source dispatch.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled =
-            crate::name::mangle_generic_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
+        let mangled = sig.receiver().to_mangled();
         if ctx.has_methodful_impl_anywhere(&mangled, &inspect_alt_name)
-            || !has_inspect(&mangled, ctx)
+            || !has_inspect(&mangled, sig.repr_type_id, ctx, &mut tt)
         {
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
         generated.push(Rc::new(RefCell::new(generate_fn_inspect_alt_fn(
+            &module_source,
             &sig.type_arg_names,
             sig.arity,
             sig.return_type,
@@ -4742,9 +4463,14 @@ fn generate_struct_inspect_alt_fn(
     span: Span,
     inspect_alt_trait: &str,
     inspect_alt_method: &str,
-    formatter_name: &str,
+    formatter_fq: &FqTypeName,
 ) -> TirFunction {
-    let method_info = trait_method_info(struct_name, inspect_alt_trait, inspect_alt_method);
+    let method_info = trait_method_info(
+        module_source,
+        struct_name,
+        inspect_alt_trait,
+        inspect_alt_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let stmts = build_struct_inspect_alt_body(
@@ -4759,7 +4485,7 @@ fn generate_struct_inspect_alt_fn(
         module_source,
         tt,
         span,
-        formatter_name,
+        formatter_fq,
         inspect_alt_trait,
         inspect_alt_method,
     );
@@ -4791,7 +4517,7 @@ fn build_struct_inspect_alt_body(
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
-    formatter_name: &str,
+    formatter_fq: &FqTypeName,
     inspect_alt_trait: &str,
     inspect_alt_method: &str,
 ) -> Vec<TirStmt> {
@@ -4803,7 +4529,7 @@ fn build_struct_inspect_alt_body(
             string_type,
             ref_string_type,
             span,
-            formatter_name,
+            &formatter_fq,
         )
     };
     let newline_indent = || {
@@ -4812,7 +4538,7 @@ fn build_struct_inspect_alt_body(
             fmt(),
             None::<(&str, TypeId)>,
             span,
-            formatter_name,
+            &formatter_fq,
         )
     };
 
@@ -4826,7 +4552,7 @@ fn build_struct_inspect_alt_body(
             string_type,
             ref_string_type,
             span,
-            formatter_name,
+            &formatter_fq,
         ));
         return stmts;
     }
@@ -4836,7 +4562,7 @@ fn build_struct_inspect_alt_body(
         fmt(),
         Some((format!("{struct_name} {{"), string_type)),
         span,
-        formatter_name,
+        &formatter_fq,
     ));
     for (field_name, field_type, field_index) in fields {
         stmts.push(newline_indent());
@@ -4846,7 +4572,7 @@ fn build_struct_inspect_alt_body(
             string_type,
             ref_string_type,
             span,
-            formatter_name,
+            &formatter_fq,
         ));
         let field_access = field_access_local(
             0,
@@ -4879,7 +4605,7 @@ fn build_struct_inspect_alt_body(
         fmt(),
         Some(("}", string_type)),
         span,
-        formatter_name,
+        &formatter_fq,
     ));
     stmts
 }
@@ -4902,9 +4628,14 @@ fn generate_variant_inspect_alt_fn(
     span: Span,
     inspect_alt_trait: &str,
     inspect_alt_method: &str,
-    formatter_name: &str,
+    formatter_fq: &FqTypeName,
 ) -> TirFunction {
-    let method_info = trait_method_info(variant_name, inspect_alt_trait, inspect_alt_method);
+    let method_info = trait_method_info(
+        module_source,
+        variant_name,
+        inspect_alt_trait,
+        inspect_alt_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     // Same payload-binding allocation strategy as
@@ -4940,7 +4671,7 @@ fn generate_variant_inspect_alt_fn(
         module_source,
         tt,
         span,
-        formatter_name,
+        formatter_fq,
         inspect_alt_trait,
         inspect_alt_method,
     );
@@ -4973,7 +4704,7 @@ fn build_variant_inspect_alt_body(
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
-    formatter_name: &str,
+    formatter_fq: &FqTypeName,
     inspect_alt_trait: &str,
     inspect_alt_method: &str,
 ) -> Vec<TirStmt> {
@@ -5001,7 +4732,7 @@ fn build_variant_inspect_alt_body(
                     string_type,
                     ref_string_type,
                     span,
-                    formatter_name,
+                    &formatter_fq,
                 ));
                 Vec::new()
             } else {
@@ -5010,14 +4741,14 @@ fn build_variant_inspect_alt_body(
                     fmt_local(),
                     Some((format!("{variant_name}::{case_name}("), string_type)),
                     span,
-                    formatter_name,
+                    &formatter_fq,
                 ));
                 body_stmts.push(formatter_call(
                     "write_newline_indent",
                     fmt_local(),
                     None::<(&str, TypeId)>,
                     span,
-                    formatter_name,
+                    &formatter_fq,
                 ));
                 let binding_idx = binding_idx.expect("non-unit case must have a payload binding");
                 let binding_name = format!("__inspect_alt_{case_name}_{binding_idx}");
@@ -5039,14 +4770,14 @@ fn build_variant_inspect_alt_body(
                     string_type,
                     ref_string_type,
                     span,
-                    formatter_name,
+                    &formatter_fq,
                 ));
                 body_stmts.push(formatter_call(
                     "close_brace",
                     fmt_local(),
                     Some((")", string_type)),
                     span,
-                    formatter_name,
+                    &formatter_fq,
                 ));
                 vec![TirPattern::Binding {
                     name: binding_name,
@@ -5117,7 +4848,7 @@ fn formatter_call(
     fmt: TirExpr,
     text_arg: Option<(impl Into<String>, TypeId)>,
     span: Span,
-    formatter_name: &str,
+    formatter_fq: &FqTypeName,
 ) -> TirStmt {
     let args = match text_arg {
         Some((text, string_type)) => vec![CallArg::new(
@@ -5131,10 +4862,10 @@ fn formatter_call(
             Box::new(fmt),
             FunctionRef {
                 module_source: ModuleSource::format(),
-                name: format!("{formatter_name}::{method_name}"),
+                name: format!("{formatter_fq}::{method_name}"),
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
-                    formatter_name.to_string(),
+                    formatter_fq.clone(),
                     None,
                     method_name.to_string(),
                 )),
@@ -5163,7 +4894,7 @@ fn generate_display_fallback(
     trait_env: &TraitEnv,
     module_source: &ModuleSource,
     impl_type_params: Vec<TirTypeParam>,
-    tt: &TypeTable,
+    tt: &mut TypeTable,
     span: Span,
 ) -> TirFunction {
     // Resolve the body's home for the delegate target (the receiver
@@ -5176,8 +4907,30 @@ fn generate_display_fallback(
         .as_deref()
         .or(inspect_info.trait_name.as_deref())
         .expect("display fallback delegates to a trait method");
-    let delegate_module =
-        resolve_impl_module_via_env(receiver_type, delegate_trait, tt, trait_env, module_source);
+    // A blanket-derived delegate — an enum's `Inspect` from the `ReflectEnum`
+    // blanket — has no per-type body, so route the call through the blanket.
+    // The instance lands in the blanket's module; naming it by the receiver's
+    // module would name a body that module never defines.
+    let (delegate_module, delegate_monomorph) =
+        match crate::synthesis::template::blanket_dispatch_for(
+            trait_env,
+            receiver_type,
+            delegate_trait,
+            &inspect_info.method_name,
+            tt,
+        ) {
+            Some((mono, blanket_module)) => (blanket_module, Some(mono)),
+            None => (
+                resolve_impl_module_via_env(
+                    receiver_type,
+                    delegate_trait,
+                    tt,
+                    trait_env,
+                    module_source,
+                ),
+                None,
+            ),
+        };
     let qualified_name = display_info.to_mangled_name();
 
     let params = vec![
@@ -5209,14 +4962,24 @@ fn generate_display_fallback(
         span,
     );
 
+    let delegate_name = inspect_info.to_mangled_name();
+    let delegate_call = TirExpr::new(
+        TirExprKind::method_call(
+            Box::new(self_local),
+            FunctionRef {
+                module_source: delegate_module,
+                name: delegate_name,
+                monomorph_info: delegate_monomorph,
+                method_info: Some(inspect_info),
+            },
+            vec![],
+            vec![CallArg::new(fmt_local, false)],
+        ),
+        TypeTable::UNIT,
+        span,
+    );
     let body = TirBlock::new(
-        vec![trait_method_call(
-            self_local,
-            inspect_info,
-            delegate_module,
-            vec![fmt_local],
-            span,
-        )],
+        vec![TirStmt::new(TirStmtKind::Expr(delegate_call), span)],
         span,
     );
 
@@ -5310,8 +5073,11 @@ fn generate_fallback_impls(
         if ctx.has_impl(name, &pair.delegate_trait) {
             return true;
         }
-        let delegate_key =
-            MethodName::format_local(name, Some(&pair.delegate_trait), &pair.delegate_method);
+        let delegate_key = MethodName::format_local(
+            &FqTypeName::declared(&module_source, name),
+            Some(&pair.delegate_trait),
+            &pair.delegate_method,
+        );
         all_fn_names.contains(&delegate_key)
     };
 
@@ -5322,10 +5088,20 @@ fn generate_fallback_impls(
                          ref_type: TypeId,
                          receiver_type: TypeId,
                          impl_type_params: Vec<TirTypeParam>,
-                         tt: &TypeTable|
+                         tt: &mut TypeTable|
      -> Rc<RefCell<TirFunction>> {
-        let target_info = trait_method_info(name, &pair.target_trait, &pair.target_method);
-        let delegate_info = trait_method_info(name, &pair.delegate_trait, &pair.delegate_method);
+        let target_info = trait_method_info(
+            &module_source,
+            name,
+            &pair.target_trait,
+            &pair.target_method,
+        );
+        let delegate_info = trait_method_info(
+            &module_source,
+            name,
+            &pair.delegate_trait,
+            &pair.delegate_method,
+        );
         Rc::new(RefCell::new(generate_display_fallback(
             target_info,
             delegate_info,
@@ -5347,7 +5123,7 @@ fn generate_fallback_impls(
         }
         let enum_type = tt.make_enum(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(enum_type);
-        generated.push(make_fallback(name, ref_type, enum_type, vec![], &tt));
+        generated.push(make_fallback(name, ref_type, enum_type, vec![], &mut tt));
         ctx.record_impl(name, &pair.target_trait);
     }
 
@@ -5366,7 +5142,7 @@ fn generate_fallback_impls(
         }
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(struct_type);
-        generated.push(make_fallback(name, ref_type, struct_type, vec![], &tt));
+        generated.push(make_fallback(name, ref_type, struct_type, vec![], &mut tt));
         ctx.record_impl(name, &pair.target_trait);
     }
 
@@ -5392,7 +5168,7 @@ fn generate_fallback_impls(
             ref_type,
             struct_type,
             type_params.clone(),
-            &tt,
+            &mut tt,
         ));
         ctx.record_impl(name, &pair.target_trait);
     }
@@ -5409,7 +5185,7 @@ fn generate_fallback_impls(
         }
         let variant_type = tt.make_variant(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(variant_type);
-        generated.push(make_fallback(name, ref_type, variant_type, vec![], &tt));
+        generated.push(make_fallback(name, ref_type, variant_type, vec![], &mut tt));
         ctx.record_impl(name, &pair.target_trait);
     }
 
@@ -5432,7 +5208,7 @@ fn generate_fallback_impls(
             ref_type,
             variant_type,
             type_params.clone(),
-            &tt,
+            &mut tt,
         ));
         ctx.record_impl(name, &pair.target_trait);
     }
@@ -5447,7 +5223,13 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(*flags_type_id);
-        generated.push(make_fallback(name, ref_type, *flags_type_id, vec![], &tt));
+        generated.push(make_fallback(
+            name,
+            ref_type,
+            *flags_type_id,
+            vec![],
+            &mut tt,
+        ));
         ctx.record_impl(name, &pair.target_trait);
     }
 
@@ -5483,7 +5265,13 @@ fn generate_fallback_impls(
                 None,
             ))));
         } else {
-            generated.push(make_fallback(&nt.name, ref_type, nt.type_id, vec![], &tt));
+            generated.push(make_fallback(
+                &nt.name,
+                ref_type,
+                nt.type_id,
+                vec![],
+                &mut tt,
+            ));
         }
         ctx.record_impl(&nt.name, &pair.target_trait);
     }
@@ -5499,7 +5287,7 @@ fn generate_fallback_impls(
         if base_name == TypeTable::TUPLE_TYPE_NAME {
             continue;
         }
-        let mangled = crate::name::mangle_generic_name(&base_name, &type_arg_names);
+        let mangled = tt.fq_type_name(type_id).to_mangled();
         if ctx.has_methodful_impl_anywhere(&mangled, &pair.target_trait) {
             continue;
         }
@@ -5514,11 +5302,20 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(type_id);
-        let target_info = trait_method_info(&base_name, &pair.target_trait, &pair.target_method)
-            .with_struct_type_args(&type_arg_names);
-        let delegate_info =
-            trait_method_info(&base_name, &pair.delegate_trait, &pair.delegate_method)
-                .with_struct_type_args(&type_arg_names);
+        let target_info = trait_method_info(
+            &module_source,
+            &base_name,
+            &pair.target_trait,
+            &pair.target_method,
+        )
+        .with_struct_type_args(&type_arg_names);
+        let delegate_info = trait_method_info(
+            &module_source,
+            &base_name,
+            &pair.delegate_trait,
+            &pair.delegate_method,
+        )
+        .with_struct_type_args(&type_arg_names);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
             target_info,
             delegate_info,
@@ -5528,7 +5325,7 @@ fn generate_fallback_impls(
             ctx.trait_env,
             &module_source,
             vec![],
-            &tt,
+            &mut tt,
             span,
         ))));
         // Per-module: do not `ctx.record_impl`.
@@ -5536,8 +5333,7 @@ fn generate_fallback_impls(
 
     // `Fn` dispatch-stub fallbacks — one per canonical `(arity, return_type)`.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled =
-            crate::name::mangle_generic_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
+        let mangled = sig.receiver().to_mangled();
         if ctx.has_methodful_impl_anywhere(&mangled, &pair.target_trait) {
             continue;
         }
@@ -5553,12 +5349,14 @@ fn generate_fallback_impls(
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
         let target_info = trait_method_info(
+            &module_source,
             crate::name::CLOSURE_FN_TRAIT,
             &pair.target_trait,
             &pair.target_method,
         )
         .with_struct_type_args(&sig.type_arg_names);
         let delegate_info = trait_method_info(
+            &module_source,
             crate::name::CLOSURE_FN_TRAIT,
             &pair.delegate_trait,
             &pair.delegate_method,
@@ -5573,7 +5371,7 @@ fn generate_fallback_impls(
             ctx.trait_env,
             &module_source,
             vec![],
-            &tt,
+            &mut tt,
             span,
         ))));
         // Per-module: do not `ctx.record_impl`.
@@ -5619,57 +5417,35 @@ fn decompose_type_for_method_name(
     resolved: &ResolvedType,
     type_id: TypeId,
     tt: &TypeTable,
-) -> (Receiver, bool, Vec<String>) {
-    let named = |n: String| Receiver::Type(n);
+) -> (Receiver, bool, Vec<FqTypeName>) {
     match resolved {
-        ResolvedType::TypeParam { name, .. } => (named(name.clone()), true, vec![]),
-        ResolvedType::BuiltinArray(elem) => (
-            named(TypeTable::ARRAY_TYPE_NAME.to_string()),
-            false,
-            vec![tt.mangle_type_name(*elem)],
-        ),
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } => {
-            let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
-            (named(name.clone()), false, args)
-        }
         ResolvedType::Function {
             params,
             return_type,
             ..
-        } => {
-            let args =
-                crate::name::fn_type_arg_names(params.len(), &tt.mangle_type_name(*return_type));
-            (
-                named(crate::name::CLOSURE_FN_TRAIT.to_string()),
-                false,
-                args,
-            )
-        }
-        ResolvedType::GenericResource {
-            name, type_args, ..
-        } => {
-            let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
-            (named(name.clone()), false, args)
-        }
-        ResolvedType::Reactive(inner) => (
-            named("Reactive".to_string()),
+        } => (
+            Receiver::Type(FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT)),
             false,
-            vec![tt.mangle_type_name(*inner)],
+            crate::name::fn_type_args(params.len(), &tt.fq_type_name(*return_type)),
+        ),
+        ResolvedType::Reactive(inner) => (
+            Receiver::Type(FqTypeName::builtin("Reactive")),
+            false,
+            vec![tt.fq_type_name(*inner)],
         ),
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (
             Receiver::Ref(RefKind::from_resolved(resolved).expect("ref classify")),
             false,
-            vec![tt.mangle_type_name(*inner)],
+            vec![tt.fq_type_name(*inner)],
         ),
         _ => {
-            let name = tt.mangle_type_name(type_id);
-            debug_assert!(
-                !name.contains('<'),
-                "decompose_type_for_method_name: unhandled parameterized type: {name}"
-            );
-            (named(name), false, vec![])
+            let fq = tt.fq_type_name(type_id);
+            let args = fq.args().to_vec();
+            (
+                Receiver::Type(fq.head_only()),
+                matches!(resolved, ResolvedType::TypeParam { .. }),
+                args,
+            )
         }
     }
 }
@@ -5718,7 +5494,9 @@ fn resolve_impl_module_via_env(
         }
         ResolvedType::Primitive(p) => Some(p.as_str().to_string()),
         ResolvedType::Unit => Some(TypeTable::UNIT_TYPE_NAME.to_string()),
-        ResolvedType::Struct { name, .. }
+        ResolvedType::Struct {
+            decl_name: name, ..
+        }
         | ResolvedType::Enum { name, .. }
         | ResolvedType::Variant { name, .. }
         | ResolvedType::Newtype { name, .. }
@@ -5766,7 +5544,7 @@ fn resolve_impl_module_via_env(
 /// collide on `function_id_for`, which is required to be injective over
 /// `project.functions` (asserted in `optimize/dce`). Use
 /// [`collect_canonical_fn_signatures`] for the `(arity, return_type)` view.
-fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<String>)> {
+fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<FqTypeName>)> {
     let is_concrete = |t: TypeId| !matches!(tt.get(t), ResolvedType::TypeParam { .. });
 
     tt.all_types()
@@ -5779,7 +5557,7 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
                 if !type_args.iter().all(|e| is_concrete(*e)) {
                     return None;
                 }
-                let args = type_args.iter().map(|e| tt.mangle_type_name(*e)).collect();
+                let args = type_args.iter().map(|e| tt.fq_type_name(*e)).collect();
                 Some((id, TypeTable::TUPLE_TYPE_NAME.to_string(), args))
             }
             ResolvedType::GenericResource {
@@ -5788,7 +5566,7 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
                 if !type_args.iter().all(|t| is_concrete(*t)) {
                     return None;
                 }
-                let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
+                let args = type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
                 Some((id, name.clone(), args))
             }
             _ => None,
@@ -5810,10 +5588,16 @@ struct FnSignature {
     repr_type_id: TypeId,
     arity: usize,
     return_type: TypeId,
-    /// `[arity, mangle_type_name(return_type)]` (see
-    /// [`crate::name::fn_type_arg_names`]) — the form consumed by
-    /// [`crate::name::mangle_generic_name`] and the dispatch-stub emitters.
-    type_arg_names: Vec<String>,
+    /// `[arity, return_type]` (see [`crate::name::fn_type_args`]) — the form
+    /// consumed by the dispatch-stub emitters.
+    type_arg_names: Vec<FqTypeName>,
+}
+
+impl FnSignature {
+    /// The `Fn<arity,ret>` receiver this signature's dispatch stubs hang off.
+    fn receiver(&self) -> FqTypeName {
+        FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT).with_args(self.type_arg_names.clone())
+    }
 }
 
 fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
@@ -5836,15 +5620,15 @@ fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
             continue;
         }
         let arity = params.len();
-        let return_type_name = tt.mangle_type_name(*return_type);
-        if !seen.insert((arity, return_type_name.clone())) {
+        let return_type_fq = tt.fq_type_name(*return_type);
+        if !seen.insert((arity, return_type_fq.to_mangled())) {
             continue;
         }
         result.push(FnSignature {
             repr_type_id: id,
             arity,
             return_type: *return_type,
-            type_arg_names: crate::name::fn_type_arg_names(arity, &return_type_name),
+            type_arg_names: crate::name::fn_type_args(arity, &return_type_fq),
         });
     }
     result
@@ -5854,13 +5638,14 @@ fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
 ///
 /// Body: `return *self == *other;` (i32 comparison via enum discriminant)
 fn generate_enum_eq_fn(
+    module_source: &ModuleSource,
     enum_name: &str,
     enum_type: TypeId,
     ref_enum_type: TypeId,
     eq_trait_name: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(enum_name, eq_trait_name, "eq");
+    let method_info = trait_method_info(module_source, enum_name, eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
     let comparison = TirExpr::new(
@@ -5903,6 +5688,7 @@ fn generate_enum_eq_fn(
 /// return Ordering::Equal;
 /// ```
 fn generate_enum_ord_fn(
+    module_source: &ModuleSource,
     enum_name: &str,
     enum_type: TypeId,
     ref_enum_type: TypeId,
@@ -5911,7 +5697,7 @@ fn generate_enum_ord_fn(
     span: Span,
     names: &TraitsStdlibNames,
 ) -> TirFunction {
-    let method_info = trait_method_info(enum_name, ord_trait_name, "cmp");
+    let method_info = trait_method_info(module_source, enum_name, ord_trait_name, "cmp");
     let qualified_name = method_info.to_mangled_name();
 
     let local_a = || local_expr(2, "a", enum_type, span);
@@ -6053,11 +5839,9 @@ fn trait_call_on_type(
         crate::synthesis::template::blanket_dispatch_for(
             trait_env,
             value_type,
-            &info.base_struct_name(),
             trait_name,
             method_name,
             tt,
-            true,
         )
     };
 
@@ -6072,8 +5856,12 @@ fn trait_call_on_type(
         let monomorph_info = if needs_ref_monomorph {
             match &resolved {
                 ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
-                    let base_info =
-                        trait_method_info(&info.base_struct_name(), trait_name, method_name);
+                    let base_info = trait_method_info(
+                        module_source,
+                        &info.base_struct_name(),
+                        trait_name,
+                        method_name,
+                    );
                     Some(MonomorphInfo {
                         generic_name: base_info.to_mangled_name(),
                         impl_type_args: vec![*inner_id],
@@ -6183,7 +5971,7 @@ fn generate_struct_eq_fn(
     tt: &mut TypeTable,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(struct_name, eq_trait_name, "eq");
+    let method_info = trait_method_info(module_source, struct_name, eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
     let result = build_struct_eq_chain(fields, ref_struct_type, trait_env, module_source, tt, span);
@@ -6316,7 +6104,7 @@ fn generate_struct_ord_fn(
     span: Span,
     names: &TraitsStdlibNames,
 ) -> TirFunction {
-    let method_info = trait_method_info(struct_name, ord_trait_name, "cmp");
+    let method_info = trait_method_info(module_source, struct_name, ord_trait_name, "cmp");
     let qualified_name = method_info.to_mangled_name();
 
     let (stmts, locals) = build_struct_ord_body(
@@ -6478,7 +6266,7 @@ fn generate_variant_eq_fn(
     let eq_trait_name = tt
         .compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
         .to_string();
-    let method_info = trait_method_info(variant_name, &eq_trait_name, "eq");
+    let method_info = trait_method_info(module_source, variant_name, &eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
     // Allocate two payload-binding locals (self-side, other-side) for

@@ -44,7 +44,7 @@ internal trait ReflectStruct {                    // struct
     type FieldTypes;                             // payload pack [F_0, F_1, …]
     type Members;                                // [StructField<Self, F_0>, …]
     fn members() -> Self::Members;
-    fn construct(fields: Self::FieldTypes) -> Self;  // assemble from field values
+    fn from_fields(fields: Self::FieldTypes) -> Self;  // assemble from field values
     fn type_name() -> String;
     fn wire_name_policy() -> CaseStyle;          // #[wire(name_policy)], casing not applied
 }
@@ -95,9 +95,10 @@ A generic derivation over a member walk binds a type pack, and both instance and
 `static` trait methods resolve through such a pack-bound blanket — a deserialize
 entry (`T::from_wire(…)`) dispatches the same way a walk does.
 
-`from_discriminant` / `from_bits` return `Option` because an unknown input is a
-normal deserialize error, not a bug. `construct` assembles a struct from its
-field-value tuple; `discriminant` / `bits` read the live tag off a value.
+Every kind spells its build direction `from_<channel>`. `from_discriminant` /
+`from_bits` return `Option` because an unknown raw input is a normal deserialize
+error, not a bug; `from_fields` is total, since a field-value tuple is already
+typed. `discriminant` / `bits` read the live tag off a value.
 
 ## Members
 

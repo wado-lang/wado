@@ -231,7 +231,7 @@ fn collect_resource_refs(
             );
         }
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => {
@@ -867,13 +867,16 @@ impl EffectIndex<'_> {
         if let Some(method_info) = &func_ref.method_info
             && method_info.trait_name.is_none()
         {
-            let resource_key = (
-                func_ref.module_source.clone(),
-                method_info.base_struct_name(),
-            );
+            // `resource_names` is keyed by the declaration name, as the
+            // `resource` item writes it — a mangled head would carry the
+            // declaring module and match nothing, silently dropping the
+            // resource requirement instead of reporting it.
+            let decl_name = method_info.receiver_decl_name();
+            let decl_name = decl_name.into_string();
+            let resource_key = (func_ref.module_source.clone(), decl_name.clone());
             if self.resource_names.contains(&resource_key) {
                 let resource_effect = EffectRef::Concrete {
-                    name: method_info.base_struct_name(),
+                    name: decl_name,
                     module_source: func_ref.module_source.clone(),
                 };
                 if !effects.contains(&resource_effect) {
@@ -1709,7 +1712,7 @@ impl TypeRefCtx {
             }
             ResolvedType::Newtype { base_type, .. } => self.walk(tt, *base_type, visited),
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => self

@@ -1215,10 +1215,9 @@ mod tests {
         use crate::tir::{ResolvedType, TypeTable};
         let mut types = TypeTable::new();
         let struct_ty = types.intern(ResolvedType::Struct {
-            name: "W".to_string(),
+            decl_name: "W".to_string(),
             module_source: ModuleSource::default(),
-            is_monomorphized: false,
-            base_name: None,
+            type_args: Vec::new(),
         });
         let mut body = Body::empty();
         let base = body.exprs.push(ExprNode {

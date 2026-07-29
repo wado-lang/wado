@@ -242,11 +242,17 @@ pub(crate) enum ImplTargetKey {
 }
 
 impl ImplTargetKey {
-    /// The receiver head, for consumers that still reason in bare names.
+    /// The receiver this target indexes under. Built from the same
+    /// `(module, name)` pair `TypeTable::impl_receiver_key` reads off a
+    /// resolved type, so a definition and a lookup agree by construction.
     pub(crate) fn receiver(&self) -> name::Receiver {
         match self {
-            ImplTargetKey::Decl((_, name)) | ImplTargetKey::TypeParam(_, name) => {
-                name::Receiver::Type(name.clone())
+            ImplTargetKey::Decl((module, name)) => {
+                name::Receiver::Type(name::FqTypeName::of_head(module, name))
+            }
+            // A type parameter names no declaration, so no module qualifies it.
+            ImplTargetKey::TypeParam(_, name) => {
+                name::Receiver::Type(name::FqTypeName::binder(name))
             }
             ImplTargetKey::Ref(kind) => name::Receiver::Ref(*kind),
         }
@@ -1288,12 +1294,34 @@ impl TraitEnv {
             .map(|b| &b.module)
     }
 
+    /// The value blanket for `trait_name` whose receiver-param bounds `satisfies`
+    /// accepts. A trait may carry several disjoint value blankets — the four
+    /// reflection kinds each derive `Inspect` over their own `Reflect*` bound —
+    /// so a receiver-blind first-wins selection would hand every receiver the
+    /// first-registered kind and then reject it on the bound check.
+    pub(crate) fn value_blanket_for_receiver(
+        &self,
+        trait_name: &str,
+        type_module: Option<&ModuleSource>,
+        satisfies: &dyn Fn(&[String]) -> bool,
+    ) -> Option<&BlanketImpl> {
+        let impls = self.blanket_impls.get(trait_name)?;
+        let mut values = impls
+            .iter()
+            .filter(|b| b.receiver == BlanketReceiver::Value)
+            .filter(|b| satisfies(&b.bounds));
+        if let Some(hint) = type_module
+            && let Some(b) = values.clone().find(|b| &b.module == hint)
+        {
+            return Some(b);
+        }
+        values.next()
+    }
+
     /// The value blanket `impl<Param: Bounds, ..> Trait for Param` for
     /// `trait_name`, preferring one homed in `type_module`, else the first
     /// registered. Ref blankets (`impl<T> Trait for &T`) are excluded — they
-    /// never dispatch a value receiver. The `blanket_impl_{param,bounds,arity}`
-    /// projections below all read the same selected blanket, so they stay
-    /// mutually consistent.
+    /// never dispatch a value receiver.
     fn value_blanket_for_trait(
         &self,
         trait_name: &str,
@@ -1311,31 +1339,6 @@ impl TraitEnv {
         values.next()
     }
 
-    /// The value blanket's receiver-param name (`I` in `impl<I: Bound> Trait for
-    /// I`), used to reconstruct the template's mangled name `I^Trait::method`.
-    pub(crate) fn blanket_impl_param_for_trait(
-        &self,
-        trait_name: &str,
-        type_module: Option<&ModuleSource>,
-    ) -> Option<String> {
-        self.value_blanket_for_trait(trait_name, type_module)
-            .map(|b| b.param.clone())
-    }
-
-    /// The bound trait names on the value blanket's receiver param (`Bound` in
-    /// `impl<I: Bound> Trait for I`). A call may only dispatch through the
-    /// blanket if the receiver satisfies these bounds — otherwise a type with
-    /// its own (unregistered, auto-derived) impl, e.g. a closure's `Fn^Inspect`,
-    /// would be misrouted to the blanket body.
-    pub(crate) fn blanket_impl_bounds_for_trait(
-        &self,
-        trait_name: &str,
-        type_module: Option<&ModuleSource>,
-    ) -> Option<Vec<String>> {
-        self.value_blanket_for_trait(trait_name, type_module)
-            .map(|b| b.bounds.clone())
-    }
-
     /// Whether `trait_name` has a *universal* ref blanket
     /// `impl<T: Bound> Trait for &T` (`is_mut` selects `&mut T`) — the inner is a
     /// bare type param, so it applies to every reference. Distinguished from a
@@ -1350,17 +1353,13 @@ impl TraitEnv {
         })
     }
 
-    /// The associated-type names a value blanket projects into type packs, in
-    /// header order — `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` yields
-    /// `["Assoc"]`. Empty for a blanket that projects none.
-    pub(crate) fn blanket_projected_pack_assocs(
-        &self,
-        trait_name: &str,
-        type_module: Option<&ModuleSource>,
-    ) -> Vec<String> {
-        let Some(blanket) = self.value_blanket_for_trait(trait_name, type_module) else {
-            return Vec::new();
-        };
+    /// The `(declaring trait, associated type)` pairs a value blanket projects
+    /// into type packs, in the order the impl declares them —
+    /// `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` yields
+    /// `[("Bound", "Assoc")]`. The trait is carried because a bare assoc name
+    /// is ambiguous: the reflection kinds all spell their member channel
+    /// `Members`.
+    pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<(String, String)> {
         let Some(header) = self
             .impl_headers
             .get(&(blanket.module.clone(), blanket.ast_id))
@@ -1371,14 +1370,14 @@ impl TraitEnv {
             .type_params
             .iter()
             .flat_map(|tp| &tp.bounds)
-            .flat_map(|bound| &bound.assoc_types)
-            .filter_map(|assoc| match &assoc.ty {
+            .flat_map(|bound| bound.assoc_types.iter().map(move |a| (&bound.name, a)))
+            .filter_map(|(bound_name, assoc)| match &assoc.ty {
                 ast::Type::Tuple(elems)
                     if elems
                         .iter()
                         .any(|e| matches!(e, ast::Type::TypePackSpread(..))) =>
                 {
-                    Some(assoc.name.clone())
+                    Some((bound_name.clone(), assoc.name.clone()))
                 }
                 _ => None,
             })
@@ -1881,10 +1880,15 @@ pub(super) fn impl_target_key(
     }
 }
 
-pub(super) fn receiver_key(ty: &ast::Type) -> name::Receiver {
+/// The declaration name an `impl` header writes its target as.
+///
+/// An AST header carries no module, so this cannot produce a qualified
+/// receiver — compare it against [`name::Receiver::decl_key`], which is the
+/// same namespace, never against `head_key`.
+pub(super) fn receiver_decl_key(ty: &ast::Type) -> String {
     match name::RefKind::from_ast(ty) {
-        Some(kind) => name::Receiver::Ref(kind),
-        None => name::Receiver::Type(get_type_name_static(ty)),
+        Some(kind) => kind.prefix().to_string(),
+        None => get_type_name_static(ty),
     }
 }
 

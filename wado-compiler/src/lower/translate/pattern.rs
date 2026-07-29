@@ -2,7 +2,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 
 use crate::module_source::ModuleSource;
-use crate::name::LocalMethodName;
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::FunctionRef;
 use crate::tir::{
     CallArg, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField,
@@ -52,8 +52,12 @@ fn coerce_value_to_binding(
         ),
         // A `&primitive` / `&variant` / `&fn` binding type that boxing
         // has redefined to its `Box<T>` struct: build the struct literal.
-        ResolvedType::Struct { name, .. } if type_table.box_payload_of(binding_type).is_some() => {
-            let struct_name = name.clone();
+        ResolvedType::Struct {
+            decl_name,
+            type_args,
+            ..
+        } if type_table.box_payload_of(binding_type).is_some() => {
+            let struct_name = type_table.struct_rendered_name(decl_name, type_args);
             TirExpr::new(
                 TirExprKind::StructLiteral {
                     struct_type: binding_type,
@@ -144,7 +148,7 @@ pub struct Lowering {
     /// Canonical stdlib name of the `Eq` trait.
     eq_trait_name: String,
     /// Canonical stdlib name of the `String` struct.
-    string_struct_name: String,
+    string_struct_name: FqTypeName,
     /// Immutable globals with a bare integer-literal initializer, keyed by `(module, name)`.
     const_int_globals: IndexMap<(ModuleSource, String), i128>,
 }
@@ -189,9 +193,8 @@ impl Lowering {
         let eq_trait_name = type_table
             .compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
             .to_string();
-        let string_struct_name = type_table
-            .compiler_struct_name(crate::compiler_item::CompilerItem::String)
-            .to_string();
+        let string_struct_name =
+            type_table.compiler_struct_fq_name(crate::compiler_item::CompilerItem::String);
         Self {
             variant_case_map,
             struct_fields_map,
@@ -241,7 +244,7 @@ struct PatternLowerer<'a> {
     /// Canonical stdlib name of the `String` struct, resolved through
     /// the same registry so the receiver-type slot of the synthesised
     /// `String^Eq::eq` `LocalMethodName` tracks renames too.
-    string_struct_name: String,
+    string_struct_name: FqTypeName,
     /// Map from (`variant_name`, `module_source`) to a list of
     /// (`case_name`, `case_index`) pairs. The `module_source` axis
     /// is required because Wado allows two modules to each declare a
@@ -260,7 +263,7 @@ impl<'a> PatternLowerer<'a> {
         local_count: u32,
         locals: Vec<TirLocal>,
         eq_trait_name: String,
-        string_struct_name: String,
+        string_struct_name: FqTypeName,
         variant_case_map: &'a IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
         struct_fields_map: &'a IndexMap<(String, ModuleSource), Vec<TirField>>,
         const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
@@ -299,12 +302,15 @@ impl<'a> PatternLowerer<'a> {
     fn get_struct_fields(&self, type_id: TypeId, type_table: &TypeTable) -> Option<Vec<TirField>> {
         match type_table.get(type_id) {
             ResolvedType::Struct {
-                name,
+                decl_name,
                 module_source,
-                ..
+                type_args,
             } => self
                 .struct_fields_map
-                .get(&(name.clone(), module_source.clone()))
+                .get(&(
+                    type_table.struct_rendered_name(decl_name, type_args),
+                    module_source.clone(),
+                ))
                 .cloned(),
             _ => None,
         }

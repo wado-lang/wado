@@ -52,7 +52,7 @@ type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // Typ
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(21)
 
-type "functype//core:prelude/int128.wado/i128^Ord::cmp" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(22)
+type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128^Ord::cmp" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(22)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
@@ -98,7 +98,7 @@ fn "match_literal_i128_guarded.wado/run"() with Stdout {
     r4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
     "core:cli/println"(r4);
     bind = struct.new "core:prelude/int128.wado//i128" { low: 99_i64, high: 0_i64 };
-    r5 = (if "core:prelude/int128.wado/i128^Ord::cmp"(bind, global:match_literal_i128_guarded.wado::__const_obj_0) == 2 -> ref "core:prelude/string.wado//String" {
+    r5 = (if "core:prelude/int128.wado/core:prelude/int128.wado/i128^Ord::cmp"(bind, global:match_literal_i128_guarded.wado::__const_obj_0) == 2 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 105, 103), used: 3 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
@@ -224,7 +224,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "core:prelude/int128.wado/i128^Ord::cmp"(self, other) {
+fn "core:prelude/int128.wado/core:prelude/int128.wado/i128^Ord::cmp"(self, other) {
     if self.high < other.high {
         return 0;
     }

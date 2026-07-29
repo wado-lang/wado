@@ -149,7 +149,7 @@ impl TypeSystem {
             ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => return true,
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => self
@@ -325,12 +325,23 @@ impl TypeSystem {
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
     pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {
-            ResolvedType::Struct { name, .. }
+            ResolvedType::Struct {
+                decl_name: name, ..
+            }
             | ResolvedType::GenericInstance { name, .. }
             | ResolvedType::Newtype { name, .. }
             | ResolvedType::Flags { name, .. } => Some(name.clone()),
             _ => None,
         }
+    }
+
+    /// The fq receiver name of `type_id`'s head: the name a method defined on
+    /// this type is spelled with, module included and type arguments dropped
+    /// (`List<i32>` → `core:prelude/list.wado/List`). Reading the module off
+    /// the resolved type is what makes this exact — a written name would have
+    /// to be re-resolved in the current scope, which the type already did.
+    pub(crate) fn fq_receiver_head(&self, type_id: TypeId) -> crate::name::FqTypeName {
+        self.type_table.borrow().fq_base_type_name(type_id)
     }
 
     /// For newtypes, get the base type name and ID for trait impl lookup fallback.
@@ -356,7 +367,9 @@ impl TypeSystem {
         let mut current = type_id;
         loop {
             match self.type_table.borrow().get(current).clone() {
-                ResolvedType::Struct { name, .. } => return name,
+                ResolvedType::Struct {
+                    decl_name: name, ..
+                } => return name,
                 ResolvedType::GenericInstance { name, .. } => return name,
                 ResolvedType::Newtype { base_type, .. } => current = base_type,
                 ResolvedType::Flags { .. } => return "u32".to_string(),
@@ -464,7 +477,9 @@ impl TypeSystem {
         let resolved = self.type_table.borrow().get(type_id).clone();
         match resolved {
             ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),
-            ResolvedType::Struct { name, .. } => name,
+            ResolvedType::Struct {
+                decl_name: name, ..
+            } => name,
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {

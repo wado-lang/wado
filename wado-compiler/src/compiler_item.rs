@@ -307,6 +307,8 @@ pub enum CompilerItem {
     ReflectStructTypeName,
     /// `ReflectStruct::members` — the per-field member tuple.
     ReflectStructMembers,
+    /// `ReflectStruct::from_fields` — assemble a struct from its field-value tuple.
+    ReflectStructFromFields,
     /// `ReflectStruct::wire_name_policy` — the struct's `#[wire(name_policy)]` policy.
     ReflectStructWireNamePolicy,
     /// `Member::name` — the member's source field name.
@@ -548,6 +550,7 @@ impl CompilerItem {
         Self::ListFromTuple,
         Self::ReflectStructTypeName,
         Self::ReflectStructMembers,
+        Self::ReflectStructFromFields,
         Self::ReflectStructWireNamePolicy,
         Self::MemberName,
         Self::MemberWireNameOverride,
@@ -697,6 +700,7 @@ impl CompilerItem {
             Self::ListFromTuple => "list_from_tuple",
             Self::ReflectStructTypeName => "reflect_struct_type_name",
             Self::ReflectStructMembers => "reflect_struct_members",
+            Self::ReflectStructFromFields => "reflect_struct_from_fields",
             Self::ReflectStructWireNamePolicy => "reflect_struct_wire_name_policy",
             Self::MemberName => "member_name",
             Self::MemberWireNameOverride => "member_wire_name_override",
@@ -818,6 +822,7 @@ impl CompilerItem {
             | Self::ListFromTuple
             | Self::ReflectStructTypeName
             | Self::ReflectStructMembers
+            | Self::ReflectStructFromFields
             | Self::ReflectStructWireNamePolicy
             | Self::MemberName
             | Self::MemberWireNameOverride
@@ -1001,6 +1006,7 @@ impl CompilerItem {
             | Self::ListFromTuple
             | Self::ReflectStructTypeName
             | Self::ReflectStructMembers
+            | Self::ReflectStructFromFields
             | Self::ReflectStructWireNamePolicy
             | Self::MemberName
             | Self::MemberWireNameOverride

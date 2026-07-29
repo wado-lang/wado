@@ -3,7 +3,7 @@
 use crate::ast::{self, BinaryOp, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir::{
     FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TypeId, TypeTable,
 };
@@ -348,24 +348,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // a plain variant's comparison falls through to
             // `try_lower_comparison` at monomorphize time, after synthesis
             // already ran, and the method is never generated.
+            // The receiver is named by the module that declares it, read off
+            // the resolved type itself — the declaration is right here, so
+            // nothing re-resolves a written name.
             let struct_name = match &left_type {
-                ResolvedType::Struct { name, .. } => Some(name.clone()),
-                ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
-                ResolvedType::Variant { name, .. } => Some(name.clone()),
+                ResolvedType::Struct {
+                    decl_name: name,
+                    module_source,
+                    ..
+                }
+                | ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    ..
+                }
+                | ResolvedType::Variant {
+                    name,
+                    module_source,
+                } => Some(FqTypeName::declared(module_source, name).into_string()),
                 ResolvedType::Newtype { base_type, .. } => {
                     let tt = self.tysys.type_table.borrow();
                     let ultimate = tt.get_ultimate_base_type(*base_type);
                     match tt.get(ultimate) {
                         ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
-                            drop(tt);
-                            self.tysys.struct_name_for_type(*base_type)
+                            Some(tt.fq_base_type_name(*base_type).into_string())
                         }
                         // A newtype of a variant (e.g. `type Alias = SomeVariant;`)
                         // needs the same Variant-dispatch path as a direct
-                        // `ResolvedType::Variant` comparison above —
-                        // `struct_name_for_type` doesn't cover `Variant`, so
-                        // read the name straight off the resolved ultimate type.
-                        ResolvedType::Variant { name, .. } => Some(name.clone()),
+                        // `ResolvedType::Variant` comparison above.
+                        ResolvedType::Variant {
+                            name,
+                            module_source,
+                        } => Some(FqTypeName::declared(module_source, name).into_string()),
                         _ => None,
                     }
                 }
@@ -498,6 +512,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         trait_name: eq_trait_name,
                         method_name: "eq".to_string(),
                         impl_name: name.clone(),
+                        impl_type_id: None,
                         self_kind: info.self_kind,
                         return_type: info.return_type,
                         param_types: info.param_types,
@@ -532,6 +547,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         trait_name: ord_trait_name,
                         method_name: "cmp".to_string(),
                         impl_name: name.clone(),
+                        impl_type_id: None,
                         self_kind: info.self_kind,
                         return_type: info.return_type,
                         param_types: info.param_types,
@@ -569,7 +585,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_arithmetic_or_bitwise {
             // Get struct name for trait lookup
             let struct_name = match &left_type {
-                ResolvedType::Struct { name, .. } => Some(name.clone()),
+                ResolvedType::Struct {
+                    decl_name: name, ..
+                } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
                 ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
                     Some(name.clone())
@@ -596,9 +614,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.tysys.newtype_base_lookup(&struct_name, left.type_id);
 
                 // Find the arithmetic trait implementation
-                let (trait_info_opt, impl_name) = self
+                let (trait_info_opt, (impl_name, impl_type_id)) = self
                     .find_arithmetic_trait_impl(&struct_name, left.type_id, trait_name, method_name)
-                    .map(|info| (Some(info), struct_name.clone()))
+                    .map(|info| (Some(info), (struct_name.clone(), left.type_id)))
                     .unwrap_or_else(|| {
                         let info = self.find_arithmetic_trait_impl(
                             &lookup_name,
@@ -606,13 +624,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             trait_name,
                             method_name,
                         );
-                        (info, lookup_name.clone())
+                        (info, (lookup_name.clone(), lookup_type_id))
                     });
                 if let Some(trait_info) = trait_info_opt {
                     let resolved = ResolvedTraitMethod {
                         trait_name: trait_info.trait_name,
                         method_name: method_name.to_string(),
                         impl_name,
+                        impl_type_id: Some(impl_type_id),
                         self_kind: trait_info.self_kind,
                         return_type: trait_info.output_type,
                         param_types: trait_info.rhs_type.map(|t| vec![t]).unwrap_or_default(),
@@ -663,6 +682,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         trait_name: trait_name.to_string(),
                         method_name: method_name.to_string(),
                         impl_name: name.clone(),
+                        impl_type_id: None,
                         self_kind: info.self_kind,
                         return_type: operand_type_id,
                         param_types: info.param_types,
@@ -688,7 +708,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_shift {
             // Get struct name for trait lookup
             let struct_name = match &left_type {
-                ResolvedType::Struct { name, .. } => Some(name.clone()),
+                ResolvedType::Struct {
+                    decl_name: name, ..
+                } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
                 ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
                     Some(name.clone())
@@ -709,9 +731,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.tysys.newtype_base_lookup(&struct_name, left.type_id);
 
                 // Find the shift trait implementation
-                let (trait_info_opt, impl_name) = self
+                let (trait_info_opt, (impl_name, impl_type_id)) = self
                     .find_arithmetic_trait_impl(&struct_name, left.type_id, trait_name, method_name)
-                    .map(|info| (Some(info), struct_name.clone()))
+                    .map(|info| (Some(info), (struct_name.clone(), left.type_id)))
                     .unwrap_or_else(|| {
                         let info = self.find_arithmetic_trait_impl(
                             &lookup_name,
@@ -719,7 +741,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             trait_name,
                             method_name,
                         );
-                        (info, lookup_name.clone())
+                        (info, (lookup_name.clone(), lookup_type_id))
                     });
                 if let Some(trait_info) = trait_info_opt {
                     // Shift traits declare `rhs: u32` (not `&Self`), so the
@@ -729,6 +751,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         trait_name: trait_info.trait_name,
                         method_name: method_name.to_string(),
                         impl_name,
+                        impl_type_id: Some(impl_type_id),
                         self_kind: trait_info.self_kind,
                         return_type: trait_info.output_type,
                         param_types: trait_info.rhs_type.map(|t| vec![t]).unwrap_or_default(),
@@ -998,7 +1021,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } {
             let operand_resolved = self.tysys.type_table.borrow().get(expr_type).clone();
             let struct_name = match &operand_resolved {
-                ResolvedType::Struct { name, .. } => Some(name.clone()),
+                ResolvedType::Struct {
+                    decl_name: name, ..
+                } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
                 ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
                     Some(name.clone())
@@ -1225,7 +1250,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 // Check for IndexAssign trait implementation
                 let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-                    ResolvedType::Struct { name, .. } => name,
+                    ResolvedType::Struct {
+                        decl_name: name, ..
+                    } => name,
                     ResolvedType::GenericInstance { name, .. } => name,
                     ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name,
                     // `arr[i] = v` dispatches through `impl IndexAssign for Array<T>`,
@@ -1257,7 +1284,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         super::Elaborator::find_index_assign_trait_impl,
                     );
-                    if let Some(trait_info) = assign_info {
+                    if let Some((trait_info, matched_type_id)) = assign_info {
                         if let Some(key_type) = trait_info.index_type
                             && key_type != index_type
                         {
@@ -1277,8 +1304,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.typecheck(value_type, trait_info.input_type, value_span);
 
                         // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
+                        let receiver = self.fq_index_receiver(matched_type_id);
                         let mangled_method_name = MethodName::format_local(
-                            &lookup_name,
+                            &receiver,
                             Some(&trait_info.trait_name),
                             "index_assign",
                         );
@@ -1288,7 +1316,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             name: mangled_method_name,
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
-                                lookup_name,
+                                receiver,
                                 Some(trait_info.trait_name),
                                 "index_assign".to_string(),
                             )),
@@ -1711,14 +1739,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             wrap_flags.push(wrap);
         }
 
+        // The receiver is named by the type whose impl matched; a type-param
+        // receiver names no declaration, so it stays a binder.
+        let receiver_fq = resolved.impl_type_id.map_or_else(
+            || FqTypeName::binder(&resolved.impl_name),
+            |id| self.tysys.fq_receiver_head(id),
+        );
         let mangled_method_name = MethodName::format_local(
-            &resolved.impl_name,
+            &receiver_fq,
             Some(&resolved.trait_name),
             &resolved.method_name,
         );
 
         let mut method_info = LocalMethodName::new(
-            resolved.impl_name.clone(),
+            receiver_fq,
             Some(resolved.trait_name.clone()),
             resolved.method_name.clone(),
         );

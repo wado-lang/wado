@@ -154,3 +154,5 @@ history is the SSoT for how the design got here.
 - [Provider Metadata — Source-Bundled Package Artifacts](./wep-2026-07-26-provider-metadata.md)
 - [Super Traits](./wep-2026-07-27-super-traits.md)
 - [`post-return` for Synchronously-Lifted Exports](./wep-2026-07-28-cm-post-return.md)
+- [Structured Fq Names](./wep-2026-07-28-structured-fq-names.md)
+- [Name Namespaces as Types](./wep-2026-07-29-name-namespaces.md)

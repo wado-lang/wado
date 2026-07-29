@@ -89,6 +89,9 @@ pub fn link(package: Package) -> FlatPackage {
         }
     }
 
+    #[cfg(debug_assertions)]
+    assert_no_stub_shadowing(&functions, "link");
+
     // Build variant lookup indices.
     let mut variant_index = IndexMap::default();
     for (i, v) in variants.iter().enumerate() {
@@ -126,4 +129,48 @@ pub fn link(package: Package) -> FlatPackage {
         trait_env: package.trait_env,
         moved_local_spans: package.moved_local_spans,
     }
+}
+
+/// Assert that no bodyless stub shares a definition's name.
+///
+/// A name carries its subject's declaring module, so one name is one function.
+/// A stub sharing a definition's name is a call waiting to bind to nothing,
+/// which only surfaces much later as an unsatisfied trait bound at WIR build.
+/// Checking where the invariant must hold reports every violation at once, and
+/// running it at each stage boundary names the stage that introduced one.
+///
+/// Shape stubs (tuples, `Stream<u8>`) are emitted per using module by design
+/// and have no definition anywhere, so they never collide. A `core:builtin`
+/// declaration paired with its `core:rt` implementation is the intended shape
+/// of an intrinsic, not a collision.
+#[cfg(debug_assertions)]
+pub(crate) fn assert_no_stub_shadowing(
+    functions: &[Rc<RefCell<crate::tir::TirFunction>>],
+    stage: &str,
+) {
+    let mut bodied: crate::hashmap::IndexMap<String, ModuleSource> =
+        crate::hashmap::IndexMap::default();
+    for f in functions {
+        let f = f.borrow();
+        if f.body.is_some() {
+            bodied.insert(f.name.clone(), f.module_source.clone());
+        }
+    }
+    let collisions: Vec<(String, ModuleSource, ModuleSource)> = functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            if f.body.is_some() || f.module_source == ModuleSource::builtin() {
+                return None;
+            }
+            bodied
+                .get(&f.name)
+                .map(|def| (f.name.clone(), f.module_source.clone(), def.clone()))
+        })
+        .collect();
+    assert!(
+        collisions.is_empty(),
+        "after {stage}: a bodyless stub shares a definition's name \
+         (name, stub module, definition module): {collisions:#?}"
+    );
 }

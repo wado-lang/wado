@@ -926,8 +926,12 @@ impl<'a> Emitter<'a> {
     fn map_resolved_leaf(&mut self, id: TypeId) -> Result<Type, WitEmitError> {
         match self.types.get(id) {
             ResolvedType::Primitive(p) => map_primitive(*p),
-            ResolvedType::Struct { name, .. } if name == "String" => Ok(Type::String),
-            ResolvedType::Struct { name, .. }
+            ResolvedType::Struct {
+                decl_name: name, ..
+            } if name == "String" => Ok(Type::String),
+            ResolvedType::Struct {
+                decl_name: name, ..
+            }
             | ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. }
             | ResolvedType::Flags { name, .. }

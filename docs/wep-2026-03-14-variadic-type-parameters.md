@@ -420,7 +420,11 @@ where T: ReflectStruct<FieldTypes = [..F]>
 - [x] Tuple `Eq`: monomorphizer expands `==`/`!=` on concrete tuples to element-wise
       comparisons; enables `<..T: Eq>` trait bounds on variadic functions
 - [ ] Standard library: add variadic impls for `Default`, `Clone`
-- [ ] Remove compiler-magic struct `Inspect`; replace with the `ReflectStruct`-based impl
+- [x] Remove compiler-magic struct `Inspect`; replace with the `ReflectStruct`-based impl
+- [x] Dispatch a `static` trait method through a blanket impl, so a
+      build-direction derivation
+      (`impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Zero> Zero for T`)
+      resolves at its `T::zero()` entry point
 
 ---
 

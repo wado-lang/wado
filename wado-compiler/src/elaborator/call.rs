@@ -5,7 +5,7 @@ use crate::hashmap::IndexMap;
 use crate::ast::{self, Expr, Item, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -256,10 +256,14 @@ impl TypeSystem {
                     type_param_type_id,
                 };
             }
+            // Consumed as a declaration name: `is_static_method`,
+            // `locate_static_method_impl` and `find_impl_method_ast_id` all key
+            // on what an `impl` header writes, which carries no module.
             let concrete_name = self
                 .type_table
                 .borrow()
-                .mangle_type_name(type_param_type_id);
+                .fq_type_name(type_param_type_id)
+                .to_display();
             return CalleeIdentKind::Rewritten(format!("{concrete_name}::{suffix}"));
         }
 
@@ -566,7 +570,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Only populated by `infer_static_method_type_args`; the
                 // explicit `call.type_args` only carries method-level args.
                 let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
-                let mangled_name = MethodName::format_local(prefix, None, suffix);
                 // Omitted turbofish infers both levels; an explicit `_` fills
                 // only the hole slots (see `infer_static_call_type_args`).
                 if method_type_args.is_empty() {
@@ -739,7 +742,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .resolve_static_method_call_from_qualified(
                         prefix,
                         suffix,
-                        &mangled_name,
                         &args,
                         &impl_type_args_inferred,
                         &method_type_args,
@@ -901,6 +903,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // If prefix is a known type (struct/enum/newtype/flags) with no matching
             // static method, emit a compile error.
             else if self.tysys.is_known_type_name(prefix) {
+                // A value blanket indexes statics under the receiver param
+                // name, so `prefix`'s own bucket never sees them.
+                let receiver_ty = self.resolve_named_type(prefix, call.span, false);
+                if let Some(return_type) =
+                    self.resolve_blanket_static_method(receiver_ty, suffix, call.id, &[], &[])
+                {
+                    return return_type;
+                }
                 let _ = self.emit(TypeError::UnknownFunction {
                     name: format!("{prefix}::{suffix}"),
                     span: call.span,
@@ -989,8 +999,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Static method call on a type from the namespace module.
-                    // Use the namespace module source so codegen finds the right impl.
-                    let mangled_name = MethodName::format_local(type_name, None, method_name);
                     let method_type_args: Vec<TypeId> = call
                         .type_args
                         .iter()
@@ -1016,11 +1024,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let trait_name = method_ref.trait_name.clone();
                     let struct_module = method_ref.module.clone();
 
-                    let final_mangled = if let Some(ref tn) = method_ref.trait_name {
-                        MethodName::format_local(type_name, Some(tn), method_name)
-                    } else {
-                        mangled_name
-                    };
+                    // Qualify by the module the impl was located in:
+                    // `helper::Pair` and a local `Pair` are different
+                    // declarations.
+                    let final_mangled = MethodName::format_local(
+                        &crate::name::FqTypeName::of_head(&struct_module, type_name),
+                        method_ref.trait_name.as_deref(),
+                        method_name,
+                    );
 
                     let mut return_type =
                         self.lookup_static_method_return_type(&method_ref, &final_mangled);
@@ -1047,7 +1058,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         name: final_mangled,
                         monomorph_info,
                         method_info: Some(LocalMethodName::new(
-                            type_name.to_string(),
+                            self.qualified_receiver_name(type_name),
                             trait_name,
                             method_name.to_string(),
                         )),
@@ -2673,7 +2684,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
                 .collect();
             let mut method_info = LocalMethodName::new(
-                type_param_name.to_string(),
+                FqTypeName::binder(&type_param_name),
                 Some(found_trait),
                 method_name.to_string(),
             );

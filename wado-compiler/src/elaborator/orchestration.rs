@@ -1837,7 +1837,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) {
         match type_table.get(type_id) {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             }

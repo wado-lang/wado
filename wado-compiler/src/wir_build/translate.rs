@@ -164,7 +164,12 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // This check must come before type lookups since DCE may have removed the
         // functor's types from the TypeTable.
         let functor_name = &functor.struct_name;
-        let call_method_fq = format!("{module_source}/{functor_name}::__call");
+        let call_method_local = crate::name::MethodName::format_local(
+            &crate::name::FqTypeName::declared(module_source, functor_name),
+            None,
+            crate::name::CLOSURE_CALL_METHOD,
+        );
+        let call_method_fq = crate::name::MangledName::in_module(module_source, &call_method_local);
         let call_func_id = match ctx.func_map.get(&call_method_fq).cloned() {
             Some(id) => id,
             None => continue,
@@ -483,7 +488,14 @@ fn register_inspect_wrapper(
         nullable: true,
     };
 
-    let target_fq = format!("{module_source}/{functor_name}^{trait_name}::{method_name}");
+    // The per-functor impl's local name is `<fq functor>^Trait::method`;
+    // module + local name together form its `func_map` key.
+    let impl_local_name = crate::name::MethodName::format_local(
+        &crate::name::FqTypeName::declared(module_source, functor_name),
+        Some(trait_name),
+        method_name,
+    );
+    let target_fq = crate::name::MangledName::in_module(module_source, &impl_local_name);
     let target_func_id = ctx.func_map.get(&target_fq).cloned();
 
     // Look up the Formatter struct WIR type id once; needed to
@@ -499,15 +511,12 @@ fn register_inspect_wrapper(
 
     // Look up the per-functor impl's TIR function so we can read its
     // current `params` (post-DAE) and only forward the surviving slots.
-    // The unqualified function name is `__Closure_N^TraitName::method`;
-    // module + name together must equal `target_fq`.
-    let impl_unqualified_name = format!("{functor_name}^{trait_name}::{method_name}");
     let impl_param_names: Option<Vec<String>> = ctx.package.functions.iter().find_map(|f| {
         let f = f.borrow();
         if f.is_dead {
             return None;
         }
-        if f.module_source == *module_source && f.name == impl_unqualified_name {
+        if f.module_source == *module_source && f.name == impl_local_name {
             Some(f.params.iter().map(|p| p.name.clone()).collect())
         } else {
             None
@@ -2666,8 +2675,10 @@ impl FunctionTranslator<'_, '_> {
                 let translated_args: Vec<WirInstr> =
                     args.iter().map(|a| self.translate_operand(*a)).collect();
                 // Look up in WASI imports (registered by register_imports from TIR imports)
-                let func_id = if let Some(func_id) =
-                    self.ctx.func_map.get(&format!("wasi/{local_name}"))
+                let func_id = if let Some(func_id) = self
+                    .ctx
+                    .func_map
+                    .get(&crate::name::MangledName::wasi_import(local_name))
                 {
                     func_id.clone()
                 } else {
@@ -2697,7 +2708,7 @@ impl FunctionTranslator<'_, '_> {
                         // Look up the pre-registered import function
                         self.ctx
                             .func_map
-                            .get(&format!("wasi/{local_name}"))
+                            .get(&crate::name::MangledName::wasi_import(local_name))
                             .cloned()
                             .unwrap_or_else(|| {
                                 // No pre-registered import; fall back to ensure_canonical

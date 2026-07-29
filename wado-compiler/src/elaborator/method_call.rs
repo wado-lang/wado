@@ -4,7 +4,7 @@ use super::trait_env::ImplTargetKey;
 use crate::ast::{self, AstId, Item};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirExpr, TirExprKind, TypeId,
     TypeTable,
@@ -15,7 +15,7 @@ use super::Elaborator;
 use super::callee::StaticMethodRef;
 use super::method_lookup::MethodInferenceInput;
 use super::reflect::ScalarReflectSpec;
-use super::types::{FunctionContext, MethodInfo, TypeError};
+use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 
 /// Inputs to [`Elaborator::resolve_method_call_with`], the TIR-level method-call
 /// dispatcher. The AST-driven [`Elaborator::resolve_method_call`] is a thin
@@ -163,7 +163,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The struct_module is where the struct is defined (and inherent methods live)
         let (struct_name, struct_module) = match self.tysys.type_table.borrow().get(base_type_id) {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => (name.clone(), module_source.clone()),
@@ -256,7 +256,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut trait_name: Option<String> = None;
         let mut trait_impl_module_source: Option<ModuleSource> = None;
         let mut blanket_type_param: Option<String> = None;
-        let mut trait_impl_struct_name: Option<String> = None;
+        let mut trait_impl_struct_name: Option<FqTypeName> = None;
         let mut matched_impl_struct_name: Option<String> = None;
         // `Some` when the ref-priority path below adopts a `&T` / `&mut T` impl,
         // so `base_struct_name` (then `"&"` / `"&mut"`) keys back to its typed
@@ -290,7 +290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && !trait_match.is_blanket_ref_impl
                 {
                     matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
-                    trait_impl_struct_name = Some(trait_match.impl_struct_name);
+                    trait_impl_struct_name = Some(trait_match.impl_struct_fq);
                     matched_ref_kind = Some(ref_kind);
                     trait_name = Some(trait_match.trait_name);
                     let mut info = trait_match.method_info;
@@ -310,7 +310,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Fall back to base type trait methods
         if method_info.is_none()
             && let Some(trait_match) = self.find_trait_method_for_type(
-                &self.impl_target_of(base_type_id, &struct_name),
+                &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
                 method_name,
                 &struct_module,
                 receiver_type_args_for_trait.as_deref(),
@@ -319,7 +319,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
             if trait_match.impl_struct_name != struct_name {
-                trait_impl_struct_name = Some(trait_match.impl_struct_name);
+                trait_impl_struct_name = Some(trait_match.impl_struct_fq);
             }
             trait_name = Some(trait_match.trait_name);
             method_info = Some(trait_match.method_info);
@@ -397,7 +397,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_kind,
             param_types,
             param_is_mut: _,
-            inherited_from_base,
+            owner,
             cm_name,
             is_ref_impl,
             method_type_param_ids: _,
@@ -423,7 +423,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self_kind: ast::SelfKind::Ref,
                 param_types: vec![],
                 param_is_mut: vec![],
-                inherited_from_base: None,
+                owner: MethodOwner::Receiver,
                 cm_name: None,
                 is_ref_impl: false,
                 method_type_param_ids: vec![],
@@ -557,7 +557,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Type check method arguments against expected parameter types (newtype-aware)
         // If method was inherited from a newtype's base type, substitute base->newtype in params
-        let expected_param_types: Vec<TypeId> = if let Some(base_type_id) = inherited_from_base {
+        let expected_param_types: Vec<TypeId> = if let Some(base_type_id) = owner.inherited() {
             // Get the newtype that the method is being called on
             let newtype_id = self.tysys.get_base_type(receiver.type_id);
             // Substitute base type with newtype in all parameter types
@@ -626,7 +626,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Substitute return type for inherited newtype methods
         // e.g., Point::clone_point() -> Point becomes Location::clone_point() -> Location
-        if let Some(base_type_id) = inherited_from_base {
+        if let Some(base_type_id) = owner.inherited() {
             let newtype_id = self.tysys.get_base_type(receiver.type_id);
             return_type =
                 self.tysys
@@ -817,7 +817,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Get struct name and monomorph info from base type for mangled method name.
         // For inherited methods (Newtype/Flags), use the actual implementation type's name,
         // since the function is defined on the base type (e.g., Point::sum, not Location::sum).
-        let method_impl_type_id = inherited_from_base.unwrap_or(base_type_id);
+        let method_impl_type_id = owner.declaring(base_type_id);
         let (
             mut receiver_struct_name,
             mut base_struct_name,
@@ -831,68 +831,73 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .clone()
         {
             ResolvedType::GenericInstance {
-                name, type_args, ..
+                name,
+                type_args,
+                module_source,
             }
             | ResolvedType::GenericResource {
-                name, type_args, ..
+                name,
+                type_args,
+                module_source,
             } => {
-                // Qualify the arguments so a concrete-generic impl's method
-                // name matches its definition (issue #1348).
-                let type_arg_names: Vec<String> = type_args
+                // Qualify the base and the arguments alike, so a concrete-generic
+                // impl's method name matches its definition (issue #1348).
+                let type_arg_names: Vec<FqTypeName> = type_args
                     .iter()
-                    .map(|t| {
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .mangle_type_arg_for_generic(*t)
-                    })
+                    .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                     .collect();
-                let mangled = mangle_generic_name(&name, &type_arg_names);
-                (mangled, name, type_arg_names, Some(type_args))
+                let base = FqTypeName::declared(&module_source, &name);
+                let mangled = base.clone().with_args(type_arg_names.clone());
+                (mangled, base, type_arg_names, Some(type_args))
             }
             // The raw GC array splits like a generic instance: the receiver
             // name is the full `Array<T>` spelling, but the method-owner base
             // name is "Array" (matching `impl Array<T>`'s registration).
             ResolvedType::BuiltinArray(elem) => {
-                let arg_name = self.tysys.type_table.borrow().mangle_type_name(elem);
-                let mangled = crate::name::mangle_builtin_array_type(&arg_name);
-                (
-                    mangled,
-                    TypeTable::ARRAY_TYPE_NAME.to_string(),
-                    vec![arg_name],
-                    Some(vec![elem]),
-                )
+                let arg_name = self.tysys.type_table.borrow().fq_type_name(elem);
+                let base = self.qualified_receiver_name(TypeTable::ARRAY_TYPE_NAME);
+                let mangled = base.clone().with_args(vec![arg_name.clone()]);
+                (mangled, base, vec![arg_name], Some(vec![elem]))
             }
-            ResolvedType::Newtype { name, .. }
-                if matched_impl_struct_name.as_deref() == Some(name.as_str()) =>
-            {
-                (name.clone(), name, vec![], None)
+            // Named by its declaring module: a bare head names no definition,
+            // and re-resolution would peel past the impl to the base.
+            ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            } if matched_impl_struct_name.as_deref() == Some(name.as_str()) => {
+                let base = FqTypeName::declared(&module_source, &name);
+                (base.clone(), base, vec![], None)
             }
-            ResolvedType::Newtype { name, .. } if name.contains('<') => {
+            // A generic newtype's stored `name` is the display form, baking
+            // arguments into the head (`MyArray<i32>`); split it there.
+            ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            } if name.contains('<') => {
                 let type_args = {
                     let tt = self.tysys.type_table.borrow();
                     let ultimate = tt.get_ultimate_base_type(method_impl_type_id);
                     tt.generic_type_args(ultimate).unwrap_or_default()
                 };
-                let head = crate::name::split_base_name(&name).to_string();
-                let type_arg_names: Vec<String> = type_args
+                let head =
+                    FqTypeName::declared(&module_source, crate::name::split_base_name(&name));
+                let type_arg_names: Vec<FqTypeName> = type_args
                     .iter()
-                    .map(|t| {
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .mangle_type_arg_for_generic(*t)
-                    })
+                    .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                     .collect();
-                (name, head, type_arg_names, Some(type_args))
+                let mangled = head.clone().with_args(type_arg_names.clone());
+                (mangled, head, type_arg_names, Some(type_args))
             }
             _ => {
                 let name = self
                     .tysys
                     .type_table
                     .borrow()
-                    .mangle_type_name(method_impl_type_id);
-                (name.clone(), name, vec![], None)
+                    .fq_type_name(method_impl_type_id);
+                let head = name.head_only();
+                (name, head, vec![], None)
             }
         };
 
@@ -937,8 +942,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // For blanket impls, the template function uses the type param name (e.g., "I").
             // The call site uses the concrete receiver (e.g., "ListIter<i32>").
             // monomorph_info maps from the concrete name back to the template.
-            let generic_name =
-                MethodName::format_local(blanket_param, trait_name.as_deref(), method_name);
+            let generic_name = MethodName::format_local(
+                &FqTypeName::binder(blanket_param),
+                trait_name.as_deref(),
+                method_name,
+            );
             Some(MonomorphInfo {
                 generic_name,
                 impl_type_args: vec![base_type_id],
@@ -977,7 +985,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let base_target = match matched_ref_kind {
             Some(kind) => ImplTargetKey::Ref(kind),
-            None => self.impl_target_of(base_type_id, &base_struct_name),
+            // `impl_target_of` falls back on a written name, so hand it the
+            // declaration name rather than the module-qualified head.
+            None => self.impl_target_of(base_type_id, &base_struct_name.decl_name()),
         };
         let param_is_mut = self.lookup_method_param_is_mut(&base_target, method_name);
         let mut method_info =
@@ -1003,7 +1013,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // that so cross-module inherent impls resolve.
             .or_else(|| inherent_impl_module.clone())
             .or_else(|| {
-                inherited_from_base.and_then(|base_id| {
+                owner.inherited().and_then(|base_id| {
                     match self.tysys.type_table.borrow().get(base_id) {
                         ResolvedType::Struct { module_source, .. }
                         | ResolvedType::GenericInstance { module_source, .. }
@@ -1028,9 +1038,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Synthetic call sites (e.g. for-of's `.into_iter()` / `.next()`) pass
         // `method_id == None` so no edge is recorded — the call has no
         // source-level method name to navigate from.
+        // The impl-header scan compares against the name the header writes, so
+        // it needs the declaration name — read off the receiver's resolved type,
+        // never split out of the mangled head, which carries the declaring
+        // module and matches no header.
+        let receiver_key = self
+            .tysys
+            .type_table
+            .borrow()
+            .impl_receiver_key(method_impl_type_id);
+        let receiver_decl_name = receiver_key.decl_key().into_string();
         if let Some(method_id) = method_id
-            && let Some(method_ast_id) =
-                self.find_impl_method_ast_id(&method_module_source, &base_struct_name, method_name)
+            && let Some(method_ast_id) = self.find_impl_method_ast_id(
+                &method_module_source,
+                &receiver_decl_name,
+                method_name,
+            )
         {
             self.record_reference_to_def(method_id, method_ast_id);
         }
@@ -1131,6 +1154,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Resolve the target type first to get struct name for parameter type lookup
         let target_type_id = self.resolve_type(&static_call.target_type);
+
+        // `Tag::<Point>::tag()` where `Tag` is a trait resolves to no type;
+        // unreported it types `unknown` and lowering builds an invalid module.
+        if target_type_id == TypeTable::UNKNOWN
+            && let ast::Type::Generic(g) = &static_call.target_type
+            && self.tysys.trait_env.find_trait_decl_key(&g.name).is_some()
+        {
+            let _ = self.emit(TypeError::UnknownFunction {
+                name: format!("{}::{}", g.name, static_call.method),
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        }
 
         // Extract struct name AND canonical decl key for parameter type
         // lookup (follow newtypes to base). The canonical key disambiguates
@@ -1515,182 +1551,198 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let (struct_name, struct_module, mangled_struct_name, struct_type_args) =
-            match self.tysys.type_table.borrow().get(target_type_id) {
-                ResolvedType::Struct {
-                    name,
-                    module_source,
-                    ..
-                } => (name.clone(), module_source.clone(), name.clone(), vec![]),
-                ResolvedType::Resource {
-                    name,
-                    module_source,
-                } => (name.clone(), module_source.clone(), name.clone(), vec![]),
-                // Generic resource types (Future<T>, Stream<T>, etc.) - handle like generic structs
-                // for static method resolution: use the base name and type args for substitution.
-                ResolvedType::GenericResource {
-                    name,
-                    module_source,
-                    type_args,
-                } => {
-                    let type_arg_names: Vec<String> = type_args
-                        .iter()
-                        .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
-                        .collect();
-                    let mangled = mangle_generic_name(name, &type_arg_names);
-                    (
-                        name.clone(),
-                        module_source.clone(),
-                        mangled,
-                        type_args.clone(),
-                    )
-                }
-                ResolvedType::Primitive(prim) => {
-                    let name = prim.as_str().to_string();
-                    (name.clone(), ModuleSource::primitive(), name, vec![])
-                }
-                ResolvedType::BuiltinArray(elem) => {
-                    let elem = *elem;
-                    let arg_name = self.tysys.type_table.borrow().mangle_type_name(elem);
-                    let mangled = crate::name::mangle_builtin_array_type(&arg_name);
-                    (
-                        TypeTable::ARRAY_TYPE_NAME.to_string(),
-                        ModuleSource::array(),
-                        mangled,
-                        vec![elem],
-                    )
-                }
-                ResolvedType::Enum {
-                    name,
-                    module_source,
-                } => (name.clone(), module_source.clone(), name.clone(), vec![]),
-                ResolvedType::Variant {
-                    name,
-                    module_source,
-                } => (name.clone(), module_source.clone(), name.clone(), vec![]),
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                } => {
-                    // Build mangled name for generic type: List<i32>
-                    let type_arg_names: Vec<String> = type_args
-                        .iter()
-                        .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
-                        .collect();
-                    let mangled = mangle_generic_name(name, &type_arg_names);
-                    (
-                        name.clone(),
-                        module_source.clone(),
-                        mangled,
-                        type_args.clone(),
-                    )
-                }
-                ResolvedType::Newtype {
-                    name,
-                    module_source,
-                    base_type,
-                } => {
-                    // First try the newtype's own name (for methods defined via `impl NewtypeName`)
-                    let newtype_name = name.clone();
-                    let newtype_module = module_source.clone();
+        let (struct_name, struct_module, mangled_struct_name, struct_type_args) = match self
+            .tysys
+            .type_table
+            .borrow()
+            .get(target_type_id)
+        {
+            ResolvedType::Struct {
+                decl_name: name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Resource {
+                name,
+                module_source,
+            } => (
+                name.clone(),
+                module_source.clone(),
+                FqTypeName::declared(module_source, name),
+                vec![],
+            ),
+            // Generic resource types (Future<T>, Stream<T>, etc.) - handle like generic structs
+            // for static method resolution: use the base name and type args for substitution.
+            ResolvedType::GenericResource {
+                name,
+                module_source,
+                type_args,
+            } => {
+                let type_arg_names: Vec<FqTypeName> = type_args
+                    .iter()
+                    .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
+                    .collect();
+                let mangled = FqTypeName::declared(module_source, name).with_args(type_arg_names);
+                (
+                    name.clone(),
+                    module_source.clone(),
+                    mangled,
+                    type_args.clone(),
+                )
+            }
+            ResolvedType::Primitive(prim) => (
+                prim.as_str().to_string(),
+                ModuleSource::primitive(),
+                FqTypeName::builtin(prim.as_str()),
+                vec![],
+            ),
+            ResolvedType::BuiltinArray(elem) => {
+                let elem = *elem;
+                let arg = self.tysys.type_table.borrow().fq_type_name(elem);
+                (
+                    TypeTable::ARRAY_TYPE_NAME.to_string(),
+                    ModuleSource::array(),
+                    FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME).with_args(vec![arg]),
+                    vec![elem],
+                )
+            }
+            ResolvedType::Enum {
+                name,
+                module_source,
+            }
+            | ResolvedType::Variant {
+                name,
+                module_source,
+            } => (
+                name.clone(),
+                module_source.clone(),
+                FqTypeName::declared(module_source, name),
+                vec![],
+            ),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                let args: Vec<FqTypeName> = type_args
+                    .iter()
+                    .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
+                    .collect();
+                (
+                    name.clone(),
+                    module_source.clone(),
+                    FqTypeName::declared(module_source, name).with_args(args),
+                    type_args.clone(),
+                )
+            }
+            ResolvedType::Newtype {
+                name,
+                module_source,
+                base_type,
+            } => {
+                // First try the newtype's own name (for methods defined via `impl NewtypeName`)
+                let newtype_name = name.clone();
+                let newtype_module = module_source.clone();
 
-                    // Check if the newtype itself has the static method
-                    if self.has_static_method_direct(&newtype_name, &static_call.method) {
-                        (newtype_name.clone(), newtype_module, newtype_name, vec![])
-                    } else {
-                        // Fall back to the base type for inherited methods
-                        match self.tysys.type_table.borrow().get(*base_type).clone() {
-                            ResolvedType::Struct {
-                                name,
-                                module_source,
-                                ..
-                            } => (name.clone(), module_source, name, vec![]),
-                            ResolvedType::GenericInstance {
-                                name,
-                                module_source,
-                                type_args,
-                            } => {
-                                let type_arg_names: Vec<String> = type_args
-                                    .iter()
-                                    .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
-                                    .collect();
-                                let mangled = mangle_generic_name(&name, &type_arg_names);
-                                (name, module_source, mangled, type_args)
-                            }
-                            ResolvedType::Newtype {
-                                base_type: inner_base,
-                                ..
-                            } => {
-                                let mut current = inner_base;
-                                loop {
-                                    match self.tysys.type_table.borrow().get(current).clone() {
-                                        ResolvedType::Struct {
-                                            name,
-                                            module_source,
-                                            ..
-                                        } => {
-                                            break (name.clone(), module_source, name, vec![]);
-                                        }
-                                        ResolvedType::Newtype {
-                                            base_type: next, ..
-                                        } => current = next,
-                                        _ => {
-                                            break (
-                                                newtype_name.clone(),
-                                                newtype_module,
-                                                newtype_name,
-                                                vec![],
-                                            );
-                                        }
+                // Check if the newtype itself has the static method
+                if self.has_static_method_direct(&newtype_name, &static_call.method) {
+                    let fq = FqTypeName::declared(&newtype_module, &newtype_name);
+                    (newtype_name, newtype_module, fq, vec![])
+                } else {
+                    // Fall back to the base type for inherited methods
+                    match self.tysys.type_table.borrow().get(*base_type).clone() {
+                        ResolvedType::Struct {
+                            decl_name: name,
+                            module_source,
+                            ..
+                        } => {
+                            let fq = FqTypeName::declared(&module_source, &name);
+                            (name, module_source, fq, vec![])
+                        }
+                        ResolvedType::GenericInstance {
+                            name,
+                            module_source,
+                            type_args,
+                        } => {
+                            let args: Vec<FqTypeName> = type_args
+                                .iter()
+                                .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
+                                .collect();
+                            let fq = FqTypeName::declared(&module_source, &name).with_args(args);
+                            (name, module_source, fq, type_args)
+                        }
+                        ResolvedType::Newtype {
+                            base_type: inner_base,
+                            ..
+                        } => {
+                            let mut current = inner_base;
+                            loop {
+                                match self.tysys.type_table.borrow().get(current).clone() {
+                                    ResolvedType::Struct {
+                                        decl_name: name,
+                                        module_source,
+                                        ..
+                                    } => {
+                                        let fq = FqTypeName::declared(&module_source, &name);
+                                        break (name, module_source, fq, vec![]);
+                                    }
+                                    ResolvedType::Newtype {
+                                        base_type: next, ..
+                                    } => current = next,
+                                    _ => {
+                                        let fq =
+                                            FqTypeName::declared(&newtype_module, &newtype_name);
+                                        break (newtype_name, newtype_module, fq, vec![]);
                                     }
                                 }
                             }
-                            ResolvedType::Primitive(prim) => {
-                                let prim_name = prim.as_str().to_string();
-                                (
-                                    prim_name.clone(),
-                                    ModuleSource::primitive(),
-                                    prim_name,
-                                    vec![],
-                                )
-                            }
-                            _ => (newtype_name.clone(), newtype_module, newtype_name, vec![]),
+                        }
+                        ResolvedType::Primitive(prim) => (
+                            prim.as_str().to_string(),
+                            ModuleSource::primitive(),
+                            FqTypeName::builtin(prim.as_str()),
+                            vec![],
+                        ),
+                        _ => {
+                            let fq = FqTypeName::declared(&newtype_module, &newtype_name);
+                            (newtype_name, newtype_module, fq, vec![])
                         }
                     }
                 }
-                ResolvedType::Flags {
-                    name,
-                    module_source,
-                } => {
-                    // First try the flags' own name, then fall back to u32
-                    let flags_name = name.clone();
-                    let flags_module = module_source.clone();
-                    if self.has_static_method_direct(&flags_name, &static_call.method) {
-                        (flags_name.clone(), flags_module, flags_name, vec![])
-                    } else {
-                        (
-                            "u32".to_string(),
-                            ModuleSource::primitive(),
-                            "u32".to_string(),
-                            vec![],
-                        )
-                    }
+            }
+            ResolvedType::Flags {
+                name,
+                module_source,
+            } => {
+                // First try the flags' own name, then fall back to u32
+                let flags_name = name.clone();
+                let flags_module = module_source.clone();
+                if self.has_static_method_direct(&flags_name, &static_call.method) {
+                    let fq = FqTypeName::declared(&flags_module, &flags_name);
+                    (flags_name, flags_module, fq, vec![])
+                } else {
+                    (
+                        "u32".to_string(),
+                        ModuleSource::primitive(),
+                        FqTypeName::builtin("u32"),
+                        vec![],
+                    )
                 }
-                // The target names no struct-like type: a trait, an undeclared
-                // name, a turbofish on a non-generic.
-                _ => {
-                    let _ = self.emit(TypeError::UnknownFunction {
-                        name: format!(
-                            "{}::{}",
-                            super::trait_env::get_type_name_static(&static_call.target_type),
-                            static_call.method
-                        ),
-                        span: static_call.span,
-                    });
-                    return TypeTable::ERROR;
-                }
-            };
+            }
+            // The target names no struct-like type: a trait, an undeclared
+            // name, a turbofish on a non-generic.
+            _ => {
+                let _ = self.emit(TypeError::UnknownFunction {
+                    name: format!(
+                        "{}::{}",
+                        super::trait_env::get_type_name_static(&static_call.target_type),
+                        static_call.method
+                    ),
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
+            }
+        };
 
         // Find trait name: if the static method belongs to a trait impl, include the
         // trait name in the mangled function name so WIR can resolve it correctly.
@@ -1725,6 +1777,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut return_type =
             self.lookup_static_method_return_type(&method_ref, &mangled_func_name);
 
+        // A value blanket indexes statics under its receiver *param* name, so
+        // the concrete receiver's own bucket misses.
+        if return_type == TypeTable::UNKNOWN
+            && let Some(resolved) = self.resolve_blanket_static_method(
+                target_type_id,
+                &static_call.method,
+                static_call.id,
+                &method_type_args,
+                &static_method_defaults,
+            )
+        {
+            return resolved;
+        }
+
         // Emit a compile error if the static method was not found anywhere
         if return_type == TypeTable::UNKNOWN {
             let _ = self.emit(TypeError::UnknownFunction {
@@ -1755,7 +1821,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None
         } else {
             let generic_name = MethodName::format_local(
-                &struct_name,
+                &self.qualified_receiver_name(&struct_name),
                 trait_name_opt.as_deref(),
                 &static_call.method,
             );
@@ -1771,9 +1837,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
             .collect();
-        let impl_only_type_arg_names: Vec<String> = struct_type_args
+        let impl_only_type_arg_names: Vec<FqTypeName> = struct_type_args
             .iter()
-            .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+            .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
             .collect();
 
         let param_is_mut = struct_name_for_lookup
@@ -1783,7 +1849,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Build method_info with base struct name and trait name (if applicable)
         let mut method_info = LocalMethodName::new(
-            struct_name.clone(),
+            self.qualified_receiver_name(&struct_name),
             trait_name_opt,
             static_call.method.clone(),
         )
@@ -1833,6 +1899,132 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         return_type
     }
 
+    /// Resolve a `static` trait method reached through a value blanket impl
+    /// (`impl<T: Bound> Trait for T`). The blanket has no per-type home, so its
+    /// statics are indexed under the receiver param name (`T`) and the concrete
+    /// receiver's bucket never sees them. Select the blanket whose bounds the
+    /// receiver satisfies and dispatch to its template, the way an instance
+    /// method reached through the same impl already does.
+    pub(super) fn resolve_blanket_static_method(
+        &mut self,
+        receiver_type_id: TypeId,
+        method: &str,
+        call_id: AstId,
+        method_type_args: &[TypeId],
+        static_method_defaults: &[(String, Option<ast::Expr>)],
+    ) -> Option<TypeId> {
+        let (trait_name, blanket_param, blanket_module) =
+            self.find_blanket_static_method(receiver_type_id, method)?;
+
+        let template_name = MethodName::format_local(
+            &FqTypeName::binder(&blanket_param),
+            Some(&trait_name),
+            method,
+        );
+        let method_ref = StaticMethodRef::new(
+            blanket_module.clone(),
+            blanket_param.clone(),
+            method.to_string(),
+            Some(trait_name.clone()),
+        );
+        let template_return = self.lookup_static_method_return_type(&method_ref, &template_name);
+        if template_return == TypeTable::UNKNOWN {
+            return None;
+        }
+        // The template is written against the blanket param, so `-> Self` /
+        // `-> T` lands on the receiver at the call site.
+        let return_type = SubstitutionContext::new()
+            .with_impl_args(&[receiver_type_id])
+            .substitute(template_return, &mut self.tysys.type_table.borrow_mut());
+
+        let receiver_arg_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .fq_type_name(receiver_type_id);
+        let method_type_arg_names: Vec<String> = method_type_args
+            .iter()
+            .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+            .collect();
+        let method_info = LocalMethodName::new(
+            self.tysys.fq_receiver_head(receiver_type_id),
+            Some(trait_name.clone()),
+            method.to_string(),
+        )
+        .with_type_args(&[receiver_arg_name], &method_type_arg_names);
+
+        let func_ref = FunctionRef {
+            module_source: blanket_module,
+            name: method_info.to_mangled_name(),
+            monomorph_info: Some(MonomorphInfo {
+                generic_name: template_name,
+                impl_type_args: vec![receiver_type_id],
+                method_type_args: method_type_args.to_vec(),
+                is_blanket: true,
+            }),
+            method_info: Some(method_info),
+        };
+        self.sem.types.static_method_dispatch.insert(
+            call_id,
+            super::sem::types::StaticMethodDispatch {
+                function_ref: func_ref,
+                param_is_mut: Vec::new(),
+                type_args: method_type_args.to_vec(),
+                param_defaults: static_method_defaults.to_vec(),
+            },
+        );
+
+        Some(return_type)
+    }
+
+    /// The value blanket impl carrying a static `method_name` whose receiver
+    /// bounds `receiver_type_id` satisfies, as `(trait, receiver param, module)`.
+    fn find_blanket_static_method(
+        &mut self,
+        receiver_type_id: TypeId,
+        method_name: &str,
+    ) -> Option<(String, String, ModuleSource)> {
+        let candidates: Vec<(String, String, ModuleSource, Vec<String>)> = self
+            .tysys
+            .trait_env
+            .blanket_impls
+            .iter()
+            .flat_map(|(trait_name, impls)| impls.iter().map(move |b| (trait_name, b)))
+            .filter(|(_, b)| b.receiver == super::trait_env::BlanketReceiver::Value)
+            // Reading the impl header instead would also match an instance
+            // method of the same name.
+            .filter(|(_, b)| {
+                self.tysys
+                    .trait_env
+                    .static_method_index
+                    .get(&(b.module.clone(), b.param.clone()))
+                    .is_some_and(|entries| entries.iter().any(|e| e.name == method_name))
+            })
+            .map(|(trait_name, b)| {
+                (
+                    trait_name.clone(),
+                    b.param.clone(),
+                    b.module.clone(),
+                    b.bounds.clone(),
+                )
+            })
+            .collect();
+
+        candidates
+            .into_iter()
+            .find(|(_, _, _, bounds)| {
+                bounds.iter().all(|bound| {
+                    self.tysys.type_implements_trait(
+                        &self.annotate_ctx,
+                        &self.type_lookup(),
+                        receiver_type_id,
+                        bound,
+                    )
+                })
+            })
+            .map(|(trait_name, param, module, _)| (trait_name, param, module))
+    }
+
     /// Look up `#[cm("...")]` for a static (no-self) method on a resource type in a module.
     fn lookup_resource_static_cm(
         &self,
@@ -1856,14 +2048,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Check if a static method exists directly for a given type name (no newtype fallback).
     fn has_static_method_direct(&self, struct_name: &str, method_name: &str) -> bool {
-        let mangled = MethodName::format_local(struct_name, None, method_name);
+        let qualified = self.qualified_receiver_name(struct_name);
+        let mangled = MethodName::format_local(&qualified, None, method_name);
         if self.sem.decls.function_return_types.contains_key(&mangled) {
             return true;
         }
         // Also check with trait-qualified name
         if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name) {
             let trait_mangled =
-                MethodName::format_local(struct_name, Some(&trait_name), method_name);
+                MethodName::format_local(&qualified, Some(&trait_name), method_name);
             if self
                 .sem
                 .decls
@@ -1927,15 +2120,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Also try with just StructName::method (for non-generic types)
-        let simple_name = MethodName::format_local(struct_name, None, method_name);
+        let simple_name = MethodName::format_local(
+            &self.qualified_receiver_name(struct_name),
+            None,
+            method_name,
+        );
         if let Some(&return_type) = self.sem.decls.function_return_types.get(&simple_name) {
             return return_type;
         }
 
         // Try with trait-qualified name (StructName^TraitName::method)
         if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name) {
-            let trait_mangled =
-                MethodName::format_local(struct_name, Some(&trait_name), method_name);
+            let trait_mangled = MethodName::format_local(
+                &self.qualified_receiver_name(struct_name),
+                Some(&trait_name),
+                method_name,
+            );
             if let Some(&return_type) = self.sem.decls.function_return_types.get(&trait_mangled) {
                 return return_type;
             }
@@ -2251,7 +2451,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             loop {
                 match self.tysys.type_table.borrow().get(current_type).clone() {
                     ResolvedType::Struct {
-                        name,
+                        decl_name: name,
                         module_source,
                         ..
                     }
@@ -2621,7 +2821,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Get the operator trait and method name for a binary operator.
     pub(super) fn is_static_method(&self, struct_name: &str, method_name: &str) -> bool {
-        let mangled_name = MethodName::format_local(struct_name, None, method_name);
+        let mangled_name = MethodName::format_local(
+            &self.qualified_receiver_name(struct_name),
+            None,
+            method_name,
+        );
 
         // Check if it's registered in function_return_types (static methods are registered there)
         if self
@@ -2724,7 +2928,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         method_name: &str,
-        mangled_func_name: &str,
         args: &[TirExpr],
         impl_type_args: &[TypeId],
         method_type_args: &[TypeId],
@@ -2739,22 +2942,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // is keyed by the *original* `Counter`, not the local alias.
         // The other lookups below still consume `struct_name` as-is and
         // canonicalise internally via `Elaborator::canonical_decl_key`.
-        let canonical_struct_name = self.canonical_decl_key(struct_name).1;
-        let mangled_func_name_owned = if canonical_struct_name == struct_name {
-            mangled_func_name.to_string()
-        } else {
-            MethodName::format_local(&canonical_struct_name, None, method_name)
-        };
+        // Rebuilt from the canonical key, not the local alias.
+        let qualified_struct_name = self.qualified_receiver_name(struct_name);
+        let mangled_func_name_owned =
+            MethodName::format_local(&qualified_struct_name, None, method_name);
         let mangled_func_name = mangled_func_name_owned.as_str();
         // For newtypes, check if the newtype itself has the method first,
         // then fall back to the base type's static method
         let mut newtype_dispatch: Option<(TypeId, TypeId, Vec<TypeId>)> = None;
-        let (actual_struct_name, actual_mangled_name) = if let Some(newtype_id) =
+        // The written name keys the impl indices; the fq form names the method.
+        let (actual_struct_name, actual_struct_fq, actual_mangled_name) = if let Some(newtype_id) =
             self.lookup_newtype(struct_name)
         {
             // First check if the newtype itself has this static method
             if self.has_static_method_direct(struct_name, method_name) {
-                (struct_name.to_string(), mangled_func_name.to_string())
+                (
+                    struct_name.to_string(),
+                    qualified_struct_name.clone(),
+                    mangled_func_name.to_string(),
+                )
             } else {
                 let base_type_id = match self.tysys.type_table.borrow().get(newtype_id).clone() {
                     ResolvedType::Newtype { .. } => Some(
@@ -2779,17 +2985,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         _ => vec![],
                     };
                     newtype_dispatch = Some((newtype_id, base_type_id, base_args));
-                    let mangled = MethodName::format_local(&base_name, None, method_name);
-                    (base_name, mangled)
+                    let base_fq = self.tysys.fq_receiver_head(base_type_id);
+                    let mangled = MethodName::format_local(&base_fq, None, method_name);
+                    (base_name, base_fq, mangled)
                 } else if let Some(base_name) = base_name {
-                    let mangled = MethodName::format_local(&base_name, None, method_name);
-                    (base_name, mangled)
+                    let base_fq = self.qualified_receiver_name(&base_name);
+                    let mangled = MethodName::format_local(&base_fq, None, method_name);
+                    (base_name, base_fq, mangled)
                 } else {
-                    (struct_name.to_string(), mangled_func_name.to_string())
+                    (
+                        struct_name.to_string(),
+                        qualified_struct_name.clone(),
+                        mangled_func_name.to_string(),
+                    )
                 }
             }
         } else {
-            (struct_name.to_string(), mangled_func_name.to_string())
+            (
+                struct_name.to_string(),
+                qualified_struct_name.clone(),
+                mangled_func_name.to_string(),
+            )
         };
 
         let impl_type_args_owned: Vec<TypeId> = match &newtype_dispatch {
@@ -2826,7 +3042,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Use trait-qualified mangled name if this is a trait method
         let final_mangled_name = if let Some(ref trait_name) = method_ref.trait_name {
-            MethodName::format_local(&actual_struct_name, Some(trait_name), method_name)
+            MethodName::format_local(&actual_struct_fq, Some(trait_name), method_name)
         } else {
             actual_mangled_name
         };
@@ -2884,11 +3100,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: final_mangled_name,
             monomorph_info,
             method_info: Some({
-                let mut m = LocalMethodName::new(
-                    actual_struct_name,
-                    trait_name_opt,
-                    method_name.to_string(),
-                );
+                let mut m =
+                    LocalMethodName::new(actual_struct_fq, trait_name_opt, method_name.to_string());
                 m.cm_name = cm_name;
                 m
             }),

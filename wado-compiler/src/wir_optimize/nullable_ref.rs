@@ -438,6 +438,25 @@ fn transform_instr(
                 *instr = WirInstr::RefAsNonNull(inner);
                 return;
             }
+            // A discriminant read that is not part of an `== N` comparison —
+            // the reflection helpers (`$variant_tag$`, `$case_extract$`'s
+            // guard) materialise the tag itself and compare it later, against
+            // a local. There is no discriminant field to read, so compute the
+            // tag from the null check.
+            if field_name == crate::name::VARIANT_DISCRIMINANT_FIELD
+                && let Some(&(payload_case, _)) = nullable_map.get(&type_id.index())
+            {
+                transform_instr(expr, types, vci, nullable_map);
+                let inner = std::mem::replace(expr, Box::new(WirInstr::Nop));
+                let is_null = WirInstr::RefIsNull(inner);
+                *instr = if payload_case == 0 {
+                    // The payload case is tag 0, so null is the other case: 1.
+                    is_null
+                } else {
+                    WirInstr::I32Eqz(Box::new(is_null))
+                };
+                return;
+            }
             transform_instr(expr, types, vci, nullable_map);
             // Update result_ty to reflect the field's current type after substitution.
             if let Some(WirTypeDef::Struct(st)) = types.get(type_id.index() as usize)

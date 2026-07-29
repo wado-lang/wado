@@ -50,7 +50,7 @@ use crate::ast::{self, Item, Module};
 use crate::compiler_host::CompilerHost;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{self as name, MethodName, Receiver, RefKind};
+use crate::name::{self as name, Receiver, RefKind};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::tir::{self as tir, TypeId, TypeTable};
 
@@ -842,6 +842,30 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.handler_bindings.insert(key, info);
     }
 
+    /// The fq name of an impl receiver written as `written`.
+    ///
+    /// An fq name names its subject by the module that declares it, so a
+    /// declared type is qualified through the same canonical key the impl
+    /// index uses. A type parameter is a template's own binder and a
+    /// builtin shape has no declaring module in any mangle, so both stay bare
+    /// — matching what `TypeTable::mangle_type_arg_for_generic` produces for
+    /// the same type on the consuming side.
+    pub(super) fn qualified_receiver_name(&self, written: &str) -> crate::name::FqTypeName {
+        if self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .contains_key(written)
+        {
+            return crate::name::FqTypeName::binder(written);
+        }
+        if crate::name::is_builtin_shape_name(written) {
+            return crate::name::FqTypeName::builtin(written);
+        }
+        let (module, name) = self.canonical_decl_key(written);
+        crate::name::FqTypeName::of_head(&module, &name)
+    }
+
     /// Record the impl-block resolution facts (Gap 12 of Stage 5)
     /// keyed by the [`crate::ast::ImplBlock`]'s [`AstId`]. Reify
     /// reads the entry verbatim — no re-resolution of the impl
@@ -925,10 +949,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
             return;
         }
+        let receiver = Receiver::Type(self.tysys.fq_receiver_head(target_type_id));
         if self.tysys.has_real_trait_impl_for_type(
             &self.annotate_ctx,
             &self.type_lookup(),
-            &Receiver::Type(target_type_name.to_string()),
+            &receiver,
             trait_name,
         ) {
             return;
@@ -1247,11 +1272,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(crate) fn impl_target_of(
         &self,
         type_id: tir::TypeId,
-        fallback_name: &str,
+        fallback_name: &crate::name::DeclName,
     ) -> trait_env::ImplTargetKey {
         match self.type_decl_key(type_id) {
             Some(key) => trait_env::ImplTargetKey::Decl(key),
-            None => self.impl_target(fallback_name),
+            None => self.impl_target(fallback_name.as_decl_str()),
         }
     }
 
@@ -1297,7 +1322,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let tt = self.tysys.type_table.borrow();
         match tt.get(tt.peel_refs(type_id)) {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             }
@@ -1351,8 +1376,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         use crate::tir::ResolvedType;
         let mut current = self.tysys.type_table.borrow().peel_refs(type_id);
         loop {
+            // `impl_name` is a receiver name, so it carries its declaring
+            // module. Build the same form from the candidate key rather than
+            // taking `impl_name` apart — a name is assembled, never parsed.
             if let Some(key) = self.type_decl_key(current)
-                && key.1 == impl_name
+                && (key.1 == impl_name
+                    || crate::name::FqTypeName::declared(&key.0, &key.1).to_mangled() == impl_name)
             {
                 return Some(key);
             }
@@ -1624,7 +1653,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for (type_name, const_name, ty, value) in assoc_const_inputs {
             let type_id = self.resolve_type(&ty);
             let (type_module, canon_type_name) = self.canonical_decl_key(&type_name);
-            let canon_key = MethodName::format_local(&canon_type_name, None, &const_name);
+            // An associated-constant key is `Type::CONST` with the module held
+            // as the other half of the map key — not a mangled method name, so
+            // it does not carry the module inside the string.
+            let canon_key = format!("{canon_type_name}::{const_name}");
             self.sem.decls.associated_constants.insert(
                 (type_module, canon_key),
                 (module_source.clone(), type_id, value),
@@ -1885,9 +1917,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),
             );
+            let qualified_struct_name = scope.qualified_receiver_name(&struct_name);
             let receiver = match RefKind::from_ast(&impl_block.ty) {
                 Some(kind) => Receiver::Ref(kind),
-                None => Receiver::Type(struct_name.clone()),
+                None => Receiver::Type(qualified_struct_name.clone()),
             };
             // Concrete type args of the impl's trait reference
             // (`impl Future<i32>` → `[i32]`), resolved in the
@@ -1904,18 +1937,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             // Concrete-impl owner (`impl List<u8>`): the receiver's
             // qualified mangle, matching call sites (issue #1348).
-            let concrete_owner: Option<String> = if scope.impl_is_concrete_instantiation(
-                &impl_block.ty,
-                &impl_block.type_params,
-                &scope.current_module_source,
-            ) {
+            let concrete_owner: Option<crate::name::FqTypeName> = if scope
+                .impl_is_concrete_instantiation(
+                    &impl_block.ty,
+                    &impl_block.type_params,
+                    &scope.current_module_source,
+                ) {
                 let tt = scope.tysys.type_table.borrow();
                 let peeled = tt.peel_refs(self_type);
                 matches!(
                     tt.get(peeled),
                     crate::tir::ResolvedType::GenericInstance { .. }
                 )
-                .then(|| tt.mangle_type_name(peeled))
+                .then(|| tt.fq_type_name(peeled))
             } else {
                 None
             };
@@ -1927,7 +1961,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     trait_type_args,
                     is_handler_method,
                     is_ref_impl,
-                    struct_name: struct_name.clone(),
+                    struct_name: qualified_struct_name,
                     receiver,
                     concrete_owner,
                 },

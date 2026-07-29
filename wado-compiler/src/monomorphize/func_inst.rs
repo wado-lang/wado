@@ -8,7 +8,7 @@ use std::sync::Arc;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp,
     TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern,
@@ -134,51 +134,72 @@ struct SubstitutedCall {
 /// `[T, T::Assoc, …]` while a call site supplies `[T]`, so without this the
 /// queueing and rewrite sides key the same instance differently. A blanket that
 /// projects nothing is returned unchanged.
-pub(super) fn blanket_impl_args_with_projected_packs(
+///
+/// The blanket is selected by the receiver, the same rule the emit side applies
+/// (`synthesis::template::blanket_dispatch_for`): a trait may carry several
+/// disjoint value blankets — the four reflection kinds each derive `Inspect`
+/// over their own `Reflect*` bound — and picking the first-registered one would
+/// ask a variant receiver for a struct's `FieldTypes` and key the instance
+/// under args the template never declared.
+/// The impl args a pack-projecting blanket dispatch instantiates under, or
+/// `None` when this is not one.
+///
+/// One question, asked once: can this receiver supply every pack this blanket
+/// projects? Splitting it — a guard asking the blanket whether it projects
+/// packs, a helper asking the receiver whether it can supply them — let the two
+/// answer differently and key the same instance two ways.
+pub(super) fn blanket_pack_dispatch_args(
     args: &[TypeId],
     trait_env: &TraitEnv,
     trait_name: &str,
     blanket_module: &ModuleSource,
     type_table: &TypeTable,
-) -> Vec<TypeId> {
+) -> Option<Vec<TypeId>> {
+    if args.len() != 1 {
+        return None;
+    }
+    let receiver = args[0];
+    let blanket =
+        trait_env.value_blanket_for_receiver(trait_name, Some(blanket_module), &|bounds| {
+            crate::synthesis::template::receiver_satisfies_blanket_bounds(
+                receiver,
+                bounds.to_vec(),
+                type_table,
+            )
+        })?;
+    let projected = trait_env.pack_assocs_of_blanket(blanket);
+    if projected.is_empty() {
+        return None;
+    }
     let mut out = args.to_vec();
-    if out.len() == 1 {
-        for assoc in trait_env.blanket_projected_pack_assocs(trait_name, Some(blanket_module)) {
-            if let Some(ty) = type_table.resolve_assoc_type(out[0], &assoc) {
-                out.push(ty);
-            }
-        }
+    for (bound_trait, assoc) in projected {
+        out.push(type_table.resolve_trait_assoc_type(receiver, &bound_trait, &assoc)?);
     }
-    out
+    Some(out)
 }
 
-/// Whether `generic_name` is the bare-`T` blanket template for `trait_name` and
-/// that blanket projects type packs. Excludes one-arg blankets and concrete /
-/// shape / ref dispatches, whose `generic_name` is not the param's template.
-pub(super) fn is_pack_blanket_dispatch(
-    trait_env: &TraitEnv,
-    trait_name: &str,
-    method_name: &str,
-    blanket_module: &ModuleSource,
-    generic_name: &str,
-) -> bool {
-    let Some(param) = trait_env.blanket_impl_param_for_trait(trait_name, Some(blanket_module))
-    else {
-        return false;
-    };
-    if generic_name != MethodName::format_local(&param, Some(trait_name), method_name) {
-        return false;
+/// The method type args an instantiation keys on.
+///
+/// A call site's `type_args` are method type args only when the callee declares
+/// method-level type params. After variadic expansion they are filled in by
+/// inferring from argument types, which cannot tell a method type param from an
+/// ordinary parameter — so the callee's declaration decides, and a callee
+/// declaring none has none. Honouring the call site otherwise bakes an argument
+/// type into the instance name that no call site spells.
+fn declared_method_type_args(generic: &TirFunction, type_args: &[TypeId]) -> Vec<TypeId> {
+    if generic.has_real_type_params() {
+        type_args.to_vec()
+    } else {
+        Vec::new()
     }
-    !trait_env
-        .blanket_projected_pack_assocs(trait_name, Some(blanket_module))
-        .is_empty()
 }
 
-/// Whether a blanket impl `impl<T: Bound> Trait for T` may claim the receiver.
-/// The blanket applies only when the receiver satisfies the param's bound
-/// (e.g. a `ReflectStruct`-bound `Inspect` derive must not swallow a token type that
-/// has no `ReflectStruct`). `None` receiver info means the caller cannot vet the
-/// bound and the blanket is allowed as before.
+/// Whether any of `trait_name`'s blanket impls may claim the receiver — the
+/// template name the caller looked up already pins which one. Asking only the
+/// first-registered blanket would reject every receiver of the other kinds when
+/// a trait carries several, as each reflection kind's `Inspect` derive does.
+/// `None` receiver info means the caller cannot vet the bound and the blanket is
+/// allowed as before.
 fn blanket_receiver_satisfies(
     trait_env: &TraitEnv,
     trait_name: &str,
@@ -188,10 +209,15 @@ fn blanket_receiver_satisfies(
     let Some((type_id, type_table)) = blanket_receiver else {
         return true;
     };
-    let bounds = trait_env
-        .blanket_impl_bounds_for_trait(trait_name, Some(blanket_module))
-        .unwrap_or_default();
-    crate::synthesis::template::receiver_satisfies_blanket_bounds(type_id, bounds, type_table)
+    trait_env
+        .value_blanket_for_receiver(trait_name, Some(blanket_module), &|bounds| {
+            crate::synthesis::template::receiver_satisfies_blanket_bounds(
+                type_id,
+                bounds.to_vec(),
+                type_table,
+            )
+        })
+        .is_some()
 }
 
 fn lookup_template_with_trait_fallback<'a, V>(
@@ -400,6 +426,30 @@ impl TirRefVisitor for LocalTypeFinder {
     }
 }
 
+/// Whether `expr` reads local `index` anywhere inside it.
+struct LocalReadFinder {
+    index: u32,
+    found: bool,
+}
+
+impl TirRefVisitor for LocalReadFinder {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if matches!(expr.kind, TirExprKind::Local { index, .. } if index == self.index) {
+            self.found = true;
+        }
+        self.walk_expr(expr);
+    }
+}
+
+fn expr_reads_local(expr: &TirExpr, index: u32) -> bool {
+    let mut finder = LocalReadFinder {
+        index,
+        found: false,
+    };
+    finder.visit_expr(expr);
+    finder.found
+}
+
 /// Fills in inferred method-level `type_args` on `MethodCall` nodes whose type
 /// arguments were left empty (T inferred from a `TypePack` element at resolution
 /// time, only concrete after variadic expansion). Rides the shared mutable walk
@@ -407,8 +457,28 @@ impl TirRefVisitor for LocalTypeFinder {
 /// the hand-enumerated few. Stops at `Closure` boundaries: a closure body is
 /// monomorphized as its own function, so its calls are inferred there, and
 /// (matching the original walker) this pass leaves them alone.
+///
+/// Two conditions gate the inference, and both are needed. The argument must
+/// read the loop binding — that is the one shape the elaborator could not pin,
+/// because the argument's type was a pack element. And the callee must actually
+/// declare a method type param: `f.write_str(&field.name())` reads the binding
+/// too, yet `write_str` takes a plain `&String`, and naming its instance after
+/// an ordinary parameter's type spells a name no call site uses. The callee's
+/// template is the authority on which is which.
 struct MethodTypeArgInferer<'a> {
     type_table: &'a TypeTable,
+    binding_local: u32,
+    templates: &'a IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
+}
+
+impl MethodTypeArgInferer<'_> {
+    /// Whether the callee declares a method-level type param. Only generic
+    /// functions are registered as templates, so a miss is a definite "no".
+    fn callee_is_method_generic(&self, func: &FunctionRef) -> bool {
+        self.templates
+            .get(&(func.module_source.clone(), func.name.clone()))
+            .is_some_and(|t| t.borrow().has_real_type_params())
+    }
 }
 
 impl TirMutVisitor for MethodTypeArgInferer<'_> {
@@ -444,6 +514,12 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
         let Some(first_arg) = args.first() else {
             return;
         };
+        if !expr_reads_local(&first_arg.expr, self.binding_local) {
+            return;
+        }
+        if !self.callee_is_method_generic(func) {
+            return;
+        }
         // Infer T from the first non-self argument's inner type. For
         // `element<T: Serialize>(&mut self, value: &T)` the first arg is `&T`,
         // so unwrap references (and an auto-boxed `Box<T>`) to reach T.
@@ -552,13 +628,13 @@ impl Monomorphizer {
                         || !monomorph.method_type_args.is_empty())
                 {
                     let mut names_to_try = vec![MethodName::format_local(
-                        &info.base_struct_name(),
+                        &info.fq_base_struct_name(),
                         info.trait_name.as_deref(),
                         &info.method_name,
                     )];
-                    if info.struct_name != info.base_struct_name() {
+                    if info.struct_name() != info.base_struct_name() {
                         names_to_try.push(MethodName::format_local(
-                            &info.struct_name,
+                            &info.fq_struct_name(),
                             info.trait_name.as_deref(),
                             &info.method_name,
                         ));
@@ -576,7 +652,7 @@ impl Monomorphizer {
                             &func.module_source,
                             &generic_method_name,
                             Some(info),
-                            &[&info.base_struct_name(), &info.struct_name],
+                            &[&info.base_struct_name(), &info.struct_name()],
                             None,
                             None,
                         ) {
@@ -586,10 +662,10 @@ impl Monomorphizer {
                             // from the struct name if needed.
                             let impl_type_args = if monomorph.impl_type_args.is_empty()
                                 && !generic_func.impl_type_params.is_empty()
-                                && info.struct_name != info.base_struct_name()
+                                && info.struct_name() != info.base_struct_name()
                             {
                                 type_table
-                                    .find_type_args_by_mangled_name(&info.struct_name)
+                                    .find_type_args_by_mangled_name(&info.struct_name())
                                     .unwrap_or_default()
                             } else {
                                 monomorph.impl_type_args.clone()
@@ -598,27 +674,18 @@ impl Monomorphizer {
                                 .base_trait_name
                                 .as_deref()
                                 .or(info.trait_name.as_deref());
-                            let impl_type_args = match blanket_trait {
-                                Some(tn)
-                                    if monomorph.is_blanket
-                                        && is_pack_blanket_dispatch(
-                                            &self.functions.trait_env,
-                                            tn,
-                                            &info.method_name,
-                                            &func.module_source,
-                                            &monomorph.generic_name,
-                                        ) =>
-                                {
-                                    blanket_impl_args_with_projected_packs(
+                            let impl_type_args = blanket_trait
+                                .filter(|_| monomorph.is_blanket)
+                                .and_then(|tn| {
+                                    blanket_pack_dispatch_args(
                                         &impl_type_args,
                                         &self.functions.trait_env,
                                         tn,
                                         &func.module_source,
                                         type_table,
                                     )
-                                }
-                                _ => impl_type_args,
-                            };
+                                })
+                                .unwrap_or(impl_type_args);
                             let method_type_args = monomorph.method_type_args.clone();
                             let total = impl_type_args.len() + method_type_args.len();
                             if total >= generic_func.impl_type_params.len() {
@@ -688,13 +755,13 @@ impl Monomorphizer {
                     }
                 {
                     let mut names_to_try = vec![MethodName::format_local(
-                        &info.base_struct_name(),
+                        &info.fq_base_struct_name(),
                         info.trait_name.as_deref(),
                         &info.method_name,
                     )];
-                    if info.struct_name != info.base_struct_name() {
+                    if info.struct_name() != info.base_struct_name() {
                         names_to_try.push(MethodName::format_local(
-                            &info.struct_name,
+                            &info.fq_struct_name(),
                             info.trait_name.as_deref(),
                             &info.method_name,
                         ));
@@ -709,7 +776,7 @@ impl Monomorphizer {
                             &method_func.module_source,
                             &generic_method_name,
                             Some(info),
-                            &[&info.base_struct_name(), &info.struct_name],
+                            &[&info.base_struct_name(), &info.struct_name()],
                             None,
                             Some((receiver.type_id, type_table)),
                         ) {
@@ -755,7 +822,6 @@ impl Monomorphizer {
                             receiver.type_id,
                             type_table,
                             &method_name,
-                            &struct_name,
                             trait_name_opt.as_deref(),
                         );
 
@@ -786,17 +852,22 @@ impl Monomorphizer {
                                 let method_info =
                                     gf.borrow().method_info.clone().unwrap_or_else(|| {
                                         LocalMethodName::new(
-                                            struct_name.clone(),
+                                            super::dispatch_receiver_name(
+                                                type_table,
+                                                receiver.type_id,
+                                            ),
                                             tn.clone(),
                                             method_name.clone(),
                                         )
                                     });
                                 let template_module = gf.borrow().module_source.clone();
+                                let method_type_args =
+                                    declared_method_type_args(&gf.borrow(), type_args);
                                 let key = InstantiationKey {
                                     name: full_method_name.clone(),
                                     module_source: template_module,
                                     impl_type_args: vec![],
-                                    method_type_args: type_args.clone(),
+                                    method_type_args,
                                     method_info: Some(method_info),
                                 };
                                 let mangled = self.method_instantiation_name(&key, type_table);
@@ -819,15 +890,17 @@ impl Monomorphizer {
                                         .filter(|(_, args)| !args.is_empty())
                                 });
                             if let Some((base_struct, impl_type_args)) = base_info {
+                                let receiver_head =
+                                    super::dispatch_receiver_head(type_table, receiver.type_id);
                                 // Try both inherent and trait method formats
                                 let mut dg_names: Vec<(String, Option<String>)> = vec![(
-                                    MethodName::format_local(&base_struct, None, &method_name),
+                                    MethodName::format_local(&receiver_head, None, &method_name),
                                     None,
                                 )];
                                 if let Some(ref tn) = trait_name_opt {
                                     dg_names.push((
                                         MethodName::format_local(
-                                            &base_struct,
+                                            &receiver_head,
                                             Some(tn),
                                             &method_name,
                                         ),
@@ -839,7 +912,7 @@ impl Monomorphizer {
                                     {
                                         dg_names.push((
                                             MethodName::format_local(
-                                                &info.base_struct_name(),
+                                                &info.fq_base_struct_name(),
                                                 Some(tn),
                                                 &method_name,
                                             ),
@@ -855,8 +928,11 @@ impl Monomorphizer {
                                     let info_base = info_ref
                                         .map(LocalMethodName::base_struct_name)
                                         .unwrap_or_default();
-                                    let candidates: Vec<&str> = if let Some(info) = info_ref {
-                                        vec![&info_base, &info.struct_name, &base_struct]
+                                    let info_inst = info_ref
+                                        .map(LocalMethodName::struct_name)
+                                        .unwrap_or_default();
+                                    let candidates: Vec<&str> = if info_ref.is_some() {
+                                        vec![&info_base, &info_inst, &base_struct]
                                     } else {
                                         vec![&base_struct]
                                     };
@@ -876,18 +952,27 @@ impl Monomorphizer {
                                         if impl_type_args.len()
                                             >= generic_func.impl_type_params.len()
                                         {
-                                            let method_info = LocalMethodName::new(
-                                                base_struct,
-                                                tn.clone(),
-                                                method_name.clone(),
-                                            );
+                                            let method_info = generic_func
+                                                .method_info
+                                                .clone()
+                                                .unwrap_or_else(|| {
+                                                    LocalMethodName::new(
+                                                        type_table
+                                                            .fq_base_type_name(receiver.type_id),
+                                                        tn.clone(),
+                                                        method_name.clone(),
+                                                    )
+                                                });
                                             let template_module =
                                                 generic_func.module_source.clone();
                                             let key = InstantiationKey {
                                                 name: generic_method_name.clone(),
                                                 module_source: template_module,
                                                 impl_type_args,
-                                                method_type_args: type_args.clone(),
+                                                method_type_args: declared_method_type_args(
+                                                    &generic_func,
+                                                    type_args,
+                                                ),
                                                 method_info: Some(method_info),
                                             };
                                             let mangled =
@@ -916,7 +1001,7 @@ impl Monomorphizer {
                         && info.base_struct_name() != base_struct
                     {
                         names_to_try.push(MethodName::format_local(
-                            &info.base_struct_name(),
+                            &info.fq_base_struct_name(),
                             None,
                             &method_name,
                         ));
@@ -929,7 +1014,7 @@ impl Monomorphizer {
                         && info.base_struct_name() != base_struct
                     {
                         names_to_try.push(MethodName::format_local(
-                            &info.base_struct_name(),
+                            &info.fq_base_struct_name(),
                             Some(trait_name),
                             &method_name,
                         ));
@@ -937,12 +1022,13 @@ impl Monomorphizer {
                     } else {
                         false
                     };
-                    names_to_try.push(MethodName::format_local(&base_struct, None, &method_name));
+                    let receiver_head = super::dispatch_receiver_head(type_table, receiver.type_id);
+                    names_to_try.push(MethodName::format_local(&receiver_head, None, &method_name));
                     if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
                     {
                         names_to_try.push(MethodName::format_local(
-                            &base_struct,
+                            &receiver_head,
                             Some(trait_name),
                             &method_name,
                         ));
@@ -954,8 +1040,11 @@ impl Monomorphizer {
                         let info_base = info_ref
                             .map(LocalMethodName::base_struct_name)
                             .unwrap_or_default();
-                        let candidates: Vec<&str> = if let Some(info) = info_ref {
-                            vec![&info_base, &info.struct_name, &base_struct]
+                        let info_inst = info_ref
+                            .map(LocalMethodName::struct_name)
+                            .unwrap_or_default();
+                        let candidates: Vec<&str> = if info_ref.is_some() {
+                            vec![&info_base, &info_inst, &base_struct]
                         } else {
                             vec![&base_struct]
                         };
@@ -1023,15 +1112,13 @@ impl Monomorphizer {
                             let effective_impl_type_args = if generic_func
                                 .method_info
                                 .as_ref()
-                                .is_some_and(|mi| mi.struct_name != base_struct)
+                                .is_some_and(|mi| mi.struct_name() != base_struct)
                                 && generic_func.impl_type_params.is_empty()
                             {
                                 Vec::new()
                             } else {
                                 effective_impl_type_args
                             };
-                            // Check if method has its own type params (double generics)
-                            let has_method_type_params = generic_func.has_real_type_params();
                             // Queue if we have at least enough impl type args.
                             // impl_type_args may be longer than impl_type_params when the impl
                             // fixes some struct type params to concrete types
@@ -1039,11 +1126,7 @@ impl Monomorphizer {
                             if effective_impl_type_args.len() >= generic_func.impl_type_params.len()
                             {
                                 let method_type_args_for_key =
-                                    if has_method_type_params && !type_args.is_empty() {
-                                        type_args.clone()
-                                    } else {
-                                        vec![]
-                                    };
+                                    declared_method_type_args(&generic_func, type_args);
                                 let method_info = generic_func.method_info.clone();
                                 let template_module = generic_func.module_source.clone();
                                 let key = InstantiationKey {
@@ -1070,14 +1153,15 @@ impl Monomorphizer {
                 {
                     let base_struct = &struct_key.name;
                     let impl_type_args = struct_key.impl_type_args.clone();
+                    let receiver_head = super::dispatch_receiver_head(type_table, receiver.type_id);
 
                     let mut names_to_try =
-                        vec![MethodName::format_local(base_struct, None, &method_name)];
+                        vec![MethodName::format_local(&receiver_head, None, &method_name)];
                     if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
                     {
                         names_to_try.push(MethodName::format_local(
-                            base_struct,
+                            &receiver_head,
                             Some(trait_name),
                             &method_name,
                         ));
@@ -1085,7 +1169,7 @@ impl Monomorphizer {
                         // the template function is registered under "&^Trait::method"
                         if info.base_struct_name() != *base_struct {
                             names_to_try.push(MethodName::format_local(
-                                &info.base_struct_name(),
+                                &info.fq_base_struct_name(),
                                 Some(trait_name),
                                 &method_name,
                             ));
@@ -1098,8 +1182,11 @@ impl Monomorphizer {
                         let info_base = info_ref
                             .map(LocalMethodName::base_struct_name)
                             .unwrap_or_default();
-                        let candidates: Vec<&str> = if let Some(info) = info_ref {
-                            vec![&info_base, &info.struct_name, base_struct]
+                        let info_inst = info_ref
+                            .map(LocalMethodName::struct_name)
+                            .unwrap_or_default();
+                        let candidates: Vec<&str> = if info_ref.is_some() {
+                            vec![&info_base, &info_inst, base_struct]
                         } else {
                             vec![base_struct]
                         };
@@ -1114,14 +1201,9 @@ impl Monomorphizer {
                             Some((receiver.type_id, type_table)),
                         ) {
                             let generic_func = generic_func_rc.borrow();
-                            let has_method_type_params = generic_func.has_real_type_params();
                             if impl_type_args.len() >= generic_func.impl_type_params.len() {
                                 let method_type_args_for_key =
-                                    if has_method_type_params && !type_args.is_empty() {
-                                        type_args.clone()
-                                    } else {
-                                        vec![]
-                                    };
+                                    declared_method_type_args(&generic_func, type_args);
                                 let method_info = generic_func.method_info.clone();
                                 // The instantiation lives in the template's
                                 // home module — that's what the lookup at
@@ -1158,8 +1240,11 @@ impl Monomorphizer {
                     let info_base = info_ref
                         .map(LocalMethodName::base_struct_name)
                         .unwrap_or_default();
-                    let candidates: Vec<&str> = if let Some(info) = info_ref {
-                        vec![&info_base, &info.struct_name]
+                    let info_inst = info_ref
+                        .map(LocalMethodName::struct_name)
+                        .unwrap_or_default();
+                    let candidates: Vec<&str> = if info_ref.is_some() {
+                        vec![&info_base, &info_inst]
                     } else {
                         Vec::new()
                     };
@@ -1195,69 +1280,28 @@ impl Monomorphizer {
                     // `ReflectStruct<FieldTypes>` / `ReflectEnum<Members>` /
                     // `ReflectFlags<Members>`; a one-arg blanket, the shape-keyed
                     // ref blankets, and any non-template dispatch project none.
-                    let projects_packs = match (trait_name, info) {
-                        (Some(tn), Some(info)) => is_pack_blanket_dispatch(
-                            &self.functions.trait_env,
-                            tn,
-                            &info.method_name,
-                            &generic_func.module_source,
-                            &mono.generic_name,
-                        ),
-                        _ => false,
-                    };
-                    // The direct-name blanket lookup finds a pack blanket even when
-                    // the receiver arg does not satisfy its bound — a non-`ReflectStruct`
-                    // generic struct (a token like `EnumCase<Color>`) or a ref.
-                    // Instantiating it would call `ReflectStruct::<T>::…` on a `T` that has
-                    // no such impl and trap. Skip so the type-specific dispatch
-                    // (bespoke, or the ref blanket) is used instead.
-                    let blanket_bound_ok = {
-                        let recv = mono.impl_type_args.first().copied();
-                        match (trait_name, recv) {
-                            (Some(tn), Some(rt)) => {
-                                if projects_packs {
-                                    let bounds = self
-                                        .functions
-                                        .trait_env
-                                        .blanket_impl_bounds_for_trait(
-                                            tn,
-                                            Some(&generic_func.module_source),
-                                        )
-                                        .unwrap_or_default();
-                                    crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                                        rt, bounds, type_table,
-                                    )
-                                } else {
-                                    true
-                                }
-                            }
-                            _ => true,
-                        }
-                    };
-                    if !blanket_bound_ok {
-                        drop(generic_func);
-                        return;
-                    }
-                    let method_info = generic_func.method_info.clone();
-                    // impl_type_args and method_type_args are now separate in MonomorphInfo.
-                    // For blanket impls, impl_type_args contains the concrete receiver type.
-                    // method_type_args comes from the MethodCall's type_args field.
-                    // If method_type_args is empty but the callee has type params, infer from args.
-                    let impl_ta = match trait_name {
-                        Some(tn) if projects_packs => blanket_impl_args_with_projected_packs(
+                    let pack_args = match (trait_name, info) {
+                        (Some(tn), Some(_)) => blanket_pack_dispatch_args(
                             &mono.impl_type_args,
                             &self.functions.trait_env,
                             tn,
                             &generic_func.module_source,
                             type_table,
                         ),
-                        _ => mono.impl_type_args.clone(),
+                        _ => None,
                     };
-                    let method_ta = if !type_args.is_empty() {
+                    let method_info = generic_func.method_info.clone();
+                    // impl_type_args and method_type_args are now separate in MonomorphInfo.
+                    // For blanket impls, impl_type_args contains the concrete receiver type.
+                    // method_type_args comes from the MethodCall's type_args field.
+                    // If method_type_args is empty but the callee has type params, infer from args.
+                    let impl_ta = pack_args.unwrap_or_else(|| mono.impl_type_args.clone());
+                    let method_ta = if !generic_func.has_real_type_params() {
+                        // See `declared_method_type_args`: the callee declares none.
+                        Vec::new()
+                    } else if !type_args.is_empty() {
                         type_args.clone()
-                    } else if mono.method_type_args.is_empty()
-                        && generic_func.has_real_type_params()
-                    {
+                    } else if mono.method_type_args.is_empty() {
                         // Infer method type args from argument types
                         let method_params = &generic_func.params;
                         let mut inferred_method_args = Vec::new();
@@ -1326,13 +1370,15 @@ impl Monomorphizer {
                     }
                 };
                 if let Some(ref info) = method_func.method_info
-                    && TypeTable::is_tuple_type(&info.struct_name)
+                    && TypeTable::is_tuple_type(&info.struct_name())
                     && receiver_is_builtin_tuple
                 {
                     let mono = method_func.monomorph_info.as_ref();
                     let generic_name = mono.map(|m| m.generic_name.clone()).unwrap_or_else(|| {
+                        // A tuple is module-independent, so its receiver form is
+                        // the bare tuple name.
                         MethodName::format_local(
-                            TypeTable::TUPLE_TYPE_NAME,
+                            &FqTypeName::binder(TypeTable::TUPLE_TYPE_NAME),
                             info.trait_name.as_deref(),
                             &info.method_name,
                         )
@@ -1348,8 +1394,11 @@ impl Monomorphizer {
                         let info_base = info_ref
                             .map(LocalMethodName::base_struct_name)
                             .unwrap_or_default();
-                        let candidates: Vec<&str> = if let Some(info) = info_ref {
-                            vec![&info_base, &info.struct_name]
+                        let info_inst = info_ref
+                            .map(LocalMethodName::struct_name)
+                            .unwrap_or_default();
+                        let candidates: Vec<&str> = if info_ref.is_some() {
+                            vec![&info_base, &info_inst]
                         } else {
                             vec![TypeTable::TUPLE_TYPE_NAME]
                         };
@@ -1459,12 +1508,7 @@ impl Monomorphizer {
         let Some(trait_name) = &info.trait_name else {
             return tid;
         };
-        let newtype_name = type_table.mangle_type_name(tid);
-        if self
-            .functions
-            .trait_env
-            .has_any_methodful_impl_by_receiver(&Receiver::Type(newtype_name), trait_name)
-        {
+        if self.has_own_trait_impl(type_table, tid, trait_name) {
             return tid;
         }
         base
@@ -1619,10 +1663,10 @@ impl Monomorphizer {
             // self-call back to its own definition, and `-O3` walked
             // the recursive method into a stack overflow.
             method_info: generic.method_info.as_ref().map(|info| {
-                let impl_type_arg_names: Vec<String> = key
+                let impl_type_arg_names: Vec<FqTypeName> = key
                     .impl_type_args
                     .iter()
-                    .map(|&t| type_table.mangle_type_arg_for_generic(t))
+                    .map(|&t| type_table.fq_type_name(t))
                     .collect();
                 let method_type_arg_names: Vec<String> = key
                     .method_type_args
@@ -1636,8 +1680,7 @@ impl Monomorphizer {
                     .iter()
                     .any(|p| p.name == info.base_struct_name());
                 if is_blanket && !impl_type_arg_names.is_empty() {
-                    let base = type_table.base_type_name(key.impl_type_args[0]);
-                    info.with_substituted_struct_name(&impl_type_arg_names[0], &base)
+                    info.with_substituted_struct_name(&impl_type_arg_names[0])
                 } else {
                     info.with_type_args(&impl_type_arg_names, &method_type_arg_names)
                 }
@@ -1854,7 +1897,7 @@ impl Monomorphizer {
                                 .collect::<Vec<_>>(),
                         )
                     } else if self.current_impl_type_param_count > 0
-                        && info.struct_name == info.base_struct_name()
+                        && info.struct_name() == info.base_struct_name()
                         && self.current_impl_struct_name.as_deref()
                             == Some(info.base_struct_name().as_str())
                     {
@@ -1885,9 +1928,9 @@ impl Monomorphizer {
                             Some(concrete_tid) => {
                                 let dispatch_tid =
                                     self.type_param_dispatch_tid(concrete_tid, &info, type_table);
-                                let type_name = type_table.mangle_type_name(dispatch_tid);
-                                let base = type_table.base_type_name(dispatch_tid);
-                                info.with_substituted_struct_name(&type_name, &base)
+                                info.with_substituted_struct_name(
+                                    &type_table.fq_type_name(dispatch_tid),
+                                )
                             }
                             None => info.clone(),
                         }
@@ -1897,9 +1940,9 @@ impl Monomorphizer {
                         // qualified mangle so call sites match the
                         // function-definition naming produced by the
                         // `method_instantiation_name*` helpers.
-                        let impl_names: Vec<String> = sub_impl_type_args
+                        let impl_names: Vec<FqTypeName> = sub_impl_type_args
                             .iter()
-                            .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
+                            .map(|&tid| type_table.fq_type_name(tid))
                             .collect();
                         let method_names: Vec<String> = sub_method_type_args
                             .iter()
@@ -1992,34 +2035,27 @@ impl Monomorphizer {
                                     &new_info,
                                     receiver_module.as_ref(),
                                 );
-                            let blanket_module = if generic_or_concrete.is_none() {
+                            let blanket = if generic_or_concrete.is_none() {
                                 trait_name_for_blanket.and_then(|tn| {
                                     self.functions
                                         .trait_env
-                                        .blanket_impl_module_for_trait(tn, receiver_module.as_ref())
-                                        .cloned()
+                                        .value_blanket_for_receiver(
+                                            tn,
+                                            receiver_module.as_ref(),
+                                            &|bounds| {
+                                                crate::synthesis::template::receiver_satisfies_blanket_bounds(
+                                                    concrete_type_id,
+                                                    bounds.to_vec(),
+                                                    type_table,
+                                                )
+                                            },
+                                        )
+                                        .map(|b| (b.module.clone(), b.param.clone()))
                                 })
                             } else {
                                 None
                             };
-                            // Only dispatch through the blanket if the receiver
-                            // satisfies its param bound (e.g. a `ReflectStruct` struct
-                            // derive must not swallow a token type without a
-                            // `ReflectStruct` impl).
-                            let blanket_module = blanket_module.filter(|bm| {
-                                let bounds = trait_name_for_blanket
-                                    .and_then(|tn| {
-                                        self.functions
-                                            .trait_env
-                                            .blanket_impl_bounds_for_trait(tn, Some(bm))
-                                    })
-                                    .unwrap_or_default();
-                                crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                                    concrete_type_id,
-                                    bounds,
-                                    type_table,
-                                )
-                            });
+                            let blanket_module = blanket.as_ref().map(|(m, _)| m.clone());
                             let concrete_impl_module = self
                                 .functions
                                 .impl_module(&new_info, receiver_module.as_ref());
@@ -2048,23 +2084,16 @@ impl Monomorphizer {
                             // (`i32^Default::default`) is a direct function,
                             // unless it dispatches through a blanket impl (see
                             // below).
-                            let blanket_generic_name = blanket_module
+                            let blanket_generic_name = blanket
                                 .as_ref()
-                                .and(trait_name_for_blanket)
-                                .and_then(|tn| {
-                                    let param =
-                                        self.functions.trait_env.blanket_impl_param_for_trait(
-                                            tn,
-                                            blanket_module.as_ref(),
-                                        )?;
-                                    Some(
-                                        LocalMethodName::new(
-                                            param,
-                                            Some(tn.to_string()),
-                                            new_info.method_name.clone(),
-                                        )
-                                        .to_mangled_name(),
+                                .zip(trait_name_for_blanket)
+                                .map(|((_, param), tn)| {
+                                    LocalMethodName::new(
+                                        FqTypeName::binder(param),
+                                        Some(tn.to_string()),
+                                        new_info.method_name.clone(),
                                     )
+                                    .to_mangled_name()
                                 });
                             let new_monomorph = if let Some(generic_name) = blanket_generic_name {
                                 Some(MonomorphInfo {
@@ -2079,7 +2108,7 @@ impl Monomorphizer {
                                 None
                             } else {
                                 let base_info = LocalMethodName::new(
-                                    new_info.base_struct_name(),
+                                    new_info.fq_base_struct_name(),
                                     new_info.trait_name.clone(),
                                     new_info.method_name.clone(),
                                 )
@@ -2601,8 +2630,12 @@ impl Monomorphizer {
 
                 // Update struct_name to match the (possibly monomorphized) struct_type
                 match type_table.get(*struct_type) {
-                    ResolvedType::Struct { name, .. } => {
-                        struct_name.clone_from(name);
+                    ResolvedType::Struct {
+                        decl_name,
+                        type_args,
+                        ..
+                    } => {
+                        *struct_name = type_table.struct_rendered_name(decl_name, type_args);
                     }
                     ResolvedType::GenericInstance {
                         name, type_args, ..
@@ -2823,7 +2856,7 @@ impl Monomorphizer {
         // Mirror the template ref arm (`method_call_info_for_type`): the call
         // name carries the shape + inner type; `call_rewrite` resolves it to the
         // queued `&<inner>^Trait::method` instance via the blanket `monomorph_info`.
-        let inner_name = type_table.mangle_type_name(inner);
+        let inner_name = type_table.fq_type_name(inner);
         let ref_info = LocalMethodName::new_ref(
             ref_kind,
             Some(trait_name.to_string()),
@@ -2881,7 +2914,7 @@ impl Monomorphizer {
         // Check if the struct actually needs type arg substitution.
         // Skip for non-generic structs (e.g., String::push_str from template strings)
         // that happen to appear inside a generic impl block.
-        let has_explicit_type_params = info.struct_name != info.base_struct_name();
+        let has_explicit_type_params = info.struct_name() != info.base_struct_name();
         let receiver_is_generic = {
             let base = type_table.peel_refs(receiver_type_id);
             // Unwrap Newtype to check if the underlying base type is generic
@@ -2894,10 +2927,7 @@ impl Monomorphizer {
                 ResolvedType::GenericInstance { .. }
                     | ResolvedType::GenericResource { .. }
                     | ResolvedType::BuiltinArray(_)
-                    | ResolvedType::Struct {
-                        is_monomorphized: true,
-                        ..
-                    }
+                    | ResolvedType::Struct { .. }
             )
         };
         // Newtype-override guard: when the method already names a newtype with
@@ -2932,37 +2962,22 @@ impl Monomorphizer {
             let inner = type_table.peel_refs(receiver_type_id);
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
             // then fall back to the base type name (e.g., "f64") if no direct impl exists.
-            let own_mangled = type_table.mangle_type_name(inner);
-            let own_base = type_table.base_type_name(inner);
-            let candidate = info.with_substituted_struct_name(&own_mangled, &own_base);
+            let candidate = info.with_substituted_struct_name(&type_table.fq_type_name(inner));
             if self.functions.has_impl(&candidate) {
                 candidate
             } else {
-                let mangled = type_table.mangle_type_name_resolving_newtypes(inner);
-                // Take the base name from the *resolved* type so newtypes
-                // (`type FieldValue = List<u8>`) inherit the underlying
-                // type's base ("List"), not the newtype's own name.
-                // Without this, `base_struct_name` stays "FieldValue" while
-                // `struct_name` becomes "List<u8>", and the trait_env
+                // Newtypes must inherit the underlying head, else the trait_env
                 // candidate lookup misses the per-type impl.
                 let resolved_inner = type_table.resolve_newtype_base(inner);
-                let base = type_table.base_type_name(resolved_inner);
-                info.with_substituted_struct_name(&mangled, &base)
+                info.with_substituted_struct_name(&type_table.fq_type_name(resolved_inner))
             }
         } else if needs_struct_type_args {
-            // Derive the struct name from the already-substituted receiver type.
-            // Resolve through newtypes so that e.g. MyArray<i32>::len → List<i32>::len.
+            // Resolve through newtypes so the receiver matches the TraitEnv key
+            // for the template's home module (issue #1110).
             let recv_inner = type_table.peel_refs(receiver_type_id);
-            let recv_mangled = type_table.mangle_type_name_resolving_newtypes(recv_inner);
-            // `base_type_name(Newtype)` returns the newtype's own name (e.g.
-            // "MyBytes"), but the post-substitution body actually targets the
-            // base type's impl ("List"). Peel through the newtype first so
-            // `base_struct_name` lines up with the TraitEnv key for the
-            // template's home module — required by the `(module_source, name)`
-            // lookup in `monomorphize_with_externals` (issue #1110).
             let resolved_recv = type_table.resolve_newtype_base(recv_inner);
-            let recv_base = type_table.base_type_name(resolved_recv);
-            let mut new_info = info.with_substituted_struct_name(&recv_mangled, &recv_base);
+            let mut new_info =
+                info.with_substituted_struct_name(&type_table.fq_type_name(resolved_recv));
             // For ref-type impls (e.g., impl IntoIterator for &List<T>), preserve
             // the ref receiver (`&` / `&mut`) so that the monomorphizer selects the
             // correct generic function template ("&^IntoIterator::into_iter" instead
@@ -3046,44 +3061,33 @@ impl Monomorphizer {
         let generic_or_concrete = self
             .functions
             .generic_or_concrete_impl_module(&new_info, receiver_module.as_ref());
-        let blanket_module = if generic_or_concrete.is_none() {
+        // Module and receiver param must be read off this same blanket: the
+        // call-site type-param head matches only a direct `T::method` call.
+        let blanket = if generic_or_concrete.is_none() {
+            let recv_inner = type_table.peel_refs(receiver_type_id);
             trait_name_for_blanket.and_then(|tn| {
                 self.functions
                     .trait_env
-                    .blanket_impl_module_for_trait(tn, receiver_module.as_ref())
-                    .cloned()
+                    .value_blanket_for_receiver(tn, receiver_module.as_ref(), &|bounds| {
+                        crate::synthesis::template::receiver_satisfies_blanket_bounds(
+                            recv_inner,
+                            bounds.to_vec(),
+                            type_table,
+                        )
+                    })
+                    .map(|b| {
+                        (
+                            b.module.clone(),
+                            b.param.clone(),
+                            self.functions.trait_env.pack_assocs_of_blanket(b),
+                        )
+                    })
             })
         } else {
             None
         };
-        // Only dispatch through the blanket if the receiver satisfies its
-        // param bound — a `ReflectStruct`-bound struct derive must not swallow a
-        // type carrying its own unregistered impl (e.g. `Fn^Inspect`).
-        let blanket_module = blanket_module.filter(|bm| {
-            let recv_inner = type_table.peel_refs(receiver_type_id);
-            let bounds = trait_name_for_blanket
-                .and_then(|tn| {
-                    self.functions
-                        .trait_env
-                        .blanket_impl_bounds_for_trait(tn, Some(bm))
-                })
-                .unwrap_or_default();
-            crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                recv_inner, bounds, type_table,
-            )
-        });
-        // The blanket's receiver param name (`T` in `impl<T: Bound> Trait
-        // for T`) keys its template. The call-site type-param head of
-        // `old_func_name` only equals it for a direct `T::method` call; a
-        // call on a *different* param (a pack member `F` inside the blanket
-        // body) must still resolve to `T^Trait::method`.
-        let blanket_param = blanket_module.as_ref().and_then(|bm| {
-            trait_name_for_blanket.and_then(|tn| {
-                self.functions
-                    .trait_env
-                    .blanket_impl_param_for_trait(tn, Some(bm))
-            })
-        });
+        let blanket_module = blanket.as_ref().map(|(m, ..)| m.clone());
+        let blanket_param = blanket.as_ref().map(|(_, p, _)| p.clone());
         let concrete_impl_module = self
             .functions
             .impl_module(&new_info, receiver_module.as_ref());
@@ -3133,23 +3137,41 @@ impl Monomorphizer {
             // `[T, T::Assoc, …]` so its instance name matches the two-arg template.
             // A plain one-arg blanket (`impl<I: Iterator> IntoIterator for I`)
             // projects nothing, so it stays keyed by the call-site args.
-            let projected_assocs: Vec<TypeId> =
-                match (blanket_module.as_ref(), trait_name_for_blanket) {
-                    (Some(bm), Some(tn)) => self
-                        .functions
-                        .trait_env
-                        .blanket_projected_pack_assocs(tn, Some(bm))
-                        .iter()
-                        .filter_map(|assoc| type_table.resolve_assoc_type(recv_inner, assoc))
-                        .collect(),
-                    _ => Vec::new(),
-                };
+            // All or nothing: a partial list keys the instance under an
+            // argument shape the template never declared.
+            let projected_assocs: Vec<TypeId> = blanket
+                .as_ref()
+                .map(|(_, _, assocs)| assocs.as_slice())
+                .unwrap_or_default()
+                .to_vec()
+                .iter()
+                .map(|(bound_trait, assoc)| {
+                    // A generic instance's pack is substituted from its base
+                    // declaration; a generic variant never becomes its own
+                    // declaration, so nothing registers a resolution for it.
+                    let pack = type_table.resolve_trait_assoc_type_of_instance(
+                        recv_inner,
+                        bound_trait,
+                        assoc,
+                    )?;
+                    // Record it so the call-rewrite side, which reads behind a
+                    // shared borrow and cannot substitute, sees the same answer.
+                    type_table.register_assoc_type_resolution(
+                        recv_inner,
+                        bound_trait.clone(),
+                        assoc.clone(),
+                        pack,
+                    );
+                    Some(pack)
+                })
+                .collect::<Option<Vec<_>>>()
+                .unwrap_or_default();
             let has_projected = !projected_assocs.is_empty();
             let blanket_name = if receiver_is_assoc_projection {
                 new_func_name.clone()
             } else if let (true, Some(param)) = (has_projected, blanket_param) {
                 LocalMethodName::new(
-                    param,
+                    FqTypeName::binder(&param),
                     new_info.trait_name.clone(),
                     new_info.method_name.clone(),
                 )
@@ -3603,7 +3625,7 @@ impl Monomorphizer {
             // Inside variadic for-of, method calls like `seq.element(&v)` have empty type_args
             // because T was inferred from a TypePack at resolution time. Now that types are
             // concrete, fill in type_args so the monomorphizer can instantiate the generic method.
-            Self::infer_method_call_type_args(&mut elem_body, type_table);
+            self.infer_method_call_type_args(&mut elem_body, type_table, binding_local_idx);
 
             // Rewrite binding_local_idx → iter_binding in the body
             for s in &mut elem_body.stmts {
@@ -3698,8 +3720,18 @@ impl Monomorphizer {
     /// Populate inferred method-level `type_args` on every `MethodCall` in a
     /// (post variadic-for-of-expansion) block. Delegates to
     /// [`MethodTypeArgInferer`] so the traversal is exhaustive.
-    fn infer_method_call_type_args(block: &mut TirBlock, type_table: &TypeTable) {
-        MethodTypeArgInferer { type_table }.visit_block(block);
+    fn infer_method_call_type_args(
+        &self,
+        block: &mut TirBlock,
+        type_table: &TypeTable,
+        binding_local: u32,
+    ) {
+        MethodTypeArgInferer {
+            type_table,
+            binding_local,
+            templates: &self.functions.templates,
+        }
+        .visit_block(block);
     }
 
     /// Rewrite types in the body of a variadic for-of iteration.
@@ -3807,9 +3839,7 @@ impl Monomorphizer {
                 if Self::expr_uses_local(receiver, binding_local)
                     && let Some(info) = &mut func.method_info
                 {
-                    let type_name = type_table.mangle_type_name(elem_type);
-                    let base_name = type_table.base_type_name(elem_type);
-                    *info = info.with_substituted_struct_name(&type_name, &base_name);
+                    *info = info.with_substituted_struct_name(&type_table.fq_type_name(elem_type));
                     func.name = info.to_mangled_name();
                     if let Some(ms) = module_source_for_trait_impl(type_table, elem_type) {
                         func.module_source = ms;
@@ -4330,54 +4360,32 @@ fn try_lower_comparison(
     type_table: &mut TypeTable,
 ) -> Option<TirExprKind> {
     let operand_type = type_table.get(left.type_id);
-    let (base_struct_name, impl_type_args, type_module_source): (
-        String,
-        Vec<String>,
-        Option<ModuleSource>,
-    ) = match operand_type {
-        ResolvedType::Struct {
-            name,
-            module_source,
-            base_name,
-            ..
-        } => {
-            let struct_name = base_name.as_deref().unwrap_or(name).to_string();
-            (struct_name, vec![], Some(module_source.clone()))
-        }
-        ResolvedType::Variant {
-            name,
-            module_source,
-            ..
-        } => (name.clone(), vec![], Some(module_source.clone())),
-        ResolvedType::GenericInstance {
-            name,
-            type_args,
-            module_source,
-            ..
-        } => {
-            if TypeTable::is_tuple_type(name) {
-                // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
-                // and already lowered to method calls by the elaborator.
-                return None;
+    let (impl_type_args, type_module_source): (Vec<FqTypeName>, Option<ModuleSource>) =
+        match operand_type {
+            ResolvedType::Struct { module_source, .. }
+            | ResolvedType::Variant { module_source, .. } => (vec![], Some(module_source.clone())),
+            ResolvedType::GenericInstance {
+                name,
+                type_args,
+                module_source,
+                ..
+            } => {
+                if TypeTable::is_tuple_type(name) {
+                    // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
+                    // and already lowered to method calls by the elaborator.
+                    return None;
+                }
+                // Must match the struct-name form
+                // `method_instantiation_name_inner` writes into `MethodInfo`.
+                let args: Vec<FqTypeName> = type_args
+                    .iter()
+                    .map(|&t| type_table.fq_type_name(t))
+                    .collect();
+                (args, Some(module_source.clone()))
             }
-            // Use the qualified type-arg mangle so the call sites
-            // synthesised here (Eq / Ord operator lowering) name
-            // their target methods with the same struct-name form
-            // the monomorphizer's `method_instantiation_name_inner`
-            // uses to set the function definition's
-            // `MethodInfo.struct_name`. Falling back to
-            // `mangle_type_name` here used to emit `Foo<String>::eq`
-            // call sites against `Foo<core:prelude/string.wado/String>::eq`
-            // function definitions and broke the inliner's
-            // recursive-function detection.
-            let args: Vec<String> = type_args
-                .iter()
-                .map(|&t| type_table.mangle_type_arg_for_generic(t))
-                .collect();
-            (name.clone(), args, Some(module_source.clone()))
-        }
-        _ => return None,
-    };
+            _ => return None,
+        };
+    let base_struct_name = type_table.fq_base_type_name(left.type_id);
 
     let make_ref = |e: &TirExpr, tt: &mut TypeTable| -> TirExpr {
         let ref_type = tt.intern(ResolvedType::Ref(e.type_id));
@@ -4392,13 +4400,9 @@ fn try_lower_comparison(
     };
 
     let resolve_module = |info: &LocalMethodName, type_mod: Option<ModuleSource>| -> ModuleSource {
-        // Match the legacy `trait_method_locations.get(mangled)` semantics:
-        // only concrete (non-generic) impls live in the module the function
-        // actually compiles into. Generic impls' instantiations live in the
-        // receiver type's module, surfaced here through `type_mod`. Lookup
-        // uses `info.struct_name` (the post-substitution full type name)
-        // — matches `FuncInstState::impl_module` so the same trait-method
-        // call resolves identically here and in receiver-substitution paths.
+        // Only concrete impls live in the module the function compiles into;
+        // generic instantiations live in the receiver's module (`type_mod`).
+        // Keyed like `FuncInstState::impl_module` so both paths agree.
         // `type_mod` is also passed to disambiguate same-name receiver
         // types coming from different modules.
         //
@@ -4411,7 +4415,7 @@ fn try_lower_comparison(
             .as_deref()
             .and_then(|tn| {
                 trait_env
-                    .concrete_impl_module_for(&info.struct_name, tn, type_mod.as_ref())
+                    .concrete_impl_module_for(&info.struct_name(), tn, type_mod.as_ref())
                     .cloned()
             })
             .or(type_mod)

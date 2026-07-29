@@ -30,6 +30,7 @@ impl Monomorphizer {
             mangled_name.clone(),
             struct_module_source,
             key.name.clone(), // base_name: the original generic struct name
+            key.impl_type_args.clone(),
         );
 
         // Find the GenericInstance TypeId and record the substitution early

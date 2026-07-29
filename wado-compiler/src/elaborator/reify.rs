@@ -67,7 +67,7 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{Receiver, global_name};
+use crate::name::{FqTypeName, Receiver, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, ResolvedType, TirBinaryOp, TirBlock, TirEnum, TirEnumCase,
@@ -1355,12 +1355,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // decided AST-side by the elaborator and recorded on the facts so it
         // agrees with method dispatch's `from_concrete_impl` (and is not fooled
         // by a param named like a known type). Methods become concrete fns.
-        let concrete_owner: Option<String> = facts.concrete_owner.clone();
+        let concrete_owner: Option<FqTypeName> = facts.concrete_owner.clone();
 
         impl_block
             .methods
             .iter()
-            .filter_map(|method| self.reify_method(method, &facts, concrete_owner.as_deref()))
+            .filter_map(|method| self.reify_method(method, &facts, concrete_owner.as_ref()))
             .collect()
     }
 
@@ -1403,7 +1403,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Concrete generic instantiation owner (`"List<u8>"`) for
         // `impl Tag for List<u8>`, so default methods are also per-instantiation
         // concrete functions. Recorded AST-side by the elaborator.
-        let concrete_owner: Option<String> = facts.concrete_owner.clone();
+        let concrete_owner: Option<FqTypeName> = facts.concrete_owner.clone();
 
         let trait_decl_name = super::Elaborator::<H>::get_type_name_static(trait_ast);
         let Some(trait_sig) = super::trait_query::trait_sig_by_name_with(
@@ -1454,7 +1454,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 std::mem::replace(&mut self.current_module_source, trait_module.clone());
             let saved_module_items = std::mem::replace(&mut self.current_module_items, trait_items);
 
-            let tir_func_opt = self.reify_method(default_method, &facts, concrete_owner.as_deref());
+            let tir_func_opt = self.reify_method(default_method, &facts, concrete_owner.as_ref());
 
             self.current_module_items = saved_module_items;
             self.current_module_source = saved_module_source;
@@ -1469,7 +1469,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // safety net for the synthesis path and matches the
                 // combined walk byte-for-byte.
                 tir_func.name = MethodName::format_local(
-                    concrete_owner.as_deref().unwrap_or(&struct_name),
+                    concrete_owner.as_ref().unwrap_or(&struct_name),
                     Some(&trait_name_mangled),
                     &default_method.name,
                 );
@@ -1500,7 +1500,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // function: named `List<u8>::method`, with no impl type params and no
         // monomorphization, so distinct instantiations stay distinct and call
         // sites resolve it directly (mirroring a monomorphized instance).
-        concrete_owner: Option<&str>,
+        concrete_owner: Option<&FqTypeName>,
     ) -> Option<TirFunction> {
         use crate::ast::SelfKind;
         use crate::name::LocalMethodName;
@@ -1586,7 +1586,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // special-cases and the `&T`-blanket "bare `&`" carve-out that
         // `get_type_name` (module.rs:581) already encodes — exactly the
         // parity-bug class WEP 2026-05-26 §"Stage 7 gap" calls out.
-        let base_struct_name = facts.struct_name.clone();
+        let _base_struct_name = facts.struct_name.clone();
         // Mangled / display names — read straight off the per-method facts
         // `resolve_method` already publishes; reify no longer runs
         // `format_local` itself.
@@ -1628,7 +1628,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 facts.trait_name_mangled.as_deref(),
                 &func.name,
             );
-            method_info = method_info.with_substituted_struct_name(owner, &base_struct_name);
+            method_info = method_info.with_substituted_struct_name(owner);
             impl_type_params = Vec::new();
         }
 
@@ -4822,7 +4822,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let peeled = tt.peel_refs(recorded_type);
             match tt.get(peeled) {
                 ResolvedType::Struct {
-                    name,
+                    decl_name: name,
                     module_source,
                     ..
                 }
@@ -6821,8 +6821,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name: facts.mangled_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName {
-                        receiver: Receiver::Type(facts.target_name.clone()),
-                        struct_name: facts.target_name,
+                        receiver: Receiver::Type(facts.target_name),
+                        struct_type_args: Vec::new(),
                         trait_name: Some(from_trait),
                         base_trait_name: Some(facts.from_trait_name),
                         base_trait_module: None,
@@ -8571,7 +8571,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (struct_name, module_source, type_args): (String, Option<ModuleSource>, Vec<TypeId>) =
             match resolved {
                 ResolvedType::Struct {
-                    name,
+                    decl_name: name,
                     module_source,
                     ..
                 } => (name, Some(module_source), vec![]),
@@ -9127,9 +9127,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
         let target_type = choice.target_type;
         let name = match self.tysys.type_table.borrow().get(target_type).clone() {
-            crate::tir::ResolvedType::Struct { name, .. } if name == "u128" || name == "i128" => {
-                name
-            }
+            crate::tir::ResolvedType::Struct {
+                decl_name: name,
+                module_source,
+                ..
+            } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name),
             _ => return None,
         };
 
@@ -9150,7 +9152,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             _ => return None,
         };
 
-        let parse_result = if name == "u128" {
+        let parse_result = if name.decl_name() == "u128" {
             super::util::parse_u128_literal(&repr).map(|v| v as i128)
         } else if negated {
             super::util::parse_i128_literal(&format!("-{repr}"))
@@ -9182,9 +9184,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
         let name = match self.tysys.type_table.borrow().get(target_type).clone() {
-            crate::tir::ResolvedType::Struct { name, .. } if name == "u128" || name == "i128" => {
-                name
-            }
+            crate::tir::ResolvedType::Struct {
+                decl_name: name,
+                module_source,
+                ..
+            } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name),
             _ => return None,
         };
 
@@ -9195,7 +9199,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }) = &cast.expr
             && !super::util::is_float_only_literal(repr)
         {
-            let parsed = if name == "u128" {
+            let parsed = if name.decl_name() == "u128" {
                 super::util::parse_u128_literal(repr).map(|v| v as i128)
             } else {
                 super::util::parse_i128_literal(repr)
@@ -9213,7 +9217,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         // Negated literal operand (i128 only): `-170... as i128`.
-        if name == "i128"
+        if name.decl_name() == "i128"
             && let ast::Expr::Unary(unary) = &cast.expr
             && unary.op == ast::UnaryOp::Neg
             && let ast::Expr::Literal(ast::LiteralExpr {
@@ -9252,7 +9256,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 cast.span,
             ));
         }
-        let intermediate_type = if name == "u128" {
+        let intermediate_type = if name.decl_name() == "u128" {
             crate::tir::TypeTable::U64
         } else {
             crate::tir::TypeTable::I64
@@ -9302,7 +9306,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
         };
         let source_name = match self.tysys.type_table.borrow().get(source_base).clone() {
-            ResolvedType::Struct { name, .. } if name == "u128" || name == "i128" => name,
+            ResolvedType::Struct {
+                decl_name: name, ..
+            } if name == "u128" || name == "i128" => name,
             _ => return None,
         };
         let signed_source = source_name == "i128";
@@ -9338,7 +9344,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | PrimitiveType::I8
                 | PrimitiveType::U8,
             ) => Lowering::LowThenCast,
-            ResolvedType::Struct { name, .. } if name == source_name => {
+            ResolvedType::Struct {
+                decl_name: name, ..
+            } if name == source_name => {
                 if target_type == source_type {
                     Lowering::Identity
                 } else {
@@ -9348,12 +9356,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return None;
                 }
             }
-            ResolvedType::Struct { name, .. } if name == "i128" => {
-                Lowering::Reinterpret(CompilerItem::I128FromU128)
-            }
-            ResolvedType::Struct { name, .. } if name == "u128" => {
-                Lowering::Reinterpret(CompilerItem::U128FromI128)
-            }
+            ResolvedType::Struct {
+                decl_name: name, ..
+            } if name == "i128" => Lowering::Reinterpret(CompilerItem::I128FromU128),
+            ResolvedType::Struct {
+                decl_name: name, ..
+            } if name == "u128" => Lowering::Reinterpret(CompilerItem::U128FromI128),
             _ => return None,
         };
 
@@ -9363,7 +9371,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let (_, owner_type, method_name) = tt.compiler_method(item);
                 (owner_type.to_string(), method_name.to_string())
             };
-            let method_info = crate::name::LocalMethodName::new(owner_type, None, method_name);
+            let method_info = crate::name::LocalMethodName::new(
+                crate::name::FqTypeName::declared(
+                    &crate::module_source::ModuleSource::int128(),
+                    &owner_type,
+                ),
+                None,
+                method_name,
+            );
             crate::tir::FunctionRef {
                 module_source: crate::module_source::ModuleSource::int128(),
                 name: method_info.to_mangled_name(),
@@ -9731,7 +9746,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     ),
                 ) || matches!(
                     self.tysys.type_table.borrow().get(scrutinee_type),
-                    ResolvedType::Struct { name, .. } if name == "u128",
+                    ResolvedType::Struct { decl_name: name, .. } if name == "u128",
                 );
                 if is_unsigned {
                     if let Ok(v) = super::util::parse_u128_literal(repr) {
@@ -10036,7 +10051,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 | PrimitiveType::U64
                                 | PrimitiveType::U128
                         )
-                    ) || matches!(resolved, ResolvedType::Struct { ref name, .. } if name == "u128")
+                    ) || matches!(resolved, ResolvedType::Struct { decl_name: ref name, .. } if name == "u128")
                 };
                 let int_pattern = |value: u128| {
                     if scrutinee_is_unsigned {
@@ -10329,7 +10344,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let peeled_scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
         let scrutinee_struct_name =
             match self.tysys.type_table.borrow().get(peeled_scrutinee).clone() {
-                ResolvedType::Struct { name, .. } => name,
+                ResolvedType::Struct {
+                    decl_name: name, ..
+                } => name,
                 ResolvedType::GenericInstance { name, .. } => name,
                 _ => String::new(),
             };

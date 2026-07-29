@@ -78,6 +78,10 @@ internal trait ReflectStruct {
     #[compiler_item("reflect_struct_members")]
     fn members() -> Self::Members;
 
+    /// Assembles the struct from its field values.
+    #[compiler_item("reflect_struct_from_fields")]
+    fn from_fields(fields: Self::FieldTypes) -> Self;
+
     /// The struct's `#[wire(name_policy)]` (`Identity` if none).
     #[compiler_item("reflect_struct_wire_name_policy")]
     fn wire_name_policy() -> CaseStyle;
@@ -713,12 +717,12 @@ internal trait Inspect {
 /// Struct debug formatting derived over `ReflectStruct` (WEP 2026-06-13): walk
 /// the field members, writing `Name { field: value, ... }`. Secret fields are
 /// elided and reported with a trailing `, ..`.
-impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for T {
+impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
     fn inspect(&self, f: &mut Formatter) {
-        f.write_str(&ReflectStruct::<T>::type_name());
+        f.write_str(&ReflectStruct::<S>::type_name());
         let mut wrote_field = false;
         let mut has_secret = false;
-        for let field of ReflectStruct::<T>::members() {
+        for let field of ReflectStruct::<S>::members() {
             if field.is_secret() {
                 has_secret = true;
             } else {
@@ -742,6 +746,62 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for T {
             f.write_str(&" { .. }");
         } else {
             f.write_str(&" {}");
+        }
+    }
+}
+
+/// Enum debug formatting derived over `ReflectEnum` (WEP 2026-06-13): find the
+/// live case and write `Name::Case`.
+impl<E: ReflectEnum<Members = [..M]>, ..M> Inspect for E {
+    fn inspect(&self, f: &mut Formatter) {
+        for let case of ReflectEnum::<E>::members() {
+            if case.holds(self) {
+                f.write_str(&ReflectEnum::<E>::type_name());
+                f.write_str(&"::");
+                f.write_str(&case.name());
+            }
+        }
+    }
+}
+
+/// Variant debug formatting derived over `ReflectVariant` (WEP 2026-06-13):
+/// write `Name::Case`, then the payload in parens unless the case is unit.
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> Inspect for V {
+    fn inspect(&self, f: &mut Formatter) {
+        for let case of ReflectVariant::<V>::members() {
+            if case.holds(self) {
+                f.write_str(&ReflectVariant::<V>::type_name());
+                f.write_str(&"::");
+                f.write_str(&case.name());
+                if !case.is_unit() {
+                    f.write_str(&"(");
+                    case.extract(self).inspect(f);
+                    f.write_str(&")");
+                }
+            }
+        }
+    }
+}
+
+/// Flags debug formatting derived over `ReflectFlags` (WEP 2026-06-13): the set
+/// bits joined by ` | `, or `Name::none()` when no bit is set.
+impl<L: ReflectFlags<Members = [..M]>, ..M> Inspect for L {
+    fn inspect(&self, f: &mut Formatter) {
+        let mut wrote_bit = false;
+        for let bit of ReflectFlags::<L>::members() {
+            if bit.is_set(self) {
+                if wrote_bit {
+                    f.write_str(&" | ");
+                }
+                f.write_str(&ReflectFlags::<L>::type_name());
+                f.write_str(&"::");
+                f.write_str(&bit.name());
+                wrote_bit = true;
+            }
+        }
+        if !wrote_bit {
+            f.write_str(&ReflectFlags::<L>::type_name());
+            f.write_str(&"::none()");
         }
     }
 }

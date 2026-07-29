@@ -977,7 +977,7 @@ pub struct WirField {
 }
 
 /// Runtime representation of a variant type.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WirVariantRepr {
     /// Subtype hierarchy: base struct with `discriminant: i32` + per-case subtypes.
     /// This is the general-purpose representation used when no null niche is available.

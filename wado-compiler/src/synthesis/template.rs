@@ -17,7 +17,7 @@ use std::sync::Arc;
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::elaborator::trait_env::TraitEnv;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, Receiver, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr,
     TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart,
@@ -41,6 +41,10 @@ use crate::token::Span;
 #[allow(dead_code)]
 pub(super) struct FormatStdlibNames {
     pub formatter: String,
+    /// `formatter` prefixed by its declaring module — the form a function name
+    /// embeds. The bare `formatter` stays for type-table lookups, which key a
+    /// struct by its simple name plus module.
+    pub formatter_fq: FqTypeName,
     pub alignment: String,
     pub left_name: String,
     pub left_index: u32,
@@ -86,6 +90,10 @@ impl FormatStdlibNames {
         let (_, _, right_name, right_index) = items.require_enum_case(CompilerItem::AlignmentRight);
         Self {
             formatter: items.struct_name(CompilerItem::Formatter).to_string(),
+            formatter_fq: {
+                let (module, name) = items.require_struct(CompilerItem::Formatter);
+                FqTypeName::declared(module, name)
+            },
             alignment: items.enum_name(CompilerItem::Alignment).to_string(),
             left_name: left_name.to_string(),
             left_index,
@@ -428,10 +436,7 @@ fn build_template_block(
     ctx: &TemplateCtx,
 ) -> TirExpr {
     let tt = ctx.tt;
-    let string_struct_name = tt
-        .borrow()
-        .compiler_struct_name(CompilerItem::String)
-        .to_string();
+    let string_struct_name = tt.borrow().compiler_struct_fq_name(CompilerItem::String);
     let with_capacity_qualified =
         crate::name::MethodName::format_local(&string_struct_name, None, "with_capacity");
     let label = crate::name::TEMPLATE_BLOCK_LABEL.to_string();
@@ -836,10 +841,10 @@ fn build_formatter_expr(
             TirExprKind::Call {
                 func: FunctionRef {
                     module_source: ModuleSource::format(),
-                    name: format!("{}::new", names.formatter),
+                    name: format!("{}::new", names.formatter_fq),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        names.formatter.clone(),
+                        names.formatter_fq.clone(),
                         None,
                         "new".to_string(),
                     )),
@@ -1001,9 +1006,11 @@ fn peel_transparent_newtype(type_id: TypeId, trait_name: &str, ctx: &TemplateCtx
             let tt = ctx.tt.borrow();
             match tt.get(tid) {
                 ResolvedType::Newtype {
-                    name, base_type, ..
+                    name,
+                    base_type,
+                    module_source,
                 } if !ctx.trait_env.has_any_methodful_impl_by_receiver(
-                    &Receiver::Type(name.clone()),
+                    &Receiver::Type(FqTypeName::of_head(module_source, name)),
                     trait_name,
                 ) =>
                 {
@@ -1122,7 +1129,7 @@ fn method_call_info_for_type(
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
             let ref_kind =
                 RefKind::from_resolved(&tt.borrow().get(type_id).clone()).expect("ref classify");
-            let inner_name = tt.borrow().mangle_type_name(inner);
+            let inner_name = tt.borrow().fq_type_name(inner);
             let local_name = LocalMethodName::new_ref(
                 ref_kind,
                 Some(trait_name.to_string()),
@@ -1161,82 +1168,73 @@ fn method_call_info_for_type(
     }
 }
 
-/// Whether `type_id` satisfies a blanket impl's receiver-param `bounds`. Only
-/// the `ReflectStruct` bound is checked structurally (via the `Fields` associated
-/// type registered for every reflected struct); other bounds are treated as
-/// satisfiable, preserving existing blanket dispatch (e.g. `IntoIterator`).
+/// The reflection kind `type_id` is, or `None` when reflection does not cover
+/// it. A type is exactly one kind and its kind is fixed by its declaration, so
+/// this is a structural question — it does not depend on how far the pipeline
+/// has run. A `GenericInstance` takes its base declaration's kind: `Pair<i32>`
+/// is a struct because `Pair` is. The sealed member handles are the one
+/// declared struct reflection never covers.
+fn reflect_kind_of(type_id: TypeId, tt: &TypeTable) -> Option<CompilerItem> {
+    if tt
+        .decl_of_type(type_id)
+        .is_some_and(|decl| tt.is_sealed_reflect_member(decl))
+    {
+        return None;
+    }
+    match tt.get(type_id) {
+        ResolvedType::Struct { .. } => Some(CompilerItem::ReflectStruct),
+        ResolvedType::Variant { .. } => Some(CompilerItem::ReflectVariant),
+        ResolvedType::Enum { .. } => Some(CompilerItem::ReflectEnum),
+        ResolvedType::Flags { .. } => Some(CompilerItem::ReflectFlags),
+        ResolvedType::GenericInstance {
+            name,
+            module_source,
+            ..
+        } => {
+            // A variant is asked first: a variant declaration also registers a
+            // struct-shaped payload layout under its own name, so the struct
+            // lookup answers for both kinds.
+            if tt.find_variant_type(name, module_source).is_some() {
+                Some(CompilerItem::ReflectVariant)
+            } else if tt.find_struct_by_name(name, module_source).is_some() {
+                Some(CompilerItem::ReflectStruct)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Whether `type_id` satisfies a blanket impl's receiver-param `bounds`. A
+/// `Reflect*` bound holds exactly when the receiver is that kind; any other
+/// bound is treated as satisfiable, preserving existing blanket dispatch
+/// (e.g. `IntoIterator`).
 pub(crate) fn receiver_satisfies_blanket_bounds(
     type_id: TypeId,
     bounds: Vec<String>,
     tt: &TypeTable,
 ) -> bool {
-    receiver_satisfies_blanket_bounds_inner(type_id, &bounds, tt, false)
-}
-
-/// A `ReflectStruct` bound is satisfied by any non-generic `struct` (which is
-/// unconditionally `ReflectStruct`-derived). At monomorphize time this is the
-/// registered `Fields` associated type; during trait synthesis, which runs
-/// before `synthesize_reflect` registers it, `allow_pre_reflect_struct` lets a
-/// plain `ResolvedType::Struct` stand in — an original declared struct is always
-/// ReflectStruct-eligible, and only originals appear at synthesis time (monomorphized
-/// generics like a token `EnumCase<Color>` are not `ResolvedType::Struct` there).
-pub(crate) fn receiver_satisfies_blanket_bounds_inner(
-    type_id: TypeId,
-    bounds: &[String],
-    tt: &TypeTable,
-    allow_pre_reflect_struct: bool,
-) -> bool {
     if bounds.is_empty() {
         return true;
     }
-    let reflect_name = tt.compiler_items().trait_name(CompilerItem::ReflectStruct);
-    for bound in bounds {
-        if bound == reflect_name && !type_is_reflect(type_id, tt, allow_pre_reflect_struct) {
-            return false;
+    let kind = reflect_kind_of(type_id, tt);
+    let items = tt.compiler_items();
+    let reflect_bounds = [
+        CompilerItem::ReflectStruct,
+        CompilerItem::ReflectVariant,
+        CompilerItem::ReflectEnum,
+        CompilerItem::ReflectFlags,
+    ];
+    bounds.iter().all(|bound| {
+        match reflect_bounds
+            .into_iter()
+            .find(|item| bound == items.trait_name(*item))
+        {
+            Some(required) => kind == Some(required),
+            None => true,
         }
-    }
-    true
-}
-
-fn type_is_reflect(type_id: TypeId, tt: &TypeTable, allow_pre_reflect_struct: bool) -> bool {
-    if tt
-        .resolve_assoc_type(type_id, crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC)
-        .is_some()
-    {
-        return true;
-    }
-    // A generic instance's projection lives on its base declaration and is
-    // substituted per instantiation, which may not have happened yet. The
-    // definition's presence is the fact — the substitution is mechanical.
-    if matches!(tt.get(type_id), ResolvedType::GenericInstance { .. })
-        && tt.has_generic_assoc_type_def(
-            type_id,
-            crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
-        )
-    {
-        return true;
-    }
-    allow_pre_reflect_struct && is_unsealed_declared_struct(type_id, tt)
-}
-
-/// Whether `type_id` is spelled from a struct declaration that reflection will
-/// cover — the stand-in the pre-reflect window accepts. A `GenericInstance`
-/// counts: `Pair<i32>` is a struct because `Pair` is. Sealed member handles are
-/// the one struct reflection never covers.
-fn is_unsealed_declared_struct(type_id: TypeId, tt: &TypeTable) -> bool {
-    let declared = match tt.get(type_id) {
-        ResolvedType::Struct { .. } => true,
-        ResolvedType::GenericInstance {
-            name,
-            module_source,
-            ..
-        } => tt.find_struct_by_name(name, module_source).is_some(),
-        _ => false,
-    };
-    declared
-        && !tt
-            .decl_of_type(type_id)
-            .is_some_and(|decl| tt.is_sealed_reflect_member(decl))
+    })
 }
 
 /// The module of a struct-like `type_id`, used as the disambiguation hint for
@@ -1263,42 +1261,39 @@ fn type_module_hint_tt(type_id: TypeId, tt: &TypeTable) -> Option<ModuleSource> 
 pub(crate) fn blanket_dispatch_for(
     trait_env: &TraitEnv,
     type_id: TypeId,
-    base_struct_name: &str,
     trait_name: &str,
     method_name: &str,
-    tt: &TypeTable,
-    allow_pre_reflect_struct: bool,
+    tt: &mut TypeTable,
 ) -> Option<(MonomorphInfo, ModuleSource)> {
-    let type_key = match RefKind::from_resolved(tt.get(type_id)) {
-        Some(kind) => Receiver::Ref(kind),
-        None => Receiver::Type(base_struct_name.to_string()),
-    };
+    let type_key = tt.impl_receiver_key(type_id);
     if trait_env.has_any_methodful_impl_by_receiver(&type_key, trait_name) {
         return None;
     }
     let type_module = type_module_hint_tt(type_id, tt);
-    let blanket_module = trait_env
-        .blanket_impl_module_for_trait(trait_name, type_module.as_ref())?
-        .clone();
-    if !receiver_satisfies_blanket_bounds_inner(
-        type_id,
-        &trait_env
-            .blanket_impl_bounds_for_trait(trait_name, Some(&blanket_module))
-            .unwrap_or_default(),
-        tt,
-        allow_pre_reflect_struct,
-    ) {
-        return None;
-    }
-    let param = trait_env.blanket_impl_param_for_trait(trait_name, Some(&blanket_module))?;
-    let generic_name =
-        LocalMethodName::new(param, Some(trait_name.to_string()), method_name.to_string())
-            .to_mangled_name();
+    // Param and pack projections must come from the same blanket, or the
+    // template name would name one kind and the args another.
+    let blanket =
+        trait_env.value_blanket_for_receiver(trait_name, type_module.as_ref(), &|bounds| {
+            receiver_satisfies_blanket_bounds(type_id, bounds.to_vec(), tt)
+        })?;
+    let blanket_module = blanket.module.clone();
+    let generic_name = LocalMethodName::new(
+        FqTypeName::binder(&blanket.param),
+        Some(trait_name.to_string()),
+        method_name.to_string(),
+    )
+    .to_mangled_name();
+    // `impl_type_args` is positional against the impl's type params
+    // (`impl<V, ..P>` → `[receiver, P]`). A blanket that projects a pack the
+    // receiver cannot supply does not apply: instantiating it with the pack
+    // missing would leave the body unable to bind it.
     let mut impl_type_args = vec![type_id];
-    if let Some(fields) =
-        tt.resolve_assoc_type(type_id, crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC)
-    {
-        impl_type_args.push(fields);
+    for (bound_trait, assoc) in trait_env.pack_assocs_of_blanket(blanket) {
+        let pack = tt.resolve_trait_assoc_type_of_instance(type_id, &bound_trait, &assoc)?;
+        // Substituting a pack needs interning, so a mutable table. Record it
+        // here, the one place that has one; later readers hold a shared borrow.
+        tt.register_assoc_type_resolution(type_id, bound_trait, assoc, pack);
+        impl_type_args.push(pack);
     }
     Some((
         MonomorphInfo {
@@ -1331,11 +1326,9 @@ fn blanket_method_call_info(
     let (monomorph_info, blanket_module) = blanket_dispatch_for(
         ctx.trait_env,
         type_id,
-        &local_name.base_struct_name(),
         trait_name,
         method_name,
-        &ctx.tt.borrow(),
-        false,
+        &mut ctx.tt.borrow_mut(),
     )?;
     Some(MethodCallInfo {
         local_name: local_name.clone(),
@@ -1359,19 +1352,21 @@ fn method_name_for_type(
     // `generic_dispatch_components`. The `_` fallback below would instead mangle
     // the full `Array<i32>` / `List<i32>` spelling and trip
     // `LocalMethodName::new`'s no-`<` invariant.
-    if let Some((name, type_args)) = tt_ref.generic_dispatch_components(type_id) {
-        let arg_names: Vec<String> = type_args
-            .iter()
-            .map(|t| tt_ref.mangle_type_name(*t))
-            .collect();
-        return LocalMethodName::new(name, Some(trait_name.to_string()), method_name.to_string())
-            .with_struct_type_args(&arg_names);
+    if let Some((_, type_args)) = tt_ref.generic_dispatch_components(type_id) {
+        let arg_names: Vec<FqTypeName> =
+            type_args.iter().map(|t| tt_ref.fq_type_name(*t)).collect();
+        return LocalMethodName::new(
+            tt_ref.fq_base_type_name(type_id),
+            Some(trait_name.to_string()),
+            method_name.to_string(),
+        )
+        .with_struct_type_args(&arg_names);
     }
     let resolved = tt_ref.get(type_id).clone();
     match resolved {
         ResolvedType::TypeParam { ref name, .. } | ResolvedType::TypePack { ref name, .. } => {
             let mut info = LocalMethodName::new(
-                name.clone(),
+                FqTypeName::binder(name),
                 Some(trait_name.to_string()),
                 method_name.to_string(),
             );
@@ -1385,22 +1380,23 @@ fn method_name_for_type(
         } => {
             // A `Fn` receiver mangles as base struct `Fn` with the canonical
             // `[arity, return-type]` args (shared with trait synthesis through
-            // `name::fn_type_arg_names`). Without this arm the `_` fallback
-            // would call `LocalMethodName::new("Fn<N,Ret>", ...)` whose
-            // debug_assert rejects struct names containing `<`.
+            // `name::fn_type_args`). Without this arm the `_` fallback would
+            // call `LocalMethodName::new("Fn<N,Ret>", ...)` whose debug_assert
+            // rejects struct names containing `<`.
             let type_args =
-                crate::name::fn_type_arg_names(params.len(), &tt_ref.mangle_type_name(return_type));
+                crate::name::fn_type_args(params.len(), &tt_ref.fq_type_name(return_type));
             LocalMethodName::new(
-                crate::name::CLOSURE_FN_TRAIT.to_string(),
+                FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),
                 Some(trait_name.to_string()),
                 method_name.to_string(),
             )
             .with_struct_type_args(&type_args)
         }
-        _ => {
-            let name = tt_ref.mangle_type_name(type_id);
-            LocalMethodName::new(name, Some(trait_name.to_string()), method_name.to_string())
-        }
+        _ => LocalMethodName::new(
+            tt_ref.fq_base_type_name(type_id),
+            Some(trait_name.to_string()),
+            method_name.to_string(),
+        ),
     }
 }
 

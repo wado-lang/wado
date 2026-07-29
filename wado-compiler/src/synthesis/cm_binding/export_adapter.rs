@@ -29,7 +29,7 @@ use crate::cm_abi;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::LocalMethodName;
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{
     CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
@@ -153,7 +153,9 @@ fn lower_to_flat_inner(
                 cm_type: cm_abi::CmValType::I32,
             }]
         }
-        ResolvedType::Struct { name, .. } if name == &names.string => {
+        ResolvedType::Struct {
+            decl_name: name, ..
+        } if name == &names.string => {
             // String → cm_lower_string → packed i64, split to ptr(i32) and len(i32)
             let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
             let packed_local = alloc_local(next_local, locals, TypeTable::I64);
@@ -289,7 +291,7 @@ fn lower_to_flat_inner(
             // __elem = (__arr[__i]) via the IndexValue<i32> trait method.
             let elem_local = alloc_local(next_local, locals, elem_type_id);
             let iv_info = LocalMethodName::new(
-                names.array,
+                FqTypeName::declared(&ModuleSource::list(), &names.array),
                 Some("IndexValue<i32>".to_string()),
                 "index_value".to_string(),
             );
@@ -631,7 +633,9 @@ fn lower_to_flat_inner(
                 })
                 .collect()
         }
-        ResolvedType::Struct { name, .. } if name != &names.string => {
+        ResolvedType::Struct {
+            decl_name: name, ..
+        } if name != &names.string => {
             // Struct: concatenation of field flat types
             if let Some(struct_decl) = find_struct_decl(name, tir_modules) {
                 let mut result = Vec::new();

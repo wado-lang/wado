@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::MangledName;
 
 use crate::module_source::ModuleSource;
 use crate::name::StructName;
@@ -51,7 +52,7 @@ pub struct WirContext<'a> {
     /// All function definitions (with optional bodies).
     pub functions: Vec<WirFunction>,
     /// Map from fully-qualified function name to `WirFuncId`.
-    pub func_map: IndexMap<String, WirFuncId>,
+    pub func_map: IndexMap<crate::name::MangledName, WirFuncId>,
     /// Map from a defined function's canonical [`crate::nir::FuncId`] to its
     /// `WirFuncId`. Lets a stamped call resolve its target by id, skipping the
     /// name reconstruction in `resolve_function_ref` (the name path stays for
@@ -370,7 +371,7 @@ impl<'a> WirContext<'a> {
             desc: WirImportDesc::Func { type_id, name },
         });
         self.import_func_map.insert(fq.clone(), func_id.clone());
-        self.func_map.insert(fq, func_id.clone());
+        self.func_map.insert(MangledName::new(fq), func_id.clone());
         func_id
     }
 
@@ -388,7 +389,7 @@ impl<'a> WirContext<'a> {
         let fq = func.name.fq.clone();
         let fq_rc: Rc<str> = Rc::from(fq.as_str());
         let func_id = WirFuncId::new(func_idx, fq_rc);
-        self.func_map.insert(fq, func_id.clone());
+        self.func_map.insert(MangledName::new(fq), func_id.clone());
         if let Some(nir_id) = nir_id {
             self.funcid_map.insert(nir_id, func_id.clone());
         }
@@ -651,13 +652,15 @@ impl<'a> WirContext<'a> {
         results: Vec<WirType>,
     ) -> WirFuncId {
         let name = intrinsic.import_name();
-        let key = format!("wasi/{name}");
+        let key = MangledName::wasi_import(&name);
         if let Some(func_id) = self.func_map.get(&key) {
             return func_id.clone();
         }
         let type_fq = format!("functype//wasi/{name}");
         let type_id = self.register_func_type(type_fq, params, results);
-        let wir_name = WirName { fq: key };
+        let wir_name = WirName {
+            fq: key.into_string(),
+        };
         let func_id = self.register_import_func("wasi".to_string(), name, type_id, wir_name);
         self.needed_canonicals.insert(intrinsic, func_id.clone());
         func_id
@@ -688,10 +691,13 @@ impl<'a> WirContext<'a> {
             ResolvedType::Unit => WirType::Unit,
             ResolvedType::Never => WirType::Unit, // placeholder
             ResolvedType::Struct {
-                name,
+                decl_name,
                 module_source,
-                ..
+                type_args,
             } => {
+                // The WIR struct map is keyed on the rendered spelling: each
+                // instantiation is its own struct type.
+                let name = &type_table.struct_rendered_name(decl_name, type_args);
                 // String is always at ModuleSource::string().
                 let lookup_module = if name == "String" {
                     ModuleSource::string()

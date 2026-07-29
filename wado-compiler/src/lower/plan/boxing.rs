@@ -132,12 +132,9 @@ fn shadow_one_function(func: &mut crate::tir::TirFunction, plan: &BoxPlan, type_
 
         let mut prelude_stmts: Vec<TirStmt> = Vec::with_capacity(shadowed_params.len());
         for (param_idx, shadow_idx, box_type_id, original_type_id, name) in &shadowed_params {
-            let box_struct_name =
-                if let ResolvedType::Struct { name, .. } = type_table.get(*box_type_id) {
-                    name.clone()
-                } else {
-                    panic!("Box type should be a struct");
-                };
+            let box_struct_name = type_table
+                .struct_list_name(*box_type_id)
+                .expect("Box type should be a struct");
             let span = func.span;
             let param_read = TirExpr::new(
                 TirExprKind::Local {
@@ -232,6 +229,7 @@ impl TypeBuilder {
             struct_name.clone(),
             self.box_module_source.clone(),
             "Box".to_string(),
+            vec![inner_type_id],
         );
 
         // Create the TirStruct definition with a single `value` field

@@ -1,12 +1,14 @@
 //! Monomorphizer state: instantiation tracking and name generation.
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
-use crate::tir::{InstantiationKey, ResolvedType, TypeId, TypeTable};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
+use crate::tir::{InstantiationKey, ResolvedType, TirFunction, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state
 pub(super) struct StructInstState {
@@ -41,6 +43,15 @@ pub(super) struct FuncInstState {
     /// module that owns `impl <trait> for <type>` without rebuilding a
     /// parallel "mangled name → module" index.
     pub trait_env: Arc<TraitEnv>,
+    /// Every generic function template in the project, keyed as
+    /// `collect_function_instantiation_sites` keys them. Read-only for the
+    /// whole run and shared rather than cloned.
+    ///
+    /// A template is registered only when it declares type params, so absence
+    /// is the answer "this callee is not generic" — which is what the
+    /// post-variadic-expansion type-arg inference needs in order to tell a
+    /// method type param from an ordinary parameter.
+    pub templates: Rc<IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>>,
 }
 
 impl FuncInstState {
@@ -53,7 +64,7 @@ impl FuncInstState {
     /// route `&List<i32>^Inspect::inspect` through the `&T`-blanket
     /// instantiation rather than collapsing it to `List<i32>::inspect`.
     ///
-    /// The lookup uses `info.struct_name` (the post-substitution type
+    /// The lookup uses `info.struct_name()` (the post-substitution type
     /// name) rather than `info.base_struct_name()`, which mirrors the
     /// legacy `trait_method_locations.contains_key(<full mangled name>)`
     /// semantics: a concrete impl's key is the full type name (e.g. the
@@ -73,13 +84,13 @@ impl FuncInstState {
             .or(info.trait_name.as_deref())?;
         if let Some(m) =
             self.trait_env
-                .concrete_impl_module_for(&info.struct_name, trait_name, type_module)
+                .concrete_impl_module_for(&info.struct_name(), trait_name, type_module)
         {
             return Some(m.clone());
         }
         // Fall back to the head name for argument shapes the qualified
         // instantiated index above cannot spell (tuples, function types).
-        if info.base_struct_name() != info.struct_name
+        if info.base_struct_name() != info.struct_name()
             && let Some(m) = self.trait_env.concrete_impl_module_for(
                 &info.base_struct_name(),
                 trait_name,
@@ -118,13 +129,13 @@ impl FuncInstState {
             .base_trait_name
             .as_deref()
             .or(info.trait_name.as_deref())?;
-        if let Some(m) = self
-            .trait_env
-            .impl_module_for(&info.struct_name, trait_name, type_module)
+        if let Some(m) =
+            self.trait_env
+                .impl_module_for(&info.struct_name(), trait_name, type_module)
         {
             return Some(m.clone());
         }
-        if info.base_struct_name() != info.struct_name
+        if info.base_struct_name() != info.struct_name()
             && let Some(m) =
                 self.trait_env
                     .impl_module_for(&info.base_struct_name(), trait_name, type_module)
@@ -182,6 +193,7 @@ impl Monomorphizer {
                 instantiated_names: IndexSet::default(),
                 pending: Vec::new(),
                 trait_env,
+                templates: Rc::new(IndexMap::default()),
             },
             current_impl_type_param_count: 0,
             current_impl_struct_name: None,
@@ -365,7 +377,7 @@ impl Monomorphizer {
         } else {
             // Normal: append type args: "List" → "List<i32>"
             MethodName::format_struct_with_args(
-                &method_info.struct_name,
+                &method_info.struct_name(),
                 method_info.receiver().ref_kind(),
                 &impl_arg_names,
                 method_info.trait_name.as_deref(),
@@ -392,8 +404,14 @@ impl Monomorphizer {
         type_table: &TypeTable,
     ) -> Option<String> {
         match type_table.get(type_id) {
-            ResolvedType::Struct { name, .. }
-            | ResolvedType::Enum { name, .. }
+            // The identity a method name is built from, so the rendered
+            // spelling: `ArraySlice<u8>::internal_repr`, not `ArraySlice`.
+            ResolvedType::Struct {
+                decl_name,
+                type_args,
+                ..
+            } => Some(type_table.struct_rendered_name(decl_name, type_args)),
+            ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. }
             | ResolvedType::Flags { name, .. } => Some(name.clone()),
             ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
@@ -425,49 +443,83 @@ impl Monomorphizer {
         }
     }
 
-    /// If `type_id` (peeling references) is a newtype that has its OWN
-    /// non-blanket impl of `trait_name`, return the newtype's own mangled name
-    /// (e.g. `"ByteList"`); otherwise `None`.
+    /// If `type_id` (peeling references) is a newtype that answers this call
+    /// with its OWN impl, return the newtype's own name (e.g. `"ByteList"`);
+    /// otherwise `None`.
     ///
     /// Unlike [`Self::get_struct_name_from_type`], which makes newtypes
     /// transparent by peeling to the base, this preserves the newtype's identity
-    /// — but only when the newtype actually overrides the trait. The collect path
-    /// tries this name first so the queued instantiation (`ByteList^Trait::method`)
-    /// matches the call the rewrite emits, not the inherited base
-    /// (`List^Trait::method`). Newtypes without their own impl (e.g. `Meters`,
-    /// simd `v128` lanes) return `None` and keep peeling to the base, so their
-    /// dispatch is unchanged.
+    /// — but only when the newtype actually overrides the method. The collect
+    /// path tries this name first so the queued instantiation
+    /// (`ByteList^Trait::method`) matches the call the rewrite emits, not the
+    /// inherited base (`List^Trait::method`). Newtypes without their own impl
+    /// (e.g. `Meters`, simd `v128` lanes) return `None` and keep peeling to the
+    /// base, so their dispatch is unchanged.
+    ///
+    /// A trait method asks for an `impl <Trait> for`; an inherent method asks
+    /// for a method of that name. Answering only the first left
+    /// `impl MyArray<T> { fn second() }` invisible, so an inherent call on a
+    /// generic newtype was named after the base it inherits from — a function
+    /// that does not exist.
     pub fn newtype_own_struct_name_with_impl(
         &self,
         type_id: TypeId,
         type_table: &TypeTable,
+        method_name: &str,
         trait_name: Option<&str>,
-    ) -> Option<String> {
-        let trait_name = trait_name?;
-        self.newtype_own_name(type_id, type_table, |own| {
-            self.functions
+    ) -> Option<FqTypeName> {
+        self.newtype_own_name(type_id, type_table, |_, tid| match trait_name {
+            Some(trait_name) => self.has_own_trait_impl(type_table, tid, trait_name),
+            None => self
+                .functions
                 .trait_env
-                .impl_module_for(own, trait_name, None)
-                .is_some()
+                .has_inherent_method_by_receiver(&type_table.impl_receiver_key(tid), method_name),
         })
     }
 
+    /// Whether the declaration `tid` names carries its own `impl <trait> for`
+    /// block. The impl index keys the head as source writes it, so the query
+    /// goes through [`TypeTable::impl_receiver_key`] rather than a mangled
+    /// name — which would carry the declaring module the index never stores.
+    pub(super) fn has_own_trait_impl(
+        &self,
+        type_table: &TypeTable,
+        tid: TypeId,
+        trait_name: &str,
+    ) -> bool {
+        self.functions
+            .trait_env
+            .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(tid), trait_name)
+    }
+
     /// Peel refs/newtypes to the first newtype level satisfying `has_own_impl`
-    /// (evaluated on that level's mangled name), returning that name.
+    /// (evaluated on that level's name and its `TypeId`), returning that name.
+    ///
+    /// Reads the unerased view: erasure redirects a newtype id to its base
+    /// before monomorphize, so the erased view never reports a `Newtype` level
+    /// at all and every newtype would look like one without its own impl.
     fn newtype_own_name(
         &self,
         type_id: TypeId,
         type_table: &TypeTable,
-        has_own_impl: impl Fn(&str) -> bool,
-    ) -> Option<String> {
+        has_own_impl: impl Fn(&FqTypeName, TypeId) -> bool,
+    ) -> Option<FqTypeName> {
         let mut tid = type_id;
         loop {
-            match type_table.get(tid) {
+            match type_table.get_unerased(tid) {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => tid = *inner,
-                ResolvedType::Newtype { base_type, .. } => {
+                ResolvedType::Newtype {
+                    base_type,
+                    name,
+                    module_source,
+                } => {
                     let base = *base_type;
-                    let own = type_table.mangle_type_name(tid);
-                    if has_own_impl(&own) {
+                    // A generic newtype's stored name bakes its arguments into
+                    // the head; every consumer of this wants the declaration an
+                    // `impl` header writes.
+                    let own =
+                        FqTypeName::declared(module_source, crate::name::split_base_name(name));
+                    if has_own_impl(&own, tid) {
                         return Some(own);
                     }
                     tid = base;
@@ -483,22 +535,17 @@ impl Monomorphizer {
         type_table: &TypeTable,
         info: &LocalMethodName,
     ) -> bool {
-        let own = match info.trait_name.as_deref() {
-            Some(trait_name) => self.newtype_own_name(receiver_type_id, type_table, |own| {
-                self.functions
-                    .trait_env
-                    .impl_module_for(own, trait_name, None)
-                    .is_some()
-            }),
-            None => self.newtype_own_name(receiver_type_id, type_table, |own| {
-                let head = crate::name::split_base_name(own);
-                self.functions.trait_env.has_inherent_method_by_receiver(
-                    &Receiver::Type(head.to_string()),
-                    &info.method_name,
-                )
-            }),
-        };
-        own.as_deref() == Some(info.struct_name.as_str())
+        let own = self.newtype_own_struct_name_with_impl(
+            receiver_type_id,
+            type_table,
+            &info.method_name,
+            info.trait_name.as_deref(),
+        );
+        // Against the *base* receiver: `newtype_own_name` answers a declaration
+        // (`MyArray`), while `struct_name` is an instantiation (`MyArray<i32>`).
+        // Comparing those two never matched for a generic newtype, so the guard
+        // never fired and the receiver was peeled to the base it inherits from.
+        own.as_ref() == Some(&info.fq_base_struct_name())
     }
 
     /// Build the ordered list of `(mangled_method_name, trait_name)` formats to
@@ -511,31 +558,40 @@ impl Monomorphizer {
     /// the newtype's own name alongside the list so callers can also seed their
     /// candidate set with it. Shared by the collect (`func_inst.rs`) and rewrite
     /// (`call_rewrite.rs`) paths so the two stay in lockstep.
+    ///
+    /// The names are receivers, so they come off the receiver's type — a
+    /// template is registered under the fq head its definition was named with,
+    /// which a struct-instantiation spelling does not reproduce.
     pub fn newtype_aware_method_names(
         &self,
         receiver_type_id: TypeId,
         type_table: &TypeTable,
         method_name: &str,
-        struct_name: &str,
         trait_name: Option<&str>,
     ) -> (Option<String>, Vec<(String, Option<String>)>) {
-        let own_name =
-            self.newtype_own_struct_name_with_impl(receiver_type_id, type_table, trait_name);
+        let own_name = self.newtype_own_struct_name_with_impl(
+            receiver_type_id,
+            type_table,
+            method_name,
+            trait_name,
+        );
         let mut names: Vec<(String, Option<String>)> = Vec::new();
-        let mut push_for = |s: &str| {
-            names.push((MethodName::format_local(s, None, method_name), None));
+        let mut push_for = |s: FqTypeName| {
+            names.push((MethodName::format_local(&s, None, method_name), None));
             if let Some(tn) = trait_name {
                 names.push((
-                    MethodName::format_local(s, Some(tn), method_name),
+                    MethodName::format_local(&s, Some(tn), method_name),
                     Some(tn.to_string()),
                 ));
             }
         };
-        if let Some(ref own) = own_name {
+        if let Some(own) = own_name.clone() {
             push_for(own);
         }
-        push_for(struct_name);
-        (own_name, names)
+        // The key's `impl_type_args` are empty here — the instantiation is
+        // spelled into the name, so the receiver keeps its type arguments.
+        push_for(super::dispatch_receiver_name(type_table, receiver_type_id));
+        (own_name.map(|n| n.to_mangled()), names)
     }
 
     /// Build the candidate struct-name set for trait-fallback template lookup,
@@ -554,8 +610,8 @@ impl Monomorphizer {
             c.push(Cow::Borrowed(own));
         }
         if let Some(info) = info {
-            c.push(info.receiver.head_key());
-            c.push(Cow::Borrowed(info.struct_name.as_str()));
+            c.push(Cow::Owned(info.receiver.head_key().into_string()));
+            c.push(Cow::Owned(info.struct_name()));
         }
         c.push(Cow::Borrowed(struct_name));
         c
@@ -573,15 +629,11 @@ impl Monomorphizer {
             return Some(info);
         }
         match type_table.get(type_id) {
-            ResolvedType::Struct { name, .. } => {
-                // For monomorphized structs with names like "List<i32>", look up the
-                // original InstantiationKey to get the base name and type_args
-                if let Some(key) = self.structs.mangled_to_key.get(name) {
-                    Some((key.name.clone(), key.impl_type_args.clone()))
-                } else {
-                    Some((name.clone(), vec![]))
-                }
-            }
+            ResolvedType::Struct {
+                decl_name,
+                type_args,
+                ..
+            } => Some((decl_name.clone(), type_args.clone())),
             // Newtypes are transparent — unwrap to base type for struct info lookup
             ResolvedType::Newtype { base_type, .. } => {
                 self.get_struct_info_from_type(*base_type, type_table)

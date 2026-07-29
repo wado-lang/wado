@@ -349,14 +349,21 @@ pub enum ResolvedType {
     Unit,
     Never,
     Struct {
-        name: String,
+        /// The declaration's own name, as source writes it — never with
+        /// arguments spelled into it.
+        ///
+        /// Every other nominal variant holds a declaration name here too, and
+        /// `GenericInstance` already keeps its arguments beside one. A
+        /// monomorphized struct used to be the exception, storing the rendered
+        /// `TreeMap<String,i32>` and a separate `base_name` to recover the head
+        /// from — which is what let its spelling pass as a declaration name
+        /// wherever the two were matched together.
+        decl_name: String,
         module_source: ModuleSource,
-        /// Whether this struct was created by monomorphizing a generic struct.
-        /// If true, `base_name` contains the original generic struct name.
-        is_monomorphized: bool,
-        /// For monomorphized structs, the original generic name (e.g., "`TreeMap`" for "`TreeMap`<String,i32>").
-        /// None for non-monomorphized structs.
-        base_name: Option<String>,
+        /// What this instantiation was made with; empty for a declaration
+        /// written as such. The rendered spelling is derived from the two —
+        /// see [`TypeTable::struct_rendered_name`].
+        type_args: Vec<TypeId>,
     },
     Enum {
         name: String,
@@ -729,7 +736,7 @@ impl TypeTable {
     /// writable type name, so it can never collide with a user-defined
     /// `struct Tuple` — that is what makes the name-only [`Self::is_tuple_type`]
     /// check sound. User-facing spelling is `[T1, T2, …]`.
-    pub const TUPLE_TYPE_NAME: &'static str = "[]";
+    pub const TUPLE_TYPE_NAME: &'static str = crate::name::TUPLE_TYPE_NAME;
 
     /// Canonical name for the unit type `()` used in method lookup and impl indexing.
     /// Must match what `format_type_name(TypeNameInfo::Unit)` returns, and matches
@@ -813,15 +820,19 @@ impl TypeTable {
             return id;
         }
         let id = self.types.next_id();
-        // Update struct name index for O(1) lookups by (name, module_source)
+        // Update struct name index for O(1) lookups by (name, module_source).
+        // Keyed on the *rendered* spelling: every instantiation of a generic
+        // struct is a distinct type, and keying on the declaration would
+        // collapse them all onto one entry.
         if let ResolvedType::Struct {
-            ref name,
+            ref decl_name,
             ref module_source,
-            ..
+            ref type_args,
         } = ty
         {
+            let rendered = self.struct_rendered_name(decl_name, type_args);
             self.struct_name_index
-                .insert((name.clone(), module_source.clone()), id);
+                .insert((rendered, module_source.clone()), id);
         }
         self.types.push(ty.clone());
         self.intern_map.insert(ty, id);
@@ -847,6 +858,20 @@ impl TypeTable {
 
     pub fn get(&self, id: TypeId) -> &ResolvedType {
         let id = self.redirects.get(id).copied().unwrap_or(id);
+        self.types
+            .get(id)
+            .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
+    }
+
+    /// [`Self::get`] before the newtype / flags erasure applied ahead of
+    /// monomorphize.
+    ///
+    /// Erasure is a representation choice — a `flags` value is a `u32` at
+    /// runtime — but `impl Trait for Perms` is still keyed under `Perms`. A
+    /// name that has to match an impl must read the identity; only code that
+    /// cares how the value is stored should read [`Self::get`].
+    #[must_use]
+    pub fn get_unerased(&self, id: TypeId) -> &ResolvedType {
         self.types
             .get(id)
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
@@ -1054,9 +1079,7 @@ impl TypeTable {
     #[must_use]
     pub fn is_seq_container(&self, type_id: TypeId) -> bool {
         let declared = match self.get(type_id) {
-            ResolvedType::Struct {
-                name, base_name, ..
-            } => base_name.as_deref().unwrap_or(name.as_str()),
+            ResolvedType::Struct { decl_name, .. } => decl_name.as_str(),
             ResolvedType::GenericInstance { name, .. } => name.as_str(),
             _ => return false,
         };
@@ -1156,9 +1179,31 @@ impl TypeTable {
         // Implicit closure under `redirects`: every kept id whose `get`
         // result lives at a different id must keep that target alive too.
         let mut effective_keep: IndexSet<TypeId> = keep.clone();
+        let mut queue: Vec<TypeId> = Vec::new();
+        let keep_id = |set: &mut IndexSet<TypeId>, queue: &mut Vec<TypeId>, id: TypeId| {
+            if set.insert(id) {
+                queue.push(id);
+            }
+        };
         for &id in keep {
             if let Some(&target) = self.redirects.get(id) {
-                effective_keep.insert(target);
+                keep_id(&mut effective_keep, &mut queue, target);
+            }
+            queue.push(id);
+        }
+        // A surviving struct spells itself with its instantiation arguments,
+        // so those must resolve too. The reachability walk reaches a type
+        // through its erased view and never through the pre-erasure arguments
+        // a monomorphized struct records, so nothing else keeps them alive.
+        while let Some(id) = queue.pop() {
+            let Some(ResolvedType::Struct { type_args, .. }) = self.types.get(id) else {
+                continue;
+            };
+            for arg in type_args.clone() {
+                keep_id(&mut effective_keep, &mut queue, arg);
+                if let Some(&target) = self.redirects.get(arg) {
+                    keep_id(&mut effective_keep, &mut queue, target);
+                }
             }
         }
 
@@ -1179,7 +1224,7 @@ impl TypeTable {
         for (id, ty) in self.types.iter() {
             self.intern_map.insert(ty.clone(), id);
             if let ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } = ty
@@ -1254,6 +1299,16 @@ impl TypeTable {
     /// `compiler_items()`.
     pub fn compiler_struct_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
         self.compiler_items.struct_name(item)
+    }
+
+    /// The fq name of a compiler-item struct: its declaring module plus its
+    /// name, the form any name that embeds a receiver expects.
+    pub fn compiler_struct_fq_name(
+        &self,
+        item: crate::compiler_item::CompilerItem,
+    ) -> crate::name::FqTypeName {
+        let (module, name) = self.compiler_items.require_struct(item);
+        crate::name::FqTypeName::declared(module, name)
     }
 
     pub fn compiler_trait_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
@@ -1549,28 +1604,67 @@ impl TypeTable {
 
     pub fn make_struct(&mut self, name: String, module_source: ModuleSource) -> TypeId {
         self.intern(ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
-            is_monomorphized: false,
-            base_name: None,
+            type_args: Vec::new(),
         })
+    }
+
+    /// A struct type's rendered spelling: the declaration alone, or the
+    /// declaration with its arguments applied. Derived rather than stored, so
+    /// there is no fused name for a declaration lookup to mistake for one.
+    #[must_use]
+    pub fn struct_rendered_name(&self, decl_name: &str, type_args: &[TypeId]) -> String {
+        if type_args.is_empty() {
+            return decl_name.to_string();
+        }
+        let args: Vec<String> = type_args
+            .iter()
+            .map(|&a| self.mangle_type_arg_for_generic(a))
+            .collect();
+        crate::name::mangle_generic_name(decl_name, &args)
     }
 
     /// Create a monomorphized struct type (e.g., "Box<i32>")
     ///
     /// - `name`: The fully mangled name (e.g., "`TreeMap`<String,i32>")
     /// - `base_name`: The original generic struct name (e.g., "`TreeMap`")
+    /// - `type_args`: what it was instantiated with. Must be the arguments
+    ///   `name` renders from — passing an empty list for an instantiated type
+    ///   interns the *declaration* instead, a different type that spells itself
+    ///   the same way. The `debug_assert` below is that contract.
     pub fn make_monomorphized_struct(
         &mut self,
         name: String,
         module_source: ModuleSource,
         base_name: String,
+        type_args: Vec<TypeId>,
+    ) -> TypeId {
+        debug_assert_eq!(
+            name,
+            self.struct_rendered_name(&base_name, &type_args),
+            "the caller's rendering must be what `struct_rendered_name` derives"
+        );
+        let _ = name;
+        self.intern(ResolvedType::Struct {
+            decl_name: base_name,
+            module_source,
+            type_args,
+        })
+    }
+
+    /// Intern the instantiation of `base_name` with `type_args`, deriving its
+    /// rendered spelling rather than taking one from the caller.
+    pub fn make_monomorphized_struct_from_args(
+        &mut self,
+        base_name: String,
+        module_source: ModuleSource,
+        type_args: Vec<TypeId>,
     ) -> TypeId {
         self.intern(ResolvedType::Struct {
-            name,
+            decl_name: base_name,
             module_source,
-            is_monomorphized: true,
-            base_name: Some(base_name),
+            type_args,
         })
     }
 
@@ -1585,10 +1679,9 @@ impl TypeTable {
     pub fn find_struct_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
         // Use the existing intern_map for O(1) lookup
         let key = ResolvedType::Struct {
-            name: name.to_string(),
+            decl_name: name.to_string(),
             module_source: module_source.clone(),
-            is_monomorphized: false,
-            base_name: None,
+            type_args: Vec::new(),
         };
         self.intern_map.get(&key).copied()
     }
@@ -1705,9 +1798,8 @@ impl TypeTable {
                     module_source,
                 }
                 | ResolvedType::Struct {
-                    name: n,
+                    decl_name: n,
                     module_source,
-                    is_monomorphized: false,
                     ..
                 }
                 | ResolvedType::Flags {
@@ -2220,6 +2312,55 @@ impl TypeTable {
             return Some(resolved);
         }
         self.resolve_generic_assoc_type_mono(concrete_id, assoc_name)
+    }
+
+    /// The registered resolution of `trait_name::assoc_name` on `concrete_id`.
+    /// Unlike [`Self::resolve_assoc_type`] this cannot be confused by a name
+    /// several traits share; unlike
+    /// [`Self::resolve_trait_assoc_type_of_instance`] it does not substitute a
+    /// generic definition, so it needs no interning.
+    pub fn resolve_trait_assoc_type(
+        &self,
+        concrete_id: TypeId,
+        trait_name: &str,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        self.assoc_type_resolutions
+            .get(&(concrete_id, trait_name.to_string(), assoc_name.to_string()))
+            .copied()
+    }
+
+    /// [`Self::resolve_assoc_type_of_instance`] for a caller that knows which
+    /// trait declares the associated type. The untyped form scans every trait
+    /// and gives up when two disagree, so a name several traits share — the
+    /// reflection kinds all spell their member channel `Members` — is only
+    /// unambiguous here.
+    pub fn resolve_trait_assoc_type_of_instance(
+        &mut self,
+        concrete_id: TypeId,
+        trait_name: &str,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        let key = (concrete_id, trait_name.to_string(), assoc_name.to_string());
+        if let Some(&resolved) = self.assoc_type_resolutions.get(&key) {
+            return Some(resolved);
+        }
+        let type_args = match self.get(concrete_id).clone() {
+            ResolvedType::GenericInstance { type_args, .. } => type_args,
+            _ => return None,
+        };
+        let def_key = (
+            self.decl_of_type(concrete_id)?,
+            trait_name.to_string(),
+            assoc_name.to_string(),
+        );
+        let def_type_id = *self.generic_assoc_type_defs.get(&def_key)?;
+        let subst: IndexMap<u32, TypeId> = type_args
+            .iter()
+            .enumerate()
+            .map(|(i, &a)| (i as u32, a))
+            .collect();
+        Some(self.substitute_type_params(def_type_id, &subst))
     }
 
     /// Substitute `TypeParam` and `TypePack` indices in `type_id` using `substitution`.
@@ -2763,7 +2904,12 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => {
                 format!("Array<{}>", self.type_name(*elem))
             }
-            ResolvedType::Struct { name, .. } => crate::name::strip_local_item_id(name).to_string(),
+            ResolvedType::Struct {
+                decl_name,
+                type_args,
+                ..
+            } => crate::name::strip_local_item_id(&self.struct_rendered_name(decl_name, type_args))
+                .to_string(),
             ResolvedType::Enum { name, .. } => name.clone(),
             ResolvedType::Resource { name, .. } => name.clone(),
             ResolvedType::Function {
@@ -2875,16 +3021,21 @@ impl TypeTable {
         let base = self.resolve_newtype_base(id);
         match self.get(base) {
             ResolvedType::GenericInstance {
-                name, type_args, ..
+                name,
+                type_args,
+                module_source,
             } => {
                 let args: Vec<String> = type_args
                     .iter()
                     .map(|t| self.mangle_type_name_resolving_newtypes(*t))
                     .collect();
+                // A tuple is module-independent; every other instance is named
+                // by the module declaring its base.
                 if Self::is_tuple_type(name) {
                     crate::name::mangle_tuple_type(&args)
                 } else {
-                    crate::name::mangle_generic_name(name, &args)
+                    let unqualified = crate::name::mangle_generic_name(name, &args);
+                    format!("{module_source}/{unqualified}")
                 }
             }
             ResolvedType::BuiltinArray(elem) => {
@@ -3035,12 +3186,19 @@ impl TypeTable {
                 name,
                 module_source,
                 ..
-            }
-            | ResolvedType::Struct {
-                name,
-                module_source,
-                ..
             } => format!("{module_source}/{name}"),
+            // A struct mangles as a type argument by its rendered spelling:
+            // `TreeMap<String,i32>` and `TreeMap<String,String>` are distinct
+            // arguments, and naming both `TreeMap` collides the functions
+            // instantiated over them.
+            ResolvedType::Struct {
+                decl_name,
+                module_source,
+                type_args,
+            } => format!(
+                "{module_source}/{}",
+                self.struct_rendered_name(decl_name, type_args)
+            ),
             ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -3149,12 +3307,165 @@ impl TypeTable {
     pub fn base_type_name(&self, id: TypeId) -> String {
         match self.get(id) {
             ResolvedType::GenericInstance { name, .. } => name.clone(),
-            ResolvedType::Struct {
-                base_name: Some(base),
-                ..
-            } => base.clone(),
+            ResolvedType::Struct { decl_name, .. } => decl_name.clone(),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.base_type_name(*inner),
             _ => self.mangle_type_name(id),
+        }
+    }
+
+    /// The name a struct is *stored* under in the package's struct list and
+    /// named by in a `StructLiteral`: the declaration or instantiation name
+    /// with the head left bare, module disambiguation carried alongside as a
+    /// `ModuleSource` rather than folded into the string.
+    ///
+    /// Every mangler qualifies a declared head by its module; this namespace
+    /// must not, because that is how the struct list is keyed. The list holds
+    /// one entry per instantiation, so an instantiation is spelled with its
+    /// arguments — `decl_name` alone names a template nothing stores. `None`
+    /// for a type that is not struct-shaped.
+    #[must_use]
+    pub fn struct_list_name(&self, id: TypeId) -> Option<String> {
+        match self.get(id) {
+            ResolvedType::Struct {
+                decl_name,
+                type_args,
+                ..
+            } => Some(self.struct_rendered_name(decl_name, type_args)),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_arg_for_generic(*t))
+                    .collect();
+                Some(if Self::is_tuple_type(name) {
+                    crate::name::mangle_tuple_type(&args)
+                } else {
+                    crate::name::mangle_generic_name(name, &args)
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// The receiver `id`'s impl blocks are indexed under, with the reference
+    /// kind lifted out.
+    ///
+    /// The head carries its declaring module, so two modules declaring the same
+    /// simple name index apart. Consumers pick the namespace they need:
+    /// [`crate::name::Receiver::decl_key`] for the name an `impl` header
+    /// writes, [`crate::name::Receiver::head_key`] for the mangled identity.
+    #[must_use]
+    pub fn impl_receiver_key(&self, id: TypeId) -> crate::name::Receiver {
+        use crate::name::{FqTypeName, Receiver};
+        let declared =
+            |module: &ModuleSource, name: &str| Receiver::Type(FqTypeName::declared(module, name));
+        let builtin = |name: &str| Receiver::Type(FqTypeName::builtin(name));
+        // Unerased: which impls a type has is a fact about its identity, and
+        // erasure rewrites a newtype / flags id to the representation it is
+        // stored as, whose impls are a different set.
+        match self.get_unerased(id) {
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
+                crate::name::RefKind::from_resolved(self.get(id))
+                    .map_or_else(|| builtin(""), Receiver::Ref)
+            }
+            ResolvedType::Struct {
+                decl_name,
+                module_source,
+                ..
+            } => declared(module_source, decl_name),
+            ResolvedType::Enum {
+                name,
+                module_source,
+            }
+            | ResolvedType::Variant {
+                name,
+                module_source,
+            }
+            | ResolvedType::Flags {
+                name,
+                module_source,
+            }
+            | ResolvedType::Resource {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => declared(module_source, name),
+            // A generic newtype's stored name bakes the arguments into the head
+            // (`MyArray<i32>`); an `impl` header writes only `MyArray`.
+            ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            } => declared(module_source, crate::name::split_base_name(name)),
+            // A generic resource and a binder name no declaration of their own.
+            ResolvedType::GenericResource { name, .. } => builtin(name),
+            ResolvedType::TypeParam { name, .. } => Receiver::Type(FqTypeName::binder(name)),
+            ResolvedType::BuiltinArray(_) => builtin(Self::ARRAY_TYPE_NAME),
+            ResolvedType::Unit => builtin(Self::UNIT_TYPE_NAME),
+            ResolvedType::Primitive(prim) => builtin(prim.as_str()),
+            ResolvedType::Function { .. } => builtin(crate::name::CLOSURE_FN_TRAIT),
+            _ => builtin(&self.base_type_name(id)),
+        }
+    }
+
+    /// [`Self::base_type_name`] as a receiver head: the base is a declaration,
+    /// so it carries its module and matches what the impl registered. The bare
+    /// form stays for indices keyed by the written simple name.
+    #[must_use]
+    pub fn fq_base_type_name(&self, id: TypeId) -> crate::name::FqTypeName {
+        use crate::name::FqTypeName;
+        match self.get(id) {
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::GenericResource {
+                name,
+                module_source,
+                ..
+            } if !Self::is_tuple_type(name) => FqTypeName::declared(module_source, name),
+            ResolvedType::Struct {
+                decl_name,
+                module_source,
+                ..
+            } => FqTypeName::declared(module_source, decl_name),
+            ResolvedType::Enum {
+                name,
+                module_source,
+            }
+            | ResolvedType::Variant {
+                name,
+                module_source,
+            }
+            | ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Flags {
+                name,
+                module_source,
+            }
+            | ResolvedType::Resource {
+                name,
+                module_source,
+            } => FqTypeName::declared(module_source, name),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.fq_base_type_name(*inner)
+            }
+            ResolvedType::BuiltinArray(_) => FqTypeName::builtin(Self::ARRAY_TYPE_NAME),
+            ResolvedType::Unit => FqTypeName::builtin(Self::UNIT_TYPE_NAME),
+            ResolvedType::Function { .. } => FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),
+            // Tuples, primitives and function types are builtin shapes: no
+            // module declares them and every mangler spells them bare.
+            _ => FqTypeName::builtin(&self.base_type_name(id)),
         }
     }
 
@@ -3170,26 +3481,10 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
-            ResolvedType::Struct {
-                name,
-                is_monomorphized: true,
-                base_name: Some(base_name),
-                ..
-            } => {
-                // Search for a GenericInstance with matching base name and mangled name
-                for tid in self.iter_type_ids() {
-                    if let ResolvedType::GenericInstance {
-                        name: gi_name,
-                        type_args,
-                        ..
-                    } = self.get(tid)
-                        && gi_name == base_name
-                        && self.mangle_type_name(tid) == *name
-                    {
-                        return Some(type_args.clone());
-                    }
-                }
-                None
+            // No recovery: a struct carries its arguments, so an empty list
+            // means it is a declaration rather than an instantiation.
+            ResolvedType::Struct { type_args, .. } if !type_args.is_empty() => {
+                Some(type_args.clone())
             }
             _ => None,
         }
@@ -3211,29 +3506,146 @@ impl TypeTable {
     /// This separates type resolution (here in tir.rs) from name formatting
     /// (in name.rs), following the principle that name format details belong
     /// in name.rs.
+    /// The structured fq name of `id`.
+    ///
+    /// The type table is the only thing that knows a declaration's module, so
+    /// it hands back structure and lets the caller render or inspect. Rendering
+    /// here and re-deriving the module from the string later is not possible —
+    /// a `ModuleSource` cannot be rebuilt without the interner — which is why
+    /// the name stays structured all the way to its consumers.
+    #[must_use]
+    pub fn fq_type_name(&self, id: TypeId) -> crate::name::FqTypeName {
+        use crate::name::FqTypeName;
+        let args_of = |type_args: &[TypeId]| -> Vec<FqTypeName> {
+            type_args.iter().map(|t| self.fq_type_name(*t)).collect()
+        };
+        match self.get(id) {
+            ResolvedType::Primitive(prim) => FqTypeName::builtin(prim.as_str()),
+            ResolvedType::Unit => FqTypeName::builtin(Self::UNIT_TYPE_NAME),
+            ResolvedType::Never => FqTypeName::builtin("!"),
+            // Head and arguments come straight off the type — the same shape
+            // every other instantiated type has. No recovery step, because
+            // there is no fused spelling left to recover them from.
+            ResolvedType::Struct {
+                decl_name,
+                module_source,
+                type_args,
+            } => FqTypeName::declared(module_source, decl_name).with_args(args_of(type_args)),
+            ResolvedType::Enum {
+                name,
+                module_source,
+            }
+            | ResolvedType::Resource {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Variant {
+                name,
+                module_source,
+            }
+            | ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Flags {
+                name,
+                module_source,
+            } => FqTypeName::declared(module_source, name),
+            ResolvedType::TypeParam { name, .. } => FqTypeName::binder(name),
+            ResolvedType::GenericInstance {
+                name,
+                type_args,
+                module_source,
+            } => {
+                let args = args_of(type_args);
+                if Self::is_tuple_type(name) {
+                    FqTypeName::tuple(args)
+                } else {
+                    FqTypeName::declared(module_source, name).with_args(args)
+                }
+            }
+            ResolvedType::GenericResource {
+                name, type_args, ..
+            } => FqTypeName::builtin(name).with_args(args_of(type_args)),
+            ResolvedType::BuiltinArray(elem) => {
+                FqTypeName::builtin(Self::ARRAY_TYPE_NAME).with_args(vec![self.fq_type_name(*elem)])
+            }
+            ResolvedType::Ref(inner) => self
+                .fq_type_name(*inner)
+                .with_reference(crate::name::RefKind::Shared),
+            ResolvedType::MutRef(inner) => self
+                .fq_type_name(*inner)
+                .with_reference(crate::name::RefKind::Mut),
+            // Shapes that name no declaration — assoc-type projections, packs,
+            // `Unknown`. They carry no module, so the rendered spelling is
+            // already their whole identity.
+            _ => FqTypeName::builtin(&self.mangle_type_name(id)),
+        }
+    }
+
     fn get_type_name_info(&self, id: TypeId) -> TypeNameInfo {
         match self.get(id) {
             ResolvedType::Primitive(prim) => TypeNameInfo::Primitive(prim.as_str().to_string()),
             ResolvedType::Unit => TypeNameInfo::Unit,
-            ResolvedType::Struct { name, .. }
-            | ResolvedType::Enum { name, .. }
-            | ResolvedType::Resource { name, .. }
-            | ResolvedType::Variant { name, .. }
-            | ResolvedType::Newtype { name, .. }
-            | ResolvedType::Flags { name, .. }
-            | ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
+            // A declared type is named by its declaring module too: two modules
+            // may declare the same simple name, and a mangled name that omits
+            // the module collapses them onto one identity — the hazard
+            // `mangle_type_arg_for_generic` documents, reached from here as
+            // well.
+            // The identity every mangled name embeds, so the rendered
+            // spelling: each instantiation is its own type.
+            ResolvedType::Struct {
+                decl_name,
+                module_source,
+                type_args,
+            } => TypeNameInfo::Named(format!(
+                "{module_source}/{}",
+                self.struct_rendered_name(decl_name, type_args)
+            )),
+            ResolvedType::Enum {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Resource {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Variant {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Flags {
+                name,
+                module_source,
+                ..
+            } => TypeNameInfo::Named(format!("{module_source}/{name}")),
+            // A type parameter is a template's own binder, not a declaration.
+            ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
             ResolvedType::GenericInstance {
-                name, type_args, ..
+                name,
+                type_args,
+                module_source,
             } => {
                 let args: Vec<String> = type_args
                     .iter()
                     .map(|t| self.mangle_type_arg_for_generic(*t))
                     .collect();
+                // A tuple is module-independent; its elements stay qualified.
                 if Self::is_tuple_type(name) {
                     return TypeNameInfo::Tuple(args);
                 }
                 TypeNameInfo::Generic {
-                    name: name.clone(),
+                    name: format!("{module_source}/{name}"),
                     args,
                 }
             }
@@ -5135,10 +5547,9 @@ mod tests {
         // (bypassing the name-keyed intern_map, as a local declaration's
         // constructor will) and register it under its own AstId.
         let second_type = table.push_fresh(ResolvedType::Struct {
-            name: "Point".to_string(),
+            decl_name: "Point".to_string(),
             module_source: module,
-            is_monomorphized: false,
-            base_name: None,
+            type_args: Vec::new(),
         });
         table.register_decl_type(second, second_type);
 

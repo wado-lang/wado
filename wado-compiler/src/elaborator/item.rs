@@ -10,7 +10,7 @@ use crate::compiler_item::{
 use crate::hashmap::IndexSet;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
-use crate::name::{MethodName, global_name};
+use crate::name::{FqTypeName, MethodName, global_name};
 use crate::tir::{
     FunctionKind, TirEffect, TirEffectOp, TirFunction, TirParam, TirResource, TirStruct, TirTest,
     TirVariantDecl, TypeId, TypeTable, method_param_offset,
@@ -1070,7 +1070,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.type_contains_closure_inner(type_table, *base_type, visited)
             }
             crate::tir::ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => {
@@ -2155,14 +2155,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .unwrap_or(TypeTable::UNIT),
         };
 
-        let mangled_name = MethodName::format_local(struct_name, trait_name, &func.name);
+        // The receiver is named by the module that declares it — the written
+        // name alone is not an identity. `display_name` below stays bare: it is
+        // what diagnostics show, not what the registry keys on.
+        let qualified_struct_name = scope.qualified_receiver_name(struct_name);
+        let mangled_name = MethodName::format_local(&qualified_struct_name, trait_name, &func.name);
         scope
             .sem
             .decls
             .function_return_types
             .insert(mangled_name.clone(), return_type);
 
-        let display_name = MethodName::format_local(struct_name, None, &func.name);
+        // Diagnostics show the written name, not the registry key.
+        let display_name =
+            MethodName::format_local(&FqTypeName::binder(struct_name), None, &func.name);
 
         // Stage 5 / mangled-name slice: publish the mangled + display
         // names for reify to read straight off `MethodNames` instead of

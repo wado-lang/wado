@@ -19,7 +19,7 @@ use crate::ast::{NamedType, Type};
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::LocalMethodName;
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStructField, TypeId, TypeTable,
@@ -1163,7 +1163,7 @@ impl<'a> AdapterBuilder<'a> {
         // __elem = param[__i] (IndexValue trait method)
         let elem_local = alloc_local(&mut self.next_local, &mut self.locals, elem_type_id);
         let iv_info = LocalMethodName::new(
-            self.lower_ctx.names.array.clone(),
+            FqTypeName::declared(&ModuleSource::list(), &self.lower_ctx.names.array),
             Some("IndexValue<i32>".to_string()),
             "index_value".to_string(),
         );

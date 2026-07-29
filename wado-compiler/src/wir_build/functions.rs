@@ -4,6 +4,7 @@
 use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_f32_type, prim_of};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
+use crate::name::MangledName;
 use crate::name::global_name;
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprKind, Operand};
@@ -111,7 +112,7 @@ fn register_imports(ctx: &mut WirContext<'_>) {
         // Also register under the TIR builtin function name so call sites can resolve.
         // e.g., "builtin/realloc" → same WirFuncId as "mem/realloc"
         if !import.func_name.is_empty() {
-            let alias = format!("builtin/{}", import.func_name);
+            let alias = MangledName::builtin_alias(&import.func_name);
             ctx.func_map.insert(alias, func_id);
         }
     }
@@ -440,7 +441,7 @@ fn register_single_function(
     let mangled_name = build_mangled_name(tir_func, module_source);
 
     // Skip if already registered
-    let fq = format!("{module_source}/{mangled_name}");
+    let fq = MangledName::in_module(module_source, &mangled_name);
     if ctx.func_map.contains_key(&fq) {
         return;
     }
@@ -494,6 +495,7 @@ fn register_single_function(
     let effects = tir_func.effects.clone();
 
     // Register function type
+    let fq = fq.into_string();
     let type_fq = format!("functype//{fq}");
     let type_id = ctx.register_func_type(type_fq, params, results);
 
@@ -618,7 +620,7 @@ fn register_exports(ctx: &mut WirContext<'_>) {
         let core_func_name = &export.core_func_name;
         // Find the function in the map
         let entry_source = &ctx.package.entry_module_source;
-        let fq = format!("{entry_source}/{core_func_name}");
+        let fq = MangledName::in_module(entry_source, core_func_name);
         if let Some(func_id) = ctx.func_map.get(&fq) {
             // Export with export.name (component-level name), using core_func_name's function
             ctx.exports.push(crate::wir::WirExport {
@@ -635,7 +637,7 @@ fn register_exports(ctx: &mut WirContext<'_>) {
         }
 
         if let Some(post_return) = &export.post_return_core_name {
-            let fq = format!("{entry_source}/{post_return}");
+            let fq = MangledName::in_module(entry_source, post_return);
             let Some(func_id) = ctx.func_map.get(&fq) else {
                 panic!(
                     "[WIR] post-return function '{post_return}' not found (fq: {fq}); available: {:?}",
@@ -654,7 +656,7 @@ fn register_exports(ctx: &mut WirContext<'_>) {
     // Also export test functions
     for test in &component_plan.test_exports {
         let entry_source = &ctx.package.entry_module_source;
-        let fq = format!("{entry_source}/{}", test.core_func_name);
+        let fq = MangledName::in_module(entry_source, &test.core_func_name);
         if let Some(func_id) = ctx.func_map.get(&fq) {
             // Export test function with its core function name
             ctx.exports.push(crate::wir::WirExport {

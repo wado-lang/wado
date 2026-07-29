@@ -1,0 +1,59 @@
+// A value blanket's statics are indexed under its receiver param name, so the
+// concrete receiver's own bucket never saw them: `Point::tag()` was unknown and
+// `Tag::<Point>::tag()` typed `unknown`, which an annotated binding swallowed
+// into an invalid core module. A static trait method must dispatch through a
+// blanket impl the way an instance method already does (WEP 2026-06-13).
+
+trait Marker {
+    fn marker() -> i32;
+}
+
+trait Tag {
+    fn tag() -> String;
+}
+
+impl<T: Marker> Tag for T {
+    fn tag() -> String {
+        return "tagged";
+    }
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Marker for Point {
+    fn marker() -> i32 {
+        return 1;
+    }
+}
+
+struct Line {
+    len: i32,
+}
+
+impl Marker for Line {
+    fn marker() -> i32 {
+        return 2;
+    }
+}
+
+struct Unmarked {
+    y: i32,
+}
+
+test "a static trait method dispatches through a blanket impl" {
+    assert Point::tag() == "tagged";
+}
+
+test "an annotated binding does not swallow the call" {
+    let s: String = Point::tag();
+    assert s.len() == 6;
+}
+
+test "every receiver satisfying the bound reaches the same blanket" {
+    assert Point::tag() == Line::tag();
+}
+
+__DATA__
+{"test": {}}

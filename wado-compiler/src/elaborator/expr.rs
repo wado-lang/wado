@@ -6,7 +6,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, Receiver, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirField, TirStruct, TirStructField,
     TypeId, TypeTable,
@@ -76,7 +76,7 @@ pub(super) fn peel_to_struct(
     let peeled = tt.peel_refs(type_id);
     match tt.get(peeled) {
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => Some((name.clone(), module_source.clone(), Vec::new())),
@@ -1116,7 +1116,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
         let (struct_name, module_source) = match resolved {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             }
@@ -1155,7 +1155,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match resolved {
             // Struct field access
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => {
@@ -1226,7 +1226,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
         let (struct_name, module_source) = match resolved {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => (name, module_source),
@@ -1416,7 +1416,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For List and custom types, look for Index or IndexValue trait implementation
         // (List implements IndexValue<i32> with type Output = T)
         let struct_name = match &base_type {
-            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::Struct {
+                decl_name: name, ..
+            } => name.clone(),
             ResolvedType::GenericInstance { name, .. } => name.clone(),
             ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name.clone(),
             // The raw GC array dispatches `[]` through `impl IndexValue /
@@ -1439,7 +1441,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         |s, n, t| s.find_index_value_trait_impl(n, t, None),
                     )
-                    .and_then(|i| i.index_type)
+                    .and_then(|(i, _)| i.index_type)
                 })
                 .flatten();
             let index_type = self.resolve_expr(&index.index, ctx, expected_key);
@@ -1464,18 +1466,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
                 })
                 .flatten();
-            if let Some(trait_info) = index_trait_info {
+            if let Some((trait_info, matched_type_id)) = index_trait_info {
                 if let Some(key_type) = trait_info.index_type
                     && key_type != index_type
                 {
                     let _ = self.resolve_expr(&index.index, ctx, Some(key_type));
                 }
 
-                let mangled_method_name = MethodName::format_local(
-                    &lookup_name,
-                    Some(&trait_info.trait_name),
-                    "index_ref",
-                );
+                let receiver = self.fq_index_receiver(matched_type_id);
+                let mangled_method_name =
+                    MethodName::format_local(&receiver, Some(&trait_info.trait_name), "index_ref");
 
                 // The method returns &Output, so the type is Ref(output_type)
                 let ref_output_type = self
@@ -1489,7 +1489,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: mangled_method_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        lookup_name,
+                        receiver,
                         Some(trait_info.trait_name.clone()),
                         "index_ref".to_string(),
                     )),
@@ -1522,15 +1522,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 lookup_type_id,
                 |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
             );
-            if let Some(trait_info) = index_value_info {
+            if let Some((trait_info, matched_type_id)) = index_value_info {
                 if let Some(key_type) = trait_info.index_type
                     && key_type != index_type
                 {
                     let _ = self.resolve_expr(&index.index, ctx, Some(key_type));
                 }
 
+                let receiver = self.fq_index_receiver(matched_type_id);
                 let mangled_method_name = MethodName::format_local(
-                    &lookup_name,
+                    &receiver,
                     Some(&trait_info.trait_name),
                     "index_value",
                 );
@@ -1541,7 +1542,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: mangled_method_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        lookup_name,
+                        receiver,
                         Some(trait_info.trait_name.clone()),
                         "index_value".to_string(),
                     )),
@@ -1593,7 +1594,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => recv_type,
         };
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct { name, .. }
+            ResolvedType::Struct {
+                decl_name: name, ..
+            }
             | ResolvedType::GenericInstance { name, .. }
             | ResolvedType::Newtype { name, .. }
             | ResolvedType::Flags { name, .. } => name,
@@ -1612,7 +1615,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             lookup_type_id,
             |s, n, t| s.find_index_trait_impl(n, t, None),
         )
-        .and_then(|i| i.index_type)
+        .and_then(|(i, _)| i.index_type)
         .or_else(|| {
             self.index_lookup_or_newtype_base(
                 &struct_name,
@@ -1621,7 +1624,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 lookup_type_id,
                 super::Elaborator::find_index_assign_trait_impl,
             )
-            .and_then(|i| i.index_type)
+            .and_then(|(i, _)| i.index_type)
         })
     }
 
@@ -2425,7 +2428,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     | crate::tir::PrimitiveType::U64
                     | crate::tir::PrimitiveType::U128
             )
-        ) || matches!(resolved, ResolvedType::Struct { ref name, .. } if name == "u128")
+        ) || matches!(resolved, ResolvedType::Struct { decl_name: ref name, .. } if name == "u128")
     }
 
     fn exh_literal(&self, lit: &Literal, scrutinee_type: TypeId) -> ExhPattern {
@@ -2898,19 +2901,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
         // For large literals: 170... as i128 → i128::from_pair(low, high)
         let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
-            ResolvedType::Struct { name, .. } => Some(name),
+            ResolvedType::Struct {
+                decl_name: name,
+                module_source,
+                ..
+            } => Some((FqTypeName::declared(&module_source, &name), name)),
             _ => None,
         };
 
-        if let Some(ref name) = struct_name
-            && (name == "u128" || name == "i128")
+        if let Some((ref name, ref simple)) = struct_name
+            && (simple == "u128" || simple == "i128")
         {
             // Handle number literal cast specially to support values > u64
             if let ast::Expr::Literal(lit) = &cast.expr
                 && let Literal::Number(repr) = &lit.value
                 && !util::is_float_only_literal(repr)
             {
-                let parse_result = if name == "u128" {
+                let parse_result = if simple == "u128" {
                     util::parse_u128_literal(repr).map(|v| v as i128)
                 } else {
                     util::parse_i128_literal(repr)
@@ -2943,7 +2950,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let ast::Expr::Literal(lit) = &unary.expr
                 && let Literal::Number(repr) = &lit.value
                 && !util::is_float_only_literal(repr)
-                && name == "i128"
+                && simple == "i128"
             {
                 // Parse the negated value directly using Rust's i128
                 let negated_repr = format!("-{repr}");
@@ -2971,7 +2978,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.tysys.type_table.borrow().is_integer(source_type)
                 || self.tysys.type_table.borrow().is_float(source_type)
             {
-                let intermediate_type = if name == "u128" {
+                let intermediate_type = if simple == "u128" {
                     TypeTable::U64
                 } else {
                     TypeTable::I64
@@ -3018,7 +3025,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             let source_is_wide_int = matches!(
                 tt.get(tt.get_ultimate_base_type(source_type)),
-                ResolvedType::Struct { name, .. } if name == "i128" || name == "u128"
+                ResolvedType::Struct { decl_name: name, .. } if name == "i128" || name == "u128"
             );
             let target_supported = !source_is_wide_int
                 || match tt.get(tt.get_ultimate_base_type(target_type)) {
@@ -3035,7 +3042,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | PrimitiveType::U8
                         | PrimitiveType::Char,
                     ) => true,
-                    ResolvedType::Struct { name, .. } => name == "i128" || name == "u128",
+                    ResolvedType::Struct {
+                        decl_name: name, ..
+                    } => name == "i128" || name == "u128",
                     _ => false,
                 };
             if !target_supported {
@@ -4367,7 +4376,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Use "From<SourceType>" as the trait name in mangled names to disambiguate
         // multiple From impls on the same target type.
         let from_trait = format!("{from_trait_name}<{from_name}>");
-        let method_name = MethodName::format_local(&target_name, Some(&from_trait), "from");
+        // The receiver the method name is built from — the same value reify
+        // puts on the call's `method_info`, so the two cannot drift.
+        let target_receiver = self.qualified_receiver_name(&target_name);
+        let method_name = MethodName::format_local(&target_receiver, Some(&from_trait), "from");
 
         // Find the module source that provides the From impl
         let module_source = self.find_from_impl_module(&target_name, &from_name);
@@ -4378,7 +4390,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::FromCallFacts {
                 module_source: module_source.clone(),
                 mangled_name: method_name.clone(),
-                target_name: target_name.clone(),
+                target_name: target_receiver.clone(),
                 from_name,
                 from_trait_name: from_trait_name.clone(),
             },
@@ -4390,22 +4402,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     module_source,
                     name: method_name,
                     monomorph_info: None,
-                    method_info: Some(crate::name::LocalMethodName {
-                        receiver: Receiver::Type(target_name.clone()),
-                        struct_name: target_name,
-                        trait_name: Some(from_trait),
-                        base_trait_name: Some(from_trait_name),
-                        // Auto-derived `From` impl (synthesis-side): the
-                        // dispatch builder never needs `From`'s declaring
-                        // module because it's not an effect / resource.
-                        base_trait_module: None,
-                        trait_type_args: vec![],
-                        method_name: "from".to_string(),
-                        method_type_args: vec![],
-                        is_type_param_receiver: false,
-                        is_ref_impl: false,
-                        cm_name: None,
-                    }),
+                    // Auto-derived `From` impl (synthesis-side): the dispatch
+                    // builder never needs `From`'s declaring module because
+                    // it's not an effect / resource, so `base_trait_module`
+                    // stays unset.
+                    method_info: Some(crate::name::LocalMethodName::new(
+                        target_receiver,
+                        Some(from_trait),
+                        "from".to_string(),
+                    )),
                 },
                 type_args: vec![],
                 args: vec![CallArg::new(value, false)],

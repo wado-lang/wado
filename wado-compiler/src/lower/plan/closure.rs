@@ -7,7 +7,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir;
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBlock,
@@ -182,17 +182,10 @@ fn make_call_method_args(args: Vec<TirExpr>, call_method: &TirFunction) -> Vec<C
 /// method name.
 fn build_specialized_method_info(info: &LocalMethodName, functor_suffix: &str) -> LocalMethodName {
     LocalMethodName {
-        struct_name: info.struct_name.clone(),
-        receiver: info.receiver.clone(),
-        trait_name: info.trait_name.clone(),
-        base_trait_name: info.base_trait_name.clone(),
-        base_trait_module: info.base_trait_module.clone(),
-        trait_type_args: info.trait_type_args.clone(),
         method_name: format!("{}{}", info.full_method_name(), functor_suffix),
         method_type_args: Vec::new(),
-        is_type_param_receiver: info.is_type_param_receiver,
         is_ref_impl: false,
-        cm_name: info.cm_name.clone(),
+        ..info.clone()
     }
 }
 
@@ -548,8 +541,11 @@ impl ClosureLowerer {
             // Use a qualified name to avoid collisions in the inliner's
             // candidate map. `LocalMethodName` stays unqualified so codegen
             // re-mangles it consistently with other methods.
-            let qualified_method_name =
-                MethodName::format_local(&struct_name, None, crate::name::CLOSURE_CALL_METHOD);
+            let qualified_method_name = MethodName::format_local(
+                &FqTypeName::declared(&self.module_source, &struct_name),
+                None,
+                crate::name::CLOSURE_CALL_METHOD,
+            );
             let self_ref_type = type_table.make_ref(struct_type_id);
 
             let mut params = Vec::with_capacity(1 + collected.params.len());
@@ -666,7 +662,7 @@ impl ClosureLowerer {
             // `method_info` carries the unmangled (struct, trait, method)
             // triple so codegen can produce the canonical mangled name.
             let method_info = LocalMethodName::new(
-                struct_name.clone(),
+                FqTypeName::declared(&self.module_source, &struct_name),
                 None,
                 crate::name::CLOSURE_CALL_METHOD.to_string(),
             );
@@ -783,6 +779,7 @@ impl ClosureLowerer {
             .compiler_items()
             .struct_name(CompilerItem::Formatter)
             .to_string();
+        let formatter_fq = type_table.compiler_struct_fq_name(CompilerItem::Formatter);
         let formatter_type = type_table.make_struct(formatter_name.clone(), ModuleSource::format());
         let formatter_mut_ref = type_table.make_mut_ref(formatter_type);
         let string_type = type_table.make_compiler_struct(CompilerItem::String);
@@ -811,7 +808,7 @@ impl ClosureLowerer {
                         self_ref_type,
                         formatter_mut_ref,
                         string_type,
-                        &formatter_name,
+                        &formatter_fq,
                         span,
                     )
                 }
@@ -842,7 +839,7 @@ impl ClosureLowerer {
         self_ref_type: TypeId,
         formatter_mut_ref: TypeId,
         string_type: TypeId,
-        formatter_name: &str,
+        formatter_fq: &FqTypeName,
         span: Span,
     ) -> TirFunction {
         let fmt_local = TirExpr::new(
@@ -858,10 +855,10 @@ impl ClosureLowerer {
                 Box::new(fmt_local),
                 FunctionRef {
                     module_source: ModuleSource::format(),
-                    name: format!("{formatter_name}::write_str"),
+                    name: format!("{formatter_fq}::write_str"),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        formatter_name.to_string(),
+                        formatter_fq.clone(),
                         None,
                         "write_str".to_string(),
                     )),
@@ -930,10 +927,14 @@ impl ClosureLowerer {
                 Box::new(self_local),
                 FunctionRef {
                     module_source: self.module_source.clone(),
-                    name: MethodName::format_local(struct_name, Some(target_trait), target_method),
+                    name: MethodName::format_local(
+                        &FqTypeName::declared(&self.module_source, struct_name),
+                        Some(target_trait),
+                        target_method,
+                    ),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        struct_name.to_string(),
+                        FqTypeName::declared(&self.module_source, struct_name),
                         Some(target_trait.to_string()),
                         target_method.to_string(),
                     )),
@@ -974,14 +975,18 @@ impl ClosureLowerer {
         TirFunction {
             module_source: self.module_source.clone(),
             is_async: false,
-            name: MethodName::format_local(struct_name, Some(trait_name), method_name),
+            name: MethodName::format_local(
+                &FqTypeName::declared(&self.module_source, struct_name),
+                Some(trait_name),
+                method_name,
+            ),
             visibility: crate::ast::Visibility::Private,
             is_export: false,
             type_params: Vec::new(),
             impl_type_params: Vec::new(),
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(
-                struct_name.to_string(),
+                FqTypeName::declared(&self.module_source, struct_name),
                 Some(trait_name.to_string()),
                 method_name.to_string(),
             )),
@@ -1729,7 +1734,7 @@ impl ClosureCallSiteLowerer<'_> {
         };
 
         let new_method_info = LocalMethodName::new(
-            functor.struct_name.clone(),
+            FqTypeName::declared(&functor.module_source, &functor.struct_name),
             Some(base_trait.to_string()),
             info.method_name.clone(),
         );

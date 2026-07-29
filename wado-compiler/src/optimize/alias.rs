@@ -406,17 +406,22 @@ impl<'a> CallImmutability<'a> {
                 self.walk(base, stack)
             }
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
-                base_name,
+                type_args,
                 ..
             } => {
-                let is_box_or_list = base_name.as_deref() == Some(self.box_name.as_str())
-                    || base_name.as_deref() == Some(self.list_name.as_str());
+                let is_box_or_list = (!type_args.is_empty() && *name == self.box_name)
+                    || (!type_args.is_empty() && *name == self.list_name);
                 if is_box_or_list {
                     false
                 } else {
-                    let key = (name.clone(), module_source.clone());
+                    // `struct_fields` is keyed by the NIR struct's rendered
+                    // name, so an instantiation must be spelled with its args.
+                    let key = (
+                        self.type_table.struct_rendered_name(name, type_args),
+                        module_source.clone(),
+                    );
                     match self.struct_fields.get(&key) {
                         Some(fields) => fields.iter().all(|&f| self.walk(f, stack)),
                         // Unknown layout (not in the registry) — conservative.
@@ -1037,11 +1042,9 @@ fn reference_pointee_struct_key(
         ResolvedType::Newtype { base_type, .. } => {
             reference_pointee_struct_key(*base_type, type_table)
         }
-        ResolvedType::Struct {
-            name,
-            module_source,
-            ..
-        } => Some((name.clone(), module_source.clone())),
+        ResolvedType::Struct { module_source, .. } => {
+            Some((type_table.struct_list_name(type_id)?, module_source.clone()))
+        }
         _ => None,
     }
 }
@@ -1135,11 +1138,11 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Ref(_) => true,
         ResolvedType::GenericInstance { name, .. } if is_box_or_list_name(name) => true,
-        ResolvedType::Struct { base_name, .. }
-            if base_name.as_deref().is_some_and(is_box_or_list_name) =>
-        {
-            true
-        }
+        ResolvedType::Struct {
+            decl_name,
+            type_args,
+            ..
+        } if !type_args.is_empty() && is_box_or_list_name(decl_name) => true,
         ResolvedType::Primitive(_)
         | ResolvedType::Unit
         | ResolvedType::Never

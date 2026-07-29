@@ -222,14 +222,15 @@ pub(super) fn aggregate_field_info(
     }
     let resolved = type_table.get(return_type);
     if let ResolvedType::Struct {
-        name,
+        decl_name,
         module_source,
-        ..
+        type_args,
     } = resolved
     {
+        let name = type_table.struct_rendered_name(decl_name, type_args);
         let s = structs
             .iter()
-            .find(|s| s.name == *name && s.module_source == *module_source)?;
+            .find(|s| s.name == name && s.module_source == *module_source)?;
         if !s.type_params.is_empty() {
             return None;
         }

@@ -1246,6 +1246,41 @@ pub(super) struct LocalVar {
 }
 
 /// Method lookup result including return type, self parameter kind, and parameter types
+/// Which type's `impl` block answers a method call.
+///
+/// A newtype inherits its base's methods, and the two cases are named
+/// differently — an inherited method is named after the type that declares it.
+/// Spelling that as `Option<TypeId>` left "`None` means the receiver's own
+/// impl" as a convention a reader had to know, and the question "is this the
+/// receiver's own?" got asked downstream by comparing names instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum MethodOwner {
+    /// The receiver's own `impl` block.
+    Receiver,
+    /// Inherited through the receiver's newtype chain from the type that
+    /// declares it — the innermost such type for a chained newtype.
+    InheritedFrom(TypeId),
+}
+
+impl MethodOwner {
+    /// The type whose `impl` declares the method: the receiver itself unless
+    /// the method was inherited.
+    pub(super) fn declaring(self, receiver: TypeId) -> TypeId {
+        match self {
+            Self::Receiver => receiver,
+            Self::InheritedFrom(owner) => owner,
+        }
+    }
+
+    /// The type it was inherited from, or `None` when the receiver owns it.
+    pub(super) fn inherited(self) -> Option<TypeId> {
+        match self {
+            Self::Receiver => None,
+            Self::InheritedFrom(owner) => Some(owner),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct MethodInfo {
     /// [`crate::tir::method_param_offset`] as the digest applied it, carried
@@ -1266,9 +1301,10 @@ pub(super) struct MethodInfo {
     /// expanding defaults that reference earlier parameters (e.g. `fn f(w, h = w)`).
     /// Empty vec when `param_defaults` is also empty.
     pub(super) param_names: Vec<String>,
-    /// If this method was inherited from a newtype's base type, the base type ID
-    /// Used for method signature substitution
-    pub(super) inherited_from_base: Option<TypeId>,
+    /// Which type's `impl` answers this call. Naming and signature
+    /// substitution both read the declaring type from here rather than
+    /// re-deriving it from the receiver.
+    pub(super) owner: MethodOwner,
     /// CM canonical name from `#[cm("...")]` on resource methods.
     pub(super) cm_name: Option<String>,
     /// True when the method was found on a reference type impl (e.g., `impl Trait for &T`).
@@ -1681,7 +1717,12 @@ pub(super) struct TraitMethodMatch {
     pub(super) blanket_type_param: Option<String>,
     /// The struct name that actually has the trait impl (may differ from the
     /// receiver's struct name when the impl was found through the newtype chain).
+    /// Written form — the impl-index key.
     pub(super) impl_struct_name: String,
+    /// [`Self::impl_struct_name`] as the receiver form a mangled name embeds,
+    /// resolved from the impl's own module so it matches the name the impl's
+    /// methods were defined under.
+    pub(super) impl_struct_fq: crate::name::FqTypeName,
     /// True for blanket ref impls like `impl<T: Inspect> Inspect for &T` where
     /// the inner type is a type parameter. False for specific ref impls like
     /// `impl IntoIterator for &List<T>` where the inner type is a concrete generic.
@@ -2067,9 +2108,14 @@ pub(super) struct ResolvedTraitMethod {
     pub(super) trait_name: String,
     /// Method name (e.g., "eq", "cmp", "add", "shl", "neg", "bitnot").
     pub(super) method_name: String,
-    /// Struct name used for method mangling. For newtypes this may be the
-    /// ultimate base-type name when dispatch falls back to the base impl.
+    /// Written name of the type whose impl matched — the impl-index key. For
+    /// newtypes this may be the ultimate base-type name when dispatch falls
+    /// back to the base impl.
     pub(super) impl_name: String,
+    /// That type's `TypeId`, from which the receiver's fq name is read.
+    /// `None` when the receiver is a type parameter, which names no
+    /// declaration.
+    pub(super) impl_type_id: Option<TypeId>,
     /// `self_kind` from the method signature (almost always `Ref`).
     pub(super) self_kind: ast::SelfKind,
     /// Return type of the method, with `Self` and impl type params

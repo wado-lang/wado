@@ -502,8 +502,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // recorded even for impls with no methods referencing it).
                 let _ = scope.resolve_type(&impl_block.ty);
 
-                // Collect method signatures with mangled names
-                let struct_name = scope.get_type_name(&impl_block.ty);
+                // The receiver is named by the module that declares it — the
+                // written name alone is not an identity.
+                let struct_name =
+                    scope.qualified_receiver_name(&scope.get_type_name(&impl_block.ty));
                 let trait_name = impl_block
                     .trait_type
                     .as_ref()
