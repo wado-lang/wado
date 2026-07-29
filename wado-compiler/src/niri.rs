@@ -265,17 +265,25 @@ impl Callee {
         self.writes_param(0)
     }
 
+    /// How many arguments a call to this callee carries, receiver included.
+    fn arity(&self) -> usize {
+        self.mut_params.len()
+    }
+
     /// Whether the parameter at `index` is a `&mut T` borrow — the only kind
-    /// that reaches the caller's storage.
+    /// that reaches the caller's storage. An index the signature does not
+    /// have answers as one that does: nothing about a call the map cannot
+    /// account for is exempt.
     fn writes_param(&self, index: usize) -> bool {
-        self.mut_params.get(index).copied().unwrap_or(false)
+        self.mut_params.get(index).copied().unwrap_or(true)
     }
 
     /// Whether the parameter at `index` is one a passing read describes. A
     /// stored one is not: the callee keeps the reference, and what it later
-    /// reads through it is whatever the referent has become.
+    /// reads through it is whatever the referent has become. Nor is an index
+    /// the signature does not have.
     fn reads_only(&self, index: usize) -> bool {
-        !self.stored_params.get(index).copied().unwrap_or(false)
+        self.stored_params.get(index).is_some_and(|stored| !stored)
     }
 }
 
@@ -736,8 +744,7 @@ fn overlapping_places(places: &[(u32, Vec<u32>)], root: u32, path: &[u32]) -> us
     places
         .iter()
         .filter(|(other_root, other_path)| {
-            *other_root == root
-                && (other_path.starts_with(path) || path.starts_with(other_path))
+            *other_root == root && (other_path.starts_with(path) || path.starts_with(other_path))
         })
         .count()
 }
@@ -891,8 +898,14 @@ impl ExecutedWrites {
             let Some(callee) = callees.get(func_id) else {
                 continue;
             };
-            let at_statement = statements.contains(&e);
+            // Arity is what makes a position mean a parameter. A call the
+            // signature does not fit is one `run_call_a` refuses outright, so
+            // nothing here is exempt either.
             let first_arg = usize::from(receiver.is_some());
+            if first_arg + args.len() != callee.arity() {
+                continue;
+            }
+            let at_statement = statements.contains(&e);
             if let Some(receiver) = receiver {
                 match (callee.writes_receiver(), at_statement) {
                     (false, _) if callee.reads_only(0) => {
@@ -2747,12 +2760,7 @@ impl<'a> Interpreter<'a> {
         let Some((root, path)) = place_of(body, destination) else {
             return Flow::Bail;
         };
-        let (
-            Lattice::Const(at),
-            Lattice::Const(source),
-            Lattice::Const(from),
-            Lattice::Const(len),
-        ) = (
+        let (Lattice::Const(at), Lattice::Const(source), Lattice::Const(from), Lattice::Const(len)) = (
             self.eval_operand_a(body, at),
             self.eval_operand_a(body, source),
             self.eval_operand_a(body, from),
@@ -2856,8 +2864,7 @@ impl<'a> Interpreter<'a> {
         if_true: Operand,
         if_false: Operand,
     ) -> Lattice {
-        let Lattice::Const(Value::Bool(condition)) =
-            self.operand_lattice_folded_a(body, condition)
+        let Lattice::Const(Value::Bool(condition)) = self.operand_lattice_folded_a(body, condition)
         else {
             return Lattice::Unevaluated;
         };

@@ -38,8 +38,8 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
-    CalleeMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice, CtfeBuiltin,
-    CtfeBuiltinMap, is_ctfe_runnable,
+    CalleeMap, CtfeBuiltin, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey,
+    Interpreter, Lattice, is_ctfe_runnable,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 

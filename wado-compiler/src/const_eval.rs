@@ -118,7 +118,12 @@ impl Value {
     /// where the copy traps at run time.
     #[must_use]
     pub fn with_run(&self, at: u64, source: &Self, from: u64, len: u64) -> Option<Self> {
-        let (Self::Seq { type_id, elements }, Self::Seq { elements: source, .. }) = (self, source)
+        let (
+            Self::Seq { type_id, elements },
+            Self::Seq {
+                elements: source, ..
+            },
+        ) = (self, source)
         else {
             return None;
         };

@@ -25,8 +25,8 @@ use wado_compiler::nir_arena::{
 };
 use wado_compiler::nir_value_graph::ValueKind;
 use wado_compiler::niri::{
-    Callee, CalleeMap, GlobalEnv, Interpreter, Lattice, MAX_SEQ_ELEMENTS, CtfeBuiltin, CtfeBuiltinMap, Value,
-    is_ctfe_eligible,
+    Callee, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, GlobalEnv, Interpreter, Lattice,
+    MAX_SEQ_ELEMENTS, Value, is_ctfe_eligible,
 };
 use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
 
@@ -3771,7 +3771,10 @@ fn a_write_through_a_place_the_frame_does_not_own_is_refused() {
     interp.with_callees(&callees);
     interp.with_ctfe_builtins(&builtins);
 
-    assert_eq!(flow_fold(&mut interp, &call_expr(&write_global, vec![])), None);
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&write_global, vec![])),
+        None
+    );
 }
 
 #[test]
@@ -3828,7 +3831,11 @@ fn a_store_through_a_projection_that_is_not_a_place_is_refused() {
             let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
             assign_stmt_b(
                 field_access(
-                    index_expr(local_expr(0, list_ty), int_lit(0, TypeTable::I32, "0"), list_ty),
+                    index_expr(
+                        local_expr(0, list_ty),
+                        int_lit(0, TypeTable::I32, "0"),
+                        list_ty,
+                    ),
                     SeqField::Len.index(),
                     "used",
                     TypeTable::I32,
@@ -4183,11 +4190,7 @@ fn a_method_call_writes_back_through_its_receiver() {
         TypeTable::I32,
         vec![
             let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
-            expr_stmt_b(method_call_expr(
-                &bump,
-                local_expr(0, list_ty),
-                Vec::new(),
-            )),
+            expr_stmt_b(method_call_expr(&bump, local_expr(0, list_ty), Vec::new())),
             return_stmt(used_of_local(list_ty)),
         ],
     );
