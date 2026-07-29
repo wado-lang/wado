@@ -111,6 +111,38 @@ E2E: 3882 passed, 26 failed — 17 of those pre-date this work; three fixtures
 (`serde_generic_deserialize`, `serde_json_roundtrip_complex`,
 `serde_json_treemap`) are open regressions, tracked below.
 
+### Open: a monomorphized struct's base head is not recoverable
+
+Root cause of the three serde regressions, established by instrumentation.
+
+`with_substituted_struct_name` used to take an instantiated spelling and a base
+head as two strings; the migration collapsed them into one `FqTypeName` on the
+grounds that both could be read off it. For a **monomorphized struct** they
+cannot. The type table holds them as two separate facts — `name`, with the
+arguments fused into the string, and `base_name` — and `fq_type_name` returns
+the fused head with an empty `args`. So `head_only()` answers
+`…/Wrapper<i32>`, `base_struct_name()` answers the same, the monomorphizer
+looks for a template named `Wrapper<i32>^Deserialize::deserialize`, finds none,
+and never queues the instance. The stub it leaves behind is what WIR build
+reports as an unsatisfied bound.
+
+Passing the base head (`fq_base_type_name`, which reads `base_name`) alongside
+the instantiated one fixes all three fixtures. It is not sufficient on its own:
+`function_id_for` builds a `FunctionId` from `fq_struct_name()` — base plus
+`struct_type_args` — and those args are *also* unrecoverable
+(`generic_type_args` returns `None` once the originating `GenericInstance` has
+left the table), so two instantiations collapse onto one id and
+`serde_generic_struct_mixed_fields` trips the injectivity assert.
+
+So the fix has to expose the base head *without* weakening per-instantiation
+identity. Two routes, neither yet tried:
+
+- Additive: keep every identity as it is and add the base-headed name as an
+  extra candidate in the monomorphize template lookup. Changes no key, so it
+  cannot collide.
+- Structural: give `LocalMethodName` the instantiated receiver as structure, so
+  `fq_struct_name()` stays unique while `base_struct_name()` is the base.
+
 ### Open: generic-struct `Deserialize` is never instantiated
 
 `Wrapper<i32>^Deserialize::deserialize<core:json/JsonDeserializer>` reaches WIR
