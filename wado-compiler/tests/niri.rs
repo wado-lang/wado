@@ -3678,8 +3678,8 @@ fn a_write_through_a_frame_owned_place_is_read_back() {
     let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
     let set_id = next_test_func_id();
     let get_id = next_test_func_id();
-    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::Set);
-    builtins.insert(get_id, CtfeBuiltin::Get);
+    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
 
     let backing = || {
         field_access(
@@ -3738,7 +3738,7 @@ fn a_write_through_a_place_the_frame_does_not_own_is_refused() {
     let mut table = TypeTable::new();
     let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
     let set_id = next_test_func_id();
-    let builtins = ctfe_builtin_map(set_id, CtfeBuiltin::Set);
+    let builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
 
     let write_global = make_pure_fn_stmts(
         "write_global",
@@ -3895,8 +3895,8 @@ fn array_new_denotes_a_zero_filled_sequence() {
     let array_ty = table.make_builtin_array(TypeTable::U8);
     let new_id = next_test_func_id();
     let get_id = next_test_func_id();
-    let mut builtins = ctfe_builtin_map(new_id, CtfeBuiltin::New);
-    builtins.insert(get_id, CtfeBuiltin::Get);
+    let mut builtins = ctfe_builtin_map(new_id, CtfeBuiltin::ArrayNew);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
 
     let new_then_read = make_pure_fn_stmts(
         "new_then_read",
@@ -3949,7 +3949,7 @@ fn an_allocation_past_the_element_cap_is_not_a_sequence() {
     let mut table = TypeTable::new();
     let array_ty = table.make_builtin_array(TypeTable::U8);
     let new_id = next_test_func_id();
-    let builtins = ctfe_builtin_map(new_id, CtfeBuiltin::New);
+    let builtins = ctfe_builtin_map(new_id, CtfeBuiltin::ArrayNew);
 
     let mut interp = Interpreter::new(&table);
     interp.with_ctfe_builtins(&builtins);
@@ -3974,7 +3974,7 @@ fn a_container_the_frame_never_filled_stays_an_allocation() {
     let string_ty = table.make_struct("String".to_string(), ModuleSource::default());
     let array_ty = table.make_builtin_array(TypeTable::U8);
     let new_id = next_test_func_id();
-    let builtins = ctfe_builtin_map(new_id, CtfeBuiltin::New);
+    let builtins = ctfe_builtin_map(new_id, CtfeBuiltin::ArrayNew);
 
     let with_capacity = make_pure_fn(
         "with_capacity",
@@ -4002,8 +4002,8 @@ fn a_copy_into_a_frame_owned_place_splices_the_source() {
     let array_ty = table.make_builtin_array(TypeTable::U8);
     let copy_id = next_test_func_id();
     let get_id = next_test_func_id();
-    let mut builtins = ctfe_builtin_map(copy_id, CtfeBuiltin::Copy);
-    builtins.insert(get_id, CtfeBuiltin::Get);
+    let mut builtins = ctfe_builtin_map(copy_id, CtfeBuiltin::ArrayCopy);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
 
     let backing = move || {
         field_access(
@@ -4063,7 +4063,7 @@ fn a_copy_past_the_end_of_the_destination_is_refused() {
     let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
     let array_ty = table.make_builtin_array(TypeTable::U8);
     let copy_id = next_test_func_id();
-    let builtins = ctfe_builtin_map(copy_id, CtfeBuiltin::Copy);
+    let builtins = ctfe_builtin_map(copy_id, CtfeBuiltin::ArrayCopy);
 
     let overrun = make_pure_fn_stmts(
         "overrun",
@@ -4537,7 +4537,7 @@ fn a_branch_hint_is_stepped_past() {
     // statement before the growth it guards.
     let table = TypeTable::new();
     let hint_id = next_test_func_id();
-    let builtins = ctfe_builtin_map(hint_id, CtfeBuiltin::Hint);
+    let builtins = ctfe_builtin_map(hint_id, CtfeBuiltin::ColdPath);
 
     let hinted = make_pure_fn_stmts(
         "hinted",
@@ -4595,7 +4595,7 @@ fn a_sequence_over_the_cap_is_not_modelled() {
 #[test]
 fn array_get_folds_an_element() {
     let func_id = next_test_func_id();
-    let map = ctfe_builtin_map(func_id, CtfeBuiltin::Get);
+    let map = ctfe_builtin_map(func_id, CtfeBuiltin::ArrayGet);
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     interp.with_ctfe_builtins(&map);
@@ -4627,7 +4627,7 @@ fn array_get_folds_an_element() {
 #[test]
 fn array_get_reads_through_a_shared_reference() {
     let func_id = next_test_func_id();
-    let map = ctfe_builtin_map(func_id, CtfeBuiltin::Get);
+    let map = ctfe_builtin_map(func_id, CtfeBuiltin::ArrayGet);
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     interp.with_ctfe_builtins(&map);
@@ -4655,7 +4655,7 @@ fn array_get_reads_through_a_shared_reference() {
 fn array_get_past_the_end_is_left_alone() {
     // Folding the read would delete the run-time trap.
     let func_id = next_test_func_id();
-    let map = ctfe_builtin_map(func_id, CtfeBuiltin::Get);
+    let map = ctfe_builtin_map(func_id, CtfeBuiltin::ArrayGet);
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     interp.with_ctfe_builtins(&map);
@@ -4675,7 +4675,7 @@ fn array_get_past_the_end_is_left_alone() {
 #[test]
 fn array_len_folds_to_the_element_count() {
     let func_id = next_test_func_id();
-    let map = ctfe_builtin_map(func_id, CtfeBuiltin::Len);
+    let map = ctfe_builtin_map(func_id, CtfeBuiltin::ArrayLen);
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     interp.with_ctfe_builtins(&map);
@@ -4733,7 +4733,7 @@ fn array_get_reads_an_element_out_of_a_constant_global() {
     // `TABLE[1]` on `global TABLE: List<i32> = [10, 31];` — the container is
     // known through the global env, so the element reads out of it.
     let func_id = next_test_func_id();
-    let map = ctfe_builtin_map(func_id, CtfeBuiltin::Get);
+    let map = ctfe_builtin_map(func_id, CtfeBuiltin::ArrayGet);
     let table = TypeTable::new();
     let module = ModuleSource::default();
     let backing = Value::seq(

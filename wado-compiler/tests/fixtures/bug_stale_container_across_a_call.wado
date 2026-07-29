@@ -1,15 +1,13 @@
 // A container a call writes must not stay bound across it.
 //
 // Container SROA rewrites the tuple list into parallel lists whose locals are
-// assigned rather than declared `mut`, so the walk tracks them. The pushes are
-// statement-position calls the walk steps over — it runs nothing — and a
-// container held across one answers `len()` with the length before the push.
-// The bounds check on the read then folds against that answer and the program
-// traps on an index it does hold.
+// assigned rather than declared `mut`, so the walk tracks them. It runs
+// nothing, though: a container held across a push answers `len()` with the
+// length before it, the bounds check folds against that answer, and the
+// program traps on an index it does hold.
 //
-// The container the frame fills is the *other* case: there the executor
-// performs the write or abandons the evaluation, and only there is stepping
-// past one sound.
+// A container the frame fills is the other case — there the executor performs
+// the write or abandons the evaluation.
 use { println, Stdout } from "core:cli";
 
 #[inline("never")]

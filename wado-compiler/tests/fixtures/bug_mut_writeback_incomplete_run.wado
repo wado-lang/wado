@@ -1,16 +1,14 @@
 // A `&mut` parameter is only worth reading back from a run that reached the
 // end on its own terms.
 //
-// `outer` returns a call the frame refuses to run — a mutating call outside
-// statement position — so its body never performed the push. Reporting that as
-// a completed run wrote the parameter back untouched, and the caller went on
-// believing the container was current: `v.len()` folded to 0 while the run-time
-// list held one element.
+// `outer` returns a call the frame refuses to run, so its body never performed
+// the push. Reporting that as a completed run wrote the parameter back
+// untouched: `v.len()` folded to 0 against a list holding one element.
 //
-// Aliasing is the other way a write-back goes missing. Each `&mut` parameter
-// binds its own snapshot and each write-back replays whole, so two arguments
-// naming the same list let the second undo the first. Wado has no borrow
-// checker, so this is ordinary source.
+// Aliasing loses a write the other way. Each `&mut` parameter binds its own
+// snapshot and each write-back replays whole, so two arguments naming the same
+// list let the second undo the first. Wado has no borrow checker, so that is
+// ordinary source.
 use { println, Stdout } from "core:cli";
 
 #[inline(never)]

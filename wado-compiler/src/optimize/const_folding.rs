@@ -308,12 +308,12 @@ pub(super) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             continue;
         };
         let builtin = match name.as_str() {
-            "builtin::array_get" | "builtin::array_get_u8" => CtfeBuiltin::Get,
-            "builtin::array_len" => CtfeBuiltin::Len,
-            "builtin::array_new" => CtfeBuiltin::New,
-            "builtin::array_set" | "builtin::array_set_u8" => CtfeBuiltin::Set,
-            "builtin::array_copy" => CtfeBuiltin::Copy,
-            "builtin::cold_path" => CtfeBuiltin::Hint,
+            "builtin::array_get" | "builtin::array_get_u8" => CtfeBuiltin::ArrayGet,
+            "builtin::array_len" => CtfeBuiltin::ArrayLen,
+            "builtin::array_new" => CtfeBuiltin::ArrayNew,
+            "builtin::array_set" | "builtin::array_set_u8" => CtfeBuiltin::ArraySet,
+            "builtin::array_copy" => CtfeBuiltin::ArrayCopy,
+            "builtin::cold_path" => CtfeBuiltin::ColdPath,
             "builtin::select" => CtfeBuiltin::Select,
             _ => continue,
         };

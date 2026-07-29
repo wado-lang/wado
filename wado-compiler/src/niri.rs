@@ -225,18 +225,13 @@ pub type CalleeKey = crate::nir::FuncId;
 /// time, not here.
 pub type CalleeMap = IndexMap<CalleeKey, Callee>;
 
-/// A callee the engine may run, with the one fact about it that the
-/// trackability analysis needs answered without a borrow.
+/// A callee the engine may run, with the parameter facts the trackability
+/// analysis needs answered without a borrow. Asking the function later answers
+/// only when nobody holds `borrow_mut` on it, and a fold must not turn on
+/// which function the visitor happens to be walking.
 pub struct Callee {
     pub func: Rc<RefCell<NirFunction>>,
-    /// `is_mut_ref` per parameter, captured when the map is built. Asking the
-    /// function itself would answer only when nobody holds `borrow_mut` on it,
-    /// and this decides whether a local stays trackable — a fold must not turn
-    /// on which function the visitor happens to be walking.
     pub mut_params: Vec<bool>,
-    /// Which parameters the callee keeps beyond the call, from its `stores`
-    /// clause. A kept reference outlives the read, so naming its referent is
-    /// not the passing read the other arguments are.
     pub stored_params: Vec<bool>,
 }
 
@@ -265,61 +260,47 @@ impl Callee {
         self.writes_param(0)
     }
 
-    /// How many arguments a call to this callee carries, receiver included.
     fn arity(&self) -> usize {
         self.mut_params.len()
     }
 
-    /// Whether the parameter at `index` is a `&mut T` borrow — the only kind
-    /// that reaches the caller's storage. An index the signature does not
-    /// have answers as one that does: nothing about a call the map cannot
-    /// account for is exempt.
+    /// A `&mut T` borrow is the only parameter kind that reaches the caller's
+    /// storage. An index the signature does not have answers as one that does:
+    /// nothing about a call the map cannot account for is exempt.
     fn writes_param(&self, index: usize) -> bool {
         self.mut_params.get(index).copied().unwrap_or(true)
     }
 
-    /// Whether the parameter at `index` is one a passing read describes. A
-    /// stored one is not: the callee keeps the reference, and what it later
-    /// reads through it is whatever the referent has become. Nor is an index
-    /// the signature does not have.
+    /// A stored parameter outlives the call, so naming its referent is not the
+    /// passing read the other arguments are.
     fn reads_only(&self, index: usize) -> bool {
         self.stored_params.get(index).is_some_and(|stored| !stored)
     }
 }
 
-/// The builtins the engine understands. Most are the array intrinsics an
-/// element read or write reaches NIR as — a call, not an `Index` node — plus
-/// the hints that denote nothing at all.
+/// The builtins the engine evaluates. An element read or write reaches NIR as
+/// a call to one of these, not as an `Index` node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CtfeBuiltin {
-    Get,
-    Len,
-    /// `array_new(len)`, which denotes a sequence of `len` default elements.
-    New,
-    /// `array_set(&mut seq, i, v)`. Unlike the reads, this is performed rather
-    /// than folded: it updates the frame's value for the place its first
-    /// argument roots at, and only inside a compile-time frame that owns it.
-    Set,
-    /// `array_copy(&mut dst, dst_offset, src, src_offset, len)`, performed like
-    /// [`CtfeBuiltin::Set`] but over a run of elements.
-    Copy,
-    /// A branch hint such as `cold_path()`. It denotes nothing and computes
-    /// nothing, so a frame steps past it — and must, since it sits on the very
-    /// path that grows a container.
-    Hint,
-    /// `select(cond, if_true, if_false)`, the branchless form a comparison
-    /// collapses to. Both arms are already evaluated, so picking one folds
-    /// nothing away that was not going to run.
+    ArrayGet,
+    ArrayLen,
+    ArrayNew,
+    ArraySet,
+    ArrayCopy,
+    ColdPath,
     Select,
 }
 
 impl CtfeBuiltin {
-    /// Whether the builtin writes its first argument, which the executor
-    /// performs at statement position rather than folding.
+    /// Whether the builtin writes its first argument. A write is performed at
+    /// statement position rather than folded, and only by a frame that owns
+    /// the place it lands in.
     fn is_write(self) -> bool {
         match self {
-            Self::Set | Self::Copy => true,
-            Self::Get | Self::Len | Self::New | Self::Hint | Self::Select => false,
+            Self::ArraySet | Self::ArrayCopy => true,
+            Self::ArrayGet | Self::ArrayLen | Self::ArrayNew | Self::ColdPath | Self::Select => {
+                false
+            }
         }
     }
 }
@@ -559,19 +540,10 @@ impl EditSink for BodySink<'_> {
 /// optimizer to keep the body out of line, which says nothing about whether
 /// the result is knowable at compile time.
 ///
-/// Nor is `stores`, which declares that the function keeps a *reference*
-/// parameter beyond the call. The engine has no reference values: an argument
-/// reduces to its referent's value, and a borrow of a local disqualifies that
-/// local's root ([`clobbered_locals`]), so a referent the engine can bind at
-/// all is one nothing in the frame can go on to change. What the callee keeps
-/// is therefore indistinguishable from what it was handed. The one thing that
-/// could change under a stored reference — a mutable global — reaches the
-/// engine as `NonConst` and never binds.
-///
-/// That argument is why a stored argument is the one kind of read
-/// [`ExecutedWrites`] does not exempt: exempting it would restore the local
-/// the borrow names, and the callee would keep a snapshot of a value the frame
-/// goes on to write.
+/// Nor is `stores`. The engine has no reference values — an argument reduces to
+/// its referent's value — so what the callee keeps is a snapshot, sound exactly
+/// while nothing can write the referent afterwards. [`ExecutedWrites`] is what
+/// holds that: a stored argument is the one read it does not exempt.
 #[must_use]
 pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
     func.effects.is_empty()
@@ -715,10 +687,9 @@ fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
     }
 }
 
-/// The location a borrow or lvalue chain denotes: the local it roots at, plus
-/// the field path reaching into that local's value. Distinct from
-/// [`lvalue_root_local`], which answers only *which* local is touched — a write
-/// also needs to know where inside it lands.
+/// The local a borrow or lvalue chain roots at, and the field path reaching
+/// into its value. [`lvalue_root_local`] answers only which local is touched;
+/// a write also needs to know where inside it lands.
 fn place_of(body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
     match &body.exprs[op.as_expr()?].kind {
         ExprKind::Local { index, .. } => Some((*index, Vec::new())),
@@ -737,9 +708,9 @@ fn place_of(body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
     }
 }
 
-/// How many of `places` reach storage the place `(root, path)` reaches. Two
-/// places overlap when one is a prefix of the other: `c.repr` covers `c`, and
-/// `c.repr` and `c.used` cover nothing of each other.
+/// How many of `places` reach storage `(root, path)` reaches. One place covers
+/// another when its path is a prefix: `c` covers `c.repr`, and `c.repr` and
+/// `c.used` cover nothing of each other.
 fn overlapping_places(places: &[(u32, Vec<u32>)], root: u32, path: &[u32]) -> usize {
     places
         .iter()
@@ -766,9 +737,8 @@ fn value_with_path(base: &Value, path: &[u32], new: Value) -> Option<Value> {
 /// A write counts only at statement position, where the executor runs it — one
 /// buried in a larger expression is merely reduced, so its target would keep a
 /// stale value.
-/// What running a call left behind: the value it returned, and the value each
-/// `&mut` parameter holds at return, paired with the caller place it belongs
-/// in.
+/// What running a call left behind: the value it returned, and what each `&mut`
+/// parameter holds at return, paired with the caller place it belongs in.
 struct CallRun {
     result: Lattice,
     writes: Vec<(u32, Vec<u32>, Value)>,
@@ -776,20 +746,17 @@ struct CallRun {
 
 #[derive(Default)]
 struct ExecutedWrites {
-    /// Places only read through: a builtin's source arguments, a shared
-    /// receiver, an argument passed by value. Nothing can write through one,
-    /// so naming it says nothing about whether the value stays current.
+    /// Nothing can write through a read, so naming one says nothing about
+    /// whether the value stays current.
     reads: IndexSet<ExprId>,
-    /// Places written through, and the `Assign` nodes whose target names one.
     /// Exempt only inside a compile-time frame, which performs the write or
-    /// abandons the evaluation: an ordinary walk performs nothing, and a write
-    /// it merely steps over leaves its target stale.
+    /// abandons the evaluation. An ordinary walk performs nothing, and a write
+    /// it steps over leaves its target stale.
     writes: IndexSet<ExprId>,
     place_assigns: IndexSet<ExprId>,
 }
 
 impl ExecutedWrites {
-    /// What a compile-time frame performs itself.
     fn in_frame(
         body: &Body,
         ctfe_builtins: Option<&CtfeBuiltinMap>,
@@ -818,7 +785,7 @@ impl ExecutedWrites {
         writes
     }
 
-    /// What an ordinary walk performs: nothing. Only the reads survive.
+    /// An ordinary walk performs nothing, so only the reads survive.
     fn outside_frame(
         body: &Body,
         ctfe_builtins: Option<&CtfeBuiltinMap>,
@@ -832,9 +799,8 @@ impl ExecutedWrites {
         }
     }
 
-    /// A builtin's arguments. The engine models the whole call exactly, so the
-    /// destination it writes and the source it reads are equally current —
-    /// but only where the frame runs it.
+    /// The engine models a builtin call exactly, so the destination it writes
+    /// and the source it reads are equally current — where the frame runs it.
     fn collect_builtin_borrows(
         &mut self,
         body: &Body,
@@ -867,14 +833,11 @@ impl ExecutedWrites {
         }
     }
 
-    /// The places a call reaches through. A shared receiver or a by-value
-    /// argument only reads, so it counts wherever it appears — including the
-    /// `&self` methods a container is read through. A `&mut` one counts as a
-    /// write, which only a frame performs, and only at statement position:
-    /// elsewhere the projection merely reads the call.
-    ///
-    /// A callee the map does not hold says nothing about its parameters, so
-    /// nothing about it is exempt.
+    /// A shared receiver or by-value argument counts wherever it appears —
+    /// that is what carries a container through the `&self` reads `push` makes
+    /// of its own capacity. A `&mut` one counts only at statement position,
+    /// where a frame performs the write; elsewhere the projection merely reads
+    /// the call. A callee the map does not hold exempts nothing.
     fn collect_call_borrows(
         &mut self,
         body: &Body,
@@ -898,9 +861,6 @@ impl ExecutedWrites {
             let Some(callee) = callees.get(func_id) else {
                 continue;
             };
-            // Arity is what makes a position mean a parameter. A call the
-            // signature does not fit is one `run_call_a` refuses outright, so
-            // nothing here is exempt either.
             let first_arg = usize::from(receiver.is_some());
             if first_arg + args.len() != callee.arity() {
                 continue;
@@ -916,10 +876,6 @@ impl ExecutedWrites {
                 }
             }
             for (i, arg) in args.iter().enumerate() {
-                // `ArenaCallArg::is_mut` is the callee's `mut x: T` prefix — a
-                // parameter it may rebind in its own copy, which reaches no
-                // caller storage. Only `&mut T` does, and that is the
-                // parameter's kind.
                 let index = first_arg + i;
                 match (callee.writes_param(index), at_statement) {
                     (false, _) if callee.reads_only(index) => {
@@ -932,7 +888,6 @@ impl ExecutedWrites {
         }
     }
 
-    /// Whether the walk itself keeps the place `op` names current.
     fn reaches(&self, body: &Body, op: Operand) -> bool {
         let mut op = op;
         loop {
@@ -949,7 +904,7 @@ impl ExecutedWrites {
         }
     }
 
-    /// Record the place `op` names, peeling the borrow it may be wrapped in.
+    /// Records the place `op` names, peeling the borrow it may be wrapped in.
     fn record(&mut self, body: &Body, op: Operand, reach: Reach) {
         let Some(e) = op.as_expr() else {
             return;
@@ -969,7 +924,6 @@ impl ExecutedWrites {
     }
 }
 
-/// How a walk reaches a place.
 #[derive(Clone, Copy)]
 enum Reach {
     Read,
@@ -1003,9 +957,8 @@ pub(crate) fn reachable_exprs(body: &Body) -> Vec<ExprId> {
 ///
 /// The read positions are listed rather than inferred from the absence of the
 /// others, so a node kind nobody taught this walk about costs a fold and never
-/// a wrong one. Under value semantics that list is long — returning, binding,
-/// storing and composing all copy — but each entry earns its place: leave one
-/// out and a container filled in a frame cannot leave it.
+/// a wrong one. Under value semantics that list is long: returning, binding,
+/// storing and composing all copy.
 ///
 /// Only the reachable body is scanned: a mention orphaned by an earlier rewrite
 /// cannot run, so it must not disqualify a local.
@@ -1084,7 +1037,6 @@ fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
             _ => {}
         }
     }
-    // Returning, binding and discarding all copy the value out.
     for (_, stmt) in &body.stmts {
         match &stmt.kind {
             StmtKind::Return { value: Some(op) } => read_value(*op, &mut value_reads),
@@ -1094,8 +1046,6 @@ fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
             _ => {}
         }
     }
-    // A place the frame reaches through directly is one it keeps current, so
-    // naming it is as good as reading it.
     value_reads.extend(writes.reads.iter().chain(&writes.writes).copied());
     for (e, index) in &local_mentions {
         if !value_reads.contains(e) {
@@ -1535,14 +1485,12 @@ impl<'a> Interpreter<'a> {
                 Value::seq(node.type_id, elements).map_or(Lattice::NonConst, Lattice::Const)
             }
             ExprKind::Index { expr: inner, index } => self.index_lattice(body, *inner, *index),
-            // A sequence builtin denotes its value structurally, so a container
-            // built over one is constant without the call being rewritten
-            // first — an allocation has no literal node form to be rewritten
-            // to, and the bottom-up walk would otherwise leave it unevaluated.
+            // A builtin denotes its value structurally, so a container built
+            // over one is constant before any rewrite — an allocation has no
+            // literal node form to be rewritten to.
             ExprKind::Call { .. } => self.try_ctfe_builtin_fold_a(body, e),
-            // A reference reads as its referent, and a dereference reads as the
-            // reference: the engine models referents by value throughout, so
-            // neither step changes what is denoted.
+            // The engine models referents by value, so neither step changes
+            // what is denoted.
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::Deref,
                 expr: inner,
@@ -1940,24 +1888,22 @@ impl<'a> Interpreter<'a> {
 
     /// Write `value` back over `e` as the container literal the lower phase
     /// emits for a source string: a struct over a packed byte array and its
-    /// length. Only a byte-sequence container has that form — every other
-    /// aggregate stays inside the engine, having no operand form to promote to
-    /// and no literal shape to be written as.
+    /// length. Every other aggregate stays inside the engine, having no
+    /// literal shape to be written as.
     ///
-    /// The bytes are the container's first `used`, not the whole backing array:
-    /// a grown container's capacity outruns what it holds, and capacity is not
-    /// observable. A container the frame never filled is left alone, though —
-    /// an empty one is a reservation rather than a result, and writing it back
-    /// would trade the capacity the source asked for against nothing.
+    /// The bytes are the container's first `used`, not the whole backing array
+    /// — a grown container's capacity outruns what it holds, and capacity is
+    /// not observable. One the frame never filled is left alone: an empty
+    /// container is a reservation rather than a result, and a literal cannot
+    /// carry the capacity it asked for.
     fn materialize_seq_via<S: EditSink>(&self, sink: &mut S, e: ExprId, value: &Value) -> bool {
         let Value::Aggregate { type_id, .. } = value else {
             return false;
         };
-        // The literal below names its fields `repr` / `used` and carries only
-        // those two. Any struct over an array and an `i32` has that shape, so
-        // the container has to be identified rather than recognised: writing
-        // one back over `Chunk { data, tag }` would drop a field and read the
-        // second as a length.
+        // Any struct over an array and an `i32` has the shape written below,
+        // so the container is identified rather than recognised: over
+        // `Chunk { data, tag }` the literal drops a field and reads the second
+        // as a length.
         if !self.type_table.is_seq_container(*type_id) {
             return false;
         }
@@ -1987,9 +1933,8 @@ impl<'a> Interpreter<'a> {
             };
             bytes.push(byte);
         }
-        // Every element checked out as a `u8`, so the array the literal names
-        // is `Array<u8>` — not whatever type the value carries, which on the
-        // array-literal path is the container's own.
+        // Every element checked out as a `u8`. The value's own type is the
+        // container's on the array-literal path, so it is not the one to use.
         let Some(backing_type) = self.type_table.find_builtin_array(TypeTable::U8) else {
             return false;
         };
@@ -2543,10 +2488,9 @@ impl<'a> Interpreter<'a> {
             }
             StmtKind::Return { value } => match *value {
                 None => Flow::Return(Lattice::Unevaluated),
-                // A returned expression the frame could not evaluate is one it
-                // stepped over, and whatever that expression would have
-                // written did not happen. The run has to be abandoned rather
-                // than reported as one that reached the end.
+                // A returned expression the frame could not evaluate is one
+                // it stepped over, along with whatever that expression would
+                // have written.
                 Some(op) => match self.eval_operand_a(body, op) {
                     lattice @ (Lattice::Const(_) | Lattice::NonConst) => Flow::Return(lattice),
                     Lattice::Unevaluated => Flow::Bail,
@@ -2705,16 +2649,13 @@ impl<'a> Interpreter<'a> {
         Some(())
     }
 
-    /// Perform `array_set(&mut place, i, v)` or
-    /// `array_copy(&mut place, at, src, from, len)`, updating the frame's value
-    /// for the place's root. `None` when the statement is not a sequence write
-    /// at all; `Some(Flow::Bail)` when it is one the engine cannot follow —
+    /// Perform a builtin at statement position, updating the frame's value for
+    /// the place a write lands in. `None` when the statement is not a builtin
+    /// the engine knows; `Some(Flow::Bail)` when it is one it cannot follow —
     /// stepping past a write it did not apply would leave the container stale.
     ///
     /// The root has to be a local the frame already holds a constant for, which
-    /// is what confines the write to values the engine itself built: a
-    /// parameter, a global, or anything else reaches the frame as
-    /// `NonConst` and bails here.
+    /// confines the write to values the engine itself built.
     fn exec_builtin_stmt_a(&mut self, body: &mut Body, e: ExprId) -> Option<Flow> {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return None;
@@ -2722,10 +2663,13 @@ impl<'a> Interpreter<'a> {
         let builtin = *self.ctfe_builtins.and_then(|m| m.get(func_id))?;
         let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
         match builtin {
-            CtfeBuiltin::Set => Some(self.exec_element_write_a(body, &args)),
-            CtfeBuiltin::Copy => Some(self.exec_run_write_a(body, &args)),
-            CtfeBuiltin::Hint => Some(Flow::Fallthrough(Lattice::Unevaluated)),
-            CtfeBuiltin::Get | CtfeBuiltin::Len | CtfeBuiltin::New | CtfeBuiltin::Select => None,
+            CtfeBuiltin::ArraySet => Some(self.exec_element_write_a(body, &args)),
+            CtfeBuiltin::ArrayCopy => Some(self.exec_run_write_a(body, &args)),
+            CtfeBuiltin::ColdPath => Some(Flow::Fallthrough(Lattice::Unevaluated)),
+            CtfeBuiltin::ArrayGet
+            | CtfeBuiltin::ArrayLen
+            | CtfeBuiltin::ArrayNew
+            | CtfeBuiltin::Select => None,
         }
     }
 
@@ -2751,8 +2695,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// A run write splices `len` of `src`'s elements into the destination. A
-    /// run either side cannot supply is left to trap at run time.
+    /// Splices `len` of `src`'s elements into the destination. A run either
+    /// side cannot supply is left to trap at run time.
     fn exec_run_write_a(&mut self, body: &mut Body, args: &[Operand]) -> Flow {
         let [destination, at, source, from, len] = *args else {
             return Flow::Bail;
@@ -2822,7 +2766,7 @@ impl<'a> Interpreter<'a> {
             return Lattice::Unevaluated;
         };
         match (builtin, args.as_slice()) {
-            (CtfeBuiltin::Len, [arr]) => {
+            (CtfeBuiltin::ArrayLen, [arr]) => {
                 let Lattice::Const(v) = self.operand_to_lattice_a(body, arr.expr) else {
                     return Lattice::Unevaluated;
                 };
@@ -2833,30 +2777,28 @@ impl<'a> Interpreter<'a> {
                     })
                 })
             }
-            (CtfeBuiltin::Get, [arr, index]) => self.index_lattice(body, arr.expr, index.expr),
-            (CtfeBuiltin::New, [len]) => self.allocation_lattice(body, e, len.expr),
+            (CtfeBuiltin::ArrayGet, [arr, index]) => self.index_lattice(body, arr.expr, index.expr),
+            (CtfeBuiltin::ArrayNew, [len]) => self.allocation_lattice(body, e, len.expr),
             (CtfeBuiltin::Select, [condition, if_true, if_false]) => {
                 self.select_lattice(body, condition.expr, if_true.expr, if_false.expr)
             }
-            // A write denotes nothing; the executor performs it as a statement.
-            // Nor does a hint, which the executor simply steps past.
+            // A write denotes nothing; the executor performs it as a
+            // statement. Nor does a hint, which it steps past.
             (
-                CtfeBuiltin::Set
-                | CtfeBuiltin::Copy
-                | CtfeBuiltin::Hint
+                CtfeBuiltin::ArraySet
+                | CtfeBuiltin::ArrayCopy
+                | CtfeBuiltin::ColdPath
                 | CtfeBuiltin::Select
-                | CtfeBuiltin::Len
-                | CtfeBuiltin::Get
-                | CtfeBuiltin::New,
+                | CtfeBuiltin::ArrayLen
+                | CtfeBuiltin::ArrayGet
+                | CtfeBuiltin::ArrayNew,
                 _,
             ) => Lattice::Unevaluated,
         }
     }
 
-    /// The arm `select(cond, if_true, if_false)` picks. Both arms run at run
-    /// time, so the one not taken has to compute rather than trap — a constant
-    /// is exactly that, and anything else keeps the call along with whatever it
-    /// would have done.
+    /// The arm `select` picks. Both arms run at run time, so the one not taken
+    /// has to compute rather than trap; a constant is exactly that.
     fn select_lattice(
         &self,
         body: &Body,
@@ -2878,10 +2820,9 @@ impl<'a> Interpreter<'a> {
     }
 
     /// The sequence `array_new(len)` allocates: `len` elements at the default
-    /// the element type's `array.new_default` leaves. A length that is negative
-    /// or past [`MAX_SEQ_ELEMENTS`], or an element type with no compile-time
-    /// default, is simply not a constant here — the call stays and traps or
-    /// allocates at run time as written.
+    /// `array.new_default` leaves. A negative or oversized length, or an
+    /// element type with no compile-time default, is not a constant here — the
+    /// call stays and traps or allocates at run time as written.
     fn allocation_lattice(&self, body: &Body, e: ExprId, len: Operand) -> Lattice {
         let Lattice::Const(len) = self.operand_to_lattice_a(body, len) else {
             return Lattice::Unevaluated;
@@ -2899,18 +2840,18 @@ impl<'a> Interpreter<'a> {
         ) else {
             return Lattice::Unevaluated;
         };
-        // Checked before building: an allocation the value model would reject
-        // must not be walked element by element first.
+        // Before building: an allocation the value model rejects must not be
+        // walked element by element first.
         if len > MAX_SEQ_ELEMENTS {
             return Lattice::Unevaluated;
         }
         Value::seq(array_type, vec![default; len]).map_or(Lattice::Unevaluated, Lattice::Const)
     }
 
-    /// Fold a call to the value it computes. A call that writes through a
-    /// `&mut` parameter is never folded here: this projection is re-entrant,
-    /// and a write applied twice is worse than one not folded at all. Those
-    /// run at statement position, where the executor applies the writes.
+    /// Fold a call to the value it computes. One that writes through a `&mut`
+    /// parameter is never folded here: this projection is re-entrant, and a
+    /// write applied twice is worse than one not folded at all. Those run at
+    /// statement position, where the executor applies the writes.
     /// `Unevaluated` on any miss, so the original call — and any runtime trap
     /// inside it — survives.
     fn try_call_fold_a(&mut self, body: &Body, e: ExprId) -> Lattice {
@@ -2933,8 +2874,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// The callee a call names, and the operands bound to its parameters —
-    /// a method's receiver is its first.
+    /// The callee a call names, and the operands bound to its parameters. A
+    /// method's receiver is its first.
     fn call_target_a(&self, body: &Body, e: ExprId) -> Option<(CalleeKey, Vec<Operand>)> {
         match &body.exprs[e].kind {
             ExprKind::Call { func_id, args, .. } => {
@@ -2956,14 +2897,12 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Run a call in a compile-time frame: bind the parameters, execute the
-    /// body, and report both the value it returns and what it leaves in each
-    /// `&mut` parameter. `None` when the frame cannot run it — an unknown
-    /// callee, an argument that is not constant, recursion, or an exhausted
-    /// budget.
+    /// body, and report the value it returns along with what it leaves in each
+    /// `&mut` parameter. `None` when the frame cannot run it.
     ///
-    /// `may_write` is the caller's promise to apply the write-backs. Without
-    /// it a callee that takes a `&mut` parameter is refused outright, since
-    /// running it would produce writes with nowhere to go.
+    /// `may_write` is the caller's promise to apply the write-backs. Without it
+    /// a callee taking a `&mut` parameter is refused outright, since running it
+    /// would produce writes with nowhere to go.
     fn run_call_a(&mut self, body: &Body, e: ExprId, may_write: bool) -> Option<CallRun> {
         let callees = self.callees?;
         let (key, args) = self.call_target_a(body, e)?;
@@ -2982,9 +2921,9 @@ impl<'a> Interpreter<'a> {
         if self.step_budget == 0 {
             return None;
         }
-        // A unit callee denotes nothing, whatever its last statement computed.
-        // Handing that value back would leave it on the stack where the call
-        // stood, and the module would fail to validate.
+        // A unit callee denotes nothing, whatever its last statement
+        // computed. Handing that value back would leave it on the stack where
+        // the call stood and the module would fail to validate.
         let returns_unit = callee.return_type == crate::tir::TypeTable::UNIT;
 
         let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());
@@ -3005,8 +2944,8 @@ impl<'a> Interpreter<'a> {
         }
         // Each parameter binds its own snapshot and each write-back replays
         // whole, so two arguments naming the same storage would let the later
-        // one undo the earlier. Wado has no borrow checker, so `f(&mut v, &v)`
-        // is ordinary source; the frame declines it and the call runs.
+        // undo the earlier. Wado has no borrow checker, so that is ordinary
+        // source: the frame declines it and the call runs.
         if targets
             .iter()
             .any(|(_, root, path)| overlapping_places(&places, *root, path) > 1)
@@ -3041,8 +2980,7 @@ impl<'a> Interpreter<'a> {
         }
         let root = scratch.root;
         let flow = self.exec_block_a(&mut scratch, root);
-        // Only a body that ran to the end leaves parameters worth reading: one
-        // that bailed part way holds whatever the half-run wrote.
+        // Only a body that ran to the end leaves parameters worth reading.
         let completed = matches!(flow, Flow::Return(_) | Flow::Fallthrough(_));
         let result = match flow {
             Flow::Return(lattice) | Flow::Fallthrough(lattice) if !returns_unit => lattice,
@@ -3052,9 +2990,9 @@ impl<'a> Interpreter<'a> {
             | Flow::Continue
             | Flow::Bail => Lattice::Unevaluated,
         };
-        // Read the parameters back before the frame is torn down. A `&mut`
-        // parameter the callee left untrackable has no value to write, and the
-        // run as a whole is refused rather than losing the write.
+        // Before the frame is torn down. A `&mut` parameter the callee left
+        // untrackable has no value to write, and the run is refused rather
+        // than losing it.
         let written: Option<Vec<(u32, Vec<u32>, Value)>> = completed
             .then(|| {
                 targets
@@ -3078,9 +3016,9 @@ impl<'a> Interpreter<'a> {
         })
     }
 
-    /// An argument's value, folding the arithmetic it may still be spelled as.
-    /// The structural projection alone reads only what already stands as a
-    /// literal, and an argument reaches a call as written.
+    /// An argument's value, folding the arithmetic it may still be spelled as:
+    /// an argument reaches a call as written, and the structural projection
+    /// alone reads only what already stands as a literal.
     fn operand_lattice_folded_a(&self, body: &Body, op: Operand) -> Lattice {
         match op.as_expr() {
             Some(e) => self.reduce_to_lattice_a(body, e),
