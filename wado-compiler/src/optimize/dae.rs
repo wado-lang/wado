@@ -170,7 +170,7 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
         if trait_name != inspect_name && trait_name != inspect_alt_name {
             continue;
         }
-        if !functor_struct_names.contains(&(func.module_source.clone(), mi.struct_name.clone())) {
+        if !functor_struct_names.contains(&(func.module_source.clone(), mi.struct_name().clone())) {
             continue;
         }
         if let Some(id) = func.id {

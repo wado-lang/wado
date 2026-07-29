@@ -6821,7 +6821,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name: facts.mangled_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName {
-                        struct_name: facts.target_name.to_mangled(),
                         receiver: Receiver::Type(facts.target_name),
                         struct_type_args: Vec::new(),
                         trait_name: Some(from_trait),

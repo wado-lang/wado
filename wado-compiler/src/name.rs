@@ -525,10 +525,12 @@ pub fn extract_local_name(name: &str) -> &str {
 /// - `Point^Display::fmt` → `struct_name="Point"`, `trait_name=Some("Display")`, `method_name="fmt"`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LocalMethodName {
-    /// The struct name, possibly with type args (e.g., "Point" or "Point<i32>")
-    pub struct_name: String,
     /// The typed receiver shape (`Point`, `&T`, `S::SeqSerializer`). Its
     /// `head_key()` is the base identity string preserved across monomorphization.
+    ///
+    /// With [`Self::struct_type_args`] this is the whole of the receiver's
+    /// identity — the rendered `Point<i32>` spelling is [`Self::struct_name`],
+    /// derived rather than stored, so the two cannot disagree.
     pub receiver: Receiver,
     /// The trait/effect/resource name, possibly with type args
     /// (e.g., `"Display"`, `"Stream<u8>"`).
@@ -852,6 +854,26 @@ impl LocalMethodName {
         &self.receiver
     }
 
+    /// The receiver as a mangled name embeds it: the head with its type
+    /// arguments applied (`Point<i32>`, `&List<i32>`).
+    ///
+    /// Derived from [`Self::receiver`] and [`Self::struct_type_args`] rather
+    /// than stored beside them, so it cannot drift from the structure it is a
+    /// rendering of.
+    #[must_use]
+    pub fn struct_name(&self) -> String {
+        if self.struct_type_args.is_empty() {
+            self.receiver.head_key().into_string()
+        } else {
+            let rendered: Vec<String> = self
+                .struct_type_args
+                .iter()
+                .map(FqTypeName::to_mangled)
+                .collect();
+            self.receiver.mangle(&rendered)
+        }
+    }
+
     /// The base receiver identity string: `Point`, `&`, `&mut`, `S::SeqSerializer`.
     #[must_use]
     pub fn base_struct_name(&self) -> String {
@@ -940,10 +962,8 @@ impl LocalMethodName {
         let base_trait_name = trait_name
             .as_deref()
             .map(|n| split_base_name(n).to_string());
-        let struct_name = receiver.head_key().into_string();
         Self {
             receiver,
-            struct_name,
             struct_type_args: Vec::new(),
             base_trait_name,
             base_trait_module: None,
@@ -977,7 +997,6 @@ impl LocalMethodName {
             .as_deref()
             .map(|n| split_base_name(n).to_string());
         Self {
-            struct_name: struct_name.to_mangled(),
             receiver: Receiver::Type(struct_name),
             struct_type_args: Vec::new(),
             base_trait_name,
@@ -1016,14 +1035,7 @@ impl LocalMethodName {
         impl_type_args: &[FqTypeName],
         method_type_args: &[String],
     ) -> Self {
-        let mangled_struct = if impl_type_args.is_empty() {
-            self.struct_name.clone()
-        } else {
-            let rendered: Vec<String> = impl_type_args.iter().map(FqTypeName::to_mangled).collect();
-            self.receiver.mangle(&rendered)
-        };
         Self {
-            struct_name: mangled_struct,
             struct_type_args: impl_type_args.to_vec(),
             receiver: self.receiver.clone(),
             trait_name: self.trait_name.clone(),
@@ -1082,7 +1094,6 @@ impl LocalMethodName {
     #[must_use]
     pub fn with_substituted_struct_name(&self, resolved: &FqTypeName) -> Self {
         Self {
-            struct_name: resolved.to_mangled(),
             receiver: Receiver::Type(resolved.head_only()),
             struct_type_args: resolved.args().to_vec(),
             trait_name: self.trait_name.clone(),
@@ -1118,9 +1129,9 @@ impl LocalMethodName {
     pub fn to_mangled_name(&self) -> String {
         let method_part = self.full_method_name();
         if let Some(trait_name) = &self.trait_name {
-            format!("{}^{}::{}", self.struct_name, trait_name, method_part)
+            format!("{}^{}::{}", self.struct_name(), trait_name, method_part)
         } else {
-            format!("{}::{}", self.struct_name, method_part)
+            format!("{}::{}", self.struct_name(), method_part)
         }
     }
 

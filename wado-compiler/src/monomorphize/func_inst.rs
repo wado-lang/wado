@@ -634,7 +634,7 @@ impl Monomorphizer {
                         info.trait_name.as_deref(),
                         &info.method_name,
                     )];
-                    if info.struct_name != info.base_struct_name() {
+                    if info.struct_name() != info.base_struct_name() {
                         names_to_try.push(MethodName::format_local(
                             &info.fq_struct_name(),
                             info.trait_name.as_deref(),
@@ -654,7 +654,7 @@ impl Monomorphizer {
                             &func.module_source,
                             &generic_method_name,
                             Some(info),
-                            &[&info.base_struct_name(), &info.struct_name],
+                            &[&info.base_struct_name(), &info.struct_name()],
                             None,
                             None,
                         ) {
@@ -664,10 +664,10 @@ impl Monomorphizer {
                             // from the struct name if needed.
                             let impl_type_args = if monomorph.impl_type_args.is_empty()
                                 && !generic_func.impl_type_params.is_empty()
-                                && info.struct_name != info.base_struct_name()
+                                && info.struct_name() != info.base_struct_name()
                             {
                                 type_table
-                                    .find_type_args_by_mangled_name(&info.struct_name)
+                                    .find_type_args_by_mangled_name(&info.struct_name())
                                     .unwrap_or_default()
                             } else {
                                 monomorph.impl_type_args.clone()
@@ -761,7 +761,7 @@ impl Monomorphizer {
                         info.trait_name.as_deref(),
                         &info.method_name,
                     )];
-                    if info.struct_name != info.base_struct_name() {
+                    if info.struct_name() != info.base_struct_name() {
                         names_to_try.push(MethodName::format_local(
                             &info.fq_struct_name(),
                             info.trait_name.as_deref(),
@@ -778,7 +778,7 @@ impl Monomorphizer {
                             &method_func.module_source,
                             &generic_method_name,
                             Some(info),
-                            &[&info.base_struct_name(), &info.struct_name],
+                            &[&info.base_struct_name(), &info.struct_name()],
                             None,
                             Some((receiver.type_id, type_table)),
                         ) {
@@ -936,8 +936,9 @@ impl Monomorphizer {
                                     let info_base = info_ref
                                         .map(LocalMethodName::base_struct_name)
                                         .unwrap_or_default();
-                                    let candidates: Vec<&str> = if let Some(info) = info_ref {
-                                        vec![&info_base, &info.struct_name, &base_struct]
+                                    let info_inst = info_ref.map(LocalMethodName::struct_name).unwrap_or_default();
+                                    let candidates: Vec<&str> = if info_ref.is_some() {
+                                        vec![&info_base, &info_inst, &base_struct]
                                     } else {
                                         vec![&base_struct]
                                     };
@@ -1051,8 +1052,9 @@ impl Monomorphizer {
                         let info_base = info_ref
                             .map(LocalMethodName::base_struct_name)
                             .unwrap_or_default();
-                        let candidates: Vec<&str> = if let Some(info) = info_ref {
-                            vec![&info_base, &info.struct_name, &base_struct]
+                        let info_inst = info_ref.map(LocalMethodName::struct_name).unwrap_or_default();
+                        let candidates: Vec<&str> = if info_ref.is_some() {
+                            vec![&info_base, &info_inst, &base_struct]
                         } else {
                             vec![&base_struct]
                         };
@@ -1120,7 +1122,7 @@ impl Monomorphizer {
                             let effective_impl_type_args = if generic_func
                                 .method_info
                                 .as_ref()
-                                .is_some_and(|mi| mi.struct_name != base_struct)
+                                .is_some_and(|mi| mi.struct_name() != base_struct)
                                 && generic_func.impl_type_params.is_empty()
                             {
                                 Vec::new()
@@ -1192,8 +1194,9 @@ impl Monomorphizer {
                         let info_base = info_ref
                             .map(LocalMethodName::base_struct_name)
                             .unwrap_or_default();
-                        let candidates: Vec<&str> = if let Some(info) = info_ref {
-                            vec![&info_base, &info.struct_name, base_struct]
+                        let info_inst = info_ref.map(LocalMethodName::struct_name).unwrap_or_default();
+                        let candidates: Vec<&str> = if info_ref.is_some() {
+                            vec![&info_base, &info_inst, base_struct]
                         } else {
                             vec![base_struct]
                         };
@@ -1247,8 +1250,9 @@ impl Monomorphizer {
                     let info_base = info_ref
                         .map(LocalMethodName::base_struct_name)
                         .unwrap_or_default();
-                    let candidates: Vec<&str> = if let Some(info) = info_ref {
-                        vec![&info_base, &info.struct_name]
+                    let info_inst = info_ref.map(LocalMethodName::struct_name).unwrap_or_default();
+                    let candidates: Vec<&str> = if info_ref.is_some() {
+                        vec![&info_base, &info_inst]
                     } else {
                         Vec::new()
                     };
@@ -1374,7 +1378,7 @@ impl Monomorphizer {
                     }
                 };
                 if let Some(ref info) = method_func.method_info
-                    && TypeTable::is_tuple_type(&info.struct_name)
+                    && TypeTable::is_tuple_type(&info.struct_name())
                     && receiver_is_builtin_tuple
                 {
                     let mono = method_func.monomorph_info.as_ref();
@@ -1398,8 +1402,9 @@ impl Monomorphizer {
                         let info_base = info_ref
                             .map(LocalMethodName::base_struct_name)
                             .unwrap_or_default();
-                        let candidates: Vec<&str> = if let Some(info) = info_ref {
-                            vec![&info_base, &info.struct_name]
+                        let info_inst = info_ref.map(LocalMethodName::struct_name).unwrap_or_default();
+                        let candidates: Vec<&str> = if info_ref.is_some() {
+                            vec![&info_base, &info_inst]
                         } else {
                             vec![TypeTable::TUPLE_TYPE_NAME]
                         };
@@ -1898,7 +1903,7 @@ impl Monomorphizer {
                                 .collect::<Vec<_>>(),
                         )
                     } else if self.current_impl_type_param_count > 0
-                        && info.struct_name == info.base_struct_name()
+                        && info.struct_name() == info.base_struct_name()
                         && self.current_impl_struct_name.as_deref()
                             == Some(info.base_struct_name().as_str())
                     {
@@ -2933,7 +2938,7 @@ impl Monomorphizer {
         // Check if the struct actually needs type arg substitution.
         // Skip for non-generic structs (e.g., String::push_str from template strings)
         // that happen to appear inside a generic impl block.
-        let has_explicit_type_params = info.struct_name != info.base_struct_name();
+        let has_explicit_type_params = info.struct_name() != info.base_struct_name();
         let receiver_is_generic = {
             let base = type_table.peel_refs(receiver_type_id);
             // Unwrap Newtype to check if the underlying base type is generic
@@ -4417,7 +4422,7 @@ fn try_lower_comparison(
                 // The call sites synthesised here (Eq / Ord operator lowering) name
                 // their target methods with the same struct-name form the
                 // monomorphizer's `method_instantiation_name_inner` uses to set the
-                // function definition's `MethodInfo.struct_name`.
+                // function definition's `MethodInfo.struct_name()`.
                 let args: Vec<FqTypeName> = type_args
                     .iter()
                     .map(|&t| type_table.fq_type_name(t))
@@ -4445,7 +4450,7 @@ fn try_lower_comparison(
         // only concrete (non-generic) impls live in the module the function
         // actually compiles into. Generic impls' instantiations live in the
         // receiver type's module, surfaced here through `type_mod`. Lookup
-        // uses `info.struct_name` (the post-substitution full type name)
+        // uses `info.struct_name()` (the post-substitution full type name)
         // — matches `FuncInstState::impl_module` so the same trait-method
         // call resolves identically here and in receiver-substitution paths.
         // `type_mod` is also passed to disambiguate same-name receiver
@@ -4460,7 +4465,7 @@ fn try_lower_comparison(
             .as_deref()
             .and_then(|tn| {
                 trait_env
-                    .concrete_impl_module_for(&info.struct_name, tn, type_mod.as_ref())
+                    .concrete_impl_module_for(&info.struct_name(), tn, type_mod.as_ref())
                     .cloned()
             })
             .or(type_mod)

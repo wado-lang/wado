@@ -149,6 +149,6 @@ Order:
       interchangeable — the swap behind three of the six defects.
 - [ ] 1c. `MangledName` on `func_map` / emitted names; `StructListKey` on the
       struct list.
-- [ ] 2. `LocalMethodName::struct_name` field → derived method.
+- [x] 2. `LocalMethodName::struct_name` field → derived method.
 - [ ] 3. `MethodOwner` replacing `inherited_from_base` and its sibling fields.
 - [ ] 4. `TypeIdentity` in `ResolvedType`; delete `base_name` / `is_monomorphized`.

@@ -64,7 +64,7 @@ impl FuncInstState {
     /// route `&List<i32>^Inspect::inspect` through the `&T`-blanket
     /// instantiation rather than collapsing it to `List<i32>::inspect`.
     ///
-    /// The lookup uses `info.struct_name` (the post-substitution type
+    /// The lookup uses `info.struct_name()` (the post-substitution type
     /// name) rather than `info.base_struct_name()`, which mirrors the
     /// legacy `trait_method_locations.contains_key(<full mangled name>)`
     /// semantics: a concrete impl's key is the full type name (e.g. the
@@ -84,13 +84,13 @@ impl FuncInstState {
             .or(info.trait_name.as_deref())?;
         if let Some(m) =
             self.trait_env
-                .concrete_impl_module_for(&info.struct_name, trait_name, type_module)
+                .concrete_impl_module_for(&info.struct_name(), trait_name, type_module)
         {
             return Some(m.clone());
         }
         // Fall back to the head name for argument shapes the qualified
         // instantiated index above cannot spell (tuples, function types).
-        if info.base_struct_name() != info.struct_name
+        if info.base_struct_name() != info.struct_name()
             && let Some(m) = self.trait_env.concrete_impl_module_for(
                 &info.base_struct_name(),
                 trait_name,
@@ -131,11 +131,11 @@ impl FuncInstState {
             .or(info.trait_name.as_deref())?;
         if let Some(m) = self
             .trait_env
-            .impl_module_for(&info.struct_name, trait_name, type_module)
+            .impl_module_for(&info.struct_name(), trait_name, type_module)
         {
             return Some(m.clone());
         }
-        if info.base_struct_name() != info.struct_name
+        if info.base_struct_name() != info.struct_name()
             && let Some(m) =
                 self.trait_env
                     .impl_module_for(&info.base_struct_name(), trait_name, type_module)
@@ -377,7 +377,7 @@ impl Monomorphizer {
         } else {
             // Normal: append type args: "List" → "List<i32>"
             MethodName::format_struct_with_args(
-                &method_info.struct_name,
+                &method_info.struct_name(),
                 method_info.receiver().ref_kind(),
                 &impl_arg_names,
                 method_info.trait_name.as_deref(),
@@ -602,7 +602,7 @@ impl Monomorphizer {
         }
         if let Some(info) = info {
             c.push(Cow::Owned(info.receiver.head_key().into_string()));
-            c.push(Cow::Borrowed(info.struct_name.as_str()));
+            c.push(Cow::Owned(info.struct_name()));
         }
         c.push(Cow::Borrowed(struct_name));
         c

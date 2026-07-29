@@ -302,7 +302,7 @@ impl Monomorphizer {
                     info.trait_name.as_deref(),
                     &info.method_name,
                 )];
-                if info.struct_name != info.base_struct_name() {
+                if info.struct_name() != info.base_struct_name() {
                     names_to_try.push(MethodName::format_local(
                         &info.fq_struct_name(),
                         info.trait_name.as_deref(),
@@ -332,7 +332,8 @@ impl Monomorphizer {
                     })
                     .unwrap_or_else(|| monomorph.impl_type_args.clone());
                 let base_struct_name = info.base_struct_name();
-                let candidates: Vec<&str> = vec![&base_struct_name, &info.struct_name];
+                let info_inst = info.struct_name();
+                let candidates: Vec<&str> = vec![&base_struct_name, &info_inst];
                 for generic_method_name in names_to_try {
                     let key = InstantiationKey {
                         name: generic_method_name.clone(),
@@ -500,8 +501,9 @@ impl Monomorphizer {
                     let info_base = info_ref
                         .map(LocalMethodName::base_struct_name)
                         .unwrap_or_default();
-                    let dg_candidates: Vec<&str> = if let Some(info) = info_ref {
-                        vec![&info_base, &info.struct_name, &base_struct]
+                    let info_inst = info_ref.map(LocalMethodName::struct_name).unwrap_or_default();
+                    let dg_candidates: Vec<&str> = if info_ref.is_some() {
+                        vec![&info_base, &info_inst, &base_struct]
                     } else {
                         vec![&base_struct]
                     };
@@ -635,8 +637,9 @@ impl Monomorphizer {
             let info_base = info_ref
                 .map(LocalMethodName::base_struct_name)
                 .unwrap_or_default();
-            let pk_candidates: Vec<&str> = if let Some(info) = info_ref {
-                vec![&info_base, &info.struct_name, &base_struct]
+            let info_inst = info_ref.map(LocalMethodName::struct_name).unwrap_or_default();
+            let pk_candidates: Vec<&str> = if info_ref.is_some() {
+                vec![&info_base, &info_inst, &base_struct]
             } else {
                 vec![&base_struct]
             };
@@ -701,8 +704,9 @@ impl Monomorphizer {
                 let mi_base = mi
                     .map(LocalMethodName::base_struct_name)
                     .unwrap_or_default();
-                let candidates: Vec<&str> = if let Some(info) = mi {
-                    vec![&mi_base, &info.struct_name]
+                let info_inst = mi.map(LocalMethodName::struct_name).unwrap_or_default();
+                let candidates: Vec<&str> = if mi.is_some() {
+                    vec![&mi_base, &info_inst]
                 } else {
                     Vec::new()
                 };
@@ -739,7 +743,7 @@ impl Monomorphizer {
         // Tuple variadic impl: rewrite `[]^Eq::eq` → `[]<i32,i32,i32>^Eq::eq`.
         // The reserved tuple base name `[]` is unique to built-in tuples.
         if let Some(ref info) = method_func.method_info
-            && TypeTable::is_tuple_type(&info.struct_name)
+            && TypeTable::is_tuple_type(&info.struct_name())
         {
             let mono = method_func.monomorph_info.as_ref();
             let generic_name = mono.map(|m| m.generic_name.clone()).unwrap_or_else(|| {
