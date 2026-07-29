@@ -171,41 +171,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => (crate::name::MangledName::new(name.clone()), module_source.clone()),
+            } => (
+                crate::name::MangledName::new(name.clone()),
+                module_source.clone(),
+            ),
             // Primitive types have impl blocks in core:prelude/primitive
-            ResolvedType::Primitive(_) => (crate::name::MangledName::new(
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .mangle_type_name(base_type_id)),
+            ResolvedType::Primitive(_) => (
+                crate::name::MangledName::new(
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .mangle_type_name(base_type_id),
+                ),
                 ModuleSource::primitive(),
             ),
             // Unit type () has impl blocks in core:prelude/primitive
-            ResolvedType::Unit => (crate::name::MangledName::new(
-                TypeTable::UNIT_TYPE_NAME.to_string()),
+            ResolvedType::Unit => (
+                crate::name::MangledName::new(TypeTable::UNIT_TYPE_NAME.to_string()),
                 ModuleSource::primitive(),
             ),
             // Enum types - use enum name and its defining module
             ResolvedType::Enum {
                 name,
                 module_source,
-            } => (crate::name::MangledName::new(name.clone()), module_source.clone()),
+            } => (
+                crate::name::MangledName::new(name.clone()),
+                module_source.clone(),
+            ),
             // Generic resource types (Future<T>, Stream<T>, etc.) - use resource name and module
             ResolvedType::GenericResource {
                 name,
                 module_source,
                 ..
-            } => (crate::name::MangledName::new(name.clone()), module_source.clone()),
+            } => (
+                crate::name::MangledName::new(name.clone()),
+                module_source.clone(),
+            ),
             // Newtype/Flags - use the type's own name and defining module
             ResolvedType::Newtype {
                 name,
                 module_source,
                 ..
-            } => (crate::name::MangledName::new(name.clone()), module_source.clone()),
+            } => (
+                crate::name::MangledName::new(name.clone()),
+                module_source.clone(),
+            ),
             ResolvedType::Flags {
                 name,
                 module_source,
-            } => (crate::name::MangledName::new(name.clone()), module_source.clone()),
+            } => (
+                crate::name::MangledName::new(name.clone()),
+                module_source.clone(),
+            ),
             // Raw GC array `Array<T>`: inherent methods live in
             // `impl Array<T>` (core:prelude/array.wado), keyed by "Array".
             ResolvedType::BuiltinArray(_) => (
@@ -214,7 +231,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
             _ => (
                 crate::name::MangledName::new(
-                    self.tysys.type_table.borrow().mangle_type_name(base_type_id),
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .mangle_type_name(base_type_id),
                 ),
                 self.current_module_source.clone(),
             ),
@@ -1585,13 +1605,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 let name = &name.to_string();
                 (
-                name.clone(),
-                module_source.clone(),
-                FqTypeName::declared(module_source, name),
-                vec![],
-            )
+                    name.clone(),
+                    module_source.clone(),
+                    FqTypeName::declared(module_source, name),
+                    vec![],
+                )
             }
-ResolvedType::Resource {
+            ResolvedType::Resource {
                 name,
                 module_source,
             } => (
@@ -1712,8 +1732,11 @@ ResolvedType::Resource {
                                         module_source,
                                         ..
                                     } => {
-                                        let fq = FqTypeName::declared(&module_source, &name.as_mangled_str());
-                                        break (name, module_source, fq, vec![]);
+                                        let fq = FqTypeName::declared(
+                                            &module_source,
+                                            name.as_mangled_str(),
+                                        );
+                                        break (name.to_string(), module_source, fq, vec![]);
                                     }
                                     ResolvedType::Newtype {
                                         base_type: next, ..
@@ -1721,7 +1744,7 @@ ResolvedType::Resource {
                                     _ => {
                                         let fq =
                                             FqTypeName::declared(&newtype_module, &newtype_name);
-                                        break (crate::name::MangledName::new(newtype_name), newtype_module, fq, vec![]);
+                                        break (newtype_name, newtype_module, fq, vec![]);
                                     }
                                 }
                             }
@@ -1815,7 +1838,7 @@ ResolvedType::Resource {
         // Emit a compile error if the static method was not found anywhere
         if return_type == TypeTable::UNKNOWN {
             let _ = self.emit(TypeError::UnknownFunction {
-                name: format!("{}::{}", struct_name, static_call.method),
+                name: format!("{struct_name}::{}", static_call.method),
                 span: static_call.span,
             });
             return TypeTable::ERROR;
@@ -2482,9 +2505,9 @@ ResolvedType::Resource {
                         ..
                     } => {
                         let name = &name.to_string();
-                        break Some((module_source, name.to_string()))
+                        break Some((module_source, name.to_string()));
                     }
-ResolvedType::GenericInstance {
+                    ResolvedType::GenericInstance {
                         name,
                         module_source,
                         ..

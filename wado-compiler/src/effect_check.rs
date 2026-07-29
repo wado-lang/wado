@@ -245,7 +245,8 @@ fn collect_resource_refs(
             name,
             module_source,
         } => {
-            if let Some(payloads) = variant_payloads.get(&(module_source.clone(), name.to_string())) {
+            if let Some(payloads) = variant_payloads.get(&(module_source.clone(), name.to_string()))
+            {
                 for pt in payloads {
                     collect_resource_refs(*pt, tt, struct_fields, variant_payloads, out, visited);
                 }

@@ -4829,7 +4829,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let name = &name.to_string();
                     (name.clone(), module_source.clone())
                 }
-ResolvedType::GenericInstance {
+                ResolvedType::GenericInstance {
                     name,
                     module_source,
                     ..
@@ -9134,7 +9134,9 @@ ResolvedType::GenericInstance {
                 name,
                 module_source,
                 ..
-            } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name.as_mangled_str()),
+            } if name == "u128" || name == "i128" => {
+                FqTypeName::declared(&module_source, &name.as_mangled_str())
+            }
             _ => return None,
         };
 
@@ -9191,7 +9193,9 @@ ResolvedType::GenericInstance {
                 name,
                 module_source,
                 ..
-            } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name.as_mangled_str()),
+            } if name == "u128" || name == "i128" => {
+                FqTypeName::declared(&module_source, &name.as_mangled_str())
+            }
             _ => return None,
         };
 

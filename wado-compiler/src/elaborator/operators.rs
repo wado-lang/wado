@@ -360,7 +360,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let name = &name.to_string();
                     Some(FqTypeName::declared(module_source, name).into_string())
                 }
-ResolvedType::GenericInstance {
+                ResolvedType::GenericInstance {
                     name,
                     module_source,
                     ..
@@ -589,7 +589,9 @@ ResolvedType::GenericInstance {
             // Get struct name for trait lookup
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
-                ResolvedType::GenericInstance { name, .. } => Some(name.clone()).map(crate::name::MangledName::new),
+                ResolvedType::GenericInstance { name, .. } => {
+                    Some(name.clone()).map(crate::name::MangledName::new)
+                }
                 ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
                     Some(name.clone()).map(crate::name::MangledName::new)
                 }
@@ -611,12 +613,18 @@ ResolvedType::GenericInstance {
                 };
 
                 // For newtypes, resolve base type for trait impl fallback
-                let (lookup_name, lookup_type_id) =
-                    self.tysys.newtype_base_lookup(&struct_name.as_mangled_str(), left.type_id);
+                let (lookup_name, lookup_type_id) = self
+                    .tysys
+                    .newtype_base_lookup(&struct_name.as_mangled_str(), left.type_id);
 
                 // Find the arithmetic trait implementation
                 let (trait_info_opt, (impl_name, impl_type_id)) = self
-                    .find_arithmetic_trait_impl(&struct_name.as_mangled_str(), left.type_id, trait_name, method_name)
+                    .find_arithmetic_trait_impl(
+                        &struct_name.as_mangled_str(),
+                        left.type_id,
+                        trait_name,
+                        method_name,
+                    )
                     .map(|info| (Some(info), (struct_name.to_string(), left.type_id)))
                     .unwrap_or_else(|| {
                         let info = self.find_arithmetic_trait_impl(
@@ -710,7 +718,9 @@ ResolvedType::GenericInstance {
             // Get struct name for trait lookup
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
-                ResolvedType::GenericInstance { name, .. } => Some(name.clone()).map(crate::name::MangledName::new),
+                ResolvedType::GenericInstance { name, .. } => {
+                    Some(name.clone()).map(crate::name::MangledName::new)
+                }
                 ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
                     Some(name.clone()).map(crate::name::MangledName::new)
                 }
@@ -726,12 +736,18 @@ ResolvedType::GenericInstance {
                 };
 
                 // For newtypes, resolve base type for trait impl fallback
-                let (lookup_name, lookup_type_id) =
-                    self.tysys.newtype_base_lookup(&struct_name.as_mangled_str(), left.type_id);
+                let (lookup_name, lookup_type_id) = self
+                    .tysys
+                    .newtype_base_lookup(&struct_name.as_mangled_str(), left.type_id);
 
                 // Find the shift trait implementation
                 let (trait_info_opt, (impl_name, impl_type_id)) = self
-                    .find_arithmetic_trait_impl(&struct_name.as_mangled_str(), left.type_id, trait_name, method_name)
+                    .find_arithmetic_trait_impl(
+                        &struct_name.as_mangled_str(),
+                        left.type_id,
+                        trait_name,
+                        method_name,
+                    )
                     .map(|info| (Some(info), (struct_name.to_string(), left.type_id)))
                     .unwrap_or_else(|| {
                         let info = self.find_arithmetic_trait_impl(
@@ -1023,15 +1039,18 @@ ResolvedType::GenericInstance {
             let operand_resolved = self.tysys.type_table.borrow().get(expr_type).clone();
             let struct_name = match &operand_resolved {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
-                ResolvedType::GenericInstance { name, .. } => Some(name.clone()).map(crate::name::MangledName::new),
+                ResolvedType::GenericInstance { name, .. } => {
+                    Some(name.clone()).map(crate::name::MangledName::new)
+                }
                 ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
                     Some(name.clone()).map(crate::name::MangledName::new)
                 }
                 _ => None,
             };
             if let Some(struct_name) = struct_name {
-                let (lookup_name, lookup_type_id) =
-                    self.tysys.newtype_base_lookup(&struct_name.as_mangled_str(), expr_type);
+                let (lookup_name, lookup_type_id) = self
+                    .tysys
+                    .newtype_base_lookup(&struct_name.as_mangled_str(), expr_type);
                 let resolved = self
                     .resolve_trait_method_for_op(
                         &struct_name.as_mangled_str(),
@@ -1243,17 +1262,24 @@ ResolvedType::GenericInstance {
                 // Check for IndexAssign trait implementation
                 let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
                     ResolvedType::Struct { name, .. } => name,
-                    ResolvedType::GenericInstance { name, .. } => crate::name::MangledName::new(name),
-                    ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => crate::name::MangledName::new(name),
+                    ResolvedType::GenericInstance { name, .. } => {
+                        crate::name::MangledName::new(name)
+                    }
+                    ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
+                        crate::name::MangledName::new(name)
+                    }
                     // `arr[i] = v` dispatches through `impl IndexAssign for Array<T>`,
                     // keyed by the base name "Array".
-                    ResolvedType::BuiltinArray(_) => crate::name::MangledName::new(TypeTable::ARRAY_TYPE_NAME.to_string()),
+                    ResolvedType::BuiltinArray(_) => {
+                        crate::name::MangledName::new(TypeTable::ARRAY_TYPE_NAME.to_string())
+                    }
                     _ => crate::name::MangledName::new(String::new()),
                 };
 
                 // For newtypes, resolve the base type name for trait impl lookup
-                let (lookup_name, lookup_type_id) =
-                    self.tysys.newtype_base_lookup(&struct_name.as_mangled_str(), base_type_id);
+                let (lookup_name, lookup_type_id) = self
+                    .tysys
+                    .newtype_base_lookup(&struct_name.as_mangled_str(), base_type_id);
 
                 if !struct_name.is_empty() {
                     let index_type = self.resolve_expr(&index_expr.index, ctx, None);

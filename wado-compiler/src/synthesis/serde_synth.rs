@@ -515,7 +515,7 @@ fn distribute_bound_driven_requests(project: &mut Package) {
                     let name = &name.to_string();
                     Some(((name.clone(), module_source.clone()), id))
                 }
-ResolvedType::Enum {
+                ResolvedType::Enum {
                     name,
                     module_source,
                 }

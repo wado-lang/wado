@@ -123,7 +123,9 @@ pub fn cm_payload_type_from_type_id(
             name,
             module_source,
             ..
-        } if !is_cm_owned_source(module_source) => Some(CmPayloadType::Named(to_kebab(name.as_mangled_str()))),
+        } if !is_cm_owned_source(module_source) => {
+            Some(CmPayloadType::Named(to_kebab(name.as_mangled_str())))
+        }
         _ => None,
     }
 }

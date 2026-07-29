@@ -1823,19 +1823,27 @@ impl fmt::Display for MangledName {
 /// Comparing against a literal or an already-mangled `String` is sound; what
 /// the newtype prevents is this reaching a consumer that keys on declarations.
 impl PartialEq<str> for MangledName {
-    fn eq(&self, other: &str) -> bool { self.0 == other }
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
 }
 
 impl PartialEq<&str> for MangledName {
-    fn eq(&self, other: &&str) -> bool { self.0 == *other }
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
 }
 
 impl PartialEq<String> for MangledName {
-    fn eq(&self, other: &String) -> bool { self.0 == *other }
+    fn eq(&self, other: &String) -> bool {
+        self.0 == *other
+    }
 }
 
 impl PartialEq<MangledName> for String {
-    fn eq(&self, other: &MangledName) -> bool { *self == other.0 }
+    fn eq(&self, other: &MangledName) -> bool {
+        *self == other.0
+    }
 }
 
 /// A `Type::method` path in the declaration namespace — the key the CM

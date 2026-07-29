@@ -1713,11 +1713,8 @@ impl TypeTable {
                 ResolvedType::Resource {
                     name: n,
                     module_source,
-                } => {
-                    let name = &name.to_string();
-                    (n.clone(), module_source)
-                }
-ResolvedType::Enum {
+                } => (n.clone(), module_source),
+                ResolvedType::Enum {
                     name: n,
                     module_source,
                 }
@@ -2827,7 +2824,9 @@ ResolvedType::Enum {
             ResolvedType::BuiltinArray(elem) => {
                 format!("Array<{}>", self.type_name(*elem))
             }
-            ResolvedType::Struct { name, .. } => crate::name::strip_local_item_id(name.as_mangled_str()).to_string(),
+            ResolvedType::Struct { name, .. } => {
+                crate::name::strip_local_item_id(name.as_mangled_str()).to_string()
+            }
             ResolvedType::Enum { name, .. } => name.clone(),
             ResolvedType::Resource { name, .. } => name.clone(),
             ResolvedType::Function {
@@ -3294,7 +3293,7 @@ ResolvedType::Enum {
                 let name = &name.to_string();
                 declared(module_source, name)
             }
-ResolvedType::Variant {
+            ResolvedType::Variant {
                 name,
                 module_source,
             }
@@ -3362,7 +3361,7 @@ ResolvedType::Variant {
                 let name = &name.to_string();
                 FqTypeName::declared(module_source, name)
             }
-ResolvedType::Variant {
+            ResolvedType::Variant {
                 name,
                 module_source,
             }
@@ -3496,7 +3495,7 @@ ResolvedType::Variant {
                 let name = &name.to_string();
                 FqTypeName::declared(module_source, name)
             }
-ResolvedType::Resource {
+            ResolvedType::Resource {
                 name,
                 module_source,
                 ..
@@ -5503,7 +5502,7 @@ mod tests {
         // (bypassing the name-keyed intern_map, as a local declaration's
         // constructor will) and register it under its own AstId.
         let second_type = table.push_fresh(ResolvedType::Struct {
-            name: "Point".to_string(),
+            name: crate::name::MangledName::new("Point".to_string()),
             module_source: module,
             base_name: None,
         });

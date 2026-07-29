@@ -1040,11 +1040,17 @@ impl TypeSystem {
             ..
         } = &resolved
             && on_bound == Some(OnBoundTrait::Default)
-            && self.auto_derive_default_struct_type(scope, name.as_mangled_str()).is_some()
+            && self
+                .auto_derive_default_struct_type(scope, name.as_mangled_str())
+                .is_some()
         {
             self.type_table
                 .borrow_mut()
-                .record_bound_driven_synth_request(name.as_mangled_str(), module_source, trait_name);
+                .record_bound_driven_synth_request(
+                    name.as_mangled_str(),
+                    module_source,
+                    trait_name,
+                );
             return true;
         }
 
@@ -1123,7 +1129,7 @@ impl TypeSystem {
                 let name = &name.to_string();
                 (FqTypeName::of_head(module_source, name), None)
             }
-ResolvedType::Enum {
+            ResolvedType::Enum {
                 name,
                 module_source,
                 ..

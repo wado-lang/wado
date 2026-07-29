@@ -1845,7 +1845,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
                 out.push((name.clone().to_string(), module_source.clone()));
             }
-ResolvedType::Variant {
+            ResolvedType::Variant {
                 name,
                 module_source,
                 ..

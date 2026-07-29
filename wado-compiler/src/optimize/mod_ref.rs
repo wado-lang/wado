@@ -1215,7 +1215,7 @@ mod tests {
         use crate::tir::{ResolvedType, TypeTable};
         let mut types = TypeTable::new();
         let struct_ty = types.intern(ResolvedType::Struct {
-            name: "W".to_string(),
+            name: crate::name::MangledName::new("W".to_string()),
             module_source: ModuleSource::default(),
             base_name: None,
         });

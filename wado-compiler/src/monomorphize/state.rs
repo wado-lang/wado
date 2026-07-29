@@ -622,7 +622,7 @@ impl Monomorphizer {
             ResolvedType::Struct { name, .. } => {
                 // For monomorphized structs with names like "List<i32>", look up the
                 // original InstantiationKey to get the base name and type_args
-                if let Some(key) = self.structs.mangled_to_key.get(name) {
+                if let Some(key) = self.structs.mangled_to_key.get(name.as_mangled_str()) {
                     Some((key.name.to_string(), key.impl_type_args.clone()))
                 } else {
                     Some((name.clone().to_string(), vec![]))

@@ -1133,7 +1133,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => return,
         };
-        if let Some(info) = self.lookup_struct_fields_in(&struct_name.as_mangled_str(), &module_source) {
+        if let Some(info) =
+            self.lookup_struct_fields_in(&struct_name.as_mangled_str(), &module_source)
+        {
             for ((fname, _, _), fid) in info.fields.iter().zip(info.field_ast_ids.iter()) {
                 if fname == field_name {
                     self.record_reference_to_def(use_id, *fid);
@@ -1159,7 +1161,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 module_source,
                 ..
             } => {
-                if let Some(struct_info) = self.lookup_struct_fields_in(&name.as_mangled_str(), &module_source) {
+                if let Some(struct_info) =
+                    self.lookup_struct_fields_in(&name.as_mangled_str(), &module_source)
+                {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             return (index as u32, *ftype);
@@ -1252,7 +1256,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let same_package = module_source.same_package(&self.current_module_source);
-        if let Some(struct_info) = self.lookup_struct_fields_in(&struct_name.as_mangled_str(), &module_source) {
+        if let Some(struct_info) =
+            self.lookup_struct_fields_in(&struct_name.as_mangled_str(), &module_source)
+        {
             for (fname, _, vis) in &struct_info.fields {
                 if fname == field_name && !vis.reachable_from(same_package) {
                     let _ = self.emit(TypeError::PrivateFieldAccess {
@@ -1417,17 +1423,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (List implements IndexValue<i32> with type Output = T)
         let struct_name = match &base_type {
             ResolvedType::Struct { name, .. } => name.clone(),
-            ResolvedType::GenericInstance { name, .. } => crate::name::MangledName::new(name.clone()),
-            ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => crate::name::MangledName::new(name.clone()),
+            ResolvedType::GenericInstance { name, .. } => {
+                crate::name::MangledName::new(name.clone())
+            }
+            ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
+                crate::name::MangledName::new(name.clone())
+            }
             // The raw GC array dispatches `[]` through `impl IndexValue /
             // IndexAssign for Array<T>`, keyed by the base name "Array".
-            ResolvedType::BuiltinArray(_) => crate::name::MangledName::new(TypeTable::ARRAY_TYPE_NAME.to_string()),
+            ResolvedType::BuiltinArray(_) => {
+                crate::name::MangledName::new(TypeTable::ARRAY_TYPE_NAME.to_string())
+            }
             _ => crate::name::MangledName::new(String::new()),
         };
 
         // For newtypes, also resolve the base type name for trait impl lookup
-        let (lookup_name, lookup_type_id) =
-            self.tysys.newtype_base_lookup(&struct_name.as_mangled_str(), base_type_id);
+        let (lookup_name, lookup_type_id) = self
+            .tysys
+            .newtype_base_lookup(&struct_name.as_mangled_str(), base_type_id);
 
         if !struct_name.is_empty() {
             let expected_key = Self::is_coercible_compound_literal(&index.index)
@@ -1604,8 +1617,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if struct_name.is_empty() {
             return None;
         }
-        let (lookup_name, lookup_type_id) =
-            self.tysys.newtype_base_lookup(&struct_name.as_mangled_str(), base_type_id);
+        let (lookup_name, lookup_type_id) = self
+            .tysys
+            .newtype_base_lookup(&struct_name.as_mangled_str(), base_type_id);
         self.index_lookup_or_newtype_base(
             &struct_name.as_mangled_str(),
             base_type_id,
@@ -2903,7 +2917,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => Some((FqTypeName::declared(&module_source, &name.as_mangled_str()), name)),
+            } => Some((
+                FqTypeName::declared(&module_source, &name.as_mangled_str()),
+                name,
+            )),
             _ => None,
         };
 

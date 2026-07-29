@@ -103,7 +103,10 @@ fn build_single_field_index(project: &NirPackage) -> SingleFieldIndex {
         }
         let f = &s.fields[0];
         out.insert(
-            (crate::name::MangledName::new(s.name.clone()), s.module_source.clone()),
+            (
+                crate::name::MangledName::new(s.name.clone()),
+                s.module_source.clone(),
+            ),
             (f.name.clone(), f.type_id),
         );
     }
@@ -237,13 +240,19 @@ fn is_sroa_eligible_inner_type(type_id: TypeId, _type_table: &TypeTable) -> bool
     true
 }
 
-fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(crate::name::MangledName, ModuleSource)> {
+fn struct_key_of(
+    type_id: TypeId,
+    type_table: &TypeTable,
+) -> Option<(crate::name::MangledName, ModuleSource)> {
     match type_table.get(type_id) {
         ResolvedType::Struct {
             name,
             module_source,
             ..
-        } => Some((crate::name::MangledName::new(name.clone().to_string()), module_source.clone())),
+        } => Some((
+            crate::name::MangledName::new(name.clone().to_string()),
+            module_source.clone(),
+        )),
         _ => None,
     }
 }
@@ -308,7 +317,10 @@ fn build_struct_fields_index(project: &NirPackage) -> StructFieldsIndex {
     let mut out: StructFieldsIndex = IndexMap::default();
     for s in &project.structs {
         out.insert(
-            (crate::name::MangledName::new(s.name.clone()), s.module_source.clone()),
+            (
+                crate::name::MangledName::new(s.name.clone()),
+                s.module_source.clone(),
+            ),
             s.fields.iter().map(|f| f.type_id).collect(),
         );
     }
@@ -701,7 +713,8 @@ fn rewrite_call_sites(
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let Some(key) = func.id else { continue };
-        let mut scalar_param_struct: IndexMap<u32, (crate::name::MangledName, ModuleSource)> = IndexMap::default();
+        let mut scalar_param_struct: IndexMap<u32, (crate::name::MangledName, ModuleSource)> =
+            IndexMap::default();
         for (pi, param) in func.params.iter().enumerate() {
             if let Some(info) = candidates.get(&(key, pi)) {
                 scalar_param_struct.insert(param.local_index, info.struct_key.clone());

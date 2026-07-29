@@ -446,7 +446,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                         // Check field visibility for cross-module struct literal
                         if module_source != self.current_module_source
-                            && let Some(struct_info) = self.lookup_struct_fields(&name.as_mangled_str())
+                            && let Some(struct_info) =
+                                self.lookup_struct_fields(&name.as_mangled_str())
                         {
                             let same_package =
                                 module_source.same_package(&self.current_module_source);
@@ -1080,7 +1081,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let expected_short = self
                         .strip_ns_prefix(expected_name)
                         .unwrap_or(expected_name.as_str());
-                    let actual_short = actual_name.as_mangled_str().rsplit("::").next().unwrap_or(actual_name.as_mangled_str());
+                    let actual_short = actual_name
+                        .as_mangled_str()
+                        .rsplit("::")
+                        .next()
+                        .unwrap_or(actual_name.as_mangled_str());
                     let matches = actual_short == expected_short;
                     if !matches {
                         let _ = self.emit(TypeError::PatternTypeMismatch {
@@ -1761,7 +1766,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let expected_short = self
                             .strip_ns_prefix(expected_name)
                             .unwrap_or(expected_name.as_str());
-                        let actual_short = name.as_mangled_str().rsplit("::").next().unwrap_or(name.as_mangled_str());
+                        let actual_short = name
+                            .as_mangled_str()
+                            .rsplit("::")
+                            .next()
+                            .unwrap_or(name.as_mangled_str());
                         if actual_short != expected_short {
                             let _ = self.emit(TypeError::PatternTypeMismatch {
                                 expected: expected_name.clone(),
