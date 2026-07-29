@@ -328,6 +328,15 @@ not asking. The failure is in the impl-index lookup for
 belongs at `TraitEnv`'s index and what this refactor changed about how its keys
 are built, not at the receiver's arguments.
 
+Read as far as `type_decl_key`, which answers `(module, "TreeMap")` for the
+`GenericInstance` — the right key — so the miss is in the index that key is
+looked up in. The specific suspicion, untested: `canonical_decl_key` resolves a
+written name through `find_struct_like_decl_key`, which scans declarations by
+name, and a monomorphized struct's `decl_name` is now the declaration's own name
+rather than the fused spelling. An instance may therefore answer a query that
+used to find only the declaration. That is a hypothesis, and this session's
+record says to measure it before acting on it.
+
 Deriving through the unerased view was tried — spelling a newtype / flags
 argument by its own declaration rather than its base — and made things *worse*:
 reflect stayed at 10 and serde went 4 to 6. Reverted. So the reachability set is
