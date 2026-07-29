@@ -3131,11 +3131,19 @@ impl TypeTable {
                 module_source,
                 ..
             }
-            | ResolvedType::Struct {
-                decl_name: name,
+ => format!("{module_source}/{name}"),
+            // A struct mangles as a type argument by its rendered spelling:
+            // `TreeMap<String,i32>` and `TreeMap<String,String>` are distinct
+            // arguments, and naming both `TreeMap` collides the functions
+            // instantiated over them.
+            ResolvedType::Struct {
+                decl_name,
                 module_source,
-                ..
-            } => format!("{module_source}/{name}"),
+                type_args,
+            } => format!(
+                "{module_source}/{}",
+                self.struct_rendered_name(decl_name, type_args)
+            ),
             ResolvedType::GenericInstance {
                 name,
                 module_source,
