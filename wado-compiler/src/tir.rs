@@ -1144,9 +1144,31 @@ impl TypeTable {
         // Implicit closure under `redirects`: every kept id whose `get`
         // result lives at a different id must keep that target alive too.
         let mut effective_keep: IndexSet<TypeId> = keep.clone();
+        let mut queue: Vec<TypeId> = Vec::new();
+        let keep_id = |set: &mut IndexSet<TypeId>, queue: &mut Vec<TypeId>, id: TypeId| {
+            if set.insert(id) {
+                queue.push(id);
+            }
+        };
         for &id in keep {
             if let Some(&target) = self.redirects.get(id) {
-                effective_keep.insert(target);
+                keep_id(&mut effective_keep, &mut queue, target);
+            }
+            queue.push(id);
+        }
+        // A surviving struct spells itself with its instantiation arguments,
+        // so those must resolve too. The reachability walk reaches a type
+        // through its erased view and never through the pre-erasure arguments
+        // a monomorphized struct records, so nothing else keeps them alive.
+        while let Some(id) = queue.pop() {
+            let Some(ResolvedType::Struct { type_args, .. }) = self.types.get(id) else {
+                continue;
+            };
+            for arg in type_args.clone() {
+                keep_id(&mut effective_keep, &mut queue, arg);
+                if let Some(&target) = self.redirects.get(arg) {
+                    keep_id(&mut effective_keep, &mut queue, target);
+                }
             }
         }
 
