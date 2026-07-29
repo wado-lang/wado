@@ -1324,7 +1324,7 @@ impl TypeSystem {
             .filter(|b| b.receiver == super::trait_env::BlanketReceiver::Value)
         {
             let bounds_satisfied = blanket.bounds.iter().all(|bound| {
-                self.synthesized_reflect_bound_holds(scope, &type_key.head_key(), bound)
+                self.synthesized_reflect_bound_holds(scope, &type_key.decl_key(), bound)
                     || self.find_trait_impl_for_type(ctx, scope, type_key, bound)
             });
             if bounds_satisfied {
@@ -1339,6 +1339,9 @@ impl TypeSystem {
     /// is eligible for by kind (`ReflectStruct` on a struct, `ReflectVariant` on a
     /// variant, …). These have no impl blocks, so the name-based search misses
     /// them; a hit records the bound-driven synth request.
+    ///
+    /// `type_name` is the declaration name: every lookup below goes through the
+    /// module scope, which keys declarations as source writes them.
     fn synthesized_reflect_bound_holds(
         &self,
         scope: &TypeLookup,
