@@ -62,12 +62,15 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
             .collect();
         let (subject, ref_subject) = {
             let mut tt = flat.type_table.borrow_mut();
-            // The instantiation, not the declaration: `decl.name` alone does
-            // not identify it, and `monomorph_info` carries the arguments the
-            // instance was made with. Minting here would create a second type
-            // that is not the instance this declaration describes.
-            let subject =
-                tt.make_monomorphized_struct_from_args(base_name, module_source.clone(), impl_type_args);
+            // Named after the declaration, not the instantiation: callers spell
+            // the bridge `$field_get$Pair$<member>`, and the member type is
+            // what distinguishes instantiations (members sharing a mangled
+            // member type share one index-dispatched bridge). Looked up rather
+            // than minted, so this is the registered type and not a second one.
+            let _ = (&base_name, &impl_type_args);
+            let subject = tt
+                .find_struct_by_name(&decl.name, &module_source)
+                .unwrap_or_else(|| tt.make_struct(decl.name.clone(), module_source.clone()));
             let ref_subject = tt.make_ref(subject);
             (subject, ref_subject)
         };
