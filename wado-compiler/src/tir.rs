@@ -2839,7 +2839,12 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => {
                 format!("Array<{}>", self.type_name(*elem))
             }
-            ResolvedType::Struct { name, .. } => crate::name::strip_local_item_id(name).to_string(),
+            ResolvedType::Struct {
+                decl_name,
+                type_args,
+                ..
+            } => crate::name::strip_local_item_id(&self.struct_rendered_name(decl_name, type_args))
+                .to_string(),
             ResolvedType::Enum { name, .. } => name.clone(),
             ResolvedType::Resource { name, .. } => name.clone(),
             ResolvedType::Function {
@@ -3230,10 +3235,7 @@ impl TypeTable {
     pub fn base_type_name(&self, id: TypeId) -> String {
         match self.get(id) {
             ResolvedType::GenericInstance { name, .. } => name.clone(),
-            ResolvedType::Struct {
-                base_name: Some(base),
-                ..
-            } => base.clone(),
+            ResolvedType::Struct { decl_name, .. } => decl_name.clone(),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.base_type_name(*inner),
             _ => self.mangle_type_name(id),
         }
@@ -3250,7 +3252,7 @@ impl TypeTable {
     #[must_use]
     pub fn struct_decl_name(&self, id: TypeId) -> Option<String> {
         match self.get(id) {
-            ResolvedType::Struct { name, .. } => Some(name.clone()),
+            ResolvedType::Struct { decl_name, .. } => Some(decl_name.clone()),
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
@@ -3290,11 +3292,11 @@ impl TypeTable {
                     .map_or_else(|| builtin(""), Receiver::Ref)
             }
             ResolvedType::Struct {
-                base_name: Some(base),
+                decl_name,
                 module_source,
                 ..
-            } => declared(module_source, base),
-            ResolvedType::Struct {
+            } => declared(module_source, decl_name),
+            ResolvedType::Enum {
                 name,
                 module_source,
                 ..
@@ -3355,11 +3357,11 @@ impl TypeTable {
                 ..
             } if !Self::is_tuple_type(name) => FqTypeName::declared(module_source, name),
             ResolvedType::Struct {
-                base_name: Some(base),
+                decl_name,
                 module_source,
                 ..
-            } => FqTypeName::declared(module_source, base),
-            ResolvedType::Struct {
+            } => FqTypeName::declared(module_source, decl_name),
+            ResolvedType::Enum {
                 name,
                 module_source,
                 ..
@@ -3471,31 +3473,15 @@ impl TypeTable {
             ResolvedType::Primitive(prim) => FqTypeName::builtin(prim.as_str()),
             ResolvedType::Unit => FqTypeName::builtin(Self::UNIT_TYPE_NAME),
             ResolvedType::Never => FqTypeName::builtin("!"),
-            // A monomorphized struct spells its arguments into `name`, so the
-            // head and the arguments are handed back separately — the same
-            // shape every other instantiated type already has. Without this a
-            // name built off one answers `Wrapper<i32>` to both "what is the
-            // base?" and "what is the instance?", and a template lookup then
-            // asks for `Wrapper<i32>^Trait::method`, which nothing declares.
+            // Head and arguments come straight off the type — the same shape
+            // every other instantiated type has. No recovery step, because
+            // there is no fused spelling left to recover them from.
             ResolvedType::Struct {
-                name,
+                decl_name,
                 module_source,
-                base_name: Some(base),
-                ..
-            } => match self.generic_type_args(id) {
-                Some(type_args) if !type_args.is_empty() => {
-                    FqTypeName::declared(module_source, base).with_args(args_of(&type_args))
-                }
-                // Arguments unrecorded and no `GenericInstance` left to match:
-                // the instantiated spelling is all the identity there is.
-                _ => FqTypeName::declared(module_source, name),
-            },
-            ResolvedType::Struct {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::Enum {
+                type_args,
+            } => FqTypeName::declared(module_source, decl_name).with_args(args_of(type_args)),
+            ResolvedType::Enum {
                 name,
                 module_source,
             }
