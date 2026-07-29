@@ -231,10 +231,9 @@ fn is_sroa_eligible_inner_type(type_id: TypeId, _type_table: &TypeTable) -> bool
 
 fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(String, ModuleSource)> {
     match type_table.get(type_id) {
-        ResolvedType::Struct { module_source, .. } => Some((
-            type_table.struct_list_name(type_id)?,
-            module_source.clone(),
-        )),
+        ResolvedType::Struct { module_source, .. } => {
+            Some((type_table.struct_list_name(type_id)?, module_source.clone()))
+        }
         _ => None,
     }
 }

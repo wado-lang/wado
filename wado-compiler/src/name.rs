@@ -2507,7 +2507,10 @@ mod tests {
             point.clone().with_reference(RefKind::Shared).to_display(),
             "&Point"
         );
-        assert_eq!(point.with_reference(RefKind::Mut).to_display(), "&mut Point");
+        assert_eq!(
+            point.with_reference(RefKind::Mut).to_display(),
+            "&mut Point"
+        );
     }
 
     #[test]

@@ -187,7 +187,10 @@ fn carries_resource_rec(
             module_source,
             type_args,
         } => sfr
-            .get(&(tt.struct_rendered_name(&decl_name, &type_args), module_source))
+            .get(&(
+                tt.struct_rendered_name(&decl_name, &type_args),
+                module_source,
+            ))
             .map(|fields| fields.iter().map(|(_, _, t)| *t).collect())
             .unwrap_or_default(),
         _ => {

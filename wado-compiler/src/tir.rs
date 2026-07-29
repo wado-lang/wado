@@ -3151,8 +3151,7 @@ impl TypeTable {
                 name,
                 module_source,
                 ..
-            }
- => format!("{module_source}/{name}"),
+            } => format!("{module_source}/{name}"),
             // A struct mangles as a type argument by its rendered spelling:
             // `TreeMap<String,i32>` and `TreeMap<String,String>` are distinct
             // arguments, and naming both `TreeMap` collides the functions

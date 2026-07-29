@@ -560,9 +560,7 @@ impl TirMutVisitor for TypeRewriter<'_> {
                         type_args,
                         ..
                     } => {
-                        *struct_name = self
-                            .type_table
-                            .struct_rendered_name(decl_name, type_args);
+                        *struct_name = self.type_table.struct_rendered_name(decl_name, type_args);
                     }
                     ResolvedType::GenericInstance {
                         name, type_args, ..

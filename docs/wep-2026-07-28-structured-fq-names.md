@@ -6,11 +6,11 @@ An fq name is stored as a rendered `String` (`FqTypeName(String)`), so every
 consumer that needs a part of it splits the string. Eleven bugs in one refactor
 came from that, in three directions:
 
-| direction | example |
-|---|---|
-| a qualified head compared against a bare literal | `base_struct_name() != "List"` — SROA's method catalog came out empty |
-| a bare name used where a qualified one was needed | `Receiver::Type("MyArray")` names no definition |
-| the wrong split | `simple_name()` answers `i32>` for `List<i32>` because it takes the last `/` |
+| direction                                         | example                                                                      |
+| ------------------------------------------------- | ---------------------------------------------------------------------------- |
+| a qualified head compared against a bare literal  | `base_struct_name() != "List"` — SROA's method catalog came out empty        |
+| a bare name used where a qualified one was needed | `Receiver::Type("MyArray")` names no definition                              |
+| the wrong split                                   | `simple_name()` answers `i32>` for `List<i32>` because it takes the last `/` |
 
 No split is correct in general: a `ModuleSource` may itself contain `/` and `<`,
 and a type argument carries its own module path.
@@ -96,7 +96,7 @@ Order:
    `struct_name`. `with_type_args` / `with_struct_type_args` take
    `&[FqTypeName]`, and `MethodName::struct_name` is an `FqTypeName` too.
 4. **Done for fq type names.** `from_mangled`, `as_str` and `simple_name` are
-   gone, so nothing parses one. What still splits a string parses a *different*
+   gone, so nothing parses one. What still splits a string parses a _different_
    namespace, and each needs its own structuring pass:
    - `split_base_name` on a **trait** name (`Stream<u8>` → `Stream`). Trait
      references are still strings; structuring them is the next WEP.
@@ -119,7 +119,7 @@ E2E: 3882 passed, 26 failed — 17 of those pre-date this work; three fixtures
 past its own `impl`.
 
 `method_call.rs` names the receiver from
-`inherited_from_base.unwrap_or(base_type_id)`, which is correct: an *inherited*
+`inherited_from_base.unwrap_or(base_type_id)`, which is correct: an _inherited_
 method is named by the type that defines it. So the defect is upstream, in
 `lookup_method_info` reporting `inherited_from_base: Some(..)` for a method the
 newtype owns. Instrumenting the inherent-impl scan shows the `MyArray` impl is
@@ -136,7 +136,7 @@ outcome once corrected.
 
 Erasure is not involved: at rewrite time the receiver still reads as
 `Newtype { name: "MyArray<i32>" }` for all three calls. What differs is the
-name the *elaborator* already put on them — printing every `second` call as it
+name the _elaborator_ already put on them — printing every `second` call as it
 reaches the rewrite gives
 
     recv=Newtype "MyArray<String>"  struct_name=…/MyArray<String>       ✓
@@ -177,12 +177,12 @@ reports as an unsatisfied bound.
 Passing the base head (`fq_base_type_name`, which reads `base_name`) alongside
 the instantiated one fixes all three fixtures. It is not sufficient on its own:
 `function_id_for` builds a `FunctionId` from `fq_struct_name()` — base plus
-`struct_type_args` — and those args are *also* unrecoverable
+`struct_type_args` — and those args are _also_ unrecoverable
 (`generic_type_args` returns `None` once the originating `GenericInstance` has
 left the table), so two instantiations collapse onto one id and
 `serde_generic_struct_mixed_fields` trips the injectivity assert.
 
-So the fix has to expose the base head *without* weakening per-instantiation
+So the fix has to expose the base head _without_ weakening per-instantiation
 identity. Two routes, neither yet tried:
 
 - Additive: keep every identity as it is and add the base-headed name as an

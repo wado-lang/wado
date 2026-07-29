@@ -6,13 +6,13 @@ Every naming defect found while migrating to structured fq names was the same
 mistake: a name from one namespace handed to a consumer that keys on another.
 The compiler answers at least five distinct questions with a `String`:
 
-| namespace | example | who keys on it |
-|---|---|---|
-| mangled identity | `core:prelude/list.wado/List<i32>` | `func_map`, emitted function names |
-| declaration name | `List`, `MyArray`, `Wrapper<i32>` | `impl` headers, module scope, CM interface registry, go-to-definition |
-| struct-list key | bare head + qualified args | the package's struct list |
-| template key | `List` | monomorphize template registration |
-| instance key | `List<i32>` | per-instantiation identity |
+| namespace        | example                            | who keys on it                                                        |
+| ---------------- | ---------------------------------- | --------------------------------------------------------------------- |
+| mangled identity | `core:prelude/list.wado/List<i32>` | `func_map`, emitted function names                                    |
+| declaration name | `List`, `MyArray`, `Wrapper<i32>`  | `impl` headers, module scope, CM interface registry, go-to-definition |
+| struct-list key  | bare head + qualified args         | the package's struct list                                             |
+| template key     | `List`                             | monomorphize template registration                                    |
+| instance key     | `List<i32>`                        | per-instantiation identity                                            |
 
 Observed failures, all of this shape:
 
@@ -30,7 +30,7 @@ Observed failures, all of this shape:
 - `FqTypeName` rendering a tuple as `[]<i32,i32>` where every other mangler
   spells `[i32,i32]`.
 
-Structuring `FqTypeName` fixed the *representation* but not the failure mode,
+Structuring `FqTypeName` fixed the _representation_ but not the failure mode,
 because every accessor still hands back a `String` and `Receiver::head_key` /
 `decl_key` are interchangeable to the type checker. Splitting them made the
 distinction expressible; nothing makes it enforced. Each of the bugs above was
@@ -127,7 +127,7 @@ Re-scoped after steps 1–3 landed. The correctness this step was to buy is
 already bought: `TypeTable::monomorphized_struct_args` records the arguments
 where the instantiation happens, so `fq_type_name` answers both "what is the
 base?" and "what are the args?" for these types today. What remains is making
-the fused state *unrepresentable* rather than merely corrected — worth doing,
+the fused state _unrepresentable_ rather than merely corrected — worth doing,
 but hardening rather than a fix, and the most expensive step by a wide margin
 (~160 match sites and a change to interning keys).
 
@@ -139,7 +139,7 @@ Attempted, then backed out: renaming the fields to force every read site to be
 revisited produced 143 compile errors across 20 files, which is the mechanical
 part and is fine. What stops it is not mechanical. `ResolvedType` is interned by
 structural equality, and today a monomorphized struct's identity is the
-*rendered* string `TreeMap<String,i32>` — so two distinct-but-equivalent
+_rendered_ string `TreeMap<String,i32>` — so two distinct-but-equivalent
 argument `TypeId`s collapse onto one interned type. Holding `type_args:
 Vec<TypeId>` in the variant keys identity on those ids instead, and the same two
 arguments would mint two types where there was one. Such ids demonstrably exist:
@@ -158,8 +158,8 @@ So 4b needs a decision first, not a rename:
 The second is right, since what 4b buys is that the head and arguments are
 separately readable, not that identity changes — and the arguments already are,
 via `monomorphized_struct_args`. So under it, what is left of 4b is one thing:
-`ResolvedType::Struct::name` holds a *rendered* spelling for an instantiation
-and a *declaration* spelling for a declaration, and nothing stops a caller
+`ResolvedType::Struct::name` holds a _rendered_ spelling for an instantiation
+and a _declaration_ spelling for a declaration, and nothing stops a caller
 reading the first as the second. That is the same hazard steps 1a and 1b closed
 elsewhere, and it closes the same way — type the field `MangledName`, leaving
 interning untouched because the newtype hashes and compares as its `String`.
@@ -197,8 +197,8 @@ remains needs decisions, not conversions:
 Driving it from `rustc`'s own diagnostics was tried and does not work
 unsupervised. A fixer that appends the right accessor at each primary span
 cleared 70 of the 179, then stalled: the remaining classes need the expression
-*wrapped* (`&String` → `&MangledName`), not suffixed, and — the reason to stop —
-spans that name a *pattern* binding get the accessor spliced into the pattern,
+_wrapped_ (`&String` → `&MangledName`), not suffixed, and — the reason to stop —
+spans that name a _pattern_ binding get the accessor spliced into the pattern,
 which is not valid Rust. `ResolvedType::Struct { name.as_mangled_str(), .. }` is
 what that produces. So the edit needs a hand on each site, or a rewriter that
 understands pattern vs expression position; `rustc`'s machine-applicable
@@ -244,7 +244,7 @@ accessors:
   wrong — those are the WEP 2026-07-28 defects, now visible one at a time.
 
 Many sites turn out not to need either. A recurring shape is
-`FqTypeName::declared(module_source, name)` built from the *rendered* name —
+`FqTypeName::declared(module_source, name)` built from the _rendered_ name —
 which is the fusion bug written out longhand. Those collapse to
 `fq_type_name(id)`, which is structurally correct now that head and arguments
 come off the type. Prefer that over threading `decl_name` and `type_args`
@@ -261,11 +261,11 @@ type resolution) all reach.
 
 Many of the 73 share one cause: `type \`TreeMap\` does not implement trait
 \`IndexAssign<K>\``. Traced as far as both sides of that lookup, and they appear
-to agree — the registration key is built from `get_type_name_static`, which
-answers `TreeMap` for the header `impl<K, V> IndexAssign<K> for TreeMap<K, V>`,
-and the query builds `Decl((core:collections, "TreeMap"))` (both measured). So
+to agree — the registration key is built from`get_type_name_static`, which
+answers`TreeMap`for the header`impl<K, V> IndexAssign<K> for TreeMap<K, V>`,
+and the query builds`Decl((core:collections, "TreeMap"))`(both measured). So
 the mismatch is not the target key, and the next probe belongs on the trait side
-of the pair — `IndexAssign` against `IndexAssign<K>` — rather than the type side.
+of the pair —`IndexAssign`against`IndexAssign<K>` — rather than the type side.
 
 ### Where the second attempt stands
 
@@ -282,7 +282,7 @@ it was written before doing exactly that twice.
 
 The remaining 10 share one cause, and it is the design's real cost. Registration
 keys the WIR struct map on `NirStruct.name` — a string the monomorphizer
-produced — while the lookup now *re-derives* the spelling from `decl_name` and
+produced — while the lookup now _re-derives_ the spelling from `decl_name` and
 `type_args`. Those agree only while the argument `TypeId`s render the same way
 at both moments, and erasure redirects mean they need not: `FlagsBit<T>` is
 registered under one spelling and looked up under another, falling through to
@@ -304,7 +304,7 @@ implemented and measured, and all three were no-ops. Each was reverted rather
 than kept for looking principled.
 
 What is established, all measured: the WIR struct map holds no `FlagsBit` entry,
-and yet `instantiate_struct` *does* emit a `TirStruct` for it. So monomorphize
+and yet `instantiate_struct` _does_ emit a `TirStruct` for it. So monomorphize
 is doing its job and the type is lost somewhere between there and WIR
 registration — DCE, link, or the flat-package assembly.
 
@@ -326,18 +326,16 @@ struct that is reachable.
 
 This is the cost of a derived name, now concrete. The `TirStruct` name was fixed
 at monomorphize time, before erasure. The reachability set derives its name from
-the type's `type_args` *after* erasure has redirected those ids, so the same
+the type's `type_args` _after_ erasure has redirected those ids, so the same
 function renders a different string. While the name was stored on the type, both
 sides read the one string and the question never arose.
 
 ### The reverse lookup a split name cannot answer
 
-`type \`TreeMap\` does not implement trait \`IndexAssign<K>\`` read as an
+`type \`TreeMap\` does not implement trait \`IndexAssign<K>\``read as an
 elaborator failure and was not one. The elaborator resolves the impl correctly —
-measured at every step: the impl index holds 10 refs for
-`Decl((core:collections, "TreeMap"))`, the `starts_with` filter admits
-`IndexAssign<K>`, and the projection returns the `index_assign` method with both
-gates passing. The diagnostic comes from the *WIR-build* trait-bound check, which
+measured at every step: the impl index holds 10 refs for`Decl((core:collections, "TreeMap"))`, the`starts_with`filter admits`IndexAssign<K>`, and the projection returns the`index_assign` method with both
+gates passing. The diagnostic comes from the _WIR-build_ trait-bound check, which
 reports a call left spelled with its template name.
 
 The call never got monomorphized because `get_struct_info_from_type` answered
@@ -370,7 +368,7 @@ nothing is stored under. Sixteen sites took it as such, in two shapes:
 
 - **A registry lookup.** `struct_fields_map`, `struct_fields`, `struct_index`,
   `single_field`, `package.structs` — every struct registry is keyed by the
-  *rendered* name, because it holds one entry per instantiation. Keyed by
+  _rendered_ name, because it holds one entry per instantiation. Keyed by
   `decl_name` they miss every instantiation and fall through to the
   conservative branch.
 - **A minted name.** A `StructLiteral`'s `struct_name` and a `Box` wrapper's
@@ -403,14 +401,14 @@ no template defines. Both sites now split the head; the honest fix is to give
 step 6.
 
 Deriving through the unerased view was tried — spelling a newtype / flags
-argument by its own declaration rather than its base — and made things *worse*:
+argument by its own declaration rather than its base — and made things _worse_:
 reflect stayed at 10 and serde went 4 to 6. Reverted. So the reachability set is
 not uniformly pre-erasure either; some of what it holds is spelled post-erasure
 and matches definitions named that way.
 
 Which means the retain check was comparing names minted at two different points
 in the pipeline, and no single view makes both sides agree. What it needed was
-not a better spelling but the same *derivation* on both sides: DCE's analysis
+not a better spelling but the same _derivation_ on both sides: DCE's analysis
 renders `struct_rendered_name(decl_name, type_args)` off the resolved type, so
 retention now derives that same rendering from the instantiation the struct
 records in `monomorph_info`, instead of comparing the name monomorphize stored.
@@ -427,7 +425,7 @@ remaining seam — closing it means carrying the struct's `TypeId` on `TirStruct
 Splitting the arguments out gave the type table a second way to be
 inconsistent. `TypeTable::retain` documents an invariant — `get(id)` never
 panics for a surviving id — and closed the kept set over `redirects` to hold it.
-But a monomorphized struct records its arguments as they were *before* erasure,
+But a monomorphized struct records its arguments as they were _before_ erasure,
 and the reachability walk reaches every type through the erased view, so nothing
 kept a flags argument's own id alive. The struct survived, spelling itself with
 an id that no longer resolved, and rendering it after DCE panicked. While the
@@ -486,23 +484,28 @@ Order:
 - [x] 1c. `MangledName` on `func_map`, built only through `in_module` /
       `builtin_alias` / `wasi_import`. `WirName.fq` stays a `String`: it names
       types as well as functions, so the index key is the boundary.
-- [x] 2. `LocalMethodName::struct_name` field → derived method.
-- [x] 3. `MethodOwner` replacing `inherited_from_base`. Its sibling fields
-      were already gone with step 2, so the fact now has one encoding.
+-
+  2. [x] `LocalMethodName::struct_name` field → derived method.
+-
+  3. [x] `MethodOwner` replacing `inherited_from_base`. Its sibling fields
+         were already gone with step 2, so the fact now has one encoding.
 - [x] 4a. Delete `is_monomorphized` from `ResolvedType::Struct` and
       `FreeFunctionName`. It duplicated `base_name.is_some()`, and with only two
       constructors nothing could ever make the two disagree.
 - [x] 4b. `decl_name` holds the declaration and the arguments sit beside it as
       `Vec<TypeId>`, so the fused spelling is derived. `struct_list_name` owns
       the rendering; the struct-list registries are keyed by it.
-- [ ] 5. `StructListKey` as a type, so a registry cannot be keyed by
-      `(decl_name, module)` at all. Sixteen readers took the split field for
-      the stored name; a newtype makes that a compile error rather than a
-      convention.
-- [ ] 6. Split the fused spelling out of `ResolvedType::Newtype` the way 4b did
-      for `Struct`. Its `name` still bakes arguments into the head
-      (`MyArray<i32>`), which is why the impl index was queried under a name it
-      never registers.
-- [ ] 7. Carry the struct's `TypeId` on `TirStruct` / `NirStruct`, so DCE
-      retention asks identity instead of deriving a name that has to match one
-      built elsewhere.
+-
+  5. [ ] `StructListKey` as a type, so a registry cannot be keyed by
+         `(decl_name, module)` at all. Sixteen readers took the split field for
+         the stored name; a newtype makes that a compile error rather than a
+         convention.
+-
+  6. [ ] Split the fused spelling out of `ResolvedType::Newtype` the way 4b did
+         for `Struct`. Its `name` still bakes arguments into the head
+         (`MyArray<i32>`), which is why the impl index was queried under a name it
+         never registers.
+-
+  7. [ ] Carry the struct's `TypeId` on `TirStruct` / `NirStruct`, so DCE
+         retention asks identity instead of deriving a name that has to match one
+         built elsewhere.

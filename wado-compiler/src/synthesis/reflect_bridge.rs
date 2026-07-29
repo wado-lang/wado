@@ -67,20 +67,23 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
             // it must rebuild the instantiation from its base and arguments —
             // `make_struct(decl.name)` would register the rendered spelling as a
             // declaration name, the fusion WEP 2026-07-29 removes.
-            let subject = tt.find_struct_by_name(&decl.name, &module_source).unwrap_or_else(
-                || {
+            let subject = tt
+                .find_struct_by_name(&decl.name, &module_source)
+                .unwrap_or_else(|| {
                     tt.make_monomorphized_struct(
                         decl.name.clone(),
                         module_source.clone(),
                         base_name.clone(),
                         impl_type_args.clone(),
                     )
-                },
-            );
+                });
             let ref_subject = tt.make_ref(subject);
             (subject, ref_subject)
         };
-        let subject_mangle = flat.type_table.borrow().mangle_type_arg_for_generic(subject);
+        let subject_mangle = flat
+            .type_table
+            .borrow()
+            .mangle_type_arg_for_generic(subject);
         if !seen_subjects.insert(subject_mangle) {
             continue;
         }

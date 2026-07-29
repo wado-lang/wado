@@ -2665,9 +2665,10 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 // `cm_to_wrappers` is keyed by the resource declaration as it
                 // is written, with the module alongside — the same namespace
                 // the instance path reads off the receiver type.
-                let base_name = method_info.base_trait_name.clone().unwrap_or_else(|| {
-                    method_info.receiver().decl_key().into_string()
-                });
+                let base_name = method_info
+                    .base_trait_name
+                    .clone()
+                    .unwrap_or_else(|| method_info.receiver().decl_key().into_string());
                 let decl_module = func.module_source.clone();
                 // Static resource call: receiver type isn't directly
                 // available, fall back to single-instantiation routing.
