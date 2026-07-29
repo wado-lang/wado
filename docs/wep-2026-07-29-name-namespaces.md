@@ -208,15 +208,19 @@ Costs and risks:
 
 ## Remaining work
 
-- [ ] 5. `StructListKey` as a type, so a registry cannot be keyed by
-      `(decl_name, module)` at all. Sixteen readers took the split field for the
-      stored name; a newtype makes that a compile error rather than a convention.
-- [ ] 6. Split the fused spelling out of `ResolvedType::Newtype` the way 4b did
-      for `Struct`.
-- [ ] 7. Carry the struct's `TypeId` on `TirStruct` / `NirStruct`, so DCE
-      retention asks identity instead of deriving a name that has to match one
-      built elsewhere. Retention still accepts the stored name, because a
-      non-monomorphized struct has no `monomorph_info` to derive from.
-- [ ] 8. A method key holding the impl module and the receiver's module as
-      separate fields. Blocked on 5: the redundancy is load-bearing until the key
-      is structured.
+-
+  5. [ ] `StructListKey` as a type, so a registry cannot be keyed by
+         `(decl_name, module)` at all. Sixteen readers took the split field for the
+         stored name; a newtype makes that a compile error rather than a convention.
+-
+  6. [ ] Split the fused spelling out of `ResolvedType::Newtype` the way 4b did
+         for `Struct`.
+-
+  7. [ ] Carry the struct's `TypeId` on `TirStruct` / `NirStruct`, so DCE
+         retention asks identity instead of deriving a name that has to match one
+         built elsewhere. Retention still accepts the stored name, because a
+         non-monomorphized struct has no `monomorph_info` to derive from.
+-
+  8. [ ] A method key holding the impl module and the receiver's module as
+         separate fields. Blocked on 5: the redundancy is load-bearing until the key
+         is structured.

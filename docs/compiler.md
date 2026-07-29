@@ -197,13 +197,13 @@ The loader canonicalizes paths (RFC 3986, project-root-relative with `/` separat
 
 `name.rs` centralizes mangling so other components do not depend on name shapes:
 
-| Name             | Format                            | Example                             |
-| ---------------- | --------------------------------- | ----------------------------------- |
-| Method           | `{impl}/{decl}/{Type}::{method}`  | `./geom.wado/./geom.wado/Point::sum` |
+| Name             | Format                                   | Example                                      |
+| ---------------- | ---------------------------------------- | -------------------------------------------- |
+| Method           | `{impl}/{decl}/{Type}::{method}`         | `./geom.wado/./geom.wado/Point::sum`         |
 | Trait method     | `{impl}/{decl}/{Type}^{Trait}::{method}` | `./geom.wado/./geom.wado/Point^Display::fmt` |
-| Effect operation | `{Effect}::{op}`                  | `Stdout::write_via_stream`          |
-| WASI canonical   | `wasi:{pkg}/{iface}::{fn}`        | `wasi:cli/stdout::write-via-stream` |
-| Mangled generic  | `{Base}$T1$T2…`                   | `Box$i32`, `Pair$i32$String`        |
+| Effect operation | `{Effect}::{op}`                         | `Stdout::write_via_stream`                   |
+| WASI canonical   | `wasi:{pkg}/{iface}::{fn}`               | `wasi:cli/stdout::write-via-stream`          |
+| Mangled generic  | `{Base}$T1$T2…`                          | `Box$i32`, `Pair$i32$String`                 |
 
 Every fq name names its subject by the module that declares it, and a type
 written into any name goes through `TypeTable::mangle_type_arg_for_generic`. A
