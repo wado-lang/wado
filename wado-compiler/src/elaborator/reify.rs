@@ -9847,11 +9847,8 @@ ResolvedType::GenericInstance {
             ResolvedType::Variant {
                 name,
                 module_source,
-            } => {
-                let name = &name.to_string();
-                (name, module_source)
-            }
-ResolvedType::GenericInstance {
+            } => (name, module_source),
+            ResolvedType::GenericInstance {
                 name,
                 module_source,
                 ..
