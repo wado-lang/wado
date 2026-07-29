@@ -1,0 +1,9 @@
+// `task return` delivers the declared result, so a mismatch is a type error —
+// the CM binding downstream flattens the value against the declared result and
+// would mis-lower anything else.
+export async fn run() -> String {
+    task return 42;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'String', found 'i32'"}

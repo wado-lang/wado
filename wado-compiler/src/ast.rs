@@ -3426,6 +3426,9 @@ pub struct TraitDecl {
     pub name_span: Span,
     pub visibility: Visibility,
     pub type_params: Vec<GenericParam>,
+    /// Supertraits: the `Eq + Display` of `trait Ord: Eq + Display`. Every
+    /// implementor of this trait must also implement each of them.
+    pub supertraits: Vec<TraitBound>,
     /// Associated type declarations: `type Output;`
     pub associated_types: Vec<AssociatedTypeDecl>,
     /// Trait methods. Body is None for required methods.

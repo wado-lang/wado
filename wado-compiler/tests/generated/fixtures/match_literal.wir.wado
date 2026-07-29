@@ -29,53 +29,49 @@ type "functype//match_literal.wado/match_literal_bool" = fn();  // TypeId(10)
 
 type "functype//match_literal.wado/match_literal_char" = fn();  // TypeId(11)
 
-type "functype//match_literal.wado/match_literal_i128" = fn();  // TypeId(12)
+type "functype//match_literal.wado/match_literal_i16" = fn();  // TypeId(12)
 
-type "functype//match_literal.wado/match_literal_i16" = fn();  // TypeId(13)
+type "functype//match_literal.wado/match_literal_i32" = fn();  // TypeId(13)
 
-type "functype//match_literal.wado/match_literal_i32" = fn();  // TypeId(14)
+type "functype//match_literal.wado/match_literal_i64" = fn();  // TypeId(14)
 
-type "functype//match_literal.wado/match_literal_i64" = fn();  // TypeId(15)
+type "functype//match_literal.wado/match_literal_i8" = fn();  // TypeId(15)
 
-type "functype//match_literal.wado/match_literal_i8" = fn();  // TypeId(16)
+type "functype//match_literal.wado/match_literal_negative" = fn();  // TypeId(16)
 
-type "functype//match_literal.wado/match_literal_negative" = fn();  // TypeId(17)
+type "functype//match_literal.wado/match_literal_u16" = fn();  // TypeId(17)
 
-type "functype//match_literal.wado/match_literal_u128" = fn();  // TypeId(18)
+type "functype//match_literal.wado/match_literal_u32" = fn();  // TypeId(18)
 
-type "functype//match_literal.wado/match_literal_u16" = fn();  // TypeId(19)
+type "functype//match_literal.wado/match_literal_u64" = fn();  // TypeId(19)
 
-type "functype//match_literal.wado/match_literal_u32" = fn();  // TypeId(20)
+type "functype//match_literal.wado/match_literal_u8" = fn();  // TypeId(20)
 
-type "functype//match_literal.wado/match_literal_u64" = fn();  // TypeId(21)
+type "functype//match_literal.wado/run" = fn();  // TypeId(21)
 
-type "functype//match_literal.wado/match_literal_u8" = fn();  // TypeId(22)
+type "functype//match_literal.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
 
-type "functype//match_literal.wado/run" = fn();  // TypeId(23)
+type "functype//match_literal.wado/__cm_export__run" = fn();  // TypeId(23)
 
-type "functype//match_literal.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(24)
 
-type "functype//match_literal.wado/__cm_export__run" = fn();  // TypeId(25)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(25)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(26)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(26)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(27)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(27)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(28)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(28)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(29)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(29)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(30)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(30)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(31)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(32)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(35)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(33)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -114,12 +110,6 @@ fn "match_literal.wado/match_literal_char"() with Stdout {
     "core:cli/println"(r2);
     r3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("newline"), used: 7 };
     "core:cli/println"(r3);
-}
-
-fn "match_literal.wado/match_literal_i128"() with Stdout {
-    let r1: ref "core:prelude/string.wado//String";
-    r1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
-    "core:cli/println"(r1);
 }
 
 fn "match_literal.wado/match_literal_i16"() with Stdout {
@@ -212,12 +202,6 @@ fn "match_literal.wado/match_literal_negative"() with Stdout {
     "core:cli/println"(r5);
 }
 
-fn "match_literal.wado/match_literal_u128"() with Stdout {
-    let r1: ref "core:prelude/string.wado//String";
-    r1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
-    "core:cli/println"(r1);
-}
-
 fn "match_literal.wado/match_literal_u16"() with Stdout {
     let r1: ref "core:prelude/string.wado//String";
     let r2: ref "core:prelude/string.wado//String";
@@ -267,6 +251,8 @@ fn "match_literal.wado/match_literal_u8"() with Stdout {
 }
 
 fn "match_literal.wado/run"() with Stdout {
+    let r1_1: ref "core:prelude/string.wado//String";
+    let r1_16: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:match_literal.wado::__modules_initialized);
         cold_path;
@@ -275,13 +261,15 @@ fn "match_literal.wado/run"() with Stdout {
     };
     "match_literal.wado/match_literal_bool"();
     "match_literal.wado/match_literal_char"();
-    "match_literal.wado/match_literal_i128"();
+    r1_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
+    "core:cli/println"(r1_1);
     "match_literal.wado/match_literal_i16"();
     "match_literal.wado/match_literal_i32"();
     "match_literal.wado/match_literal_i64"();
     "match_literal.wado/match_literal_i8"();
     "match_literal.wado/match_literal_negative"();
-    "match_literal.wado/match_literal_u128"();
+    r1_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
+    "core:cli/println"(r1_16);
     "match_literal.wado/match_literal_u16"();
     "match_literal.wado/match_literal_u32"();
     "match_literal.wado/match_literal_u64"();

@@ -140,6 +140,13 @@ pub fn shallow_copy_helper_name(deep_name: &str) -> String {
     format!("{deep_name}$shallow")
 }
 
+/// The name of a `param_spec` clone: the original's name plus the clone's
+/// ordinal among that callee's specializations. Unique package-wide, since the
+/// original's name already is.
+pub fn param_spec_name(original: &str, ordinal: usize) -> String {
+    format!("{original}$spec{ordinal}")
+}
+
 /// The name of the synthesized `Case::<V, P>::extract` helper for a variant
 /// and one of its payload types, both identified by their structural mangles
 /// (same identity discipline as [`value_copy_helper_name`]). Lowering rewrites
@@ -191,6 +198,14 @@ pub fn variant_payload_field(index: usize) -> String {
 /// deliberately not matched.
 pub fn is_variant_payload_field(field_name: &str) -> bool {
     field_name.starts_with("payload_")
+}
+
+/// Kebab-case a world export's function name for the Component Model boundary.
+///
+/// Wado function identifiers are `[a-z0-9_]`, so replacing underscores suffices.
+/// Distinct from [`to_kebab`], which also splits `PascalCase` word boundaries.
+pub fn kebab_export_name(name: &str) -> String {
+    name.replace('_', "-")
 }
 
 /// Convert a Wado identifier (`snake_case` / `PascalCase` / `camelCase`) to

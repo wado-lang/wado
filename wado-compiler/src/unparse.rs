@@ -834,6 +834,28 @@ impl<'a> Unparser<'a> {
         self.output.push(',');
     }
 
+    /// `A + B<Item = i32>` — the shared rendering of every `+`-joined bound
+    /// list: generic-parameter bounds, associated-type bounds, supertraits.
+    fn unparse_trait_bounds(&mut self, bounds: &[crate::ast::TraitBound]) {
+        self.comma_sep_with(" + ", bounds, |s, bound| {
+            if let Some(sig) = &bound.fn_signature {
+                // `<F: fn(...)>` / `<F: fn mut(...)>` round-trip. Use
+                // bound-aware fn-type printing so multi-effect `with` clauses
+                // come back out parens-grouped.
+                s.unparse_fn_signature_in_bound(sig);
+            } else {
+                s.output.push_str(&bound.name);
+                if !bound.assoc_types.is_empty() {
+                    s.delimited("<", ">", &bound.assoc_types, |s, assoc| {
+                        s.output.push_str(&assoc.name);
+                        s.output.push_str(" = ");
+                        s.unparse_type(&assoc.ty);
+                    });
+                }
+            }
+        });
+    }
+
     /// Unparse generic type parameters: `<T, U: Ord>`
     fn unparse_generic_params(&mut self, params: &[crate::ast::GenericParam]) {
         if params.is_empty() {
@@ -845,23 +867,7 @@ impl<'a> Unparser<'a> {
             s.output.push_str(&param.name);
             if !param.bounds.is_empty() {
                 s.output.push_str(": ");
-                s.comma_sep_with(" + ", &param.bounds, |s, bound| {
-                    if let Some(sig) = &bound.fn_signature {
-                        // `<F: fn(...)>` / `<F: fn mut(...)>` round-trip.
-                        // Use bound-aware fn-type printing so multi-effect
-                        // `with` clauses come back out parens-grouped.
-                        s.unparse_fn_signature_in_bound(sig);
-                    } else {
-                        s.output.push_str(&bound.name);
-                        if !bound.assoc_types.is_empty() {
-                            s.delimited("<", ">", &bound.assoc_types, |s, assoc| {
-                                s.output.push_str(&assoc.name);
-                                s.output.push_str(" = ");
-                                s.unparse_type(&assoc.ty);
-                            });
-                        }
-                    }
-                });
+                s.unparse_trait_bounds(&param.bounds);
             }
             if let Some(default_type) = &param.default {
                 s.output.push_str(" = ");
@@ -1071,6 +1077,10 @@ impl<'a> Unparser<'a> {
         self.output.push_str("trait ");
         self.output.push_str(&t.name);
         self.unparse_generic_params(&t.type_params);
+        if !t.supertraits.is_empty() {
+            self.output.push_str(": ");
+            self.unparse_trait_bounds(&t.supertraits);
+        }
 
         self.with_braced_body(t.span, |this| {
             for assoc in &t.associated_types {
@@ -1080,16 +1090,7 @@ impl<'a> Unparser<'a> {
                     this.output.push_str(&assoc.name);
                     if !assoc.bounds.is_empty() {
                         this.output.push_str(": ");
-                        this.comma_sep_with(" + ", &assoc.bounds, |this, bound| {
-                            this.output.push_str(&bound.name);
-                            if !bound.assoc_types.is_empty() {
-                                this.delimited("<", ">", &bound.assoc_types, |this, ab| {
-                                    this.output.push_str(&ab.name);
-                                    this.output.push_str(" = ");
-                                    this.unparse_type(&ab.ty);
-                                });
-                            }
-                        });
+                        this.unparse_trait_bounds(&assoc.bounds);
                     }
                     this.output.push(';');
                 });
@@ -3810,6 +3811,10 @@ pub fn unparse_flags_header(fl: &FlagsDecl) -> String {
 pub fn unparse_trait_header(t: &TraitDecl) -> String {
     let mut out = String::new();
     emit_decl_header(t.visibility, "trait ", &t.name, &t.type_params, &mut out);
+    if !t.supertraits.is_empty() {
+        out.push_str(": ");
+        unparse_trait_bounds_into(&t.supertraits, &mut out);
+    }
     out
 }
 
@@ -3947,6 +3952,27 @@ pub fn unparse_global_signature(g: &GlobalDecl) -> String {
     out
 }
 
+/// `A + B<Item = i32>` — see [`Unparser::unparse_trait_bounds`].
+fn unparse_trait_bounds_into(bounds: &[crate::ast::TraitBound], o: &mut String) {
+    for (i, bound) in bounds.iter().enumerate() {
+        if i > 0 {
+            o.push_str(" + ");
+        }
+        if let Some(sig) = &bound.fn_signature {
+            unparse_fn_signature_in_bound_into(sig, o);
+        } else {
+            o.push_str(&bound.name);
+            if !bound.assoc_types.is_empty() {
+                delimited_into("<", ">", &bound.assoc_types, o, |assoc, o| {
+                    o.push_str(&assoc.name);
+                    o.push_str(" = ");
+                    unparse_type_into(&assoc.ty, o);
+                });
+            }
+        }
+    }
+}
+
 pub fn unparse_generic_params_into(params: &[GenericParam], output: &mut String) {
     if params.is_empty() {
         return;
@@ -3957,23 +3983,7 @@ pub fn unparse_generic_params_into(params: &[GenericParam], output: &mut String)
         o.push_str(&param.name);
         if !param.bounds.is_empty() {
             o.push_str(": ");
-            for (j, bound) in param.bounds.iter().enumerate() {
-                if j > 0 {
-                    o.push_str(" + ");
-                }
-                if let Some(sig) = &bound.fn_signature {
-                    unparse_fn_signature_in_bound_into(sig, o);
-                } else {
-                    o.push_str(&bound.name);
-                    if !bound.assoc_types.is_empty() {
-                        delimited_into("<", ">", &bound.assoc_types, o, |assoc, o| {
-                            o.push_str(&assoc.name);
-                            o.push_str(" = ");
-                            unparse_type_into(&assoc.ty, o);
-                        });
-                    }
-                }
-            }
+            unparse_trait_bounds_into(&param.bounds, o);
         }
         if let Some(default_type) = &param.default {
             o.push_str(" = ");

@@ -37,10 +37,11 @@ fn g(x: i32) -> i32 {
 }
 
 export fn run() {
-    assert f(5) == 2005;
-    assert f(-5) == 995;
-    assert g(-5) == 2995;
-    assert g(7) == 7;
+    // Opaque arguments, or every call folds and no site is left to inline at.
+    assert f(builtin::black_box(5)) == 2005;
+    assert f(builtin::black_box(-5)) == 995;
+    assert g(builtin::black_box(-5)) == 2995;
+    assert g(builtin::black_box(7)) == 7;
 }
 
 __DATA__

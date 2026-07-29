@@ -1,0 +1,52 @@
+// A `&mut` parameter is only worth reading back from a run that reached the
+// end on its own terms.
+//
+// `outer` returns a call the frame refuses to run, so its body never performed
+// the push. Reporting that as a completed run wrote the parameter back
+// untouched: `v.len()` folded to 0 against a list holding one element.
+//
+// Aliasing loses a write the other way. Each `&mut` parameter binds its own
+// snapshot and each write-back replays whole, so two arguments naming the same
+// list let the second undo the first. Wado has no borrow checker, so that is
+// ordinary source.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn leaf(dst: &mut List<u8>) -> i32 {
+    dst.push(9);
+    return 1;
+}
+
+#[inline(never)]
+fn outer(dst: &mut List<u8>) -> i32 {
+    return leaf(dst);
+}
+
+#[inline(never)]
+fn stepped_over() -> i32 {
+    let mut v: List<u8> = [];
+    outer(&mut v);
+    return v.len() as i32;
+}
+
+#[inline(never)]
+fn two(a: &mut List<u8>, b: &mut List<u8>) {
+    a.push(1);
+    b.push(2);
+}
+
+#[inline(never)]
+fn aliased() -> i32 {
+    let mut v: List<u8> = [];
+    two(&mut v, &mut v);
+    return v.len() as i32;
+}
+
+export fn run() with Stdout {
+    println(`${stepped_over()} ${aliased()}`);
+}
+
+__DATA__
+{
+    "stdout": "1 2\n"
+}

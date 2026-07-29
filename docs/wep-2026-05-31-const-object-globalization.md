@@ -95,17 +95,21 @@ promotes the global and drops the assignment. Soundness therefore rests on the
 gates alone: a value that turns out not to be const-expressible merely leaves
 the global assigned at runtime, still correct.
 
-Two shapes are matched, collected in a single exhaustive walk:
+Three shapes are matched, collected in a single exhaustive walk:
 
 - A `let` binding of a qualifying value.
 - A qualifying value referenced via `&` directly at an expression position with
   no enclosing `let` — the shape a synthesized `serde` field key takes
   (`st.field(&"id_str", …)`). It is rewritten in place: the `Unary::Ref`'s inner
   expression becomes `{ GlobalVarSet(G, …); GlobalVarGet(G) }`.
+- A qualifying value passed to a call _by value_ — a constant header value
+  handed straight to `Fields::append`. Rewritten in place like the `&` shape,
+  wrapping the argument node itself, and gated additionally on the callee (see
+  below).
 
-The walk skips into a qualifying `let`'s own value, because hoisting both would
-nest one global's `GlobalVarSet` inside another's initializer — a shape the
-single-assignment classifier cannot see through.
+The walk skips into a qualifying `let`'s own value and into a hoisted argument,
+because hoisting both would nest one global's `GlobalVarSet` inside another's
+initializer — a shape the single-assignment classifier cannot see through.
 
 #### Gate: closed constant expression
 
@@ -133,10 +137,34 @@ Any `&mut self` method, any `&mut` of a projection, and any assignment to the
 binding or a projection disqualifies it.
 
 A bare whole-value read in a consuming position (return, block tail, `let y =
-xs`, an aggregate element) is also rejected: the value-copy machinery may have
-elided the copy treating the binding as a movable local, which globalizing would
-break. By-`&` borrows, by-value arguments, field / index reads and `&self`
-methods are admitted.
+xs`, an aggregate element, a by-value call argument) is also rejected: the
+value-copy machinery may have elided the copy treating the binding as a movable
+local, which globalizing would break. By-`&` borrows, field / index reads and
+`&self` methods are admitted.
+
+#### Gate: callee parameter, for a by-value argument
+
+A by-value argument is handed over uncopied when the value is fresh — a literal
+always is — so the callee receives the object itself, and globalizing makes that
+object shared. `callee_param_readonly` therefore runs the same read-only walk
+over the callee's own body, anchored at the parameter's local index. A parameter
+the callee writes, stores, or returns fails it, and so does a callee with no
+body (an import: nothing here can prove what it does with the value) or a
+`&` / `&mut` parameter.
+
+Read-only is not sufficient on its own. A by-value parameter is the callee's own
+copy, so returning a projection of it (`return s.data`) is legitimate — the
+return-convention fixpoint even calls the result _owned_, which is what lets the
+caller skip a defensive copy of it. Hoisting the argument invalidates that
+premise: the "owned" value handed back is the shared global's storage, and the
+first mutation corrupts the constant. `param_storage_escapes` therefore also
+rejects a callee that returns, stores, or passes on the parameter's storage,
+following `let` aliases (`let r = s.data;`) since they name the same storage.
+
+The pair is what keeps this shape sound on its own terms rather than by luck: a
+mutating callee used to get a caller-side defensive copy that blocked the const
+gate first, but that copy was itself removable — nothing else stands between a
+shared global and a callee that writes it.
 
 #### Gate: profitability
 
@@ -166,8 +194,9 @@ its assignment outright.
 
 #### Representation and scope
 
-A global created from the inline-`&` case is marked
-`NirGlobal::prefer_fixed_string_repr` — a field rather than a name-prefix guess,
+A global created from either in-place case — the inline `&` or the by-value
+argument — is marked `NirGlobal::prefer_fixed_string_repr`, a field rather than
+a name-prefix guess,
 so it cannot misidentify a user-declared global sharing the pass's
 `__const_obj_*` naming convention. WIR build gives only such a global's
 `GlobalVarSet` value a size-bounded override
@@ -192,20 +221,11 @@ loop, and a pure call building a heap value from literals.
 - The const predicate lives in one place and codegen mirrors it.
 - Short string globals are eager via a constant `array.new_fixed<u8>` repr;
   longer ones stay lazy.
-- A derived scalar global (`global B = A + 10`) is promoted to an eager const,
-  but its reads no longer fold at use sites: `niri`'s `GlobalEnv` keys on
-  Wasm-mutability (`const_folding::build_global_env`), so an extracted global is
-  `NonConst` to the interpreter.
+- An extracted global's value is readable to `niri` from the assignment that
+  fills the slot, not from the placeholder in it, so a derived scalar global
+  (`global B = A + 10`) and a hoisted constant aggregate alike fold at their use
+  sites — field and element reads down to scalars, then branch pruning, then DCE
+  of the global nobody reads. This is the cross-function constant propagation
+  intra-function SROA cannot reach.
 - Cost: a marginally larger global section for constants a path may never reach,
   acceptable given no access-time overhead.
-
-## TODO
-
-- [ ] Reads of a user-immutable global folding from its initializer. Blocked on
-      [Global Variables](./wep-2026-01-27-global-variables.md): a deferred
-      global's recorded initializer is a placeholder today, so keying the
-      interpreter's env on Wado-level immutability would fold reads to the
-      placeholder rather than the value.
-- [ ] `G.field` / `G[const]` folding on an immutable aggregate global. Owned by
-      [niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md) — see its
-      aggregate globals and element projection TODO.

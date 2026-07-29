@@ -128,7 +128,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(51)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(52)
 
+<<<<<<< HEAD
 type "functype//core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(53)
+||||||| 2738e686c
+type "functype//core:prelude/range.wado/RangeExclusive<i32>^Iterator::next" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(53)
+=======
+type "functype//core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(53)
+>>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -153,6 +159,7 @@ global global:const_object_globalization_impure_call.wado::__const_obj_2: ref nu
 global global:const_object_globalization_impure_call.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111), used: 22 };
 global global:const_object_globalization_impure_call.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
 global global:const_object_globalization_impure_call.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
+global global:core:prelude/primitive.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "const_object_globalization_impure_call.wado/bump"(step) {
     global:const_object_globalization_impure_call.wado::CALLS = global:const_object_globalization_impure_call.wado::CALLS + step;
@@ -197,7 +204,13 @@ fn "const_object_globalization_impure_call.wado/run"() with Stdout {
         l2: loop {
             let __sroa___match_7_discriminant: i32;
             let __sroa___match_7_payload_0: i32;
+<<<<<<< HEAD
             multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(__iter_1);
+||||||| 2738e686c
+            multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(__iter_1);
+=======
+            multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0"(__iter_1);
+>>>>>>> origin/main
             if __sroa___match_7_discriminant == 0 {
                 xs = "const_object_globalization_impure_call.wado/bump"(1);
                 acc = acc + "const_object_globalization_impure_call.wado/head"(xs);
@@ -448,7 +461,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
+<<<<<<< HEAD
     offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+||||||| 2738e686c
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+=======
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_6, digit_count);
+>>>>>>> origin/main
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
@@ -627,17 +646,21 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
+<<<<<<< HEAD
 fn "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(self) {
+||||||| 2738e686c
+fn "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(self) {
+=======
+fn "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0"(self) {
+>>>>>>> origin/main
     let current: i32;
-    let other: i32;
     let __sroa_self_value_8: i32;
     if __inline_i32_Ord__cmp_0: block -> "core:prelude/traits.wado//enum:Ordering" {
         __sroa_self_value_8 = self.start;
-        other = self.end;
-        if __sroa_self_value_8 < other {
+        if __sroa_self_value_8 < 3 {
             break __inline_i32_Ord__cmp_0: 0;
         }
-        if __sroa_self_value_8 > other {
+        if __sroa_self_value_8 > 3 {
             break __inline_i32_Ord__cmp_0: 2;
         }
         break __inline_i32_Ord__cmp_0: 1;
@@ -647,7 +670,7 @@ fn "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator
     current = self.start;
     __fused___inline_i32_Step__next_step_1: block {
         if current == 2147483647 {
-            self.start = self.end;
+            self.start = 3;
             break __fused___inline_i32_Step__next_step_1;
         }
         self.start = current + 1;

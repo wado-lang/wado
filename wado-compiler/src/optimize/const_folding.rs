@@ -22,12 +22,13 @@
 //! [`ValueGraph`]: crate::nir_value_graph
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use cranelift_entity::EntityRef;
 
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::SeqField;
-use crate::const_eval::Value;
+use crate::const_eval::{Value, prim_of};
 use crate::hashmap::IndexSet;
 use crate::nir::NirFunction;
 use crate::nir::NirUnaryOp;
@@ -37,21 +38,22 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
-    CalleeMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice, SeqBuiltin,
-    SeqBuiltinMap, is_ctfe_eligible,
+    CalleeMap, CtfeBuiltin, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey,
+    Interpreter, Lattice, is_ctfe_runnable,
 };
-use crate::tir::{PrimitiveType, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
-/// The three whole-program maps [`fold_constants`] feeds its interpreter. Each
-/// is a fresh-per-build allocation ([`build_callee_map`] walks every function,
-/// [`build_global_field_env`] every global *and* every function body), so
-/// rebuilding them on every fixed-point iteration is pure overhead when nothing
-/// they depend on changed. [`ConstFoldCache`] reuses them across iterations.
+/// The whole-program maps [`fold_constants`] feeds its interpreter that depend
+/// on the *set* of functions and globals rather than on body content. Each is a
+/// fresh-per-build allocation ([`build_callee_map`] walks every function,
+/// [`build_global_env`] reduces every global's initializer), so rebuilding them
+/// on every fixed-point iteration is pure overhead. [`ConstFoldCache`] reuses
+/// them across iterations; what is read out of bodies is [`GlobalView`], built
+/// per pass.
 struct FoldMaps {
     callees: CalleeMap,
-    seq_builtins: SeqBuiltinMap,
-    globals: GlobalEnv,
-    global_fields: GlobalFieldEnv,
+    ctfe_builtins: CtfeBuiltinMap,
+    declared_globals: GlobalEnv,
 }
 
 fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
@@ -62,35 +64,24 @@ fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
     // a callee's body edit is visible without rebuilding the map — only its
     // *membership* (the ctfe-eligible function set) can go stale.
     let callees = build_callee_map(project);
-    let seq_builtins = build_seq_builtin_map(project);
+    let ctfe_builtins = build_ctfe_builtin_map(project);
     // Every immutable global whose initializer reduces to a `Const(_)` becomes a
     // `GlobalVarGet` rewrite target; mutable globals are recorded as `NonConst`.
-    let globals = build_global_env(project, type_table, &callees);
-    // Known constant fields of immutable globals — the `SeqField::Len` length of
-    // sequence globals, so a `global:X.used` read folds and the bounds-check /
-    // branch passes can drop the checks they eliminate on the pre-hoist local.
-    let global_fields = build_global_field_env(project);
+    let declared_globals = build_global_env(project, type_table, &callees, &ctfe_builtins);
     FoldMaps {
         callees,
-        seq_builtins,
-        globals,
-        global_fields,
+        ctfe_builtins,
+        declared_globals,
     }
 }
 
 /// Cross-iteration cache for [`FoldMaps`], owned by the fixed-point loop and
 /// threaded into each gated [`fold_constants`] call.
 ///
-/// The maps depend only on the set of functions and globals, not on function
-/// *body* content: the [`CalleeMap`]'s `Rc` handles track body edits
-/// automatically, the [`GlobalEnv`] reads only global initializers (untouched by
-/// the function-scoped loop passes), and the [`GlobalFieldEnv`]'s body scan finds
-/// inline `GlobalVarSet`s to immutable globals — a shape only
-/// `const_object_globalization` (a post-loop
-/// pass) produces, so it contributes nothing during the loop. Hence the cache is
-/// valid while the function and global counts are unchanged; `value_copy_demote`
-/// appending a specialization (function count grows) or DCE around the loop
-/// (global count changes) invalidates it, forcing a rebuild.
+/// The cache is valid while the function and global counts are unchanged;
+/// `value_copy_demote` appending a specialization (function count grows) or DCE
+/// around the loop (global count changes) invalidates it, forcing a rebuild.
+/// The [`CalleeMap`]'s `Rc` handles track body edits with no rebuild at all.
 pub(super) struct ConstFoldCache {
     funcs_len: usize,
     globals_len: usize,
@@ -120,7 +111,8 @@ pub fn fold_constants(
         });
     }
     let maps = &cache.as_ref().expect("just populated").maps;
-    let mut visitor = new_visitor(&type_table, maps);
+    let globals = build_global_view(project, &type_table, maps);
+    let mut visitor = new_visitor(&type_table, maps, &globals);
     let mut buffers = EngineBuffers::default();
     let len = project.functions.len();
     gate.run_gated(GatedPass::ConstFold, len, |fid| {
@@ -129,13 +121,13 @@ pub fn fold_constants(
 }
 
 /// Ungated variant: folds every function, rebuilding the maps each call. Used by
-/// the post-globalization cleanup, whose bodies carry the inline `GlobalVarSet`s
-/// globalization emits — so its [`GlobalFieldEnv`] is body-dependent and must not
-/// be cached across the caller's fixed point.
+/// the post-globalization cleanup, which runs outside the loop that owns the
+/// cache.
 pub fn fold_constants_all(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
     let maps = build_fold_maps(project, &type_table);
-    let mut visitor = new_visitor(&type_table, &maps);
+    let globals = build_global_view(project, &type_table, &maps);
+    let mut visitor = new_visitor(&type_table, &maps, &globals);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -144,14 +136,18 @@ pub fn fold_constants_all(project: &mut NirPackage) -> bool {
     changed
 }
 
-fn new_visitor<'a>(type_table: &'a TypeTable, maps: &'a FoldMaps) -> ConstFoldVisitor<'a> {
+fn new_visitor<'a>(
+    type_table: &'a TypeTable,
+    maps: &'a FoldMaps,
+    globals: &'a GlobalView,
+) -> ConstFoldVisitor<'a> {
     let mut visitor = ConstFoldVisitor {
         interpreter: Interpreter::new(type_table),
     };
     visitor.interpreter.with_callees(&maps.callees);
-    visitor.interpreter.with_seq_builtins(&maps.seq_builtins);
-    visitor.interpreter.with_globals(&maps.globals);
-    visitor.interpreter.with_global_fields(&maps.global_fields);
+    visitor.interpreter.with_ctfe_builtins(&maps.ctfe_builtins);
+    visitor.interpreter.with_globals(&globals.values);
+    visitor.interpreter.with_global_fields(&globals.fields);
     visitor
 }
 
@@ -192,9 +188,14 @@ pub(super) struct ConstFoldRule<'a> {
 }
 
 impl<'a> ConstFoldRule<'a> {
-    pub(super) fn new(type_table: &'a TypeTable, callees: &'a CalleeMap) -> Self {
+    pub(super) fn new(
+        type_table: &'a TypeTable,
+        callees: &'a CalleeMap,
+        ctfe_builtins: &'a CtfeBuiltinMap,
+    ) -> Self {
         let mut interpreter = Interpreter::new(type_table);
         interpreter.with_callees(callees);
+        interpreter.with_ctfe_builtins(ctfe_builtins);
         Self {
             interpreter: RefCell::new(interpreter),
         }
@@ -235,6 +236,13 @@ impl EditSink for EngineSink<'_, '_> {
     fn replace_with_value(&mut self, e: ExprId, value: crate::const_eval::Value) -> bool {
         self.engine.replace_expr_with_value(e, value)
     }
+    fn const_operand(
+        &mut self,
+        kind: crate::nir_value_graph::ValueKind,
+        type_id: TypeId,
+    ) -> crate::nir_arena::Operand {
+        self.engine.const_operand(kind, type_id)
+    }
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         self.engine.become_expr(dst, src);
     }
@@ -256,7 +264,8 @@ impl EditSink for EngineSink<'_, '_> {
     }
 }
 
-/// Pre-build the [`CalleeMap`] from every CTFE-eligible function in
+/// Pre-build the [`CalleeMap`] from every function a compile-time frame can run
+/// in
 /// `project`. The map stores `Rc<RefCell<NirFunction>>` handles
 /// aliased with `project.functions`, so rebuilding the map every
 /// optimizer iteration costs only refcount bumps. The key shape
@@ -266,33 +275,46 @@ pub(super) fn build_callee_map(project: &NirPackage) -> CalleeMap {
     let mut map = CalleeMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if !is_ctfe_eligible(&func) {
+        if !is_ctfe_runnable(&func) {
             continue;
         }
         let Some(id) = func.id else {
             continue;
         };
         drop(func);
-        map.insert(id, func_rc.clone());
+        map.insert(id, crate::niri::Callee::new(func_rc.clone()));
     }
     map
 }
 
-/// Which callee ids are the array builtins the engine evaluates.
-fn build_seq_builtin_map(project: &NirPackage) -> SeqBuiltinMap {
-    let mut map = SeqBuiltinMap::default();
+/// Which callee ids are the builtins the engine evaluates.
+///
+/// `array_get` is generic, but a builtin is declared once and shared by every
+/// instantiation — the type arguments ride on the call, not on a monomorphized
+/// callee record — so the name is read off whichever of the two forms the
+/// callee has.
+pub(super) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
+    let mut map = CtfeBuiltinMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let Some(id) = func.id else {
             continue;
         };
         let descriptor = crate::nir::FunctionRef::from_resolved(&func, func.module_source.clone());
-        let Some(name) = descriptor.monomorphized_builtin_name() else {
+        let Some(name) = descriptor
+            .builtin_name()
+            .or_else(|| descriptor.monomorphized_builtin_name())
+        else {
             continue;
         };
         let builtin = match name.as_str() {
-            "builtin::array_get" => SeqBuiltin::Get,
-            "builtin::array_len" => SeqBuiltin::Len,
+            "builtin::array_get" | "builtin::array_get_u8" => CtfeBuiltin::ArrayGet,
+            "builtin::array_len" => CtfeBuiltin::ArrayLen,
+            "builtin::array_new" => CtfeBuiltin::ArrayNew,
+            "builtin::array_set" | "builtin::array_set_u8" => CtfeBuiltin::ArraySet,
+            "builtin::array_copy" => CtfeBuiltin::ArrayCopy,
+            "builtin::cold_path" => CtfeBuiltin::ColdPath,
+            "builtin::select" => CtfeBuiltin::Select,
             _ => continue,
         };
         map.insert(id, builtin);
@@ -316,6 +338,7 @@ fn build_global_env(
     project: &NirPackage,
     type_table: &TypeTable,
     callees: &CalleeMap,
+    ctfe_builtins: &CtfeBuiltinMap,
 ) -> GlobalEnv {
     let mut env = GlobalEnv::default();
     for global in &project.globals {
@@ -328,6 +351,7 @@ fn build_global_env(
             Some(declared) => {
                 let mut interp = Interpreter::new(type_table);
                 interp.with_callees(callees);
+                interp.with_ctfe_builtins(ctfe_builtins);
                 interp.with_globals(&env);
                 let body = declared.body();
                 match declared.expr() {
@@ -415,22 +439,41 @@ fn const_seq_len_a(body: &Body, e: ExprId) -> Option<i32> {
     }
 }
 
-/// Pre-build the [`GlobalFieldEnv`]: the statically-known [`SeqField::Len`]
-/// length of every Wado-immutable sequence global. Body globalization hoists
-/// constant read-only `List` / `String` bindings into such globals (leaving a
-/// `null` placeholder initializer and an inline `GlobalVarSet` with the real
-/// value), so folding `global:X.used` to a constant lets the bounds-check /
-/// branch passes recover the elimination they perform on the pre-hoist local.
-fn build_global_field_env(project: &NirPackage) -> GlobalFieldEnv {
+/// What the interpreter knows about module globals for one pass.
+///
+/// A declared initializer is only half the story: a non-trivial one never
+/// reaches the global's slot. `lower/plan`'s `globals::extract` moves it into
+/// module init, and body globalization hoists a constant read-only binding into
+/// a fresh global the same way — both leave a placeholder in the slot and the
+/// real value in an inline `GlobalVarSet`. Reading that store back is what lets
+/// such a global fold at all.
+///
+/// A store's value is function-body content, which the optimizer loop is still
+/// reducing, so this is rebuilt per pass rather than cached in [`FoldMaps`].
+struct GlobalView {
+    /// What each global holds. Seeded from [`FoldMaps::declared_globals`]; a
+    /// global every store of which is the same constant overrides its
+    /// placeholder's `NonConst`.
+    values: GlobalEnv,
+    /// The [`SeqField::Len`] a sequence global carries even when its elements do
+    /// not reduce, so the bounds-check / branch passes recover the elimination
+    /// they perform on the pre-hoist local.
+    fields: GlobalFieldEnv,
+}
+
+fn build_global_view(project: &NirPackage, type_table: &TypeTable, maps: &FoldMaps) -> GlobalView {
+    let mut view = GlobalView {
+        values: maps.declared_globals.clone(),
+        fields: GlobalFieldEnv::default(),
+    };
     let immutable: IndexSet<GlobalKey> = project
         .globals
         .iter()
         .filter(|g| !g.wado_mutable)
         .map(|g| (g.module_source.clone(), g.name.clone()))
         .collect();
-    let mut env = GlobalFieldEnv::default();
     if immutable.is_empty() {
-        return env;
+        return view;
     }
     // A non-placeholder const initializer (a user const sequence global) is a
     // direct source.
@@ -441,24 +484,55 @@ fn build_global_field_env(project: &NirPackage) -> GlobalFieldEnv {
             && let Some(n) = const_seq_len_a(declared.body(), init_e)
         {
             record_seq_len(
-                &mut env,
+                &mut view.fields,
                 (global.module_source.clone(), global.name.clone()),
                 n,
             );
         }
     }
-    // The inline `GlobalVarSet(X, <const>)` body globalization emits, read from
-    // each function's arena body.
-    let mut collector = SeqLenCollector {
+    let mut stored = GlobalEnv::default();
+    let mut escaped = IndexSet::default();
+    let mut collector = GlobalStoreCollector {
         immutable: &immutable,
-        env: &mut env,
+        type_table,
+        funcs: &project.functions,
+        callees: &maps.callees,
+        ctfe_builtins: &maps.ctfe_builtins,
+        declared_env: &maps.declared_globals,
+        fields: &mut view.fields,
+        stored: &mut stored,
+        escaped: &mut escaped,
     };
     for func_rc in &project.functions {
         if let Some(body) = func_rc.borrow().body.as_ref() {
             collector.visit_body(body);
         }
     }
-    env
+    for (key, lattice) in stored {
+        if matches!(lattice, Lattice::Const(_)) {
+            view.values.insert(key, lattice);
+        }
+    }
+    for key in escaped {
+        view.fields.swap_remove(&key);
+        view.values.insert(key, Lattice::NonConst);
+    }
+    view
+}
+
+/// Whether `e` is `&GLOBAL` — a shared borrow of a whole global, not of a part
+/// of one.
+fn is_whole_global_ref(body: &Body, e: ExprId) -> bool {
+    let ExprKind::Unary {
+        op: NirUnaryOp::Ref,
+        expr: inner,
+    } = &body.exprs[e].kind
+    else {
+        return false;
+    };
+    inner
+        .as_expr()
+        .is_some_and(|i| matches!(body.exprs[i].kind, ExprKind::GlobalVarGet { .. }))
 }
 
 fn record_seq_len(env: &mut GlobalFieldEnv, key: GlobalKey, n: i32) {
@@ -471,39 +545,166 @@ fn record_seq_len(env: &mut GlobalFieldEnv, key: GlobalKey, n: i32) {
     );
 }
 
-/// Records the [`SeqField::Len`] of each immutable global assigned an inline
-/// constant sequence via `GlobalVarSet`. Walks the arena body directly.
-struct SeqLenCollector<'a> {
+/// Reads what every body says about the immutable globals: the `GlobalVarSet`
+/// that carries a value, and the uses that make one unknowable.
+struct GlobalStoreCollector<'a> {
     immutable: &'a IndexSet<GlobalKey>,
-    env: &'a mut GlobalFieldEnv,
+    type_table: &'a TypeTable,
+    funcs: &'a [Rc<RefCell<NirFunction>>],
+    callees: &'a CalleeMap,
+    ctfe_builtins: &'a CtfeBuiltinMap,
+    declared_env: &'a GlobalEnv,
+    fields: &'a mut GlobalFieldEnv,
+    stored: &'a mut GlobalEnv,
+    escaped: &'a mut IndexSet<GlobalKey>,
 }
 
-impl SeqLenCollector<'_> {
+impl GlobalStoreCollector<'_> {
     fn visit_body(&mut self, body: &Body) {
-        self.visit_node(body, NodeRef::Block(body.root));
+        let mut stack = vec![NodeRef::Block(body.root)];
+        while let Some(node) = stack.pop() {
+            match node {
+                NodeRef::Expr(e) => self.visit_expr(body, e),
+                NodeRef::Stmt(s) => self.visit_stmt(body, s),
+                NodeRef::Block(_) | NodeRef::Pat(_) => {}
+            }
+            body.for_each_child(node, |c| stack.push(c));
+        }
     }
 
-    fn visit_node(&mut self, body: &Body, node: NodeRef) {
-        if let NodeRef::Expr(e) = node
-            && let ExprKind::GlobalVarSet {
+    fn visit_expr(&mut self, body: &Body, e: ExprId) {
+        match &body.exprs[e].kind {
+            ExprKind::GlobalVarSet {
                 module_source,
                 name,
                 value,
-            } = &body.exprs[e].kind
-        {
-            let key = (module_source.clone(), name.clone());
-            let value = *value;
-            if self.immutable.contains(&key)
-                && let Some(n) = const_seq_len_operand_a(body, value)
-            {
-                record_seq_len(self.env, key, n);
+            } => {
+                let key = (module_source.clone(), name.clone());
+                let value = *value;
+                if self.immutable.contains(&key) {
+                    self.record_store(body, key, value);
+                }
             }
+            ExprKind::Assign { target, .. } => self.record_escape(body, (*target).into()),
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr,
+            } => self.record_escape(body, *expr),
+            ExprKind::MethodCall {
+                receiver,
+                func_id,
+                args,
+                ..
+            } => {
+                // An unresolvable receiver mutability counts as mutating.
+                if self.callee_mutates_self(*func_id) != Some(false) {
+                    self.record_escape(body, *receiver);
+                }
+                for arg in args.iter().filter(|a| a.is_mut) {
+                    self.record_escape(body, arg.expr);
+                }
+            }
+            ExprKind::Call { args, .. } => {
+                for arg in args.iter().filter(|a| a.is_mut) {
+                    self.record_escape(body, arg.expr);
+                }
+            }
+            _ => {}
         }
-        let mut kids = Vec::new();
-        body.for_each_child(node, |c| kids.push(c));
-        for c in kids {
-            self.visit_node(body, c);
+    }
+
+    /// A binding that hands a global's interior to a local takes it out of
+    /// reach: writes then root at the local, not at the global — LICM hoisting
+    /// `G.repr` out of a loop that writes through it is the shape that bites.
+    ///
+    /// Only a binding that can alias: a scalar is copied into its local, and a
+    /// shared borrow of the whole global is what a method call on it lowers to.
+    /// A non-scalar `let x = G` is a deep copy by value semantics yet counts
+    /// here, because `value_copy_demote` elides that copy once it proves the
+    /// binding read-only — which is how the local comes to alias after all.
+    fn visit_stmt(&mut self, body: &Body, s: StmtId) {
+        let value = match &body.stmts[s].kind {
+            StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => *value,
+            _ => return,
+        };
+        let Some(e) = value.as_expr() else {
+            return;
+        };
+        if is_whole_global_ref(body, e) || prim_of(body.exprs[e].type_id, self.type_table).is_some()
+        {
+            return;
         }
+        self.record_escape(body, value);
+    }
+
+    /// `Some(true)` when `func_id`'s `self` parameter is `&mut self`,
+    /// `Some(false)` when it is `&self` or by-value, `None` when unresolvable.
+    ///
+    /// Read off [`NirParam::is_mut_ref`], captured before boxing: boxing lowers
+    /// `&mut T`, `&T`, and a by-value primitive receiver alike to `Box<T>`, so
+    /// by then the type no longer says which of them mutates its caller's
+    /// storage.
+    ///
+    /// [`NirParam::is_mut_ref`]: crate::nir::NirParam::is_mut_ref
+    fn callee_mutates_self(&self, func_id: crate::nir::FuncId) -> Option<bool> {
+        let func = self.funcs.get(func_id.index())?.borrow();
+        let receiver = func.params.first()?;
+        Some(
+            receiver.is_mut_ref
+                || matches!(
+                    self.type_table.get(receiver.type_id),
+                    ResolvedType::MutRef(_)
+                ),
+        )
+    }
+
+    /// Mark the global a place roots at as one nothing may be read off, through
+    /// the projection and borrow chain leading to it.
+    fn record_escape(&mut self, body: &Body, place: Operand) {
+        let Some(e) = place.as_expr() else {
+            return;
+        };
+        match &body.exprs[e].kind {
+            ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => {
+                let key = (module_source.clone(), name.clone());
+                if self.immutable.contains(&key) {
+                    self.escaped.insert(key);
+                }
+            }
+            ExprKind::FieldAccess { expr: inner, .. }
+            | ExprKind::Index { expr: inner, .. }
+            | ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+                expr: inner,
+            } => self.record_escape(body, *inner),
+            _ => {}
+        }
+    }
+
+    fn record_store(&mut self, body: &Body, key: GlobalKey, value: Operand) {
+        if let Some(n) = const_seq_len_operand_a(body, value) {
+            record_seq_len(self.fields, key.clone(), n);
+        }
+        let mut interpreter = Interpreter::new(self.type_table);
+        interpreter.with_callees(self.callees);
+        interpreter.with_ctfe_builtins(self.ctfe_builtins);
+        interpreter.with_globals(self.declared_env);
+        // A store whose value does not reduce says the global is not a constant
+        // — joining it as `NonConst` keeps a sibling store from speaking for the
+        // whole global.
+        let stored = match interpreter.operand_to_lattice_a(body, value) {
+            constant @ Lattice::Const(_) => constant,
+            Lattice::NonConst | Lattice::Unevaluated => Lattice::NonConst,
+        };
+        let known = self
+            .stored
+            .get(&key)
+            .cloned()
+            .unwrap_or(Lattice::Unevaluated);
+        self.stored.insert(key, known.join(stored));
     }
 }
 

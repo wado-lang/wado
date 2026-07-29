@@ -139,7 +139,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(53)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(54)
 
+<<<<<<< HEAD
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(55)
+||||||| 2738e686c
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(55)
+=======
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next$spec0" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(55)
+>>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -163,6 +169,7 @@ global global:auto_deref.wado::__const_obj_3: ref null "core:prelude/string.wado
 global global:auto_deref.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 115, 117, 109, 32, 61, 61, 32, 54, 10), used: 21 };
 global global:auto_deref.wado::__const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 98, 32, 61, 61, 32, 98, 39, 104, 39, 10), used: 22 };
 global global:auto_deref.wado::__const_obj_10: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 117, 116, 111, 95, 100, 101, 114, 101, 102, 95, 109, 101, 116, 104, 111, 100), used: 17 };
+global global:core:prelude/primitive.wado::__const_obj_13: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "auto_deref.wado/auto_deref_for_of"() with Stdout {
     let arr: ref "core:prelude//List<i32>";
@@ -204,7 +211,13 @@ fn "auto_deref.wado/auto_deref_for_of"() with Stdout {
         l5: loop {
             let __sroa___match_20_discriminant: i32;
             let __sroa___match_20_payload_0: char;
+<<<<<<< HEAD
             multivalue_bind [__sroa___match_20_discriminant, __sroa___match_20_payload_0] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_11);
+||||||| 2738e686c
+            multivalue_bind [__sroa___match_20_discriminant, __sroa___match_20_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_11);
+=======
+            multivalue_bind [__sroa___match_20_discriminant, __sroa___match_20_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next$spec0"(__iter_11);
+>>>>>>> origin/main
             if __sroa___match_20_discriminant == 0 {
                 count = count + 1;
             } else {
@@ -506,7 +519,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
+<<<<<<< HEAD
     offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+||||||| 2738e686c
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+=======
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_13, digit_count);
+>>>>>>> origin/main
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
@@ -522,6 +541,7 @@ fn "core:prelude/primitive.wado/i32^Inspect::inspect"(self, f) {
     "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
+<<<<<<< HEAD
 fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
     if self.byte_index >= self.used {
         return 1, 0;
@@ -534,6 +554,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(capacity) {
+||||||| 2738e686c
+fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
+    if self.byte_index >= self.used {
+        return 1, 0;
+    }
+    let __pattern_temp_0_mv_0: u32;
+    let __pattern_temp_0_mv_1: i32;
+    multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "core:prelude/string.wado/decode_char_at"(self.repr, self.byte_index);
+    self.byte_index = self.byte_index + __pattern_temp_0_mv_1;
+    return 0, __pattern_temp_0_mv_0;
+}
+
+fn "core:prelude/string.wado/String::with_capacity"(capacity) {
+=======
+fn "core:prelude/string.wado/String::with_capacity"(capacity) {
+>>>>>>> origin/main
     return struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity), used: 0 };
 }
 
@@ -610,12 +646,24 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n"(s
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
+<<<<<<< HEAD
     b35: block {
         l36: loop {
             break_if b35 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_4, c);
+||||||| 2738e686c
+    b35: block {
+        l36: loop {
+            break_if b35 i >= n;
+            "core:prelude/string.wado/String::push"(_licm_buf_4, c);
+=======
+    b34: block {
+        l35: loop {
+            break_if b34 i >= n;
+            "core:prelude/string.wado/String::push"(_licm_buf_4, c);
+>>>>>>> origin/main
             i = i + 1;
-            continue l36;
+            continue l35;
         };
     };
 }
@@ -708,6 +756,17 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::
     ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(self.repr, self.index) };
     self.index = self.index + 1;
     return ref_val;
+}
+
+fn "core:prelude/string.wado/StrCharIter^Iterator::next$spec0"(self) {
+    if self.byte_index >= 3 {
+        return 1, 0;
+    }
+    let __pattern_temp_0_mv_0: u32;
+    let __pattern_temp_0_mv_1: i32;
+    multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "core:prelude/string.wado/decode_char_at"(self.repr, self.byte_index);
+    self.byte_index = self.byte_index + __pattern_temp_0_mv_1;
+    return 0, __pattern_temp_0_mv_0;
 }
 
 export fn "auto_deref.wado/__cm_export__run" as "run"

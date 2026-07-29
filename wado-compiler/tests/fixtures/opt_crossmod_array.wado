@@ -3,6 +3,10 @@
 // 1. List literals in sub-modules are collapsed to array.new_fixed
 // 2. Generic functions monomorphized across modules are correctly inlined
 // 3. Non-scalar elements (String) are optimized even across module boundaries
+//
+// A list read at constant indices folds to its elements and drops — a `String`
+// element as much as a scalar one, since a byte sequence has a literal form to
+// leave the interpreter as — so neither array reaches the WIR.
 
 use { println, Stdout } from "core:cli";
 use { string_pair, int_triple, string_literals } from "./sub/opt_crossmod_level2.wado";
@@ -42,11 +46,9 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "ok\n",
-    "wir_expect:O2": [
-        "array.new_fixed<i32>(10, 20, 30)",
-        "array.new_fixed<ref \"core:prelude/string.wado//String\">("
-    ],
     "wir_not_expect:O2": [
-        "SequenceLiteralBuilder::push_literal\"("
+        "SequenceLiteralBuilder::push_literal\"(",
+        "array.new_fixed<i32>",
+        "array.new_fixed<ref \"core:prelude/string.wado//String\">("
     ]
 }

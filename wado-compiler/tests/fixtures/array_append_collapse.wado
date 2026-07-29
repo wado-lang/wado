@@ -1,5 +1,8 @@
 // Verifies that List<T> literals go through SequenceLiteralBuilder
 // and the collapse_array_append_sequences WIR pass recovers ArrayNewFixed.
+//
+// Only the lists something still reads at run time reach the WIR: one whose
+// every read folds to the element it denotes drops with its array.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
@@ -71,13 +74,12 @@ __DATA__
 {
     "stdout": "ok\n",
     "wir_expect:O2": [
-        "array.new_fixed<i32>(10, 20, 30)",
-        "array.new_fixed<ref \"core:prelude/string.wado//String\">(",
-        "array.new_fixed<i32>(5, 10, 15)"
+        "array.new_fixed<i32>(100, 200)"
     ],
     "wir_not_expect:O2": [
         "SequenceLiteralBuilder::push_literal\"(",
         "List<String>::push\"(__local_",
-        "List<i32>::push\"("
+        "List<i32>::push\"(",
+        "array.new_fixed<ref \"core:prelude/string.wado//String\">("
     ]
 }

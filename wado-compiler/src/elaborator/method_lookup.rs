@@ -1456,6 +1456,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_ast: Option<&ast::Expr>,
         method_name: &str,
         span: Span,
+        ctx: &FunctionContext,
     ) {
         let immutable = match self.tysys.type_table.borrow().get(receiver.type_id) {
             ResolvedType::Ref(_) => true,
@@ -1463,12 +1464,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => receiver_ast.is_some_and(|e| self.place_roots_at_immutable_ref(e)),
         };
         if immutable {
-            let _ = self.logger.error(TypeError::CannotMutate {
+            let _ = self.emit(TypeError::CannotMutate {
                 message: format!(
                     "cannot call `&mut self` method `{method_name}` through immutable reference"
                 ),
                 span,
             });
+            return;
+        }
+        if let Some(binding) =
+            receiver_ast.and_then(|e| self.place_roots_at_immutable_binding(e, ctx))
+        {
+            let _ = self.emit(TypeError::CannotMutate {
+                message: format!(
+                    "cannot call `&mut self` method `{method_name}` on immutable '{binding}'"
+                ),
+                span,
+            });
+        }
+    }
+
+    /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and any
+    /// nesting of those. A reference step ends the walk — `&mut T` makes the
+    /// place writable however the binding holding it was declared, and `&T` is
+    /// [`Self::place_roots_at_immutable_ref`]'s to report. A root the frame
+    /// cannot see (a capture, a temporary) reports nothing, so this only ever
+    /// speaks where the binding is provably immutable.
+    pub(super) fn place_roots_at_immutable_binding(
+        &self,
+        expr: &ast::Expr,
+        ctx: &FunctionContext,
+    ) -> Option<String> {
+        if let Some(ty) = self.sem.types.expression_types.get(&expr.id()).copied()
+            && matches!(
+                self.tysys.type_table.borrow().get(ty),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            )
+        {
+            return None;
+        }
+        match expr {
+            ast::Expr::Ident(id) => match binding_mutability(&id.name, ctx) {
+                Some(is_mut) => (!is_mut).then(|| id.name.clone()),
+                // Only a name no binding claims can be the global; one
+                // shadowing it answers for itself.
+                None => self.is_immutable_global(&id.name).then(|| id.name.clone()),
+            },
+            ast::Expr::FieldAccess(fa) => self.place_roots_at_immutable_binding(&fa.expr, ctx),
+            ast::Expr::Index(ix) => self.place_roots_at_immutable_binding(&ix.expr, ctx),
+            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
+                self.place_roots_at_immutable_binding(&u.expr, ctx)
+            }
+            _ => None,
         }
     }
 
@@ -3272,4 +3319,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
         )
     }
+}
+
+/// How the frame sees `name`: `Some(is_mut)` for a binding it can vouch for,
+/// `None` when none claims the name and it may be a global.
+///
+/// A closure body's own scopes hold only its parameters and locals — the
+/// enclosing frame's bindings reach it as captures, which the scopes alone
+/// would leave unaccounted for.
+fn binding_mutability(name: &str, ctx: &FunctionContext) -> Option<bool> {
+    if let Some(local) = ctx.lookup(name) {
+        return Some(local.is_mut);
+    }
+    // Reading through a `&mut` box is what a mutable capture is.
+    if ctx.deref_overrides.contains_key(name) || ctx.outer_box_types.contains_key(name) {
+        return Some(true);
+    }
+    ctx.outer_locals.get(name).map(|outer| outer.is_mut)
 }

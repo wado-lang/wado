@@ -1,0 +1,16 @@
+// Ordering has to hold across modules too: `DERIVED` reads a global of a third
+// module, and both are initialized before the entry module. Sorting the
+// per-module initializers with the entry last says nothing about the order of
+// the rest, so `DERIVED` read `BASE`'s placeholder and trapped.
+
+use { println, Stdout } from "core:cli";
+use { DERIVED } from "./sub/global_init_order_cross_amid.wado";
+
+export fn run() with Stdout {
+    println(`${DERIVED}`);
+}
+
+__DATA__
+{
+    "stdout": "103\n"
+}

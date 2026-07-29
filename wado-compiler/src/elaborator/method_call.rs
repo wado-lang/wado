@@ -349,7 +349,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .cloned()
                 && let Some((found_trait, info)) = {
                     let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
-                    self.find_method_in_trait_bounds(&bound_names, method_name, base_type_id)
+                    self.find_method_in_trait_bounds(&bound_names, method_name, base_type_id, span)
                 }
             {
                 trait_name = Some(found_trait);
@@ -374,7 +374,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if let Some(bounds) = assoc_bounds
                 && let Some((found_trait, info)) =
-                    self.find_method_in_trait_bounds(&bounds, method_name, base_type_id)
+                    self.find_method_in_trait_bounds(&bounds, method_name, base_type_id, span)
             {
                 trait_name = Some(found_trait);
                 method_info = Some(info);
@@ -640,7 +640,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // placeholder.
 
         if self_kind == ast::SelfKind::MutRef && !is_ref_impl {
-            self.check_mut_receiver(&receiver, receiver_ast, method_name, span);
+            self.check_mut_receiver(&receiver, receiver_ast, method_name, span, ctx);
         }
 
         // Adjust receiver based on what the method expects (self_kind)
@@ -1728,12 +1728,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         vec![],
                     )
                 }
+<<<<<<< HEAD
             }
             _ => {
                 // Unknown type - return error expression
                 return TypeTable::ERROR;
             }
         };
+||||||| 2738e686c
+                _ => {
+                    // Unknown type - return error expression
+                    return TypeTable::ERROR;
+                }
+            };
+=======
+                // The target names no struct-like type: a trait, an undeclared
+                // name, a turbofish on a non-generic.
+                _ => {
+                    let _ = self.emit(TypeError::UnknownFunction {
+                        name: format!(
+                            "{}::{}",
+                            super::trait_env::get_type_name_static(&static_call.target_type),
+                            static_call.method
+                        ),
+                        span: static_call.span,
+                    });
+                    return TypeTable::ERROR;
+                }
+            };
+>>>>>>> origin/main
 
         // Find trait name: if the static method belongs to a trait impl, include the
         // trait name in the mangled function name so WIR can resolve it correctly.

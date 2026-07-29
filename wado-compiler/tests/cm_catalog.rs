@@ -530,15 +530,19 @@ async fn embedded_stream_round_trip(
     Ok(())
 }
 
-/// Compile the catalog fixture as a library world at `opt_level`.
+/// Compile the catalog fixture as a library world at `opt_level`, under the
+/// `debug` allocator: it poisons freed memory, surfacing use-after-free at the
+/// boundary.
 fn compile_catalog(opt_level: OptLevel) -> Vec<u8> {
+    compile_catalog_with_allocator(opt_level, "debug")
+}
+
+fn compile_catalog_with_allocator(opt_level: OptLevel, allocator: &str) -> Vec<u8> {
     let source = std::fs::read_to_string(FIXTURE).expect("read cm_catalog fixture");
     let options = CompilerOptions {
         opt_level,
         lib_world: Some(LIB_WORLD_FQ.to_string()),
-        // The debug allocator poisons freed memory, surfacing lift/lower
-        // use-after-free at the boundary.
-        allocator: Some("debug".to_string()),
+        allocator: Some(allocator.to_string()),
         ..Default::default()
     };
     common::compile_source_with_compiler_options(Path::new(FIXTURE), &source, options)
@@ -1389,6 +1393,60 @@ fn cm_lib_rejects_empty_record_boundary_type() {
     );
 }
 
+/// A Component Model interface has one namespace shared by its types and its
+/// functions (`WIT.md`). Wado keeps the two apart, so a `PascalCase` type and a
+/// `snake_case` function look unambiguous until kebab-casing maps them onto one
+/// CM name. That must be a diagnostic naming both, not an ICE from Wasm
+/// validation.
+#[test]
+fn cm_lib_rejects_export_name_colliding_with_type_name() {
+    let err = try_compile_lib(
+        "variant Shape {\n    Dot,\n    Line(u32),\n}\n\
+         export fn shape(v: u32) -> u32 {\n    return v;\n}\n\
+         export fn make(v: u32) -> Shape {\n    if v == 0 {\n        \
+         return Shape::Dot;\n    } else {\n        return Shape::Line(v);\n    }\n}\n",
+    )
+    .expect_err("a function and a type sharing a CM name should fail to compile");
+    assert!(
+        err.contains("`shape`") && err.contains("`Shape`"),
+        "expected a collision diagnostic naming both the function and the type, got: {err}"
+    );
+}
+
+/// The interface name check walks every export signature through the CM type
+/// engine, which recurses without a depth guard. It has to run behind the
+/// boundary-representability check, or a recursive type overflows the stack
+/// instead of getting the diagnostic that already exists for it.
+#[test]
+fn cm_lib_rejects_recursive_type_before_the_name_check_walks_it() {
+    let err = try_compile_lib(
+        "pub struct Node {\n    next: Option<Node>,\n    value: u32,\n}\n\
+         export fn depth(n: Node) -> u32 {\n    return n.value;\n}\n",
+    )
+    .expect_err("a recursive boundary type should fail to compile");
+    assert!(
+        err.contains("recursive") && err.contains("Node"),
+        "expected the recursive-type boundary diagnostic, got: {err}"
+    );
+}
+
+/// Two type names that differ only in a way kebab-casing erases land on the same
+/// CM name with no function involved at all.
+#[test]
+fn cm_lib_rejects_two_types_sharing_a_cm_name() {
+    let err = try_compile_lib(
+        "struct HTTPServer {\n    port: u32,\n}\n\
+         struct HttpServer {\n    host: String,\n}\n\
+         export fn a(v: HTTPServer) -> u32 {\n    return v.port;\n}\n\
+         export fn b(v: HttpServer) -> String {\n    return v.host;\n}\n",
+    )
+    .expect_err("two types sharing a CM name should fail to compile");
+    assert!(
+        err.contains("http-server"),
+        "expected a diagnostic naming the shared CM name, got: {err}"
+    );
+}
+
 /// The fixture is the published package source reused verbatim, so it must stay
 /// byte-identical to `package-cm-catalog/src/lib.wado`; otherwise the test
 /// corpus and the shipped package could drift apart.
@@ -1415,4 +1473,85 @@ fn cm_catalog_round_trip_o0() {
 #[test]
 fn cm_catalog_round_trip_o2() {
     run_round_trips(OptLevel::O2);
+}
+
+/// Round-trip every value case twice under `freelist`, whose free path traps on
+/// a block that is already free.
+///
+/// The guard for the `post-return` free walk (wado-lang/wado#1683): a buffer the
+/// walk visits twice is a double-free, and calling twice also catches a buffer
+/// freed while the host still needs it, since `freelist` hands the block straight
+/// back on the next call. The catalog is the widest shape corpus available.
+fn run_double_free_guard(opt_level: OptLevel) {
+    let wasm = compile_catalog_with_allocator(opt_level, "freelist");
+    let engine = common::engine();
+    let opt = common::opt_level_name(opt_level);
+
+    common::runtime().block_on(async {
+        let component = Component::new(engine, &wasm).expect("instantiate component type");
+        let linker = common::linker(engine).expect("build linker");
+        let state = common::WasiState::new_with_pipes(
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+        );
+        let mut store = Store::new(engine, state);
+        store.set_epoch_deadline((common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .expect("instantiate library component");
+        let iface = instance
+            .get_export(&mut store, None, LIB_WORLD_FQ)
+            .map(|(_, idx)| idx);
+
+        let mut failures = Vec::new();
+        for Case { export, value } in cases() {
+            let func = iface
+                .as_ref()
+                .and_then(|i| instance.get_export(&mut store, Some(i), export))
+                .map(|(_, idx)| idx)
+                .and_then(|idx| instance.get_func(&mut store, idx));
+            let Some(func) = func else {
+                failures.push(format!("[{opt}] export `{export}` not found"));
+                continue;
+            };
+            for call in 0..2 {
+                let mut results = vec![Val::Bool(false); func.ty(&store).results().len()];
+                match func
+                    .call_async(&mut store, std::slice::from_ref(&value), &mut results)
+                    .await
+                {
+                    Ok(()) if results.first() == Some(&value) => {}
+                    Ok(()) => failures.push(format!(
+                        "[{opt}] `{export}` call {call}: round-trip mismatch\n  \
+                         in:  {value:?}\n  out: {:?}",
+                        results.first()
+                    )),
+                    Err(e) => failures.push(format!(
+                        "[{opt}] `{export}` call {call} trapped: {e:#}\n  \
+                         A `freelist` trap here is a double-free or a \
+                         premature free in the `post-return` walk."
+                    )),
+                }
+            }
+        }
+
+        assert!(
+            failures.is_empty(),
+            "{} of {} catalog exports failed under `freelist`:\n{}",
+            failures.len(),
+            cases().len(),
+            failures.join("\n")
+        );
+    });
+}
+
+#[test]
+fn cm_catalog_no_double_free_o0() {
+    run_double_free_guard(OptLevel::O0);
+}
+
+#[test]
+fn cm_catalog_no_double_free_o2() {
+    run_double_free_guard(OptLevel::O2);
 }

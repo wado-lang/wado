@@ -368,6 +368,21 @@ impl<H: CompilerHost> SpanEmitter for Logger<'_, H> {
     }
 }
 
+/// Minimal error-reporting slice of [`Logger`], letting a phase diagnose
+/// without taking the host type parameter — the counterpart to [`SpanEmitter`]
+/// for profiling.
+pub trait ErrorSink {
+    /// Report an error that makes it impossible to continue the phase.
+    fn fatal_in(&self, module: &ModuleSource, diagnostic: Diagnostic) -> Bail;
+}
+
+impl<H: CompilerHost> ErrorSink for Logger<'_, H> {
+    fn fatal_in(&self, module: &ModuleSource, diagnostic: Diagnostic) -> Bail {
+        let diagnostic = Self::with_file(diagnostic, &module.source_path());
+        self.fatal(diagnostic).expect_err("fatal always bails")
+    }
+}
+
 /// A [`Logger`] bound to one module, so code threading a single `logger`
 /// value (recursive validators) need not also thread a [`ModuleSource`].
 /// Obtain one with [`Logger::in_module`].

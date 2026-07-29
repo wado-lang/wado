@@ -2224,29 +2224,11 @@ impl Monomorphizer {
                             &method_name_before,
                         )
                     {
-                        // Unwrap receiver: &T -> T (strip the Ref wrapper)
-                        let left = if let TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: inner,
-                        } = &receiver.kind
-                        {
-                            (**inner).clone()
-                        } else {
-                            (**receiver).clone()
+                        let left = unref_operand(receiver, type_table);
+                        let Some(arg) = args.first() else {
+                            unreachable!("a binary-op trait method always takes one argument")
                         };
-                        // Unwrap first arg: &T -> T
-                        let right = if let Some(arg) = args.first()
-                            && let TirExprKind::Unary {
-                                op: TirUnaryOp::Ref,
-                                expr: inner,
-                            } = &arg.expr.kind
-                        {
-                            (**inner).clone()
-                        } else if let Some(arg) = args.first() {
-                            arg.expr.clone()
-                        } else {
-                            unreachable!()
-                        };
+                        let right = unref_operand(&arg.expr, type_table);
                         let result_type =
                             if matches!(binary_op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
                                 TypeTable::BOOL
@@ -4546,6 +4528,40 @@ fn try_lower_comparison(
     }
 
     None
+}
+
+/// Strip one `&` from an operand of a trait method being rewritten to a
+/// primitive binary op, which takes values rather than references.
+///
+/// `&expr` collapses to `expr`. A reference *value* — a `&T` parameter, a field
+/// holding one — has no `&` node to drop, so it gets an explicit deref; leaving
+/// it alone handed codegen a `(ref $type)` where the instruction wanted an i32.
+fn unref_operand(operand: &TirExpr, type_table: &TypeTable) -> TirExpr {
+    let mut expr = if let TirExprKind::Unary {
+        op: TirUnaryOp::Ref,
+        expr: inner,
+    } = &operand.kind
+    {
+        (**inner).clone()
+    } else {
+        operand.clone()
+    };
+    // `T = &i32` leaves the inner value a reference of its own, so peel a
+    // layer at a time and type each `Deref` by what it yields.
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = type_table.get(expr.type_id)
+    {
+        let inner = *inner;
+        let span = expr.span;
+        expr = TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: Box::new(expr),
+            },
+            inner,
+            span,
+        );
+    }
+    expr
 }
 
 /// Convert a trait method name to a TIR binary operator, if applicable.

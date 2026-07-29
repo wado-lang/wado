@@ -25,13 +25,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//licm_reloadable_hoist.wado/escape_quotes" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(10)
+type "functype//licm_reloadable_hoist.wado/run" = fn();  // TypeId(10)
 
-type "functype//licm_reloadable_hoist.wado/run" = fn();  // TypeId(11)
+type "functype//licm_reloadable_hoist.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//licm_reloadable_hoist.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//licm_reloadable_hoist.wado/__cm_export__run" = fn();  // TypeId(12)
 
-type "functype//licm_reloadable_hoist.wado/__cm_export__run" = fn();  // TypeId(13)
+type "functype//licm_reloadable_hoist.wado/escape_quotes$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(13)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(14)
 
@@ -75,6 +75,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:licm_reloadable_hoist.wado::__modules_initialized: bool = 0;
 global mut global:licm_reloadable_hoist.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
 
+<<<<<<< HEAD
 fn "licm_reloadable_hoist.wado/escape_quotes"(buf, s) {
     let n: i32;
     let i: i32;
@@ -107,6 +108,41 @@ fn "licm_reloadable_hoist.wado/escape_quotes"(buf, s) {
     };
 }
 
+||||||| 2738e686c
+fn "licm_reloadable_hoist.wado/escape_quotes"(buf, s) {
+    let n: i32;
+    let i: i32;
+    let b: u8;
+    let start_12: i32;
+    let start_21: i32;
+    let start_30: i32;
+    let _licm_repr_37: ref Array<u8>;
+    n = s.used;
+    i = 0;
+    _licm_repr_37 = s.repr;
+    b0: block {
+        l1: loop {
+            break_if b0 i >= n;
+            b = builtin::array_get<u8>(_licm_repr_37, i);
+            if b == 34 {
+                start_12 = "core:prelude/string.wado/String::internal_reserve_uninit"(buf, 1);
+                _licm_repr_37 = s.repr;
+                builtin::array_set_u8(buf.repr, start_12, 91);
+                start_21 = "core:prelude/string.wado/String::internal_reserve_uninit"(buf, 1);
+                _licm_repr_37 = s.repr;
+                builtin::array_set_u8(buf.repr, start_21, 81);
+                start_30 = "core:prelude/string.wado/String::internal_reserve_uninit"(buf, 1);
+                _licm_repr_37 = s.repr;
+                builtin::array_set_u8(buf.repr, start_30, 93);
+            }
+            i = i + 1;
+            continue l1;
+        };
+    };
+}
+
+=======
+>>>>>>> origin/main
 fn "licm_reloadable_hoist.wado/run"() with Stdout {
     let out: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
@@ -117,7 +153,7 @@ fn "licm_reloadable_hoist.wado/run"() with Stdout {
     };
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     global:licm_reloadable_hoist.wado::__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a\"b\"c\"d"), used: 7 };
-    "licm_reloadable_hoist.wado/escape_quotes"(out, global:licm_reloadable_hoist.wado::__const_obj_0);
+    "licm_reloadable_hoist.wado/escape_quotes$spec0"(out, global:licm_reloadable_hoist.wado::__const_obj_0);
     "core:cli/println"(out);
 }
 
@@ -134,6 +170,36 @@ fn "licm_reloadable_hoist.wado/__cm_export__run"() {
     };
     "licm_reloadable_hoist.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "licm_reloadable_hoist.wado/escape_quotes$spec0"(buf, s) {
+    let i: i32;
+    let b: u8;
+    let start_12: i32;
+    let start_21: i32;
+    let start_30: i32;
+    let _licm_repr_37: ref Array<u8>;
+    i = 0;
+    _licm_repr_37 = s.repr;
+    b0: block {
+        l1: loop {
+            break_if b0 i >= 7;
+            b = builtin::array_get<u8>(_licm_repr_37, i);
+            if b == 34 {
+                start_12 = "core:prelude/string.wado/String::internal_reserve_uninit"(buf, 1);
+                _licm_repr_37 = s.repr;
+                builtin::array_set_u8(buf.repr, start_12, 91);
+                start_21 = "core:prelude/string.wado/String::internal_reserve_uninit"(buf, 1);
+                _licm_repr_37 = s.repr;
+                builtin::array_set_u8(buf.repr, start_21, 81);
+                start_30 = "core:prelude/string.wado/String::internal_reserve_uninit"(buf, 1);
+                _licm_repr_37 = s.repr;
+                builtin::array_set_u8(buf.repr, start_30, 93);
+            }
+            i = i + 1;
+            continue l1;
+        };
+    };
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

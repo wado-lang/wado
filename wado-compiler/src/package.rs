@@ -73,6 +73,11 @@ pub struct Package {
     /// Populated by `synthesis::cm_binding` when export adapters are synthesized.
     /// For example: `"run"` → `"__cm_export__run"`.
     pub export_binding_names: IndexMap<String, String>,
+    /// Maps world export name → `post-return` function name, for the sync-lifted
+    /// exports that return indirectly. Populated alongside
+    /// `export_binding_names`; absent for every other export, which gets no
+    /// `post-return` canonical option.
+    pub post_return_binding_names: IndexMap<String, String>,
     /// Flattened CM ABI parameter types for the `task-return` canonical intrinsic.
     /// Populated by `synthesis::cm_binding` when an export returns a Result type.
     /// Used by `optimize_dce` to override the builtin registry's single-`i32` signature.
@@ -170,6 +175,7 @@ impl Package {
             test_name_filters: Vec::new(),
             // CM export adapter mapping
             export_binding_names: IndexMap::default(),
+            post_return_binding_names: IndexMap::default(),
             task_return_flat_params: None,
             // Wasm assets loaded from `use _ from "<path>" with { type: ... }`
             wasm_assets: IndexMap::default(),

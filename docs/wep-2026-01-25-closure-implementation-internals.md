@@ -324,7 +324,7 @@ Tasks:
 
 Add `FnMut<Args, Ret, Effects>` as the base trait in `core:prelude`, and re-declare `Fn` as a sub-trait of `FnMut` so that `fn <: fn mut` holds at the trait-bound level. Wire bound `fn` / `fn mut` syntax to resolve to these internal trait references. The current prelude `Fn` declaration is `pub trait Fn<Args, Ret, Effects>` (no `Effects` default, no supertrait); both are added by this phase.
 
-Wado's parser does not yet support a supertrait clause on trait declarations (no existing stdlib trait uses `trait X<...>: Y<...>` form). Adding parser support is part of this phase. If supertrait syntax proves invasive, an alternative is to keep `Fn` and `FnMut` as two independent traits and emit the `Fn ⇒ FnMut` blanket impl from the compiler (per closure-literal lowering), with `check_assignable` enforcing the `fn <: fn mut` rule directly without going through trait-bound inheritance. Either path satisfies the design.
+The supertrait clause this needs now exists ([Super Traits](./wep-2026-07-27-super-traits.md)), so `trait Fn<...>: FnMut<...>` is expressible. The alternative — two independent traits with `check_assignable` enforcing `fn <: fn mut` directly — also satisfies the design.
 
 Status: the implementation followed the alternative path — `check_assignable` enforces `fn <: fn mut` directly on `ResolvedType::Function`, and `<F: fn(...)>` bounds are realised at `register_generic_params` time by binding `F` to the bound's function type. The internal `Fn` / `FnMut` traits as separate user-namable items are unused; closure literals never need to implement them.
 

@@ -18,8 +18,8 @@ fn table_len() -> i32 {
     return t.len();
 }
 
-// A constant index against a constant length: the bounds check folds away, so
-// no panic path survives for it.
+// A constant index against a constant length: the bounds check folds away and
+// the element itself reads out of the literal, so the helper disappears too.
 #[inline(never)]
 fn third() -> i32 {
     let t: List<i32> = [10, 20, 31];
@@ -35,5 +35,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "3 31\n",
-    "wir_not_expect:O2": ["table_len"]
+    "wir_not_expect:O2": ["table_len", "third"]
 }

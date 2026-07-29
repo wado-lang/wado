@@ -66,13 +66,21 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(26)
 
+<<<<<<< HEAD
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(27)
+||||||| 2738e686c
+type "functype//core:prelude/string.wado/String^Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(27)
+=======
+type "functype//core:prelude/string.wado/String^Add::add$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(27)
+>>>>>>> origin/main
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(28)
+type "functype//core:prelude/string.wado/String^Add::add$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(28)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(30)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(31)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -94,11 +102,29 @@ fn "variant_struct_concat_module.wado/format_str"(s, opts) {
     let pad: ref "core:prelude/string.wado//String";
     pad = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 32), used: 2 };
     return let __match_scrut_0: ref "variant_struct_concat_module.wado//Align", __match_scrut_0 = opts.align, (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+<<<<<<< HEAD
         "core:prelude/string.wado/core:prelude/string.wado/String^Add::add"(s, pad);
+||||||| 2738e686c
+        "core:prelude/string.wado/String^Add::add"(s, pad);
+=======
+        "core:prelude/string.wado/String^Add::add$spec0"(s, pad);
+>>>>>>> origin/main
     } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+<<<<<<< HEAD
         "core:prelude/string.wado/core:prelude/string.wado/String^Add::add"(pad, s);
+||||||| 2738e686c
+        "core:prelude/string.wado/String^Add::add"(pad, s);
+=======
+        "core:prelude/string.wado/String^Add::add$spec1"(pad, s);
+>>>>>>> origin/main
     } else {
+<<<<<<< HEAD
         "core:prelude/string.wado/core:prelude/string.wado/String^Add::add"("core:prelude/string.wado/core:prelude/string.wado/String^Add::add"(pad, s), pad);
+||||||| 2738e686c
+        "core:prelude/string.wado/String^Add::add"("core:prelude/string.wado/String^Add::add"(pad, s), pad);
+=======
+        "core:prelude/string.wado/String^Add::add$spec0"("core:prelude/string.wado/String^Add::add$spec1"(pad, s), pad);
+>>>>>>> origin/main
     });
 }
 
@@ -280,11 +306,35 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, other_len);
 }
 
+<<<<<<< HEAD
 fn "core:prelude/string.wado/core:prelude/string.wado/String^Add::add"(self, other) {
+||||||| 2738e686c
+fn "core:prelude/string.wado/String^Add::add"(self, other) {
+=======
+fn "core:prelude/string.wado/String^Add::add$spec0"(self, other) {
+>>>>>>> origin/main
     let result: ref "core:prelude/string.wado//String";
+<<<<<<< HEAD
     result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self.used + other.used), used: 0 };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result, self);
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result, other);
+||||||| 2738e686c
+    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self.used + other.used), used: 0 };
+    "core:prelude/string.wado/String::push_str"(result, self);
+    "core:prelude/string.wado/String::push_str"(result, other);
+=======
+    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self.used + 2), used: 0 };
+    "core:prelude/string.wado/String::push_str"(result, self);
+    "core:prelude/string.wado/String::push_str"(result, other);
+    return result;
+}
+
+fn "core:prelude/string.wado/String^Add::add$spec1"(self, other) {
+    let result: ref "core:prelude/string.wado//String";
+    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(2 + other.used), used: 0 };
+    "core:prelude/string.wado/String::push_str"(result, self);
+    "core:prelude/string.wado/String::push_str"(result, other);
+>>>>>>> origin/main
     return result;
 }
 

@@ -485,6 +485,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .insert(binding.name.clone(), type_id);
                     }
                     scope.enforce_impl_assoc_type_bounds(impl_block);
+                    scope.enforce_impl_supertraits(impl_block);
                 }
 
                 // Resolve the trait type for its side effect of recording a

@@ -1214,7 +1214,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let expected = ctx.task_return_type;
-        self.resolve_expr(&tr_stmt.value, ctx, expected);
+        let mut value_type = self.resolve_expr(&tr_stmt.value, ctx, expected);
+        // Unchecked, a mismatch reaches the CM binding, which flattens the
+        // value against the *declared* result and mis-lowers it.
+        let Some(expected) = expected else {
+            return;
+        };
+        if self.type_has_infer_hole(value_type) {
+            self.solve_infer_holes_against(value_type, expected);
+            value_type = self.apply_infer_holes(value_type);
+        }
+        self.typecheck_return(value_type, expected, tr_stmt.span);
     }
 
     /// Resolve an if statement (Stage 7-B: records-only). reify rebuilds the
@@ -1340,7 +1350,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `name` refers to an immutable global (defined here or imported),
     /// which in pattern position is a constant-value (refutable) match rather
     /// than a fresh binding.
-    fn is_immutable_global(&self, name: &str) -> bool {
+    pub(super) fn is_immutable_global(&self, name: &str) -> bool {
         self.sem
             .decls
             .current_module_globals
@@ -2717,7 +2727,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the loop variable (`resolve_if_pattern_inner`, preserving the
         // binding's real `AstId`) and walks the body for its facts.
         ctx.enter_scope();
-        self.resolve_if_pattern_inner(&for_of.binding, item_type, ctx, span, RefBinding::None);
+        let binding = if for_of.is_mut {
+            mut_bindings_of(&for_of.binding)
+        } else {
+            for_of.binding.clone()
+        };
+        self.resolve_if_pattern_inner(&binding, item_type, ctx, span, RefBinding::None);
         self.resolve_block(&for_of.body, ctx, None);
         ctx.exit_scope();
 
@@ -3077,6 +3092,60 @@ fn format_pattern_qualifier_type(ty: &Type) -> String {
         Type::TypePackSpread(name, _) => format!("..{name}"),
         Type::Infer(_) => "_".to_string(),
         Type::Error(_) => "<error>".to_string(),
+    }
+}
+
+/// The pattern with every identifier leaf made mutable.
+///
+/// `for let mut …` carries the `mut` on the statement while the pattern walker
+/// reads it off a `MutIdent`, so a destructuring binding needs it pushed down
+/// to the names it introduces.
+fn mut_bindings_of(pattern: &Pattern) -> Pattern {
+    match pattern {
+        Pattern::Ident { id, name, span } => Pattern::MutIdent {
+            id: *id,
+            name: name.clone(),
+            span: *span,
+        },
+        Pattern::Tuple(elements, has_rest) => {
+            Pattern::Tuple(elements.iter().map(mut_bindings_of).collect(), *has_rest)
+        }
+        Pattern::Struct {
+            type_name,
+            fields,
+            has_rest,
+            span,
+        } => Pattern::Struct {
+            type_name: type_name.clone(),
+            fields: fields
+                .iter()
+                .map(|f| crate::ast::StructPatternField {
+                    pattern: mut_bindings_of(&f.pattern),
+                    ..f.clone()
+                })
+                .collect(),
+            has_rest: *has_rest,
+            span: *span,
+        },
+        Pattern::Variant {
+            variant_name,
+            variant_qualifier,
+            name_id,
+            name_span,
+            bindings,
+            span,
+        } => Pattern::Variant {
+            variant_name: variant_name.clone(),
+            variant_qualifier: variant_qualifier.clone(),
+            name_id: *name_id,
+            name_span: *name_span,
+            bindings: bindings.iter().map(mut_bindings_of).collect(),
+            span: *span,
+        },
+        Pattern::Or(alternatives) => {
+            Pattern::Or(alternatives.iter().map(mut_bindings_of).collect())
+        }
+        other => other.clone(),
     }
 }
 

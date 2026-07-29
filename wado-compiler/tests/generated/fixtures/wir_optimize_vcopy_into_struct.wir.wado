@@ -111,7 +111,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:wir_optimize_vcopy_into_struct.wado::__modules_initialized: bool = 0;
-global mut global:wir_optimize_vcopy_into_struct.wado::__const_obj_0: ref null "wir_optimize_vcopy_into_struct.wado//Wrapper" = ref.null none;
+global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global mut global:wir_optimize_vcopy_into_struct.wado::__const_obj_1: ref null "wir_optimize_vcopy_into_struct.wado//Wrapper" = ref.null none;
 
 fn "wir_optimize_vcopy_into_struct.wado/wrap"(c) {
     let inner: ref "wir_optimize_vcopy_into_struct.wado//Inner";
@@ -138,11 +139,17 @@ fn "wir_optimize_vcopy_into_struct.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:wir_optimize_vcopy_into_struct.wado::__modules_initialized = 1;
     };
-    if ref.is_null(global:wir_optimize_vcopy_into_struct.wado::__const_obj_0) {
+    if ref.is_null(global:wir_optimize_vcopy_into_struct.wado::__const_obj_1) {
         c = struct.new "wir_optimize_vcopy_into_struct.wado//Inner" { value: 42 };
-        global:wir_optimize_vcopy_into_struct.wado::__const_obj_0 = "wir_optimize_vcopy_into_struct.wado/wrap"(c);
+        global:wir_optimize_vcopy_into_struct.wado::__const_obj_1 = "wir_optimize_vcopy_into_struct.wado/wrap"(c);
     }
+<<<<<<< HEAD
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_7 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_8(global:wir_optimize_vcopy_into_struct.wado::__const_obj_0.inner.value), f_7); start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start, 44); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_21 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_22(global:wir_optimize_vcopy_into_struct.wado::__const_obj_0.label), f_21); __local_2);
+||||||| 2738e686c
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_7 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_8(global:wir_optimize_vcopy_into_struct.wado::__const_obj_0.inner.value), f_7); start = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start, 44); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_21 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_22(global:wir_optimize_vcopy_into_struct.wado::__const_obj_0.label), f_21); __local_2);
+=======
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_7 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_8(global:wir_optimize_vcopy_into_struct.wado::__const_obj_1.inner.value), f_7); start = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start, 44); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_21 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_22(global:wir_optimize_vcopy_into_struct.wado::__const_obj_1.label), f_21); __local_2);
+>>>>>>> origin/main
 }
 
 fn "wir_optimize_vcopy_into_struct.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -333,7 +340,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
+<<<<<<< HEAD
     offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+||||||| 2738e686c
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+=======
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_0, digit_count);
+>>>>>>> origin/main
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 

@@ -19,7 +19,9 @@ fn id(n: i32) -> i32 {
 }
 
 export fn run() {
-    let x = id(41);
+    // Opaque, or `use_copy` folds end to end and copy propagation has no
+    // caller left to get wrong.
+    let x = id(builtin::black_box(41));
     assert use_copy(x) == 42;
 }
 

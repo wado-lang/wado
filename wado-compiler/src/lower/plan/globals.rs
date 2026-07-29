@@ -4,7 +4,9 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
+use crate::logger::{Bail, ErrorSink};
 use crate::module_source::ModuleSource;
 use crate::tir::FunctionRef;
 use crate::tir::{
@@ -152,7 +154,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
 /// closure rewrite. The top-level `__initialize_modules` aggregator
 /// that calls each module's `__initialize_module` is built later by
 /// [`build_initialize_modules`].
-pub fn extract(flat: &mut FlatPackage) {
+pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bail> {
     let type_table = flat.type_table.borrow();
 
     // Collect non-constant initializers with their indices for topological sorting
@@ -186,7 +188,7 @@ pub fn extract(flat: &mut FlatPackage) {
 
     // If no lazy initializers, nothing to do
     if lazy_inits.is_empty() {
-        return;
+        return Ok(());
     }
 
     // Partition lazy inits by their owning module so each module gets
@@ -199,12 +201,15 @@ pub fn extract(flat: &mut FlatPackage) {
         by_module.entry(entry.2.clone()).or_default().push(entry);
     }
 
+    let reads_by_function = global_reads_by_function(&flat.functions);
     let span = Span::new(0, 0, 1, 1);
     for (module_source, module_inits) in by_module {
-        let sorted_inits = topological_sort_global_inits(&module_inits, &flat.globals);
+        let sorted_inits =
+            topological_sort_global_inits(&module_inits, &reads_by_function, errors)?;
         let init_func = build_module_init_function(module_source, sorted_inits, span);
         flat.functions.push(Rc::new(RefCell::new(init_func)));
     }
+    Ok(())
 }
 
 fn build_module_init_function(
@@ -275,110 +280,161 @@ fn build_module_init_function(
     }
 }
 
-/// Collect global variable references from an expression as
-/// `(module_source, name)` pairs so two modules each declaring a
-/// global with the same name don't collide in the dependency graph
-/// when their initializers happen to share the topo-sort input.
-fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<(ModuleSource, String)>) {
-    match &expr.kind {
-        TirExprKind::GlobalVarGet {
-            name,
-            module_source,
-        } => {
-            refs.insert((module_source.clone(), name.clone()));
-        }
-        // Recursively search in sub-expressions
-        TirExprKind::Binary { left, right, .. } => {
-            collect_global_refs(left, refs);
-            collect_global_refs(right, refs);
-        }
-        TirExprKind::Unary { expr: inner, .. } => {
-            collect_global_refs(inner, refs);
-        }
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                collect_global_refs(&arg.expr, refs);
+/// What a function body reads and calls, in one walk.
+///
+/// Globals are keyed by `(module_source, name)` so two modules each declaring a
+/// global with the same name don't collide in the dependency graph; callees by
+/// [`FunctionRef::full_name`], the same key [`global_reads_by_function`] maps.
+#[derive(Default)]
+struct BodyReads {
+    globals: IndexSet<(ModuleSource, String)>,
+    callees: IndexSet<String>,
+}
+
+impl crate::tir_visitor::TirRefVisitor for BodyReads {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::GlobalVarGet {
+                name,
+                module_source,
+            } => {
+                self.globals.insert((module_source.clone(), name.clone()));
             }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            collect_global_refs(receiver, refs);
-            for arg in args {
-                collect_global_refs(&arg.expr, refs);
+            TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => {
+                self.callees.insert(func.full_name());
             }
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_global_refs(&field.value, refs);
+            // A function named as a value reaches a call this walk cannot see —
+            // `apply(reader)` calls `reader` through a parameter, and a closure
+            // body is a function of its own. Counting the mention keeps what it
+            // reads on the mentioning side of the graph.
+            TirExprKind::FuncRef {
+                module_source,
+                name,
+                ..
+            } => {
+                self.callees.insert(function_key(module_source, name));
             }
+            _ => {}
         }
-        TirExprKind::TupleLiteral { elements, .. } => {
-            for elem in elements {
-                collect_global_refs(elem, refs);
-            }
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            collect_global_refs(condition, refs);
-            for stmt in &then_branch.stmts {
-                if let TirStmtKind::Expr(e) = &stmt.kind {
-                    collect_global_refs(e, refs);
-                }
-            }
-            if let Some(else_blk) = else_branch {
-                for stmt in &else_blk.stmts {
-                    if let TirStmtKind::Expr(e) = &stmt.kind {
-                        collect_global_refs(e, refs);
+        self.walk_expr(expr);
+    }
+}
+
+/// The key [`global_reads_by_function`] maps a function under: the same string
+/// [`FunctionRef::full_name`] produces for a free function, so a call and a
+/// bare mention of the same function land on one entry.
+fn function_key(module_source: &ModuleSource, name: &str) -> String {
+    FunctionRef {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+        monomorph_info: None,
+        method_info: None,
+    }
+    .full_name()
+}
+
+/// Every global each function reads, closed over the call graph.
+///
+/// An initializer's dependency is not always written in it: a call reads
+/// globals the caller never names, and ordering on the directly-written
+/// references alone leaves such a global still holding its placeholder when the
+/// caller runs. Computed as a least fixpoint, so a recursive cycle contributes
+/// each member's own reads and terminates.
+fn global_reads_by_function(
+    functions: &[Rc<RefCell<TirFunction>>],
+) -> IndexMap<String, IndexSet<(ModuleSource, String)>> {
+    use crate::tir_visitor::TirRefVisitor;
+
+    let mut reads: IndexMap<String, IndexSet<(ModuleSource, String)>> = IndexMap::default();
+    let mut callees: IndexMap<String, IndexSet<String>> = IndexMap::default();
+    for func_rc in functions {
+        let func = func_rc.borrow();
+        let Some(body) = func.body.as_ref() else {
+            continue;
+        };
+        let mut scan = BodyReads::default();
+        scan.visit_block(body);
+        let key = FunctionRef::from_resolved(&func, func.module_source.clone()).full_name();
+        reads.entry(key.clone()).or_default().extend(scan.globals);
+        callees.entry(key).or_default().extend(scan.callees);
+    }
+
+    loop {
+        let mut grown: Vec<(String, IndexSet<(ModuleSource, String)>)> = Vec::new();
+        for (name, called) in &callees {
+            let known = reads.get(name);
+            let mut fresh = IndexSet::default();
+            for callee in called {
+                let Some(callee_reads) = reads.get(callee) else {
+                    continue;
+                };
+                for global in callee_reads {
+                    if known.is_none_or(|k| !k.contains(global)) {
+                        fresh.insert(global.clone());
                     }
                 }
             }
-        }
-        TirExprKind::Block(block) => {
-            for stmt in &block.stmts {
-                if let TirStmtKind::Expr(e) = &stmt.kind {
-                    collect_global_refs(e, refs);
-                }
+            if !fresh.is_empty() {
+                grown.push((name.clone(), fresh));
             }
         }
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TupleLen { expr: inner }
-        | TirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        } => {
-            collect_global_refs(inner, refs);
+        if grown.is_empty() {
+            return reads;
         }
-        TirExprKind::Index {
-            expr: inner, index, ..
-        } => {
-            collect_global_refs(inner, refs);
-            collect_global_refs(index, refs);
+        for (name, fresh) in grown {
+            reads.entry(name).or_default().extend(fresh);
         }
-        TirExprKind::Cast { expr: inner, .. } => {
-            collect_global_refs(inner, refs);
-        }
-        TirExprKind::Assign { target, value } => {
-            collect_global_refs(target, refs);
-            collect_global_refs(value, refs);
-        }
-        // Leaf expressions - no sub-expressions
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. } => {}
-        // Other expressions - skip for now
-        _ => {}
     }
+}
+
+/// The globals an initializer depends on, kept apart by how certainly: those it
+/// names, and those the functions it reaches read.
+#[derive(Default)]
+struct InitRefs {
+    direct: IndexSet<(ModuleSource, String)>,
+    via_calls: IndexSet<(ModuleSource, String)>,
+}
+
+fn collect_global_refs(
+    expr: &TirExpr,
+    reads_by_function: &IndexMap<String, IndexSet<(ModuleSource, String)>>,
+) -> InitRefs {
+    use crate::tir_visitor::TirRefVisitor;
+
+    let mut scan = BodyReads::default();
+    scan.visit_expr(expr);
+    let mut refs = InitRefs {
+        direct: scan.globals,
+        via_calls: IndexSet::default(),
+    };
+    for callee in &scan.callees {
+        let Some(callee_reads) = reads_by_function.get(callee) else {
+            continue;
+        };
+        for global in callee_reads {
+            if !refs.direct.contains(global) {
+                refs.via_calls.insert(global.clone());
+            }
+        }
+    }
+    refs
+}
+
+/// Whether `from` already depends on `to`, directly or transitively — so an
+/// edge `to → from` would close a cycle.
+fn depends_on(deps: &[IndexSet<usize>], from: usize, to: usize) -> bool {
+    let mut seen = vec![false; deps.len()];
+    let mut stack = vec![from];
+    while let Some(node) = stack.pop() {
+        if node == to {
+            return true;
+        }
+        if std::mem::replace(&mut seen[node], true) {
+            continue;
+        }
+        stack.extend(deps[node].iter().copied());
+    }
+    false
 }
 
 /// Topologically sort global initializers based on dependencies.
@@ -386,10 +442,11 @@ fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<(ModuleSource, String
 /// Returns the initializers in an order where dependencies are initialized first.
 fn topological_sort_global_inits(
     lazy_inits: &[(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)],
-    _all_globals: &[TirGlobal],
-) -> Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)> {
+    reads_by_function: &IndexMap<String, IndexSet<(ModuleSource, String)>>,
+    errors: &dyn ErrorSink,
+) -> Result<Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)>, Bail> {
     if lazy_inits.len() <= 1 {
-        return lazy_inits.to_vec();
+        return Ok(lazy_inits.to_vec());
     }
 
     // Build a map from `(module_source, name)` to its index in
@@ -403,18 +460,35 @@ fn topological_sort_global_inits(
         .map(|(i, (_, name, module_source, ..))| ((module_source.clone(), name.clone()), i))
         .collect();
 
-    // Build dependency graph: deps[i] = set of indices that i depends on
+    // Build dependency graph: deps[i] = set of indices that i depends on.
     let mut deps: Vec<IndexSet<usize>> = vec![IndexSet::default(); lazy_inits.len()];
+    let edges = |refs: IndexSet<(ModuleSource, String)>, i: usize| -> Vec<usize> {
+        refs.into_iter()
+            .filter_map(|key| key_to_idx.get(&key).copied())
+            .filter(|&dep| dep != i)
+            .collect()
+    };
 
-    for (i, (_, _, _, _, initializer, _)) in lazy_inits.iter().enumerate() {
-        let mut refs = IndexSet::default();
-        collect_global_refs(initializer, &mut refs);
+    let scanned: Vec<InitRefs> = lazy_inits
+        .iter()
+        .map(|(_, _, _, _, initializer, _)| collect_global_refs(initializer, reads_by_function))
+        .collect();
 
-        for ref_key in refs {
-            if let Some(&dep_idx) = key_to_idx.get(&ref_key)
-                && dep_idx != i
-            {
-                deps[i].insert(dep_idx);
+    // A reference written in the initializer is a definite dependency.
+    for (i, refs) in scanned.iter().enumerate() {
+        for dep in edges(refs.direct.clone(), i) {
+            deps[i].insert(dep);
+        }
+    }
+    // What a callee reads is inferred, and the inference is path-insensitive: a
+    // helper that reads two globals makes each initializer calling it look
+    // dependent on the other, even when no execution reads both. Such an edge
+    // yields rather than manufacturing a cycle out of a program that has none —
+    // the definite edges above already fix every order that is really required.
+    for (i, refs) in scanned.iter().enumerate() {
+        for dep in edges(refs.via_calls.clone(), i) {
+            if !depends_on(&deps, dep, i) {
+                deps[i].insert(dep);
             }
         }
     }
@@ -444,22 +518,31 @@ fn topological_sort_global_inits(
         }
     }
 
-    // Check for cycles
     if sorted.len() < lazy_inits.len() {
-        // Cycle detected - report which globals are involved
-        let in_cycle: Vec<&str> = lazy_inits
+        let cycle: Vec<&(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)> = lazy_inits
             .iter()
             .enumerate()
             .filter(|(i, _)| in_degree[*i] > 0)
-            .map(|(_, (_, name, ..))| name.as_str())
+            .map(|(_, init)| init)
             .collect();
-        panic!(
-            "Circular dependency detected among global variables: {}",
-            in_cycle.join(", ")
-        );
+        let names: Vec<&str> = cycle.iter().map(|(_, name, ..)| name.as_str()).collect();
+        let (_, _, module_source, _, initializer, _) = cycle[0];
+        return Err(errors.fatal_in(
+            module_source,
+            Diagnostic {
+                severity: Severity::Error,
+                code: Code::CircularDependency,
+                message: format!(
+                    "global initializers form a cycle: {}. Each waits for a value \
+                     another has not been given yet, so none can go first.",
+                    names.join(", ")
+                ),
+                span: Some(DiagnosticSpan::from_span(&initializer.span, None)),
+            },
+        ));
     }
 
-    sorted
+    Ok(sorted)
 }
 
 /// Renumber all local variable indices in a TIR expression by adding an offset.
@@ -649,6 +732,56 @@ fn renumber_locals_in_pattern(pattern: &mut TirPattern, offset: u32) {
     }
 }
 
+/// Order the per-module initializers so each runs after the modules whose
+/// globals it reads, entry last.
+///
+/// [`topological_sort_global_inits`] settles the order within a module; a
+/// global read across a module boundary needs the same treatment one level up,
+/// or the reader finds a placeholder. Discovery order is no substitute: it
+/// tracks how the loader happened to reach the modules.
+fn sort_modules_by_dependency(
+    modules: &mut Vec<ModuleSource>,
+    entry_source: &ModuleSource,
+    functions: &[Rc<RefCell<TirFunction>>],
+) {
+    let reads = global_reads_by_function(functions);
+    let module_deps = |module: &ModuleSource| -> IndexSet<ModuleSource> {
+        let key = function_key(module, crate::name::MODULE_INIT_FUNCTION);
+        reads
+            .get(&key)
+            .into_iter()
+            .flatten()
+            .map(|(source, _)| source.clone())
+            .filter(|source| source != module)
+            .collect()
+    };
+
+    let mut ordered: Vec<ModuleSource> = Vec::with_capacity(modules.len());
+    let mut placed: IndexSet<ModuleSource> = IndexSet::default();
+    // Entry last: it is the one module every other is linked into, and a cycle
+    // among the rest — which imports cannot form — would otherwise strand it.
+    let mut pending: Vec<ModuleSource> = modules
+        .iter()
+        .filter(|ms| *ms != entry_source)
+        .cloned()
+        .collect();
+
+    while !pending.is_empty() {
+        let ready = pending
+            .iter()
+            .position(|ms| module_deps(ms).iter().all(|dep| placed.contains(dep)));
+        // No module is ready only if the remainder depends on each other, which
+        // the import graph cannot express. Take one so the loop terminates.
+        let next = pending.remove(ready.unwrap_or(0));
+        placed.insert(next.clone());
+        ordered.push(next);
+    }
+    if modules.iter().any(|ms| ms == entry_source) {
+        ordered.push(entry_source.clone());
+    }
+    *modules = ordered;
+}
+
 /// Generate `__initialize_modules` for a `FlatPackage`.
 /// Generate the top-level `__initialize_modules` aggregator. Must run
 /// after all per-module init functions exist (i.e. after [`extract`]).
@@ -670,8 +803,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         return;
     }
 
-    // Sort: entry module last
-    modules_with_init.sort_by_key(|ms| i32::from(*ms == entry_source));
+    sort_modules_by_dependency(&mut modules_with_init, &entry_source, &flat.functions);
 
     let span = Span::new(0, 0, 1, 1);
 
