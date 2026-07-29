@@ -298,10 +298,26 @@ its struct dropped even though monomorphize emitted it. This refactor rewrote
 how that set is filled (`base_name.is_some()` became `type_args.is_empty()`,
 and the name is now derived rather than read off the type).
 
-So the probe is: is the `FlagsBit<u32>` `TypeId` in `analysis.used_types`, and
-if so does the derived name equal the `TirStruct` name the retain checks
-against? Those two questions separate a reachability failure from a spelling
-one, and everything so far says to measure before choosing between them.
+Measured, and it is the spelling one:
+
+    drop "FlagsBit<reflect_flags_derive.wado/Perms>"
+    have ["FlagsBit<u32>"]
+
+The `TirStruct` is named with the flags newtype `Perms`; the reachability set
+holds the same struct named with `u32`, its erased base. DCE therefore drops a
+struct that is reachable.
+
+This is the cost of a derived name, now concrete. The `TirStruct` name was fixed
+at monomorphize time, before erasure. The reachability set derives its name from
+the type's `type_args` *after* erasure has redirected those ids, so the same
+function renders a different string. While the name was stored on the type, both
+sides read the one string and the question never arose.
+
+The fix is to derive on both sides at the same point, or to derive through the
+unerased view — `mangle_type_arg_for_generic` follows erasure redirects, and
+`struct_rendered_name` inherits that. Which of the two is right depends on
+whether the `TirStruct` name is itself meant to be pre- or post-erasure, which
+the retain check has no way to say today.
 
 ## Consequences
 
