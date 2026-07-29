@@ -479,7 +479,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => (name.clone(), Some(module_source.clone()), None, None),
+            } => (name.to_string(), Some(module_source.clone()), None, None),
             // Resource types use reference semantics - handle like struct for method lookup
             ResolvedType::Resource {
                 name,
@@ -3069,7 +3069,7 @@ ResolvedType::GenericInstance {
                 name,
                 module_source,
                 ..
-            } => (name, module_source, None),
+            } => (name.to_string(), module_source, None),
             ResolvedType::GenericInstance {
                 name,
                 module_source,
