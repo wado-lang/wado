@@ -702,15 +702,6 @@ pub struct TypeTable {
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
     variant_case_index: IndexMap<(String, ModuleSource), Vec<(String, u32, TypeId)>>,
-    /// The type arguments a monomorphized struct was instantiated with.
-    ///
-    /// `ResolvedType::Struct` spells them into `name` (`Wrapper<i32>`), which
-    /// makes them unreadable: nothing can recover the base head and the
-    /// arguments from that string, so a name built off such a type answers the
-    /// instantiated spelling to *both* questions. Recording them where the
-    /// instantiation happens is what lets [`Self::fq_type_name`] hand back a
-    /// structured name for these types like it does for every other shape.
-    monomorphized_struct_args: IndexMap<TypeId, Vec<TypeId>>,
 }
 
 impl Default for TypeTable {
@@ -797,7 +788,6 @@ impl TypeTable {
             symbol_by_type: TypeMap::default(),
             bound_driven_synth_requests: IndexSet::default(),
             variant_case_index: IndexMap::default(),
-            monomorphized_struct_args: IndexMap::default(),
         };
 
         // Pre-populate primitive types matching the constants above
@@ -3411,30 +3401,10 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
-            ResolvedType::Struct {
-                name,
-                base_name: Some(base_name),
-                ..
-            } => {
-                if let Some(args) = self.monomorphized_struct_args.get(&id) {
-                    return Some(args.clone());
-                }
-                // A type recorded before its instantiation site ran — or by a
-                // producer that has none — is still matchable against the
-                // `GenericInstance` it was mangled from, while one survives.
-                for tid in self.iter_type_ids() {
-                    if let ResolvedType::GenericInstance {
-                        name: gi_name,
-                        type_args,
-                        ..
-                    } = self.get(tid)
-                        && gi_name == base_name
-                        && self.mangle_type_name(tid) == *name
-                    {
-                        return Some(type_args.clone());
-                    }
-                }
-                None
+            // No recovery: a struct carries its arguments, so an empty list
+            // means it is a declaration rather than an instantiation.
+            ResolvedType::Struct { type_args, .. } if !type_args.is_empty() => {
+                Some(type_args.clone())
             }
             _ => None,
         }
