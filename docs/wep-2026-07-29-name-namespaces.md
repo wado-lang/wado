@@ -135,7 +135,9 @@ Costs and risks:
 
 Order:
 
-- [ ] 1. Namespaced name types + retype the registry keys.
+- [x] 1a. `DeclName` / `DeclPath` + the CM interface registry, the adapter map
+      and `impl_target_of` keyed by them.
+- [ ] 1b. `MangledName` + `func_map` / emitted names; `StructListKey` + the struct list.
 - [ ] 2. `LocalMethodName::struct_name` field → derived method.
 - [ ] 3. `MethodOwner` replacing `inherited_from_base` and its sibling fields.
 - [ ] 4. `TypeIdentity` in `ResolvedType`; delete `base_name` / `is_monomorphized`.

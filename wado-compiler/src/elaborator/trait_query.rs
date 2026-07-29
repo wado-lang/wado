@@ -1345,9 +1345,10 @@ impl TypeSystem {
     fn synthesized_reflect_bound_holds(
         &self,
         scope: &TypeLookup,
-        type_name: &str,
+        type_name: &crate::name::DeclName,
         bound_name: &str,
     ) -> bool {
+        let type_name = type_name.as_decl_str();
         let Some(on_bound) = self.classify_on_bound_trait(scope, bound_name) else {
             return false;
         };

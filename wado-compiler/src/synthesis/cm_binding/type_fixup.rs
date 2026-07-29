@@ -26,6 +26,7 @@ use crate::ast::Type;
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::name::{DeclName, DeclPath};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
     TirStmt, TirStmtKind, TypeId, TypeTable,
@@ -608,7 +609,7 @@ impl TirRefVisitor for LocalTypeUpdateCollector<'_> {
 
 pub(super) fn rewrite_calls_in_block(
     block: &mut TirBlock,
-    adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
+    adapters: &IndexMap<DeclPath, Rc<RefCell<TirFunction>>>,
     entry_source: &ModuleSource,
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
@@ -638,7 +639,7 @@ pub(super) fn rewrite_calls_in_block(
 /// each shared adapter was retyped to, so a second call site that disagrees
 /// is an ICE instead of a silent last-write-wins overwrite.
 struct CallRewriteWalker<'a> {
-    adapters: &'a IndexMap<String, Rc<RefCell<TirFunction>>>,
+    adapters: &'a IndexMap<DeclPath, Rc<RefCell<TirFunction>>>,
     entry_source: &'a ModuleSource,
     cm_interface_registry: &'a CmInterfaceRegistry,
     type_table: &'a Rc<RefCell<TypeTable>>,
@@ -851,7 +852,7 @@ fn flatten_call_site_args(
 
 fn rewrite_calls_in_expr(
     expr: &mut TirExpr,
-    adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
+    adapters: &IndexMap<DeclPath, Rc<RefCell<TirFunction>>>,
     entry_source: &ModuleSource,
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
@@ -866,7 +867,7 @@ fn rewrite_calls_in_expr(
         ..
     } = &mut expr.kind
         && cm_interface_registry.world_import_source(&func.name) == Some(&func.module_source)
-        && let Some(adapter_rc) = adapters.get(&func.name)
+        && let Some(adapter_rc) = adapters.get(&DeclPath::from_declared(&func.name))
     {
         {
             let adapter_key = Rc::as_ptr(adapter_rc) as usize;
@@ -879,7 +880,8 @@ fn rewrite_calls_in_expr(
                 type_table,
                 applied_returns,
             );
-            let wasi_func = cm_interface_registry.get_function(&func.name);
+            let wasi_func =
+                cm_interface_registry.get_function(&DeclPath::from_declared(&func.name));
             for (i, arg) in args.iter().enumerate() {
                 let is_gc_passthrough = wasi_func.is_some_and(|f| {
                     i < f.params.len()
@@ -928,7 +930,7 @@ fn rewrite_calls_in_expr(
             .interface_name()
             .unwrap_or_default();
         let method_name = func.name.clone();
-        let qualified = format!("{interface_name}::{method_name}");
+        let qualified = DeclPath::from_declared(format!("{interface_name}::{method_name}"));
 
         if let Some(adapter_rc) = adapters.get(&qualified) {
             // Check if this is a streaming async function
@@ -1011,9 +1013,8 @@ fn rewrite_calls_in_expr(
             let tt = type_table.borrow();
             tt.impl_receiver_key(tt.peel_refs(receiver.type_id))
                 .decl_key()
-                .into_owned()
         };
-        let mut qualified = format!("{head}::{}", method_info.method_name);
+        let mut qualified = DeclPath::method_of(&head, &method_info.method_name);
         // Resolve through type aliases (e.g., Headers -> Fields). Scoped to
         // `wasi:` — the method resolution path is WASI-only.
         if !adapters.contains_key(&qualified)
@@ -1021,7 +1022,7 @@ fn rewrite_calls_in_expr(
             && let Some(Type::Named(resolved)) =
                 cm_interface_registry.get_newtype_by_source(source, &head)
         {
-            let aliased = format!("{}::{}", resolved.name, method_info.method_name);
+            let aliased = DeclPath::method_of(&DeclName::new(&resolved.name), &method_info.method_name);
             if adapters.contains_key(&aliased) {
                 qualified = aliased;
             }
@@ -1164,7 +1165,7 @@ fn rewrite_calls_in_expr(
         && let Some(info) = func.method_info.as_ref()
     {
         // Keyed as the registry declares it — `Resource::method`, no module.
-        let func_name = format!("{}::{}", info.receiver_decl_name(), info.method_name);
+        let func_name = DeclPath::method_of(&info.receiver_decl_name(), &info.method_name);
         if let Some(adapter_rc) = adapters.get(&func_name) {
             // Look up WASI function info to flatten args at the call site
             let wasi_func_info = cm_interface_registry.get_function(&func_name).cloned();
@@ -1302,7 +1303,7 @@ fn rewrite_calls_in_expr(
 
 pub(super) fn collect_effect_calls_in_block(
     block: &TirBlock,
-    effects: &mut IndexSet<String>,
+    effects: &mut IndexSet<DeclPath>,
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &RefCell<TypeTable>,
 ) {
@@ -1321,7 +1322,7 @@ pub(super) fn collect_effect_calls_in_block(
 /// handler bodies, match arms, template interpolations, …) so an effect
 /// call nested anywhere still triggers adapter generation.
 struct EffectCallCollector<'a> {
-    effects: &'a mut IndexSet<String>,
+    effects: &'a mut IndexSet<DeclPath>,
     cm_interface_registry: &'a CmInterfaceRegistry,
     type_table: &'a RefCell<TypeTable>,
 }
@@ -1344,7 +1345,7 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                 if func.module_source.clone().is_effect_like()
                     && let Some(interface_name) = func.module_source.clone().interface_name()
                 {
-                    let qualified = format!("{interface_name}::{}", func.name);
+                    let qualified = DeclPath::from_declared(format!("{interface_name}::{}", func.name));
                     if self
                         .cm_interface_registry
                         .get_function(&qualified)
@@ -1357,7 +1358,7 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                 // The registry keys on the declared `Resource::method`, so the
                 // receiver reaches it by its declaration name.
                 if let Some(info) = func.method_info.as_ref() {
-                    let qualified = format!("{}::{}", info.receiver_decl_name(), info.method_name);
+                    let qualified = DeclPath::method_of(&info.receiver_decl_name(), &info.method_name);
                     if self
                         .cm_interface_registry
                         .get_function(&qualified)
@@ -1371,7 +1372,8 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                 if self.cm_interface_registry.world_import_source(&func.name)
                     == Some(&func.module_source)
                 {
-                    self.effects.insert(func.name.clone());
+                    self.effects
+                        .insert(DeclPath::from_declared(func.name.clone()));
                 }
             }
             TirExprKind::MethodCall { receiver, func, .. } => {
@@ -1384,9 +1386,8 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                         let tt = self.type_table.borrow();
                         tt.impl_receiver_key(tt.peel_refs(receiver.type_id))
                             .decl_key()
-                            .into_owned()
                     };
-                    let qualified = format!("{head}::{}", method_info.method_name);
+                    let qualified = DeclPath::method_of(&head, &method_info.method_name);
                     if self
                         .cm_interface_registry
                         .get_function(&qualified)
@@ -1400,7 +1401,7 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                             .get_newtype_by_source(source, &head)
                     {
                         // Resolve through type aliases (e.g. Headers -> Fields).
-                        let aliased = format!("{}::{}", resolved.name, method_info.method_name);
+                        let aliased = DeclPath::method_of(&DeclName::new(&resolved.name), &method_info.method_name);
                         if self.cm_interface_registry.get_function(&aliased).is_some() {
                             self.effects.insert(aliased);
                         }

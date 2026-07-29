@@ -484,7 +484,10 @@ fn synthesize_dispatch_wrappers(
             is_open
                 && project
                     .cm_interface_registry
-                    .get_function(&format!("{base_name}::{}", op.name))
+                    .get_function(&crate::name::DeclPath::method_of(
+                        &crate::name::DeclName::new(base_name.clone()),
+                        &op.name,
+                    ))
                     .is_some()
         })
         .collect();

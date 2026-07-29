@@ -651,7 +651,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let entries: Vec<(ModuleSource, AstId)> = self
                 .tysys
                 .trait_env
-                .inherent_impl_keys(&self.impl_target_of(base_type_id, &struct_name));
+                .inherent_impl_keys(&self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)));
             for (impl_module, item_id) in &entries {
                 let impl_ref = ImplBlockRef(impl_module.clone(), *item_id);
                 let trait_env = Arc::clone(&self.tysys.trait_env);
@@ -685,7 +685,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let entries: Vec<(ModuleSource, AstId)> = self
                 .tysys
                 .trait_env
-                .inherent_impl_keys(&self.impl_target_of(base_type_id, &struct_name));
+                .inherent_impl_keys(&self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)));
             for (search_module_source, item_id) in &entries {
                 let impl_ref = ImplBlockRef(search_module_source.clone(), *item_id);
                 let trait_env = Arc::clone(&self.tysys.trait_env);
@@ -1696,7 +1696,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.newtype_chain_bases(name)
                 .into_iter()
                 .map(|(base_id, base_name)| match base_id {
-                    Some(id) => self.impl_target_of(id, &base_name),
+                    Some(id) => self.impl_target_of(id, &crate::name::DeclName::new(&base_name)),
                     None => self.impl_target(&base_name),
                 }),
         );
@@ -2630,7 +2630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
         self.probe_trait_impls(
-            &self.impl_target_of(base_type_id, struct_name),
+            &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
             |trait_name| trait_name.starts_with(trait_base_name),
             |s, impl_ref, impl_sig, declared| {
@@ -2827,7 +2827,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
         self.probe_trait_impls(
-            &self.impl_target_of(base_type_id, struct_name),
+            &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
             |found_trait_name| found_trait_name == trait_name,
             |s, impl_ref, impl_sig, _declared| {
@@ -2941,7 +2941,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
         self.probe_trait_impls(
-            &self.impl_target_of(base_type_id, struct_name),
+            &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
             |trait_base| trait_base.starts_with(trait_base_name),
             |s, impl_ref, impl_sig, declared| {

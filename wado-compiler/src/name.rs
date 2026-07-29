@@ -689,11 +689,11 @@ impl Receiver {
     /// feeding it a mangled head matched nothing (silently losing a trait
     /// segment, a resource requirement, or a go-to-definition edge).
     #[must_use]
-    pub fn decl_key(&self) -> Cow<'_, str> {
+    pub fn decl_key(&self) -> DeclName {
         match self {
-            Receiver::Type(n) => Cow::Borrowed(n.decl_name()),
-            Receiver::Ref(k) => Cow::Borrowed(k.prefix()),
-            Receiver::Projection { base, assoc } => Cow::Owned(format!("{base}::{assoc}")),
+            Receiver::Type(n) => n.decl_name(),
+            Receiver::Ref(k) => DeclName::new(k.prefix()),
+            Receiver::Projection { base, assoc } => DeclName::new(format!("{base}::{assoc}")),
         }
     }
 
@@ -878,8 +878,8 @@ impl LocalMethodName {
     /// [`Receiver::decl_key`] for why this is a different namespace from
     /// [`Self::base_struct_name`].
     #[must_use]
-    pub fn receiver_decl_key(&self) -> String {
-        self.receiver.decl_key().into_owned()
+    pub fn receiver_decl_key(&self) -> DeclName {
+        self.receiver.decl_key()
     }
 
     /// [`Self::struct_name`] as the receiver form a mangled name embeds —
@@ -895,8 +895,8 @@ impl LocalMethodName {
     /// knows nothing of Wado modules, so a static call on a WASI resource has
     /// to reach it by the declared name alone.
     #[must_use]
-    pub fn receiver_decl_name(&self) -> String {
-        self.fq_base_struct_name().decl_name().to_string()
+    pub fn receiver_decl_name(&self) -> DeclName {
+        self.fq_base_struct_name().decl_name()
     }
 
     /// The receiver's reference kind, or `None` for a value receiver.
@@ -1166,6 +1166,7 @@ impl LocalMethodName {
             && self
                 .fq_struct_name()
                 .decl_name()
+                .as_decl_str()
                 .starts_with(CLOSURE_STRUCT_PREFIX)
     }
 }
@@ -1707,6 +1708,112 @@ pub fn mangle_tuple_type(elems: &[String]) -> String {
 /// The head name of a tuple type. Name formats live here, so
 /// [`crate::tir::TypeTable::TUPLE_TYPE_NAME`] reads it from this one place.
 pub const TUPLE_TYPE_NAME: &str = "[]";
+
+/// A name in the *declaration* namespace: what source writes, what an `impl`
+/// header spells, and what every by-name declaration lookup keys on — module
+/// scope (`struct_fields`, `enum_case`, …), the CM interface registry,
+/// go-to-definition.
+///
+/// Distinct from a mangled name, which carries the declaring module and which
+/// no declaration lookup stores. Every naming defect in WEP 2026-07-28 was one
+/// substituted for the other, and both being `String` is what let that compile.
+/// So this deliberately has no `Deref<Target = str>`, no `AsRef<str>` and no
+/// `From<String>`: it is minted by the authorities that know the namespace —
+/// [`FqTypeName`], [`Receiver`], [`crate::tir::TypeTable`] — and read back only
+/// through [`Self::as_decl_str`], which names what it is handing out.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct DeclName(String);
+
+impl DeclName {
+    /// Mint from a name already known to be in the declaration namespace —
+    /// read off a declaration, an `impl` header, or an import scope. Restricted
+    /// to this crate so the namespace has a bounded set of entry points.
+    #[must_use]
+    pub(crate) fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
+    /// The underlying spelling. Named rather than a `Deref` so a consumer that
+    /// wants a mangled name cannot reach one by accident.
+    #[must_use]
+    pub fn as_decl_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl fmt::Display for DeclName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// A `Type::method` path in the declaration namespace — the key the CM
+/// interface registry and the import-adapter map store.
+///
+/// Built from a [`DeclName`] receiver rather than assembled with `format!` at
+/// each call site, so the half that decides the namespace cannot be a mangled
+/// name. Two of the three sites that assembled this by hand were passing
+/// `head_key()`, which the registry never stores.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct DeclPath(String);
+
+impl DeclPath {
+    /// `<receiver>::<method>` — a method reached through its declaring type.
+    #[must_use]
+    pub fn method_of(receiver: &DeclName, method: &str) -> Self {
+        Self(format!("{receiver}::{method}"))
+    }
+
+    /// A path already spelled in the declaration namespace — a WIT-derived
+    /// `interface::function` key, or one read back out of the registry.
+    #[must_use]
+    pub(crate) fn from_declared(path: impl Into<String>) -> Self {
+        Self(path.into())
+    }
+
+    #[must_use]
+    pub fn as_decl_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl fmt::Display for DeclPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// Comparing against a literal is sound in either direction: a literal spells
+/// one name, and for the builtins these comparisons ask about (`u128`, `i128`)
+/// the declaration and mangled namespaces coincide. What the newtype prevents
+/// is a `DeclName` being *passed* where a mangled name is expected.
+impl PartialEq<str> for DeclName {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for DeclName {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
+impl PartialEq<String> for DeclName {
+    fn eq(&self, other: &String) -> bool {
+        self.0 == *other
+    }
+}
 
 /// Build a monomorphized method name from struct name, type args, and method name.
 ///
@@ -2496,8 +2603,8 @@ impl FqTypeName {
     /// the form an `impl` header writes its target as, so it is what an
     /// impl-header scan compares against.
     #[must_use]
-    pub fn decl_name(&self) -> &str {
-        self.head.name()
+    pub fn decl_name(&self) -> DeclName {
+        DeclName::new(self.head.name())
     }
 
     /// The module that declares this type, or `None` for a builtin or binder.

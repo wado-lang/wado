@@ -872,6 +872,7 @@ impl EffectIndex<'_> {
             // declaring module and match nothing, silently dropping the
             // resource requirement instead of reporting it.
             let decl_name = method_info.receiver_decl_name();
+            let decl_name = decl_name.into_string();
             let resource_key = (func_ref.module_source.clone(), decl_name.clone());
             if self.resource_names.contains(&resource_key) {
                 let resource_effect = EffectRef::Concrete {

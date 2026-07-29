@@ -27,6 +27,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
+use crate::name::DeclPath;
 use crate::package::Package;
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
 use crate::tir_visitor::TirRefVisitor;
@@ -380,7 +381,7 @@ fn entry_type_table(project: &Package) -> Rc<RefCell<TypeTable>> {
 fn generate_import_adapters(project: &mut Package) {
     let entry_source = project.entry_module_source.clone();
 
-    let mut seen_effects: IndexSet<String> = IndexSet::default();
+    let mut seen_effects: IndexSet<DeclPath> = IndexSet::default();
     for module in project.tir_modules.values() {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
@@ -407,7 +408,7 @@ fn generate_import_adapters(project: &mut Package) {
     let owner_sources = effect_owner_module_sources(&project.tir_modules);
     // Keyed by the qualified `interface::method` effect name — the same key
     // call sites are rewritten against.
-    let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
+    let mut adapters: IndexMap<DeclPath, Rc<RefCell<TirFunction>>> = IndexMap::default();
     // Auxiliary functions returned alongside an adapter (e.g. the
     // per-import `__cm_lift__*` for async imports). Not used for
     // call-site rewriting, but added to the entry module so they
@@ -1167,7 +1168,7 @@ mod tests {
         // interface (as bootstrap and lib registration populate it).
         let wasi_newtype = |name: &str| {
             let source = reg
-                .find_wasi_newtype_source(name)
+                .find_wasi_newtype_source(&crate::name::DeclName::new(name))
                 .expect("wasi newtype source");
             Type::Named(NamedType {
                 id: crate::ast::AstId::fresh(),

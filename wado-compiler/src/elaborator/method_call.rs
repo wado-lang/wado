@@ -310,7 +310,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Fall back to base type trait methods
         if method_info.is_none()
             && let Some(trait_match) = self.find_trait_method_for_type(
-                &self.impl_target_of(base_type_id, &struct_name),
+                &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
                 method_name,
                 &struct_module,
                 receiver_type_args_for_trait.as_deref(),
@@ -994,7 +994,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(kind) => ImplTargetKey::Ref(kind),
             // `impl_target_of` falls back on a written name, so hand it the
             // declaration name rather than the module-qualified head.
-            None => self.impl_target_of(base_type_id, base_struct_name.decl_name()),
+            None => self.impl_target_of(base_type_id, &base_struct_name.decl_name()),
         };
         let param_is_mut = self.lookup_method_param_is_mut(&base_target, method_name);
         let mut method_info =
@@ -1054,7 +1054,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .impl_receiver_key(method_impl_type_id);
-        let receiver_decl_name = receiver_key.decl_key().into_owned();
+        let receiver_decl_name = receiver_key.decl_key().into_string();
         if let Some(method_id) = method_id
             && let Some(method_ast_id) = self.find_impl_method_ast_id(
                 &method_module_source,

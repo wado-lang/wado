@@ -1272,11 +1272,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(crate) fn impl_target_of(
         &self,
         type_id: tir::TypeId,
-        fallback_name: &str,
+        fallback_name: &crate::name::DeclName,
     ) -> trait_env::ImplTargetKey {
         match self.type_decl_key(type_id) {
             Some(key) => trait_env::ImplTargetKey::Decl(key),
-            None => self.impl_target(fallback_name),
+            None => self.impl_target(fallback_name.as_decl_str()),
         }
     }
 
