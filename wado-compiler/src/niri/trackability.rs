@@ -224,8 +224,7 @@ enum Reach {
 ///
 /// The read positions are listed rather than inferred from the absence of the
 /// others, so a node kind nobody taught this walk about costs a fold and never
-/// a wrong one. Under value semantics that list is long — returning, binding,
-/// storing and composing all copy.
+/// a wrong one.
 ///
 /// Only the reachable body is scanned: a mention an earlier rewrite orphaned
 /// cannot run, so it must not disqualify anything.

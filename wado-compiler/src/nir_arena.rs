@@ -368,14 +368,12 @@ pub enum PatKind {
     },
 }
 
-/// A dense set of the local indices a [`Body`] declares, backed by a bitset
-/// indexed by the index itself.
+/// A dense set of the local indices a [`Body`] declares.
 ///
-/// Local indices within a body are dense (`0..locals.len()`), so this is the
-/// membership-only companion to `IndexSet<u32>` — the same idea as
-/// `crate::tir::TypeSet`, without the per-grow allocation and hashing. The
-/// analyses that rebuild one per function on every optimizer iteration are
-/// what make the difference worth having.
+/// Local indices are dense within a body (`0..locals.len()`), so this is the
+/// membership-only companion to `IndexSet<u32>`, without its allocation and
+/// hashing. Worth having because the analyses rebuild one per function on
+/// every optimizer iteration.
 #[derive(Default, Clone, Debug)]
 pub struct LocalSet {
     words: Vec<u64>,

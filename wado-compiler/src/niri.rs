@@ -1,15 +1,12 @@
 //! NIR Interpreter (niri).
 //!
 //! Compile-time partial evaluator over the arena `Body`: it reduces what it can
-//! and leaves a residual otherwise. Constant folding is the primary consumer;
-//! branch pruning, constant propagation and compile-time function evaluation
-//! reuse the same engine.
+//! and leaves a residual otherwise.
 //!
-//! Reduction is monotone — an expression only moves toward literal form, never
-//! back — and idempotent. A literal leaf is left as written, so the source repr
-//! (`0xFF`) survives a no-op pass.
+//! Reduction is monotone and idempotent — an expression only moves toward
+//! literal form — so a literal leaf survives a no-op pass as written.
 //!
-//! Each module below answers one question:
+//! Each module answers one question:
 //!
 //! - `lattice` — what an expression denotes.
 //! - `frame` — what running a body does.
@@ -18,8 +15,8 @@
 //! - `pattern` — whether a pattern matches a value.
 //! - `place` — what a borrow or lvalue chain names.
 //!
-//! What the engine can evaluate is the WEP's to state, and it is maintained
-//! there rather than here: `docs/wep-2026-04-27-nir-interpreter.md`.
+//! What the engine can evaluate is stated in
+//! `docs/wep-2026-04-27-nir-interpreter.md`, not here.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -89,13 +86,9 @@ pub type CalleeKey = crate::nir::FuncId;
 
 /// The callees a compile-time frame may run.
 ///
-/// Membership answers whether a frame may *run* the callee at all —
-/// [`is_ctfe_runnable`], decided once at construction and never re-checked.
-/// Whether the call's value may be substituted for it is a different question,
-/// answered per call: a unit callee denotes nothing, and one writing through a
-/// `&mut` parameter runs only at statement position, where the executor applies
-/// the write-backs. Arity, argument reduction and body shape are likewise
-/// checked at fold time.
+/// Membership answers whether a frame may *run* the callee at all
+/// ([`is_ctfe_runnable`]), decided once at construction. Whether a call's value
+/// may be substituted for it is a separate question, answered per call.
 pub type CalleeMap = IndexMap<CalleeKey, Callee>;
 
 /// A callee the engine may run, with the parameter facts the trackability
@@ -206,12 +199,9 @@ mod trackability;
 use pattern::PatternMatch;
 use trackability::{Reached, aggregate_safe_locals};
 
-/// Commit sink for niri's body rewrites. The rewrite logic reads through
-/// [`EditSink::body`] and commits every edit through the sink, so two backends
-/// can share it: [`BodySink`] mutates a `Body` in place — used for throwaway
-/// CTFE scratch bodies, where coherence with an engine's parent map / use
-/// index is moot — while the optimize layer's `EngineSink` routes every edit
-/// through `Engine::*` so the real body's maps stay coherent.
+/// Commit sink for niri's body rewrites, so one set of rewrites serves two
+/// backends: [`BodySink`] over a throwaway CTFE body, and the optimize layer's
+/// `EngineSink`, which keeps the real body's maps coherent.
 pub(crate) trait EditSink {
     fn body(&self) -> &Body;
     /// Replace `e`'s kind. The new kind's children must already be parented to
@@ -281,11 +271,9 @@ impl EditSink for BodySink<'_> {
 /// `type_params` and `impl_type_params` empty, since CTFE runs after
 /// monomorphization.
 ///
-/// `inline_hint` is not consulted: `#[inline(never)]` asks the optimizer to keep
-/// the body out of line, which says nothing about compile-time knowability.
-///
-/// Nor is `stores`. What a callee keeps is a snapshot, sound exactly while
-/// nothing can write the referent afterwards; `Reached` is what holds that.
+/// Neither `inline_hint` nor `stores` is consulted. Where a body is placed says
+/// nothing about compile-time knowability, and what a callee keeps is a
+/// snapshot that `Reached` is what holds sound.
 #[must_use]
 pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
     func.effects.is_empty()
@@ -302,11 +290,10 @@ pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
 /// Whether `func`'s call can be replaced by the value it computes: runnable,
 /// producing a value at all, and keeping no reference past the call.
 ///
-/// Strictly stronger than [`is_ctfe_runnable`], which is what the
-/// [`CalleeMap`] gates on: a frame runs a unit callee for the writes it
-/// performs, so requiring a value here would refuse work the frame does. This
-/// is the question a caller asks when it wants to hold the result — hoisting
-/// a pure call's result to a global, where nothing remains to write through.
+/// Strictly stronger than [`is_ctfe_runnable`], which the [`CalleeMap`] gates
+/// on: a frame runs a unit callee for the writes it performs, so requiring a
+/// value there would refuse work the frame does. This is what a caller asks
+/// when it wants to hold the result.
 #[must_use]
 pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
     func.return_type != crate::tir::TypeTable::UNIT
@@ -516,13 +503,10 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Reset the per-function state. The driving visitor must call this before
-    /// walking each function body: local indices are unique per function, not
-    /// project-wide, so a previous function's bindings would otherwise read as
-    /// this one's.
-    ///
-    /// The step budget resets here too, so one function with a long
-    /// compile-time loop cannot decide whether the next one folds.
+    /// Reset the per-function state, which the driving visitor must do before
+    /// each body: local indices are per-function, so one function's bindings
+    /// would otherwise read as the next one's. The step budget resets too, so
+    /// a long compile-time loop cannot decide whether later functions fold.
     pub fn enter_function(&mut self) {
         self.step_budget = DEFAULT_STEP_BUDGET;
         self.frame = FrameState::default();

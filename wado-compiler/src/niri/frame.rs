@@ -559,13 +559,12 @@ impl Interpreter<'_> {
     /// Run the scratch body already installed as the current frame, reporting
     /// what it returned and what it left in each `&mut` parameter.
     ///
-    /// `None` rather than an empty write list when a `&mut` parameter the
-    /// callee left untrackable has no value to write: losing it would leave
-    /// the caller's place holding what the program never produced.
+    /// `None` rather than an empty write list when a `&mut` parameter has no
+    /// value to write: losing it would leave the caller's place holding what
+    /// the program never produced.
     ///
-    /// A unit callee denotes nothing whatever its last statement computed, so
-    /// `returns_unit` discards the result — handing it back would leave a value
-    /// on the stack where the call stood and the module would fail to validate.
+    /// `returns_unit` discards the result — a unit callee denotes nothing, and
+    /// a value left where the call stood fails validation.
     ///
     /// Every fallible step of a call lives here, so the caller restores its own
     /// frame unconditionally on return.

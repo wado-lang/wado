@@ -74,11 +74,7 @@ impl Interpreter<'_> {
     }
 
     /// Reduce `e` to its flow-sensitive constant value or collapse a constant
-    /// branch, committing through `sink`. The value substitutions
-    /// ([`Self::flow_fold_value`]) and the structural collapses
-    /// (short-circuit / `if` / `match`) all route through the sink, so the
-    /// engine-routed visitor keeps the parent map / use index coherent and the
-    /// scratch-body CTFE path mutates in place.
+    /// branch, committing every edit through `sink`.
     ///
     /// A scalar the scratch backend declines to promote is memoized instead, so
     /// its later lattice reads still see the constant. An aggregate is
@@ -111,18 +107,14 @@ impl Interpreter<'_> {
     /// emits for a source string: a struct over a packed byte array and its
     /// length.
     ///
-    /// The bytes are the container's first `used`, not the whole backing array
-    /// — a grown container's capacity outruns what it holds, and capacity is
-    /// not observable. One the frame never filled is left alone: an empty
-    /// container is a reservation rather than a result, and a literal cannot
-    /// carry the capacity it asked for.
+    /// Only the container's first `used` bytes: capacity outruns what it holds
+    /// and is not observable. An empty one is left alone, being a reservation
+    /// rather than a result.
     ///
-    /// The container is identified by type rather than recognised by shape: any
-    /// struct over an array and an `i32` looks the same, and over
-    /// `Chunk { data, tag }` the literal would drop a field and read the second
-    /// as a length. The `u8` backing type comes from the table for the same
-    /// reason — on the array-literal path the value's own type is the
-    /// container's.
+    /// The container is identified by type, never recognised by shape — any
+    /// struct over an array and an `i32` has that shape, and over
+    /// `Chunk { data, tag }` the literal would read the second field as a
+    /// length.
     fn materialize_seq_via<S: EditSink>(&self, sink: &mut S, e: ExprId, value: &Value) -> bool {
         let Value::Aggregate { type_id, .. } = value else {
             return false;
@@ -209,14 +201,11 @@ impl Interpreter<'_> {
 
     /// The constant a `receiver.field` node reads, when the receiver is a
     /// constant aggregate. Discarding the receiver is safe precisely because it
-    /// is constant: a literal aggregate's fields are constants, and a call only
-    /// reduces to one when it is CTFE-eligible (pure), so nothing observable is
-    /// dropped and the read cannot trap on null.
+    /// is constant: nothing observable is dropped and the read cannot trap.
     ///
-    /// A call receiver is folded here rather than in
-    /// [`Self::field_access_lattice`], which cannot run CTFE from `&self`; that
-    /// is what lets `factory().field` reduce to the field of the constructed
-    /// value.
+    /// A call receiver folds here rather than in
+    /// [`Self::field_access_lattice`], which cannot run CTFE from `&self` —
+    /// that is what lets `factory().field` reduce.
     fn field_projection_value(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         let ExprKind::FieldAccess {
             expr: inner,
@@ -278,17 +267,15 @@ impl Interpreter<'_> {
         self.reduce_local_block(&mut sink, block)
     }
 
-    /// Bottom-up reduce the subtree rooted at `e`, applying
-    /// [`Self::reduce_local_in_body`] at each node so a child fold is
+    /// Bottom-up reduce the subtree rooted at `e`, so a child fold is
     /// observable at its parent. Used by CTFE to evaluate a callee body whose
     /// children no outer walk has pre-reduced.
     ///
     /// The children come from [`Body::for_each_child`], so a node kind added to
     /// the IR is walked here without anyone remembering to.
     ///
-    /// Unlike `optimize::const_folding`'s visitor over a real body, this keeps
-    /// no flow-sensitive env: reducing an expression is not running it, and a
-    /// walk that performs nothing must not record bindings.
+    /// This keeps no flow-sensitive env: reducing an expression is not running
+    /// it, and a walk that performs nothing must not record bindings.
     pub fn reduce_in_place(&mut self, body: &mut Body, e: ExprId) -> bool {
         self.reduce_in_place_node(body, NodeRef::Expr(e))
     }

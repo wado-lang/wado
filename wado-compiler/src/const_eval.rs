@@ -217,10 +217,9 @@ impl Value {
     /// answers.
     ///
     /// `PartialEq` models the program's own `==`, so it follows IEEE and holds
-    /// for `-0.0` and `0.0`. Those are still two values a program can tell
-    /// apart (`1.0 / x` alone does), so substituting either for the other
-    /// changes what it computes. Two NaNs are not equal under either question,
-    /// which leaves them where a rewrite cannot reach.
+    /// for `-0.0` and `0.0`. A program tells those apart (`1.0 / x` alone
+    /// does), so substituting either changes what it computes. Two NaNs are
+    /// equal under neither question, which leaves them out of reach.
     #[must_use]
     pub fn denotes_same(&self, other: &Self) -> bool {
         match (self, other) {
