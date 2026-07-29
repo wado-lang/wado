@@ -313,11 +313,19 @@ the type's `type_args` *after* erasure has redirected those ids, so the same
 function renders a different string. While the name was stored on the type, both
 sides read the one string and the question never arose.
 
-The fix is to derive on both sides at the same point, or to derive through the
-unerased view — `mangle_type_arg_for_generic` follows erasure redirects, and
-`struct_rendered_name` inherits that. Which of the two is right depends on
-whether the `TirStruct` name is itself meant to be pre- or post-erasure, which
-the retain check has no way to say today.
+Deriving through the unerased view was tried — spelling a newtype / flags
+argument by its own declaration rather than its base — and made things *worse*:
+reflect stayed at 10 and serde went 4 to 6. Reverted. So the reachability set is
+not uniformly pre-erasure either; some of what it holds is spelled post-erasure
+and matches definitions named that way.
+
+Which means the retain check is comparing names minted at two different points
+in the pipeline and there is no single view that makes both sides agree. The
+honest fix is not a better spelling but removing the comparison: retention
+should key on the struct's `TypeId`, which erasure redirects consistently,
+rather than on a string that means different things depending on when it was
+built. That is a larger change than the ten fixtures, and it is where this
+should resume.
 
 ## Consequences
 
