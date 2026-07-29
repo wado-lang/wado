@@ -541,12 +541,11 @@ impl ClosureLowerer {
             // Use a qualified name to avoid collisions in the inliner's
             // candidate map. `LocalMethodName` stays unqualified so codegen
             // re-mangles it consistently with other methods.
-            let qualified_method_name =
-                MethodName::format_local(
-                    &FqTypeName::declared(&self.module_source, &struct_name),
-                    None,
-                    crate::name::CLOSURE_CALL_METHOD,
-                );
+            let qualified_method_name = MethodName::format_local(
+                &FqTypeName::declared(&self.module_source, &struct_name),
+                None,
+                crate::name::CLOSURE_CALL_METHOD,
+            );
             let self_ref_type = type_table.make_ref(struct_type_id);
 
             let mut params = Vec::with_capacity(1 + collected.params.len());

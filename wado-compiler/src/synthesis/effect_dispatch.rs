@@ -1651,7 +1651,10 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         // Keying the fallback on the head exactly hits only the template, never
         // a concrete sibling like `Holder<u8>`.
         let impl_info = env.impl_index.get(&impl_key).or_else(|| {
-            let head = env.type_table.borrow().fq_base_type_name(handler_underlying);
+            let head = env
+                .type_table
+                .borrow()
+                .fq_base_type_name(handler_underlying);
             env.impl_index.get(&(
                 head.into_string(),
                 effect_module.clone(),

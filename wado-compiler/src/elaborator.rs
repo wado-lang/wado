@@ -851,7 +851,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// — matching what `TypeTable::mangle_type_arg_for_generic` produces for
     /// the same type on the consuming side.
     pub(super) fn qualified_receiver_name(&self, written: &str) -> crate::name::FqTypeName {
-        if self.annotate_ctx.trait_ctx.type_params.contains_key(written) {
+        if self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .contains_key(written)
+        {
             return crate::name::FqTypeName::binder(written);
         }
         if crate::name::is_builtin_shape_name(written) {

@@ -1528,8 +1528,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 let receiver = self.fq_index_receiver(matched_type_id);
-                let mangled_method_name =
-                    MethodName::format_local(&receiver, Some(&trait_info.trait_name), "index_value");
+                let mangled_method_name = MethodName::format_local(
+                    &receiver,
+                    Some(&trait_info.trait_name),
+                    "index_value",
+                );
 
                 // IndexValue returns Output directly (not a reference)
                 let func = FunctionRef {

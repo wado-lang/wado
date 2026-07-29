@@ -980,12 +980,11 @@ fn default_value_for_type(
         .compiler_trait_name(crate::compiler_item::CompilerItem::Default)
         .to_string();
     requested_defaults.push((base_name.clone(), module_source.clone()));
-    let mut method_info =
-        LocalMethodName::new(
-            FqTypeName::declared(&module_source, &base_name),
-            Some(default_trait_name),
-            "default".to_string(),
-        );
+    let mut method_info = LocalMethodName::new(
+        FqTypeName::declared(&module_source, &base_name),
+        Some(default_trait_name),
+        "default".to_string(),
+    );
     if !type_args.is_empty() {
         let arg_names: Vec<FqTypeName> = type_args
             .iter()
@@ -1864,11 +1863,7 @@ fn generate_struct_deserialize(
         Some(names.deserialize.clone()),
         "deserialize".to_string(),
     );
-    let qualified_name = MethodName::format_local(
-        &target,
-        Some(&names.deserialize),
-        "deserialize",
-    );
+    let qualified_name = MethodName::format_local(&target, Some(&names.deserialize), "deserialize");
 
     let deser_func = TirFunction {
         module_source: ModuleSource::default(),
@@ -2895,11 +2890,7 @@ fn generate_variant_family_deserialize(
         Some(names.deserialize.clone()),
         "deserialize".to_string(),
     );
-    let qualified_name = MethodName::format_local(
-        &target,
-        Some(&names.deserialize),
-        "deserialize",
-    );
+    let qualified_name = MethodName::format_local(&target, Some(&names.deserialize), "deserialize");
 
     TirFunction {
         module_source: ModuleSource::default(),
@@ -3916,11 +3907,7 @@ fn generate_flags_deserialize(
         Some(names.deserialize.clone()),
         "deserialize".to_string(),
     );
-    let qualified_name = MethodName::format_local(
-        &target,
-        Some(&names.deserialize),
-        "deserialize",
-    );
+    let qualified_name = MethodName::format_local(&target, Some(&names.deserialize), "deserialize");
 
     Some(TirFunction {
         module_source: ModuleSource::default(),

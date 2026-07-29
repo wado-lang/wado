@@ -268,7 +268,8 @@ impl Interner {
                 crate::name::FunctionId::Method(_) => false,
             };
             if let Some(defined) = self.ids.keys().find(|k| same_name(k)) {
-                self.shadowed.push(format!("{key:?} vs defined {defined:?}"));
+                self.shadowed
+                    .push(format!("{key:?} vs defined {defined:?}"));
             }
         }
         let id = crate::nir::FuncId::new(self.base_len + self.stubs.len());

@@ -3238,9 +3238,8 @@ impl TypeTable {
     #[must_use]
     pub fn impl_receiver_key(&self, id: TypeId) -> crate::name::Receiver {
         use crate::name::{FqTypeName, Receiver};
-        let declared = |module: &ModuleSource, name: &str| {
-            Receiver::Type(FqTypeName::declared(module, name))
-        };
+        let declared =
+            |module: &ModuleSource, name: &str| Receiver::Type(FqTypeName::declared(module, name));
         let builtin = |name: &str| Receiver::Type(FqTypeName::builtin(name));
         // Unerased: which impls a type has is a fact about its identity, and
         // erasure rewrites a newtype / flags id to the representation it is
@@ -3346,7 +3345,9 @@ impl TypeTable {
                 name,
                 module_source,
             } => FqTypeName::declared(module_source, name),
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.fq_base_type_name(*inner),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.fq_base_type_name(*inner)
+            }
             ResolvedType::BuiltinArray(_) => FqTypeName::builtin(Self::ARRAY_TYPE_NAME),
             ResolvedType::Unit => FqTypeName::builtin(Self::UNIT_TYPE_NAME),
             ResolvedType::Function { .. } => FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),

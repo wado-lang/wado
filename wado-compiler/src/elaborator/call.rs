@@ -904,13 +904,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // bucket never sees them. Retry through the blanket before
                 // calling the method unknown.
                 let receiver_ty = self.resolve_named_type(prefix, call.span, false);
-                if let Some(return_type) = self.resolve_blanket_static_method(
-                    receiver_ty,
-                    suffix,
-                    call.id,
-                    &[],
-                    &[],
-                ) {
+                if let Some(return_type) =
+                    self.resolve_blanket_static_method(receiver_ty, suffix, call.id, &[], &[])
+                {
                     return return_type;
                 }
                 let _ = self.emit(TypeError::UnknownFunction {

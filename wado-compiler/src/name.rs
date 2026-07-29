@@ -1012,7 +1012,11 @@ impl LocalMethodName {
     /// `base_struct_name`, `base_trait_name`, and `base_trait_module` are
     /// preserved (not changed by type args).
     #[must_use]
-    pub fn with_type_args(&self, impl_type_args: &[FqTypeName], method_type_args: &[String]) -> Self {
+    pub fn with_type_args(
+        &self,
+        impl_type_args: &[FqTypeName],
+        method_type_args: &[String],
+    ) -> Self {
         let mangled_struct = if impl_type_args.is_empty() {
             self.struct_name.clone()
         } else {
@@ -2271,9 +2275,7 @@ mod tests {
         assert_eq!(display_type_name("./geom.wado/Point"), "Point");
         // A naive split on the last `/` would answer `String>` here.
         assert_eq!(
-            display_type_name(
-                "core:prelude/types.wado/Option<core:prelude/string.wado/String>"
-            ),
+            display_type_name("core:prelude/types.wado/Option<core:prelude/string.wado/String>"),
             "Option<String>"
         );
         assert_eq!(
@@ -2283,7 +2285,10 @@ mod tests {
         // Builtin shapes carry no module, and refs keep their prefix.
         assert_eq!(display_type_name("i32"), "i32");
         assert_eq!(display_type_name("&./geom.wado/Point"), "&Point");
-        assert_eq!(display_type_name("&mut a.wado/List<b.wado/T>"), "&mut List<T>");
+        assert_eq!(
+            display_type_name("&mut a.wado/List<b.wado/T>"),
+            "&mut List<T>"
+        );
     }
 }
 
@@ -2548,4 +2553,3 @@ impl std::fmt::Display for FqTypeName {
         f.write_str(&self.to_mangled())
     }
 }
-

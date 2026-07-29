@@ -91,46 +91,37 @@ Order:
    conflating those two was the direct cause of several mis-dispatches.
    `with_substituted_struct_name` now takes one `FqTypeName` instead of an
    (instantiated, base) string pair that could disagree.
-3. **Done in `name.rs`; callers pending.** `LocalMethodName` stores
-   `struct_type_args: Vec<FqTypeName>`, so `fq_struct_name` rebuilds the
-   instantiated receiver instead of re-reading `struct_name`.
-   `with_type_args` / `with_struct_type_args` take `&[FqTypeName]`, and
-   `MethodName::struct_name` is an `FqTypeName` too. `name.rs` itself is
-   clean; every remaining error is a caller still holding a rendered name.
-4. Delete the remaining `split_base_name` / `rsplit('/')` helpers and
-   `display_type_name`. Nothing should parse a rendered name afterwards.
-
-Step 4 is the point of the exercise: while a parser exists, the next caller
-will reach for it.
+3. **Done.** `LocalMethodName` stores `struct_type_args: Vec<FqTypeName>`, so
+   `fq_struct_name` rebuilds the instantiated receiver instead of re-reading
+   `struct_name`. `with_type_args` / `with_struct_type_args` take
+   `&[FqTypeName]`, and `MethodName::struct_name` is an `FqTypeName` too.
+4. **Done for fq type names.** `from_mangled`, `as_str` and `simple_name` are
+   gone, so nothing parses one. What still splits a string parses a *different*
+   namespace, and each needs its own structuring pass:
+   - `split_base_name` on a **trait** name (`Stream<u8>` → `Stream`). Trait
+     references are still strings; structuring them is the next WEP.
+   - `display_type_name` in `trait_bound_violation_message`, which formats a
+     diagnostic from a mangled call name at the WIR-build layer — the only
+     thing that layer has. It goes when WIR carries structure.
 
 ## Status
 
-The build is red mid-migration, by design — the type errors are the worklist.
-`name.rs` is clean; 112 errors remain across 19 files, each a site that was
-handed a rendered name and must now be handed structure. The frontier,
-largest first:
+Complete: the workspace builds and the fq-name namespace is structured
+end to end.
 
-| file | errors |
-|---|---|
-| `optimize/dce.rs` | 22 |
-| `elaborator/reify.rs` | 14 |
-| `synthesis/traits.rs` | 11 |
-| `monomorphize/func_inst.rs` | 11 |
-| `elaborator/method_call.rs` | 11 |
-| `tir.rs` | 7 |
-| `elaborator/trait_query.rs` | 6 |
-| `synthesis/serde_synth.rs` | 5 |
-| others (11 files) | ≤4 each |
+Two shapes covered nearly every migrated site:
 
-The count rose as `name.rs` was finished — that is the migration working:
-each signature that stops accepting a `String` surfaces the callers that were
-passing one.
+- The caller holds a `TypeId`: `type_table.fq_type_name(id)` in place of
+  `mangle_type_name` / `mangle_type_arg_for_generic` / `type_name`. One
+  producer, so a definition and a call site cannot pick different spellings.
+- The caller compares a receiver against an `impl` header: `decl_key()`, not
+  `head_key()`. Getting this backwards is what emptied SROA's method catalog,
+  silenced the resource-capability check, and broke go-to-definition.
 
-Two recurring shapes cover most of them:
+Two behavioural corrections fell out of the migration rather than being sought:
 
-- The caller holds a `TypeId`: use `type_table.fq_type_name(id)` in place of
-  `mangle_type_name(id)`.
-- The caller compares a receiver against an `impl` header: use
-  `Receiver::decl_key()`, not `head_key()`. Getting this backwards is what
-  emptied SROA's method catalog, silenced the resource-capability check, and
-  broke go-to-definition.
+- `SynthesisCtx`'s methodful-impl probe keyed a bare receiver, so an impl on
+  one module's `Widget` suppressed synthesis for another module's. It now keys
+  the same `(module, name)` pair `ImplTargetKey::receiver` builds.
+- `MethodName`'s `Display` prefixed the defining module in front of a receiver
+  that already names its declaring module, printing it twice.

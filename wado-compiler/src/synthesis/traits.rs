@@ -585,7 +585,8 @@ fn generate_struct_reflect_methods(
         .map(|f| (f.name.clone(), f.type_id, f.index))
         .collect();
 
-    let type_name_fn = generate_type_name_fn(module_source, 
+    let type_name_fn = generate_type_name_fn(
+        module_source,
         name,
         env.string_type,
         reflect_trait_name,
@@ -633,7 +634,8 @@ fn generate_struct_reflect_methods(
         )
     };
 
-    let members_fn = generate_struct_members_fn(module_source, 
+    let members_fn = generate_struct_members_fn(
+        module_source,
         type_table,
         env,
         reflect_trait_name,
@@ -643,7 +645,8 @@ fn generate_struct_reflect_methods(
         members_tuple_type,
         span,
     );
-    let from_fields_fn = generate_struct_from_fields_fn(module_source, 
+    let from_fields_fn = generate_struct_from_fields_fn(
+        module_source,
         env,
         reflect_trait_name,
         name,
@@ -652,7 +655,8 @@ fn generate_struct_reflect_methods(
         fields_tuple_type,
         span,
     );
-    let wire_name_policy_fn = generate_wire_name_policy_fn(module_source, 
+    let wire_name_policy_fn = generate_wire_name_policy_fn(
+        module_source,
         name,
         env.case_style_type,
         name_policy,
@@ -903,7 +907,12 @@ fn generate_struct_members_fn(
     members_tuple_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, struct_name, reflect_trait_name, &env.members_method);
+    let method_info = trait_method_info(
+        module_source,
+        struct_name,
+        reflect_trait_name,
+        &env.members_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let option_string_type = type_table.borrow_mut().make_option(env.string_type);
@@ -1010,7 +1019,12 @@ fn generate_struct_from_fields_fn(
     fields_tuple_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, struct_name, reflect_trait_name, &env.from_fields_method);
+    let method_info = trait_method_info(
+        module_source,
+        struct_name,
+        reflect_trait_name,
+        &env.from_fields_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let literal_fields = fields
@@ -1097,7 +1111,12 @@ fn generate_wire_name_policy_fn(
     wire_name_policy_method: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, type_name, reflect_trait_name, wire_name_policy_method);
+    let method_info = trait_method_info(
+        module_source,
+        type_name,
+        reflect_trait_name,
+        wire_name_policy_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let (case_index, case_name) = case_style_variant(name_policy);
@@ -1242,7 +1261,12 @@ fn generate_type_name_fn(
     type_name_method: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, struct_name, reflect_trait_name, type_name_method);
+    let method_info = trait_method_info(
+        module_source,
+        struct_name,
+        reflect_trait_name,
+        type_name_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let literal = TirExpr::new(
@@ -1419,7 +1443,8 @@ fn generate_variant_reflect_methods(
 ) -> Vec<TirFunction> {
     let span = target.span;
 
-    let type_name_fn = generate_type_name_fn(module_source, 
+    let type_name_fn = generate_type_name_fn(
+        module_source,
         &target.name,
         env.string_type,
         variant_trait_name,
@@ -1470,7 +1495,8 @@ fn generate_variant_reflect_methods(
         )
     };
 
-    let discriminant_fn = generate_variant_discriminant_fn(module_source, 
+    let discriminant_fn = generate_variant_discriminant_fn(
+        module_source,
         &target.name,
         ref_variant_type,
         variant_type,
@@ -1478,7 +1504,8 @@ fn generate_variant_reflect_methods(
         &env.discriminant_method,
         span,
     );
-    let cases_fn = generate_variant_cases_fn(module_source, 
+    let cases_fn = generate_variant_cases_fn(
+        module_source,
         type_table,
         env,
         variant_trait_name,
@@ -1488,7 +1515,8 @@ fn generate_variant_reflect_methods(
         span,
     );
 
-    let wire_name_policy_fn = generate_wire_name_policy_fn(module_source, 
+    let wire_name_policy_fn = generate_wire_name_policy_fn(
+        module_source,
         &target.name,
         env.case_style_type,
         &target.wire_name_policy,
@@ -1529,7 +1557,12 @@ fn generate_variant_cases_fn(
     members_tuple_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, &target.name, variant_trait_name, &env.cases_method);
+    let method_info = trait_method_info(
+        module_source,
+        &target.name,
+        variant_trait_name,
+        &env.cases_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let option_string_type = type_table.borrow_mut().make_option(env.string_type);
@@ -1909,7 +1942,12 @@ fn generate_variant_discriminant_fn(
     discriminant_method: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, variant_name, variant_trait_name, discriminant_method);
+    let method_info = trait_method_info(
+        module_source,
+        variant_name,
+        variant_trait_name,
+        discriminant_method,
+    );
     let qualified_name = method_info.to_mangled_name();
     let mut function = make_synthetic_method(
         qualified_name,
@@ -2084,7 +2122,8 @@ fn generate_enum_reflect_methods(
 ) -> Vec<TirFunction> {
     let span = target.span;
 
-    let type_name_fn = generate_type_name_fn(module_source, 
+    let type_name_fn = generate_type_name_fn(
+        module_source,
         &target.name,
         env.string_type,
         enum_trait_name,
@@ -2123,9 +2162,17 @@ fn generate_enum_reflect_methods(
         )
     };
 
-    let discriminant_fn =
-        generate_enum_discriminant_fn(module_source, env, enum_trait_name, target, enum_type, ref_enum_type, span);
-    let from_discriminant_fn = generate_enum_from_discriminant_fn(module_source, 
+    let discriminant_fn = generate_enum_discriminant_fn(
+        module_source,
+        env,
+        enum_trait_name,
+        target,
+        enum_type,
+        ref_enum_type,
+        span,
+    );
+    let from_discriminant_fn = generate_enum_from_discriminant_fn(
+        module_source,
         type_table,
         env,
         enum_trait_name,
@@ -2134,7 +2181,8 @@ fn generate_enum_reflect_methods(
         option_enum_type,
         span,
     );
-    let members_fn = generate_enum_members_fn(module_source, 
+    let members_fn = generate_enum_members_fn(
+        module_source,
         type_table,
         env,
         enum_trait_name,
@@ -2145,7 +2193,8 @@ fn generate_enum_reflect_methods(
         span,
     );
 
-    let wire_name_policy_fn = generate_wire_name_policy_fn(module_source, 
+    let wire_name_policy_fn = generate_wire_name_policy_fn(
+        module_source,
         &target.name,
         env.case_style_type,
         &target.wire_name_policy,
@@ -2178,7 +2227,12 @@ fn generate_enum_members_fn(
     members_tuple_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, &target.name, enum_trait_name, &env.members_method);
+    let method_info = trait_method_info(
+        module_source,
+        &target.name,
+        enum_trait_name,
+        &env.members_method,
+    );
 
     let option_string_type = type_table.borrow_mut().make_option(env.string_type);
 
@@ -2258,7 +2312,12 @@ fn generate_enum_discriminant_fn(
     ref_enum_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, &target.name, enum_trait_name, &env.discriminant_method);
+    let method_info = trait_method_info(
+        module_source,
+        &target.name,
+        enum_trait_name,
+        &env.discriminant_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let as_i32 = crate::synthesis::common::cast(
@@ -2297,8 +2356,12 @@ fn generate_enum_from_discriminant_fn(
     option_enum_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info =
-        trait_method_info(module_source, &target.name, enum_trait_name, &env.from_discriminant_method);
+    let method_info = trait_method_info(
+        module_source,
+        &target.name,
+        enum_trait_name,
+        &env.from_discriminant_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let mut stmts = Vec::new();
@@ -2426,8 +2489,13 @@ fn generate_flags_reflect_impls(
 
     let mut generated = Vec::new();
     for target in &targets {
-        let methods =
-            generate_flags_reflect_methods(&module_source, &module.type_table, &env, flags_trait_name, target);
+        let methods = generate_flags_reflect_methods(
+            &module_source,
+            &module.type_table,
+            &env,
+            flags_trait_name,
+            target,
+        );
         generated.extend(methods.into_iter().map(|f| Rc::new(RefCell::new(f))));
         ctx.record_impl(&target.name, flags_trait_name);
     }
@@ -2503,7 +2571,8 @@ fn generate_flags_reflect_methods(
 ) -> Vec<TirFunction> {
     let span = target.span;
 
-    let type_name_fn = generate_type_name_fn(module_source, 
+    let type_name_fn = generate_type_name_fn(
+        module_source,
         &target.name,
         env.string_type,
         flags_trait_name,
@@ -2540,8 +2609,16 @@ fn generate_flags_reflect_methods(
         )
     };
 
-    let bits_fn = generate_flags_bits_fn(module_source, env, flags_trait_name, target, ref_flags_type, span);
-    let from_bits_fn = generate_flags_from_bits_fn(module_source, 
+    let bits_fn = generate_flags_bits_fn(
+        module_source,
+        env,
+        flags_trait_name,
+        target,
+        ref_flags_type,
+        span,
+    );
+    let from_bits_fn = generate_flags_from_bits_fn(
+        module_source,
         type_table,
         env,
         flags_trait_name,
@@ -2549,7 +2626,8 @@ fn generate_flags_reflect_methods(
         option_flags_type,
         span,
     );
-    let members_fn = generate_flags_members_fn(module_source, 
+    let members_fn = generate_flags_members_fn(
+        module_source,
         env,
         flags_trait_name,
         target,
@@ -2558,7 +2636,8 @@ fn generate_flags_reflect_methods(
         span,
     );
 
-    let wire_name_policy_fn = generate_wire_name_policy_fn(module_source, 
+    let wire_name_policy_fn = generate_wire_name_policy_fn(
+        module_source,
         &target.name,
         env.case_style_type,
         &target.wire_name_policy,
@@ -2589,7 +2668,12 @@ fn generate_flags_members_fn(
     members_tuple_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, &target.name, flags_trait_name, &env.members_method);
+    let method_info = trait_method_info(
+        module_source,
+        &target.name,
+        flags_trait_name,
+        &env.members_method,
+    );
 
     let rows = target
         .members
@@ -2644,7 +2728,12 @@ fn generate_flags_bits_fn(
     ref_flags_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, &target.name, flags_trait_name, &env.bits_method);
+    let method_info = trait_method_info(
+        module_source,
+        &target.name,
+        flags_trait_name,
+        &env.bits_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let as_u32 = crate::synthesis::common::cast(
@@ -2684,7 +2773,12 @@ fn generate_flags_from_bits_fn(
     option_flags_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, &target.name, flags_trait_name, &env.from_bits_method);
+    let method_info = trait_method_info(
+        module_source,
+        &target.name,
+        flags_trait_name,
+        &env.from_bits_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let valid_mask: u64 = target
@@ -3099,8 +3193,14 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         let ref_enum_type = type_table.make_ref(enum_type);
 
         if ctx.should_synthesize(enum_name, &eq_trait_name) {
-            let func =
-                generate_enum_eq_fn(&module_source, enum_name, enum_type, ref_enum_type, &eq_trait_name, *span);
+            let func = generate_enum_eq_fn(
+                &module_source,
+                enum_name,
+                enum_type,
+                ref_enum_type,
+                &eq_trait_name,
+                *span,
+            );
             generated_functions.push(Rc::new(RefCell::new(func)));
             ctx.record_impl(enum_name, &eq_trait_name);
         }
@@ -3108,7 +3208,8 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         if ctx.should_synthesize(enum_name, &ord_trait_name) {
             let ordering_type =
                 type_table.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
-            let func = generate_enum_ord_fn(&module_source, 
+            let func = generate_enum_ord_fn(
+                &module_source,
                 enum_name,
                 enum_type,
                 ref_enum_type,
@@ -3296,8 +3397,14 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
             continue;
         }
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
-        let func =
-            generate_struct_default_fn(&module_source, name, fields, struct_type, &default_trait_name, *span);
+        let func = generate_struct_default_fn(
+            &module_source,
+            name,
+            fields,
+            struct_type,
+            &default_trait_name,
+            *span,
+        );
         generated.push(Rc::new(RefCell::new(func)));
         ctx.record_impl(name, &default_trait_name);
     }
@@ -3600,7 +3707,8 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
-        generated.push(Rc::new(RefCell::new(generate_fn_inspect_fn(&module_source, 
+        generated.push(Rc::new(RefCell::new(generate_fn_inspect_fn(
+            &module_source,
             &sig.type_arg_names,
             sig.arity,
             sig.return_type,
@@ -3653,7 +3761,8 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
         }
         let enum_type = tt.make_enum(name.clone(), module_source.clone());
         let ref_type = tt.make_ref(enum_type);
-        generated.push(Rc::new(RefCell::new(generate_enum_display_fn(&module_source, 
+        generated.push(Rc::new(RefCell::new(generate_enum_display_fn(
+            &module_source,
             name,
             cases,
             enum_type,
@@ -3828,7 +3937,8 @@ fn generate_fn_inspect_fn(
     inspect_trait: &str,
     inspect_method: &str,
 ) -> TirFunction {
-    generate_fn_canonical_dispatch_stub(&module_source, 
+    generate_fn_canonical_dispatch_stub(
+        &module_source,
         FnDispatchTrait::Inspect,
         inspect_trait,
         inspect_method,
@@ -3853,7 +3963,8 @@ fn generate_fn_inspect_alt_fn(
     inspect_alt_trait: &str,
     inspect_alt_method: &str,
 ) -> TirFunction {
-    generate_fn_canonical_dispatch_stub(&module_source, 
+    generate_fn_canonical_dispatch_stub(
+        &module_source,
         FnDispatchTrait::InspectAlt,
         inspect_alt_trait,
         inspect_alt_method,
@@ -3882,8 +3993,13 @@ fn generate_fn_canonical_dispatch_stub(
     fmt_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, crate::name::CLOSURE_FN_TRAIT, trait_name, method_name)
-        .with_struct_type_args(type_arg_names);
+    let method_info = trait_method_info(
+        module_source,
+        crate::name::CLOSURE_FN_TRAIT,
+        trait_name,
+        method_name,
+    )
+    .with_struct_type_args(type_arg_names);
     let qualified_name = method_info.to_mangled_name();
 
     let mut func = make_synthetic_method(
@@ -4016,7 +4132,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     let has_inspect = |type_name: &str,
                        type_id: TypeId,
                        ctx: &SynthesisCtx<'_, '_, '_>,
-                       tt: &mut TypeTable| -> bool {
+                       tt: &mut TypeTable|
+     -> bool {
         if ctx.has_impl(type_name, &inspect_name) {
             return true;
         }
@@ -4054,7 +4171,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         }
         let ref_type = tt.make_ref(enum_type);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(&module_source, &name, &inspect_alt_name, &inspect_alt_method),
+            trait_method_info(
+                &module_source,
+                &name,
+                &inspect_alt_name,
+                &inspect_alt_method,
+            ),
             trait_method_info(&module_source, &name, &inspect_name, &inspect_method),
             ref_type,
             enum_type,
@@ -4227,7 +4349,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         }
         let ref_type = tt.make_ref(nt.type_id);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(&module_source, &nt.name, &inspect_alt_name, &inspect_alt_method),
+            trait_method_info(
+                &module_source,
+                &nt.name,
+                &inspect_alt_name,
+                &inspect_alt_method,
+            ),
             trait_method_info(&module_source, &nt.name, &inspect_name, &inspect_method),
             ref_type,
             nt.type_id,
@@ -4269,8 +4396,13 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         // Opaque resource types (Future, Stream, etc.): delegate to
         // Inspect via the stock `display_fallback`.
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(&shape_module, &base_name, &inspect_alt_name, &inspect_alt_method)
-                .with_struct_type_args(&type_arg_names),
+            trait_method_info(
+                &shape_module,
+                &base_name,
+                &inspect_alt_name,
+                &inspect_alt_method,
+            )
+            .with_struct_type_args(&type_arg_names),
             trait_method_info(&shape_module, &base_name, &inspect_name, &inspect_method)
                 .with_struct_type_args(&type_arg_names),
             ref_type,
@@ -4299,7 +4431,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
-        generated.push(Rc::new(RefCell::new(generate_fn_inspect_alt_fn(&module_source, 
+        generated.push(Rc::new(RefCell::new(generate_fn_inspect_alt_fn(
+            &module_source,
             &sig.type_arg_names,
             sig.arity,
             sig.return_type,
@@ -4343,7 +4476,12 @@ fn generate_struct_inspect_alt_fn(
     inspect_alt_method: &str,
     formatter_fq: &FqTypeName,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, struct_name, inspect_alt_trait, inspect_alt_method);
+    let method_info = trait_method_info(
+        module_source,
+        struct_name,
+        inspect_alt_trait,
+        inspect_alt_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     let stmts = build_struct_inspect_alt_body(
@@ -4503,7 +4641,12 @@ fn generate_variant_inspect_alt_fn(
     inspect_alt_method: &str,
     formatter_fq: &FqTypeName,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, variant_name, inspect_alt_trait, inspect_alt_method);
+    let method_info = trait_method_info(
+        module_source,
+        variant_name,
+        inspect_alt_trait,
+        inspect_alt_method,
+    );
     let qualified_name = method_info.to_mangled_name();
 
     // Same payload-binding allocation strategy as
@@ -4958,8 +5101,18 @@ fn generate_fallback_impls(
                          impl_type_params: Vec<TirTypeParam>,
                          tt: &mut TypeTable|
      -> Rc<RefCell<TirFunction>> {
-        let target_info = trait_method_info(&module_source, name, &pair.target_trait, &pair.target_method);
-        let delegate_info = trait_method_info(&module_source, name, &pair.delegate_trait, &pair.delegate_method);
+        let target_info = trait_method_info(
+            &module_source,
+            name,
+            &pair.target_trait,
+            &pair.target_method,
+        );
+        let delegate_info = trait_method_info(
+            &module_source,
+            name,
+            &pair.delegate_trait,
+            &pair.delegate_method,
+        );
         Rc::new(RefCell::new(generate_display_fallback(
             target_info,
             delegate_info,
@@ -5081,7 +5234,13 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(*flags_type_id);
-        generated.push(make_fallback(name, ref_type, *flags_type_id, vec![], &mut tt));
+        generated.push(make_fallback(
+            name,
+            ref_type,
+            *flags_type_id,
+            vec![],
+            &mut tt,
+        ));
         ctx.record_impl(name, &pair.target_trait);
     }
 
@@ -5117,7 +5276,13 @@ fn generate_fallback_impls(
                 None,
             ))));
         } else {
-            generated.push(make_fallback(&nt.name, ref_type, nt.type_id, vec![], &mut tt));
+            generated.push(make_fallback(
+                &nt.name,
+                ref_type,
+                nt.type_id,
+                vec![],
+                &mut tt,
+            ));
         }
         ctx.record_impl(&nt.name, &pair.target_trait);
     }
@@ -5148,11 +5313,20 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(type_id);
-        let target_info = trait_method_info(&module_source, &base_name, &pair.target_trait, &pair.target_method)
-            .with_struct_type_args(&type_arg_names);
-        let delegate_info =
-            trait_method_info(&module_source, &base_name, &pair.delegate_trait, &pair.delegate_method)
-                .with_struct_type_args(&type_arg_names);
+        let target_info = trait_method_info(
+            &module_source,
+            &base_name,
+            &pair.target_trait,
+            &pair.target_method,
+        )
+        .with_struct_type_args(&type_arg_names);
+        let delegate_info = trait_method_info(
+            &module_source,
+            &base_name,
+            &pair.delegate_trait,
+            &pair.delegate_method,
+        )
+        .with_struct_type_args(&type_arg_names);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
             target_info,
             delegate_info,
@@ -5185,13 +5359,15 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
-        let target_info = trait_method_info(&module_source, 
+        let target_info = trait_method_info(
+            &module_source,
             crate::name::CLOSURE_FN_TRAIT,
             &pair.target_trait,
             &pair.target_method,
         )
         .with_struct_type_args(&sig.type_arg_names);
-        let delegate_info = trait_method_info(&module_source, 
+        let delegate_info = trait_method_info(
+            &module_source,
             crate::name::CLOSURE_FN_TRAIT,
             &pair.delegate_trait,
             &pair.delegate_method,
@@ -5692,8 +5868,12 @@ fn trait_call_on_type(
         let monomorph_info = if needs_ref_monomorph {
             match &resolved {
                 ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
-                    let base_info =
-                        trait_method_info(module_source, &info.base_struct_name(), trait_name, method_name);
+                    let base_info = trait_method_info(
+                        module_source,
+                        &info.base_struct_name(),
+                        trait_name,
+                        method_name,
+                    );
                     Some(MonomorphInfo {
                         generic_name: base_info.to_mangled_name(),
                         impl_type_args: vec![*inner_id],

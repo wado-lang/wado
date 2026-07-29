@@ -916,8 +916,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        let mut method_info =
-            LocalMethodName::new(FqTypeName::binder(type_param_name), Some(trait_name), method);
+        let mut method_info = LocalMethodName::new(
+            FqTypeName::binder(type_param_name),
+            Some(trait_name),
+            method,
+        );
         method_info.is_type_param_receiver = true;
         let mangled_name = method_info.to_mangled_name();
 
@@ -1162,8 +1165,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let param_is_mut = self.reflect_scalar_param_is_mut(spec, &method);
-        let mut method_info =
-            LocalMethodName::new(FqTypeName::binder(type_param_name), Some(trait_name), method);
+        let mut method_info = LocalMethodName::new(
+            FqTypeName::binder(type_param_name),
+            Some(trait_name),
+            method,
+        );
         method_info.is_type_param_receiver = true;
         let mangled_name = method_info.to_mangled_name();
 

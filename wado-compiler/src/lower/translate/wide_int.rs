@@ -226,11 +226,7 @@ fn create_i128_eq_call(
             tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::I128),
         )
     };
-    let method_info = LocalMethodName::new(
-        i128_struct_name,
-        Some(eq_trait_name),
-        "eq".to_string(),
-    );
+    let method_info = LocalMethodName::new(i128_struct_name, Some(eq_trait_name), "eq".to_string());
     let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::method_call(
@@ -285,11 +281,7 @@ fn create_u128_eq_call(
             tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::U128),
         )
     };
-    let method_info = LocalMethodName::new(
-        u128_struct_name,
-        Some(eq_trait_name),
-        "eq".to_string(),
-    );
+    let method_info = LocalMethodName::new(u128_struct_name, Some(eq_trait_name), "eq".to_string());
     let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::method_call(

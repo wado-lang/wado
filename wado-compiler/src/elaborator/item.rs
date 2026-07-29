@@ -2159,8 +2159,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // name alone is not an identity. `display_name` below stays bare: it is
         // what diagnostics show, not what the registry keys on.
         let qualified_struct_name = scope.qualified_receiver_name(struct_name);
-        let mangled_name =
-            MethodName::format_local(&qualified_struct_name, trait_name, &func.name);
+        let mangled_name = MethodName::format_local(&qualified_struct_name, trait_name, &func.name);
         scope
             .sem
             .decls

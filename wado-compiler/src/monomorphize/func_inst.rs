@@ -1034,11 +1034,7 @@ impl Monomorphizer {
                     // A struct-instantiation key names its template without a
                     // module; the method template is named after the receiver.
                     let receiver_head = super::dispatch_receiver_head(type_table, receiver.type_id);
-                    names_to_try.push(MethodName::format_local(
-                        &receiver_head,
-                        None,
-                        &method_name,
-                    ));
+                    names_to_try.push(MethodName::format_local(&receiver_head, None, &method_name));
                     if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
                     {
@@ -2988,8 +2984,7 @@ impl Monomorphizer {
             let inner = type_table.peel_refs(receiver_type_id);
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
             // then fall back to the base type name (e.g., "f64") if no direct impl exists.
-            let candidate =
-                info.with_substituted_struct_name(&type_table.fq_type_name(inner));
+            let candidate = info.with_substituted_struct_name(&type_table.fq_type_name(inner));
             if self.functions.has_impl(&candidate) {
                 candidate
             } else {
@@ -3193,8 +3188,11 @@ impl Monomorphizer {
                     // A generic instance's pack is substituted from its base
                     // declaration; a generic variant never becomes its own
                     // declaration, so nothing registers a resolution for it.
-                    let pack = type_table
-                        .resolve_trait_assoc_type_of_instance(recv_inner, bound_trait, assoc)?;
+                    let pack = type_table.resolve_trait_assoc_type_of_instance(
+                        recv_inner,
+                        bound_trait,
+                        assoc,
+                    )?;
                     // Record it so the call-rewrite side, which reads behind a
                     // shared borrow and cannot substitute, sees the same answer.
                     type_table.register_assoc_type_resolution(
@@ -3880,8 +3878,7 @@ impl Monomorphizer {
                 if Self::expr_uses_local(receiver, binding_local)
                     && let Some(info) = &mut func.method_info
                 {
-                    *info =
-                        info.with_substituted_struct_name(&type_table.fq_type_name(elem_type));
+                    *info = info.with_substituted_struct_name(&type_table.fq_type_name(elem_type));
                     func.name = info.to_mangled_name();
                     if let Some(ms) = module_source_for_trait_impl(type_table, elem_type) {
                         func.module_source = ms;
@@ -4402,32 +4399,33 @@ fn try_lower_comparison(
     type_table: &mut TypeTable,
 ) -> Option<TirExprKind> {
     let operand_type = type_table.get(left.type_id);
-    let (impl_type_args, type_module_source): (Vec<FqTypeName>, Option<ModuleSource>) = match
-        operand_type
-    {
-        ResolvedType::Struct { module_source, .. }
-        | ResolvedType::Variant { module_source, .. } => (vec![], Some(module_source.clone())),
-        ResolvedType::GenericInstance {
-            name,
-            type_args,
-            module_source,
-            ..
-        } => {
-            if TypeTable::is_tuple_type(name) {
-                // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
-                // and already lowered to method calls by the elaborator.
-                return None;
+    let (impl_type_args, type_module_source): (Vec<FqTypeName>, Option<ModuleSource>) =
+        match operand_type {
+            ResolvedType::Struct { module_source, .. }
+            | ResolvedType::Variant { module_source, .. } => (vec![], Some(module_source.clone())),
+            ResolvedType::GenericInstance {
+                name,
+                type_args,
+                module_source,
+                ..
+            } => {
+                if TypeTable::is_tuple_type(name) {
+                    // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
+                    // and already lowered to method calls by the elaborator.
+                    return None;
+                }
+                // The call sites synthesised here (Eq / Ord operator lowering) name
+                // their target methods with the same struct-name form the
+                // monomorphizer's `method_instantiation_name_inner` uses to set the
+                // function definition's `MethodInfo.struct_name`.
+                let args: Vec<FqTypeName> = type_args
+                    .iter()
+                    .map(|&t| type_table.fq_type_name(t))
+                    .collect();
+                (args, Some(module_source.clone()))
             }
-            // The call sites synthesised here (Eq / Ord operator lowering) name
-            // their target methods with the same struct-name form the
-            // monomorphizer's `method_instantiation_name_inner` uses to set the
-            // function definition's `MethodInfo.struct_name`.
-            let args: Vec<FqTypeName> =
-                type_args.iter().map(|&t| type_table.fq_type_name(t)).collect();
-            (args, Some(module_source.clone()))
-        }
-        _ => return None,
-    };
+            _ => return None,
+        };
     let base_struct_name = type_table.fq_base_type_name(left.type_id);
 
     let make_ref = |e: &TirExpr, tt: &mut TypeTable| -> TirExpr {
@@ -4479,12 +4477,9 @@ fn try_lower_comparison(
     if matches!(op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
         let receiver = make_ref(left, type_table);
         let arg_ref = make_ref(right, type_table);
-        let method_info = LocalMethodName::new(
-            base_struct_name,
-            Some("Eq".to_string()),
-            "eq".to_string(),
-        )
-        .with_struct_type_args(&impl_type_args);
+        let method_info =
+            LocalMethodName::new(base_struct_name, Some("Eq".to_string()), "eq".to_string())
+                .with_struct_type_args(&impl_type_args);
         let mangled_name = method_info.to_mangled_name();
         let method_module = resolve_module(&method_info, type_module_source);
 
@@ -4519,12 +4514,9 @@ fn try_lower_comparison(
             name: "Ordering".to_string(),
             module_source: ModuleSource::prelude(),
         });
-        let method_info = LocalMethodName::new(
-            base_struct_name,
-            Some("Ord".to_string()),
-            "cmp".to_string(),
-        )
-        .with_struct_type_args(&impl_type_args);
+        let method_info =
+            LocalMethodName::new(base_struct_name, Some("Ord".to_string()), "cmp".to_string())
+                .with_struct_type_args(&impl_type_args);
         let mangled_name = method_info.to_mangled_name();
         let method_module = resolve_module(&method_info, type_module_source);
 

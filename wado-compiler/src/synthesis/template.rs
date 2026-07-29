@@ -1274,9 +1274,10 @@ pub(crate) fn blanket_dispatch_for(
     // the blanket is chosen by which one the receiver satisfies — not by
     // registration order. Param and pack projections must come from that same
     // blanket, or the template name would name one kind and the args another.
-    let blanket = trait_env.value_blanket_for_receiver(trait_name, type_module.as_ref(), &|bounds| {
-        receiver_satisfies_blanket_bounds(type_id, bounds.to_vec(), tt)
-    })?;
+    let blanket =
+        trait_env.value_blanket_for_receiver(trait_name, type_module.as_ref(), &|bounds| {
+            receiver_satisfies_blanket_bounds(type_id, bounds.to_vec(), tt)
+        })?;
     let blanket_module = blanket.module.clone();
     let generic_name = LocalMethodName::new(
         FqTypeName::binder(&blanket.param),
