@@ -820,15 +820,19 @@ impl TypeTable {
             return id;
         }
         let id = self.types.next_id();
-        // Update struct name index for O(1) lookups by (name, module_source)
+        // Update struct name index for O(1) lookups by (name, module_source).
+        // Keyed on the *rendered* spelling: every instantiation of a generic
+        // struct is a distinct type, and keying on the declaration would
+        // collapse them all onto one entry.
         if let ResolvedType::Struct {
-            decl_name: ref name,
+            ref decl_name,
             ref module_source,
-            ..
+            ref type_args,
         } = ty
         {
+            let rendered = self.struct_rendered_name(decl_name, type_args);
             self.struct_name_index
-                .insert((name.clone(), module_source.clone()), id);
+                .insert((rendered, module_source.clone()), id);
         }
         self.types.push(ty.clone());
         self.intern_map.insert(ty, id);

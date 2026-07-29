@@ -54,14 +54,14 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
             .collect();
         let (subject, ref_subject) = {
             let mut tt = flat.type_table.borrow_mut();
-            // Re-derives a struct the instantiation site already registered, so
-            // it has no arguments of its own to record.
-            let subject = tt.make_monomorphized_struct(
-                decl.name.clone(),
-                module_source.clone(),
-                base_name,
-                vec![],
-            );
+            // The instantiation site already registered this type; look it up
+            // by the spelling the struct index is keyed on rather than minting
+            // one. Minting here with no arguments would create a second,
+            // argument-less type that is not the instance the declaration is.
+            let subject = tt
+                .find_struct_by_name(&decl.name, &module_source)
+                .unwrap_or_else(|| tt.make_struct(decl.name.clone(), module_source.clone()));
+            let _ = base_name;
             let ref_subject = tt.make_ref(subject);
             (subject, ref_subject)
         };
