@@ -10,16 +10,44 @@
 //! an unperformed write would leave the place it targets holding a value the
 //! program never produced.
 
-use crate::const_eval::{MAX_SEQ_ELEMENTS, Value};
+use crate::const_eval::Value;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_visitor::NirRefVisitor;
-use crate::tir::{PrimitiveType, ResolvedType};
 
 use super::place::{overlapping_places, place_of};
 use super::trackability::{Reached, aggregate_safe_locals, clobbered_locals};
-use super::{CallRun, CalleeKey, CtfeBuiltin, Interpreter, Lattice, prim_of};
+use super::{CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice};
+
+impl FrameState {
+    /// The state a call's body runs under: what `body` lets a frame track, with
+    /// the parameters already bound. A parameter the body can reach through
+    /// another handle binds nothing, so a stale constant cannot outlive the
+    /// write. Nothing keyed by the caller's local or expression ids carries
+    /// over.
+    fn for_call(
+        body: &Body,
+        reached: &Reached,
+        params: impl IntoIterator<Item = (u32, Value)>,
+    ) -> Self {
+        let ctfe_clobbered = clobbered_locals(body, reached);
+        let mut state = Self {
+            aggregate_locals: aggregate_safe_locals(body, reached),
+            ..Self::default()
+        };
+        for (index, value) in params {
+            let lattice = if ctfe_clobbered.contains(index) {
+                Lattice::NonConst
+            } else {
+                Lattice::Const(value)
+            };
+            state.env.insert(index, lattice);
+        }
+        state.ctfe_clobbered = ctfe_clobbered;
+        state
+    }
+}
 
 /// How control left a statement sequence during compile-time execution.
 ///
@@ -65,7 +93,6 @@ impl LoopSnapshot {
                     NodeRef::Expr(e) => self.exprs.push(e),
                     NodeRef::Stmt(s) => self.stmts.push(s),
                     NodeRef::Block(b) => self.blocks.push(b),
-                    // Patterns are matched, never rewritten.
                     NodeRef::Pat(_) => {}
                 }
                 self.walk_node(body, node);
@@ -107,12 +134,22 @@ impl LoopSnapshot {
     }
 }
 
+/// Whether two `&mut` arguments name overlapping storage. Each parameter binds
+/// its own snapshot and each write-back replays whole, so the later write would
+/// undo the earlier. Wado has no borrow checker, so this is ordinary source: the
+/// frame declines to run the call rather than mis-run it.
+fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u32>)]) -> bool {
+    targets
+        .iter()
+        .any(|(_, root, path)| overlapping_places(places, *root, path) > 1)
+}
+
 impl Interpreter<'_> {
-    fn exec_block_a(&mut self, body: &mut Body, block: BlockId) -> Flow {
+    fn exec_block(&mut self, body: &mut Body, block: BlockId) -> Flow {
         let stmts = body.blocks[block].stmts.clone();
         let mut value = Lattice::Unevaluated;
         for s in stmts {
-            match self.exec_stmt_a(body, s) {
+            match self.exec_stmt(body, s) {
                 Flow::Fallthrough(v) => value = v,
                 other => return other,
             }
@@ -126,7 +163,7 @@ impl Interpreter<'_> {
     /// on a constant. Reducing an expression is not performing it, so anything
     /// left undone — an unfolded call, a global write, a would-be trap —
     /// abandons the evaluation rather than being stepped past.
-    fn exec_stmt_a(&mut self, body: &mut Body, s: StmtId) -> Flow {
+    fn exec_stmt(&mut self, body: &mut Body, s: StmtId) -> Flow {
         if self.step_budget == 0 {
             return Flow::Bail;
         }
@@ -136,12 +173,12 @@ impl Interpreter<'_> {
                 local_index, value, ..
             } => {
                 let (index, value) = (*local_index, *value);
-                let lattice = match value.as_expr().and_then(|e| self.exec_call_stmt_a(body, e)) {
+                let lattice = match value.as_expr().and_then(|e| self.exec_call_stmt(body, e)) {
                     Some(Flow::Fallthrough(lattice)) => lattice,
                     Some(Flow::Bail | Flow::Return(_) | Flow::Break { .. } | Flow::Continue) => {
                         return Flow::Bail;
                     }
-                    None => self.eval_operand_a(body, value),
+                    None => self.eval_operand(body, value),
                 };
                 match lattice {
                     lattice @ Lattice::Const(_) => {
@@ -153,14 +190,11 @@ impl Interpreter<'_> {
             }
             StmtKind::Expr(op) => {
                 let op = *op;
-                self.exec_expr_stmt_a(body, op)
+                self.exec_expr_stmt(body, op)
             }
             StmtKind::Return { value } => match *value {
                 None => Flow::Return(Lattice::Unevaluated),
-                // A returned expression the frame could not evaluate is one
-                // it stepped over, along with whatever that expression would
-                // have written.
-                Some(op) => match self.eval_operand_a(body, op) {
+                Some(op) => match self.eval_operand(body, op) {
                     lattice @ (Lattice::Const(_) | Lattice::NonConst) => Flow::Return(lattice),
                     Lattice::Unevaluated => Flow::Bail,
                 },
@@ -171,10 +205,10 @@ impl Interpreter<'_> {
                 else_block,
             } => {
                 let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-                match self.eval_operand_a(body, condition) {
-                    Lattice::Const(Value::Bool(true)) => self.exec_block_a(body, then_block),
+                match self.eval_operand(body, condition) {
+                    Lattice::Const(Value::Bool(true)) => self.exec_block(body, then_block),
                     Lattice::Const(Value::Bool(false)) => match else_block {
-                        Some(eb) => self.exec_block_a(body, eb),
+                        Some(eb) => self.exec_block(body, eb),
                         None => Flow::Fallthrough(Lattice::Unevaluated),
                     },
                     Lattice::Const(
@@ -190,17 +224,17 @@ impl Interpreter<'_> {
             }
             StmtKind::Break { label, value } => {
                 let (label, value) = (label.clone(), *value);
-                let value = self.eval_optional_operand_a(body, value);
+                let value = self.eval_optional_operand(body, value);
                 Flow::Break { label, value }
             }
             StmtKind::Continue => Flow::Continue,
             StmtKind::Loop { body: block } => {
                 let block = *block;
-                self.exec_loop_a(body, block)
+                self.exec_loop(body, block)
             }
             StmtKind::LabeledBlock { label, block } => {
                 let (label, block) = (label.clone(), *block);
-                match self.exec_block_a(body, block) {
+                match self.exec_block(body, block) {
                     Flow::Break {
                         label: Some(broke),
                         value,
@@ -215,31 +249,30 @@ impl Interpreter<'_> {
     /// Run a loop until it breaks, control leaves the function, or the budget
     /// runs out. Termination rests on the budget alone — the per-iteration
     /// charge covers an empty body too — so no constant trip count is needed.
-    fn exec_loop_a(&mut self, body: &mut Body, block: BlockId) -> Flow {
+    fn exec_loop(&mut self, body: &mut Body, block: BlockId) -> Flow {
         let snapshot = LoopSnapshot::capture(body, block);
         loop {
             if self.step_budget == 0 {
                 return Flow::Bail;
             }
             self.step_budget -= 1;
-            match self.exec_block_a(body, block) {
+            match self.exec_block(body, block) {
                 Flow::Fallthrough(_) | Flow::Continue => {}
-                // A labeled `break` belongs to an enclosing labeled block.
                 Flow::Break { label: None, .. } => {
                     return Flow::Fallthrough(Lattice::Unevaluated);
                 }
                 other => return other,
             }
             snapshot.restore(body);
-            self.scratch_folds.clear();
+            self.frame.scratch_folds.clear();
         }
     }
 
     /// An assignment updates the environment; anything else contributes its
     /// value as the block's result.
-    fn exec_expr_stmt_a(&mut self, body: &mut Body, op: Operand) -> Flow {
+    fn exec_expr_stmt(&mut self, body: &mut Body, op: Operand) -> Flow {
         if let Some(e) = op.as_expr()
-            && let Some(flow) = self.exec_builtin_stmt_a(body, e)
+            && let Some(flow) = self.exec_builtin_stmt(body, e)
         {
             return flow;
         }
@@ -247,14 +280,14 @@ impl Interpreter<'_> {
             && let ExprKind::Assign { target, value } = &body.exprs[e].kind
         {
             let (target, value) = (*target, *value);
-            return self.exec_store_a(body, target, value);
+            return self.exec_store(body, target, value);
         }
         if let Some(e) = op.as_expr()
-            && let Some(flow) = self.exec_call_stmt_a(body, e)
+            && let Some(flow) = self.exec_call_stmt(body, e)
         {
             return flow;
         }
-        match self.eval_operand_a(body, op) {
+        match self.eval_operand(body, op) {
             lattice @ Lattice::Const(_) => Flow::Fallthrough(lattice),
             Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
         }
@@ -262,15 +295,15 @@ impl Interpreter<'_> {
 
     /// Run a call at statement position for the writes it performs. `None`
     /// when the expression is not a call the frame knows.
-    fn exec_call_stmt_a(&mut self, body: &Body, e: ExprId) -> Option<Flow> {
-        let (key, _) = self.call_target_a(body, e)?;
+    fn exec_call_stmt(&mut self, body: &Body, e: ExprId) -> Option<Flow> {
+        let (key, _) = self.call_target(body, e)?;
         if !self.callees.is_some_and(|c| c.contains_key(&key)) {
             return None;
         }
-        let Some(run) = self.run_call_a(body, e, true) else {
+        let Some(run) = self.run_call(body, e, true) else {
             return Some(Flow::Bail);
         };
-        match self.apply_writes_a(run.writes) {
+        match self.apply_writes(run.writes) {
             Some(()) => Some(Flow::Fallthrough(run.result)),
             None => Some(Flow::Bail),
         }
@@ -279,18 +312,18 @@ impl Interpreter<'_> {
     /// Perform `place = value`, updating the frame's value for the place's
     /// root. A target naming no place, or a projection into a root the frame
     /// holds no constant for, bails.
-    fn exec_store_a(&mut self, body: &mut Body, target: ExprId, value: Operand) -> Flow {
+    fn exec_store(&mut self, body: &mut Body, target: ExprId, value: Operand) -> Flow {
         let Some((root, path)) = place_of(body, target.into()) else {
             return Flow::Bail;
         };
-        let Lattice::Const(value) = self.eval_operand_a(body, value) else {
+        let Lattice::Const(value) = self.eval_operand(body, value) else {
             return Flow::Bail;
         };
         if path.is_empty() {
             self.bind_ctfe_local(root, Lattice::Const(value));
             return Flow::Fallthrough(Lattice::Unevaluated);
         }
-        match self.update_place_a(root, &path, |_| Some(value)) {
+        match self.update_place(root, &path, |_| Some(value)) {
             Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
             None => Flow::Bail,
         }
@@ -300,13 +333,13 @@ impl Interpreter<'_> {
     /// what `update` makes of it. `None` when the frame holds no constant for
     /// the root — which is what confines a write to values the engine itself
     /// built — or when the path does not reach a value the update applies to.
-    fn update_place_a(
+    fn update_place(
         &mut self,
         root: u32,
         path: &[u32],
         update: impl FnOnce(&Value) -> Option<Value>,
     ) -> Option<()> {
-        let Lattice::Const(container) = self.env.get(&root)?.clone() else {
+        let Lattice::Const(container) = self.frame.env.get(&root)?.clone() else {
             return None;
         };
         let target = path.iter().try_fold(&container, |v, i| v.field(*i))?;
@@ -318,15 +351,15 @@ impl Interpreter<'_> {
     /// Perform a builtin at statement position, updating the frame's value for
     /// the place a write lands in. `None` when the statement is not a builtin
     /// the engine knows.
-    fn exec_builtin_stmt_a(&mut self, body: &mut Body, e: ExprId) -> Option<Flow> {
+    fn exec_builtin_stmt(&mut self, body: &mut Body, e: ExprId) -> Option<Flow> {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return None;
         };
         let builtin = *self.ctfe_builtins.and_then(|m| m.get(func_id))?;
         let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
         match builtin {
-            CtfeBuiltin::ArraySet => Some(self.exec_element_write_a(body, &args)),
-            CtfeBuiltin::ArrayCopy => Some(self.exec_run_write_a(body, &args)),
+            CtfeBuiltin::ArraySet => Some(self.exec_element_write(body, &args)),
+            CtfeBuiltin::ArrayCopy => Some(self.exec_run_write(body, &args)),
             CtfeBuiltin::ColdPath => Some(Flow::Fallthrough(Lattice::Unevaluated)),
             CtfeBuiltin::ArrayGet
             | CtfeBuiltin::ArrayLen
@@ -335,7 +368,7 @@ impl Interpreter<'_> {
         }
     }
 
-    fn exec_element_write_a(&mut self, body: &mut Body, args: &[Operand]) -> Flow {
+    fn exec_element_write(&mut self, body: &mut Body, args: &[Operand]) -> Flow {
         let [seq, index, element] = *args else {
             return Flow::Bail;
         };
@@ -343,15 +376,15 @@ impl Interpreter<'_> {
             return Flow::Bail;
         };
         let (Lattice::Const(index), Lattice::Const(element)) = (
-            self.eval_operand_a(body, index),
-            self.eval_operand_a(body, element),
+            self.eval_operand(body, index),
+            self.eval_operand(body, element),
         ) else {
             return Flow::Bail;
         };
         let Some((index, _)) = index.as_int() else {
             return Flow::Bail;
         };
-        match self.update_place_a(root, &path, |seq| seq.with_element(index, element)) {
+        match self.update_place(root, &path, |seq| seq.with_element(index, element)) {
             Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
             None => Flow::Bail,
         }
@@ -359,7 +392,7 @@ impl Interpreter<'_> {
 
     /// Splices `len` of `src`'s elements into the destination. A run either
     /// side cannot supply is left to trap at run time.
-    fn exec_run_write_a(&mut self, body: &mut Body, args: &[Operand]) -> Flow {
+    fn exec_run_write(&mut self, body: &mut Body, args: &[Operand]) -> Flow {
         let [destination, at, source, from, len] = *args else {
             return Flow::Bail;
         };
@@ -367,10 +400,10 @@ impl Interpreter<'_> {
             return Flow::Bail;
         };
         let (Lattice::Const(at), Lattice::Const(source), Lattice::Const(from), Lattice::Const(len)) = (
-            self.eval_operand_a(body, at),
-            self.eval_operand_a(body, source),
-            self.eval_operand_a(body, from),
-            self.eval_operand_a(body, len),
+            self.eval_operand(body, at),
+            self.eval_operand(body, source),
+            self.eval_operand(body, from),
+            self.eval_operand(body, len),
         ) else {
             return Flow::Bail;
         };
@@ -379,7 +412,7 @@ impl Interpreter<'_> {
         else {
             return Flow::Bail;
         };
-        match self.update_place_a(root, &path, |destination| {
+        match self.update_place(root, &path, |destination| {
             destination.with_run(at, &source, from, len)
         }) {
             Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
@@ -387,127 +420,33 @@ impl Interpreter<'_> {
         }
     }
 
-    fn eval_optional_operand_a(&mut self, body: &mut Body, op: Option<Operand>) -> Lattice {
+    fn eval_optional_operand(&mut self, body: &mut Body, op: Option<Operand>) -> Lattice {
         match op {
-            Some(op) => self.eval_operand_a(body, op),
+            Some(op) => self.eval_operand(body, op),
             None => Lattice::Unevaluated,
         }
     }
 
     /// Reducing in place first is what lets a nested call fold before the
     /// operand is projected.
-    fn eval_operand_a(&mut self, body: &mut Body, op: Operand) -> Lattice {
+    fn eval_operand(&mut self, body: &mut Body, op: Operand) -> Lattice {
         match op.as_expr() {
             Some(e) => {
-                self.reduce_in_place_a(body, e);
-                self.reduce_to_lattice_a(body, e)
+                self.reduce_in_place(body, e);
+                self.reduce_to_lattice(body, e)
             }
-            None => self.operand_to_lattice_a(body, op),
+            None => self.operand_to_lattice(body, op),
         }
     }
 
     /// Bind a local inside a compile-time frame. A local the frame may reach
     /// through another handle keeps no value.
     fn bind_ctfe_local(&mut self, index: u32, lattice: Lattice) {
-        if self.ctfe_clobbered.contains(index) {
-            self.env.insert(index, Lattice::NonConst);
+        if self.frame.ctfe_clobbered.contains(index) {
+            self.frame.env.insert(index, Lattice::NonConst);
         } else {
             self.bind_local(index, lattice);
         }
-    }
-
-    /// Evaluate `array_get(seq, i)` / `array_len(seq)` over a constant
-    /// sequence, or the sequence `array_new(len)` allocates. A read's argument
-    /// is a reference to the array, and a reference to a constant reads as that
-    /// constant, so no separate deref step is needed.
-    pub(super) fn try_ctfe_builtin_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
-        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
-            return Lattice::Unevaluated;
-        };
-        let Some(builtin) = self.ctfe_builtins.and_then(|m| m.get(func_id)) else {
-            return Lattice::Unevaluated;
-        };
-        match (builtin, args.as_slice()) {
-            (CtfeBuiltin::ArrayLen, [arr]) => {
-                let Lattice::Const(v) = self.operand_to_lattice_a(body, arr.expr) else {
-                    return Lattice::Unevaluated;
-                };
-                v.seq_len().map_or(Lattice::Unevaluated, |len| {
-                    Lattice::Const(Value::Int {
-                        value: len as u64,
-                        prim: PrimitiveType::I32,
-                    })
-                })
-            }
-            (CtfeBuiltin::ArrayGet, [arr, index]) => self.index_lattice(body, arr.expr, index.expr),
-            (CtfeBuiltin::ArrayNew, [len]) => self.allocation_lattice(body, e, len.expr),
-            (CtfeBuiltin::Select, [condition, if_true, if_false]) => {
-                self.select_lattice(body, condition.expr, if_true.expr, if_false.expr)
-            }
-            // A write denotes nothing; the executor performs it as a
-            // statement. Nor does a hint, which it steps past.
-            (
-                CtfeBuiltin::ArraySet
-                | CtfeBuiltin::ArrayCopy
-                | CtfeBuiltin::ColdPath
-                | CtfeBuiltin::Select
-                | CtfeBuiltin::ArrayLen
-                | CtfeBuiltin::ArrayGet
-                | CtfeBuiltin::ArrayNew,
-                _,
-            ) => Lattice::Unevaluated,
-        }
-    }
-
-    /// The arm `select` picks. Both arms run at run time, so the one not taken
-    /// has to compute rather than trap; a constant is exactly that.
-    fn select_lattice(
-        &self,
-        body: &Body,
-        condition: Operand,
-        if_true: Operand,
-        if_false: Operand,
-    ) -> Lattice {
-        let Lattice::Const(Value::Bool(condition)) = self.operand_lattice_folded_a(body, condition)
-        else {
-            return Lattice::Unevaluated;
-        };
-        let (Lattice::Const(if_true), Lattice::Const(if_false)) = (
-            self.operand_lattice_folded_a(body, if_true),
-            self.operand_lattice_folded_a(body, if_false),
-        ) else {
-            return Lattice::Unevaluated;
-        };
-        Lattice::Const(if condition { if_true } else { if_false })
-    }
-
-    /// The sequence `array_new(len)` allocates: `len` elements at the default
-    /// `array.new_default` leaves. A negative or oversized length, or an
-    /// element type with no compile-time default, is not a constant here — the
-    /// call stays and traps or allocates at run time as written.
-    fn allocation_lattice(&self, body: &Body, e: ExprId, len: Operand) -> Lattice {
-        let Lattice::Const(len) = self.operand_to_lattice_a(body, len) else {
-            return Lattice::Unevaluated;
-        };
-        let Some((len, PrimitiveType::I32)) = len.as_int() else {
-            return Lattice::Unevaluated;
-        };
-        let array_type = body.exprs[e].type_id;
-        let ResolvedType::BuiltinArray(element_type) = self.type_table.get(array_type) else {
-            return Lattice::Unevaluated;
-        };
-        let (Ok(len), Some(default)) = (
-            usize::try_from(len as i32),
-            prim_of(*element_type, self.type_table).and_then(Value::default_of),
-        ) else {
-            return Lattice::Unevaluated;
-        };
-        // Before building: an allocation the value model rejects must not be
-        // walked element by element first.
-        if len > MAX_SEQ_ELEMENTS {
-            return Lattice::Unevaluated;
-        }
-        Value::seq(array_type, vec![default; len]).map_or(Lattice::Unevaluated, Lattice::Const)
     }
 
     /// Fold a call to the value it computes. One that writes through a `&mut`
@@ -516,18 +455,16 @@ impl Interpreter<'_> {
     /// statement position, where the executor applies the writes.
     /// `Unevaluated` on any miss, so the original call — and any runtime trap
     /// inside it — survives.
-    pub(super) fn try_call_fold_a(&mut self, body: &Body, e: ExprId) -> Lattice {
+    pub(super) fn try_call_fold(&mut self, body: &Body, e: ExprId) -> Lattice {
         if let lattice @ (Lattice::Const(_) | Lattice::NonConst) =
-            self.try_ctfe_builtin_fold_a(body, e)
+            self.try_ctfe_builtin_fold(body, e)
         {
-            // `NonConst` here is an out-of-range read: keep the call so the
-            // trap survives.
             return match lattice {
                 Lattice::Const(v) => Lattice::Const(v),
                 Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
             };
         }
-        match self.run_call_a(body, e, false) {
+        match self.run_call(body, e, false) {
             Some(run) => match run.result {
                 c @ Lattice::Const(_) => c,
                 Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
@@ -538,7 +475,7 @@ impl Interpreter<'_> {
 
     /// The callee a call names, and the operands bound to its parameters. A
     /// method's receiver is its first.
-    fn call_target_a(&self, body: &Body, e: ExprId) -> Option<(CalleeKey, Vec<Operand>)> {
+    fn call_target(&self, body: &Body, e: ExprId) -> Option<(CalleeKey, Vec<Operand>)> {
         match &body.exprs[e].kind {
             ExprKind::Call { func_id, args, .. } => {
                 Some((*func_id, args.iter().map(|a| a.expr).collect()))
@@ -565,9 +502,12 @@ impl Interpreter<'_> {
     /// `may_write` is the caller's promise to apply the write-backs. Without it
     /// a callee taking a `&mut` parameter is refused outright, since running it
     /// would produce writes with nowhere to go.
-    fn run_call_a(&mut self, body: &Body, e: ExprId, may_write: bool) -> Option<CallRun> {
+    ///
+    /// The body runs on a scratch copy, so the callee's shared arena — held
+    /// under an immutable borrow — is never mutated.
+    fn run_call(&mut self, body: &Body, e: ExprId, may_write: bool) -> Option<CallRun> {
         let callees = self.callees?;
-        let (key, args) = self.call_target_a(body, e)?;
+        let (key, args) = self.call_target(body, e)?;
         let callee_rc = callees.get(&key)?;
         if self.call_stack.iter().any(|k| k == &key) {
             return None;
@@ -583,9 +523,6 @@ impl Interpreter<'_> {
         if self.step_budget == 0 {
             return None;
         }
-        // A unit callee denotes nothing, whatever its last statement
-        // computed. Handing that value back would leave it on the stack where
-        // the call stood and the module would fail to validate.
         let returns_unit = callee.return_type == crate::tir::TypeTable::UNIT;
 
         let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());
@@ -595,54 +532,50 @@ impl Interpreter<'_> {
             let place = place_of(body, *arg);
             let value = if param.is_mut_ref {
                 let (root, path) = place.clone()?;
-                let value = self.place_value_a(root, &path)?;
+                let value = self.place_value(root, &path)?;
                 targets.push((param.local_index, root, path));
                 value
             } else {
-                self.operand_lattice_folded_a(body, *arg).as_const()?
+                self.operand_lattice_folded(body, *arg).as_const()?
             };
             places.extend(place);
             bound.push((param.local_index, value));
         }
-        // Each parameter binds its own snapshot and each write-back replays
-        // whole, so two arguments naming the same storage would let the later
-        // undo the earlier. Wado has no borrow checker, so that is ordinary
-        // source: the frame declines it and the call runs.
-        if targets
-            .iter()
-            .any(|(_, root, path)| overlapping_places(&places, *root, path) > 1)
-        {
+        if aliased_write_targets(&targets, &places) {
             return None;
         }
 
         self.step_budget -= 1;
         self.call_stack.push(key);
-        let saved_env = std::mem::take(&mut self.env);
-        // The scratch fold memo is scoped to this reduction; nested CTFE calls
-        // get a fresh map and ids never cross scratch bodies.
-        let saved_folds = std::mem::take(&mut self.scratch_folds);
-        let saved_aliases = std::mem::take(&mut self.ref_global_aliases);
-        // Local indices are per-function, so the caller's read-only-local set
-        // says nothing about the callee's.
-        let saved_aggregates = std::mem::take(&mut self.aggregate_locals);
-        let saved_clobbered = std::mem::take(&mut self.ctfe_clobbered);
-        // Execute on a scratch copy so the shared callee body, held under an
-        // immutable `Ref`, is not mutated.
         let mut scratch = callee_body.nodes_only_clone();
-        let writes = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
-        self.aggregate_locals = aggregate_safe_locals(&scratch, &writes);
-        self.ctfe_clobbered = clobbered_locals(&scratch, &writes);
-        for (index, value) in bound {
-            let lattice = if self.ctfe_clobbered.contains(index) {
-                Lattice::NonConst
-            } else {
-                Lattice::Const(value)
-            };
-            self.env.insert(index, lattice);
-        }
+        let reached = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
+        let caller = self.swap_frame(FrameState::for_call(&scratch, &reached, bound));
+        let run = self.exec_frame(&mut scratch, targets, returns_unit);
+        self.swap_frame(caller);
+        self.call_stack.pop();
+        run
+    }
+
+    /// Run the scratch body already installed as the current frame, reporting
+    /// what it returned and what it left in each `&mut` parameter.
+    ///
+    /// `None` rather than an empty write list when a `&mut` parameter has no
+    /// value to write: losing it would leave the caller's place holding what
+    /// the program never produced.
+    ///
+    /// `returns_unit` discards the result — a unit callee denotes nothing, and
+    /// a value left where the call stood fails validation.
+    ///
+    /// Every fallible step of a call lives here, so the caller restores its own
+    /// frame unconditionally on return.
+    fn exec_frame(
+        &mut self,
+        scratch: &mut Body,
+        targets: Vec<(u32, u32, Vec<u32>)>,
+        returns_unit: bool,
+    ) -> Option<CallRun> {
         let root = scratch.root;
-        let flow = self.exec_block_a(&mut scratch, root);
-        // Only a body that ran to the end leaves parameters worth reading.
+        let flow = self.exec_block(scratch, root);
         let completed = matches!(flow, Flow::Return(_) | Flow::Fallthrough(_));
         let result = match flow {
             Flow::Return(lattice) | Flow::Fallthrough(lattice) if !returns_unit => lattice,
@@ -652,57 +585,34 @@ impl Interpreter<'_> {
             | Flow::Continue
             | Flow::Bail => Lattice::Unevaluated,
         };
-        // Before the frame is torn down. A `&mut` parameter the callee left
-        // untrackable has no value to write, and the run is refused rather
-        // than losing it.
-        let written: Option<Vec<(u32, Vec<u32>, Value)>> = completed
-            .then(|| {
-                targets
-                    .into_iter()
-                    .map(|(index, root, path)| {
-                        let value = self.env.get(&index)?.as_const()?;
-                        Some((root, path, value))
-                    })
-                    .collect::<Option<Vec<_>>>()
-            })
-            .flatten();
-        self.env = saved_env;
-        self.scratch_folds = saved_folds;
-        self.ref_global_aliases = saved_aliases;
-        self.aggregate_locals = saved_aggregates;
-        self.ctfe_clobbered = saved_clobbered;
-        self.call_stack.pop();
-        Some(CallRun {
-            result,
-            writes: written?,
-        })
-    }
-
-    /// An argument's value, folding the arithmetic it may still be spelled as:
-    /// an argument reaches a call as written, and the structural projection
-    /// alone reads only what already stands as a literal.
-    fn operand_lattice_folded_a(&self, body: &Body, op: Operand) -> Lattice {
-        match op.as_expr() {
-            Some(e) => self.reduce_to_lattice_a(body, e),
-            None => self.operand_to_lattice_a(body, op),
+        if !completed {
+            return None;
         }
+        let writes = targets
+            .into_iter()
+            .map(|(index, root, path)| {
+                let value = self.frame.env.get(&index)?.as_const()?;
+                Some((root, path, value))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(CallRun { result, writes })
     }
 
     /// The frame's value for a place, or `None` when it holds none.
-    fn place_value_a(&self, root: u32, path: &[u32]) -> Option<Value> {
-        let Lattice::Const(value) = self.env.get(&root)? else {
+    fn place_value(&self, root: u32, path: &[u32]) -> Option<Value> {
+        let Lattice::Const(value) = self.frame.env.get(&root)? else {
             return None;
         };
         path.iter().try_fold(value, |v, i| v.field(*i)).cloned()
     }
 
     /// Write a finished run's `&mut` parameters back into the caller's places.
-    fn apply_writes_a(&mut self, writes: Vec<(u32, Vec<u32>, Value)>) -> Option<()> {
+    fn apply_writes(&mut self, writes: Vec<(u32, Vec<u32>, Value)>) -> Option<()> {
         for (root, path, value) in writes {
             if path.is_empty() {
                 self.bind_ctfe_local(root, Lattice::Const(value));
             } else {
-                self.update_place_a(root, &path, |_| Some(value))?;
+                self.update_place(root, &path, |_| Some(value))?;
             }
         }
         Some(())

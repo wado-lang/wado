@@ -9,10 +9,28 @@
 use indexmap::IndexSet;
 
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{Body, ExprId, ExprKind, Operand, StmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, Operand, StmtKind};
 
 use super::place::{lvalue_root_local, place_of};
-use super::{CalleeMap, CtfeBuiltinMap, LocalSet, reachable_exprs};
+use super::{CalleeMap, CtfeBuiltinMap, reachable_exprs};
+
+/// A method's receiver is its first parameter.
+const RECEIVER: usize = 0;
+
+/// The expressions a walk carries out: the operand each statement performs.
+fn performed_exprs(body: &Body) -> IndexSet<ExprId> {
+    let mut performed = IndexSet::default();
+    for (_, stmt) in &body.stmts {
+        let op = match &stmt.kind {
+            StmtKind::Expr(op) | StmtKind::Let { value: op, .. } => *op,
+            _ => continue,
+        };
+        if let Some(e) = op.as_expr() {
+            performed.insert(e);
+        }
+    }
+    performed
+}
 
 /// The places a walk reaches, and how. A mention it does not reach disqualifies
 /// the local that mention roots at.
@@ -30,41 +48,44 @@ impl Reached {
         ctfe_builtins: Option<&CtfeBuiltinMap>,
         callees: Option<&CalleeMap>,
     ) -> Self {
-        let mut statements: IndexSet<ExprId> = IndexSet::default();
-        for (_, stmt) in &body.stmts {
-            let op = match &stmt.kind {
-                StmtKind::Expr(op) | StmtKind::Let { value: op, .. } => *op,
-                _ => continue,
-            };
-            if let Some(e) = op.as_expr() {
-                statements.insert(e);
-            }
-        }
-        let mut reached = Self::default();
-        for e in &statements {
+        let performed = performed_exprs(body);
+        let mut reached = Self::collect(body, ctfe_builtins, callees, &performed);
+        for e in &performed {
             if let ExprKind::Assign { target, .. } = &body.exprs[*e].kind
                 && place_of(body, (*target).into()).is_some()
             {
                 reached.place_assigns.insert(*e);
             }
         }
-        reached.collect_builtin_borrows(body, ctfe_builtins, &statements);
-        reached.collect_call_borrows(body, callees, &statements);
         reached
     }
 
-    /// An ordinary walk performs nothing, so only the reads survive.
+    /// An ordinary walk performs nothing, so nothing it reaches is a write it
+    /// carries out. The reads are collected as [`Self::in_frame`] collects them:
+    /// what a statement-position write builtin reads is read wherever that
+    /// mention appears, whoever performs the write.
     pub(super) fn outside_frame(
         body: &Body,
         ctfe_builtins: Option<&CtfeBuiltinMap>,
         callees: Option<&CalleeMap>,
     ) -> Self {
-        let reads = Self::in_frame(body, ctfe_builtins, callees).reads;
         Self {
-            reads,
-            writes: IndexSet::default(),
-            place_assigns: IndexSet::default(),
+            reads: Self::collect(body, ctfe_builtins, callees, &performed_exprs(body)).reads,
+            ..Self::default()
         }
+    }
+
+    /// What the walk reaches, given the expressions it performs.
+    fn collect(
+        body: &Body,
+        ctfe_builtins: Option<&CtfeBuiltinMap>,
+        callees: Option<&CalleeMap>,
+        performed: &IndexSet<ExprId>,
+    ) -> Self {
+        let mut reached = Self::default();
+        reached.collect_builtin_borrows(body, ctfe_builtins, performed);
+        reached.collect_call_borrows(body, callees, performed);
+        reached
     }
 
     /// The engine models a builtin call exactly, so the destination it writes
@@ -73,7 +94,7 @@ impl Reached {
         &mut self,
         body: &Body,
         ctfe_builtins: Option<&CtfeBuiltinMap>,
-        statements: &IndexSet<ExprId>,
+        performed: &IndexSet<ExprId>,
     ) {
         let Some(map) = ctfe_builtins else {
             return;
@@ -91,7 +112,7 @@ impl Reached {
                 }
                 continue;
             }
-            if !statements.contains(&e) {
+            if !performed.contains(&e) {
                 continue;
             }
             for (i, arg) in args.iter().enumerate() {
@@ -110,7 +131,7 @@ impl Reached {
         &mut self,
         body: &Body,
         callees: Option<&CalleeMap>,
-        statements: &IndexSet<ExprId>,
+        performed: &IndexSet<ExprId>,
     ) {
         let Some(callees) = callees else {
             return;
@@ -133,10 +154,10 @@ impl Reached {
             if first_arg + args.len() != callee.arity() {
                 continue;
             }
-            let at_statement = statements.contains(&e);
+            let at_statement = performed.contains(&e);
             if let Some(receiver) = receiver {
-                match (callee.writes_receiver(), at_statement) {
-                    (false, _) if callee.reads_only(0) => {
+                match (callee.writes_param(RECEIVER), at_statement) {
+                    (false, _) if callee.reads_only(RECEIVER) => {
                         self.record(body, receiver, Reach::Read);
                     }
                     (true, true) => self.record(body, receiver, Reach::Write),
@@ -203,8 +224,7 @@ enum Reach {
 ///
 /// The read positions are listed rather than inferred from the absence of the
 /// others, so a node kind nobody taught this walk about costs a fold and never
-/// a wrong one. Under value semantics that list is long — returning, binding,
-/// storing and composing all copy.
+/// a wrong one.
 ///
 /// Only the reachable body is scanned: a mention an earlier rewrite orphaned
 /// cannot run, so it must not disqualify anything.

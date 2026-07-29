@@ -368,6 +368,58 @@ pub enum PatKind {
     },
 }
 
+/// A dense set of the local indices a [`Body`] declares.
+///
+/// Local indices are dense within a body (`0..locals.len()`), so this is the
+/// membership-only companion to `IndexSet<u32>`, without its allocation and
+/// hashing. Worth having because the analyses rebuild one per function on
+/// every optimizer iteration.
+#[derive(Default, Clone, Debug)]
+pub struct LocalSet {
+    words: Vec<u64>,
+}
+
+impl LocalSet {
+    /// An empty set pre-sized to hold `locals` indices without regrowing.
+    #[must_use]
+    pub fn with_capacity(locals: usize) -> Self {
+        Self {
+            words: vec![0; locals.div_ceil(64)],
+        }
+    }
+
+    fn slot(index: u32) -> (usize, u64) {
+        ((index / 64) as usize, 1u64 << (index % 64))
+    }
+
+    /// Insert `index`, returning `true` if it was not already present.
+    pub fn insert(&mut self, index: u32) -> bool {
+        let (word, mask) = Self::slot(index);
+        if word >= self.words.len() {
+            self.words.resize(word + 1, 0);
+        }
+        let newly = self.words[word] & mask == 0;
+        self.words[word] |= mask;
+        newly
+    }
+
+    /// Whether `index` is a member.
+    #[must_use]
+    pub fn contains(&self, index: u32) -> bool {
+        let (word, mask) = Self::slot(index);
+        self.words.get(word).is_some_and(|w| w & mask != 0)
+    }
+
+    /// Iterate members in ascending index order.
+    pub fn iter(&self) -> impl Iterator<Item = u32> + '_ {
+        self.words.iter().enumerate().flat_map(|(wi, &word)| {
+            (0..64u32)
+                .filter(move |&b| word & (1u64 << b) != 0)
+                .map(move |b| wi as u32 * 64 + b)
+        })
+    }
+}
+
 /// A NIR body in arena form: one `PrimaryMap` per node category, a `root`
 /// block, and the function-level facts later passes read beside the arena.
 #[derive(Debug, Clone)]

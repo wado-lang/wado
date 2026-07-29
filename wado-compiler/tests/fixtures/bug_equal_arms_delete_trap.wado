@@ -1,0 +1,36 @@
+// Collapsing an `if` (or `match`) whose arms are all the same constant deletes
+// the condition, so the condition must be one that can neither be observed nor
+// trap. A float-to-int cast lowers to the trapping `i32.trunc_f64_s`, and a
+// field read traps on a null reference — reordering either is fine, deleting it
+// erases a trap the program is entitled to observe.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn equal_arms_over_pure_condition(flag: bool) -> i32 {
+    if flag {
+        return 5;
+    } else {
+        return 5;
+    }
+}
+
+#[inline(never)]
+fn equal_arms_over_trapping_cast(huge: f64) -> i32 {
+    if (huge as i32) == 0 {
+        return 5;
+    } else {
+        return 5;
+    }
+}
+
+export fn run() with Stdout {
+    println(`${equal_arms_over_pure_condition(true)}`);
+    println(`${equal_arms_over_trapping_cast(1.0e30)}`);
+}
+
+__DATA__
+{
+    "stdout": "5\n",
+    "trapped": true,
+    "wir_not_expect:O2": ["equal_arms_over_pure_condition"]
+}

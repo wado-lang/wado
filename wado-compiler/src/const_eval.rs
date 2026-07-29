@@ -212,6 +212,67 @@ impl Value {
         !matches!(self, Self::Aggregate { .. } | Self::Seq { .. })
     }
 
+    /// Whether one value may stand in for the other — the question a rewrite
+    /// asks before replacing an expression, which is not the question `==`
+    /// answers.
+    ///
+    /// `PartialEq` models the program's own `==`, so it follows IEEE and holds
+    /// for `-0.0` and `0.0`. A program tells those apart (`1.0 / x` alone
+    /// does), so substituting either changes what it computes. Two NaNs are
+    /// equal under neither question, which leaves them out of reach.
+    #[must_use]
+    pub fn denotes_same(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Float {
+                    value: a,
+                    prim: a_prim,
+                },
+                Self::Float {
+                    value: b,
+                    prim: b_prim,
+                },
+            ) => a_prim == b_prim && a == b && a.is_sign_negative() == b.is_sign_negative(),
+            (
+                Self::Aggregate {
+                    type_id: a_type,
+                    fields: a_fields,
+                },
+                Self::Aggregate {
+                    type_id: b_type,
+                    fields: b_fields,
+                },
+            ) => {
+                a_type == b_type
+                    && a_fields.len() == b_fields.len()
+                    && a_fields.iter().zip(b_fields.iter()).all(
+                        |((a_index, a_value), (b_index, b_value))| {
+                            a_index == b_index && a_value.denotes_same(b_value)
+                        },
+                    )
+            }
+            (
+                Self::Seq {
+                    type_id: a_type,
+                    elements: a_elements,
+                },
+                Self::Seq {
+                    type_id: b_type,
+                    elements: b_elements,
+                },
+            ) => {
+                a_type == b_type
+                    && a_elements.len() == b_elements.len()
+                    && a_elements
+                        .iter()
+                        .zip(b_elements.iter())
+                        .all(|(a, b)| a.denotes_same(b))
+            }
+            (Self::Int { .. } | Self::Bool(_) | Self::Char(_), _) => self == other,
+            (Self::Float { .. } | Self::Aggregate { .. } | Self::Seq { .. }, _) => false,
+        }
+    }
+
     /// Returns the raw integer bit pattern, or `None` if not an int.
     #[must_use]
     pub fn as_int(&self) -> Option<(u64, PrimitiveType)> {
@@ -394,7 +455,7 @@ pub(crate) fn eval_cast(source: Value, target: PrimitiveType) -> Option<Value> {
         } if target == PrimitiveType::Char => Some(Value::Char(char::from(value as u8))),
 
         Value::Float { value, prim } if float_target => Some(float_to_float(value, prim, target)),
-        Value::Float { value, prim } if int_target => Some(float_to_int(value, prim, target)),
+        Value::Float { value, prim } if int_target => float_to_int(value, prim, target),
 
         Value::Bool(b) if int_target => Some(Value::Int {
             value: u64::from(b),
@@ -476,45 +537,61 @@ pub(crate) fn float_to_float(value: f64, prim: PrimitiveType, target: PrimitiveT
     }
 }
 
-/// Float → integer with Wasm `trunc_sat` semantics: NaN ↦ 0, ±∞ saturate
-/// to the target's MIN/MAX, finite values truncate toward zero with
-/// saturation. Rust's `as` since 1.45 matches this exactly, so we
-/// dispatch through it for the source/target widths that map directly.
+/// The integer a float → int cast produces, or `None` where the cast traps.
 ///
-/// Caller guarantees `target` is one of the i8..u64 primitives (the
-/// dispatch in [`eval_cast`] enforces this); panics otherwise to flag
-/// a bug rather than fabricate a zero.
-pub(crate) fn float_to_int(value: f64, prim: PrimitiveType, target: PrimitiveType) -> Value {
-    // For F32 sources the stored f64 is bit-equivalent to the original
-    // f32, but the truncation must be performed at f32 precision to
-    // match the runtime cast — large magnitudes saturate sooner. Cast
-    // back through f32 first when needed; otherwise the f64 path is a
-    // no-op widening and the same code computes the answer.
-    let raw = match prim {
-        PrimitiveType::F32 => trunc_sat_to_int(f64::from(value as f32), target),
-        _ => trunc_sat_to_int(value, target),
+/// `target` must be one of the i8..u64 primitives, as [`eval_cast`]'s dispatch
+/// guarantees; anything else panics rather than fabricate a value.
+///
+/// An F32 source truncates at f32 precision to match the runtime cast; the
+/// stored f64 is bit-equivalent, so the f64 path is a no-op widening otherwise.
+pub(crate) fn float_to_int(
+    value: f64,
+    prim: PrimitiveType,
+    target: PrimitiveType,
+) -> Option<Value> {
+    let value = match prim {
+        PrimitiveType::F32 => f64::from(value as f32),
+        _ => value,
     };
-    Value::Int {
-        value: truncate_int(raw, target),
+    Some(Value::Int {
+        value: truncate_int(trunc_to_int(value, target)?, target),
         prim: target,
-    }
+    })
 }
 
-/// Saturating float → int conversion, dispatched by target width.
-/// Operates on f64 since every f32 fits exactly; the caller is
-/// responsible for narrowing to f32 precision first when the source
-/// type was F32.
-pub(crate) fn trunc_sat_to_int(value: f64, target: PrimitiveType) -> u64 {
+/// The trapping float → int truncation wasm performs, as the sign- or
+/// zero-extended bit pattern of the intermediate. `None` where it traps: a NaN,
+/// an infinity, or a truncation that leaves the intermediate's range.
+///
+/// The intermediate is what decides both, and it is not the target: a cast to a
+/// narrower integer truncates through i32 and wraps the result down, so
+/// `300.7 as i8` is 44 rather than the saturated 127.
+fn trunc_to_int(value: f64, target: PrimitiveType) -> Option<u64> {
+    if !value.is_finite() {
+        return None;
+    }
+    let truncated = value.trunc();
     match target {
-        PrimitiveType::I8 => i64::from(value as i8) as u64,
-        PrimitiveType::I16 => i64::from(value as i16) as u64,
-        PrimitiveType::I32 => i64::from(value as i32) as u64,
-        PrimitiveType::I64 => value as i64 as u64,
-        PrimitiveType::U8 => u64::from(value as u8),
-        PrimitiveType::U16 => u64::from(value as u16),
-        PrimitiveType::U32 => u64::from(value as u32),
-        PrimitiveType::U64 => value as u64,
-        _ => panic!("trunc_sat_to_int: non-integer target {target:?}"),
+        PrimitiveType::I8 | PrimitiveType::I16 | PrimitiveType::I32 => (-2_147_483_648.0
+            ..=2_147_483_647.0)
+            .contains(&truncated)
+            .then_some(i64::from(truncated as i32) as u64),
+        PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 => (0.0..=4_294_967_295.0)
+            .contains(&truncated)
+            .then_some(u64::from(truncated as u32)),
+        PrimitiveType::I64 => (-9_223_372_036_854_775_808.0..9_223_372_036_854_775_808.0)
+            .contains(&truncated)
+            .then_some(truncated as i64 as u64),
+        PrimitiveType::U64 => (0.0..18_446_744_073_709_551_616.0)
+            .contains(&truncated)
+            .then_some(truncated as u64),
+        PrimitiveType::F32
+        | PrimitiveType::F64
+        | PrimitiveType::Bool
+        | PrimitiveType::Char
+        | PrimitiveType::I128
+        | PrimitiveType::U128
+        | PrimitiveType::V128 => panic!("trunc_to_int: non-integer target {target:?}"),
     }
 }
 

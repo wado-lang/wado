@@ -4,21 +4,26 @@
 //! engine cannot tell. The third is what keeps a match alive — an undecided arm
 //! binds nothing knowable, and the implicit no-match trap has to survive.
 
-use crate::const_eval::Value;
+use crate::const_eval::{Value, is_int_prim, is_signed_int};
 use crate::nir::NirLiteralPattern;
 use crate::nir_arena::{Body, PatId, PatKind};
+use crate::tir::PrimitiveType;
 
-use super::{
-    Interpreter, PatBindings, PatternMatch, bool_to_match, int_value_matches_i128,
-    int_value_matches_u128, range_matches_int,
-};
+use super::{Interpreter, PatBindings};
 
 impl Interpreter<'_> {
     /// Whether `value` matches `pat`, recording into `binds` the locals the
     /// pattern binds and the sub-values they take. `binds` is only meaningful
     /// on [`PatternMatch::Yes`]; a rejected alternative may have left entries
     /// behind.
-    pub(super) fn pattern_matches_a(
+    ///
+    /// An `Or` alternative preceded by an undecided one binds nothing: the
+    /// earlier alternative is tried first at run time and would bind from its
+    /// own positions.
+    ///
+    /// A tuple rest (`(a, ..)`) leaves its trailing sub-patterns without a
+    /// fixed element index, so only the exact-arity form is decided.
+    pub(super) fn pattern_matches(
         &self,
         body: &Body,
         value: &Value,
@@ -55,11 +60,8 @@ impl Interpreter<'_> {
                 let mut any_unknown = false;
                 for alt in alts {
                     let mut alt_binds = PatBindings::new();
-                    match self.pattern_matches_a(body, value, *alt, &mut alt_binds) {
+                    match self.pattern_matches(body, value, *alt, &mut alt_binds) {
                         PatternMatch::Yes => {
-                            // Alternatives are tried in order at run time, so an
-                            // undecided earlier one may be the one that matches
-                            // — and it would bind from its own positions.
                             if any_unknown && !alt_binds.is_empty() {
                                 return PatternMatch::Unknown;
                             }
@@ -101,7 +103,7 @@ impl Interpreter<'_> {
                 _ => PatternMatch::No,
             },
             PatKind::ConstantValue { expr } => {
-                match self.operand_to_lattice_a(body, *expr).as_const() {
+                match self.operand_to_lattice(body, *expr).as_const() {
                     Some(v) if &v == value => PatternMatch::Yes,
                     Some(_) => PatternMatch::No,
                     None => PatternMatch::Unknown,
@@ -113,8 +115,6 @@ impl Interpreter<'_> {
                 fields.iter().map(|f| (f.field_index, f.pattern)),
                 binds,
             ),
-            // A tuple rest (`(a, ..)`) leaves the trailing sub-patterns without
-            // a fixed element index, so only the exact-arity form is modelled.
             PatKind::Tuple(pats, has_rest) if !*has_rest => self.all_fields_match(
                 body,
                 value,
@@ -148,7 +148,7 @@ impl Interpreter<'_> {
             let Some(field_value) = value.field(field_index) else {
                 return PatternMatch::Unknown;
             };
-            match self.pattern_matches_a(body, field_value, pat, binds) {
+            match self.pattern_matches(body, field_value, pat, binds) {
                 PatternMatch::No => return PatternMatch::No,
                 PatternMatch::Unknown => any_unknown = true,
                 PatternMatch::Yes => {}
@@ -159,5 +159,97 @@ impl Interpreter<'_> {
         } else {
             PatternMatch::Yes
         }
+    }
+}
+
+/// Outcome of testing a pattern against a constant scrutinee.
+///
+/// `Yes` makes every later arm an infeasible edge, `No` makes this arm one, and
+/// `Unknown` leaves the arm in play — it joins with all later arms.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum PatternMatch {
+    Yes,
+    No,
+    Unknown,
+}
+
+pub(super) fn bool_to_match(b: bool) -> PatternMatch {
+    if b {
+        PatternMatch::Yes
+    } else {
+        PatternMatch::No
+    }
+}
+
+/// Whether a (raw bits, prim) integer equals a signed pattern literal, under
+/// the prim's signedness.
+pub(super) fn int_value_matches_i128(value: u64, prim: PrimitiveType, pat: i128) -> bool {
+    let Some(v) = int_value_as_i128(value, prim) else {
+        return false;
+    };
+    v == pat
+}
+
+/// Whether a (raw bits, prim) integer equals an unsigned pattern literal. A
+/// negative signed value matches nothing.
+pub(super) fn int_value_matches_u128(value: u64, prim: PrimitiveType, pat: u128) -> bool {
+    if is_signed_int(prim) {
+        let v = value as i64;
+        if v < 0 {
+            return false;
+        }
+        u128::from(v as u64) == pat
+    } else {
+        u128::from(value) == pat
+    }
+}
+
+/// A (raw bits, prim) integer widened to i128, sign- or zero-extending per the
+/// prim's signedness. `None` for a non-integer prim.
+pub(super) fn int_value_as_i128(value: u64, prim: PrimitiveType) -> Option<i128> {
+    if !is_int_prim(prim) {
+        return None;
+    }
+    if is_signed_int(prim) {
+        Some(i128::from(value as i64))
+    } else {
+        Some(i128::from(value))
+    }
+}
+
+/// The i128 a range test compares in: zero-extended where the value is
+/// unsigned, sign-extended otherwise. `None` for a negative signed value
+/// against an unsigned-typed range, whose bounds start at zero or higher.
+fn range_comparison_value(value: u64, prim: PrimitiveType, is_unsigned_pat: bool) -> Option<i128> {
+    if !is_signed_int(prim) {
+        return Some(i128::from(value));
+    }
+    if !is_unsigned_pat {
+        return Some(i128::from(value as i64));
+    }
+    let signed = i128::from(value as i64);
+    (signed >= 0).then_some(signed)
+}
+
+/// Whether a (raw bits, prim) integer falls inside a range pattern. `false` for
+/// a non-integer prim.
+pub(super) fn range_matches_int(
+    value: u64,
+    prim: PrimitiveType,
+    start: i128,
+    end: i128,
+    inclusive: bool,
+    is_unsigned_pat: bool,
+) -> bool {
+    if !is_int_prim(prim) {
+        return false;
+    }
+    let Some(v) = range_comparison_value(value, prim, is_unsigned_pat) else {
+        return false;
+    };
+    if inclusive {
+        v >= start && v <= end
+    } else {
+        v >= start && v < end
     }
 }

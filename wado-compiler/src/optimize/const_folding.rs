@@ -5,7 +5,7 @@
 //! reduction logic (literal folding, integer cast collapsing,
 //! short-circuit identity rules, env-aware local lookup) lives in
 //! [`crate::niri`]; this module is only the visitor glue that drives
-//! `reduce_local_a` across function bodies and feeds the interpreter's
+//! `reduce_local` across function bodies and feeds the interpreter's
 //! local-variable env from `Let` / `Assign` statements.
 //!
 //! This walker tracks only scalar local lattices; reaching-def of a struct
@@ -14,8 +14,8 @@
 //! are recorded [`Lattice::NonConst`] up front.
 //!
 //! The visitor mutates the arena `Body` directly: the per-node rewrites
-//! (`reduce_local_a`) and the block-level branch splice
-//! (`reduce_local_block_a`) operate on arena ids. Global initializers are
+//! (`reduce_local`) and the block-level branch splice
+//! (`reduce_local_block`) operate on arena ids. Global initializers are
 //! arena `ExprBody`s too, so the global env / global-field env are read from
 //! them via the arena interpreter path.
 //!
@@ -172,7 +172,7 @@ fn fold_function(
 
 /// Engine rule: environment-free constant folding.
 ///
-/// Runs the [`Interpreter::const_fold_kind_a`] subset — literal arithmetic and
+/// Runs the [`Interpreter::const_fold_value`] subset — literal arithmetic and
 /// pure CTFE — over the worklist rewrite engine, applying each fold through the
 /// engine's edit API so the parent map and use index stay coherent. The
 /// program-wide [`CalleeMap`] is installed; the per-function `env` stays empty,
@@ -180,7 +180,7 @@ fn fold_function(
 /// constant-branch collapse) remain with the standalone [`fold_constants`]
 /// walker that still runs once per fixed-point iteration.
 ///
-/// `const_fold_kind_a` needs `&mut Interpreter` (CTFE advances the call stack
+/// `const_fold_value` needs `&mut Interpreter` (CTFE advances the call stack
 /// and step budget), but [`Rule::apply_expr`] is `&self`, so the interpreter
 /// lives behind a [`RefCell`].
 pub(super) struct ConstFoldRule<'a> {
@@ -207,7 +207,7 @@ impl Rule for ConstFoldRule<'_> {
         let Some(value) = self
             .interpreter
             .borrow_mut()
-            .const_fold_value_a(engine.body, id)
+            .const_fold_value(engine.body, id)
         else {
             return false;
         };
@@ -333,7 +333,7 @@ pub(super) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
 /// out of the map (absent → `Lattice::Unevaluated` by default).
 ///
 /// Global initializers are arena `ExprBody`s, so this reduces them on the
-/// arena [`Interpreter::reduce_to_lattice_a`] path.
+/// arena [`Interpreter::reduce_to_lattice`] path.
 fn build_global_env(
     project: &NirPackage,
     type_table: &TypeTable,
@@ -355,8 +355,8 @@ fn build_global_env(
                 interp.with_globals(&env);
                 let body = declared.body();
                 match declared.expr() {
-                    Operand::Expr(e) => interp.reduce_to_lattice_a(body, e),
-                    op @ Operand::Value(_) => interp.operand_to_lattice_a(body, op),
+                    Operand::Expr(e) => interp.reduce_to_lattice(body, e),
+                    op @ Operand::Value(_) => interp.operand_to_lattice(body, op),
                 }
             }
         };
@@ -368,19 +368,19 @@ fn build_global_env(
 }
 
 /// The integer value of an operand — a promoted `ValueKind::Int` in the pool.
-fn operand_int_a(body: &Body, op: Operand) -> Option<u64> {
+fn operand_int(body: &Body, op: Operand) -> Option<u64> {
     body.operand_const_int(op)
 }
 
-fn const_seq_len_operand_a(body: &Body, op: Operand) -> Option<i32> {
-    op.as_expr().and_then(|e| const_seq_len_a(body, e))
+fn const_seq_len_operand(body: &Body, op: Operand) -> Option<i32> {
+    op.as_expr().and_then(|e| const_seq_len(body, e))
 }
 
-fn tail_local_a(body: &Body, op: Operand) -> Option<u32> {
+fn tail_local(body: &Body, op: Operand) -> Option<u32> {
     match &body.exprs[op.as_expr()?].kind {
         ExprKind::Local { index, .. } => Some(*index),
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            tail_local_a(body, *inner)
+            tail_local(body, *inner)
         }
         _ => None,
     }
@@ -391,7 +391,7 @@ fn tail_local_a(body: &Body, op: Operand) -> Option<u32> {
 /// in the arena. Used by [`SeqLenCollector`] to read the value of an
 /// inline `GlobalVarSet(X, <const>)` directly from the function's arena
 /// body.
-fn const_seq_len_a(body: &Body, e: ExprId) -> Option<i32> {
+fn const_seq_len(body: &Body, e: ExprId) -> Option<i32> {
     match &body.exprs[e].kind {
         ExprKind::ArrayLiteral { elements } => i32::try_from(elements.len()).ok(),
         ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
@@ -408,10 +408,10 @@ fn const_seq_len_a(body: &Body, e: ExprId) -> Option<i32> {
                 StmtKind::Break { value: Some(v), .. } => *v,
                 _ => return None,
             };
-            if let Some(len) = const_seq_len_operand_a(body, tail) {
+            if let Some(len) = const_seq_len_operand(body, tail) {
                 return Some(len);
             }
-            let index = tail_local_a(body, tail)?;
+            let index = tail_local(body, tail)?;
             // Stop at the nearest (last) `let` of `index`: it shadows any earlier
             // binding. If that binding is non-const, the length is unknown —
             // scanning past it to an earlier const `let` would return a stale
@@ -422,18 +422,18 @@ fn const_seq_len_a(body: &Body, e: ExprId) -> Option<i32> {
             let StmtKind::Let { value, .. } = &body.stmts[*nearest].kind else {
                 unreachable!("`nearest` matched a `let` of `index` above")
             };
-            const_seq_len_operand_a(body, *value)
+            const_seq_len_operand(body, *value)
         }
         ExprKind::StructLiteral { fields, .. } => fields.iter().find_map(|f| {
             if f.name == SeqField::Len.field_name()
-                && let Some(value) = operand_int_a(body, f.value)
+                && let Some(value) = operand_int(body, f.value)
             {
                 return i32::try_from(value).ok();
             }
             None
         }),
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            const_seq_len_operand_a(body, *inner)
+            const_seq_len_operand(body, *inner)
         }
         _ => None,
     }
@@ -481,7 +481,7 @@ fn build_global_view(project: &NirPackage, type_table: &TypeTable, maps: &FoldMa
         if !global.wado_mutable
             && let Some(declared) = global.init.declared()
             && let Some(init_e) = declared.expr().as_expr()
-            && let Some(n) = const_seq_len_a(declared.body(), init_e)
+            && let Some(n) = const_seq_len(declared.body(), init_e)
         {
             record_seq_len(
                 &mut view.fields,
@@ -685,7 +685,7 @@ impl GlobalStoreCollector<'_> {
     }
 
     fn record_store(&mut self, body: &Body, key: GlobalKey, value: Operand) {
-        if let Some(n) = const_seq_len_operand_a(body, value) {
+        if let Some(n) = const_seq_len_operand(body, value) {
             record_seq_len(self.fields, key.clone(), n);
         }
         let mut interpreter = Interpreter::new(self.type_table);
@@ -695,7 +695,7 @@ impl GlobalStoreCollector<'_> {
         // A store whose value does not reduce says the global is not a constant
         // — joining it as `NonConst` keeps a sibling store from speaking for the
         // whole global.
-        let stored = match interpreter.operand_to_lattice_a(body, value) {
+        let stored = match interpreter.operand_to_lattice(body, value) {
             constant @ Lattice::Const(_) => constant,
             Lattice::NonConst | Lattice::Unevaluated => Lattice::NonConst,
         };
@@ -754,7 +754,7 @@ impl ConstFoldVisitor<'_> {
         for s in stmts {
             changed |= self.visit_stmt(engine, s);
         }
-        changed |= self.interpreter.reduce_local_block_via(
+        changed |= self.interpreter.reduce_local_block(
             &mut EngineSink {
                 engine: &mut *engine,
             },
@@ -949,7 +949,7 @@ impl ConstFoldVisitor<'_> {
 
     /// Commit a single-node niri rewrite at `e` through the engine.
     fn reduce_local(&mut self, engine: &mut Engine, e: ExprId) -> bool {
-        self.interpreter.reduce_local_via(
+        self.interpreter.reduce_local(
             &mut EngineSink {
                 engine: &mut *engine,
             },
@@ -1052,8 +1052,8 @@ impl ConstFoldVisitor<'_> {
             Lattice::NonConst
         } else {
             match value {
-                Operand::Expr(e) => self.interpreter.reduce_to_lattice_a(body, e),
-                Operand::Value(_) => self.interpreter.operand_to_lattice_a(body, value),
+                Operand::Expr(e) => self.interpreter.reduce_to_lattice(body, e),
+                Operand::Value(_) => self.interpreter.operand_to_lattice(body, value),
             }
         };
         // Drop any prior knowledge keyed by this index (rare — a fresh

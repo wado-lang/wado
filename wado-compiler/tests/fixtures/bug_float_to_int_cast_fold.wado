@@ -1,0 +1,35 @@
+// A float-to-int cast lowers to the trapping `trunc` family over an i32 or i64
+// intermediate, and reaches a narrower target by wrapping that result. Folding
+// it as a saturating conversion made the constant disagree with the runtime on
+// both counts: `300.7 as i8` gave 127 rather than 44, and a value outside the
+// intermediate's range gave a number where the program traps.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn to_i8(f: f64) -> i8 {
+    return f as i8;
+}
+
+#[inline(never)]
+fn to_u8(f: f64) -> u8 {
+    return f as u8;
+}
+
+#[inline(never)]
+fn to_i32(f: f64) -> i32 {
+    return f as i32;
+}
+
+export fn run() with Stdout {
+    println(`${to_i8(300.7)}`);
+    println(`${to_i32(-7.9)}`);
+    println(`${to_i32(2147483647.0)}`);
+    println(`${to_u8(300.7)}`);
+    println(`${to_u8(-1.0)}`);
+}
+
+__DATA__
+{
+    "stdout": "44\n-7\n2147483647\n44\n",
+    "trapped": true
+}
