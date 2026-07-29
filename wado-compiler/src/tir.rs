@@ -3533,12 +3533,17 @@ impl TypeTable {
             // the module collapses them onto one identity — the hazard
             // `mangle_type_arg_for_generic` documents, reached from here as
             // well.
+            // The identity every mangled name embeds, so the rendered
+            // spelling: each instantiation is its own type.
             ResolvedType::Struct {
-                decl_name: name,
+                decl_name,
                 module_source,
-                ..
-            }
-            | ResolvedType::Enum {
+                type_args,
+            } => TypeNameInfo::Named(format!(
+                "{module_source}/{}",
+                self.struct_rendered_name(decl_name, type_args)
+            )),
+            ResolvedType::Enum {
                 name,
                 module_source,
                 ..
