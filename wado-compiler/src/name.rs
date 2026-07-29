@@ -396,8 +396,8 @@ impl fmt::Display for FreeFunctionName {
 /// A method name on a struct.
 ///
 /// Format:
-/// - Without trait: `{filename}/{struct_name}::{method_name}`
-/// - With trait: `{module_source}/{struct_name}^{trait_name}::{method_name}`
+/// - Without trait: `{struct_name}::{method_name}`
+/// - With trait: `{struct_name}^{trait_name}::{method_name}`
 ///
 /// Examples:
 /// - `./geometry.wado/Point::sum`
@@ -493,23 +493,11 @@ impl MethodName {
 }
 
 impl fmt::Display for MethodName {
+    /// The receiver already names the module that declares it, so nothing is
+    /// prefixed here. [`Self::module_source`] — where the *impl* lives, which
+    /// need not be the receiver's module — is printed by whoever needs it.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Every module is qualified the same way; the entry point contributes
-        // its base name like any other module.
-        let prefix = format!("{}/", self.module_source.to_path_string());
-
-        match &self.trait_name {
-            Some(trait_name) => {
-                write!(
-                    f,
-                    "{}{}^{}::{}",
-                    prefix, self.struct_name, trait_name, self.method_name
-                )
-            }
-            None => {
-                write!(f, "{}{}::{}", prefix, self.struct_name, self.method_name)
-            }
-        }
+        f.write_str(&self.local_name())
     }
 }
 
@@ -1980,9 +1968,10 @@ mod tests {
     #[test]
     fn test_method_name_to_string_simple() {
         let mut interner = ModuleSourceInterner::new();
+        let module = interner.local("./geometry.wado");
         let method = MethodName::new(
-            interner.local("./geometry.wado"),
-            "Point".to_string(),
+            module.clone(),
+            FqTypeName::declared(&module, "Point"),
             None,
             "sum".to_string(),
         );
@@ -1992,9 +1981,10 @@ mod tests {
     #[test]
     fn test_method_name_to_string_with_trait() {
         let mut interner = ModuleSourceInterner::new();
+        let module = interner.local("./geometry.wado");
         let method = MethodName::new(
-            interner.local("./geometry.wado"),
-            "Point".to_string(),
+            module.clone(),
+            FqTypeName::declared(&module, "Point"),
             Some("Display".to_string()),
             "fmt".to_string(),
         );
@@ -2271,7 +2261,7 @@ mod tests {
         assert_eq!(mutable.mangle(&["List<i32>".into()]), "&mut List<i32>");
         // Named receivers fall through to mangle_generic_name.
         assert_eq!(
-            Receiver::Type("List".into()).mangle(&["i32".into()]),
+            Receiver::Type(FqTypeName::builtin("List")).mangle(&["i32".into()]),
             "List<i32>"
         );
     }

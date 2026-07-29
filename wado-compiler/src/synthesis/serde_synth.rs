@@ -599,7 +599,7 @@ fn type_param_method_call(
         i
     } else {
         let mut i = LocalMethodName::with_method_type_args(
-            struct_name.to_string(),
+            FqTypeName::binder(struct_name),
             Some(trait_name.to_string()),
             method_name.to_string(),
             method_type_args,
@@ -987,7 +987,10 @@ fn default_value_for_type(
             "default".to_string(),
         );
     if !type_args.is_empty() {
-        let arg_names: Vec<String> = type_args.iter().map(|t| type_table.type_name(*t)).collect();
+        let arg_names: Vec<FqTypeName> = type_args
+            .iter()
+            .map(|t| type_table.fq_type_name(*t))
+            .collect();
         method_info = method_info.with_type_args(&arg_names, &[]);
     }
     let mangled_name = method_info.to_mangled_name();
@@ -1990,7 +1993,7 @@ fn byte_slice_method_call(
         None,
         name.to_string(),
     )
-    .with_struct_type_args(&["u8".to_string()]);
+    .with_struct_type_args(&[FqTypeName::builtin("u8")]);
     let monomorph_info = crate::tir::MonomorphInfo {
         generic_name: method_info.base_struct_name(),
         impl_type_args: vec![TypeTable::U8],
@@ -3461,7 +3464,7 @@ fn generate_flags_serialize(
             &names.serialize_seq,
             &names.m_serialize_seq_element,
             serde_module.clone(),
-            vec![string_struct_name.as_str().to_string()],
+            vec![string_struct_name.to_mangled()],
             vec![string_type],
             vec![ref_expr(
                 string_lit(member_name, string_type, span),
@@ -3696,7 +3699,7 @@ fn generate_flags_deserialize(
         &names.deserialize_seq,
         &names.m_deserialize_seq_next_element,
         serde_module.clone(),
-        vec![string_struct_name.as_str().to_string()],
+        vec![string_struct_name.to_mangled()],
         vec![string_type],
         vec![],
         result_option_string_err,

@@ -6,7 +6,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirField, TirStruct, TirStructField,
     TypeId, TypeTable,

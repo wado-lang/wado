@@ -7,7 +7,7 @@ use crate::ast::{self, Item, Type};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
-use crate::name::{Receiver, RefKind};
+use crate::name::{FqTypeName, Receiver, RefKind};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -988,7 +988,7 @@ impl TypeSystem {
             return self.find_trait_impl_for_type(
                 ctx,
                 scope,
-                &Receiver::Type(type_name),
+                &Receiver::Type(FqTypeName::builtin(&type_name)),
                 trait_name,
             );
         }
@@ -1022,7 +1022,7 @@ impl TypeSystem {
                 && self.has_real_trait_impl_for_type(
                     ctx,
                     scope,
-                    &Receiver::Type(name.clone()),
+                    &Receiver::Type(FqTypeName::of_head(module_source, name)),
                     trait_name,
                 );
             if !serde_blocked
@@ -1118,19 +1118,34 @@ impl TypeSystem {
 
         // Get the type name and type args for looking up implementations
         let (type_name, type_args) = match &resolved {
-            ResolvedType::Struct { name, .. }
-            | ResolvedType::Enum { name, .. }
-            | ResolvedType::Variant { name, .. } => (name.clone(), None),
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Enum {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Variant {
+                name,
+                module_source,
+                ..
+            } => (FqTypeName::of_head(module_source, name), None),
             // The raw GC array `Array<T>` carries its element as a single type
             // arg, so trait impls (`impl IntoIterator for Array<T>`) resolve
             // under the canonical name "Array".
-            ResolvedType::BuiltinArray(elem) => {
-                (TypeTable::ARRAY_TYPE_NAME.to_string(), Some(vec![*elem]))
-            }
+            ResolvedType::BuiltinArray(elem) => (
+                FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME),
+                Some(vec![*elem]),
+            ),
             ResolvedType::GenericInstance {
-                name, type_args, ..
+                name,
+                type_args,
+                module_source,
             } => (
-                name.clone(),
+                FqTypeName::of_head(module_source, name),
                 if type_args.is_empty() {
                     None
                 } else {
@@ -1179,13 +1194,16 @@ impl TypeSystem {
                 return bounds.iter().any(|b| b == trait_name);
             }
             ResolvedType::Newtype {
-                name, base_type, ..
+                name,
+                base_type,
+                module_source,
+                ..
             } => {
                 // Check for a direct impl on the newtype first (e.g., impl Describe for Meters)
                 if self.find_trait_impl_for_type(
                     ctx,
                     scope,
-                    &Receiver::Type(name.clone()),
+                    &Receiver::Type(FqTypeName::of_head(module_source, name)),
                     trait_name,
                 ) {
                     return true;
@@ -1194,11 +1212,14 @@ impl TypeSystem {
                 let base_id = *base_type;
                 return self.type_implements_trait(ctx, scope, base_id, trait_name);
             }
-            ResolvedType::Flags { name, .. } => {
+            ResolvedType::Flags {
+                name,
+                module_source,
+            } => {
                 if self.find_trait_impl_for_type(
                     ctx,
                     scope,
-                    &Receiver::Type(name.clone()),
+                    &Receiver::Type(FqTypeName::of_head(module_source, name)),
                     trait_name,
                 ) {
                     return true;
@@ -1860,21 +1881,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (type_name, concrete_type_args) = {
             let tt = self.tysys.type_table.borrow();
             let effective_id = tt.get_ultimate_base_type(concrete_type_id);
-            let list_name = tt
-                .compiler_struct_name(crate::compiler_item::CompilerItem::List)
-                .to_string();
+            let list_name = tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::List);
             match tt.get(effective_id).clone() {
-                ResolvedType::GenericInstance {
-                    name, type_args, ..
-                } => (name, type_args),
-                ResolvedType::Struct { name, .. } => (name, vec![]),
-                ResolvedType::BuiltinArray(elem) => (list_name, vec![elem]),
+                ResolvedType::GenericInstance { type_args, .. } => {
+                    (tt.fq_type_name(effective_id).head_only(), type_args)
+                }
                 // Primitives (`i32`, `f64`, `bool`, ...) can implement traits
                 // with associated types just like structs. Without this arm,
                 // a generic call like `parse_range::<i32>(...)` would skip
                 // the `i32::Err = ParseIntError` registration and leave
                 // `T::Err` unresolved at the caller's binding site.
-                ResolvedType::Primitive(p) => (p.as_str().to_string(), vec![]),
+                ResolvedType::Struct { .. } | ResolvedType::Primitive(_) => {
+                    (tt.fq_type_name(effective_id), vec![])
+                }
+                ResolvedType::BuiltinArray(elem) => (list_name, vec![elem]),
                 _ => return,
             }
         };

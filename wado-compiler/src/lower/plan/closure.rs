@@ -182,17 +182,10 @@ fn make_call_method_args(args: Vec<TirExpr>, call_method: &TirFunction) -> Vec<C
 /// method name.
 fn build_specialized_method_info(info: &LocalMethodName, functor_suffix: &str) -> LocalMethodName {
     LocalMethodName {
-        struct_name: info.struct_name.clone(),
-        receiver: info.receiver.clone(),
-        trait_name: info.trait_name.clone(),
-        base_trait_name: info.base_trait_name.clone(),
-        base_trait_module: info.base_trait_module.clone(),
-        trait_type_args: info.trait_type_args.clone(),
         method_name: format!("{}{}", info.full_method_name(), functor_suffix),
         method_type_args: Vec::new(),
-        is_type_param_receiver: info.is_type_param_receiver,
         is_ref_impl: false,
-        cm_name: info.cm_name.clone(),
+        ..info.clone()
     }
 }
 

@@ -4,7 +4,7 @@ use super::trait_env::ImplTargetKey;
 use crate::ast::{self, AstId, Item};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirExpr, TirExprKind, TypeId,
     TypeTable,

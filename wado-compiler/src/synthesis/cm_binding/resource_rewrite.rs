@@ -17,7 +17,7 @@ use crate::ast::{AstId, NamedType, Type};
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{LocalMethodName, Receiver};
+use crate::name::LocalMethodName;
 use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
@@ -223,7 +223,6 @@ fn synthesize_record_stream_read_func(
     synthesize_stream_read_func(
         record_stream_read_func_name(&elem_name),
         format!("stream-read:{cm_record_name}"),
-        &elem_name,
         elem_type_id,
         array_type_id,
         elem_size,
@@ -1156,16 +1155,13 @@ fn record_stream_read_func_name(elem_name: &str) -> String {
 }
 
 /// Shared stream-read loop generator. `func_name` / `stream_read_name` /
-/// `payload_ast` / `cm_package` / `elem_inst_name` are precomputed by the
-/// caller so this body serves both the WASI-record path
-/// ([`synthesize_record_stream_reads`]) and the value-payload path
-/// ([`synthesize_stream_reads`]). `elem_inst_name` is the type name used to
-/// instantiate `List<…>` for the result builder.
+/// `payload_ast` / `cm_package` are precomputed by the caller so this body
+/// serves both the WASI-record path ([`synthesize_record_stream_reads`]) and
+/// the value-payload path ([`synthesize_stream_reads`]).
 #[allow(clippy::too_many_arguments)]
 fn synthesize_stream_read_func(
     func_name: String,
     stream_read_name: String,
-    elem_inst_name: &str,
     elem_type_id: TypeId,
     array_type_id: TypeId,
     elem_size: i32,
@@ -1182,6 +1178,12 @@ fn synthesize_stream_read_func(
     // `List` is a declaration, so the receiver its methods are named after
     // carries the module that declares it.
     let list_fq = crate::name::FqTypeName::declared(&ModuleSource::list(), &list_struct_name);
+    let elem_fq = type_table.borrow().fq_type_name(elem_type_id);
+    // `List<Elem>::<method>` — the instantiated receiver both calls hang off.
+    let list_method = |method: &str| {
+        LocalMethodName::new(list_fq.clone(), None, method.to_string())
+            .with_struct_type_args(std::slice::from_ref(&elem_fq))
+    };
 
     let mut next_local: u32 = 0;
     let mut locals: Vec<TirLocal> = Vec::new();
@@ -1291,30 +1293,19 @@ fn synthesize_stream_read_func(
     );
 
     // Create empty array via List<T>::with_capacity(count)
+    let with_capacity = list_method("with_capacity");
     let empty_arr = TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
                 module_source: ModuleSource::list(),
-                name: format!("{list_fq}<{elem_inst_name}>::with_capacity"),
+                name: with_capacity.to_mangled_name(),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: format!("{list_fq}::with_capacity"),
                     impl_type_args: vec![elem_type_id],
                     method_type_args: vec![],
                     is_blanket: false,
                 }),
-                method_info: Some(LocalMethodName {
-                    struct_name: format!("{list_fq}<{elem_inst_name}>"),
-                    receiver: Receiver::Type(list_fq.as_str().to_string()),
-                    trait_name: None,
-                    base_trait_name: None,
-                    base_trait_module: None,
-                    trait_type_args: vec![],
-                    method_name: "with_capacity".to_string(),
-                    method_type_args: vec![],
-                    is_type_param_receiver: false,
-                    is_ref_impl: false,
-                    cm_name: None,
-                }),
+                method_info: Some(with_capacity),
             },
             type_args: vec![],
             args: vec![CallArg::new(
@@ -1399,31 +1390,20 @@ fn synthesize_stream_read_func(
     );
     loop_body_stmts.push(let_stmt("elem", elem_idx, elem_type_id, lifted_elem));
 
+    let push = list_method("push");
     let push_call = TirExpr::new(
         TirExprKind::method_call(
             Box::new(local_ref(arr_idx, "arr", array_type_id)),
             FunctionRef {
                 module_source: ModuleSource::list(),
-                name: format!("{list_fq}<{elem_inst_name}>::push"),
+                name: push.to_mangled_name(),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: format!("{list_fq}::push"),
                     impl_type_args: vec![elem_type_id],
                     method_type_args: vec![],
                     is_blanket: false,
                 }),
-                method_info: Some(LocalMethodName {
-                    struct_name: format!("{list_fq}<{elem_inst_name}>"),
-                    receiver: Receiver::Type(list_fq.as_str().to_string()),
-                    trait_name: None,
-                    base_trait_name: None,
-                    base_trait_module: None,
-                    trait_type_args: vec![],
-                    method_name: "push".to_string(),
-                    method_type_args: vec![],
-                    is_type_param_receiver: false,
-                    is_ref_impl: false,
-                    cm_name: None,
-                }),
+                method_info: Some(push),
             },
             vec![],
             vec![CallArg::new(
@@ -1536,12 +1516,11 @@ fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Ti
     let cm_interface_registry = ctx.cm_interface_registry;
     let type_table = ctx.type_table;
     let array_type_id = type_table.borrow_mut().make_list(elem_type_id);
-    let (func_name, read_name, elem_inst_name, payload_ast, elem_size, elem_align) = {
+    let (func_name, read_name, payload_ast, elem_size, elem_align) = {
         let tt = type_table.borrow();
         let func_name = stream_read_value_func_name(&tt, elem_type_id);
         let payload = crate::component_model::classify_stream_payload(&tt, elem_type_id);
         let read_name = CanonicalIntrinsic::StreamRead(payload).import_name();
-        let elem_inst_name = tt.base_type_name(elem_type_id);
         let payload_ast = type_id_to_ast_type(elem_type_id, &tt, cm_interface_registry);
         let size = crate::component_model::cm_size_with_registry_scoped(
             &payload_ast,
@@ -1553,20 +1532,12 @@ fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Ti
             cm_interface_registry,
             Some("cli"),
         ) as i32;
-        (
-            func_name,
-            read_name,
-            elem_inst_name,
-            payload_ast,
-            size,
-            align,
-        )
+        (func_name, read_name, payload_ast, size, align)
     };
 
     synthesize_stream_read_func(
         func_name,
         read_name,
-        &elem_inst_name,
         elem_type_id,
         array_type_id,
         elem_size,

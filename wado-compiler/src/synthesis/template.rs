@@ -1006,9 +1006,11 @@ fn peel_transparent_newtype(type_id: TypeId, trait_name: &str, ctx: &TemplateCtx
             let tt = ctx.tt.borrow();
             match tt.get(tid) {
                 ResolvedType::Newtype {
-                    name, base_type, ..
+                    name,
+                    base_type,
+                    module_source,
                 } if !ctx.trait_env.has_any_methodful_impl_by_receiver(
-                    &Receiver::Type(name.clone()),
+                    &Receiver::Type(FqTypeName::of_head(module_source, name)),
                     trait_name,
                 ) =>
                 {
@@ -1127,7 +1129,7 @@ fn method_call_info_for_type(
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
             let ref_kind =
                 RefKind::from_resolved(&tt.borrow().get(type_id).clone()).expect("ref classify");
-            let inner_name = tt.borrow().mangle_type_name(inner);
+            let inner_name = tt.borrow().fq_type_name(inner);
             let local_name = LocalMethodName::new_ref(
                 ref_kind,
                 Some(trait_name.to_string()),
@@ -1355,10 +1357,8 @@ fn method_name_for_type(
     // the full `Array<i32>` / `List<i32>` spelling and trip
     // `LocalMethodName::new`'s no-`<` invariant.
     if let Some((_, type_args)) = tt_ref.generic_dispatch_components(type_id) {
-        let arg_names: Vec<String> = type_args
-            .iter()
-            .map(|t| tt_ref.mangle_type_name(*t))
-            .collect();
+        let arg_names: Vec<FqTypeName> =
+            type_args.iter().map(|t| tt_ref.fq_type_name(*t)).collect();
         return LocalMethodName::new(
             tt_ref.fq_base_type_name(type_id),
             Some(trait_name.to_string()),
@@ -1384,11 +1384,11 @@ fn method_name_for_type(
         } => {
             // A `Fn` receiver mangles as base struct `Fn` with the canonical
             // `[arity, return-type]` args (shared with trait synthesis through
-            // `name::fn_type_arg_names`). Without this arm the `_` fallback
-            // would call `LocalMethodName::new("Fn<N,Ret>", ...)` whose
-            // debug_assert rejects struct names containing `<`.
+            // `name::fn_type_args`). Without this arm the `_` fallback would
+            // call `LocalMethodName::new("Fn<N,Ret>", ...)` whose debug_assert
+            // rejects struct names containing `<`.
             let type_args =
-                crate::name::fn_type_arg_names(params.len(), &tt_ref.mangle_type_name(return_type));
+                crate::name::fn_type_args(params.len(), &tt_ref.fq_type_name(return_type));
             LocalMethodName::new(
                 FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),
                 Some(trait_name.to_string()),

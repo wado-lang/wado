@@ -234,9 +234,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let monomorph_info = if type_args.is_empty() {
             None
         } else {
-            let arg_names: Vec<String> = type_args
+            let arg_names: Vec<FqTypeName> = type_args
                 .iter()
-                .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+                .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                 .collect();
             method_info = method_info.with_type_args(&arg_names, &[]);
             Some(crate::tir::MonomorphInfo {
