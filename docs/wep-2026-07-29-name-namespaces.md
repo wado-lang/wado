@@ -123,6 +123,18 @@ and `base_name` are then redundant and go away.
 `FqTypeName::builtin("List")` — a declaration passed off as a builtin, which the
 current API accepts and which appears in a test today — stops compiling.
 
+Re-scoped after steps 1–3 landed. The correctness this step was to buy is
+already bought: `TypeTable::monomorphized_struct_args` records the arguments
+where the instantiation happens, so `fq_type_name` answers both "what is the
+base?" and "what are the args?" for these types today. What remains is making
+the fused state *unrepresentable* rather than merely corrected — worth doing,
+but hardening rather than a fix, and the most expensive step by a wide margin
+(~160 match sites and a change to interning keys).
+
+It should therefore run on a green branch, not on top of open regressions: it is
+the one step that changes behaviour, and diagnosing a regression is much harder
+once every `ResolvedType::Struct` site has moved.
+
 ## Consequences
 
 The compiler stops accepting the class of code this session kept producing. A
@@ -153,3 +165,4 @@ Order:
 - [x] 3. `MethodOwner` replacing `inherited_from_base`. Its sibling fields
       were already gone with step 2, so the fact now has one encoding.
 - [ ] 4. `TypeIdentity` in `ResolvedType`; delete `base_name` / `is_monomorphized`.
+      Re-scoped as hardening, not correctness — see below.
