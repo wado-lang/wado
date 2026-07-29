@@ -1080,7 +1080,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let expected_short = self
                         .strip_ns_prefix(expected_name)
                         .unwrap_or(expected_name.as_str());
-                    let actual_short = actual_name.rsplit("::").next().unwrap_or(actual_name);
+                    let actual_short = actual_name.as_mangled_str().rsplit("::").next().unwrap_or(actual_name.as_mangled_str());
                     let matches = actual_short == expected_short;
                     if !matches {
                         let _ = self.emit(TypeError::PatternTypeMismatch {
@@ -1761,7 +1761,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let expected_short = self
                             .strip_ns_prefix(expected_name)
                             .unwrap_or(expected_name.as_str());
-                        let actual_short = name.rsplit("::").next().unwrap_or(name);
+                        let actual_short = name.as_mangled_str().rsplit("::").next().unwrap_or(name.as_mangled_str());
                         if actual_short != expected_short {
                             let _ = self.emit(TypeError::PatternTypeMismatch {
                                 expected: expected_name.clone(),
