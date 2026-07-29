@@ -316,10 +316,17 @@ sides read the one string and the question never arose.
 Down to two, both serde, both `TreeMap`: `type \`TreeMap\` does not implement
 trait \`IndexAssign<K>\`` — the receiver's arguments are not reaching the trait
 side, so `K` stays unsubstituted. `impl_receiver_key` answers `TreeMap`, which is
-right for the impl index, and adding a `Struct` arm to `method_call`'s
-receiver-type-args extraction changes nothing (tried, reverted). So the gap is
-further along, where the bound `IndexAssign<K>` is instantiated against the
-receiver.
+right for the impl index. Two candidate fixes were tried and both changed
+nothing: a `Struct` arm in `method_call`'s receiver-type-args extraction, and
+one in `find_indexing_trait_impl`'s `concrete_type_args`. Both were reverted.
+
+The second miss is instructive: this is the *elaborator*, which runs before
+monomorphize, so `TreeMap<String,i32>` is still a `GenericInstance` there and
+that arm already matched. Adding `Struct` was answering a question the code was
+not asking. The failure is in the impl-index lookup for
+`(TreeMap, IndexAssign)`, which is the declaration namespace — so the next probe
+belongs at `TraitEnv`'s index and what this refactor changed about how its keys
+are built, not at the receiver's arguments.
 
 Deriving through the unerased view was tried — spelling a newtype / flags
 argument by its own declaration rather than its base — and made things *worse*:
