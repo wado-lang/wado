@@ -180,11 +180,19 @@ Typing only `Struct::name` splits those bindings, so each such group needs
 monomorphized struct is the one nominal type whose `name` is not a declaration
 spelling, and the or-patterns were what let it be read as though it were.
 
-Four such groups in `tir.rs` are split; 179 errors are down to 158. What is left,
-by kind: 35 `&str` ← `&MangledName`, 34 `&MangledName` ← `&String`, 26 `String`
-← `MangledName`, 14 `MangledName` ← `String`, 9 map keys typed
-`(String, ModuleSource)` that must become `(MangledName, ModuleSource)`, and 6
-`&String` ← `&MangledName`.
+Four such groups in `tir.rs` are split. Automated conversion — suffix accessors
+and `MangledName::new` mints, both filtered to skip `{ name, .. }` shorthand so
+patterns are never touched — took 179 errors to 87 and then converged. What
+remains needs decisions, not conversions:
+
+- 34 are the same or-pattern split, spread over `elaborator.rs` (7),
+  `synthesis/traits.rs` (6), `wit_emit.rs` (4), `serde_synth.rs` (3),
+  `monomorphize/state.rs` (3) and others. Each wants `Struct` lifted into its own
+  arm whose body renders the name, exactly as the four in `tir.rs` now do.
+- 11 map keys typed `(String, ModuleSource)` (or the reverse order) that have to
+  become `(MangledName, ModuleSource)` — the point being that these indices are
+  keyed on mangled spellings and say so.
+- ~40 in a tail of individual mismatches.
 
 Driving it from `rustc`'s own diagnostics was tried and does not work
 unsupervised. A fixer that appends the right accessor at each primary span
