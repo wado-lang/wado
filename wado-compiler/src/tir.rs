@@ -351,11 +351,12 @@ pub enum ResolvedType {
     Struct {
         name: String,
         module_source: ModuleSource,
-        /// Whether this struct was created by monomorphizing a generic struct.
-        /// If true, `base_name` contains the original generic struct name.
-        is_monomorphized: bool,
-        /// For monomorphized structs, the original generic name (e.g., "`TreeMap`" for "`TreeMap`<String,i32>").
-        /// None for non-monomorphized structs.
+        /// The generic declaration this was instantiated from (e.g. `TreeMap`
+        /// for `TreeMap<String,i32>`), or `None` for a declaration written as
+        /// such. Being an instantiation *is* having one, so the separate
+        /// `is_monomorphized` flag it used to sit beside was a second encoding
+        /// of the same fact — two fields that could disagree and no constructor
+        /// that let them.
         base_name: Option<String>,
     },
     Enum {
@@ -1548,7 +1549,6 @@ impl TypeTable {
         self.intern(ResolvedType::Struct {
             name,
             module_source,
-            is_monomorphized: false,
             base_name: None,
         })
     }
@@ -1572,7 +1572,6 @@ impl TypeTable {
         let id = self.intern(ResolvedType::Struct {
             name,
             module_source,
-            is_monomorphized: true,
             base_name: Some(base_name),
         });
         if !type_args.is_empty() {
@@ -1594,7 +1593,6 @@ impl TypeTable {
         let key = ResolvedType::Struct {
             name: name.to_string(),
             module_source: module_source.clone(),
-            is_monomorphized: false,
             base_name: None,
         };
         self.intern_map.get(&key).copied()
@@ -1714,7 +1712,6 @@ impl TypeTable {
                 | ResolvedType::Struct {
                     name: n,
                     module_source,
-                    is_monomorphized: false,
                     ..
                 }
                 | ResolvedType::Flags {
@@ -3391,7 +3388,6 @@ impl TypeTable {
             | ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
             ResolvedType::Struct {
                 name,
-                is_monomorphized: true,
                 base_name: Some(base_name),
                 ..
             } => {
@@ -5489,7 +5485,6 @@ mod tests {
         let second_type = table.push_fresh(ResolvedType::Struct {
             name: "Point".to_string(),
             module_source: module,
-            is_monomorphized: false,
             base_name: None,
         });
         table.register_decl_type(second, second_type);

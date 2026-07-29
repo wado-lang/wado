@@ -1217,7 +1217,6 @@ mod tests {
         let struct_ty = types.intern(ResolvedType::Struct {
             name: "W".to_string(),
             module_source: ModuleSource::default(),
-            is_monomorphized: false,
             base_name: None,
         });
         let mut body = Body::empty();

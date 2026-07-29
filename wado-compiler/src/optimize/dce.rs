@@ -1197,7 +1197,6 @@ impl<'a> DceWalker<'a> {
         match base_receiver_type {
             ResolvedType::Struct {
                 ref name,
-                is_monomorphized: true,
                 base_name: Some(ref base_struct),
                 ref module_source,
                 ..
@@ -1243,7 +1242,6 @@ impl<'a> DceWalker<'a> {
             ResolvedType::Struct {
                 name,
                 module_source,
-                is_monomorphized: false,
                 ..
             } => {
                 // Non-monomorphized struct method.
@@ -1669,10 +1667,9 @@ impl DceAnalysis {
                 ResolvedType::Struct {
                     name,
                     module_source,
-                    is_monomorphized,
                     base_name,
                 } => {
-                    if *is_monomorphized {
+                    if base_name.is_some() {
                         self.struct_monomorph_names.insert(name.clone());
                         if let Some(base) = base_name {
                             self.struct_monomorph_bases.insert(base.clone());

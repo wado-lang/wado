@@ -296,9 +296,10 @@ pub struct FreeFunctionName {
     pub module_source: ModuleSource,
     /// The function name (e.g., `helper`)
     pub name: String,
-    /// Whether this function is monomorphized (instantiated from a generic)
-    pub is_monomorphized: bool,
-    /// Base generic name if monomorphized (e.g., "List" for "List<i32>`::len`")
+    /// The generic this was instantiated from (e.g. `List` for
+    /// `List<i32>::len`), or `None` for a function written as such. Being an
+    /// instantiation *is* having one, so the `is_monomorphized` flag that used
+    /// to sit beside this was a second encoding of the same fact.
     pub base_name: Option<String>,
 }
 
@@ -323,7 +324,6 @@ impl FreeFunctionName {
         Self {
             module_source,
             name,
-            is_monomorphized: false,
             base_name: None,
         }
     }
@@ -338,7 +338,6 @@ impl FreeFunctionName {
         Self {
             module_source: interner.from_path(module_path),
             name: name.to_string(),
-            is_monomorphized: false,
             base_name: None,
         }
     }
@@ -354,7 +353,6 @@ impl FreeFunctionName {
         Self {
             module_source: interner.from_path(&path),
             name: name.to_string(),
-            is_monomorphized: false,
             base_name: None,
         }
     }
@@ -364,7 +362,6 @@ impl FreeFunctionName {
         Self {
             module_source: module_source.clone(),
             name: name.to_string(),
-            is_monomorphized: false,
             base_name: None,
         }
     }
@@ -378,7 +375,6 @@ impl FreeFunctionName {
         Self {
             module_source,
             name,
-            is_monomorphized: true,
             base_name: Some(base_name),
         }
     }

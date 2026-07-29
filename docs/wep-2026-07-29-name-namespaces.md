@@ -159,10 +159,16 @@ Order:
       and `impl_target_of` keyed by them.
 - [x] 1b. `MangledName`, so `head_key` and `decl_key` are no longer
       interchangeable — the swap behind three of the six defects.
-- [ ] 1c. `MangledName` on `func_map` / emitted names; `StructListKey` on the
-      struct list.
+- [x] 1c. `MangledName` on `func_map`, built only through `in_module` /
+      `builtin_alias` / `wasi_import`. `WirName.fq` stays a `String`: it names
+      types as well as functions, so the index key is the boundary.
 - [x] 2. `LocalMethodName::struct_name` field → derived method.
 - [x] 3. `MethodOwner` replacing `inherited_from_base`. Its sibling fields
       were already gone with step 2, so the fact now has one encoding.
-- [ ] 4. `TypeIdentity` in `ResolvedType`; delete `base_name` / `is_monomorphized`.
-      Re-scoped as hardening, not correctness — see below.
+- [x] 4a. Delete `is_monomorphized` from `ResolvedType::Struct` and
+      `FreeFunctionName`. It duplicated `base_name.is_some()`, and with only two
+      constructors nothing could ever make the two disagree.
+- [ ] 4b. `name` holds the declaration and the arguments sit beside it as
+      `Vec<TypeId>`, so the fused spelling is derived. Measured: 178 `base_name`
+      references and 159 `Struct { name, .. }` reads, plus a change in what the
+      interning key means. Multi-session, and it belongs on a green branch.

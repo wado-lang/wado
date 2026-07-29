@@ -2961,10 +2961,7 @@ impl Monomorphizer {
                 ResolvedType::GenericInstance { .. }
                     | ResolvedType::GenericResource { .. }
                     | ResolvedType::BuiltinArray(_)
-                    | ResolvedType::Struct {
-                        is_monomorphized: true,
-                        ..
-                    }
+                    | ResolvedType::Struct { .. }
             )
         };
         // Newtype-override guard: when the method already names a newtype with
