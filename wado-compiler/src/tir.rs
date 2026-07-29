@@ -3228,45 +3228,73 @@ impl TypeTable {
         }
     }
 
-    /// The key `id`'s impl blocks are indexed under: the head name as the
-    /// source writes it, with the reference kind lifted out.
+    /// The receiver `id`'s impl blocks are indexed under, with the reference
+    /// kind lifted out.
     ///
-    /// This is not a mangled name and never becomes one. Every mangler
-    /// qualifies a declared type by its module, but the impl index keys on the
-    /// written head and disambiguates by the `(ModuleSource, AstId)` payload it
-    /// stores, so the key is read off the resolved type directly.
+    /// The head carries its declaring module, so two modules declaring the same
+    /// simple name index apart. Consumers pick the namespace they need:
+    /// [`crate::name::Receiver::decl_key`] for the name an `impl` header
+    /// writes, [`crate::name::Receiver::head_key`] for the mangled identity.
     #[must_use]
     pub fn impl_receiver_key(&self, id: TypeId) -> crate::name::Receiver {
-        use crate::name::Receiver;
-        let named = |name: &String| Receiver::Type(name.clone());
+        use crate::name::{FqTypeName, Receiver};
+        let declared = |module: &ModuleSource, name: &str| {
+            Receiver::Type(FqTypeName::declared(module, name))
+        };
+        let builtin = |name: &str| Receiver::Type(FqTypeName::builtin(name));
         // Unerased: which impls a type has is a fact about its identity, and
         // erasure rewrites a newtype / flags id to the representation it is
         // stored as, whose impls are a different set.
         match self.get_unerased(id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
                 crate::name::RefKind::from_resolved(self.get(id))
-                    .map_or_else(|| Receiver::Type(String::new()), Receiver::Ref)
+                    .map_or_else(|| builtin(""), Receiver::Ref)
             }
             ResolvedType::Struct {
                 base_name: Some(base),
+                module_source,
                 ..
-            } => named(base),
-            ResolvedType::Struct { name, .. }
-            | ResolvedType::Enum { name, .. }
-            | ResolvedType::Variant { name, .. }
-            | ResolvedType::Newtype { name, .. }
-            | ResolvedType::Flags { name, .. }
-            | ResolvedType::Resource { name, .. }
-            | ResolvedType::GenericInstance { name, .. }
-            | ResolvedType::GenericResource { name, .. }
-            | ResolvedType::TypeParam { name, .. } => named(name),
-            ResolvedType::BuiltinArray(_) => Receiver::Type(Self::ARRAY_TYPE_NAME.to_string()),
-            ResolvedType::Unit => Receiver::Type(Self::UNIT_TYPE_NAME.to_string()),
-            ResolvedType::Primitive(prim) => Receiver::Type(prim.as_str().to_string()),
-            ResolvedType::Function { .. } => {
-                Receiver::Type(crate::name::CLOSURE_FN_TRAIT.to_string())
+            } => declared(module_source, base),
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
             }
-            _ => Receiver::Type(self.base_type_name(id)),
+            | ResolvedType::Enum {
+                name,
+                module_source,
+            }
+            | ResolvedType::Variant {
+                name,
+                module_source,
+            }
+            | ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Flags {
+                name,
+                module_source,
+            }
+            | ResolvedType::Resource {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => declared(module_source, name),
+            // A generic resource and a binder name no declaration of their own.
+            ResolvedType::GenericResource { name, .. } => builtin(name),
+            ResolvedType::TypeParam { name, .. } => Receiver::Type(FqTypeName::binder(name)),
+            ResolvedType::BuiltinArray(_) => builtin(Self::ARRAY_TYPE_NAME),
+            ResolvedType::Unit => builtin(Self::UNIT_TYPE_NAME),
+            ResolvedType::Primitive(prim) => builtin(prim.as_str()),
+            ResolvedType::Function { .. } => builtin(crate::name::CLOSURE_FN_TRAIT),
+            _ => builtin(&self.base_type_name(id)),
         }
     }
 

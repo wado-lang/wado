@@ -1817,7 +1817,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, impl_ref);
         let impl_struct_name = self.get_type_name(&header.ty);
-        let impl_key = super::trait_env::receiver_key(&header.ty);
+        let impl_key = super::trait_env::receiver_decl_key(&header.ty);
         // Accept if the type matches by name, or if it's a blanket impl type parameter.
         let is_blanket_type_param =
             matches!(&header.ty, Type::Named(named) if !self.tysys.is_known_type_name(&named.name));
@@ -1825,7 +1825,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // comes straight off the impl's own AST.
         if !names_to_check
             .iter()
-            .any(|target| target.receiver() == impl_key)
+            .any(|target| target.receiver().decl_key() == impl_key)
             && !is_blanket_type_param
         {
             return None;

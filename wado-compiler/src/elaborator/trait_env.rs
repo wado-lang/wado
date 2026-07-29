@@ -241,11 +241,17 @@ pub(crate) enum ImplTargetKey {
 }
 
 impl ImplTargetKey {
-    /// The receiver head, for consumers that still reason in bare names.
+    /// The receiver this target indexes under. Built from the same
+    /// `(module, name)` pair `TypeTable::impl_receiver_key` reads off a
+    /// resolved type, so a definition and a lookup agree by construction.
     pub(crate) fn receiver(&self) -> name::Receiver {
         match self {
-            ImplTargetKey::Decl((_, name)) | ImplTargetKey::TypeParam(_, name) => {
-                name::Receiver::Type(name.clone())
+            ImplTargetKey::Decl((module, name)) => {
+                name::Receiver::Type(name::FqTypeName::of_head(module, name))
+            }
+            // A type parameter names no declaration, so no module qualifies it.
+            ImplTargetKey::TypeParam(_, name) => {
+                name::Receiver::Type(name::FqTypeName::binder(name))
             }
             ImplTargetKey::Ref(kind) => name::Receiver::Ref(*kind),
         }
@@ -1665,10 +1671,15 @@ pub(super) fn impl_target_key(
     }
 }
 
-pub(super) fn receiver_key(ty: &ast::Type) -> name::Receiver {
+/// The declaration name an `impl` header writes its target as.
+///
+/// An AST header carries no module, so this cannot produce a qualified
+/// receiver — compare it against [`name::Receiver::decl_key`], which is the
+/// same namespace, never against `head_key`.
+pub(super) fn receiver_decl_key(ty: &ast::Type) -> String {
     match name::RefKind::from_ast(ty) {
-        Some(kind) => name::Receiver::Ref(kind),
-        None => name::Receiver::Type(get_type_name_static(ty)),
+        Some(kind) => kind.prefix().to_string(),
+        None => get_type_name_static(ty),
     }
 }
 
