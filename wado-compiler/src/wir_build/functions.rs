@@ -637,7 +637,7 @@ fn register_exports(ctx: &mut WirContext<'_>) {
         }
 
         if let Some(post_return) = &export.post_return_core_name {
-            let fq = format!("{entry_source}/{post_return}");
+            let fq = MangledName::in_module(entry_source, post_return);
             let Some(func_id) = ctx.func_map.get(&fq) else {
                 panic!(
                     "[WIR] post-return function '{post_return}' not found (fq: {fq}); available: {:?}",

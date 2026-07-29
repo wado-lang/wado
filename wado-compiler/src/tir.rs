@@ -1079,9 +1079,7 @@ impl TypeTable {
     #[must_use]
     pub fn is_seq_container(&self, type_id: TypeId) -> bool {
         let declared = match self.get(type_id) {
-            ResolvedType::Struct {
-                name, base_name, ..
-            } => base_name.as_deref().unwrap_or(name.as_str()),
+            ResolvedType::Struct { decl_name, .. } => decl_name.as_str(),
             ResolvedType::GenericInstance { name, .. } => name.as_str(),
             _ => return false,
         };

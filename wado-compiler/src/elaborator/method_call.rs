@@ -1728,35 +1728,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         vec![],
                     )
                 }
-<<<<<<< HEAD
             }
+            // The target names no struct-like type: a trait, an undeclared
+            // name, a turbofish on a non-generic.
             _ => {
-                // Unknown type - return error expression
+                let _ = self.emit(TypeError::UnknownFunction {
+                    name: format!(
+                        "{}::{}",
+                        super::trait_env::get_type_name_static(&static_call.target_type),
+                        static_call.method
+                    ),
+                    span: static_call.span,
+                });
                 return TypeTable::ERROR;
             }
         };
-||||||| 2738e686c
-                _ => {
-                    // Unknown type - return error expression
-                    return TypeTable::ERROR;
-                }
-            };
-=======
-                // The target names no struct-like type: a trait, an undeclared
-                // name, a turbofish on a non-generic.
-                _ => {
-                    let _ = self.emit(TypeError::UnknownFunction {
-                        name: format!(
-                            "{}::{}",
-                            super::trait_env::get_type_name_static(&static_call.target_type),
-                            static_call.method
-                        ),
-                        span: static_call.span,
-                    });
-                    return TypeTable::ERROR;
-                }
-            };
->>>>>>> origin/main
 
         // Find trait name: if the static method belongs to a trait impl, include the
         // trait name in the mangled function name so WIR can resolve it correctly.
