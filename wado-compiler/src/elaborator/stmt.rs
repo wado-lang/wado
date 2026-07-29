@@ -427,7 +427,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Check if target type is a struct
                     let target_resolved = self.tysys.type_table.borrow().get(target_type).clone();
                     if let ResolvedType::Struct {
-                        name,
+                        decl_name: name,
                         module_source,
                         ..
                     } = target_resolved
@@ -1066,7 +1066,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let struct_name = {
                     let type_table = self.tysys.type_table.borrow();
                     match type_table.get(type_id) {
-                        ResolvedType::Struct { name, .. } => Some(name.clone()),
+                        ResolvedType::Struct {
+                            decl_name,
+                            type_args,
+                            ..
+                        } => Some(type_table.struct_rendered_name(decl_name, type_args)),
                         _ => None,
                     }
                 };
@@ -1757,7 +1761,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut type_name_matches = true;
                 if let Some(expected_name) = type_name {
                     let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-                    if let ResolvedType::Struct { ref name, .. } = resolved {
+                    if let ResolvedType::Struct {
+                        decl_name: ref name,
+                        ..
+                    } = resolved
+                    {
                         let expected_short = self
                             .strip_ns_prefix(expected_name)
                             .unwrap_or(expected_name.as_str());
@@ -1794,7 +1802,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let struct_name = {
                         let type_table = self.tysys.type_table.borrow();
                         match type_table.get(scrutinee_type) {
-                            ResolvedType::Struct { name, .. } => Some(name.clone()),
+                            ResolvedType::Struct {
+                            decl_name,
+                            type_args,
+                            ..
+                        } => Some(type_table.struct_rendered_name(decl_name, type_args)),
                             _ => None,
                         }
                     };
