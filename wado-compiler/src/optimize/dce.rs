@@ -1988,10 +1988,26 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
     // built after it, so the two spell the same type differently
     // (`FlagsBit<Perms>` against `FlagsBit<u32>`) and neither view makes both
     // sides agree. The `TypeId` erasure redirects consistently, so ask that.
-    let reachable_struct_id = |s: &crate::nir::NirStruct| {
+    // A monomorphized struct's stored `name` was fixed at monomorphize time,
+    // before newtype / flags erasure; the reachability set renders its names
+    // after erasure has redirected the argument ids. The same type therefore
+    // spells two ways (`FlagsBit<Perms>` against `FlagsBit<u32>`), and neither
+    // spelling alone answers for both sides. Derive the reachability set's own
+    // rendering from the instantiation the struct records, so the comparison is
+    // between two names built the same way.
+    let monomorph_render = |s: &crate::nir::NirStruct| {
+        let mono = s.monomorph_info.as_ref()?;
+        Some(
+            project
+                .type_table
+                .borrow()
+                .struct_rendered_name(&mono.generic_name, &mono.impl_type_args),
+        )
+    };
+    let reachable_struct_id = |rendered: &str, module_source: &ModuleSource| {
         let type_table = project.type_table.borrow();
         type_table
-            .find_struct_by_name(&s.name, &s.module_source)
+            .find_struct_by_name(rendered, module_source)
             .is_some_and(|id| analysis.types.contains(&id))
     };
     project.structs.retain(|s| {
@@ -2002,7 +2018,10 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
                 || analysis.generic_instance_names.contains(s.name.as_str())
                 || analysis.struct_monomorph_bases.contains(s.name.as_str())
         } else {
-            analysis.struct_monomorph_names.contains(s.name.as_str()) || reachable_struct_id(s)
+            let rendered = monomorph_render(s).unwrap_or_else(|| s.name.clone());
+            analysis.struct_monomorph_names.contains(s.name.as_str())
+                || analysis.struct_monomorph_names.contains(rendered.as_str())
+                || reachable_struct_id(&rendered, &s.module_source)
         }
     });
     project.variants.retain(|v| {
