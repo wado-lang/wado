@@ -2669,7 +2669,7 @@ impl Monomorphizer {
                 // Update struct_name to match the (possibly monomorphized) struct_type
                 match type_table.get(*struct_type) {
                     ResolvedType::Struct { name, .. } => {
-                        struct_name.clone_from(name.as_mangled_str().to_string());
+                        *struct_name = name.to_string();
                     }
                     ResolvedType::GenericInstance {
                         name, type_args, ..

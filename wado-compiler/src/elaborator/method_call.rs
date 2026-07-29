@@ -308,23 +308,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Fall back to base type trait methods
         if method_info.is_none()
-            && let Some(trait_match) = self.find_trait_method_for_type(
-                &self.impl_target_of(
-                    base_type_id,
-                    // `struct_name` is the mangled spelling; the impl index
-                    // keys on what a header writes.
-                    &self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .fq_base_type_name(base_type_id)
-                        .decl_name(),
-                ),
-                method_name,
-                &struct_module,
-                receiver_type_args_for_trait.as_deref(),
-                Some(base_type_id),
-            )
+            && let Some(trait_match) = {
+                // `struct_name` is the mangled spelling; the impl index keys on
+                // what a header writes, so read the declaration name off the
+                // type table.
+                let decl = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .fq_base_type_name(base_type_id)
+                    .decl_name();
+                let target = self.impl_target_of(base_type_id, &decl);
+                self.find_trait_method_for_type(
+                    &target,
+                    method_name,
+                    &struct_module,
+                    receiver_type_args_for_trait.as_deref(),
+                    Some(base_type_id),
+                )
+            }
         {
             matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
             if trait_match.impl_struct_name != struct_name {
@@ -1786,7 +1788,7 @@ ResolvedType::Resource {
 
         let method_ref = StaticMethodRef::new(
             struct_module.clone(),
-            struct_name.clone(),
+            struct_name.to_string(),
             static_call.method.clone(),
             trait_name_opt.clone(),
         );
