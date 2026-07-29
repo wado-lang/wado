@@ -250,6 +250,23 @@ which is the fusion bug written out longhand. Those collapse to
 come off the type. Prefer that over threading `decl_name` and `type_args`
 through by hand.
 
+### Corrected: the real O0 number is 73, not 2
+
+Progress was being reported from `reflect_`/`serde_`-filtered runs, which reached
+2. A full O0 run says **1880 passed, 73 failed**: `http_*`, `httpbin_*`,
+`generic_struct_1`, `effect_handler_*`, `field_forward_*` — areas the filtered
+runs never touched, and which the central renderers this work changed
+(`get_type_name_info`, `mangle_type_arg_for_generic`, the struct name index, WIR
+type resolution) all reach.
+
+Many of the 73 share one cause: `type \`TreeMap\` does not implement trait
+\`IndexAssign<K>\``. Traced as far as both sides of that lookup, and they appear
+to agree — the registration key is built from `get_type_name_static`, which
+answers `TreeMap` for the header `impl<K, V> IndexAssign<K> for TreeMap<K, V>`,
+and the query builds `Decl((core:collections, "TreeMap"))` (both measured). So
+the mismatch is not the target key, and the next probe belongs on the trait side
+of the pair — `IndexAssign` against `IndexAssign<K>` — rather than the type side.
+
 ### Where the second attempt stands
 
 `ResolvedType::Struct` carries `decl_name` + `type_args`; `base_name`, the
