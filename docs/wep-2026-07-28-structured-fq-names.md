@@ -106,8 +106,32 @@ Order:
 
 ## Status
 
-Complete: the workspace builds and the fq-name namespace is structured
-end to end.
+The workspace builds and the fq-name namespace is structured end to end.
+E2E: 3882 passed, 26 failed — 17 of those pre-date this work; three fixtures
+(`serde_generic_deserialize`, `serde_json_roundtrip_complex`,
+`serde_json_treemap`) are open regressions, tracked below.
+
+### Open: generic-struct `Deserialize` is never instantiated
+
+`Wrapper<i32>^Deserialize::deserialize<core:json/JsonDeserializer>` reaches WIR
+build unresolved. Established by instrumentation, so none of this is inference:
+
+- the bound-driven synth request is recorded (`Wrapper`, entry module,
+  `Deserialize`) and resolves to a `TypeId`;
+- `generate_struct_deserialize` succeeds and emits the template
+  `serde_generic_deserialize.wado/Wrapper^Deserialize::deserialize`, carrying
+  `impl_type_params` from the struct declaration;
+- the `existing.contains(key)` guard does not fire;
+- monomorphize nonetheless emits the instance as a bodyless stub
+  (`fn "…/Wrapper<i32>^Deserialize::deserialize<…>"();`), which is what WIR
+  build then fails to resolve.
+
+`Maybe<T>` takes the same path and works — it carries an explicit
+`impl<T: Deserialize> Deserialize for Maybe<T>;` marker, so the contrast is
+marker-driven vs bound-driven, not variant vs struct.
+
+Next step: instrument the template lookup in `monomorphize/func_inst.rs` for
+that call and find which spelling misses.
 
 Two shapes covered nearly every migrated site:
 
