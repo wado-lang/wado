@@ -739,6 +739,17 @@ pub fn split_trait_method_receiver(name: &str) -> Option<(&str, &str)> {
 }
 
 /// The reference prefix a mangled name carries, and the rest.
+/// Write a receiver's reference prefix. `&` binds directly to the pointee;
+/// `&mut` is a word and needs the separator. [`Receiver::mangle_with_ref`] and
+/// `TypeTable::mangle_type_arg_for_generic` spell it the same way, and a
+/// definition's name is built by one while its call sites go through the other.
+fn push_ref_prefix(out: &mut String, kind: RefKind) {
+    out.push_str(kind.prefix());
+    if kind == RefKind::Mut {
+        out.push(' ');
+    }
+}
+
 fn split_ref_prefix(name: &str) -> (&str, &str) {
     for prefix in [RefKind::Mut.prefix(), RefKind::Shared.prefix()] {
         if let Some(rest) = name.strip_prefix(prefix) {
@@ -922,6 +933,15 @@ impl LocalMethodName {
     /// rebuilt from the typed receiver and its structured arguments.
     #[must_use]
     pub fn fq_struct_name(&self) -> FqTypeName {
+        // A single-pointee reference receiver spells as the pointee carrying a
+        // `&` / `&mut`, not as a `&` head applied to arguments — the same rule
+        // `Receiver::mangle_with_ref` follows, so this and [`Self::struct_name`]
+        // render one spelling.
+        if let Receiver::Ref(kind) = self.receiver
+            && let [pointee] = self.struct_type_args.as_slice()
+        {
+            return pointee.clone().with_reference(kind);
+        }
         self.fq_base_struct_name()
             .with_args(self.struct_type_args.clone())
     }
@@ -2462,6 +2482,35 @@ mod tests {
     }
 
     #[test]
+    fn ref_receiver_renders_one_spelling() {
+        // `struct_name` goes through `Receiver::mangle_with_ref`, `fq_struct_name`
+        // through `FqTypeName::to_mangled`. A ref-impl template is registered
+        // under one and looked up under the other, so they must agree.
+        for kind in [RefKind::Shared, RefKind::Mut] {
+            let mut info = LocalMethodName::new_ref(
+                kind,
+                Some("IntoIterator".to_string()),
+                "into_iter".to_string(),
+            );
+            info.struct_type_args = vec![
+                FqTypeName::declared(&ModuleSource::default(), "List")
+                    .with_args(vec![FqTypeName::builtin("i32")]),
+            ];
+            assert_eq!(info.fq_struct_name().to_mangled(), info.struct_name());
+        }
+    }
+
+    #[test]
+    fn ref_prefix_binds_to_its_pointee() {
+        let point = FqTypeName::declared(&ModuleSource::default(), "Point");
+        assert_eq!(
+            point.clone().with_reference(RefKind::Shared).to_display(),
+            "&Point"
+        );
+        assert_eq!(point.with_reference(RefKind::Mut).to_display(), "&mut Point");
+    }
+
+    #[test]
     fn display_type_name_drops_modules_from_head_and_args() {
         assert_eq!(display_type_name("./geom.wado/Point"), "Point");
         // A naive split on the last `/` would answer `String>` here.
@@ -2708,8 +2757,7 @@ impl FqTypeName {
     pub fn to_mangled(&self) -> String {
         let mut out = String::new();
         if let Some(kind) = self.reference {
-            out.push_str(kind.prefix());
-            out.push(' ');
+            push_ref_prefix(&mut out, kind);
         }
         if let TypeHead::Tuple = self.head {
             let elems: Vec<String> = self.args.iter().map(FqTypeName::to_mangled).collect();
@@ -2742,8 +2790,7 @@ impl FqTypeName {
     pub fn to_display(&self) -> String {
         let mut out = String::new();
         if let Some(kind) = self.reference {
-            out.push_str(kind.prefix());
-            out.push(' ');
+            push_ref_prefix(&mut out, kind);
         }
         let args: Vec<String> = self.args.iter().map(FqTypeName::to_display).collect();
         if let TypeHead::Tuple = self.head {

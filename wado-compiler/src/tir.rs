@@ -1594,11 +1594,10 @@ impl TypeTable {
     ///
     /// - `name`: The fully mangled name (e.g., "`TreeMap`<String,i32>")
     /// - `base_name`: The original generic struct name (e.g., "`TreeMap`")
-    /// - `type_args`: what it was instantiated with, recorded in
-    ///   [`Self::monomorphized_struct_args`] because `name` cannot be taken
-    ///   apart. Empty when the caller is re-deriving a type the instantiation
-    ///   site already registered — interning hands back that same `TypeId`, so
-    ///   its arguments are already recorded and must not be overwritten.
+    /// - `type_args`: what it was instantiated with. Must be the arguments
+    ///   `name` renders from — passing an empty list for an instantiated type
+    ///   interns the *declaration* instead, a different type that spells itself
+    ///   the same way. The `debug_assert` below is that contract.
     pub fn make_monomorphized_struct(
         &mut self,
         name: String,

@@ -1069,11 +1069,16 @@ impl<'a> DceWalker<'a> {
             } else {
                 // The parts `func_name` would be split into are already on
                 // `call_info`, which is what built it.
+                //
+                // `full_method_name`, not `method_name`: the definition side
+                // (`function_id_for`) keys on the method's type arguments too,
+                // and a call keyed without them names no definition — DCE would
+                // drop a live method.
                 FunctionId::Method(MethodName::new(
                     original_callee_module,
                     call_info.fq_struct_name(),
                     call_info.trait_name.clone(),
-                    call_info.method_name.clone(),
+                    call_info.full_method_name(),
                 ))
             };
             self.analysis.callees.insert(callee_id);

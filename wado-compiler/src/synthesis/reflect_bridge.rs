@@ -62,15 +62,21 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
             .collect();
         let (subject, ref_subject) = {
             let mut tt = flat.type_table.borrow_mut();
-            // Named after the declaration, not the instantiation: callers spell
-            // the bridge `$field_get$Pair$<member>`, and the member type is
-            // what distinguishes instantiations (members sharing a mangled
-            // member type share one index-dispatched bridge). Looked up rather
-            // than minted, so this is the registered type and not a second one.
-            let _ = (&base_name, &impl_type_args);
-            let subject = tt
-                .find_struct_by_name(&decl.name, &module_source)
-                .unwrap_or_else(|| tt.make_struct(decl.name.clone(), module_source.clone()));
+            // `decl` is an instantiation, so `decl.name` is the rendered name
+            // the struct registry keys on. Minting is the unreached branch, and
+            // it must rebuild the instantiation from its base and arguments —
+            // `make_struct(decl.name)` would register the rendered spelling as a
+            // declaration name, the fusion WEP 2026-07-19 removes.
+            let subject = tt.find_struct_by_name(&decl.name, &module_source).unwrap_or_else(
+                || {
+                    tt.make_monomorphized_struct(
+                        decl.name.clone(),
+                        module_source.clone(),
+                        base_name.clone(),
+                        impl_type_args.clone(),
+                    )
+                },
+            );
             let ref_subject = tt.make_ref(subject);
             (subject, ref_subject)
         };
