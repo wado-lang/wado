@@ -1119,12 +1119,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            }
-            | ResolvedType::GenericInstance {
+            } => (name, module_source),
+            ResolvedType::GenericInstance {
                 name,
                 module_source,
                 ..
-            } => (name, module_source),
+            } => (crate::name::MangledName::new(name), module_source),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 return self.record_field_reference(inner, field_name, use_id);
             }
@@ -1592,11 +1592,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => recv_type,
         };
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct { name, .. }
-            | ResolvedType::GenericInstance { name, .. }
+            ResolvedType::Struct { name, .. } => name,
+            ResolvedType::GenericInstance { name, .. }
             | ResolvedType::Newtype { name, .. }
-            | ResolvedType::Flags { name, .. } => name,
-            ResolvedType::BuiltinArray(_) => crate::name::MangledName::new(TypeTable::ARRAY_TYPE_NAME.to_string()),
+            | ResolvedType::Flags { name, .. } => crate::name::MangledName::new(name),
+            ResolvedType::BuiltinArray(_) => {
+                crate::name::MangledName::new(TypeTable::ARRAY_TYPE_NAME.to_string())
+            }
             _ => return None,
         };
         if struct_name.is_empty() {
