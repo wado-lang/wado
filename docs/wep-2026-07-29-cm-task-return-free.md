@@ -67,11 +67,14 @@ on the allocator.
 
 ### Not covered
 
-`task.return` takes its result as *parameters*, so a result exceeding
-`MAX_FLAT_PARAMS` (16) is passed indirectly through a memory buffer instead. The
-compiler does not lower that form at all today — it emits the flat parameters
-regardless of count — so there is no such buffer to free, and it is left for
-whoever implements the indirect form.
+`task.return` takes its result as _parameters_, so a result exceeding
+`MAX_FLAT_PARAMS` (16) is passed indirectly through a memory buffer instead.
+That form is not lowered — the flat parameters are emitted regardless of count,
+which fails validation against the canonical single-pointer signature
+(wado-lang/wado#1712). So no such buffer exists to reclaim. Whoever implements
+the form inherits the memory walk already used by `post-return`, since an
+indirect `task.return` result is reclaimed exactly like an indirect sync
+return.
 
 ## References
 

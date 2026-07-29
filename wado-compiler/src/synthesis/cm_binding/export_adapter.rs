@@ -50,8 +50,8 @@ use super::import_adapter::make_binding_function;
 use super::lift::synthesize_lift_list;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
-    CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id, cm_zero,
-    coerce_flat_lift, coerce_flat_lower, compute_export_flat_param_types,
+    CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id,
+    cm_zero, coerce_flat_lift, coerce_flat_lower, compute_export_flat_param_types,
     compute_export_flat_return_types, export_needs_param_lifting, field_access, find_struct_decl,
     find_variant_decl, flat_types_from_type_id, flatten_export_type, is_unit_type,
     type_id_to_ast_type, variant_payload, variant_tag, variant_test,

@@ -246,7 +246,9 @@ pub(super) fn synthesize_free_cm_value(
             next_local,
             locals,
         ),
-        CmShape::List(elem) => free_buffer(elem, load_ptr(addr), load_len(addr), next_local, locals),
+        CmShape::List(elem) => {
+            free_buffer(elem, load_ptr(addr), load_len(addr), next_local, locals)
+        }
         CmShape::Record(fields) => fields
             .iter()
             .filter(|f| f.owns_memory())
@@ -423,12 +425,7 @@ fn free_buffer(
         binary(TirBinaryOp::Gt, len_ref(), i32_const(0), TypeTable::BOOL),
         block(vec![expr_stmt(builtin_call(
             "realloc",
-            vec![
-                ptr_ref(),
-                size,
-                i32_const(elem.align as i32),
-                i32_const(0),
-            ],
+            vec![ptr_ref(), size, i32_const(elem.align as i32), i32_const(0)],
             TypeTable::I32,
         ))]),
         None,

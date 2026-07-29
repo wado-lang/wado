@@ -159,12 +159,24 @@ fn expect_string(val: &Val, payload: usize) {
 
 #[test]
 fn async_task_return_string_buffer_is_reclaimed_o0() {
-    run_calls(STRING_SOURCE, "chunk", DOUBLINGS, OptLevel::O0, expect_string);
+    run_calls(
+        STRING_SOURCE,
+        "chunk",
+        DOUBLINGS,
+        OptLevel::O0,
+        expect_string,
+    );
 }
 
 #[test]
 fn async_task_return_string_buffer_is_reclaimed_o2() {
-    run_calls(STRING_SOURCE, "chunk", DOUBLINGS, OptLevel::O2, expect_string);
+    run_calls(
+        STRING_SOURCE,
+        "chunk",
+        DOUBLINGS,
+        OptLevel::O2,
+        expect_string,
+    );
 }
 
 /// The payload shares its flat slots with the other case, so freeing has to
