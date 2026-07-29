@@ -520,7 +520,7 @@ impl Interpreter<'_> {
             };
             match common {
                 None => common = Some(v),
-                Some(c) if c != v => return false,
+                Some(ref c) if !c.denotes_same(&v) => return false,
                 Some(_) => {}
             }
         }
@@ -626,7 +626,7 @@ fn collapse_equal_arms<S: EditSink>(
     then_value: Value,
     else_value: Value,
 ) -> bool {
-    if then_value != else_value {
+    if !then_value.denotes_same(&else_value) {
         return false;
     }
     if !is_discardable_operand(sink.body(), condition) {

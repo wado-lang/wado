@@ -78,7 +78,7 @@ impl Lattice {
         match (self, other) {
             (Self::Unevaluated, x) | (x, Self::Unevaluated) => x,
             (Self::NonConst, _) | (_, Self::NonConst) => Self::NonConst,
-            (Self::Const(a), Self::Const(b)) if a == b => Self::Const(a),
+            (Self::Const(a), Self::Const(b)) if a.denotes_same(&b) => Self::Const(a),
             (Self::Const(_), Self::Const(_)) => Self::NonConst,
         }
     }

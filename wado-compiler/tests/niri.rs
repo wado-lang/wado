@@ -6969,3 +6969,44 @@ fn aggregate_scalar_bindings_are_unaffected_by_the_read_only_rule() {
         Lattice::Const(int(7)),
     );
 }
+
+#[test]
+fn join_keeps_signed_zeros_apart() {
+    let neg = Lattice::Const(Value::Float {
+        value: -0.0,
+        prim: PrimitiveType::F64,
+    });
+    let pos = Lattice::Const(Value::Float {
+        value: 0.0,
+        prim: PrimitiveType::F64,
+    });
+    assert_eq!(neg.join(pos), Lattice::NonConst);
+}
+
+#[test]
+fn if_with_signed_zero_arms_does_not_collapse() {
+    let expr = if_expr(
+        local_expr(0, TypeTable::BOOL),
+        block_with_tail_expr(float_lit(-0.0, TypeTable::F64, "-0.0")),
+        Some(block_with_tail_expr(float_lit(0.0, TypeTable::F64, "0.0"))),
+        TypeTable::F64,
+    );
+    assert_eq!(lattice_of(&expr), Lattice::NonConst);
+}
+
+#[test]
+fn if_with_identical_zero_arms_collapses() {
+    let expr = if_expr(
+        local_expr(0, TypeTable::BOOL),
+        block_with_tail_expr(float_lit(0.0, TypeTable::F64, "0.0")),
+        Some(block_with_tail_expr(float_lit(0.0, TypeTable::F64, "0.0"))),
+        TypeTable::F64,
+    );
+    assert_eq!(
+        lattice_of(&expr),
+        Lattice::Const(Value::Float {
+            value: 0.0,
+            prim: PrimitiveType::F64,
+        })
+    );
+}

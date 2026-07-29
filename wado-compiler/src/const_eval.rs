@@ -212,6 +212,68 @@ impl Value {
         !matches!(self, Self::Aggregate { .. } | Self::Seq { .. })
     }
 
+    /// Whether one value may stand in for the other — the question a rewrite
+    /// asks before replacing an expression, which is not the question `==`
+    /// answers.
+    ///
+    /// `PartialEq` models the program's own `==`, so it follows IEEE and holds
+    /// for `-0.0` and `0.0`. Those are still two values a program can tell
+    /// apart (`1.0 / x` alone does), so substituting either for the other
+    /// changes what it computes. Two NaNs are not equal under either question,
+    /// which leaves them where a rewrite cannot reach.
+    #[must_use]
+    pub fn denotes_same(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Float {
+                    value: a,
+                    prim: a_prim,
+                },
+                Self::Float {
+                    value: b,
+                    prim: b_prim,
+                },
+            ) => a_prim == b_prim && a == b && a.is_sign_negative() == b.is_sign_negative(),
+            (
+                Self::Aggregate {
+                    type_id: a_type,
+                    fields: a_fields,
+                },
+                Self::Aggregate {
+                    type_id: b_type,
+                    fields: b_fields,
+                },
+            ) => {
+                a_type == b_type
+                    && a_fields.len() == b_fields.len()
+                    && a_fields.iter().zip(b_fields.iter()).all(
+                        |((a_index, a_value), (b_index, b_value))| {
+                            a_index == b_index && a_value.denotes_same(b_value)
+                        },
+                    )
+            }
+            (
+                Self::Seq {
+                    type_id: a_type,
+                    elements: a_elements,
+                },
+                Self::Seq {
+                    type_id: b_type,
+                    elements: b_elements,
+                },
+            ) => {
+                a_type == b_type
+                    && a_elements.len() == b_elements.len()
+                    && a_elements
+                        .iter()
+                        .zip(b_elements.iter())
+                        .all(|(a, b)| a.denotes_same(b))
+            }
+            (Self::Int { .. } | Self::Bool(_) | Self::Char(_), _) => self == other,
+            (Self::Float { .. } | Self::Aggregate { .. } | Self::Seq { .. }, _) => false,
+        }
+    }
+
     /// Returns the raw integer bit pattern, or `None` if not an int.
     #[must_use]
     pub fn as_int(&self) -> Option<(u64, PrimitiveType)> {
