@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785273133639,
+  "lastUpdate": 1785295771495,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44629,6 +44629,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fa643d82e0750d8c0fe8085dec123ccb339c0c72"
         },
         "date": 1785273132835,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16237,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276421,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9951dc10e3f04da5520e4a3eaa524ec4551f72df",
+          "message": "Merge pull request #1713 from wado-lang/claude/async-lifted-exports-leak-y6g5n1\n\nfix(cm): free the buffers a `task.return` payload owns",
+          "timestamp": "2026-07-29T12:20:11+09:00",
+          "tree_id": "1b5ed9de06b5b1a7b676d7eb12acd9e4cba39a0b",
+          "url": "https://github.com/wado-lang/wado/commit/9951dc10e3f04da5520e4a3eaa524ec4551f72df"
+        },
+        "date": 1785295771025,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
