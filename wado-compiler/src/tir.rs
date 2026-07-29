@@ -349,15 +349,21 @@ pub enum ResolvedType {
     Unit,
     Never,
     Struct {
-        name: String,
+        /// The declaration's own name, as source writes it — never with
+        /// arguments spelled into it.
+        ///
+        /// Every other nominal variant holds a declaration name here too, and
+        /// `GenericInstance` already keeps its arguments beside one. A
+        /// monomorphized struct used to be the exception, storing the rendered
+        /// `TreeMap<String,i32>` and a separate `base_name` to recover the head
+        /// from — which is what let its spelling pass as a declaration name
+        /// wherever the two were matched together.
+        decl_name: String,
         module_source: ModuleSource,
-        /// The generic declaration this was instantiated from (e.g. `TreeMap`
-        /// for `TreeMap<String,i32>`), or `None` for a declaration written as
-        /// such. Being an instantiation *is* having one, so the separate
-        /// `is_monomorphized` flag it used to sit beside was a second encoding
-        /// of the same fact — two fields that could disagree and no constructor
-        /// that let them.
-        base_name: Option<String>,
+        /// What this instantiation was made with; empty for a declaration
+        /// written as such. The rendered spelling is derived from the two —
+        /// see [`TypeTable::struct_rendered_name`].
+        type_args: Vec<TypeId>,
     },
     Enum {
         name: String,
@@ -1547,10 +1553,25 @@ impl TypeTable {
 
     pub fn make_struct(&mut self, name: String, module_source: ModuleSource) -> TypeId {
         self.intern(ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
-            base_name: None,
+            type_args: Vec::new(),
         })
+    }
+
+    /// A struct type's rendered spelling: the declaration alone, or the
+    /// declaration with its arguments applied. Derived rather than stored, so
+    /// there is no fused name for a declaration lookup to mistake for one.
+    #[must_use]
+    pub fn struct_rendered_name(&self, decl_name: &str, type_args: &[TypeId]) -> String {
+        if type_args.is_empty() {
+            return decl_name.to_string();
+        }
+        let args: Vec<String> = type_args
+            .iter()
+            .map(|&a| self.mangle_type_arg_for_generic(a))
+            .collect();
+        crate::name::mangle_generic_name(decl_name, &args)
     }
 
     /// Create a monomorphized struct type (e.g., "Box<i32>")
@@ -1569,15 +1590,17 @@ impl TypeTable {
         base_name: String,
         type_args: Vec<TypeId>,
     ) -> TypeId {
-        let id = self.intern(ResolvedType::Struct {
+        debug_assert_eq!(
             name,
+            self.struct_rendered_name(&base_name, &type_args),
+            "the caller's rendering must be what `struct_rendered_name` derives"
+        );
+        let _ = name;
+        self.intern(ResolvedType::Struct {
+            decl_name: base_name,
             module_source,
-            base_name: Some(base_name),
-        });
-        if !type_args.is_empty() {
-            self.monomorphized_struct_args.insert(id, type_args);
-        }
-        id
+            type_args,
+        })
     }
 
     pub fn make_variant(&mut self, name: String, module_source: ModuleSource) -> TypeId {
