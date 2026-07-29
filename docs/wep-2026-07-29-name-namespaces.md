@@ -278,11 +278,19 @@ the string it started from. And printing the map at the failure shows the real
 answer: asked for `FlagsBit<u32>`, the map holds **no FlagsBit entry at all**.
 
 So this is not a spelling mismatch. The monomorphized `FlagsBit<u32>` struct
-never reaches WIR registration — either the monomorphizer never queues it or
-nothing emits its `TirStruct`. The queue scans the type table for
-`GenericInstance`s, and a `Struct` now carries arguments, so the next thing to
-check is whether `FlagsBit<u32>` is reaching the type table already as a
-`Struct` and therefore never being queued as an instantiation.
+never reaches WIR registration.
+
+The instantiation scan does match only `GenericInstance`, so an applied `Struct`
+is never queued — but making it match both changes nothing measurable, so that
+is not the path either. Three proposed fixes for these ten have now been
+implemented and measured, and all three were no-ops. Each was reverted rather
+than kept for looking principled.
+
+What is established and what is not: the WIR struct map genuinely holds no
+`FlagsBit` entry (measured). Why it does not is still unknown — the queue scan
+is not the reason. The next probe belongs at the point a `TirStruct` is emitted
+for an instantiation, asking whether one is emitted for `FlagsBit<u32>` at all,
+rather than reasoning backwards from the WIR failure.
 
 ## Consequences
 
