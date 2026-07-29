@@ -626,16 +626,10 @@ impl Monomorphizer {
         }
         match type_table.get(type_id) {
             ResolvedType::Struct {
-                decl_name: name, ..
-            } => {
-                // For monomorphized structs with names like "List<i32>", look up the
-                // original InstantiationKey to get the base name and type_args
-                if let Some(key) = self.structs.mangled_to_key.get(name) {
-                    Some((key.name.clone(), key.impl_type_args.clone()))
-                } else {
-                    Some((name.clone(), vec![]))
-                }
-            }
+                decl_name,
+                type_args,
+                ..
+            } => Some((decl_name.clone(), type_args.clone())),
             // Newtypes are transparent — unwrap to base type for struct info lookup
             ResolvedType::Newtype { base_type, .. } => {
                 self.get_struct_info_from_type(*base_type, type_table)

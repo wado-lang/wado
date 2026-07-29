@@ -3316,11 +3316,6 @@ impl TypeTable {
             ResolvedType::Enum {
                 name,
                 module_source,
-                ..
-            }
-            | ResolvedType::Enum {
-                name,
-                module_source,
             }
             | ResolvedType::Variant {
                 name,
@@ -3379,11 +3374,6 @@ impl TypeTable {
                 ..
             } => FqTypeName::declared(module_source, decl_name),
             ResolvedType::Enum {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::Enum {
                 name,
                 module_source,
             }

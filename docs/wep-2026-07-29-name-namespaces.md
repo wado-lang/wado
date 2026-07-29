@@ -330,50 +330,37 @@ the type's `type_args` *after* erasure has redirected those ids, so the same
 function renders a different string. While the name was stored on the type, both
 sides read the one string and the question never arose.
 
-Down to two, both serde, both `TreeMap`: `type \`TreeMap\` does not implement
-trait \`IndexAssign<K>\`` — the receiver's arguments are not reaching the trait
-side, so `K` stays unsubstituted. `impl_receiver_key` answers `TreeMap`, which is
-right for the impl index. Two candidate fixes were tried and both changed
-nothing: a `Struct` arm in `method_call`'s receiver-type-args extraction, and
-one in `find_indexing_trait_impl`'s `concrete_type_args`. Both were reverted.
+### The reverse lookup a split name cannot answer
 
-The second miss is instructive: this is the *elaborator*, which runs before
-monomorphize, so `TreeMap<String,i32>` is still a `GenericInstance` there and
-that arm already matched. Adding `Struct` was answering a question the code was
-not asking. The failure is in the impl-index lookup for
-`(TreeMap, IndexAssign)`, which is the declaration namespace — so the next probe
-belongs at `TraitEnv`'s index and what this refactor changed about how its keys
-are built, not at the receiver's arguments.
+`type \`TreeMap\` does not implement trait \`IndexAssign<K>\`` read as an
+elaborator failure and was not one. The elaborator resolves the impl correctly —
+measured at every step: the impl index holds 10 refs for
+`Decl((core:collections, "TreeMap"))`, the `starts_with` filter admits
+`IndexAssign<K>`, and the projection returns the `index_assign` method with both
+gates passing. The diagnostic comes from the *WIR-build* trait-bound check, which
+reports a call left spelled with its template name.
 
-Read as far as `type_decl_key`, which answers `(module, "TreeMap")` for the
-`GenericInstance` — the right key — so the miss is in the index that key is
-looked up in. That suspicion is dead: `struct_like_decl_modules` is built from AST
-`Item::Struct` declarations, not from the type table, so nothing this refactor
-did can add an entry to it.
+The call never got monomorphized because `get_struct_info_from_type` answered
+with no type arguments. It took the struct's stored `name` and reverse-looked it
+up in `mangled_to_key` — a map from rendered spelling to `InstantiationKey`. That
+worked only while the struct carried its rendering. With `decl_name` and
+`type_args` split, the lookup misses, the fallthrough returns `(name, vec![])`,
+and monomorphize's "receiver is an instantiated generic struct" branch is gated
+on the arguments being non-empty.
 
-Everything measurable about this lookup agrees. The receiver is a
-`GenericInstance { name: "TreeMap", type_args: [K, V] }` with both arguments
-present; the query key is `Decl((core:collections, "TreeMap"))`; the
-registration key is built from `get_type_name_static`, which answers `TreeMap`
-for the header. Query and registration therefore look identical, and the probe
-still finds nothing. Whatever is wrong is not the key.
+The fix is to delete the reverse lookup. `mangled_to_key` recovers exactly
+`(key.name, key.impl_type_args)`, and those are what `make_monomorphized_struct`
+now stores as `decl_name` and `type_args` — the round trip through a string was
+the only reason the map was consulted:
 
-Instrumenting `probe_trait_impls` says why: for
-`Decl((core:collections, "TreeMap"))` it finds **10 impl refs** with 2 concrete
-arguments. The impls are registered and reached. So the miss is in the *filter*,
-not the lookup — either the `trait_matches` predicate or the per-impl
-projection.
+    ResolvedType::Struct { decl_name, type_args, .. } =>
+        Some((decl_name.clone(), type_args.clone())),
 
-Not the trait name either: the predicate is
-`|trait_base| trait_base.starts_with(trait_base_name)`, so `IndexAssign<K>`
-matches `IndexAssign` regardless. Which leaves the per-impl projection — it is
-handed all 10 impls and returns `None` for every one.
-
-So the sequence is established end to end by measurement: key correct, index
-populated, filter permissive, projection rejecting. The projection instantiates
-the impl signature against the receiver's arguments, which is the first step in
-this chain that consumes `type_args` rather than names — and this refactor moved
-where a struct's arguments live. That is where to instrument next.
+This is the shape of defect the fusion was hiding. A rendered name is a lossy
+encoding of a pair, and every reader that decoded it back into a pair was a
+silent dependency on the encoding. `get_struct_name_from_type` — the sibling that
+genuinely wants the rendering — keeps working, because it renders rather than
+parses.
 
 Deriving through the unerased view was tried — spelling a newtype / flags
 argument by its own declaration rather than its base — and made things *worse*:
