@@ -1553,7 +1553,7 @@ impl TypeTable {
 
     pub fn make_struct(&mut self, name: String, module_source: ModuleSource) -> TypeId {
         self.intern(ResolvedType::Struct {
-            name,
+            name: crate::name::MangledName::new(name),
             module_source,
             base_name: None,
         })
@@ -1576,7 +1576,7 @@ impl TypeTable {
         type_args: Vec<TypeId>,
     ) -> TypeId {
         let id = self.intern(ResolvedType::Struct {
-            name,
+            name: crate::name::MangledName::new(name),
             module_source,
             base_name: Some(base_name),
         });
@@ -3559,16 +3559,13 @@ ResolvedType::Resource {
                 name,
                 module_source,
                 ..
-            } => crate::name::FqTypeName::declared(module_source, name.as_mangled_str()),
+            } => TypeNameInfo::Named(format!("{module_source}/{name}")),
             ResolvedType::Enum {
                 name,
                 module_source,
                 ..
-            } => {
-                let name = &name.to_string();
-                TypeNameInfo::Named(format!("{module_source}/{name}"))
-            }
-ResolvedType::Resource {
+            } => TypeNameInfo::Named(format!("{module_source}/{name}")),
+            ResolvedType::Resource {
                 name,
                 module_source,
                 ..
