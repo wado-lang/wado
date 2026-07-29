@@ -1032,6 +1032,42 @@ impl TypeTable {
         .any(|sealed| self.symbol_by_type.get(sealed) == Some(&decl))
     }
 
+    /// The `TypeId` of `Array<element>`, when the program already has one.
+    /// Lookup only: a reader holds the table by shared reference and cannot
+    /// mint a type, and an array a constant describes is one the program
+    /// declared.
+    #[must_use]
+    pub fn find_builtin_array(&self, element: TypeId) -> Option<TypeId> {
+        self.intern_map
+            .get(&ResolvedType::BuiltinArray(element))
+            .copied()
+    }
+
+    /// Whether `type_id` is the `String` / `List` container the lower phase
+    /// writes as `{ repr, used }`. Shape does not identify one: a struct over
+    /// an array and an `i32` looks the same and means something else, so the
+    /// answer comes from the registered item rather than the field positions.
+    #[must_use]
+    pub fn is_seq_container(&self, type_id: TypeId) -> bool {
+        let ResolvedType::Struct {
+            name,
+            module_source,
+            base_name,
+            ..
+        } = self.get(type_id)
+        else {
+            return false;
+        };
+        let declared = base_name.as_deref().unwrap_or(name.as_str());
+        [
+            crate::compiler_item::CompilerItem::String,
+            crate::compiler_item::CompilerItem::List,
+        ]
+        .into_iter()
+        .filter_map(|item| self.compiler_items().struct_owned_opt(item))
+        .any(|(owner, item_name)| owner == *module_source && item_name == declared)
+    }
+
     /// Find the `TypeId` of a user-declared type (struct, enum, variant, flags,
     /// newtype, resource) by its source-level name and owning module. Returns
     /// only non-monomorphized declarations — monomorphized generic instances

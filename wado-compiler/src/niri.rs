@@ -234,17 +234,42 @@ pub struct Callee {
     /// and this decides whether a local stays trackable — a fold must not turn
     /// on which function the visitor happens to be walking.
     pub mut_params: Vec<bool>,
+    /// Which parameters the callee keeps beyond the call, from its `stores`
+    /// clause. A kept reference outlives the read, so naming its referent is
+    /// not the passing read the other arguments are.
+    pub stored_params: Vec<bool>,
 }
 
 impl Callee {
     #[must_use]
     pub fn new(func: Rc<RefCell<NirFunction>>) -> Self {
-        let mut_params = func.borrow().params.iter().map(|p| p.is_mut_ref).collect();
-        Self { func, mut_params }
+        let (mut_params, stored_params) = {
+            let borrowed = func.borrow();
+            (
+                borrowed.params.iter().map(|p| p.is_mut_ref).collect(),
+                borrowed
+                    .params
+                    .iter()
+                    .map(|p| borrowed.stores.contains(&p.name))
+                    .collect(),
+            )
+        };
+        Self {
+            func,
+            mut_params,
+            stored_params,
+        }
     }
 
     fn writes_receiver(&self) -> bool {
         self.mut_params.first().copied().unwrap_or(false)
+    }
+
+    /// Whether the parameter at `index` is one a passing read describes. A
+    /// stored one is not: the callee keeps the reference, and what it later
+    /// reads through it is whatever the referent has become.
+    fn reads_only(&self, index: usize) -> bool {
+        !self.stored_params.get(index).copied().unwrap_or(false)
     }
 }
 
@@ -522,12 +547,17 @@ impl EditSink for BodySink<'_> {
 ///
 /// Nor is `stores`, which declares that the function keeps a *reference*
 /// parameter beyond the call. The engine has no reference values: an argument
-/// reduces to its referent's value, and every borrow of a local disqualifies
-/// that local's root ([`clobbered_locals`]), so a referent the engine can bind
-/// at all is one nothing in the frame can go on to change. What the callee
-/// keeps is therefore indistinguishable from what it was handed. The one thing
-/// that could change under a stored reference — a mutable global — reaches the
+/// reduces to its referent's value, and a borrow of a local disqualifies that
+/// local's root ([`clobbered_locals`]), so a referent the engine can bind at
+/// all is one nothing in the frame can go on to change. What the callee keeps
+/// is therefore indistinguishable from what it was handed. The one thing that
+/// could change under a stored reference — a mutable global — reaches the
 /// engine as `NonConst` and never binds.
+///
+/// That argument is why a stored argument is the one kind of read
+/// [`ExecutedWrites`] does not exempt: exempting it would restore the local
+/// the borrow names, and the callee would keep a snapshot of a value the frame
+/// goes on to write.
 #[must_use]
 pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
     func.effects.is_empty()
@@ -843,18 +873,23 @@ impl ExecutedWrites {
                 continue;
             };
             let at_statement = statements.contains(&e);
+            let first_arg = usize::from(receiver.is_some());
             if let Some(receiver) = receiver {
                 match (callee.writes_receiver(), at_statement) {
-                    (false, _) => self.record(body, receiver, Reach::Read),
+                    (false, _) if callee.reads_only(0) => {
+                        self.record(body, receiver, Reach::Read);
+                    }
                     (true, true) => self.record(body, receiver, Reach::Write),
-                    (true, false) => {}
+                    (false, _) | (true, false) => {}
                 }
             }
-            for arg in args {
+            for (i, arg) in args.iter().enumerate() {
                 match (arg.is_mut, at_statement) {
-                    (false, _) => self.record(body, arg.expr, Reach::Read),
+                    (false, _) if callee.reads_only(first_arg + i) => {
+                        self.record(body, arg.expr, Reach::Read);
+                    }
                     (true, true) => self.record(body, arg.expr, Reach::Write),
-                    (true, false) => {}
+                    (false, _) | (true, false) => {}
                 }
             }
         }
@@ -905,7 +940,7 @@ enum Reach {
 }
 
 /// Every expression id reachable from the body root, in arena order.
-fn reachable_exprs(body: &Body) -> Vec<ExprId> {
+pub(crate) fn reachable_exprs(body: &Body) -> Vec<ExprId> {
     struct Collect(Vec<ExprId>);
     impl NirRefVisitor for Collect {
         fn visit_node(&mut self, body: &Body, node: NodeRef) {
@@ -1881,11 +1916,15 @@ impl<'a> Interpreter<'a> {
         let Value::Aggregate { type_id, .. } = value else {
             return false;
         };
-        let Some(Value::Seq {
-            type_id: backing_type,
-            elements,
-        }) = value.field(SeqField::Backing.index())
-        else {
+        // The literal below names its fields `repr` / `used` and carries only
+        // those two. Any struct over an array and an `i32` has that shape, so
+        // the container has to be identified rather than recognised: writing
+        // one back over `Chunk { data, tag }` would drop a field and read the
+        // second as a length.
+        if !self.type_table.is_seq_container(*type_id) {
+            return false;
+        }
+        let Some(Value::Seq { elements, .. }) = value.field(SeqField::Backing.index()) else {
             return false;
         };
         let Some((used, PrimitiveType::I32)) =
@@ -1911,8 +1950,14 @@ impl<'a> Interpreter<'a> {
             };
             bytes.push(byte);
         }
+        // Every element checked out as a `u8`, so the array the literal names
+        // is `Array<u8>` — not whatever type the value carries, which on the
+        // array-literal path is the container's own.
+        let Some(backing_type) = self.type_table.find_builtin_array(TypeTable::U8) else {
+            return false;
+        };
         let span = sink.body().exprs[e].span;
-        let backing = sink.alloc_expr(ExprKind::PackedArray(bytes), *backing_type, span);
+        let backing = sink.alloc_expr(ExprKind::PackedArray(bytes), backing_type, span);
         let len = u64::try_from(used).expect("a bounded element count fits u64");
         let len = sink.const_operand(ValueKind::Int(len, TypeTable::I32), TypeTable::I32);
         sink.replace_kind(
@@ -2562,18 +2607,11 @@ impl<'a> Interpreter<'a> {
     /// when the expression is not a call the frame knows; `Flow::Bail` when it
     /// is one the frame cannot run — stepping past a call whose writes it did
     /// not apply would leave the caller's places stale.
-    fn exec_call_stmt_a(&mut self, body: &mut Body, e: ExprId) -> Option<Flow> {
+    fn exec_call_stmt_a(&mut self, body: &Body, e: ExprId) -> Option<Flow> {
         let (key, _) = self.call_target_a(body, e)?;
         if !self.callees.is_some_and(|c| c.contains_key(&key)) {
             return None;
         }
-        // Reduce the arguments first. Binding a parameter reads the argument
-        // as it stands, and an argument still spelled as arithmetic denotes
-        // nothing until the walk has folded it.
-        self.reduce_in_place_a(body, e);
-        // A reduction that folded the call away leaves an ordinary operand in
-        // its place, which the caller evaluates as any other.
-        self.call_target_a(body, e)?;
         let Some(run) = self.run_call_a(body, e, true) else {
             return Some(Flow::Bail);
         };
@@ -2759,17 +2797,7 @@ impl<'a> Interpreter<'a> {
             (CtfeBuiltin::Get, [arr, index]) => self.index_lattice(body, arr.expr, index.expr),
             (CtfeBuiltin::New, [len]) => self.allocation_lattice(body, e, len.expr),
             (CtfeBuiltin::Select, [condition, if_true, if_false]) => {
-                match self.operand_lattice_folded_a(body, condition.expr) {
-                    Lattice::Const(Value::Bool(true)) => {
-                        self.operand_lattice_folded_a(body, if_true.expr)
-                    }
-                    Lattice::Const(Value::Bool(false)) => {
-                        self.operand_lattice_folded_a(body, if_false.expr)
-                    }
-                    Lattice::Const(_) | Lattice::NonConst | Lattice::Unevaluated => {
-                        Lattice::Unevaluated
-                    }
-                }
+                self.select_lattice(body, condition.expr, if_true.expr, if_false.expr)
             }
             // A write denotes nothing; the executor performs it as a statement.
             // Nor does a hint, which the executor simply steps past.
@@ -2784,6 +2812,31 @@ impl<'a> Interpreter<'a> {
                 _,
             ) => Lattice::Unevaluated,
         }
+    }
+
+    /// The arm `select(cond, if_true, if_false)` picks. Both arms run at run
+    /// time, so the one not taken has to compute rather than trap — a constant
+    /// is exactly that, and anything else keeps the call along with whatever it
+    /// would have done.
+    fn select_lattice(
+        &self,
+        body: &Body,
+        condition: Operand,
+        if_true: Operand,
+        if_false: Operand,
+    ) -> Lattice {
+        let Lattice::Const(Value::Bool(condition)) =
+            self.operand_lattice_folded_a(body, condition)
+        else {
+            return Lattice::Unevaluated;
+        };
+        let (Lattice::Const(if_true), Lattice::Const(if_false)) = (
+            self.operand_lattice_folded_a(body, if_true),
+            self.operand_lattice_folded_a(body, if_false),
+        ) else {
+            return Lattice::Unevaluated;
+        };
+        Lattice::Const(if condition { if_true } else { if_false })
     }
 
     /// The sequence `array_new(len)` allocates: `len` elements at the default

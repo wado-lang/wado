@@ -577,13 +577,17 @@ fn register_literal_data(ctx: &mut WirContext<'_>) {
 /// compile-time call producing a constant `String` becomes one — so the NIR is
 /// the authority. Registering after the recorded lists keeps their segment
 /// indices, appending only what they missed.
+///
+/// Only what the module will emit counts: a dead function is never lowered,
+/// and the arena keeps every node an in-place rewrite displaced. Counting
+/// either would put a segment in the binary that nothing reads.
 fn synthesized_packed_payloads(
     package: &crate::nir_package::NirPackage,
     threshold: usize,
 ) -> Vec<Vec<u8>> {
     fn collect(body: &crate::nir_arena::Body, threshold: usize, out: &mut Vec<Vec<u8>>) {
-        for (_, node) in &body.exprs {
-            if let crate::nir_arena::ExprKind::PackedArray(bytes) = &node.kind
+        for e in crate::niri::reachable_exprs(body) {
+            if let crate::nir_arena::ExprKind::PackedArray(bytes) = &body.exprs[e].kind
                 && bytes.len() > threshold
             {
                 out.push(bytes.clone());
@@ -592,7 +596,11 @@ fn synthesized_packed_payloads(
     }
     let mut out = Vec::new();
     for func in &package.functions {
-        if let Some(body) = func.borrow().body.as_ref() {
+        let func = func.borrow();
+        if func.is_dead {
+            continue;
+        }
+        if let Some(body) = func.body.as_ref() {
             collect(body, threshold, &mut out);
         }
     }

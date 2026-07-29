@@ -1,0 +1,26 @@
+// A container literal must only be written back over the container it names.
+//
+// The `{ repr, used }` literal niri materializes drops every field past the
+// second and reads the second as a length. Any struct over an array and an
+// `i32` has that shape, so recognising one by field position wrote the literal
+// over `Chunk { data, tag }` too: `tag` became the length and the array came
+// back truncated to it, with the field itself gone from the struct.
+use { println, Stdout } from "core:cli";
+
+struct Chunk { data: Array<u8>, tag: i32 }
+
+#[inline(never)]
+fn make() -> Chunk {
+    let a: Array<u8> = builtin::array_new(5);
+    return Chunk { data: a, tag: 2 };
+}
+
+export fn run() with Stdout {
+    let c = make();
+    println(`${c.data.len()} ${c.tag}`);
+}
+
+__DATA__
+{
+    "stdout": "5 2\n"
+}
