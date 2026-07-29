@@ -347,12 +347,19 @@ are built, not at the receiver's arguments.
 
 Read as far as `type_decl_key`, which answers `(module, "TreeMap")` for the
 `GenericInstance` — the right key — so the miss is in the index that key is
-looked up in. The specific suspicion, untested: `canonical_decl_key` resolves a
-written name through `find_struct_like_decl_key`, which scans declarations by
-name, and a monomorphized struct's `decl_name` is now the declaration's own name
-rather than the fused spelling. An instance may therefore answer a query that
-used to find only the declaration. That is a hypothesis, and this session's
-record says to measure it before acting on it.
+looked up in. That suspicion is dead: `struct_like_decl_modules` is built from AST
+`Item::Struct` declarations, not from the type table, so nothing this refactor
+did can add an entry to it.
+
+Everything measurable about this lookup agrees. The receiver is a
+`GenericInstance { name: "TreeMap", type_args: [K, V] }` with both arguments
+present; the query key is `Decl((core:collections, "TreeMap"))`; the
+registration key is built from `get_type_name_static`, which answers `TreeMap`
+for the header. Query and registration therefore look identical, and the probe
+still finds nothing. Whatever is wrong is not the key, and the next session
+should instrument `probe_trait_impls` itself — print what the index actually
+holds for that target — rather than continue reasoning about how the key is
+built.
 
 Deriving through the unerased view was tried — spelling a newtype / flags
 argument by its own declaration rather than its base — and made things *worse*:
