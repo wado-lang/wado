@@ -300,12 +300,15 @@ impl<'a> PatternLowerer<'a> {
     fn get_struct_fields(&self, type_id: TypeId, type_table: &TypeTable) -> Option<Vec<TirField>> {
         match type_table.get(type_id) {
             ResolvedType::Struct {
-                decl_name: name,
+                decl_name,
                 module_source,
-                ..
+                type_args,
             } => self
                 .struct_fields_map
-                .get(&(name.clone(), module_source.clone()))
+                .get(&(
+                    type_table.struct_rendered_name(decl_name, type_args),
+                    module_source.clone(),
+                ))
                 .cloned(),
             _ => None,
         }

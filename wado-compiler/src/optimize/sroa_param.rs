@@ -330,11 +330,14 @@ fn type_transitively_contains(
     }
     match type_table.get(ty) {
         ResolvedType::Struct {
-            decl_name: name,
+            decl_name,
             module_source,
-            ..
+            type_args,
         } => {
-            let key = (name.clone(), module_source.clone());
+            let key = (
+                type_table.struct_rendered_name(decl_name, type_args),
+                module_source.clone(),
+            );
             if &key == target {
                 return true;
             }

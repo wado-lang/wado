@@ -393,7 +393,12 @@ impl<'a> CallImmutability<'a> {
                 if is_box_or_list {
                     false
                 } else {
-                    let key = (name.clone(), module_source.clone());
+                    // `struct_fields` is keyed by the NIR struct's rendered
+                    // name, so an instantiation must be spelled with its args.
+                    let key = (
+                        self.type_table.struct_rendered_name(name, type_args),
+                        module_source.clone(),
+                    );
                     match self.struct_fields.get(&key) {
                         Some(fields) => fields.iter().all(|&f| self.walk(f, stack)),
                         // Unknown layout (not in the registry) — conservative.

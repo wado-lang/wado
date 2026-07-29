@@ -702,12 +702,16 @@ fn element_layout_of(
     // User struct element (e.g., `List<Point>`). Generic struct instances
     // appear as `ResolvedType::Struct` after monomorphization.
     if let ResolvedType::Struct {
-        decl_name: name,
+        decl_name,
         module_source,
-        ..
+        type_args,
     } = type_table.get(elem_ty)
     {
-        let tir_struct = struct_index.get(&(name.clone(), module_source.clone()))?;
+        let key = (
+            type_table.struct_rendered_name(decl_name, type_args),
+            module_source.clone(),
+        );
+        let tir_struct = struct_index.get(&key)?;
         if tir_struct.fields.is_empty() {
             return None;
         }
