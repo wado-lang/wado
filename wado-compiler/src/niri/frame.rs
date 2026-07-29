@@ -107,7 +107,7 @@ impl LoopSnapshot {
     }
 }
 
-impl<'a> Interpreter<'a> {
+impl Interpreter<'_> {
     fn exec_block_a(&mut self, body: &mut Body, block: BlockId) -> Flow {
         let stmts = body.blocks[block].stmts.clone();
         let mut value = Lattice::Unevaluated;
