@@ -693,8 +693,6 @@ fn collect_bytes_literals_block(body: &Body, root: BlockId, used: &mut IndexSet<
 /// Remove closure functors whose `__call` method was eliminated by function DCE.
 pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
     // Build a set of surviving (module_source, func_name) pairs for O(1) lookup.
-    // The __call method is named after the functor's fq struct name (via
-    // `MethodName::format_local`).
     let surviving_funcs: IndexSet<(ModuleSource, String)> = project
         .functions
         .iter()
@@ -915,14 +913,8 @@ fn function_id_for(func: &NirFunction) -> FunctionId {
                 monomorph_info.generic_name.clone(),
             ))
         } else {
-            // `func.name` is `format_local(fq_struct, trait, method)`, so
-            // splitting it back apart only recovers what `info` already holds
-            // structurally. Read the structure.
-            //
-            // The method's type arguments are part of its identity exactly as
-            // the receiver's are: `field<T>` (the template) and `field<i32>`
-            // (its instance) are two functions, and the bare method name
-            // collapses them onto one id.
+            // Type arguments are part of a method's identity: `field<T>` and
+            // `field<i32>` are two functions, and the bare name collapses them.
             FunctionId::Method(MethodName::new(
                 module_source.clone(),
                 info.fq_struct_name(),
@@ -1067,13 +1059,9 @@ impl<'a> DceWalker<'a> {
                     base_name,
                 ))
             } else {
-                // The parts `func_name` would be split into are already on
-                // `call_info`, which is what built it.
-                //
-                // `full_method_name`, not `method_name`: the definition side
-                // (`function_id_for`) keys on the method's type arguments too,
-                // and a call keyed without them names no definition — DCE would
-                // drop a live method.
+                // `full_method_name`, not `method_name`: `function_id_for` keys
+                // on the type arguments too, so a call keyed without them names
+                // no definition and DCE drops a live method.
                 FunctionId::Method(MethodName::new(
                     original_callee_module,
                     call_info.fq_struct_name(),
@@ -1988,18 +1976,9 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
     // 1. Its Struct type is reachable, OR
     // 2. Any GenericInstance with its base name is reachable (e.g., Box<i32> for Box)
     // 3. Any monomorphized Struct with its base name is reachable
-    // A monomorphized struct is kept by identity, not by spelling. Its
-    // `TirStruct` name was fixed before erasure while the reachability set is
-    // built after it, so the two spell the same type differently
-    // (`FlagsBit<Perms>` against `FlagsBit<u32>`) and neither view makes both
-    // sides agree. The `TypeId` erasure redirects consistently, so ask that.
-    // A monomorphized struct's stored `name` was fixed at monomorphize time,
-    // before newtype / flags erasure; the reachability set renders its names
-    // after erasure has redirected the argument ids. The same type therefore
-    // spells two ways (`FlagsBit<Perms>` against `FlagsBit<u32>`), and neither
-    // spelling alone answers for both sides. Derive the reachability set's own
-    // rendering from the instantiation the struct records, so the comparison is
-    // between two names built the same way.
+    // A struct's stored `name` predates newtype / flags erasure while the
+    // reachability set renders after it, so one type spells two ways
+    // (`FlagsBit<Perms>` against `FlagsBit<u32>`). Render both the same way.
     let monomorph_render = |s: &crate::nir::NirStruct| {
         let mono = s.monomorph_info.as_ref()?;
         Some(

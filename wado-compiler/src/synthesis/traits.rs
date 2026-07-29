@@ -3633,13 +3633,8 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
                 // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
             }
             _ => {
-                // A name carries its subject's declaring module, so one name is
-                // one function: the stub belongs to the module declaring the
-                // shape's base and is emitted once, there. Emitting a copy into
-                // every using module — which the bare-name scheme needed, since
-                // each module's copy then had a distinct identity — now mints
-                // several functions under one name, and a call from a third
-                // module matches none of them.
+                // One name is one function: the stub belongs to the module
+                // declaring the shape's base, emitted once, there.
                 // A shape with no declaration (a tuple, a reference, a `Fn`)
                 // has no module to be named by, so it keeps a copy per using
                 // module — the same reason the `Fn` arm below does.
@@ -4123,12 +4118,9 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     let ref_string_type = tt.make_ref(string_type);
     let span = synth_span();
 
-    // `Inspect` reaches a type by three routes, and a delegate is warranted
-    // whichever one applies: a trait impl (via TraitEnv / the synthesis
-    // layer), a free function with the same mangled name (legacy stdlib code
-    // predating trait synthesis), or one of the `Reflect*` blankets — the
-    // route every plain declaration takes, which leaves no per-type impl to
-    // find.
+    // `Inspect` reaches a type by a trait impl, a free function of the same
+    // mangled name (legacy stdlib), or a `Reflect*` blanket — which leaves no
+    // per-type impl to find. A delegate is warranted for all three.
     let has_inspect = |type_name: &str,
                        type_id: TypeId,
                        ctx: &SynthesisCtx<'_, '_, '_>,
@@ -4384,9 +4376,6 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
             continue;
         }
-        // One name is one function, so the delegating impl belongs to the
-        // module declaring the shape's base and is emitted once, there —
-        // matching where its `Inspect` counterpart lands.
         let shape_module = match shape_declaring_module(&resolved) {
             Some(m) if m != module_source => continue,
             Some(m) => m,
@@ -5449,9 +5438,6 @@ fn decompose_type_for_method_name(
             false,
             vec![tt.fq_type_name(*inner)],
         ),
-        // Everything else is already the structured shape the type table
-        // reports: the head names the receiver, its arguments are the method
-        // name's type args.
         _ => {
             let fq = tt.fq_type_name(type_id);
             let args = fq.args().to_vec();

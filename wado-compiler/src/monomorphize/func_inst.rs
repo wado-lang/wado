@@ -517,8 +517,6 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
         if !expr_reads_local(&first_arg.expr, self.binding_local) {
             return;
         }
-        // A callee with no method-level type params has no method type arg to
-        // infer, whatever its arguments happen to be.
         if !self.callee_is_method_generic(func) {
             return;
         }
@@ -853,8 +851,6 @@ impl Monomorphizer {
                             ) {
                                 let method_info =
                                     gf.borrow().method_info.clone().unwrap_or_else(|| {
-                                        // This key carries no `impl_type_args`,
-                                        // so the receiver keeps its own.
                                         LocalMethodName::new(
                                             super::dispatch_receiver_name(
                                                 type_table,
@@ -894,10 +890,6 @@ impl Monomorphizer {
                                         .filter(|(_, args)| !args.is_empty())
                                 });
                             if let Some((base_struct, impl_type_args)) = base_info {
-                                // The method template is named after the
-                                // receiver's fq head: `base_struct` is a
-                                // struct-instantiation key, which carries no
-                                // module.
                                 let receiver_head =
                                     super::dispatch_receiver_head(type_table, receiver.type_id);
                                 // Try both inherent and trait method formats
@@ -960,10 +952,6 @@ impl Monomorphizer {
                                         if impl_type_args.len()
                                             >= generic_func.impl_type_params.len()
                                         {
-                                            // The instance is named after the
-                                            // template's own receiver: `base_struct`
-                                            // is a struct-instantiation key, which
-                                            // carries no module.
                                             let method_info = generic_func
                                                 .method_info
                                                 .clone()
@@ -1034,8 +1022,6 @@ impl Monomorphizer {
                     } else {
                         false
                     };
-                    // A struct-instantiation key names its template without a
-                    // module; the method template is named after the receiver.
                     let receiver_head = super::dispatch_receiver_head(type_table, receiver.type_id);
                     names_to_try.push(MethodName::format_local(&receiver_head, None, &method_name));
                     if let Some(ref info) = method_func.method_info.clone()
@@ -1167,8 +1153,6 @@ impl Monomorphizer {
                 {
                     let base_struct = &struct_key.name;
                     let impl_type_args = struct_key.impl_type_args.clone();
-                    // A struct-instantiation key names its template without a
-                    // module; the method template is named after the receiver.
                     let receiver_head = super::dispatch_receiver_head(type_table, receiver.type_id);
 
                     let mut names_to_try =
@@ -2051,10 +2035,6 @@ impl Monomorphizer {
                                     &new_info,
                                     receiver_module.as_ref(),
                                 );
-                            // Dispatch through the blanket the receiver
-                            // satisfies, and take its param from that same
-                            // blanket: a trait carries one per reflection kind,
-                            // and the first-registered fits only its own.
                             let blanket = if generic_or_concrete.is_none() {
                                 trait_name_for_blanket.and_then(|tn| {
                                     self.functions
@@ -3004,23 +2984,15 @@ impl Monomorphizer {
             if self.functions.has_impl(&candidate) {
                 candidate
             } else {
-                // Name the *resolved* type so newtypes (`type FieldValue =
-                // List<u8>`) inherit the underlying type's head ("List"), not
-                // the newtype's own name — otherwise the trait_env candidate
-                // lookup misses the per-type impl.
+                // Newtypes must inherit the underlying head, else the trait_env
+                // candidate lookup misses the per-type impl.
                 let resolved_inner = type_table.resolve_newtype_base(inner);
                 info.with_substituted_struct_name(&type_table.fq_type_name(resolved_inner))
             }
         } else if needs_struct_type_args {
-            // Derive the struct name from the already-substituted receiver type.
-            // Resolve through newtypes so that e.g. MyArray<i32>::len → List<i32>::len.
+            // Resolve through newtypes so the receiver matches the TraitEnv key
+            // for the template's home module (issue #1110).
             let recv_inner = type_table.peel_refs(receiver_type_id);
-            // A newtype's own head (e.g. "MyBytes") is not what the
-            // post-substitution body targets — the base type's impl ("List")
-            // is. Peel through the newtype first so the receiver lines up with
-            // the TraitEnv key for the template's home module — required by the
-            // `(module_source, name)` lookup in `monomorphize_with_externals`
-            // (issue #1110).
             let resolved_recv = type_table.resolve_newtype_base(recv_inner);
             let mut new_info =
                 info.with_substituted_struct_name(&type_table.fq_type_name(resolved_recv));
@@ -3107,15 +3079,8 @@ impl Monomorphizer {
         let generic_or_concrete = self
             .functions
             .generic_or_concrete_impl_module(&new_info, receiver_module.as_ref());
-        // Dispatch through the blanket the receiver satisfies — a
-        // `ReflectStruct`-bound struct derive must not swallow a type carrying
-        // its own unregistered impl (`Fn^Inspect`), and with a blanket per
-        // reflection kind the first-registered one fits only its own kind. Its
-        // module and its receiver param name (`T` in `impl<T: Bound> Trait for
-        // T`, which keys its template) must come from that same blanket: the
-        // call-site type-param head of `old_func_name` equals the param only for
-        // a direct `T::method` call, while a call on a pack member `F` inside a
-        // blanket body must still resolve to the template.
+        // Module and receiver param must be read off this same blanket: the
+        // call-site type-param head matches only a direct `T::method` call.
         let blanket = if generic_or_concrete.is_none() {
             let recv_inner = type_table.peel_refs(receiver_type_id);
             trait_name_for_blanket.and_then(|tn| {
@@ -3190,10 +3155,8 @@ impl Monomorphizer {
             // `[T, T::Assoc, …]` so its instance name matches the two-arg template.
             // A plain one-arg blanket (`impl<I: Iterator> IntoIterator for I`)
             // projects nothing, so it stays keyed by the call-site args.
-            // Read off the blanket the receiver selected, all or nothing: a
-            // partial list keys the instance under an argument shape the
-            // template never declared, and the blind by-trait lookup would hand
-            // a variant receiver the struct kind's `FieldTypes`.
+            // All or nothing: a partial list keys the instance under an
+            // argument shape the template never declared.
             let projected_assocs: Vec<TypeId> = blanket
                 .as_ref()
                 .map(|(_, _, assocs)| assocs.as_slice())
@@ -4430,10 +4393,8 @@ fn try_lower_comparison(
                     // and already lowered to method calls by the elaborator.
                     return None;
                 }
-                // The call sites synthesised here (Eq / Ord operator lowering) name
-                // their target methods with the same struct-name form the
-                // monomorphizer's `method_instantiation_name_inner` uses to set the
-                // function definition's `MethodInfo.struct_name()`.
+                // Must match the struct-name form
+                // `method_instantiation_name_inner` writes into `MethodInfo`.
                 let args: Vec<FqTypeName> = type_args
                     .iter()
                     .map(|&t| type_table.fq_type_name(t))
@@ -4457,13 +4418,9 @@ fn try_lower_comparison(
     };
 
     let resolve_module = |info: &LocalMethodName, type_mod: Option<ModuleSource>| -> ModuleSource {
-        // Match the legacy `trait_method_locations.get(mangled)` semantics:
-        // only concrete (non-generic) impls live in the module the function
-        // actually compiles into. Generic impls' instantiations live in the
-        // receiver type's module, surfaced here through `type_mod`. Lookup
-        // uses `info.struct_name()` (the post-substitution full type name)
-        // — matches `FuncInstState::impl_module` so the same trait-method
-        // call resolves identically here and in receiver-substitution paths.
+        // Only concrete impls live in the module the function compiles into;
+        // generic instantiations live in the receiver's module (`type_mod`).
+        // Keyed like `FuncInstState::impl_module` so both paths agree.
         // `type_mod` is also passed to disambiguate same-name receiver
         // types coming from different modules.
         //

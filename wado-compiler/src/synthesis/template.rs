@@ -1270,10 +1270,8 @@ pub(crate) fn blanket_dispatch_for(
         return None;
     }
     let type_module = type_module_hint_tt(type_id, tt);
-    // The four reflection kinds each derive over their own `Reflect*` bound, so
-    // the blanket is chosen by which one the receiver satisfies — not by
-    // registration order. Param and pack projections must come from that same
-    // blanket, or the template name would name one kind and the args another.
+    // Param and pack projections must come from the same blanket, or the
+    // template name would name one kind and the args another.
     let blanket =
         trait_env.value_blanket_for_receiver(trait_name, type_module.as_ref(), &|bounds| {
             receiver_satisfies_blanket_bounds(type_id, bounds.to_vec(), tt)
@@ -1292,11 +1290,8 @@ pub(crate) fn blanket_dispatch_for(
     let mut impl_type_args = vec![type_id];
     for (bound_trait, assoc) in trait_env.pack_assocs_of_blanket(blanket) {
         let pack = tt.resolve_trait_assoc_type_of_instance(type_id, &bound_trait, &assoc)?;
-        // A generic instance's pack is substituted from its base declaration's
-        // definition, which needs interning and so a mutable table. Record it
-        // against the instance here, the one place that has one, so every later
-        // reader — the monomorphizer rewrites calls behind a shared borrow — is
-        // a plain lookup.
+        // Substituting a pack needs interning, so a mutable table. Record it
+        // here, the one place that has one; later readers hold a shared borrow.
         tt.register_assoc_type_resolution(type_id, bound_trait, assoc, pack);
         impl_type_args.push(pack);
     }

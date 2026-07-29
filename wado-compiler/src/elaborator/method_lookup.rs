@@ -165,10 +165,8 @@ impl TypeSystem {
                 if self.is_known_type_name_in(impl_module, &named.name)
                     && !impl_params.iter().any(|p| p.name == named.name)
                 {
-                    // The receiver side is mangled, and a mangler names a
-                    // declared type by its declaring module. Resolve the
-                    // written name against the impl's own module and mangle it
-                    // the same way, so the two sides are comparable.
+                    // Mangle the written name the same way the receiver side
+                    // was, so the two are comparable.
                     Some(self.mangled_decl_name_in(impl_module, &named.name))
                 } else {
                     None
@@ -205,10 +203,8 @@ impl TypeSystem {
         }
         self.trait_env.find_struct_like_decl_key(name).map_or_else(
             || name.to_string(),
-            // `of_head`, not `declared`: the index also carries builtin
-            // shapes, and a mangler spells those bare wherever they appear.
-            // Qualifying `i32` here made `impl Box<i32>` compare `…/i32`
-            // against the receiver's `i32` and match nothing.
+            // `of_head`, not `declared`: the index also carries builtin shapes,
+            // which a mangler spells bare wherever they appear.
             |(module, decl)| crate::name::FqTypeName::of_head(&module, &decl).into_string(),
         )
     }
@@ -1836,9 +1832,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.concrete_impl_matches_receiver(impl_ref, receiver_type_id) {
             return None;
         }
-        // The impl's methods are named after the receiver as the impl's own
-        // module resolves it, so qualify from that perspective — the call site's
-        // imports may name the same declaration differently, or not at all.
+        // Qualify from the impl's own module: the call site's imports may name
+        // the same declaration differently, or not at all.
         let impl_struct_fq = if is_blanket_type_param {
             crate::name::FqTypeName::binder(&impl_struct_name)
         } else {

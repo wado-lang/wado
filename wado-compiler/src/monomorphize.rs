@@ -199,7 +199,8 @@ fn dispatch_receiver_identity(tt: &TypeTable, type_id: TypeId) -> Option<crate::
 }
 
 /// The receiver *head* a dispatch template is named after: no type arguments,
-/// for keys that carry them in `impl_type_args`.
+/// for keys that carry them in `impl_type_args`. Prefer it over a
+/// struct-instantiation key's `name`, which carries no module.
 fn dispatch_receiver_head(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTypeName {
     let tid = dispatch_receiver_type(tt, type_id);
     dispatch_receiver_identity(tt, tid).unwrap_or_else(|| tt.fq_base_type_name(tid))

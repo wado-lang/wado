@@ -1228,12 +1228,6 @@ impl TraitEnv {
             .map(|b| &b.module)
     }
 
-    /// The value blanket `impl<Param: Bounds, ..> Trait for Param` for
-    /// `trait_name`, preferring one homed in `type_module`, else the first
-    /// registered. Ref blankets (`impl<T> Trait for &T`) are excluded — they
-    /// never dispatch a value receiver. The `blanket_impl_{param,bounds,arity}`
-    /// projections below all read the same selected blanket, so they stay
-    /// mutually consistent.
     /// The value blanket for `trait_name` whose receiver-param bounds `satisfies`
     /// accepts. A trait may carry several disjoint value blankets — the four
     /// reflection kinds each derive `Inspect` over their own `Reflect*` bound —
@@ -1258,6 +1252,10 @@ impl TraitEnv {
         values.next()
     }
 
+    /// The value blanket `impl<Param: Bounds, ..> Trait for Param` for
+    /// `trait_name`, preferring one homed in `type_module`, else the first
+    /// registered. Ref blankets (`impl<T> Trait for &T`) are excluded — they
+    /// never dispatch a value receiver.
     fn value_blanket_for_trait(
         &self,
         trait_name: &str,

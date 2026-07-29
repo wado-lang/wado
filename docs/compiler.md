@@ -199,16 +199,20 @@ The loader canonicalizes paths (RFC 3986, project-root-relative with `/` separat
 
 | Name             | Format                            | Example                             |
 | ---------------- | --------------------------------- | ----------------------------------- |
-| Method           | `{file}/{Type}::{method}`         | `./geom.wado/Point::sum`            |
-| Trait method     | `{file}/{Type}^{Trait}::{method}` | `./geom.wado/Point^Display::fmt`    |
+| Method           | `{impl}/{decl}/{Type}::{method}`  | `./geom.wado/./geom.wado/Point::sum` |
+| Trait method     | `{impl}/{decl}/{Type}^{Trait}::{method}` | `./geom.wado/./geom.wado/Point^Display::fmt` |
 | Effect operation | `{Effect}::{op}`                  | `Stdout::write_via_stream`          |
 | WASI canonical   | `wasi:{pkg}/{iface}::{fn}`        | `wasi:cli/stdout::write-via-stream` |
 | Mangled generic  | `{Base}$T1$T2…`                   | `Box$i32`, `Pair$i32$String`        |
 
-Every fq name names its subject by the module that declares it: `to_mangled_name`
-prepends nothing, so the `{file}/` above is part of `struct_name`, and a type
+Every fq name names its subject by the module that declares it, and a type
 written into any name goes through `TypeTable::mangle_type_arg_for_generic`. A
 simple name alone is never an identity — two modules may declare the same one.
+
+A method key is `(impl module, declared receiver, trait, method)`, so `{impl}`
+and `{decl}` repeat whenever a type is implemented in the module declaring it —
+the common case. A receiver with no declaring module (a builtin, a tuple) has no
+`{decl}` segment. See WEP 2026-07-29 for why neither segment is removable alone.
 
 ## Component Model Registries
 

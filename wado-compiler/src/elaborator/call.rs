@@ -256,13 +256,9 @@ impl TypeSystem {
                     type_param_type_id,
                 };
             }
-            // The rewritten prefix is consumed as a declaration name —
-            // `is_static_method`, `locate_static_method_impl`,
-            // `find_impl_method_ast_id` all key on what an `impl` header
-            // writes. A mangled name carries the declaring module, which no
-            // header does, so it matched nothing and the trait segment was
-            // silently dropped from the callee. `i32` only worked because a
-            // builtin is spelled the same in both namespaces.
+            // Consumed as a declaration name: `is_static_method`,
+            // `locate_static_method_impl` and `find_impl_method_ast_id` all key
+            // on what an `impl` header writes, which carries no module.
             let concrete_name = self
                 .type_table
                 .borrow()
@@ -907,10 +903,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // If prefix is a known type (struct/enum/newtype/flags) with no matching
             // static method, emit a compile error.
             else if self.tysys.is_known_type_name(prefix) {
-                // A value blanket (`impl<T: Bound> Trait for T`) indexes its
-                // statics under the receiver param name, so `prefix`'s own
-                // bucket never sees them. Retry through the blanket before
-                // calling the method unknown.
+                // A value blanket indexes statics under the receiver param
+                // name, so `prefix`'s own bucket never sees them.
                 let receiver_ty = self.resolve_named_type(prefix, call.span, false);
                 if let Some(return_type) =
                     self.resolve_blanket_static_method(receiver_ty, suffix, call.id, &[], &[])
@@ -1030,11 +1024,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let trait_name = method_ref.trait_name.clone();
                     let struct_module = method_ref.module.clone();
 
-                    // Qualify the receiver by the module the impl was located
-                    // in, not by this module's perspective: `helper::Pair` and
-                    // a local `Pair` are different declarations, and resolving
-                    // the written name here would name the local one and miss
-                    // the definition entirely.
+                    // Qualify by the module the impl was located in:
+                    // `helper::Pair` and a local `Pair` are different
+                    // declarations.
                     let final_mangled = MethodName::format_local(
                         &crate::name::FqTypeName::of_head(&struct_module, type_name),
                         method_ref.trait_name.as_deref(),

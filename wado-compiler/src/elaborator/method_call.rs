@@ -855,17 +855,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // name is "Array" (matching `impl Array<T>`'s registration).
             ResolvedType::BuiltinArray(elem) => {
                 let arg_name = self.tysys.type_table.borrow().fq_type_name(elem);
-                // `Array` is a declaration like any other, so the receiver
-                // carries its module and the base name matches `impl Array<T>`'s
-                // registration.
                 let base = self.qualified_receiver_name(TypeTable::ARRAY_TYPE_NAME);
                 let mangled = base.clone().with_args(vec![arg_name.clone()]);
                 (mangled, base, vec![arg_name], Some(vec![elem]))
             }
-            // The newtype answers the call with its own impl. It is a
-            // declaration like any other, so it is named by the module that
-            // declares it — a bare head would name no definition, and the
-            // later re-resolution would peel past the impl to the base.
+            // Named by its declaring module: a bare head names no definition,
+            // and re-resolution would peel past the impl to the base.
             ResolvedType::Newtype {
                 name,
                 module_source,
@@ -874,10 +869,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let base = FqTypeName::declared(&module_source, &name);
                 (base.clone(), base, vec![], None)
             }
-            // A generic newtype's stored `name` is its display form, which
-            // bakes the arguments into the head (`MyArray<i32>`). Split it
-            // there — that is the newtype's own spelling, not an fq name — and
-            // qualify the head by the module that declares it.
+            // A generic newtype's stored `name` is the display form, baking
+            // arguments into the head (`MyArray<i32>`); split it there.
             ResolvedType::Newtype {
                 name,
                 module_source,
@@ -1162,11 +1155,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve the target type first to get struct name for parameter type lookup
         let target_type_id = self.resolve_type(&static_call.target_type);
 
-        // `Tag::<Point>::tag()` where `Tag` is a trait: the receiver resolves to
-        // no type, and every lookup below then misses silently, typing the call
-        // `unknown`. An annotated binding swallowed that, lowering emitted
-        // nothing, and the WIR pipeline built an invalid core module. Report it
-        // the way the bare `Point::tag()` spelling already does.
+        // `Tag::<Point>::tag()` where `Tag` is a trait resolves to no type;
+        // unreported it types `unknown` and lowering builds an invalid module.
         if target_type_id == TypeTable::UNKNOWN
             && let ast::Type::Generic(g) = &static_call.target_type
             && self.tysys.trait_env.find_trait_decl_key(&g.name).is_some()
@@ -1778,9 +1768,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut return_type =
             self.lookup_static_method_return_type(&method_ref, &mangled_func_name);
 
-        // A value blanket's statics are indexed under its receiver *param*
-        // name, so the concrete receiver's own bucket misses. Retry through
-        // the blanket before calling the method unknown.
+        // A value blanket indexes statics under its receiver *param* name, so
+        // the concrete receiver's own bucket misses.
         if return_type == TypeTable::UNKNOWN
             && let Some(resolved) = self.resolve_blanket_static_method(
                 target_type_id,
@@ -1822,8 +1811,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let monomorph_info = if struct_type_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
-            // The template is named by the module declaring the receiver, the
-            // same rule its definition follows.
             let generic_name = MethodName::format_local(
                 &self.qualified_receiver_name(&struct_name),
                 trait_name_opt.as_deref(),
@@ -1995,9 +1982,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .flat_map(|(trait_name, impls)| impls.iter().map(move |b| (trait_name, b)))
             .filter(|(_, b)| b.receiver == super::trait_env::BlanketReceiver::Value)
-            // The blanket's *statics* are exactly its bucket under the receiver
-            // param name. Reading the impl header instead would also match an
-            // instance method of the same name and mis-resolve it here.
+            // Reading the impl header instead would also match an instance
+            // method of the same name.
             .filter(|(_, b)| {
                 self.tysys
                     .trait_env
@@ -2053,8 +2039,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Check if a static method exists directly for a given type name (no newtype fallback).
     fn has_static_method_direct(&self, struct_name: &str, method_name: &str) -> bool {
-        // Every lookup into a name-keyed index builds the name by the same rule
-        // the definition followed, or it can only miss.
         let qualified = self.qualified_receiver_name(struct_name);
         let mangled = MethodName::format_local(&qualified, None, method_name);
         if self.sem.decls.function_return_types.contains_key(&mangled) {
@@ -2949,8 +2933,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // is keyed by the *original* `Counter`, not the local alias.
         // The other lookups below still consume `struct_name` as-is and
         // canonicalise internally via `Elaborator::canonical_decl_key`.
-        // The receiver is named by the module that declares it, so the mangled
-        // name is rebuilt from the canonical key rather than the local alias.
+        // Rebuilt from the canonical key, not the local alias.
         let qualified_struct_name = self.qualified_receiver_name(struct_name);
         let mangled_func_name_owned =
             MethodName::format_local(&qualified_struct_name, None, method_name);
