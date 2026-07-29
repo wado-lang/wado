@@ -3354,7 +3354,7 @@ ResolvedType::Variant {
                 name,
                 module_source,
                 ..
-            } => FqTypeName::declared(module_source, name.as_mangled_str()),
+            } => crate::name::FqTypeName::declared(module_source, name.as_mangled_str()),
             ResolvedType::Enum {
                 name,
                 module_source,
@@ -3482,13 +3482,13 @@ ResolvedType::Variant {
                 }
                 // Arguments unrecorded and no `GenericInstance` left to match:
                 // the instantiated spelling is all the identity there is.
-                _ => FqTypeName::declared(module_source, name.as_mangled_str()),
+                _ => crate::name::FqTypeName::declared(module_source, name.as_mangled_str()),
             },
             ResolvedType::Struct {
                 name,
                 module_source,
                 ..
-            } => FqTypeName::declared(module_source, name.as_mangled_str()),
+            } => crate::name::FqTypeName::declared(module_source, name.as_mangled_str()),
             ResolvedType::Enum {
                 name,
                 module_source,
@@ -3559,7 +3559,7 @@ ResolvedType::Resource {
                 name,
                 module_source,
                 ..
-            } => FqTypeName::declared(module_source, name.as_mangled_str()),
+            } => crate::name::FqTypeName::declared(module_source, name.as_mangled_str()),
             ResolvedType::Enum {
                 name,
                 module_source,

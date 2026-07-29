@@ -235,7 +235,7 @@ fn collect_resource_refs(
             module_source,
             ..
         } => {
-            if let Some(fields) = struct_fields.get(&(module_source.clone(), name.clone())) {
+            if let Some(fields) = struct_fields.get(&(module_source.clone(), name.to_string())) {
                 for ft in fields {
                     collect_resource_refs(*ft, tt, struct_fields, variant_payloads, out, visited);
                 }
@@ -245,7 +245,7 @@ fn collect_resource_refs(
             name,
             module_source,
         } => {
-            if let Some(payloads) = variant_payloads.get(&(module_source.clone(), name.clone())) {
+            if let Some(payloads) = variant_payloads.get(&(module_source.clone(), name.to_string())) {
                 for pt in payloads {
                     collect_resource_refs(*pt, tt, struct_fields, variant_payloads, out, visited);
                 }
@@ -1717,14 +1717,14 @@ impl TypeRefCtx {
                 ..
             } => self
                 .struct_fields
-                .get(&(module_source.clone(), name.clone()))
+                .get(&(module_source.clone(), name.to_string()))
                 .is_some_and(|fields| fields.iter().any(|t| self.walk(tt, *t, visited))),
             ResolvedType::Variant {
                 name,
                 module_source,
             } => self
                 .variant_payloads
-                .get(&(module_source.clone(), name.clone()))
+                .get(&(module_source.clone(), name.to_string()))
                 .is_some_and(|payloads| payloads.iter().any(|t| self.walk(tt, *t, visited))),
             ResolvedType::Function { .. } => false,
             ResolvedType::TypeParam { .. }
