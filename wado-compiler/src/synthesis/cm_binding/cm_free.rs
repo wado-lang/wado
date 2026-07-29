@@ -35,6 +35,7 @@ use crate::synthesis::common::{
     let_mut_stmt, let_stmt, local_ref, loop_stmt,
 };
 
+use super::export_adapter::FlatLocal;
 use super::types::{
     CmStdlibNames, binary_add, cm_val_type_to_type_id, coerce_flat_lift,
     compute_export_flat_return_types, is_unit_type,
@@ -269,8 +270,7 @@ pub(super) struct FlatSlot {
 }
 
 impl FlatSlot {
-    /// The slots a `task.return` epilogue filled: one mutable local per
-    /// declared slot type, in the order the flattening assigned them.
+    /// The pre-allocated slots a variant epilogue assigns its active case into.
     pub(super) fn joined(
         locals: &[(u32, String)],
         cm_types: &[cm_abi::CmValType],
@@ -279,6 +279,17 @@ impl FlatSlot {
             .iter()
             .zip(cm_types)
             .map(|(&(local, _), &cm_type)| FlatSlot { local, cm_type })
+            .collect()
+    }
+
+    /// The slots a value flattened straight into, each keeping its natural type.
+    pub(super) fn lowered(lowered: &[FlatLocal]) -> Vec<FlatSlot> {
+        lowered
+            .iter()
+            .map(|flat| FlatSlot {
+                local: flat.index,
+                cm_type: flat.cm_type,
+            })
             .collect()
     }
 }

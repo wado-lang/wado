@@ -39,7 +39,6 @@ use super::types::{
 /// the flat lowering + `cm_raw_call(task_return_name, flat_args)` sequence, where
 /// `task_return_name` is this export's `task-return:<name>` import.
 /// New locals are appended to the function's `locals` and `local_count` is updated.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn expand_task_returns_in_func(
     user_func: &Rc<RefCell<TirFunction>>,
     return_type: &Type,
@@ -94,8 +93,7 @@ pub(super) fn strip_task_returns_in_func(user_func: &Rc<RefCell<TirFunction>>) {
 /// no nesting position is missed; `visit_block` rebuilds each block's
 /// statement list because one `task return` expands to several statements.
 struct TaskReturnExpander<'a> {
-    /// The export's world-declared result, whose flattening defines the slots
-    /// the value is lowered into — and therefore which of them own memory.
+    /// The world-declared result, whose flattening defines the slots.
     return_type: &'a Type,
     flat_return_types: &'a [cm_abi::CmValType],
     /// The `task.return` core import name for this export (`task-return:<name>`).
@@ -168,10 +166,8 @@ impl TirOptVisitor for TaskReturnStripper {
 /// `task-return(...flat_values)`. For unit-returning exports, the value
 /// is evaluated for its side effects and `task-return()` is emitted.
 ///
-/// `task.return` lifts eagerly, so every buffer the flattening allocated is
-/// the guest's again once the call returns, and `post-return` cannot reclaim
-/// it here — the sequence ends by freeing them.
-#[allow(clippy::too_many_arguments)]
+/// `task.return` lifts eagerly and `post-return` is illegal alongside `async`,
+/// so the sequence ends by freeing the buffers the flattening allocated.
 fn generate_inline_task_return(
     value: TirExpr,
     return_type: &Type,
@@ -424,8 +420,8 @@ fn generate_inline_task_return(
             span,
         );
         stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
-        // One free walk after the match, not one per arm: the slots outlive it
-        // and their discriminant tells the walk which case's payload is live.
+        // One walk after the match, not one per arm: the slots outlive it, and
+        // their discriminant tells the walk which payload is live.
         stmts.extend(synthesize_free_cm_flat(
             return_type,
             &FlatSlot::joined(&flat_locals, flat_return_types),
@@ -486,13 +482,7 @@ fn generate_inline_task_return(
             )));
             stmts.extend(synthesize_free_cm_flat(
                 return_type,
-                &lowered
-                    .iter()
-                    .map(|flat| FlatSlot {
-                        local: flat.index,
-                        cm_type: flat.cm_type,
-                    })
-                    .collect::<Vec<_>>(),
+                &FlatSlot::lowered(&lowered),
                 &shape_ctx,
                 next_local,
                 locals,

@@ -1,11 +1,9 @@
 //! Buffer reclamation at the async-lifted `--lib` boundary.
 //!
-//! An `async` export returns through `task.return`, which lifts eagerly: the
-//! Canonical ABI has read the whole value by the time the builtin returns, so
-//! the guest owns the buffers it lowered into and must give them back on the
-//! next instruction. `post-return` is not available here — it is illegal
-//! alongside `async` on `canon lift` — so freeing after `task.return` is the
-//! only mechanism there is.
+//! An `async` export returns through `task.return`, which lifts eagerly, so the
+//! guest owns the buffers it lowered into the moment the call returns.
+//! `post-return` is illegal alongside `async`, so freeing there is the only
+//! mechanism there is.
 //!
 //! The mirror of `lib_sync_lift_post_return.rs`, and capped the same way: guest
 //! memory is held far below the total payload moved, so a per-call leak
@@ -13,10 +11,9 @@
 //! library world's own default — traps on double-free, so an over-eager free
 //! fails here too.
 //!
-//! Covered: a bare `string` result, a `result<string, string>` (whose payload
-//! shares joined flat slots with the other case), and a `list<string>` (whose
-//! element buffers hang off the element array, out of the outer pointer's
-//! reach).
+//! Covered: a bare `string`, a `result<string, string>` (whose payload shares
+//! joined slots with the other case), and a `list<string>` (whose element
+//! buffers are out of the outer pointer's reach).
 
 #![allow(unused_crate_dependencies)]
 
@@ -95,8 +92,7 @@ fn lib_func(
 }
 
 /// Call `export` `CALLS` times under the memory cap, checking each result with
-/// `check`. The panic message names the leak, since exhausting the cap is how
-/// every unreclaimed buffer shows up here.
+/// `check`.
 fn run_calls(
     source: &str,
     export: &str,
@@ -139,7 +135,7 @@ fn run_calls(
     });
 }
 
-/// The bare case:one `(ptr, len)` pair straight into `task.return`.
+/// The bare case: one `(ptr, len)` pair straight into `task.return`.
 const STRING_SOURCE: &str = r#"
 export async fn chunk(n: u32) -> String {
     let mut s = "0123456789abcdef";
