@@ -223,13 +223,36 @@ pub type CalleeKey = crate::nir::FuncId;
 /// it. Body-shape and per-call validity (arity match, all args
 /// reduce, single recognized tail expression) are checked at fold
 /// time, not here.
-pub type CalleeMap = IndexMap<CalleeKey, Rc<RefCell<NirFunction>>>;
+pub type CalleeMap = IndexMap<CalleeKey, Callee>;
 
-/// The array builtins the engine can evaluate over a constant sequence. An
-/// element read or write reaches NIR as a call to one of these, not as an
-/// `Index` node.
+/// A callee the engine may run, with the one fact about it that the
+/// trackability analysis needs answered without a borrow.
+pub struct Callee {
+    pub func: Rc<RefCell<NirFunction>>,
+    /// `is_mut_ref` per parameter, captured when the map is built. Asking the
+    /// function itself would answer only when nobody holds `borrow_mut` on it,
+    /// and this decides whether a local stays trackable — a fold must not turn
+    /// on which function the visitor happens to be walking.
+    pub mut_params: Vec<bool>,
+}
+
+impl Callee {
+    #[must_use]
+    pub fn new(func: Rc<RefCell<NirFunction>>) -> Self {
+        let mut_params = func.borrow().params.iter().map(|p| p.is_mut_ref).collect();
+        Self { func, mut_params }
+    }
+
+    fn writes_receiver(&self) -> bool {
+        self.mut_params.first().copied().unwrap_or(false)
+    }
+}
+
+/// The builtins the engine understands. Most are the array intrinsics an
+/// element read or write reaches NIR as — a call, not an `Index` node — plus
+/// the hints that denote nothing at all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SeqBuiltin {
+pub enum CtfeBuiltin {
     Get,
     Len,
     /// `array_new(len)`, which denotes a sequence of `len` default elements.
@@ -239,23 +262,31 @@ pub enum SeqBuiltin {
     /// argument roots at, and only inside a compile-time frame that owns it.
     Set,
     /// `array_copy(&mut dst, dst_offset, src, src_offset, len)`, performed like
-    /// [`SeqBuiltin::Set`] but over a run of elements.
+    /// [`CtfeBuiltin::Set`] but over a run of elements.
     Copy,
+    /// A branch hint such as `cold_path()`. It denotes nothing and computes
+    /// nothing, so a frame steps past it — and must, since it sits on the very
+    /// path that grows a container.
+    Hint,
+    /// `select(cond, if_true, if_false)`, the branchless form a comparison
+    /// collapses to. Both arms are already evaluated, so picking one folds
+    /// nothing away that was not going to run.
+    Select,
 }
 
-impl SeqBuiltin {
+impl CtfeBuiltin {
     /// Whether the builtin writes its first argument, which the executor
     /// performs at statement position rather than folding.
     fn is_write(self) -> bool {
         match self {
             Self::Set | Self::Copy => true,
-            Self::Get | Self::Len | Self::New => false,
+            Self::Get | Self::Len | Self::New | Self::Hint | Self::Select => false,
         }
     }
 }
 
 /// Which sequence builtin each callee id is, for the ids that are one.
-pub type SeqBuiltinMap = IndexMap<CalleeKey, SeqBuiltin>;
+pub type CtfeBuiltinMap = IndexMap<CalleeKey, CtfeBuiltin>;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Global env
@@ -481,27 +512,43 @@ impl EditSink for BodySink<'_> {
     }
 }
 
-/// Whether `func` can be evaluated at compile time: pure, and concrete —
+/// Whether a compile-time frame can run `func`'s body: pure, and concrete —
 /// `type_params` and `impl_type_params` empty, since CTFE runs after
 /// monomorphization.
 ///
 /// `inline_hint` is deliberately not consulted: `#[inline(never)]` asks the
 /// optimizer to keep the body out of line, which says nothing about whether
 /// the result is knowable at compile time.
+///
+/// Nor is `stores`, which declares that the function keeps a *reference*
+/// parameter beyond the call. The engine has no reference values: an argument
+/// reduces to its referent's value, and every borrow of a local disqualifies
+/// that local's root ([`clobbered_locals`]), so a referent the engine can bind
+/// at all is one nothing in the frame can go on to change. What the callee
+/// keeps is therefore indistinguishable from what it was handed. The one thing
+/// that could change under a stored reference — a mutable global — reaches the
+/// engine as `NonConst` and never binds.
 #[must_use]
-pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
-    // A unit call has no value to substitute for it.
-    func.return_type != crate::tir::TypeTable::UNIT
-        && func.effects.is_empty()
+pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
+    func.effects.is_empty()
         && func.body.is_some()
         && !func.is_cm_binding
         && !func.is_dispatch_wrapper
         && !func.is_cm_export
         && !func.is_async
         && func.task_return_type.is_none()
-        && func.stores.is_empty()
         && func.type_params.is_empty()
         && func.impl_type_params.is_empty()
+}
+
+/// Whether `func`'s call can be replaced by the value it computes: runnable,
+/// and producing a value at all.
+#[must_use]
+pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
+    // A unit call has no value to substitute for it.
+    func.return_type != crate::tir::TypeTable::UNIT
+        && func.stores.is_empty()
+        && is_ctfe_runnable(func)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -549,7 +596,7 @@ pub struct Interpreter<'a> {
     /// [`with_callees`]: Self::with_callees
     callees: Option<&'a CalleeMap>,
     /// When `None`, an `array_get` / `array_len` call is just an opaque call.
-    seq_builtins: Option<&'a SeqBuiltinMap>,
+    ctfe_builtins: Option<&'a CtfeBuiltinMap>,
     /// Pre-built lattice values for module-scope globals. When `None`,
     /// every `GlobalVarGet` stays [`Lattice::Unevaluated`]. The visitor
     /// populates this once per pass via [`with_globals`].
@@ -663,22 +710,34 @@ fn value_with_path(base: &Value, path: &[u32], new: Value) -> Option<Value> {
 /// A write counts only at statement position, where the executor runs it — one
 /// buried in a larger expression is merely reduced, so its target would keep a
 /// stale value.
+/// What running a call left behind: the value it returned, and the value each
+/// `&mut` parameter holds at return, paired with the caller place it belongs
+/// in.
+struct CallRun {
+    result: Lattice,
+    writes: Vec<(u32, Vec<u32>, Value)>,
+}
+
 #[derive(Default)]
 struct ExecutedWrites {
-    /// The borrow arguments of the sequence builtins. A read cannot write at
-    /// all, so its borrow counts wherever it appears.
-    seq_borrows: IndexSet<ExprId>,
+    /// The places the frame writes through: a builtin's borrowed first
+    /// argument, and the receiver and `&mut` arguments of a call the frame
+    /// runs. Recorded with the borrow peeled, so a receiver named directly and
+    /// one named through `&mut` look alike.
+    frame_borrows: IndexSet<ExprId>,
     /// The `Assign` nodes whose target names a place.
     place_assigns: IndexSet<ExprId>,
 }
 
 impl ExecutedWrites {
-    fn of(body: &Body, seq_builtins: Option<&SeqBuiltinMap>) -> Self {
+    fn of(body: &Body, ctfe_builtins: Option<&CtfeBuiltinMap>, callees: Option<&CalleeMap>) -> Self {
         let mut statements: IndexSet<ExprId> = IndexSet::default();
         for (_, stmt) in &body.stmts {
-            if let StmtKind::Expr(op) = &stmt.kind
-                && let Some(e) = op.as_expr()
-            {
+            let op = match &stmt.kind {
+                StmtKind::Expr(op) | StmtKind::Let { value: op, .. } => *op,
+                _ => continue,
+            };
+            if let Some(e) = op.as_expr() {
                 statements.insert(e);
             }
         }
@@ -690,8 +749,19 @@ impl ExecutedWrites {
                 writes.place_assigns.insert(*e);
             }
         }
-        let Some(map) = seq_builtins else {
-            return writes;
+        writes.collect_builtin_borrows(body, ctfe_builtins, &statements);
+        writes.collect_call_borrows(body, callees, &statements);
+        writes
+    }
+
+    fn collect_builtin_borrows(
+        &mut self,
+        body: &Body,
+        ctfe_builtins: Option<&CtfeBuiltinMap>,
+        statements: &IndexSet<ExprId>,
+    ) {
+        let Some(map) = ctfe_builtins else {
+            return;
         };
         for (e, node) in &body.exprs {
             let ExprKind::Call { func_id, args, .. } = &node.kind else {
@@ -703,11 +773,91 @@ impl ExecutedWrites {
             if builtin.is_write() && !statements.contains(&e) {
                 continue;
             }
-            if let Some(arg) = args.first().and_then(|a| a.expr.as_expr()) {
-                writes.seq_borrows.insert(arg);
+            // Every argument, not just the borrowed first: the engine models
+            // the whole call exactly, so a source it reads through is as
+            // current as the destination it writes through.
+            for arg in args {
+                self.borrow_through(body, arg.expr);
             }
         }
-        writes
+    }
+
+    /// The places a call reaches through. A shared receiver or a by-value
+    /// argument only reads, so it counts wherever it appears — including the
+    /// `&self` methods a container is read through. A `&mut` one counts only
+    /// at statement position, where the frame runs the call and applies the
+    /// write; elsewhere the projection merely reads the call, and the write
+    /// would go missing.
+    ///
+    /// A callee the map does not hold says nothing about its parameters, so
+    /// nothing about it is exempt.
+    fn collect_call_borrows(
+        &mut self,
+        body: &Body,
+        callees: Option<&CalleeMap>,
+        statements: &IndexSet<ExprId>,
+    ) {
+        let Some(callees) = callees else {
+            return;
+        };
+        for (e, node) in &body.exprs {
+            let (func_id, receiver, args) = match &node.kind {
+                ExprKind::Call { func_id, args, .. } => (func_id, None, args),
+                ExprKind::MethodCall {
+                    func_id,
+                    receiver,
+                    args,
+                    ..
+                } => (func_id, Some(*receiver), args),
+                _ => continue,
+            };
+            let Some(callee) = callees.get(func_id) else {
+                continue;
+            };
+            let at_statement = statements.contains(&e);
+            if let Some(receiver) = receiver
+                && (at_statement || !callee.writes_receiver())
+            {
+                self.borrow_through(body, receiver);
+            }
+            for arg in args.iter().filter(|a| at_statement || !a.is_mut) {
+                self.borrow_through(body, arg.expr);
+            }
+        }
+    }
+
+    /// Whether the frame itself performs the write reaching the place `op`
+    /// names.
+    fn writes_through(&self, body: &Body, op: Operand) -> bool {
+        let mut op = op;
+        loop {
+            let Some(e) = op.as_expr() else {
+                return false;
+            };
+            match &body.exprs[e].kind {
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+                    expr,
+                } => op = *expr,
+                _ => return self.frame_borrows.contains(&e),
+            }
+        }
+    }
+
+    /// Record the place `op` names, peeling the borrow it may be wrapped in.
+    fn borrow_through(&mut self, body: &Body, op: Operand) {
+        let Some(e) = op.as_expr() else {
+            return;
+        };
+        match &body.exprs[e].kind {
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+                expr,
+            } => self.borrow_through(body, *expr),
+            _ => {
+                self.frame_borrows.insert(e);
+            }
+        }
     }
 }
 
@@ -732,10 +882,15 @@ fn reachable_exprs(body: &Body) -> Vec<ExprId> {
 }
 
 /// Locals of `body` that may bind an aggregate constant: every mention only
-/// reads the value — as a field read's receiver or a `match` / `switch`
-/// scrutinee — and no store target, mutable borrow, method receiver, or
+/// reads the value, and no store target, mutable borrow, method receiver, or
 /// mutable argument roots at them. A write in `writes` is exempt: the executor
 /// performs it, so the value it leaves is current.
+///
+/// The read positions are listed rather than inferred from the absence of the
+/// others, so a node kind nobody taught this walk about costs a fold and never
+/// a wrong one. Under value semantics that list is long — returning, binding,
+/// storing and composing all copy — but each entry earns its place: leave one
+/// out and a container filled in a frame cannot leave it.
 ///
 /// Only the reachable body is scanned: a mention orphaned by an earlier rewrite
 /// cannot run, so it must not disqualify a local.
@@ -743,6 +898,11 @@ fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
             set.insert(index);
+        }
+    }
+    fn read_value(op: Operand, reads: &mut IndexSet<ExprId>) {
+        if let Some(e) = op.as_expr() {
+            reads.insert(e);
         }
     }
     let mut value_reads: IndexSet<ExprId> = IndexSet::default();
@@ -756,12 +916,23 @@ fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
             | ExprKind::Match { expr, .. }
             | ExprKind::Switch {
                 scrutinee: expr, ..
-            } => {
-                if let Some(read) = expr.as_expr() {
-                    value_reads.insert(read);
+            } => read_value(*expr, &mut value_reads),
+            ExprKind::Index { expr, index } => {
+                read_value(*expr, &mut value_reads);
+                read_value(*index, &mut value_reads);
+            }
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                for element in elements {
+                    read_value(*element, &mut value_reads);
                 }
             }
-            ExprKind::Assign { target, .. } => {
+            ExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    read_value(field.value, &mut value_reads);
+                }
+            }
+            ExprKind::Assign { target, value } => {
+                read_value(*value, &mut value_reads);
                 if !writes.place_assigns.contains(&e) {
                     disqualify_root(body, (*target).into(), &mut disqualified);
                 }
@@ -770,24 +941,47 @@ fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
                 op: NirUnaryOp::MutRef,
                 expr,
             } => {
-                if !writes.seq_borrows.contains(&e) {
+                if !writes.writes_through(body, *expr) {
                     disqualify_root(body, *expr, &mut disqualified);
                 }
             }
             ExprKind::MethodCall { receiver, args, .. } => {
-                disqualify_root(body, *receiver, &mut disqualified);
-                for arg in args.iter().filter(|a| a.is_mut) {
-                    disqualify_root(body, arg.expr, &mut disqualified);
+                if !writes.writes_through(body, *receiver) {
+                    disqualify_root(body, *receiver, &mut disqualified);
+                }
+                for arg in args {
+                    if !arg.is_mut {
+                        read_value(arg.expr, &mut value_reads);
+                    } else if !writes.writes_through(body, arg.expr) {
+                        disqualify_root(body, arg.expr, &mut disqualified);
+                    }
                 }
             }
             ExprKind::Call { args, .. } => {
-                for arg in args.iter().filter(|a| a.is_mut) {
-                    disqualify_root(body, arg.expr, &mut disqualified);
+                for arg in args {
+                    if !arg.is_mut {
+                        read_value(arg.expr, &mut value_reads);
+                    } else if !writes.writes_through(body, arg.expr) {
+                        disqualify_root(body, arg.expr, &mut disqualified);
+                    }
                 }
             }
             _ => {}
         }
     }
+    // Returning, binding and discarding all copy the value out.
+    for (_, stmt) in &body.stmts {
+        match &stmt.kind {
+            StmtKind::Return { value: Some(op) } => read_value(*op, &mut value_reads),
+            StmtKind::Let { value: op, .. } | StmtKind::Expr(op) => {
+                read_value(*op, &mut value_reads);
+            }
+            _ => {}
+        }
+    }
+    // A place the frame reaches through directly is one it keeps current, so
+    // naming it is as good as reading it.
+    value_reads.extend(writes.frame_borrows.iter().copied());
     for (e, index) in &local_mentions {
         if !value_reads.contains(e) {
             disqualified.insert(*index);
@@ -819,7 +1013,7 @@ impl<'a> Interpreter<'a> {
             ctfe_clobbered: LocalSet::default(),
             scratch_folds: IndexMap::default(),
             callees: None,
-            seq_builtins: None,
+            ctfe_builtins: None,
             globals: None,
             global_fields: None,
             step_budget: DEFAULT_STEP_BUDGET,
@@ -841,8 +1035,8 @@ impl<'a> Interpreter<'a> {
 
     /// Install the sequence-builtin lookup. Without it, an element or length
     /// read stays opaque.
-    pub fn with_seq_builtins(&mut self, seq_builtins: &'a SeqBuiltinMap) -> &mut Self {
-        self.seq_builtins = Some(seq_builtins);
+    pub fn with_ctfe_builtins(&mut self, ctfe_builtins: &'a CtfeBuiltinMap) -> &mut Self {
+        self.ctfe_builtins = Some(ctfe_builtins);
         self
     }
 
@@ -887,7 +1081,7 @@ impl<'a> Interpreter<'a> {
     /// Record `body`'s [`aggregate_safe_locals`]. The driving visitor calls
     /// this once per function, next to [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
-        let writes = ExecutedWrites::of(body, self.seq_builtins);
+        let writes = ExecutedWrites::of(body, self.ctfe_builtins, self.callees);
         self.aggregate_locals = aggregate_safe_locals(body, &writes);
     }
 
@@ -1230,9 +1424,12 @@ impl<'a> Interpreter<'a> {
             // built over one is constant without the call being rewritten
             // first — an allocation has no literal node form to be rewritten
             // to, and the bottom-up walk would otherwise leave it unevaluated.
-            ExprKind::Call { .. } => self.try_seq_builtin_fold_a(body, e),
+            ExprKind::Call { .. } => self.try_ctfe_builtin_fold_a(body, e),
+            // A reference reads as its referent, and a dereference reads as the
+            // reference: the engine models referents by value throughout, so
+            // neither step changes what is denoted.
             ExprKind::Unary {
-                op: NirUnaryOp::Ref,
+                op: NirUnaryOp::Ref | NirUnaryOp::Deref,
                 expr: inner,
             } => self.operand_to_lattice_a(body, *inner),
             ExprKind::GlobalVarGet {
@@ -2200,7 +2397,14 @@ impl<'a> Interpreter<'a> {
                 local_index, value, ..
             } => {
                 let (index, value) = (*local_index, *value);
-                match self.eval_operand_a(body, value) {
+                let lattice = match value.as_expr().and_then(|e| self.exec_call_stmt_a(body, e)) {
+                    Some(Flow::Fallthrough(lattice)) => lattice,
+                    Some(Flow::Bail | Flow::Return(_) | Flow::Break { .. } | Flow::Continue) => {
+                        return Flow::Bail;
+                    }
+                    None => self.eval_operand_a(body, value),
+                };
+                match lattice {
                     lattice @ Lattice::Const(_) => {
                         self.bind_ctfe_local(index, lattice);
                         Flow::Fallthrough(Lattice::Unevaluated)
@@ -2290,7 +2494,7 @@ impl<'a> Interpreter<'a> {
     /// value as the block's result.
     fn exec_expr_stmt_a(&mut self, body: &mut Body, op: Operand) -> Flow {
         if let Some(e) = op.as_expr()
-            && let Some(flow) = self.exec_seq_write_a(body, e)
+            && let Some(flow) = self.exec_builtin_stmt_a(body, e)
         {
             return flow;
         }
@@ -2300,9 +2504,39 @@ impl<'a> Interpreter<'a> {
             let (target, value) = (*target, *value);
             return self.exec_store_a(body, target, value);
         }
+        if let Some(e) = op.as_expr()
+            && let Some(flow) = self.exec_call_stmt_a(body, e)
+        {
+            return flow;
+        }
         match self.eval_operand_a(body, op) {
             lattice @ Lattice::Const(_) => Flow::Fallthrough(lattice),
             Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
+        }
+    }
+
+    /// Run a call at statement position for the writes it performs. `None`
+    /// when the expression is not a call the frame knows; `Flow::Bail` when it
+    /// is one the frame cannot run — stepping past a call whose writes it did
+    /// not apply would leave the caller's places stale.
+    fn exec_call_stmt_a(&mut self, body: &mut Body, e: ExprId) -> Option<Flow> {
+        let (key, _) = self.call_target_a(body, e)?;
+        if !self.callees.is_some_and(|c| c.contains_key(&key)) {
+            return None;
+        }
+        // Reduce the arguments first. Binding a parameter reads the argument
+        // as it stands, and an argument still spelled as arithmetic denotes
+        // nothing until the walk has folded it.
+        self.reduce_in_place_a(body, e);
+        // A reduction that folded the call away leaves an ordinary operand in
+        // its place, which the caller evaluates as any other.
+        self.call_target_a(body, e)?;
+        let Some(run) = self.run_call_a(body, e, true) else {
+            return Some(Flow::Bail);
+        };
+        match self.apply_writes_a(run.writes) {
+            Some(()) => Some(Flow::Fallthrough(run.result)),
+            None => Some(Flow::Bail),
         }
     }
 
@@ -2356,16 +2590,17 @@ impl<'a> Interpreter<'a> {
     /// is what confines the write to values the engine itself built: a
     /// parameter, a global, or anything else reaches the frame as
     /// `NonConst` and bails here.
-    fn exec_seq_write_a(&mut self, body: &mut Body, e: ExprId) -> Option<Flow> {
+    fn exec_builtin_stmt_a(&mut self, body: &mut Body, e: ExprId) -> Option<Flow> {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return None;
         };
-        let builtin = *self.seq_builtins.and_then(|m| m.get(func_id))?;
+        let builtin = *self.ctfe_builtins.and_then(|m| m.get(func_id))?;
         let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
         match builtin {
-            SeqBuiltin::Set => Some(self.exec_element_write_a(body, &args)),
-            SeqBuiltin::Copy => Some(self.exec_run_write_a(body, &args)),
-            SeqBuiltin::Get | SeqBuiltin::Len | SeqBuiltin::New => None,
+            CtfeBuiltin::Set => Some(self.exec_element_write_a(body, &args)),
+            CtfeBuiltin::Copy => Some(self.exec_run_write_a(body, &args)),
+            CtfeBuiltin::Hint => Some(Flow::Fallthrough(Lattice::Unevaluated)),
+            CtfeBuiltin::Get | CtfeBuiltin::Len | CtfeBuiltin::New | CtfeBuiltin::Select => None,
         }
     }
 
@@ -2459,15 +2694,15 @@ impl<'a> Interpreter<'a> {
     /// sequence, or the sequence `array_new(len)` allocates. A read's argument
     /// is a reference to the array, and a reference to a constant reads as that
     /// constant, so no separate deref step is needed.
-    fn try_seq_builtin_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
+    fn try_ctfe_builtin_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return Lattice::Unevaluated;
         };
-        let Some(builtin) = self.seq_builtins.and_then(|m| m.get(func_id)) else {
+        let Some(builtin) = self.ctfe_builtins.and_then(|m| m.get(func_id)) else {
             return Lattice::Unevaluated;
         };
         match (builtin, args.as_slice()) {
-            (SeqBuiltin::Len, [arr]) => {
+            (CtfeBuiltin::Len, [arr]) => {
                 let Lattice::Const(v) = self.operand_to_lattice_a(body, arr.expr) else {
                     return Lattice::Unevaluated;
                 };
@@ -2478,15 +2713,31 @@ impl<'a> Interpreter<'a> {
                     })
                 })
             }
-            (SeqBuiltin::Get, [arr, index]) => self.index_lattice(body, arr.expr, index.expr),
-            (SeqBuiltin::New, [len]) => self.allocation_lattice(body, e, len.expr),
+            (CtfeBuiltin::Get, [arr, index]) => self.index_lattice(body, arr.expr, index.expr),
+            (CtfeBuiltin::New, [len]) => self.allocation_lattice(body, e, len.expr),
+            (CtfeBuiltin::Select, [condition, if_true, if_false]) => {
+                match self.operand_lattice_folded_a(body, condition.expr) {
+                    Lattice::Const(Value::Bool(true)) => {
+                        self.operand_lattice_folded_a(body, if_true.expr)
+                    }
+                    Lattice::Const(Value::Bool(false)) => {
+                        self.operand_lattice_folded_a(body, if_false.expr)
+                    }
+                    Lattice::Const(_) | Lattice::NonConst | Lattice::Unevaluated => {
+                        Lattice::Unevaluated
+                    }
+                }
+            }
             // A write denotes nothing; the executor performs it as a statement.
+            // Nor does a hint, which the executor simply steps past.
             (
-                SeqBuiltin::Set
-                | SeqBuiltin::Copy
-                | SeqBuiltin::Len
-                | SeqBuiltin::Get
-                | SeqBuiltin::New,
+                CtfeBuiltin::Set
+                | CtfeBuiltin::Copy
+                | CtfeBuiltin::Hint
+                | CtfeBuiltin::Select
+                | CtfeBuiltin::Len
+                | CtfeBuiltin::Get
+                | CtfeBuiltin::New,
                 _,
             ) => Lattice::Unevaluated,
         }
@@ -2522,13 +2773,15 @@ impl<'a> Interpreter<'a> {
         Value::seq(array_type, vec![default; len]).map_or(Lattice::Unevaluated, Lattice::Const)
     }
 
-    /// Fold a pure call whose args are all constant: bind the params, run the
-    /// callee's body, and return `Const(v)` only when it produces a value.
+    /// Fold a call to the value it computes. A call that writes through a
+    /// `&mut` parameter is never folded here: this projection is re-entrant,
+    /// and a write applied twice is worse than one not folded at all. Those
+    /// run at statement position, where the executor applies the writes.
     /// `Unevaluated` on any miss, so the original call — and any runtime trap
     /// inside it — survives.
     fn try_call_fold_a(&mut self, body: &Body, e: ExprId) -> Lattice {
         if let lattice @ (Lattice::Const(_) | Lattice::NonConst) =
-            self.try_seq_builtin_fold_a(body, e)
+            self.try_ctfe_builtin_fold_a(body, e)
         {
             // `NonConst` here is an out-of-range read: keep the call so the
             // trap survives.
@@ -2537,41 +2790,83 @@ impl<'a> Interpreter<'a> {
                 Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
             };
         }
-        let Some(callees) = self.callees else {
-            return Lattice::Unevaluated;
-        };
-        let (key, args): (CalleeKey, Vec<Operand>) = match &body.exprs[e].kind {
+        match self.run_call_a(body, e, false) {
+            Some(run) => match run.result {
+                c @ Lattice::Const(_) => c,
+                Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
+            },
+            None => Lattice::Unevaluated,
+        }
+    }
+
+    /// The callee a call names, and the operands bound to its parameters —
+    /// a method's receiver is its first.
+    fn call_target_a(&self, body: &Body, e: ExprId) -> Option<(CalleeKey, Vec<Operand>)> {
+        match &body.exprs[e].kind {
             ExprKind::Call { func_id, args, .. } => {
-                (*func_id, args.iter().map(|a| a.expr).collect())
+                Some((*func_id, args.iter().map(|a| a.expr).collect()))
             }
-            // Only a free `Call` is a CTFE-eligible in-package callee.
-            _ => return Lattice::Unevaluated,
-        };
-        let Some(callee_rc) = callees.get(&key) else {
-            return Lattice::Unevaluated;
-        };
+            ExprKind::MethodCall {
+                func_id,
+                receiver,
+                args,
+                ..
+            } => {
+                let mut ops = Vec::with_capacity(args.len() + 1);
+                ops.push(*receiver);
+                ops.extend(args.iter().map(|a| a.expr));
+                Some((*func_id, ops))
+            }
+            _ => None,
+        }
+    }
+
+    /// Run a call in a compile-time frame: bind the parameters, execute the
+    /// body, and report both the value it returns and what it leaves in each
+    /// `&mut` parameter. `None` when the frame cannot run it — an unknown
+    /// callee, an argument that is not constant, recursion, or an exhausted
+    /// budget.
+    ///
+    /// `may_write` is the caller's promise to apply the write-backs. Without
+    /// it a callee that takes a `&mut` parameter is refused outright, since
+    /// running it would produce writes with nowhere to go.
+    fn run_call_a(&mut self, body: &Body, e: ExprId, may_write: bool) -> Option<CallRun> {
+        let callees = self.callees?;
+        let (key, args) = self.call_target_a(body, e)?;
+        let callee_rc = callees.get(&key)?;
         if self.call_stack.iter().any(|k| k == &key) {
-            return Lattice::Unevaluated;
+            return None;
         }
-        let Ok(callee) = callee_rc.try_borrow() else {
-            return Lattice::Unevaluated;
-        };
-        let mut bound: Vec<Value> = Vec::with_capacity(args.len());
-        for arg in &args {
-            match self.operand_to_lattice_a(body, *arg).as_const() {
-                Some(v) => bound.push(v),
-                None => return Lattice::Unevaluated,
-            }
+        let callee = callee_rc.func.try_borrow().ok()?;
+        if args.len() != callee.params.len() {
+            return None;
         }
-        if bound.len() != callee.params.len() {
-            return Lattice::Unevaluated;
+        if !may_write && callee.params.iter().any(|p| p.is_mut_ref) {
+            return None;
         }
-        let Some(callee_body) = callee.body.as_ref() else {
-            return Lattice::Unevaluated;
-        };
+        let callee_body = callee.body.as_ref()?;
         if self.step_budget == 0 {
-            return Lattice::Unevaluated;
+            return None;
         }
+        // A unit callee denotes nothing, whatever its last statement computed.
+        // Handing that value back would leave it on the stack where the call
+        // stood, and the module would fail to validate.
+        let returns_unit = callee.return_type == crate::tir::TypeTable::UNIT;
+
+        let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());
+        let mut targets: Vec<(u32, u32, Vec<u32>)> = Vec::new();
+        for (arg, param) in args.iter().zip(&callee.params) {
+            let value = if param.is_mut_ref {
+                let (root, path) = place_of(body, *arg)?;
+                let value = self.place_value_a(root, &path)?;
+                targets.push((param.local_index, root, path));
+                value
+            } else {
+                self.operand_lattice_folded_a(body, *arg).as_const()?
+            };
+            bound.push((param.local_index, value));
+        }
+
         self.step_budget -= 1;
         self.call_stack.push(key);
         let saved_env = std::mem::take(&mut self.env);
@@ -2586,33 +2881,84 @@ impl<'a> Interpreter<'a> {
         // Execute on a scratch copy so the shared callee body, held under an
         // immutable `Ref`, is not mutated.
         let mut scratch = callee_body.nodes_only_clone();
-        let writes = ExecutedWrites::of(&scratch, self.seq_builtins);
+        let writes = ExecutedWrites::of(&scratch, self.ctfe_builtins, self.callees);
         self.aggregate_locals = aggregate_safe_locals(&scratch, &writes);
         self.ctfe_clobbered = clobbered_locals(&scratch, &writes);
-        for (i, v) in bound.into_iter().enumerate() {
-            let index = u32::try_from(i).expect("param count fits u32");
+        for (index, value) in bound {
             let lattice = if self.ctfe_clobbered.contains(index) {
                 Lattice::NonConst
             } else {
-                Lattice::Const(v)
+                Lattice::Const(value)
             };
             self.env.insert(index, lattice);
         }
         let root = scratch.root;
-        let result = match self.exec_block_a(&mut scratch, root) {
-            Flow::Return(lattice) | Flow::Fallthrough(lattice) => lattice,
-            Flow::Break { .. } | Flow::Continue | Flow::Bail => Lattice::Unevaluated,
+        let flow = self.exec_block_a(&mut scratch, root);
+        // Only a body that ran to the end leaves parameters worth reading: one
+        // that bailed part way holds whatever the half-run wrote.
+        let completed = matches!(flow, Flow::Return(_) | Flow::Fallthrough(_));
+        let result = match flow {
+            Flow::Return(lattice) | Flow::Fallthrough(lattice) if !returns_unit => lattice,
+            Flow::Return(_)
+            | Flow::Fallthrough(_)
+            | Flow::Break { .. }
+            | Flow::Continue
+            | Flow::Bail => Lattice::Unevaluated,
         };
+        // Read the parameters back before the frame is torn down. A `&mut`
+        // parameter the callee left untrackable has no value to write, and the
+        // run as a whole is refused rather than losing the write.
+        let written: Option<Vec<(u32, Vec<u32>, Value)>> = completed
+            .then(|| {
+                targets
+                    .into_iter()
+                    .map(|(index, root, path)| {
+                        let value = self.env.get(&index)?.as_const()?;
+                        Some((root, path, value))
+                    })
+                    .collect::<Option<Vec<_>>>()
+            })
+            .flatten();
         self.env = saved_env;
         self.scratch_folds = saved_folds;
         self.ref_global_aliases = saved_aliases;
         self.aggregate_locals = saved_aggregates;
         self.ctfe_clobbered = saved_clobbered;
         self.call_stack.pop();
-        match result {
-            c @ Lattice::Const(_) => c,
-            Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
+        Some(CallRun {
+            result,
+            writes: written?,
+        })
+    }
+
+    /// An argument's value, folding the arithmetic it may still be spelled as.
+    /// The structural projection alone reads only what already stands as a
+    /// literal, and an argument reaches a call as written.
+    fn operand_lattice_folded_a(&self, body: &Body, op: Operand) -> Lattice {
+        match op.as_expr() {
+            Some(e) => self.reduce_to_lattice_a(body, e),
+            None => self.operand_to_lattice_a(body, op),
         }
+    }
+
+    /// The frame's value for a place, or `None` when it holds none.
+    fn place_value_a(&self, root: u32, path: &[u32]) -> Option<Value> {
+        let Lattice::Const(value) = self.env.get(&root)? else {
+            return None;
+        };
+        path.iter().try_fold(value, |v, i| v.field(*i)).cloned()
+    }
+
+    /// Write a finished run's `&mut` parameters back into the caller's places.
+    fn apply_writes_a(&mut self, writes: Vec<(u32, Vec<u32>, Value)>) -> Option<()> {
+        for (root, path, value) in writes {
+            if path.is_empty() {
+                self.bind_ctfe_local(root, Lattice::Const(value));
+            } else {
+                self.update_place_a(root, &path, |_| Some(value))?;
+            }
+        }
+        Some(())
     }
 
     /// Look up a `(module_source, name)` global in the installed
@@ -2785,6 +3131,10 @@ impl LoopSnapshot {
 /// other than a write it performs itself can reach them: a borrow, a mutable
 /// argument, a method receiver, or an assignment buried inside a larger
 /// expression.
+///
+/// Only the reachable body is scanned, as in [`aggregate_safe_locals`]: a
+/// borrow orphaned by an earlier rewrite cannot run, and the arena keeps every
+/// node an in-place rewrite displaced.
 fn clobbered_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
     fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
@@ -2792,7 +3142,8 @@ fn clobbered_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
         }
     }
     let mut set = LocalSet::default();
-    for (e, node) in &body.exprs {
+    for e in reachable_exprs(body) {
+        let node = &body.exprs[e];
         match &node.kind {
             ExprKind::Assign { target, .. } => {
                 if !writes.place_assigns.contains(&e) {
@@ -2803,19 +3154,25 @@ fn clobbered_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr,
             } => {
-                if !writes.seq_borrows.contains(&e) {
+                if !writes.writes_through(body, *expr) {
                     disqualify(body, *expr, &mut set);
                 }
             }
             ExprKind::MethodCall { receiver, args, .. } => {
-                disqualify(body, *receiver, &mut set);
+                if !writes.writes_through(body, *receiver) {
+                    disqualify(body, *receiver, &mut set);
+                }
                 for arg in args.iter().filter(|a| a.is_mut) {
-                    disqualify(body, arg.expr, &mut set);
+                    if !writes.writes_through(body, arg.expr) {
+                        disqualify(body, arg.expr, &mut set);
+                    }
                 }
             }
             ExprKind::Call { args, .. } => {
                 for arg in args.iter().filter(|a| a.is_mut) {
-                    disqualify(body, arg.expr, &mut set);
+                    if !writes.writes_through(body, arg.expr) {
+                        disqualify(body, arg.expr, &mut set);
+                    }
                 }
             }
             _ => {}

@@ -38,8 +38,8 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
-    CalleeMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice, SeqBuiltin,
-    SeqBuiltinMap, is_ctfe_eligible,
+    CalleeMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice, CtfeBuiltin,
+    CtfeBuiltinMap, is_ctfe_runnable,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -52,7 +52,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 /// per pass.
 struct FoldMaps {
     callees: CalleeMap,
-    seq_builtins: SeqBuiltinMap,
+    ctfe_builtins: CtfeBuiltinMap,
     declared_globals: GlobalEnv,
 }
 
@@ -64,13 +64,13 @@ fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
     // a callee's body edit is visible without rebuilding the map — only its
     // *membership* (the ctfe-eligible function set) can go stale.
     let callees = build_callee_map(project);
-    let seq_builtins = build_seq_builtin_map(project);
+    let ctfe_builtins = build_ctfe_builtin_map(project);
     // Every immutable global whose initializer reduces to a `Const(_)` becomes a
     // `GlobalVarGet` rewrite target; mutable globals are recorded as `NonConst`.
-    let declared_globals = build_global_env(project, type_table, &callees);
+    let declared_globals = build_global_env(project, type_table, &callees, &ctfe_builtins);
     FoldMaps {
         callees,
-        seq_builtins,
+        ctfe_builtins,
         declared_globals,
     }
 }
@@ -145,7 +145,7 @@ fn new_visitor<'a>(
         interpreter: Interpreter::new(type_table),
     };
     visitor.interpreter.with_callees(&maps.callees);
-    visitor.interpreter.with_seq_builtins(&maps.seq_builtins);
+    visitor.interpreter.with_ctfe_builtins(&maps.ctfe_builtins);
     visitor.interpreter.with_globals(&globals.values);
     visitor.interpreter.with_global_fields(&globals.fields);
     visitor
@@ -188,9 +188,14 @@ pub(super) struct ConstFoldRule<'a> {
 }
 
 impl<'a> ConstFoldRule<'a> {
-    pub(super) fn new(type_table: &'a TypeTable, callees: &'a CalleeMap) -> Self {
+    pub(super) fn new(
+        type_table: &'a TypeTable,
+        callees: &'a CalleeMap,
+        ctfe_builtins: &'a CtfeBuiltinMap,
+    ) -> Self {
         let mut interpreter = Interpreter::new(type_table);
         interpreter.with_callees(callees);
+        interpreter.with_ctfe_builtins(ctfe_builtins);
         Self {
             interpreter: RefCell::new(interpreter),
         }
@@ -259,7 +264,8 @@ impl EditSink for EngineSink<'_, '_> {
     }
 }
 
-/// Pre-build the [`CalleeMap`] from every CTFE-eligible function in
+/// Pre-build the [`CalleeMap`] from every function a compile-time frame can run
+/// in
 /// `project`. The map stores `Rc<RefCell<NirFunction>>` handles
 /// aliased with `project.functions`, so rebuilding the map every
 /// optimizer iteration costs only refcount bumps. The key shape
@@ -269,26 +275,26 @@ pub(super) fn build_callee_map(project: &NirPackage) -> CalleeMap {
     let mut map = CalleeMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if !is_ctfe_eligible(&func) {
+        if !is_ctfe_runnable(&func) {
             continue;
         }
         let Some(id) = func.id else {
             continue;
         };
         drop(func);
-        map.insert(id, func_rc.clone());
+        map.insert(id, crate::niri::Callee::new(func_rc.clone()));
     }
     map
 }
 
-/// Which callee ids are the array builtins the engine evaluates.
+/// Which callee ids are the builtins the engine evaluates.
 ///
 /// `array_get` is generic, but a builtin is declared once and shared by every
 /// instantiation — the type arguments ride on the call, not on a monomorphized
 /// callee record — so the name is read off whichever of the two forms the
 /// callee has.
-fn build_seq_builtin_map(project: &NirPackage) -> SeqBuiltinMap {
-    let mut map = SeqBuiltinMap::default();
+pub(super) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
+    let mut map = CtfeBuiltinMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let Some(id) = func.id else {
@@ -302,11 +308,13 @@ fn build_seq_builtin_map(project: &NirPackage) -> SeqBuiltinMap {
             continue;
         };
         let builtin = match name.as_str() {
-            "builtin::array_get" | "builtin::array_get_u8" => SeqBuiltin::Get,
-            "builtin::array_len" => SeqBuiltin::Len,
-            "builtin::array_new" => SeqBuiltin::New,
-            "builtin::array_set" | "builtin::array_set_u8" => SeqBuiltin::Set,
-            "builtin::array_copy" => SeqBuiltin::Copy,
+            "builtin::array_get" | "builtin::array_get_u8" => CtfeBuiltin::Get,
+            "builtin::array_len" => CtfeBuiltin::Len,
+            "builtin::array_new" => CtfeBuiltin::New,
+            "builtin::array_set" | "builtin::array_set_u8" => CtfeBuiltin::Set,
+            "builtin::array_copy" => CtfeBuiltin::Copy,
+            "builtin::cold_path" => CtfeBuiltin::Hint,
+            "builtin::select" => CtfeBuiltin::Select,
             _ => continue,
         };
         map.insert(id, builtin);
@@ -330,6 +338,7 @@ fn build_global_env(
     project: &NirPackage,
     type_table: &TypeTable,
     callees: &CalleeMap,
+    ctfe_builtins: &CtfeBuiltinMap,
 ) -> GlobalEnv {
     let mut env = GlobalEnv::default();
     for global in &project.globals {
@@ -342,6 +351,7 @@ fn build_global_env(
             Some(declared) => {
                 let mut interp = Interpreter::new(type_table);
                 interp.with_callees(callees);
+                interp.with_ctfe_builtins(ctfe_builtins);
                 interp.with_globals(&env);
                 let body = declared.body();
                 match declared.expr() {
@@ -487,6 +497,7 @@ fn build_global_view(project: &NirPackage, type_table: &TypeTable, maps: &FoldMa
         type_table,
         funcs: &project.functions,
         callees: &maps.callees,
+        ctfe_builtins: &maps.ctfe_builtins,
         declared_env: &maps.declared_globals,
         fields: &mut view.fields,
         stored: &mut stored,
@@ -541,6 +552,7 @@ struct GlobalStoreCollector<'a> {
     type_table: &'a TypeTable,
     funcs: &'a [Rc<RefCell<NirFunction>>],
     callees: &'a CalleeMap,
+    ctfe_builtins: &'a CtfeBuiltinMap,
     declared_env: &'a GlobalEnv,
     fields: &'a mut GlobalFieldEnv,
     stored: &'a mut GlobalEnv,
@@ -678,6 +690,7 @@ impl GlobalStoreCollector<'_> {
         }
         let mut interpreter = Interpreter::new(self.type_table);
         interpreter.with_callees(self.callees);
+        interpreter.with_ctfe_builtins(self.ctfe_builtins);
         interpreter.with_globals(self.declared_env);
         // A store whose value does not reduce says the global is not a constant
         // — joining it as `NonConst` keeps a sibling store from speaking for the

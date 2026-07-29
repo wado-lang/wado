@@ -48,7 +48,7 @@ use crate::nir_package::NirPackage;
 
 use super::array_literal::{Collapser, resolve_array_new_ids, resolve_array_push_ids};
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
-use super::const_folding::{ConstFoldRule, build_callee_map};
+use super::const_folding::{ConstFoldRule, build_callee_map, build_ctfe_builtin_map};
 use super::elide_box_local::build_elide_box_local;
 use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
@@ -85,8 +85,9 @@ pub(super) fn run_peephole(
     // the flow-sensitive folds to the standalone `const_folding` walker.
     let type_table = project.type_table.borrow();
     let callees = build_callee_map(project);
+    let ctfe_builtins = build_ctfe_builtin_map(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    let const_fold_rule = ConstFoldRule::new(&type_table, &callees);
+    let const_fold_rule = ConstFoldRule::new(&type_table, &callees, &ctfe_builtins);
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
 
