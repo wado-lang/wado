@@ -94,6 +94,17 @@ impl Value {
         })
     }
 
+    /// This aggregate with the value at `path` replaced. `None` when the path
+    /// does not reach a field the value has.
+    #[must_use]
+    pub fn with_path(&self, path: &[u32], value: Self) -> Option<Self> {
+        let Some((head, rest)) = path.split_first() else {
+            return Some(value);
+        };
+        let updated = self.field(*head)?.with_path(rest, value)?;
+        self.with_field(*head, updated)
+    }
+
     /// This sequence with element `index` replaced. `None` for a non-sequence
     /// or an index past the end, where the write traps at run time.
     #[must_use]
