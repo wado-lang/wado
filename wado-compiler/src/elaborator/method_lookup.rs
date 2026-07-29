@@ -1881,7 +1881,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let receiver_outer = match self.tysys.type_table.borrow().get(rt) {
             ResolvedType::GenericInstance { name, .. }
-            | ResolvedType::Struct { decl_name: name, .. }
+            | ResolvedType::Struct {
+                decl_name: name, ..
+            }
             | ResolvedType::Enum { name, .. }
             | ResolvedType::Resource { name, .. }
             | ResolvedType::GenericResource { name, .. }
@@ -3025,7 +3027,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct { decl_name: name, .. } => name,
+            ResolvedType::Struct {
+                decl_name: name, ..
+            } => name,
             ResolvedType::GenericInstance { name, .. } => name,
             _ => return None, // Not a struct type
         };

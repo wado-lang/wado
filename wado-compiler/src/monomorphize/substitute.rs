@@ -555,7 +555,9 @@ impl TirMutVisitor for TypeRewriter<'_> {
                 struct_name.clone_from(mangled_name);
             } else {
                 match self.type_table.get(new_type_id) {
-                    ResolvedType::Struct { decl_name: name, .. } => {
+                    ResolvedType::Struct {
+                        decl_name: name, ..
+                    } => {
                         struct_name.clone_from(name);
                     }
                     ResolvedType::GenericInstance {

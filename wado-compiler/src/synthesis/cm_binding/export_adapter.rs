@@ -150,7 +150,9 @@ fn lower_to_flat_inner(
                 cm_type: cm_abi::CmValType::I32,
             }]
         }
-        ResolvedType::Struct { decl_name: name, .. } if name == &names.string => {
+        ResolvedType::Struct {
+            decl_name: name, ..
+        } if name == &names.string => {
             // String → cm_lower_string → packed i64, split to ptr(i32) and len(i32)
             let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
             let packed_local = alloc_local(next_local, locals, TypeTable::I64);
@@ -628,7 +630,9 @@ fn lower_to_flat_inner(
                 })
                 .collect()
         }
-        ResolvedType::Struct { decl_name: name, .. } if name != &names.string => {
+        ResolvedType::Struct {
+            decl_name: name, ..
+        } if name != &names.string => {
             // Struct: concatenation of field flat types
             if let Some(struct_decl) = find_struct_decl(name, tir_modules) {
                 let mut result = Vec::new();

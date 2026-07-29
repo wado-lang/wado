@@ -585,7 +585,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_arithmetic_or_bitwise {
             // Get struct name for trait lookup
             let struct_name = match &left_type {
-                ResolvedType::Struct { decl_name: name, .. } => Some(name.clone()),
+                ResolvedType::Struct {
+                    decl_name: name, ..
+                } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
                 ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
                     Some(name.clone())
@@ -706,7 +708,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_shift {
             // Get struct name for trait lookup
             let struct_name = match &left_type {
-                ResolvedType::Struct { decl_name: name, .. } => Some(name.clone()),
+                ResolvedType::Struct {
+                    decl_name: name, ..
+                } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
                 ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
                     Some(name.clone())
@@ -1019,7 +1023,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } {
             let operand_resolved = self.tysys.type_table.borrow().get(expr_type).clone();
             let struct_name = match &operand_resolved {
-                ResolvedType::Struct { decl_name: name, .. } => Some(name.clone()),
+                ResolvedType::Struct {
+                    decl_name: name, ..
+                } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
                 ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
                     Some(name.clone())
@@ -1239,7 +1245,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 // Check for IndexAssign trait implementation
                 let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-                    ResolvedType::Struct { decl_name: name, .. } => name,
+                    ResolvedType::Struct {
+                        decl_name: name, ..
+                    } => name,
                     ResolvedType::GenericInstance { name, .. } => name,
                     ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name,
                     // `arr[i] = v` dispatches through `impl IndexAssign for Array<T>`,

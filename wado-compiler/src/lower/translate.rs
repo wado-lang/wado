@@ -745,8 +745,9 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn wrap_in_box(&self, value: Operand, box_type: tir::TypeId, span: Span) -> ExprId {
-        let box_struct_name = if let crate::tir::ResolvedType::Struct { decl_name: name, .. } =
-            self.base.type_table.borrow().get(box_type)
+        let box_struct_name = if let crate::tir::ResolvedType::Struct {
+            decl_name: name, ..
+        } = self.base.type_table.borrow().get(box_type)
         {
             name.clone()
         } else {
@@ -1754,14 +1755,20 @@ impl FunctionTranslator<'_, '_> {
                     .get_box_inner_type(peeled)
                     .or_else(|| match tt.get(peeled) {
                         tir::ResolvedType::Struct {
-                            decl_name: name,
+                            decl_name: base,
                             module_source,
-                            base_name: Some(base),
+                            type_args,
                             ..
-                        } if *base == box_name => self
+                        } if !type_args.is_empty() && *base == box_name => self
                             .base
                             .struct_fields_map
-                            .get(&(name.clone(), module_source.clone()))
+                            .get(&(
+                                self.base
+                                    .type_table
+                                    .borrow()
+                                    .struct_rendered_name(base, type_args),
+                                module_source.clone(),
+                            ))
                             .and_then(|fields| fields.first())
                             .map(|f| f.type_id),
                         _ => None,

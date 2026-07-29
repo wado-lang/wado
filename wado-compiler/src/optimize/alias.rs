@@ -385,11 +385,11 @@ impl<'a> CallImmutability<'a> {
             ResolvedType::Struct {
                 decl_name: name,
                 module_source,
-                base_name,
+                type_args,
                 ..
             } => {
-                let is_box_or_list = base_name.as_deref() == Some(self.box_name.as_str())
-                    || base_name.as_deref() == Some(self.list_name.as_str());
+                let is_box_or_list = (!type_args.is_empty() && *name == self.box_name)
+                    || (!type_args.is_empty() && *name == self.list_name);
                 if is_box_or_list {
                     false
                 } else {
@@ -1112,11 +1112,11 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Ref(_) => true,
         ResolvedType::GenericInstance { name, .. } if is_box_or_list_name(name) => true,
-        ResolvedType::Struct { base_name, .. }
-            if base_name.as_deref().is_some_and(is_box_or_list_name) =>
-        {
-            true
-        }
+        ResolvedType::Struct {
+            decl_name,
+            type_args,
+            ..
+        } if !type_args.is_empty() && is_box_or_list_name(decl_name) => true,
         ResolvedType::Primitive(_)
         | ResolvedType::Unit
         | ResolvedType::Never

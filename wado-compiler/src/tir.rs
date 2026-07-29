@@ -822,7 +822,7 @@ impl TypeTable {
         let id = self.types.next_id();
         // Update struct name index for O(1) lookups by (name, module_source)
         if let ResolvedType::Struct {
-            ref name,
+            decl_name: ref name,
             ref module_source,
             ..
         } = ty
@@ -1604,9 +1604,9 @@ impl TypeTable {
     pub fn find_struct_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
         // Use the existing intern_map for O(1) lookup
         let key = ResolvedType::Struct {
-            name: name.to_string(),
+            decl_name: name.to_string(),
             module_source: module_source.clone(),
-            base_name: None,
+            type_args: Vec::new(),
         };
         self.intern_map.get(&key).copied()
     }
@@ -1723,7 +1723,7 @@ impl TypeTable {
                     module_source,
                 }
                 | ResolvedType::Struct {
-                    name: n,
+                    decl_name: n,
                     module_source,
                     ..
                 }
@@ -5462,9 +5462,9 @@ mod tests {
         // (bypassing the name-keyed intern_map, as a local declaration's
         // constructor will) and register it under its own AstId.
         let second_type = table.push_fresh(ResolvedType::Struct {
-            name: "Point".to_string(),
+            decl_name: "Point".to_string(),
             module_source: module,
-            base_name: None,
+            type_args: Vec::new(),
         });
         table.register_decl_type(second, second_type);
 

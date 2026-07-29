@@ -325,7 +325,9 @@ impl TypeSystem {
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
     pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {
-            ResolvedType::Struct { decl_name: name, .. }
+            ResolvedType::Struct {
+                decl_name: name, ..
+            }
             | ResolvedType::GenericInstance { name, .. }
             | ResolvedType::Newtype { name, .. }
             | ResolvedType::Flags { name, .. } => Some(name.clone()),
@@ -365,7 +367,9 @@ impl TypeSystem {
         let mut current = type_id;
         loop {
             match self.type_table.borrow().get(current).clone() {
-                ResolvedType::Struct { decl_name: name, .. } => return name,
+                ResolvedType::Struct {
+                    decl_name: name, ..
+                } => return name,
                 ResolvedType::GenericInstance { name, .. } => return name,
                 ResolvedType::Newtype { base_type, .. } => current = base_type,
                 ResolvedType::Flags { .. } => return "u32".to_string(),
@@ -473,7 +477,9 @@ impl TypeSystem {
         let resolved = self.type_table.borrow().get(type_id).clone();
         match resolved {
             ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),
-            ResolvedType::Struct { decl_name: name, .. } => name,
+            ResolvedType::Struct {
+                decl_name: name, ..
+            } => name,
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {

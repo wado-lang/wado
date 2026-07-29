@@ -194,7 +194,11 @@ fn needs_copy_in_env(
         // Concrete structs need a field-by-field deep copy, except for
         // the `Box<T>` shortcut whose semantics intentionally share
         // the underlying cell.
-        ResolvedType::Struct { base_name, .. } => base_name.as_deref() != Some(box_name),
+        ResolvedType::Struct {
+            decl_name,
+            type_args,
+            ..
+        } => !(type_args.is_empty() || decl_name == box_name),
         ResolvedType::GenericInstance {
             name,
             module_source,

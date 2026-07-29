@@ -52,7 +52,9 @@ fn coerce_value_to_binding(
         ),
         // A `&primitive` / `&variant` / `&fn` binding type that boxing
         // has redefined to its `Box<T>` struct: build the struct literal.
-        ResolvedType::Struct { decl_name: name, .. } if type_table.box_payload_of(binding_type).is_some() => {
+        ResolvedType::Struct {
+            decl_name: name, ..
+        } if type_table.box_payload_of(binding_type).is_some() => {
             let struct_name = name.clone();
             TirExpr::new(
                 TirExprKind::StructLiteral {

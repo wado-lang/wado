@@ -404,7 +404,9 @@ impl Monomorphizer {
         type_table: &TypeTable,
     ) -> Option<String> {
         match type_table.get(type_id) {
-            ResolvedType::Struct { decl_name: name, .. }
+            ResolvedType::Struct {
+                decl_name: name, ..
+            }
             | ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. }
             | ResolvedType::Flags { name, .. } => Some(name.clone()),
@@ -619,7 +621,9 @@ impl Monomorphizer {
             return Some(info);
         }
         match type_table.get(type_id) {
-            ResolvedType::Struct { decl_name: name, .. } => {
+            ResolvedType::Struct {
+                decl_name: name, ..
+            } => {
                 // For monomorphized structs with names like "List<i32>", look up the
                 // original InstantiationKey to get the base name and type_args
                 if let Some(key) = self.structs.mangled_to_key.get(name) {

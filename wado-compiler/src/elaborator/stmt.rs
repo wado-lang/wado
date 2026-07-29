@@ -1803,10 +1803,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let type_table = self.tysys.type_table.borrow();
                         match type_table.get(scrutinee_type) {
                             ResolvedType::Struct {
-                            decl_name,
-                            type_args,
-                            ..
-                        } => Some(type_table.struct_rendered_name(decl_name, type_args)),
+                                decl_name,
+                                type_args,
+                                ..
+                            } => Some(type_table.struct_rendered_name(decl_name, type_args)),
                             _ => None,
                         }
                     };

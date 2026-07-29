@@ -273,7 +273,9 @@ fn lower_type(
                 None
             }
         },
-        ResolvedType::Struct { decl_name: name, .. } if name == "String" => Some(OptionsType::String),
+        ResolvedType::Struct {
+            decl_name: name, ..
+        } if name == "String" => Some(OptionsType::String),
         ResolvedType::Struct {
             decl_name: name,
             module_source,
