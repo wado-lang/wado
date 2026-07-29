@@ -404,10 +404,14 @@ impl Monomorphizer {
         type_table: &TypeTable,
     ) -> Option<String> {
         match type_table.get(type_id) {
+            // The identity a method name is built from, so the rendered
+            // spelling: `ArraySlice<u8>::internal_repr`, not `ArraySlice`.
             ResolvedType::Struct {
-                decl_name: name, ..
-            }
-            | ResolvedType::Enum { name, .. }
+                decl_name,
+                type_args,
+                ..
+            } => Some(type_table.struct_rendered_name(decl_name, type_args)),
+            ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. }
             | ResolvedType::Flags { name, .. } => Some(name.clone()),
             ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
