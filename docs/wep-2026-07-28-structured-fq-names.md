@@ -111,7 +111,23 @@ E2E: 3882 passed, 26 failed — 17 of those pre-date this work; three fixtures
 (`serde_generic_deserialize`, `serde_json_roundtrip_complex`,
 `serde_json_treemap`) are open regressions, tracked below.
 
-### Open: a monomorphized struct's base head is not recoverable
+### Open: a generic newtype's own method is reported as inherited
+
+`newtype_generic_own_method` calls `MyArray<i32>::second`, an inherent method on
+`type MyArray<T> = List<T>`, and WIR build reports
+`core:prelude/list.wado/List<i32>::second` unresolved — the newtype was peeled
+past its own `impl`.
+
+`method_call.rs` names the receiver from
+`inherited_from_base.unwrap_or(base_type_id)`, which is correct: an *inherited*
+method is named by the type that defines it. So the defect is upstream, in
+`lookup_method_info` reporting `inherited_from_base: Some(..)` for a method the
+newtype owns. Instrumenting the inherent-impl scan shows the `MyArray` impl is
+found (`entries=1`, header name matches, `inherent_impl_applies` true) for all
+three receivers, but `inherent_method_info` answers `None` for one of them —
+that call is the one that falls through to the base.
+
+Next step: find which receiver arguments make `inherent_method_info` miss.
 
 Root cause of the three serde regressions, established by instrumentation.
 
