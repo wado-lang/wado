@@ -1005,10 +1005,12 @@ fn rewrite_calls_in_expr(
     if let TirExprKind::MethodCall { receiver, func, .. } = &expr.kind
         && let Some(method_info) = func.method_info.clone()
     {
+        // The adapter map is keyed by the declared `Resource::method`, the same
+        // key `EffectCallCollector` inserted under.
         let head = {
             let tt = type_table.borrow();
             tt.impl_receiver_key(tt.peel_refs(receiver.type_id))
-                .head_key()
+                .decl_key()
                 .into_owned()
         };
         let mut qualified = format!("{head}::{}", method_info.method_name);
@@ -1374,10 +1376,14 @@ impl TirRefVisitor for EffectCallCollector<'_> {
             }
             TirExprKind::MethodCall { receiver, func, .. } => {
                 if let Some(method_info) = func.method_info.clone() {
+                    // The registry keys on the declared `Resource::method`, as
+                    // the `Call` arm above does — a mangled head carries the
+                    // declaring module the registry never stores, and would
+                    // match nothing.
                     let head = {
                         let tt = self.type_table.borrow();
                         tt.impl_receiver_key(tt.peel_refs(receiver.type_id))
-                            .head_key()
+                            .decl_key()
                             .into_owned()
                     };
                     let qualified = format!("{head}::{}", method_info.method_name);

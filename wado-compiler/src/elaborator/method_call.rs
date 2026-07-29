@@ -1054,7 +1054,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .impl_receiver_key(method_impl_type_id);
-        let receiver_decl_name = receiver_key.head_key().into_owned();
+        let receiver_decl_name = receiver_key.decl_key().into_owned();
         if let Some(method_id) = method_id
             && let Some(method_ast_id) = self.find_impl_method_ast_id(
                 &method_module_source,
