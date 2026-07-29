@@ -86,19 +86,21 @@ fn use_if(cond: bool) -> i32 {
 }
 
 export fn run() {
-    assert use_match_small(0) == 30;
-    assert use_match_small(1) == 70;
-    assert use_match_small(2) == 110;
+    // Opaque arguments throughout, or every call folds and no return site is
+    // left to lift.
+    assert use_match_small(builtin::black_box(0)) == 30;
+    assert use_match_small(builtin::black_box(1)) == 70;
+    assert use_match_small(builtin::black_box(2)) == 110;
 
-    assert use_match_large(0) == 300;
-    assert use_match_large(3) == 1500;
-    assert use_match_large(99) == 0;
+    assert use_match_large(builtin::black_box(0)) == 300;
+    assert use_match_large(builtin::black_box(3)) == 1500;
+    assert use_match_large(builtin::black_box(99)) == 0;
 
-    assert use_match_unreachable(0) == 3;
-    assert use_match_unreachable(1) == 7;
+    assert use_match_unreachable(builtin::black_box(0)) == 3;
+    assert use_match_unreachable(builtin::black_box(1)) == 7;
 
-    assert use_if(true) == 300;
-    assert use_if(false) == 700;
+    assert use_if(builtin::black_box(true)) == 300;
+    assert use_if(builtin::black_box(false)) == 700;
 }
 
 __DATA__

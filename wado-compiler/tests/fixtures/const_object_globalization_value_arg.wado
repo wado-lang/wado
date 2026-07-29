@@ -18,20 +18,24 @@
 
 use { println, Stdout } from "core:cli";
 
+// `bias` is opaque at the call site, so the call survives to the pass with its
+// literal argument intact — folding `head_len` away would leave nothing to
+// hoist.
 #[inline(never)]
-fn head_len(s: List<u8>) -> i32 {
-    return s.len();
+fn head_len(s: List<u8>, bias: i32) -> i32 {
+    return s.len() + bias;
 }
 
 #[inline(never)]
-fn bump_first(mut v: List<u8>) -> i32 {
+fn bump_first(mut v: List<u8>, bias: i32) -> i32 {
     v[0] = v[0] + 1;
-    return v[0] as i32;
+    return v[0] as i32 + bias;
 }
 
 export fn run() with Stdout {
     // b"hello" is 5 bytes; `bump_first` must see a fresh b"abc" every call.
-    println(`${head_len(b"hello")} ${bump_first(b"abc")} ${bump_first(b"abc")} ${bump_first(b"abc")}`);
+    let zero = builtin::black_box(0);
+    println(`${head_len(b"hello", zero)} ${bump_first(b"abc", zero)} ${bump_first(b"abc", zero)} ${bump_first(b"abc", zero)}`);
 }
 
 __DATA__

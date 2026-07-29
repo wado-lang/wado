@@ -6886,6 +6886,51 @@ fn aggregate_binding_needs_a_read_only_local() {
 }
 
 #[test]
+fn a_walk_that_performs_nothing_drops_a_container_a_call_writes() {
+    // The exemptions belong to a compile-time frame, which performs the write
+    // or abandons the evaluation. An ordinary walk performs nothing: it steps
+    // over the call, so a container bound across one would answer `len()` with
+    // the length the push already changed — and the bounds check folds against
+    // that answer.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+
+    let bump = with_mut_ref_params(
+        make_pure_fn_stmts(
+            "List<u8>::bump",
+            vec![("self", list_ty)],
+            TypeTable::UNIT,
+            vec![bump_used(list_ty)],
+        ),
+        &[0],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&bump));
+
+    let written: Build = Rc::new(move |b| {
+        used_of_local(list_ty)(b);
+        method_call_expr(&bump, local_expr(0, list_ty), Vec::new())(b)
+    });
+    let (body, _) = into_body(&written);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.enter_function();
+    interp.record_aggregate_locals(&body);
+    interp.bind_local(
+        0,
+        Lattice::Const(Value::aggregate(
+            list_ty,
+            vec![(SeqField::Len.index(), int(2))],
+        )),
+    );
+
+    assert_eq!(
+        reduce_lat(&mut interp, &used_of_local(list_ty)),
+        Lattice::NonConst,
+    );
+}
+
+#[test]
 fn aggregate_scalar_bindings_are_unaffected_by_the_read_only_rule() {
     // The aggregate gate must not touch scalars: no body scanned, yet a scalar
     // binding still folds.

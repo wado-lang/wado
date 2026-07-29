@@ -720,17 +720,25 @@ struct CallRun {
 
 #[derive(Default)]
 struct ExecutedWrites {
-    /// The places the frame writes through: a builtin's borrowed first
-    /// argument, and the receiver and `&mut` arguments of a call the frame
-    /// runs. Recorded with the borrow peeled, so a receiver named directly and
-    /// one named through `&mut` look alike.
-    frame_borrows: IndexSet<ExprId>,
-    /// The `Assign` nodes whose target names a place.
+    /// Places only read through: a builtin's source arguments, a shared
+    /// receiver, an argument passed by value. Nothing can write through one,
+    /// so naming it says nothing about whether the value stays current.
+    reads: IndexSet<ExprId>,
+    /// Places written through, and the `Assign` nodes whose target names one.
+    /// Exempt only inside a compile-time frame, which performs the write or
+    /// abandons the evaluation: an ordinary walk performs nothing, and a write
+    /// it merely steps over leaves its target stale.
+    writes: IndexSet<ExprId>,
     place_assigns: IndexSet<ExprId>,
 }
 
 impl ExecutedWrites {
-    fn of(body: &Body, ctfe_builtins: Option<&CtfeBuiltinMap>, callees: Option<&CalleeMap>) -> Self {
+    /// What a compile-time frame performs itself.
+    fn in_frame(
+        body: &Body,
+        ctfe_builtins: Option<&CtfeBuiltinMap>,
+        callees: Option<&CalleeMap>,
+    ) -> Self {
         let mut statements: IndexSet<ExprId> = IndexSet::default();
         for (_, stmt) in &body.stmts {
             let op = match &stmt.kind {
@@ -754,6 +762,23 @@ impl ExecutedWrites {
         writes
     }
 
+    /// What an ordinary walk performs: nothing. Only the reads survive.
+    fn outside_frame(
+        body: &Body,
+        ctfe_builtins: Option<&CtfeBuiltinMap>,
+        callees: Option<&CalleeMap>,
+    ) -> Self {
+        let reads = Self::in_frame(body, ctfe_builtins, callees).reads;
+        Self {
+            reads,
+            writes: IndexSet::default(),
+            place_assigns: IndexSet::default(),
+        }
+    }
+
+    /// A builtin's arguments. The engine models the whole call exactly, so the
+    /// destination it writes and the source it reads are equally current —
+    /// but only where the frame runs it.
     fn collect_builtin_borrows(
         &mut self,
         body: &Body,
@@ -770,24 +795,27 @@ impl ExecutedWrites {
             let Some(builtin) = map.get(func_id) else {
                 continue;
             };
-            if builtin.is_write() && !statements.contains(&e) {
+            if !builtin.is_write() {
+                for arg in args {
+                    self.record(body, arg.expr, Reach::Read);
+                }
                 continue;
             }
-            // Every argument, not just the borrowed first: the engine models
-            // the whole call exactly, so a source it reads through is as
-            // current as the destination it writes through.
-            for arg in args {
-                self.borrow_through(body, arg.expr);
+            if !statements.contains(&e) {
+                continue;
+            }
+            for (i, arg) in args.iter().enumerate() {
+                let reach = if i == 0 { Reach::Write } else { Reach::Read };
+                self.record(body, arg.expr, reach);
             }
         }
     }
 
     /// The places a call reaches through. A shared receiver or a by-value
     /// argument only reads, so it counts wherever it appears — including the
-    /// `&self` methods a container is read through. A `&mut` one counts only
-    /// at statement position, where the frame runs the call and applies the
-    /// write; elsewhere the projection merely reads the call, and the write
-    /// would go missing.
+    /// `&self` methods a container is read through. A `&mut` one counts as a
+    /// write, which only a frame performs, and only at statement position:
+    /// elsewhere the projection merely reads the call.
     ///
     /// A callee the map does not hold says nothing about its parameters, so
     /// nothing about it is exempt.
@@ -815,20 +843,25 @@ impl ExecutedWrites {
                 continue;
             };
             let at_statement = statements.contains(&e);
-            if let Some(receiver) = receiver
-                && (at_statement || !callee.writes_receiver())
-            {
-                self.borrow_through(body, receiver);
+            if let Some(receiver) = receiver {
+                match (callee.writes_receiver(), at_statement) {
+                    (false, _) => self.record(body, receiver, Reach::Read),
+                    (true, true) => self.record(body, receiver, Reach::Write),
+                    (true, false) => {}
+                }
             }
-            for arg in args.iter().filter(|a| at_statement || !a.is_mut) {
-                self.borrow_through(body, arg.expr);
+            for arg in args {
+                match (arg.is_mut, at_statement) {
+                    (false, _) => self.record(body, arg.expr, Reach::Read),
+                    (true, true) => self.record(body, arg.expr, Reach::Write),
+                    (true, false) => {}
+                }
             }
         }
     }
 
-    /// Whether the frame itself performs the write reaching the place `op`
-    /// names.
-    fn writes_through(&self, body: &Body, op: Operand) -> bool {
+    /// Whether the walk itself keeps the place `op` names current.
+    fn reaches(&self, body: &Body, op: Operand) -> bool {
         let mut op = op;
         loop {
             let Some(e) = op.as_expr() else {
@@ -839,13 +872,13 @@ impl ExecutedWrites {
                     op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
                     expr,
                 } => op = *expr,
-                _ => return self.frame_borrows.contains(&e),
+                _ => return self.reads.contains(&e) || self.writes.contains(&e),
             }
         }
     }
 
     /// Record the place `op` names, peeling the borrow it may be wrapped in.
-    fn borrow_through(&mut self, body: &Body, op: Operand) {
+    fn record(&mut self, body: &Body, op: Operand, reach: Reach) {
         let Some(e) = op.as_expr() else {
             return;
         };
@@ -853,12 +886,22 @@ impl ExecutedWrites {
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
                 expr,
-            } => self.borrow_through(body, *expr),
+            } => self.record(body, *expr, reach),
             _ => {
-                self.frame_borrows.insert(e);
+                match reach {
+                    Reach::Read => self.reads.insert(e),
+                    Reach::Write => self.writes.insert(e),
+                };
             }
         }
     }
+}
+
+/// How a walk reaches a place.
+#[derive(Clone, Copy)]
+enum Reach {
+    Read,
+    Write,
 }
 
 /// Every expression id reachable from the body root, in arena order.
@@ -941,18 +984,18 @@ fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
                 op: NirUnaryOp::MutRef,
                 expr,
             } => {
-                if !writes.writes_through(body, *expr) {
+                if !writes.reaches(body, *expr) {
                     disqualify_root(body, *expr, &mut disqualified);
                 }
             }
             ExprKind::MethodCall { receiver, args, .. } => {
-                if !writes.writes_through(body, *receiver) {
+                if !writes.reaches(body, *receiver) {
                     disqualify_root(body, *receiver, &mut disqualified);
                 }
                 for arg in args {
                     if !arg.is_mut {
                         read_value(arg.expr, &mut value_reads);
-                    } else if !writes.writes_through(body, arg.expr) {
+                    } else if !writes.reaches(body, arg.expr) {
                         disqualify_root(body, arg.expr, &mut disqualified);
                     }
                 }
@@ -961,7 +1004,7 @@ fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
                 for arg in args {
                     if !arg.is_mut {
                         read_value(arg.expr, &mut value_reads);
-                    } else if !writes.writes_through(body, arg.expr) {
+                    } else if !writes.reaches(body, arg.expr) {
                         disqualify_root(body, arg.expr, &mut disqualified);
                     }
                 }
@@ -981,7 +1024,7 @@ fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
     }
     // A place the frame reaches through directly is one it keeps current, so
     // naming it is as good as reading it.
-    value_reads.extend(writes.frame_borrows.iter().copied());
+    value_reads.extend(writes.reads.iter().chain(&writes.writes).copied());
     for (e, index) in &local_mentions {
         if !value_reads.contains(e) {
             disqualified.insert(*index);
@@ -1081,7 +1124,7 @@ impl<'a> Interpreter<'a> {
     /// Record `body`'s [`aggregate_safe_locals`]. The driving visitor calls
     /// this once per function, next to [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
-        let writes = ExecutedWrites::of(body, self.ctfe_builtins, self.callees);
+        let writes = ExecutedWrites::outside_frame(body, self.ctfe_builtins, self.callees);
         self.aggregate_locals = aggregate_safe_locals(body, &writes);
     }
 
@@ -2881,7 +2924,7 @@ impl<'a> Interpreter<'a> {
         // Execute on a scratch copy so the shared callee body, held under an
         // immutable `Ref`, is not mutated.
         let mut scratch = callee_body.nodes_only_clone();
-        let writes = ExecutedWrites::of(&scratch, self.ctfe_builtins, self.callees);
+        let writes = ExecutedWrites::in_frame(&scratch, self.ctfe_builtins, self.callees);
         self.aggregate_locals = aggregate_safe_locals(&scratch, &writes);
         self.ctfe_clobbered = clobbered_locals(&scratch, &writes);
         for (index, value) in bound {
@@ -3154,23 +3197,23 @@ fn clobbered_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr,
             } => {
-                if !writes.writes_through(body, *expr) {
+                if !writes.reaches(body, *expr) {
                     disqualify(body, *expr, &mut set);
                 }
             }
             ExprKind::MethodCall { receiver, args, .. } => {
-                if !writes.writes_through(body, *receiver) {
+                if !writes.reaches(body, *receiver) {
                     disqualify(body, *receiver, &mut set);
                 }
                 for arg in args.iter().filter(|a| a.is_mut) {
-                    if !writes.writes_through(body, arg.expr) {
+                    if !writes.reaches(body, arg.expr) {
                         disqualify(body, arg.expr, &mut set);
                     }
                 }
             }
             ExprKind::Call { args, .. } => {
                 for arg in args.iter().filter(|a| a.is_mut) {
-                    if !writes.writes_through(body, arg.expr) {
+                    if !writes.reaches(body, arg.expr) {
                         disqualify(body, arg.expr, &mut set);
                     }
                 }
