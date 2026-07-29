@@ -936,7 +936,9 @@ impl Monomorphizer {
                                     let info_base = info_ref
                                         .map(LocalMethodName::base_struct_name)
                                         .unwrap_or_default();
-                                    let info_inst = info_ref.map(LocalMethodName::struct_name).unwrap_or_default();
+                                    let info_inst = info_ref
+                                        .map(LocalMethodName::struct_name)
+                                        .unwrap_or_default();
                                     let candidates: Vec<&str> = if info_ref.is_some() {
                                         vec![&info_base, &info_inst, &base_struct]
                                     } else {
@@ -1052,7 +1054,9 @@ impl Monomorphizer {
                         let info_base = info_ref
                             .map(LocalMethodName::base_struct_name)
                             .unwrap_or_default();
-                        let info_inst = info_ref.map(LocalMethodName::struct_name).unwrap_or_default();
+                        let info_inst = info_ref
+                            .map(LocalMethodName::struct_name)
+                            .unwrap_or_default();
                         let candidates: Vec<&str> = if info_ref.is_some() {
                             vec![&info_base, &info_inst, &base_struct]
                         } else {
@@ -1194,7 +1198,9 @@ impl Monomorphizer {
                         let info_base = info_ref
                             .map(LocalMethodName::base_struct_name)
                             .unwrap_or_default();
-                        let info_inst = info_ref.map(LocalMethodName::struct_name).unwrap_or_default();
+                        let info_inst = info_ref
+                            .map(LocalMethodName::struct_name)
+                            .unwrap_or_default();
                         let candidates: Vec<&str> = if info_ref.is_some() {
                             vec![&info_base, &info_inst, base_struct]
                         } else {
@@ -1250,7 +1256,9 @@ impl Monomorphizer {
                     let info_base = info_ref
                         .map(LocalMethodName::base_struct_name)
                         .unwrap_or_default();
-                    let info_inst = info_ref.map(LocalMethodName::struct_name).unwrap_or_default();
+                    let info_inst = info_ref
+                        .map(LocalMethodName::struct_name)
+                        .unwrap_or_default();
                     let candidates: Vec<&str> = if info_ref.is_some() {
                         vec![&info_base, &info_inst]
                     } else {
@@ -1402,7 +1410,9 @@ impl Monomorphizer {
                         let info_base = info_ref
                             .map(LocalMethodName::base_struct_name)
                             .unwrap_or_default();
-                        let info_inst = info_ref.map(LocalMethodName::struct_name).unwrap_or_default();
+                        let info_inst = info_ref
+                            .map(LocalMethodName::struct_name)
+                            .unwrap_or_default();
                         let candidates: Vec<&str> = if info_ref.is_some() {
                             vec![&info_base, &info_inst]
                         } else {

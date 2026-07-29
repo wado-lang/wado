@@ -4256,7 +4256,9 @@ pub fn cm_size_with_registry_scoped(
             let Some(source) = registry.resolve_cm_source_for(named, wasi_package) else {
                 return crate::cm_abi::cm_size(ty);
             };
-            if let Some(resolved) = registry.get_newtype_by_source(source, &crate::name::DeclName::new(&named.name)) {
+            if let Some(resolved) =
+                registry.get_newtype_by_source(source, &crate::name::DeclName::new(&named.name))
+            {
                 return cm_size_with_registry_scoped(resolved, registry, wasi_package);
             }
             if let Some(fields) = registry.get_struct_fields_by_source(source, &named.name) {
@@ -4323,7 +4325,9 @@ pub fn cm_align_with_registry_scoped(
             let Some(source) = registry.resolve_cm_source_for(named, wasi_package) else {
                 return crate::cm_abi::cm_align(ty);
             };
-            if let Some(resolved) = registry.get_newtype_by_source(source, &crate::name::DeclName::new(&named.name)) {
+            if let Some(resolved) =
+                registry.get_newtype_by_source(source, &crate::name::DeclName::new(&named.name))
+            {
                 return cm_align_with_registry_scoped(resolved, registry, wasi_package);
             }
             if let Some(fields) = registry.get_struct_fields_by_source(source, &named.name) {

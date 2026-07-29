@@ -14,7 +14,9 @@ use crate::token::Span;
 use super::Elaborator;
 use super::callee::CalleeRef;
 use super::scope::Scope;
-use super::types::{MethodInfo, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup};
+use super::types::{
+    MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
+};
 use super::tysys::TypeSystem;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1644,7 +1646,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self_kind,
                         param_types,
                         param_is_mut,
-                        inherited_from_base: None,
+                        owner: MethodOwner::Receiver,
                         cm_name: None,
                         is_ref_impl: false,
                         method_type_param_ids,
@@ -2229,7 +2231,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_is_mut: vec![false],
             param_defaults: vec![None],
             param_names: vec!["other".to_string()],
-            inherited_from_base: None,
+            owner: MethodOwner::Receiver,
             cm_name: None,
             is_ref_impl: false,
             method_type_param_ids: vec![],

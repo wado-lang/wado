@@ -21,8 +21,8 @@ use super::sig::InstantiatedImplSig;
 use super::trait_env::{ImplHeader, TraitEnv};
 use super::types::{
     ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
-    IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, SequenceLiteralTraitInfo, TypeError,
-    TypeLookup,
+    IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, MethodOwner,
+    SequenceLiteralTraitInfo, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
 
@@ -500,7 +500,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             self_kind: ast::SelfKind::Ref,
                             param_types: vec![],
                             param_is_mut: vec![],
-                            inherited_from_base: None,
+                            owner: MethodOwner::Receiver,
                             cm_name: None,
                             is_ref_impl: false,
                             method_type_param_ids: vec![],
@@ -541,7 +541,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             self_kind: ast::SelfKind::Ref,
                             param_types: vec![],
                             param_is_mut: vec![],
-                            inherited_from_base: None,
+                            owner: MethodOwner::Receiver,
                             cm_name: None,
                             is_ref_impl: false,
                             method_type_param_ids: vec![],
@@ -648,10 +648,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Coherence lets any same-package module host an `impl <struct_name>`.
         if let Some(ref module_source) = struct_module_source {
-            let entries: Vec<(ModuleSource, AstId)> = self
-                .tysys
-                .trait_env
-                .inherent_impl_keys(&self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)));
+            let entries: Vec<(ModuleSource, AstId)> = self.tysys.trait_env.inherent_impl_keys(
+                &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
+            );
             for (impl_module, item_id) in &entries {
                 let impl_ref = ImplBlockRef(impl_module.clone(), *item_id);
                 let trait_env = Arc::clone(&self.tysys.trait_env);
@@ -682,10 +681,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if struct_module_source.is_none() {
-            let entries: Vec<(ModuleSource, AstId)> = self
-                .tysys
-                .trait_env
-                .inherent_impl_keys(&self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)));
+            let entries: Vec<(ModuleSource, AstId)> = self.tysys.trait_env.inherent_impl_keys(
+                &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
+            );
             for (search_module_source, item_id) in &entries {
                 let impl_ref = ImplBlockRef(search_module_source.clone(), *item_id);
                 let trait_env = Arc::clone(&self.tysys.trait_env);
@@ -734,8 +732,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // but when called on Location, it should expect &Location)
                 // Only set if not already set (for chained newtypes like C -> B -> A -> Point,
                 // we want to keep the innermost base type where the method is defined)
-                if method_info.inherited_from_base.is_none() {
-                    method_info.inherited_from_base = Some(base_type_id);
+                if method_info.owner == MethodOwner::Receiver {
+                    method_info.owner = MethodOwner::InheritedFrom(base_type_id);
                 }
                 return Some(method_info);
             }
@@ -795,7 +793,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
             param_is_mut: super::sig::Param::is_mut_flags(&sig.params),
-            inherited_from_base: None,
+            owner: MethodOwner::Receiver,
             cm_name: None,
             is_ref_impl: false,
             method_type_param_ids: vec![],
@@ -846,7 +844,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
             param_is_mut: super::sig::Param::is_mut_flags(&sig.params),
-            inherited_from_base: None,
+            owner: MethodOwner::Receiver,
             cm_name: sig.cm_name,
             is_ref_impl: false,
             method_type_param_ids: vec![],
@@ -2371,7 +2369,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self_kind,
                     param_types,
                     param_is_mut,
-                    inherited_from_base: None,
+                    owner: MethodOwner::Receiver,
                     cm_name: None,
                     is_ref_impl: false,
                     method_type_param_ids: vec![],
@@ -2422,7 +2420,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         param_is_mut: crate::elaborator::sig::Param::is_mut_flags(
                             &default_method.sig.params,
                         ),
-                        inherited_from_base: None,
+                        owner: MethodOwner::Receiver,
                         cm_name: None,
                         is_ref_impl: false,
                         method_type_param_ids: default_method.sig.decl.type_params
@@ -3109,7 +3107,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_kind,
             param_types,
             param_is_mut: method_param_is_mut,
-            inherited_from_base: _,
+            owner: _,
             cm_name: _,
             is_ref_impl: method_is_ref_impl,
             method_type_param_ids: _,

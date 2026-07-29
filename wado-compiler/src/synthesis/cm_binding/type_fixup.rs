@@ -1022,7 +1022,8 @@ fn rewrite_calls_in_expr(
             && let Some(Type::Named(resolved)) =
                 cm_interface_registry.get_newtype_by_source(source, &head)
         {
-            let aliased = DeclPath::method_of(&DeclName::new(&resolved.name), &method_info.method_name);
+            let aliased =
+                DeclPath::method_of(&DeclName::new(&resolved.name), &method_info.method_name);
             if adapters.contains_key(&aliased) {
                 qualified = aliased;
             }
@@ -1345,7 +1346,8 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                 if func.module_source.clone().is_effect_like()
                     && let Some(interface_name) = func.module_source.clone().interface_name()
                 {
-                    let qualified = DeclPath::from_declared(format!("{interface_name}::{}", func.name));
+                    let qualified =
+                        DeclPath::from_declared(format!("{interface_name}::{}", func.name));
                     if self
                         .cm_interface_registry
                         .get_function(&qualified)
@@ -1358,7 +1360,8 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                 // The registry keys on the declared `Resource::method`, so the
                 // receiver reaches it by its declaration name.
                 if let Some(info) = func.method_info.as_ref() {
-                    let qualified = DeclPath::method_of(&info.receiver_decl_name(), &info.method_name);
+                    let qualified =
+                        DeclPath::method_of(&info.receiver_decl_name(), &info.method_name);
                     if self
                         .cm_interface_registry
                         .get_function(&qualified)
@@ -1401,7 +1404,10 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                             .get_newtype_by_source(source, &head)
                     {
                         // Resolve through type aliases (e.g. Headers -> Fields).
-                        let aliased = DeclPath::method_of(&DeclName::new(&resolved.name), &method_info.method_name);
+                        let aliased = DeclPath::method_of(
+                            &DeclName::new(&resolved.name),
+                            &method_info.method_name,
+                        );
                         if self.cm_interface_registry.get_function(&aliased).is_some() {
                             self.effects.insert(aliased);
                         }

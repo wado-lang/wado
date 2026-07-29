@@ -15,7 +15,7 @@ use super::Elaborator;
 use super::callee::StaticMethodRef;
 use super::method_lookup::MethodInferenceInput;
 use super::reflect::ScalarReflectSpec;
-use super::types::{FunctionContext, MethodInfo, TypeError};
+use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 
 /// Inputs to [`Elaborator::resolve_method_call_with`], the TIR-level method-call
 /// dispatcher. The AST-driven [`Elaborator::resolve_method_call`] is a thin
@@ -397,7 +397,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_kind,
             param_types,
             param_is_mut: _,
-            inherited_from_base,
+            owner,
             cm_name,
             is_ref_impl,
             method_type_param_ids: _,
@@ -423,7 +423,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self_kind: ast::SelfKind::Ref,
                 param_types: vec![],
                 param_is_mut: vec![],
-                inherited_from_base: None,
+                owner: MethodOwner::Receiver,
                 cm_name: None,
                 is_ref_impl: false,
                 method_type_param_ids: vec![],
@@ -557,7 +557,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Type check method arguments against expected parameter types (newtype-aware)
         // If method was inherited from a newtype's base type, substitute base->newtype in params
-        let expected_param_types: Vec<TypeId> = if let Some(base_type_id) = inherited_from_base {
+        let expected_param_types: Vec<TypeId> = if let Some(base_type_id) = owner.inherited() {
             // Get the newtype that the method is being called on
             let newtype_id = self.tysys.get_base_type(receiver.type_id);
             // Substitute base type with newtype in all parameter types
@@ -626,7 +626,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Substitute return type for inherited newtype methods
         // e.g., Point::clone_point() -> Point becomes Location::clone_point() -> Location
-        if let Some(base_type_id) = inherited_from_base {
+        if let Some(base_type_id) = owner.inherited() {
             let newtype_id = self.tysys.get_base_type(receiver.type_id);
             return_type =
                 self.tysys
@@ -817,7 +817,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Get struct name and monomorph info from base type for mangled method name.
         // For inherited methods (Newtype/Flags), use the actual implementation type's name,
         // since the function is defined on the base type (e.g., Point::sum, not Location::sum).
-        let method_impl_type_id = inherited_from_base.unwrap_or(base_type_id);
+        let method_impl_type_id = owner.declaring(base_type_id);
         let (
             mut receiver_struct_name,
             mut base_struct_name,
@@ -1020,7 +1020,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // that so cross-module inherent impls resolve.
             .or_else(|| inherent_impl_module.clone())
             .or_else(|| {
-                inherited_from_base.and_then(|base_id| {
+                owner.inherited().and_then(|base_id| {
                     match self.tysys.type_table.borrow().get(base_id) {
                         ResolvedType::Struct { module_source, .. }
                         | ResolvedType::GenericInstance { module_source, .. }

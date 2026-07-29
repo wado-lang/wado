@@ -129,9 +129,9 @@ impl FuncInstState {
             .base_trait_name
             .as_deref()
             .or(info.trait_name.as_deref())?;
-        if let Some(m) = self
-            .trait_env
-            .impl_module_for(&info.struct_name(), trait_name, type_module)
+        if let Some(m) =
+            self.trait_env
+                .impl_module_for(&info.struct_name(), trait_name, type_module)
         {
             return Some(m.clone());
         }
@@ -559,13 +559,12 @@ impl Monomorphizer {
         method_name: &str,
         trait_name: Option<&str>,
     ) -> (Option<String>, Vec<(String, Option<String>)>) {
-        let own_name =
-            self.newtype_own_struct_name_with_impl(
-                receiver_type_id,
-                type_table,
-                method_name,
-                trait_name,
-            );
+        let own_name = self.newtype_own_struct_name_with_impl(
+            receiver_type_id,
+            type_table,
+            method_name,
+            trait_name,
+        );
         let mut names: Vec<(String, Option<String>)> = Vec::new();
         let mut push_for = |s: FqTypeName| {
             names.push((MethodName::format_local(&s, None, method_name), None));
