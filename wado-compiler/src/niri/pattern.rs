@@ -16,7 +16,7 @@ impl Interpreter<'_> {
     /// pattern binds and the sub-values they take. `binds` is only meaningful
     /// on [`PatternMatch::Yes`]; a rejected alternative may have left entries
     /// behind.
-    pub(super) fn pattern_matches_a(
+    pub(super) fn pattern_matches(
         &self,
         body: &Body,
         value: &Value,
@@ -53,7 +53,7 @@ impl Interpreter<'_> {
                 let mut any_unknown = false;
                 for alt in alts {
                     let mut alt_binds = PatBindings::new();
-                    match self.pattern_matches_a(body, value, *alt, &mut alt_binds) {
+                    match self.pattern_matches(body, value, *alt, &mut alt_binds) {
                         PatternMatch::Yes => {
                             // Alternatives are tried in order at run time, so an
                             // undecided earlier one may be the one that matches
@@ -99,7 +99,7 @@ impl Interpreter<'_> {
                 _ => PatternMatch::No,
             },
             PatKind::ConstantValue { expr } => {
-                match self.operand_to_lattice_a(body, *expr).as_const() {
+                match self.operand_to_lattice(body, *expr).as_const() {
                     Some(v) if &v == value => PatternMatch::Yes,
                     Some(_) => PatternMatch::No,
                     None => PatternMatch::Unknown,
@@ -146,7 +146,7 @@ impl Interpreter<'_> {
             let Some(field_value) = value.field(field_index) else {
                 return PatternMatch::Unknown;
             };
-            match self.pattern_matches_a(body, field_value, pat, binds) {
+            match self.pattern_matches(body, field_value, pat, binds) {
                 PatternMatch::No => return PatternMatch::No,
                 PatternMatch::Unknown => any_unknown = true,
                 PatternMatch::Yes => {}

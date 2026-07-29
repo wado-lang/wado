@@ -14,6 +14,9 @@ use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, Operand, StmtKind};
 use super::place::{lvalue_root_local, place_of};
 use super::{CalleeMap, CtfeBuiltinMap, reachable_exprs};
 
+/// A method's receiver is its first parameter.
+const RECEIVER: usize = 0;
+
 /// The places a walk reaches, and how. A mention it does not reach disqualifies
 /// the local that mention roots at.
 #[derive(Default)]
@@ -30,41 +33,50 @@ impl Reached {
         ctfe_builtins: Option<&CtfeBuiltinMap>,
         callees: Option<&CalleeMap>,
     ) -> Self {
-        let mut statements: IndexSet<ExprId> = IndexSet::default();
+        let mut performed: IndexSet<ExprId> = IndexSet::default();
         for (_, stmt) in &body.stmts {
             let op = match &stmt.kind {
                 StmtKind::Expr(op) | StmtKind::Let { value: op, .. } => *op,
                 _ => continue,
             };
             if let Some(e) = op.as_expr() {
-                statements.insert(e);
+                performed.insert(e);
             }
         }
-        let mut reached = Self::default();
-        for e in &statements {
+        let mut reached = Self::collect(body, ctfe_builtins, callees, &performed);
+        for e in &performed {
             if let ExprKind::Assign { target, .. } = &body.exprs[*e].kind
                 && place_of(body, (*target).into()).is_some()
             {
                 reached.place_assigns.insert(*e);
             }
         }
-        reached.collect_builtin_borrows(body, ctfe_builtins, &statements);
-        reached.collect_call_borrows(body, callees, &statements);
         reached
     }
 
-    /// An ordinary walk performs nothing, so only the reads survive.
+    /// An ordinary walk performs nothing, so no position is one a write is
+    /// carried out at. Passing an empty set is what says so: the collectors
+    /// record a write only where the walk performs it, and a read wherever it
+    /// appears, so this leaves the reads and nothing else.
     pub(super) fn outside_frame(
         body: &Body,
         ctfe_builtins: Option<&CtfeBuiltinMap>,
         callees: Option<&CalleeMap>,
     ) -> Self {
-        let reads = Self::in_frame(body, ctfe_builtins, callees).reads;
-        Self {
-            reads,
-            writes: IndexSet::default(),
-            place_assigns: IndexSet::default(),
-        }
+        Self::collect(body, ctfe_builtins, callees, &IndexSet::default())
+    }
+
+    /// What the walk reaches, given the expressions it performs.
+    fn collect(
+        body: &Body,
+        ctfe_builtins: Option<&CtfeBuiltinMap>,
+        callees: Option<&CalleeMap>,
+        performed: &IndexSet<ExprId>,
+    ) -> Self {
+        let mut reached = Self::default();
+        reached.collect_builtin_borrows(body, ctfe_builtins, performed);
+        reached.collect_call_borrows(body, callees, performed);
+        reached
     }
 
     /// The engine models a builtin call exactly, so the destination it writes
@@ -73,7 +85,7 @@ impl Reached {
         &mut self,
         body: &Body,
         ctfe_builtins: Option<&CtfeBuiltinMap>,
-        statements: &IndexSet<ExprId>,
+        performed: &IndexSet<ExprId>,
     ) {
         let Some(map) = ctfe_builtins else {
             return;
@@ -91,7 +103,7 @@ impl Reached {
                 }
                 continue;
             }
-            if !statements.contains(&e) {
+            if !performed.contains(&e) {
                 continue;
             }
             for (i, arg) in args.iter().enumerate() {
@@ -110,7 +122,7 @@ impl Reached {
         &mut self,
         body: &Body,
         callees: Option<&CalleeMap>,
-        statements: &IndexSet<ExprId>,
+        performed: &IndexSet<ExprId>,
     ) {
         let Some(callees) = callees else {
             return;
@@ -133,10 +145,10 @@ impl Reached {
             if first_arg + args.len() != callee.arity() {
                 continue;
             }
-            let at_statement = statements.contains(&e);
+            let at_statement = performed.contains(&e);
             if let Some(receiver) = receiver {
-                match (callee.writes_receiver(), at_statement) {
-                    (false, _) if callee.reads_only(0) => {
+                match (callee.writes_param(RECEIVER), at_statement) {
+                    (false, _) if callee.reads_only(RECEIVER) => {
                         self.record(body, receiver, Reach::Read);
                     }
                     (true, true) => self.record(body, receiver, Reach::Write),

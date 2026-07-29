@@ -21,17 +21,13 @@ use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
-use super::lattice::is_provably_exhaustive_a;
+use super::lattice::is_provably_exhaustive;
 use super::pattern::PatternMatch;
 use super::{BodySink, EditSink, Interpreter, Lattice, PatBindings};
 
 impl Interpreter<'_> {
     /// The single-node rewrites at `e` (no recursion into children).
-    pub(crate) fn reduce_local_block_via<S: EditSink>(
-        &mut self,
-        sink: &mut S,
-        block: BlockId,
-    ) -> bool {
+    pub(crate) fn reduce_local_block<S: EditSink>(&mut self, sink: &mut S, block: BlockId) -> bool {
         let body = sink.body();
         let has_constant_if = body.blocks[block].stmts.iter().any(|s| {
             matches!(
@@ -71,19 +67,19 @@ impl Interpreter<'_> {
         true
     }
 
-    pub fn reduce_local_a(&mut self, body: &mut Body, e: ExprId) -> bool {
+    pub fn reduce_local_in_body(&mut self, body: &mut Body, e: ExprId) -> bool {
         let mut sink = BodySink { body };
-        self.reduce_local_via(&mut sink, e)
+        self.reduce_local(&mut sink, e)
     }
 
     /// Reduce `e` to its flow-sensitive constant value or collapse a constant
     /// branch, committing through `sink`. The value substitutions
-    /// ([`Self::flow_fold_kind_a`]) and the structural collapses
+    /// ([`Self::flow_fold_value`]) and the structural collapses
     /// (short-circuit / `if` / `match`) all route through the sink, so the
     /// engine-routed visitor keeps the parent map / use index coherent and the
     /// scratch-body CTFE path mutates in place.
-    pub(crate) fn reduce_local_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
-        if let Some(value) = self.flow_fold_candidate_a(sink.body(), e) {
+    pub(crate) fn reduce_local<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
+        if let Some(value) = self.flow_fold_candidate(sink.body(), e) {
             if value.is_scalar() {
                 // Promote the folded scalar to an `Operand::Value` in `e`'s parent.
                 if sink.replace_with_value(e, value.clone()) {
@@ -191,39 +187,38 @@ impl Interpreter<'_> {
     /// that should replace it, or `None` when `e` does not fold without
     /// per-function state.
     ///
-    /// This is the subset of [`reduce_local_a`](Self::reduce_local_a) that
+    /// This is the subset of [`reduce_local_in_body`](Self::reduce_local_in_body) that
     /// depends only on the node and its (already-folded) children plus the
-    /// program-wide [`CalleeMap`]: literal `Binary` / `Unary` / `Cast`
+    /// program-wide [`CalleeMap`](crate::niri::CalleeMap): literal `Binary` / `Unary` / `Cast`
     /// arithmetic, projection out of a constant aggregate, and pure
     /// compile-time function evaluation. Only scalars are returned — an
     /// aggregate has no operand form. Local-bound constants and
-    /// immutable-global reads stay with [`crate::optimize`]'s flow-sensitive
+    /// immutable-global reads stay with [`crate::optimize`](mod@crate::optimize)'s flow-sensitive
     /// const-fold walker, which owns the per-function dataflow state — an
     /// interpreter driving this must keep its `env` empty, since a projection's
     /// receiver resolves through it.
     ///
-    /// Because the interpreter's `env` is empty here, `try_fold_a` and
-    /// `try_call_fold_a` only succeed when every operand / argument is already
+    /// Because the interpreter's `env` is empty here, `try_fold` and
+    /// `try_call_fold` only succeed when every operand / argument is already
     /// a literal; the children a fold discards are therefore literal-only,
     /// never `Local` mentions. That lets the rewrite engine apply the result
     /// through its coherent edit API without the use index going stale.
     ///
-    /// Unlike `reduce_local_a`, this does **not** mutate `body`: the engine rule
+    /// Unlike `reduce_local_in_body`, this does **not** mutate `body`: the engine rule
     /// promotes the returned value to an `Operand::Value` via
     /// `Engine::replace_expr_with_value`.
-    pub fn const_fold_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
-        self.const_fold_candidate_a(body, e)
-            .filter(Value::is_scalar)
+    pub fn const_fold_value(&mut self, body: &Body, e: ExprId) -> Option<Value> {
+        self.const_fold_candidate(body, e).filter(Value::is_scalar)
     }
 
-    fn const_fold_candidate_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
-        if let Lattice::Const(v) = self.try_fold_a(body, e) {
+    fn const_fold_candidate(&mut self, body: &Body, e: ExprId) -> Option<Value> {
+        if let Lattice::Const(v) = self.try_fold(body, e) {
             return Some(v);
         }
-        if let Some(v) = self.field_projection_value_a(body, e) {
+        if let Some(v) = self.field_projection_value(body, e) {
             return Some(v);
         }
-        if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
+        if let Lattice::Const(v) = self.try_call_fold(body, e) {
             return Some(v);
         }
         None
@@ -239,7 +234,7 @@ impl Interpreter<'_> {
     /// [`Self::field_access_lattice`], which cannot run CTFE from `&self`; that
     /// is what lets `factory().field` reduce to the field of the constructed
     /// value.
-    fn field_projection_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
+    fn field_projection_value(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         let ExprKind::FieldAccess {
             expr: inner,
             field_index,
@@ -255,7 +250,7 @@ impl Interpreter<'_> {
         {
             return Some(v);
         }
-        let receiver = self.try_call_fold_a(body, inner.as_expr()?).as_const()?;
+        let receiver = self.try_call_fold(body, inner.as_expr()?).as_const()?;
         receiver.field(field_index).cloned()
     }
 
@@ -263,83 +258,77 @@ impl Interpreter<'_> {
     /// globals, literal arithmetic, aggregate field projection, and pure CTFE —
     /// or `None`. The structural rewrites (short-circuit / `if` / `match`
     /// collapse) are *not* included. The sink promotes the result to an
-    /// `Operand::Value` via [`EditSink::replace_with_value`], so the value is
+    /// `Operand::Value` via `EditSink::replace_with_value`, so the value is
     /// always a scalar: a constant aggregate keeps its skeleton node and only
     /// the scalars projected out of it fold.
-    pub fn flow_fold_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
-        self.flow_fold_candidate_a(body, e).filter(Value::is_scalar)
+    pub fn flow_fold_value(&mut self, body: &Body, e: ExprId) -> Option<Value> {
+        self.flow_fold_candidate(body, e).filter(Value::is_scalar)
     }
 
-    fn flow_fold_candidate_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
-        if let Lattice::Const(v) = self.try_fold_a(body, e) {
-            return Some(v);
+    fn flow_fold_candidate(&mut self, body: &Body, e: ExprId) -> Option<Value> {
+        self.const_fold_candidate(body, e)
+            .or_else(|| self.bound_read_value(body, e))
+    }
+
+    /// The constant a bare read stands for, out of the per-function state the
+    /// environment-free path has none of. Only a `Local` or a `GlobalVarGet`
+    /// node reaches an answer here, and neither is a shape
+    /// [`Self::const_fold_candidate`] can decide, so which of the two runs
+    /// first does not change what folds.
+    fn bound_read_value(&self, body: &Body, e: ExprId) -> Option<Value> {
+        match &body.exprs[e].kind {
+            // `try_fold` only folds arithmetic, so the env is consulted here:
+            // a `let x = <const>; … x …` that store→load forwarding missed — a
+            // post-`inline` binding the build-once graph never valued — still
+            // folds. Mutable locals are recorded `NonConst`, so this is
+            // immutable-only and cannot stale.
+            ExprKind::Local { .. } => self.expr_to_lattice(body, e).as_const(),
+            ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => self.global_lattice(module_source, name).as_const(),
+            _ => None,
         }
-        if let Some(v) = self.field_projection_value_a(body, e) {
-            return Some(v);
-        }
-        // A bare `Local` read bound to a constant in the flow env (the "env-bound
-        // locals" this doc promises). `try_fold_a` only folds arith; consult the
-        // env here so a `let x = <const>; … x …` that store→load forwarding missed
-        // — a post-`inline` binding the build-once graph never valued — still
-        // folds. Mutable locals are recorded `NonConst` (sound by flow), so this
-        // is immutable-only and cannot stale.
-        if matches!(&body.exprs[e].kind, ExprKind::Local { .. })
-            && let Lattice::Const(v) = self.expr_to_lattice_a(body, e)
-        {
-            return Some(v);
-        }
-        if let ExprKind::GlobalVarGet {
-            module_source,
-            name,
-        } = &body.exprs[e].kind
-            && let Lattice::Const(v) = self.global_lattice(module_source, name)
-        {
-            return Some(v);
-        }
-        if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
-            return Some(v);
-        }
-        None
     }
 
     /// Splice a constant-condition `if` statement into its parent block.
-    /// In-place wrapper over [`Self::reduce_local_block_via`] for the CTFE
+    /// In-place wrapper over `Self::reduce_local_block` for the CTFE
     /// scratch-body path; the engine-routed visitor uses the `via` form with
     /// an `EngineSink`.
-    pub fn reduce_local_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
+    pub fn reduce_local_block_in_body(&mut self, body: &mut Body, block: BlockId) -> bool {
         let mut sink = BodySink { body };
-        self.reduce_local_block_via(&mut sink, block)
+        self.reduce_local_block(&mut sink, block)
     }
 
     /// Bottom-up reduce the subtree rooted at `e`, applying
-    /// [`Self::reduce_local_a`] at each node so a child fold is observable at
-    /// its parent. Used by CTFE ([`Self::try_call_fold_a`]) to evaluate a callee
+    /// [`Self::reduce_local_in_body`] at each node so a child fold is observable at
+    /// its parent. Used by CTFE (`Self::try_call_fold`) to evaluate a callee
     /// body whose children no outer walk has pre-reduced.
     ///
     /// The children come from [`Body::for_each_child`] rather than a list of
     /// its own, so a node kind added to the IR is walked here without anyone
     /// remembering to. Two positions that walk names are handled by
-    /// [`Self::reduce_children_a`] instead.
+    /// `Self::reduce_children` instead.
     ///
     /// Distinct from `optimize::const_folding`'s visitor, which walks the same
     /// shape over a real body: that one also maintains the flow-sensitive
     /// local env as it goes, and doing so here would record bindings from a
     /// walk that performs nothing. Reducing an expression is not running it —
     /// the frame is what binds.
-    pub fn reduce_in_place_a(&mut self, body: &mut Body, e: ExprId) -> bool {
-        self.reduce_in_place_node_a(body, NodeRef::Expr(e))
+    pub fn reduce_in_place(&mut self, body: &mut Body, e: ExprId) -> bool {
+        self.reduce_in_place_node(body, NodeRef::Expr(e))
     }
 
-    fn reduce_in_place_node_a(&mut self, body: &mut Body, node: NodeRef) -> bool {
+    fn reduce_in_place_node(&mut self, body: &mut Body, node: NodeRef) -> bool {
         let mut changed = match node {
-            NodeRef::Expr(e) => self.reduce_children_a(body, e),
+            NodeRef::Expr(e) => self.reduce_children(body, e),
             NodeRef::Block(_) | NodeRef::Stmt(_) | NodeRef::Pat(_) => {
-                self.walk_children_a(body, node)
+                self.walk_children(body, node)
             }
         };
         changed |= match node {
-            NodeRef::Expr(e) => self.reduce_local_a(body, e),
-            NodeRef::Block(b) => self.reduce_local_block_a(body, b),
+            NodeRef::Expr(e) => self.reduce_local_in_body(body, e),
+            NodeRef::Block(b) => self.reduce_local_block_in_body(body, b),
             NodeRef::Stmt(_) | NodeRef::Pat(_) => false,
         };
         changed
@@ -352,7 +341,7 @@ impl Interpreter<'_> {
     /// is walked in its own scope. An `Assign` target names storage rather than
     /// a value: folding it would put a literal where the program writes, so
     /// only the receiver it projects out of is a read position.
-    fn reduce_children_a(&mut self, body: &mut Body, e: ExprId) -> bool {
+    fn reduce_children(&mut self, body: &mut Body, e: ExprId) -> bool {
         match &body.exprs[e].kind {
             ExprKind::Match {
                 expr: scrutinee,
@@ -361,58 +350,57 @@ impl Interpreter<'_> {
                 let scrutinee = *scrutinee;
                 let arm_data: Vec<(Option<Operand>, PatId, Operand)> =
                     arms.iter().map(|a| (a.guard, a.pattern, a.body)).collect();
-                let mut changed = self.reduce_in_place_operand_a(body, scrutinee);
+                let mut changed = self.reduce_in_place_operand(body, scrutinee);
                 for (guard, pattern, arm_body) in arm_data {
                     let binds = self.arm_bindings(body, scrutinee, pattern);
                     let scope = self.enter_arm(&binds);
                     if let Some(g) = guard {
-                        changed |= self.reduce_in_place_operand_a(body, g);
+                        changed |= self.reduce_in_place_operand(body, g);
                     }
-                    changed |= self.reduce_in_place_operand_a(body, arm_body);
+                    changed |= self.reduce_in_place_operand(body, arm_body);
                     self.leave_arm(scope);
                 }
                 changed
             }
             ExprKind::Assign { target, value } => {
                 let (target, value) = (*target, *value);
-                let mut changed = self.reduce_in_place_operand_a(body, value);
+                let mut changed = self.reduce_in_place_operand(body, value);
                 let receiver = match &body.exprs[target].kind {
                     ExprKind::FieldAccess { expr: inner, .. }
                     | ExprKind::Index { expr: inner, .. } => Some(*inner),
                     _ => None,
                 };
                 if let Some(receiver) = receiver {
-                    changed |= self.reduce_in_place_operand_a(body, receiver);
+                    changed |= self.reduce_in_place_operand(body, receiver);
                 }
                 changed
             }
-            _ => self.walk_children_a(body, NodeRef::Expr(e)),
+            _ => self.walk_children(body, NodeRef::Expr(e)),
         }
     }
 
-    fn walk_children_a(&mut self, body: &mut Body, node: NodeRef) -> bool {
+    fn walk_children(&mut self, body: &mut Body, node: NodeRef) -> bool {
         let mut children = Vec::new();
         body.for_each_child(node, |c| children.push(c));
         let mut changed = false;
         for child in children {
-            changed |= self.reduce_in_place_node_a(body, child);
+            changed |= self.reduce_in_place_node(body, child);
         }
         changed
     }
 
     /// Reduce an operand in place: a no-op (`false`) for a promoted pure value
     /// (already reduced), else reduce the skeleton subtree.
-    fn reduce_in_place_operand_a(&mut self, body: &mut Body, op: Operand) -> bool {
-        op.as_expr()
-            .is_some_and(|e| self.reduce_in_place_a(body, e))
+    fn reduce_in_place_operand(&mut self, body: &mut Body, op: Operand) -> bool {
+        op.as_expr().is_some_and(|e| self.reduce_in_place(body, e))
     }
 
     /// Project `e` to a lattice, assuming its children are already reduced (the
-    /// const-fold visitor walks bottom-up): `try_fold_a` sees folded children
-    /// directly, and a non-foldable node falls through to `expr_to_lattice_a`.
-    pub fn reduce_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
-        match self.try_fold_a(body, e) {
-            Lattice::Unevaluated => self.expr_to_lattice_a(body, e),
+    /// const-fold visitor walks bottom-up): `try_fold` sees folded children
+    /// directly, and a non-foldable node falls through to `expr_to_lattice`.
+    pub fn reduce_to_lattice(&self, body: &Body, e: ExprId) -> Lattice {
+        match self.try_fold(body, e) {
+            Lattice::Unevaluated => self.expr_to_lattice(body, e),
             other => other,
         }
     }
@@ -420,9 +408,9 @@ impl Interpreter<'_> {
     /// Reduce the subtree bottom-up in place (so multi-level constant operands
     /// fold), then project to a lattice. The standalone entry point for callers
     /// with an unreduced expression — the `niri` unit tests.
-    pub fn reduce_to_lattice_full_a(&mut self, body: &mut Body, e: ExprId) -> Lattice {
-        self.reduce_in_place_a(body, e);
-        self.reduce_to_lattice_a(body, e)
+    pub fn reduce_to_lattice_full(&mut self, body: &mut Body, e: ExprId) -> Lattice {
+        self.reduce_in_place(body, e);
+        self.reduce_to_lattice(body, e)
     }
 
     /// Collapse an `if` with a constant condition or equal arms.
@@ -435,7 +423,7 @@ impl Interpreter<'_> {
             } => (*condition, *then_branch, *else_branch),
             _ => return false,
         };
-        let cond_lat = self.operand_to_lattice_a(sink.body(), condition);
+        let cond_lat = self.operand_to_lattice(sink.body(), condition);
 
         // (1) Constant condition → splice the chosen arm.
         if let Lattice::Const(Value::Bool(b)) = cond_lat {
@@ -454,13 +442,13 @@ impl Interpreter<'_> {
         }
 
         // (2)/(3) require both arms Const.
-        let Lattice::Const(t) = self.block_lattice_a(sink.body(), then_branch) else {
+        let Lattice::Const(t) = self.block_lattice(sink.body(), then_branch) else {
             return false;
         };
         let Some(eb) = else_branch else {
             return false;
         };
-        let Lattice::Const(ev) = self.block_lattice_a(sink.body(), eb) else {
+        let Lattice::Const(ev) = self.block_lattice(sink.body(), eb) else {
             return false;
         };
 
@@ -494,7 +482,7 @@ impl Interpreter<'_> {
         }
         if !condition
             .as_expr()
-            .is_none_or(|ce| is_speculatable_a(sink.body(), ce))
+            .is_none_or(|ce| is_speculatable(sink.body(), ce))
         {
             return false;
         }
@@ -520,11 +508,11 @@ impl Interpreter<'_> {
             };
 
         // Rule 1: const scrutinee → splice the chosen arm.
-        if let Lattice::Const(scrut_v) = self.operand_to_lattice_a(sink.body(), scrutinee) {
+        if let Lattice::Const(scrut_v) = self.operand_to_lattice(sink.body(), scrutinee) {
             let mut chosen: Option<(usize, PatBindings)> = None;
             for (i, (guard, pat, _, _)) in arms_data.iter().enumerate() {
                 let mut binds = PatBindings::new();
-                match self.pattern_matches_a(sink.body(), &scrut_v, *pat, &mut binds) {
+                match self.pattern_matches(sink.body(), &scrut_v, *pat, &mut binds) {
                     PatternMatch::No => continue,
                     PatternMatch::Unknown => return false,
                     PatternMatch::Yes => {}
@@ -568,7 +556,7 @@ impl Interpreter<'_> {
         // Rule 2: `match X { Pat => true, _ => false } → <discriminator>`.
         // The scrutinee is preserved inside the synthesised `Binary`, and the
         // `Match` node `e` keeps its own span — only its `kind` is replaced.
-        if let Some(replacement) = try_match_bool_discriminator_a(sink.body(), &arms_data) {
+        if let Some(replacement) = try_match_bool_discriminator(sink.body(), &arms_data) {
             let right = sink.alloc_expr(
                 ExprKind::EnumConstruct {
                     enum_type: replacement.enum_type,
@@ -592,7 +580,7 @@ impl Interpreter<'_> {
         // Rule 3: non-const speculatable scrutinee, all-arms-equal. A promoted
         // `Operand::Value` scrutinee is a constant — trivially speculatable.
         if let Some(e) = scrutinee.as_expr()
-            && !is_speculatable_a(sink.body(), e)
+            && !is_speculatable(sink.body(), e)
         {
             return false;
         }
@@ -603,12 +591,12 @@ impl Interpreter<'_> {
             ExprKind::Match { arms, .. } => arms.clone(),
             _ => unreachable!(),
         };
-        if !is_provably_exhaustive_a(sink.body(), &arms_for_exh) {
+        if !is_provably_exhaustive(sink.body(), &arms_for_exh) {
             return false;
         }
         let mut common: Option<Value> = None;
         for (_, _, b, _) in &arms_data {
-            let Lattice::Const(v) = self.operand_to_lattice_a(sink.body(), *b) else {
+            let Lattice::Const(v) = self.operand_to_lattice(sink.body(), *b) else {
                 return false;
             };
             match common {
@@ -702,35 +690,35 @@ pub(super) fn absorbing_short_circuit(body: &Body, e: ExprId) -> Option<bool> {
     } else {
         return None;
     };
-    is_discardable_operand_a(body, discarded).then_some(absorbing)
+    is_discardable_operand(body, discarded).then_some(absorbing)
 }
 
 /// Whether `e` can be *deleted* outright: side-effect-free like
-/// [`is_speculatable_a`], and trap-free on top of that.
+/// [`is_speculatable`], and trap-free on top of that.
 ///
-/// The two differ where a trap is possible. `is_speculatable_a` admits
+/// The two differ where a trap is possible. `is_speculatable` admits
 /// `FieldAccess` and `Cast`, which is right for its callers — they *reorder* an
 /// expression, so a trap it would raise still happens. Deleting the expression
 /// erases the trap, which the program is entitled to observe.
-pub(super) fn is_discardable_a(body: &Body, e: ExprId) -> bool {
+pub(super) fn is_discardable(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Local { .. } => true,
         ExprKind::Binary { left, op, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-                && is_discardable_operand_a(body, *left)
-                && is_discardable_operand_a(body, *right)
+                && is_discardable_operand(body, *left)
+                && is_discardable_operand(body, *right)
         }
         ExprKind::Unary { op, expr: inner } => {
-            !matches!(op, NirUnaryOp::Deref) && is_discardable_operand_a(body, *inner)
+            !matches!(op, NirUnaryOp::Deref) && is_discardable_operand(body, *inner)
         }
         _ => false,
     }
 }
 
-/// Operand form of [`is_discardable_a`]: a promoted pure value (a constant) is
+/// Operand form of [`is_discardable`]: a promoted pure value (a constant) is
 /// always discardable.
-pub(super) fn is_discardable_operand_a(body: &Body, op: crate::nir_arena::Operand) -> bool {
-    op.as_expr().is_none_or(|e| is_discardable_a(body, e))
+pub(super) fn is_discardable_operand(body: &Body, op: crate::nir_arena::Operand) -> bool {
+    op.as_expr().is_none_or(|e| is_discardable(body, e))
 }
 
 /// The boolean value of an operand: a promoted `ValueKind::Bool` in the pool.
@@ -743,7 +731,7 @@ pub(super) fn operand_bool(body: &Body, op: Operand) -> Option<bool> {
 }
 
 /// Recognize `match X { Case => true, _ => false }` as an equality test.
-pub(super) fn try_match_bool_discriminator_a(
+pub(super) fn try_match_bool_discriminator(
     body: &Body,
     arms: &[(Option<Operand>, PatId, Operand, crate::token::Span)],
 ) -> Option<EnumEqReplacement> {
@@ -779,49 +767,41 @@ pub(super) fn try_match_bool_discriminator_a(
 }
 
 /// Whether `e` can be evaluated out of order (side-effect-free, cannot trap).
-pub(super) fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
+pub(super) fn is_speculatable(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Local { .. } => true,
         ExprKind::Binary { left, op, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-                && is_speculatable_operand_a(body, *left)
-                && is_speculatable_operand_a(body, *right)
+                && is_speculatable_operand(body, *left)
+                && is_speculatable_operand(body, *right)
         }
         ExprKind::Unary { op, expr: inner } => {
-            !matches!(op, NirUnaryOp::Deref) && is_speculatable_operand_a(body, *inner)
+            !matches!(op, NirUnaryOp::Deref) && is_speculatable_operand(body, *inner)
         }
-        ExprKind::Cast { expr: inner, .. } => is_speculatable_operand_a(body, *inner),
-        ExprKind::FieldAccess { expr: inner, .. } => is_speculatable_operand_a(body, *inner),
+        ExprKind::Cast { expr: inner, .. } => is_speculatable_operand(body, *inner),
+        ExprKind::FieldAccess { expr: inner, .. } => is_speculatable_operand(body, *inner),
         _ => false,
     }
 }
 
-/// Operand form of [`is_speculatable_a`]: a promoted pure value (constant)
+/// Operand form of [`is_speculatable`]: a promoted pure value (constant)
 /// is always speculatable.
-pub(super) fn is_speculatable_operand_a(body: &Body, op: crate::nir_arena::Operand) -> bool {
-    op.as_expr().is_none_or(|e| is_speculatable_a(body, e))
+pub(super) fn is_speculatable_operand(body: &Body, op: crate::nir_arena::Operand) -> bool {
+    op.as_expr().is_none_or(|e| is_speculatable(body, e))
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
 // `match X { Pat => true, _ => false }` discriminator collapse
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// The replacement shape produced by `try_match_bool_discriminator`. The
-/// scrutinee box is plugged in by the caller once it has taken ownership
-/// of the original `Match` expression.
+/// The comparison [`try_match_bool_discriminator`] recognised, less the
+/// scrutinee, which the caller plugs in.
 ///
-/// Only the `EnumEq` shape exists today; `PatKind::Variant` is left
-/// intact because synthesising the matching `VariantTest` requires a
-/// variant→case-index lookup that the pattern itself doesn't carry
-/// (the WIR builder resolves it via the variant decl's case list,
-/// which the interpreter doesn't carry today). The fpfmt motivator
-/// (`SpecialKind`) is an `enum`, so the Enum-only scope is sufficient
-/// for this PR; expanding to `Variant` is a follow-up.
+/// Enums only. A `PatKind::Variant` would need the variant decl's case list to
+/// synthesise its `VariantTest`, and the pattern does not carry it.
 pub(super) struct EnumEqReplacement {
     enum_type: TypeId,
     case_index: u32,
     case_name: String,
     span: crate::token::Span,
 }
-
-impl EnumEqReplacement {}

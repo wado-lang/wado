@@ -167,7 +167,7 @@ fn flow_fold(interp: &mut Interpreter, build: &Build) -> Option<Value> {
     let e = op
         .as_expr()
         .expect("expected a composite expression to flow-fold");
-    interp.flow_fold_value_a(&body, e)
+    interp.flow_fold_value(&body, e)
 }
 
 /// Full bottom-up reduction of a freshly-built expression to a lattice, using
@@ -184,8 +184,8 @@ fn lattice_of(build: &Build) -> Lattice {
 fn reduce_lat(interp: &mut Interpreter, build: &Build) -> Lattice {
     let (mut body, op) = into_body(build);
     match op {
-        Operand::Expr(e) => interp.reduce_to_lattice_full_a(&mut body, e),
-        Operand::Value(_) => interp.operand_to_lattice_a(&body, op),
+        Operand::Expr(e) => interp.reduce_to_lattice_full(&mut body, e),
+        Operand::Value(_) => interp.operand_to_lattice(&body, op),
     }
 }
 
@@ -228,13 +228,13 @@ fn unit_lit() -> Build {
     Rc::new(|b| Operand::Value(b.values.alloc_unshared(ValueKind::Unit, TypeTable::UNIT)))
 }
 
-/// Build, run the in-place reducer (`reduce_in_place_a`, the arena analogue of
+/// Build, run the in-place reducer (`reduce_in_place`, the arena analogue of
 /// the old tree `reduce`) with a default interpreter, and return the arena so
 /// the caller can inspect the rewritten root node via `body.exprs[e].kind`.
 fn reduce_to_expr(build: &Build) -> (Body, ExprId) {
     let table = TypeTable::new();
     let (mut body, e) = into_body_expr(build);
-    Interpreter::new(&table).reduce_in_place_a(&mut body, e);
+    Interpreter::new(&table).reduce_in_place(&mut body, e);
     (body, e)
 }
 
@@ -242,15 +242,15 @@ fn reduce_to_expr(build: &Build) -> (Body, ExprId) {
 /// interpreter, so env / callee bindings are visible to the reduction.
 fn reduce_with(interp: &mut Interpreter, build: &Build) -> (Body, ExprId) {
     let (mut body, e) = into_body_expr(build);
-    interp.reduce_in_place_a(&mut body, e);
+    interp.reduce_in_place(&mut body, e);
     (body, e)
 }
 
-/// Build, apply the single-node `reduce_local_a` rewrite, and return the
+/// Build, apply the single-node `reduce_local_in_body` rewrite, and return the
 /// `changed` flag plus the arena so the caller can inspect `body.exprs[e]`.
 fn reduce_local_into(interp: &mut Interpreter, build: &Build) -> (bool, Body, ExprId) {
     let (mut body, e) = into_body_expr(build);
-    let changed = interp.reduce_local_a(&mut body, e);
+    let changed = interp.reduce_local_in_body(&mut body, e);
     (changed, body, e)
 }
 
@@ -1297,7 +1297,7 @@ fn if_nonconst_cond_with_unevaluated_arm_does_not_fold() {
 
 #[test]
 fn reduce_local_rewrites_const_true_if_to_block() {
-    // The visitor-driven path: `reduce_local` rewrites the `If` in
+    // The visitor-driven path: `reduce_local_in_body` rewrites the `If` in
     // place to a `Block` of the chosen branch. This is the rewrite that
     // subsumes the `if true` case from the legacy `const_branch_prune`.
     let table = TypeTable::new();
@@ -1491,7 +1491,7 @@ fn reduce_local_block_splices_const_true_if_stmt() {
         stmts: vec![if_stmt],
         span: Span::default(),
     });
-    assert!(interp.reduce_local_block_a(&mut body, block));
+    assert!(interp.reduce_local_block_in_body(&mut body, block));
     assert_eq!(body.blocks[block].stmts.len(), 1);
     let s0 = body.blocks[block].stmts[0];
     let StmtKind::Expr(e) = body.stmts[s0].kind else {
@@ -1519,14 +1519,14 @@ fn reduce_local_block_drops_const_false_if_stmt_without_else() {
         stmts: vec![if_stmt],
         span: Span::default(),
     });
-    assert!(interp.reduce_local_block_a(&mut body, block));
+    assert!(interp.reduce_local_block_in_body(&mut body, block));
     assert!(body.blocks[block].stmts.is_empty());
 }
 
 #[test]
 fn reduce_local_block_leaves_nonconst_if_alone() {
     // Stmt-form `if cond { … }` with a non-literal condition is left
-    // structurally intact — `reduce_local_block` must not touch it.
+    // structurally intact — `reduce_local_block_in_body` must not touch it.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     let mut body = Body::empty();
@@ -1544,7 +1544,7 @@ fn reduce_local_block_leaves_nonconst_if_alone() {
         stmts: vec![if_stmt],
         span: Span::default(),
     });
-    assert!(!interp.reduce_local_block_a(&mut body, block));
+    assert!(!interp.reduce_local_block_in_body(&mut body, block));
     assert_eq!(body.blocks[block].stmts.len(), 1);
     let s0 = body.blocks[block].stmts[0];
     assert!(matches!(body.stmts[s0].kind, StmtKind::If { .. }));
@@ -2609,7 +2609,7 @@ fn match_const_scrut_unsupported_pattern_does_not_rewrite() {
 
 #[test]
 fn reduce_local_rewrites_const_match_to_arm_body_block() {
-    // The visitor-driven path: `reduce_local` rewrites a constant-scrut
+    // The visitor-driven path: `reduce_local_in_body` rewrites a constant-scrut
     // `Match` in place to a `Block` containing the chosen arm's body
     // expression as a single tail statement.
     let table = TypeTable::new();
@@ -2820,7 +2820,7 @@ fn reduce_local_leaves_unequal_arm_match_alone() {
 
 #[test]
 fn reduce_local_recurses_into_match_arm_body() {
-    // The driver path enters `reduce` (not `reduce_local`) which uses
+    // The driver path enters `reduce` (not `reduce_local_in_body`) which uses
     // `reduce_in_place` to recurse into children. The arm body
     // `1 + 2` should fold to `3` even when the surrounding match
     // doesn't itself collapse (here the arm body's reduction is
@@ -2852,7 +2852,7 @@ fn reduce_local_recurses_into_match_arm_body() {
         panic!("expected Expr stmt");
     };
     assert_eq!(
-        interp.operand_to_lattice_a(&body, tail).as_const(),
+        interp.operand_to_lattice(&body, tail).as_const(),
         Some(Value::Int {
             value: 3,
             prim: PrimitiveType::I32
@@ -2992,7 +2992,7 @@ fn match_or_pattern_no_match_no_unknowns_is_definite_no() {
     // Or-pattern with all definite-No alternatives reports No, so
     // a wildcard later catches the scrut. With const scrut == 99
     // and `Or([1, 2])` arm, the engine drops the Or arm and picks
-    // the wildcard — `reduce_local` rewrites the match to the
+    // the wildcard — `reduce_local_in_body` rewrites the match to the
     // wildcard's body block.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
@@ -6549,7 +6549,7 @@ fn a_binding_the_arm_body_reads_blocks_the_splice() {
     );
     let (mut body, e) = into_body_expr(&expr);
     let mut interp = Interpreter::new(&table);
-    interp.reduce_to_lattice_full_a(&mut body, e);
+    interp.reduce_to_lattice_full(&mut body, e);
     assert!(
         matches!(body.exprs[e].kind, ExprKind::Match { .. }),
         "the match must survive: {:?}",
@@ -6679,7 +6679,7 @@ fn an_unknown_guard_leaves_the_match_alone() {
     );
     let (mut body, e) = into_body_expr(&expr);
     let mut interp = Interpreter::new(&table);
-    interp.reduce_to_lattice_full_a(&mut body, e);
+    interp.reduce_to_lattice_full(&mut body, e);
     assert!(
         matches!(body.exprs[e].kind, ExprKind::Match { .. }),
         "the match must survive: {:?}",
@@ -6741,7 +6741,7 @@ fn a_guard_the_engine_cannot_evaluate_blocks_a_later_arm() {
     );
     let (mut body, e) = into_body_expr(&expr);
     let mut interp = Interpreter::new(&table);
-    interp.reduce_to_lattice_full_a(&mut body, e);
+    interp.reduce_to_lattice_full(&mut body, e);
     assert!(
         matches!(body.exprs[e].kind, ExprKind::Match { .. }),
         "the match must survive: {:?}",

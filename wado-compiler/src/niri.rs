@@ -44,11 +44,10 @@ use crate::tir::{TypeId, TypeTable};
 /// academic terms — readers familiar with the abstract-interpretation
 /// literature can mentally substitute Bottom/Top.
 ///
-/// Why three states: `Option<Value>` (the previous design) collapsed
-/// "I haven't computed this yet" and "I know this isn't a constant"
-/// into the same `None`, which makes memoization unsound — a cached
-/// `None` can't say whether a re-attempt would succeed. The lattice
-/// fixes this at the type level.
+/// Three states rather than `Option<Value>`: collapsing "not computed yet"
+/// and "known not to be a constant" into one `None` makes memoization
+/// unsound, since a cached `None` cannot say whether a re-attempt would
+/// succeed.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Lattice {
     /// No information yet. Default for un-bound locals and NIR kinds
@@ -79,25 +78,13 @@ impl Lattice {
         }
     }
 
-    /// Join two lattice values. This is the SCCP join (least upper bound)
-    /// over the chain `Unevaluated ⊑ Const(v) ⊑ NonConst`:
+    /// The SCCP join over `Unevaluated ⊑ Const(v) ⊑ NonConst`, used to merge
+    /// the arms of a branch whose condition is not constant.
     ///
-    /// - `Unevaluated ⊔ x = x` — an `Unevaluated` arm is treated as
-    ///   contributing no information (e.g. an `if true { … }` whose
-    ///   `else` is unreachable / absent: the join with the executed arm
-    ///   carries the executed arm's value out).
-    /// - `Const(v) ⊔ Const(v) = Const(v)` — both arms agree, the
-    ///   surrounding expression has that value regardless of which arm
-    ///   ran. This is what lets `if cond { 5 } else { 5 }` collapse to
-    ///   `5` when the condition is effect-free.
-    /// - `Const(a) ⊔ Const(b) = NonConst` (when `a ≠ b`) — arms
-    ///   disagree, the merged value is non-constant.
-    /// - `NonConst ⊔ _ = NonConst` — top is absorbing.
-    ///
-    /// The operation is commutative, associative, and idempotent, as
-    /// required of a lattice join. Used by [`Interpreter::reduce_local`]
-    /// to merge the lattice of an `if` expression's two arms when the
-    /// condition is non-constant.
+    /// An `Unevaluated` arm contributes nothing, which is the infeasible-edge
+    /// rule: it is only sound where that arm really is unreachable, so a
+    /// reachable one is promoted before it gets here (see
+    /// `arm_lattice_for_feasible_join`).
     #[must_use]
     pub fn join(self, other: Self) -> Self {
         match (self, other) {
@@ -171,10 +158,6 @@ impl Callee {
         }
     }
 
-    fn writes_receiver(&self) -> bool {
-        self.writes_param(0)
-    }
-
     fn arity(&self) -> usize {
         self.mut_params.len()
     }
@@ -232,19 +215,10 @@ pub type CtfeBuiltinMap = IndexMap<CalleeKey, CtfeBuiltin>;
 /// so the interpreter can look up a `GlobalVarGet` node directly.
 pub type GlobalKey = (ModuleSource, String);
 
-/// Lattice values for module-scope globals.
-///
-/// Populated once per pass by the driving visitor from
-/// [`crate::flat_package::FlatPackage::globals`] — typically by
-/// reducing each non-`mut` global's initializer through a fresh
-/// [`Interpreter`] (so initializers like `1 + 2`, `i32::MAX - 1`, or
-/// pure-call expressions all collapse to `Const(_)`). Mutable globals
-/// are mapped to [`Lattice::NonConst`] so reads through niri stay
-/// conservative even while the global is in scope.
-///
-/// The map is read at every `GlobalVarGet` lookup; absent keys default
-/// to [`Lattice::Unevaluated`] (the engine simply doesn't know — same
-/// rule as un-bound locals).
+/// Lattice values for module-scope globals, built once per pass by reducing
+/// each non-`mut` global's initializer. A mutable global is recorded
+/// [`Lattice::NonConst`]; an absent key reads as [`Lattice::Unevaluated`], the
+/// same convention as an un-bound local.
 pub type GlobalEnv = IndexMap<GlobalKey, Lattice>;
 
 /// Known constant field values of module-scope globals, keyed by global then
@@ -319,7 +293,7 @@ impl EditSink for BodySink<'_> {
     fn replace_with_value(&mut self, _e: ExprId, _value: Value) -> bool {
         // Scratch CTFE has no parent map to promote a constant into and pure
         // scalars no longer have a literal-node form; the value is recomputed on
-        // read (`reduce_to_lattice_a` → `try_fold_a` over operands + env), so the
+        // read (`reduce_to_lattice` → `try_fold` over operands + env), so the
         // write-back is a no-op here.
         false
     }
@@ -327,10 +301,8 @@ impl EditSink for BodySink<'_> {
         Operand::Value(self.body.values.alloc_unshared(kind, type_id))
     }
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
-        // Clone src's whole node into dst (the original short-circuit rewrite
-        // did `body.exprs[e] = body.exprs[keep].clone()`); the scratch body is
-        // discarded, so the shared child references and the still-live `src`
-        // node are harmless.
+        // The scratch body is discarded, so the shared child references and
+        // the still-live `src` node are harmless.
         let node = self.body.exprs[src].clone();
         self.body.exprs[dst] = node;
     }
@@ -362,7 +334,7 @@ impl EditSink for BodySink<'_> {
 ///
 /// Nor is `stores`. The engine has no reference values — an argument reduces to
 /// its referent's value — so what the callee keeps is a snapshot, sound exactly
-/// while nothing can write the referent afterwards. [`Reached`] is what
+/// while nothing can write the referent afterwards. `Reached` is what
 /// holds that: a stored argument is the one read it does not exempt.
 #[must_use]
 pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
@@ -419,38 +391,27 @@ struct FrameState {
     /// CTFE scratch-body fold memo: `expr → folded constant`. The scratch
     /// [`BodySink`] cannot promote a fold to an `Operand::Value` (no parent map)
     /// and pure scalars have no literal-node form, so a fold is recorded here
-    /// and read back by [`Interpreter::expr_to_lattice_a`]. Empty during
+    /// and read back by [`Interpreter::expr_to_lattice`]. Empty during
     /// real-body folding, where rewrites promote through the engine instead.
     scratch_folds: IndexMap<ExprId, Value>,
 }
 
 /// Partial evaluator over the arena `Body`.
 ///
-/// Holds the type table needed to resolve operand widths, the [`FrameState`] of
+/// Holds the type table needed to resolve operand widths, the `FrameState` of
 /// the body being walked, an optional [`CalleeMap`] of runnable callees, a step
 /// budget, and a `call_stack` of in-flight CTFE frames for recursion detection.
 pub struct Interpreter<'a> {
     type_table: &'a TypeTable,
     frame: FrameState,
-    /// Pre-built map of CTFE-eligible callees. When `None`, `Call` nodes
-    /// stay [`Lattice::Unevaluated`]. The visitor populates this once
-    /// per pass via [`with_callees`].
-    ///
-    /// [`with_callees`]: Self::with_callees
+    /// When `None`, a `Call` node stays [`Lattice::Unevaluated`].
     callees: Option<&'a CalleeMap>,
     /// When `None`, an `array_get` / `array_len` call is just an opaque call.
     ctfe_builtins: Option<&'a CtfeBuiltinMap>,
-    /// Pre-built lattice values for module-scope globals. When `None`,
-    /// every `GlobalVarGet` stays [`Lattice::Unevaluated`]. The visitor
-    /// populates this once per pass via [`with_globals`].
-    ///
-    /// [`with_globals`]: Self::with_globals
+    /// When `None`, a `GlobalVarGet` stays [`Lattice::Unevaluated`].
     globals: Option<&'a GlobalEnv>,
-    /// Pre-built constant field values of module-scope globals. When `None`,
-    /// `FieldAccess(GlobalVarGet(_), _)` stays [`Lattice::Unevaluated`]. The
-    /// visitor populates this once per pass via [`with_global_fields`].
-    ///
-    /// [`with_global_fields`]: Self::with_global_fields
+    /// When `None`, `FieldAccess(GlobalVarGet(_), _)` stays
+    /// [`Lattice::Unevaluated`].
     global_fields: Option<&'a GlobalFieldEnv>,
     /// Hard ceiling on the number of productive CTFE call entries
     /// before bailing. Decremented once per successful body evaluation;
@@ -611,7 +572,7 @@ impl<'a> Interpreter<'a> {
             .map_or(Lattice::Unevaluated, Lattice::Const)
     }
 
-    /// Record `body`'s [`aggregate_safe_locals`]. The driving visitor calls
+    /// Record `body`'s `aggregate_safe_locals`. The driving visitor calls
     /// this once per function, next to [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
         let writes = Reached::outside_frame(body, self.ctfe_builtins, self.callees);
@@ -678,11 +639,11 @@ impl<'a> Interpreter<'a> {
     /// under the values the arm would see at runtime.
     #[must_use]
     pub fn arm_bindings(&self, body: &Body, scrutinee: Operand, pattern: PatId) -> PatBindings {
-        let Lattice::Const(value) = self.operand_to_lattice_a(body, scrutinee) else {
+        let Lattice::Const(value) = self.operand_to_lattice(body, scrutinee) else {
             return PatBindings::new();
         };
         let mut binds = PatBindings::new();
-        match self.pattern_matches_a(body, &value, pattern, &mut binds) {
+        match self.pattern_matches(body, &value, pattern, &mut binds) {
             PatternMatch::Yes => binds,
             PatternMatch::No | PatternMatch::Unknown => PatBindings::new(),
         }
@@ -713,7 +674,7 @@ impl<'a> Interpreter<'a> {
         binds: &PatBindings,
     ) -> Option<bool> {
         let scope = self.enter_arm(binds);
-        let value = self.operand_to_lattice_a(body, guard).as_const();
+        let value = self.operand_to_lattice(body, guard).as_const();
         self.leave_arm(scope);
         value.and_then(|v| v.as_bool())
     }
@@ -743,4 +704,3 @@ pub type PatBindings = Vec<(u32, Value)>;
 /// The environment entries [`Interpreter::enter_arm`] displaced, restored by
 /// [`Interpreter::leave_arm`].
 pub struct ArmScope(Vec<(u32, Option<Lattice>)>);
-
