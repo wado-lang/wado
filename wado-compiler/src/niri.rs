@@ -24,18 +24,17 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::const_eval::{Value, is_int_prim, is_signed_int, prim_of};
-use crate::hashmap::IndexMap;
-use crate::hashmap::IndexSet;
+use crate::const_eval::Value;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
-    PatKind, StmtId, StmtKind, StmtNode,
+    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
+    StmtId, StmtKind, StmtNode,
 };
 use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::NirRefVisitor;
-use crate::tir::{PrimitiveType, TypeId, TypeTable};
+use crate::tir::{TypeId, TypeTable};
 
 /// Three-state lattice over compile-time evaluation results.
 ///
@@ -132,11 +131,13 @@ pub type CalleeKey = crate::nir::FuncId;
 /// separately by `Interpreter::call_stack`, since `try_borrow` permits
 /// concurrent immutable borrows.
 ///
-/// The purity / CTFE-safety gate is decided once at map construction
-/// time by [`is_ctfe_eligible`], and the interpreter never re-checks
-/// it. Body-shape and per-call validity (arity match, all args
-/// reduce, single recognized tail expression) are checked at fold
-/// time, not here.
+/// Membership answers whether a frame may *run* the callee at all —
+/// [`is_ctfe_runnable`], decided once at construction and never re-checked.
+/// Whether the call's value may be substituted for it is a different
+/// question, and it is answered per call: a unit callee denotes nothing, and
+/// one writing through a `&mut` parameter runs only at statement position,
+/// where the executor applies the write-backs. Arity, argument reduction and
+/// body shape are likewise checked at fold time.
 pub type CalleeMap = IndexMap<CalleeKey, Callee>;
 
 /// A callee the engine may run, with the parameter facts the trackability
@@ -259,10 +260,6 @@ pub type GlobalFieldEnv = IndexMap<GlobalKey, IndexMap<String, Value>>;
 /// whether the next one folds.
 pub const DEFAULT_STEP_BUDGET: u32 = 10_000;
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Field knowledge
-// ──────────────────────────────────────────────────────────────────────────────
-
 mod frame;
 mod lattice;
 mod pattern;
@@ -270,92 +267,8 @@ mod place;
 mod rewrite;
 mod trackability;
 
+use pattern::PatternMatch;
 use trackability::{Reached, aggregate_safe_locals};
-
-/// A dense set of local indices, backed by a bitset indexed by the local
-/// index itself.
-///
-/// Local indices within a function body are dense (`0..locals.len()`), so
-/// this replaces an `IndexSet<u32>` used purely for membership with a
-/// hash-free bitset — the same idea as [`crate::tir::TypeSet`]. The alias
-/// analysis rebuilds these sets for every function on every const-fold
-/// iteration, so dropping the per-grow allocation + hashing of an
-/// `IndexSet` is worthwhile.
-#[derive(Default, Clone, Debug)]
-pub struct LocalSet {
-    words: Vec<u64>,
-}
-
-impl LocalSet {
-    /// An empty set pre-sized to hold `locals` indices without regrowing.
-    #[must_use]
-    pub fn with_capacity(locals: usize) -> Self {
-        Self {
-            words: vec![0; locals.div_ceil(64)],
-        }
-    }
-
-    fn slot(index: u32) -> (usize, u64) {
-        ((index / 64) as usize, 1u64 << (index % 64))
-    }
-
-    /// Insert `index`, returning `true` if it was not already present.
-    pub fn insert(&mut self, index: u32) -> bool {
-        let (word, mask) = Self::slot(index);
-        if word >= self.words.len() {
-            self.words.resize(word + 1, 0);
-        }
-        let newly = self.words[word] & mask == 0;
-        self.words[word] |= mask;
-        newly
-    }
-
-    /// Whether `index` is a member.
-    #[must_use]
-    pub fn contains(&self, index: u32) -> bool {
-        let (word, mask) = Self::slot(index);
-        self.words.get(word).is_some_and(|w| w & mask != 0)
-    }
-
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.words.iter().all(|&w| w == 0)
-    }
-
-    /// Iterate members in ascending index order.
-    pub fn iter(&self) -> impl Iterator<Item = u32> + '_ {
-        self.words.iter().enumerate().flat_map(|(wi, &word)| {
-            (0..64u32)
-                .filter(move |&b| word & (1u64 << b) != 0)
-                .map(move |b| wi as u32 * 64 + b)
-        })
-    }
-}
-
-/// Per-function alias / aliasing-trackability annotations.
-///
-/// Computed once per function by [`crate::optimize::alias::build_alias_info`]
-/// (from the function's stable `address_taken_locals` /
-/// `stores_aliased_locals` plus a body walk that catches transient inlined-in
-/// copies) and consumed by the engine [`ValueGraph`] builder
-/// ([`crate::optimize::alias::builder_alias_sets`]) to bound heap-write
-/// invalidation at the right granularity.
-///
-/// - `aliased`: locals reachable through some other handle (`&x`,
-///   `&mut x`, captured by a closure, struct-field-stored, etc.).
-/// - `untrackable`: locals whose aliasing escapes the analysis (e.g.
-///   stashed across a `stores`-annotated callee).
-/// - `alias_groups`: union-find groups of locals connected by
-///   reference-typed `let dst = src` copies (`Box<T>`, `List<T>`,
-///   `&T`, `&mut T`).
-///
-/// [`ValueGraph`]: crate::nir_value_graph
-#[derive(Default, Clone, Debug)]
-pub struct AliasInfo {
-    pub aliased: LocalSet,
-    pub untrackable: LocalSet,
-    pub alias_groups: IndexMap<u32, IndexSet<u32>>,
-}
 
 /// Commit sink for niri's body rewrites. The rewrite logic reads through
 /// [`EditSink::body`] and commits every edit through the sink, so two backends
@@ -465,7 +378,13 @@ pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
 }
 
 /// Whether `func`'s call can be replaced by the value it computes: runnable,
-/// and producing a value at all.
+/// producing a value at all, and keeping no reference past the call.
+///
+/// Strictly stronger than [`is_ctfe_runnable`], which is what the
+/// [`CalleeMap`] gates on: a frame runs a unit callee for the writes it
+/// performs, so requiring a value here would refuse work the frame does. This
+/// is the question a caller asks when it wants to hold the result — hoisting
+/// a pure call's result to a global, where nothing remains to write through.
 #[must_use]
 pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
     // A unit call has no value to substitute for it.
@@ -478,40 +397,41 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
 // Interpreter
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Partial evaluator over the arena `Body`.
-///
-/// Holds the type table needed to resolve operand widths, a per-function
-/// `env` mapping local indices to lattice values, an optional
-/// [`CalleeMap`] of pure-eligible callees, a step budget, and a
-/// `call_stack` of in-flight CTFE frames for recursion detection.
-pub struct Interpreter<'a> {
-    type_table: &'a TypeTable,
-    /// Lattice values for `let`-bound locals in the *current function*.
-    /// Populated by the driving visitor via [`bind_local`] /
-    /// [`invalidate_local`]; cleared via [`enter_function`]. Reads of
-    /// `ExprKind::Local` consult this map during folding.
-    ///
-    /// Locals not present in the map default to [`Lattice::Unevaluated`].
-    ///
-    /// [`bind_local`]: Self::bind_local
-    /// [`invalidate_local`]: Self::invalidate_local
-    /// [`enter_function`]: Self::enter_function
+/// Everything the engine knows keyed by local index, which is per-function, so
+/// entering a body means replacing the whole group and leaving one means
+/// putting it back. Grouped rather than swapped field by field: a compile-time
+/// frame exchanges all of it at once, and a member restored out of step with
+/// its siblings would let one body read another's locals.
+#[derive(Default)]
+struct FrameState {
+    /// Lattice values for the `let`-bound locals of the body being walked.
+    /// Populated by the driving visitor via [`Interpreter::bind_local`] /
+    /// [`Interpreter::invalidate_local`]. Absent locals read as
+    /// [`Lattice::Unevaluated`].
     env: IndexMap<u32, Lattice>,
     ref_global_aliases: IndexMap<u32, GlobalKey>,
-    /// The current function's [`aggregate_safe_locals`] — the only locals that
-    /// may bind an aggregate constant. Cleared by [`Self::enter_function`], so
-    /// an unpopulated set simply refuses every aggregate binding.
+    /// The body's [`aggregate_safe_locals`] — the only locals that may bind an
+    /// aggregate constant. An unpopulated set refuses every aggregate binding.
     aggregate_locals: LocalSet,
-    /// Locals of the CTFE frame currently executing that another handle may
-    /// write — see [`clobbered_locals`]. Empty outside a frame.
+    /// Locals a compile-time frame cannot track — see [`clobbered_locals`].
+    /// Empty outside a frame.
     ctfe_clobbered: LocalSet,
     /// CTFE scratch-body fold memo: `expr → folded constant`. The scratch
     /// [`BodySink`] cannot promote a fold to an `Operand::Value` (no parent map)
-    /// and pure scalars have no literal-node form, so a fold is recorded here and
-    /// read back by [`Self::expr_to_lattice_a`]. Scoped to one `try_call_fold_a`
-    /// call (saved/cleared around the scratch reduction); empty during real-body
-    /// folding, where rewrites promote through the engine instead.
+    /// and pure scalars have no literal-node form, so a fold is recorded here
+    /// and read back by [`Interpreter::expr_to_lattice_a`]. Empty during
+    /// real-body folding, where rewrites promote through the engine instead.
     scratch_folds: IndexMap<ExprId, Value>,
+}
+
+/// Partial evaluator over the arena `Body`.
+///
+/// Holds the type table needed to resolve operand widths, the [`FrameState`] of
+/// the body being walked, an optional [`CalleeMap`] of runnable callees, a step
+/// budget, and a `call_stack` of in-flight CTFE frames for recursion detection.
+pub struct Interpreter<'a> {
+    type_table: &'a TypeTable,
+    frame: FrameState,
     /// Pre-built map of CTFE-eligible callees. When `None`, `Call` nodes
     /// stay [`Lattice::Unevaluated`]. The visitor populates this once
     /// per pass via [`with_callees`].
@@ -616,11 +536,7 @@ impl<'a> Interpreter<'a> {
     pub fn new(type_table: &'a TypeTable) -> Self {
         Self {
             type_table,
-            env: IndexMap::default(),
-            ref_global_aliases: IndexMap::default(),
-            aggregate_locals: LocalSet::default(),
-            ctfe_clobbered: LocalSet::default(),
-            scratch_folds: IndexMap::default(),
+            frame: FrameState::default(),
             callees: None,
             ctfe_builtins: None,
             globals: None,
@@ -679,6 +595,14 @@ impl<'a> Interpreter<'a> {
         self
     }
 
+    /// Install `state`, handing back what it displaced. Every per-local fact
+    /// moves together, so there is no window in which one body's locals are
+    /// read against another's — which is what a compile-time frame needs, and
+    /// what makes leaving one a single statement that cannot be skipped.
+    fn swap_frame(&mut self, state: FrameState) -> FrameState {
+        std::mem::replace(&mut self.frame, state)
+    }
+
     fn global_field(&self, key: &GlobalKey, field_name: &str) -> Lattice {
         self.global_fields
             .and_then(|m| m.get(key))
@@ -691,18 +615,18 @@ impl<'a> Interpreter<'a> {
     /// this once per function, next to [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
         let writes = Reached::outside_frame(body, self.ctfe_builtins, self.callees);
-        self.aggregate_locals = aggregate_safe_locals(body, &writes);
+        self.frame.aggregate_locals = aggregate_safe_locals(body, &writes);
     }
 
     pub fn record_ref_global_aliases(&mut self, body: &Body) {
-        self.ref_global_aliases.clear();
+        self.frame.ref_global_aliases.clear();
         let mut seen: IndexSet<u32> = IndexSet::default();
         for (_, st) in &body.stmts {
             if let Some((local, key)) = let_ref_global(body, &st.kind) {
                 if seen.insert(local) {
-                    self.ref_global_aliases.insert(local, key);
+                    self.frame.ref_global_aliases.insert(local, key);
                 } else {
-                    self.ref_global_aliases.swap_remove(&local);
+                    self.frame.ref_global_aliases.swap_remove(&local);
                 }
             }
         }
@@ -720,11 +644,7 @@ impl<'a> Interpreter<'a> {
     /// loop cannot decide whether the functions walked after it fold.
     pub fn enter_function(&mut self) {
         self.step_budget = DEFAULT_STEP_BUDGET;
-        self.env.clear();
-        self.ref_global_aliases.clear();
-        self.aggregate_locals = LocalSet::default();
-        self.ctfe_clobbered = LocalSet::default();
-        self.scratch_folds.clear();
+        self.frame = FrameState::default();
         debug_assert!(
             self.call_stack.is_empty(),
             "niri call_stack leaked across function boundary",
@@ -742,13 +662,13 @@ impl<'a> Interpreter<'a> {
     /// handle; otherwise it degrades to [`Lattice::NonConst`].
     pub fn bind_local(&mut self, index: u32, lattice: Lattice) {
         let unbacked_aggregate = matches!(&lattice, Lattice::Const(v) if !v.is_scalar())
-            && !self.aggregate_locals.contains(index);
+            && !self.frame.aggregate_locals.contains(index);
         let lattice = if unbacked_aggregate {
             Lattice::NonConst
         } else {
             lattice
         };
-        self.env.insert(index, lattice);
+        self.frame.env.insert(index, lattice);
     }
 
     /// The locals a match arm's pattern binds, with the values they take under
@@ -774,7 +694,7 @@ impl<'a> Interpreter<'a> {
         let scope = ArmScope(
             binds
                 .iter()
-                .map(|(index, _)| (*index, self.env.get(index).cloned()))
+                .map(|(index, _)| (*index, self.frame.env.get(index).cloned()))
                 .collect(),
         );
         for (index, value) in binds {
@@ -801,8 +721,8 @@ impl<'a> Interpreter<'a> {
     pub fn leave_arm(&mut self, scope: ArmScope) {
         for (index, previous) in scope.0 {
             match previous {
-                Some(lattice) => self.env.insert(index, lattice),
-                None => self.env.swap_remove(&index),
+                Some(lattice) => self.frame.env.insert(index, lattice),
+                None => self.frame.env.swap_remove(&index),
             };
         }
     }
@@ -812,66 +732,8 @@ impl<'a> Interpreter<'a> {
     /// Conservative — we don't track flow-sensitive new values, just
     /// invalidate the prior binding.
     pub fn invalidate_local(&mut self, index: u32) {
-        self.env.insert(index, Lattice::NonConst);
+        self.frame.env.insert(index, Lattice::NonConst);
     }
-}
-
-/// Whether the subtree under `op` reads any of the locals `binds` binds.
-fn operand_reads_any_local(body: &Body, op: Operand, binds: &PatBindings) -> bool {
-    struct Reads<'a> {
-        binds: &'a PatBindings,
-        found: bool,
-    }
-    impl NirRefVisitor for Reads<'_> {
-        fn visit_node(&mut self, body: &Body, node: NodeRef) {
-            if let NodeRef::Expr(e) = node
-                && let ExprKind::Local { index, .. } = &body.exprs[e].kind
-                && self.binds.iter().any(|(bound, _)| bound == index)
-            {
-                self.found = true;
-            }
-            self.walk_node(body, node);
-        }
-    }
-    let Some(expr) = op.as_expr() else {
-        return false;
-    };
-    let mut visitor = Reads {
-        binds,
-        found: false,
-    };
-    visitor.visit_node(body, NodeRef::Expr(expr));
-    visitor.found
-}
-
-/// `Some(v)` ↦ `Const(v)`, `None` ↦ `NonConst`. Used at the boundary
-/// where a numeric-evaluation helper that still returns `Option<Value>`
-/// (because its failure modes are runtime traps, not "haven't tried")
-/// flows back into the lattice surface.
-fn option_to_lattice(opt: Option<Value>) -> Lattice {
-    match opt {
-        Some(v) => Lattice::Const(v),
-        None => Lattice::NonConst,
-    }
-}
-
-/// Outcome of testing a pattern against a constant scrutinee
-/// [`Value`]. The three states mirror the pattern's contribution to
-/// SCCP feasibility in [`Interpreter::match_lattice`]:
-///
-/// - `Yes` — the pattern provably matches; later arms are infeasible
-///   edges.
-/// - `No` — the pattern provably does not match; this arm is an
-///   infeasible edge.
-/// - `Unknown` — the engine cannot decide (an unmodelled pattern
-///   shape, a guard the engine doesn't analyze, a `ConstantValue`
-///   whose inner expression doesn't reduce). The arm stays in play
-///   and contributes to the join with all later arms.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PatternMatch {
-    Yes,
-    No,
-    Unknown,
 }
 
 /// The locals a matched pattern binds, paired with the scrutinee sub-values
@@ -882,312 +744,3 @@ pub type PatBindings = Vec<(u32, Value)>;
 /// [`Interpreter::leave_arm`].
 pub struct ArmScope(Vec<(u32, Option<Lattice>)>);
 
-fn bool_to_match(b: bool) -> PatternMatch {
-    if b {
-        PatternMatch::Yes
-    } else {
-        PatternMatch::No
-    }
-}
-
-/// Join a slice of lattice values via [`Lattice::join`]. Empty input
-/// returns [`Lattice::Unevaluated`] (the join's identity).
-fn join_all(lats: &[Lattice]) -> Lattice {
-    let mut acc = Lattice::Unevaluated;
-    for l in lats {
-        acc = acc.join(l.clone());
-    }
-    acc
-}
-
-/// Compare an integer value (raw bits + prim) against a signed i128
-/// pattern literal. Returns `true` iff the values are equal under
-/// the prim's signedness interpretation.
-fn int_value_matches_i128(value: u64, prim: PrimitiveType, pat: i128) -> bool {
-    let Some(v) = int_value_as_i128(value, prim) else {
-        return false;
-    };
-    v == pat
-}
-
-/// Compare an integer value (raw bits + prim) against an unsigned
-/// u128 pattern literal.
-fn int_value_matches_u128(value: u64, prim: PrimitiveType, pat: u128) -> bool {
-    if is_signed_int(prim) {
-        // Signed value cannot represent values outside i64 range
-        // anyway; reinterpret as unsigned for comparison.
-        let v = value as i64;
-        if v < 0 {
-            return false;
-        }
-        u128::from(v as u64) == pat
-    } else {
-        u128::from(value) == pat
-    }
-}
-
-/// Convert a (raw bits, prim) integer into an i128, sign- or
-/// zero-extending per the prim's signedness. Returns `None` for
-/// non-integer prims.
-fn int_value_as_i128(value: u64, prim: PrimitiveType) -> Option<i128> {
-    if !is_int_prim(prim) {
-        return None;
-    }
-    if is_signed_int(prim) {
-        // Stored as sign-extended i64 → widen to i128.
-        Some(i128::from(value as i64))
-    } else {
-        Some(i128::from(value))
-    }
-}
-
-/// Decide whether a (raw bits, prim) integer falls inside a range
-/// pattern. Returns `false` for non-integer prims and for negative
-/// signed values against an unsigned-typed range (which by
-/// construction starts at zero or higher); otherwise returns the
-/// usual half-open / closed range membership test in i128 space.
-fn range_matches_int(
-    value: u64,
-    prim: PrimitiveType,
-    start: i128,
-    end: i128,
-    inclusive: bool,
-    is_unsigned_pat: bool,
-) -> bool {
-    if !is_int_prim(prim) {
-        return false;
-    }
-    let v: i128 = if is_unsigned_pat || !is_signed_int(prim) {
-        // Treat the value as unsigned. For a signed prim with negative
-        // bits, the unsigned reinterpretation differs — fall back to
-        // sign-extended comparison, then ensure it stays nonneg before
-        // entering an unsigned range check.
-        if is_signed_int(prim) {
-            let signed = i128::from(value as i64);
-            if signed < 0 {
-                // The pattern is unsigned; a negative scrutinee can't
-                // be in `[start, end]` when start ≥ 0.
-                return false;
-            }
-            signed
-        } else {
-            i128::from(value)
-        }
-    } else {
-        i128::from(value as i64)
-    };
-    if inclusive {
-        v >= start && v <= end
-    } else {
-        v >= start && v < end
-    }
-}
-
-/// Adjust a block's raw lattice value before feeding it into an
-/// arm-feasible-join (the `if` non-constant-condition path).
-///
-/// `Lattice::Unevaluated` from `block_lattice` means "we couldn't
-/// analyze this block's value" — which is fine when the block is the
-/// chosen branch of a constant-condition `if` (the other arm is an
-/// infeasible edge, so the result really is "we don't know"), but
-/// becomes unsound under a non-constant condition: that arm is
-/// reachable, the absence of a known value means SCCP-Top
-/// (`NonConst`), not infeasibility. Promote here so that a subsequent
-/// `Lattice::join` cannot let an `Unevaluated` arm be silently
-/// absorbed by a `Const` peer (`join(Unevaluated, Const(v)) → Const(v)`
-/// is the infeasible-edge rule, valid only when the Unevaluated edge
-/// really is unreachable).
-fn arm_lattice_for_feasible_join(lat: Lattice) -> Lattice {
-    match lat {
-        Lattice::Unevaluated => Lattice::NonConst,
-        other => other,
-    }
-}
-
-/// Whether the arms cover every scrutinee (a guardless catch-all exists).
-fn is_provably_exhaustive_a(body: &Body, arms: &[ArmData]) -> bool {
-    arms.iter()
-        .any(|a| a.guard.is_none() && pattern_is_catch_all_a(body, a.pattern))
-}
-
-fn pattern_is_catch_all_a(body: &Body, pat: PatId) -> bool {
-    match &body.pats[pat].kind {
-        PatKind::Wildcard | PatKind::Binding { .. } => true,
-        PatKind::Or(alts) => alts.iter().any(|p| pattern_is_catch_all_a(body, *p)),
-        _ => false,
-    }
-}
-
-/// Simplify a short-circuit one operand already decides. The neutral element
-/// keeps the other operand (`true && x` / `false || x` — and their mirrors —
-/// become `x`); the absorbing element becomes the result (`false && x` /
-/// `true || x` become `false` / `true`).
-fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) -> bool {
-    if let Some(absorbing) = absorbing_short_circuit(sink.body(), e) {
-        return sink.replace_with_value(e, Value::Bool(absorbing));
-    }
-    let body = sink.body();
-    let keep: Operand = match &body.exprs[e].kind {
-        ExprKind::Binary { left, op, right } => {
-            let (left, op, right) = (*left, *op, *right);
-            match (operand_bool(body, left), op, operand_bool(body, right)) {
-                (Some(false), NirBinaryOp::Or, _) | (Some(true), NirBinaryOp::And, _) => right,
-                (_, NirBinaryOp::Or, Some(false)) | (_, NirBinaryOp::And, Some(true)) => left,
-                _ => return false,
-            }
-        }
-        _ => return false,
-    };
-    // Become the kept operand. The other operand is left orphaned. A constant
-    // `keep` (a fully-constant short-circuit) is left to the const-fold path.
-    let Some(keep_e) = keep.as_expr() else {
-        return false;
-    };
-    sink.become_expr(e, keep_e);
-    true
-}
-
-/// The value a short-circuit collapses to when one operand is its absorbing
-/// element — `true` for `||`, `false` for `&&`. `None` unless the *other*
-/// operand is discardable: `x || true` still evaluates `x` first, so deleting
-/// it is only sound when it can neither trap nor be observed.
-fn absorbing_short_circuit(body: &Body, e: ExprId) -> Option<bool> {
-    let ExprKind::Binary { left, op, right } = &body.exprs[e].kind else {
-        return None;
-    };
-    let (left, op, right) = (*left, *op, *right);
-    let absorbing = match op {
-        NirBinaryOp::Or => true,
-        NirBinaryOp::And => false,
-        _ => return None,
-    };
-    let discarded = if operand_bool(body, left) == Some(absorbing) {
-        right
-    } else if operand_bool(body, right) == Some(absorbing) {
-        left
-    } else {
-        return None;
-    };
-    is_discardable_operand_a(body, discarded).then_some(absorbing)
-}
-
-/// Whether `e` can be *deleted* outright: side-effect-free like
-/// [`is_speculatable_a`], and trap-free on top of that.
-///
-/// The two differ where a trap is possible. `is_speculatable_a` admits
-/// `FieldAccess` and `Cast`, which is right for its callers — they *reorder* an
-/// expression, so a trap it would raise still happens. Deleting the expression
-/// erases the trap, which the program is entitled to observe.
-fn is_discardable_a(body: &Body, e: ExprId) -> bool {
-    match &body.exprs[e].kind {
-        ExprKind::Local { .. } => true,
-        ExprKind::Binary { left, op, right } => {
-            !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-                && is_discardable_operand_a(body, *left)
-                && is_discardable_operand_a(body, *right)
-        }
-        ExprKind::Unary { op, expr: inner } => {
-            !matches!(op, NirUnaryOp::Deref) && is_discardable_operand_a(body, *inner)
-        }
-        _ => false,
-    }
-}
-
-/// Operand form of [`is_discardable_a`]: a promoted pure value (a constant) is
-/// always discardable.
-fn is_discardable_operand_a(body: &Body, op: crate::nir_arena::Operand) -> bool {
-    op.as_expr().is_none_or(|e| is_discardable_a(body, e))
-}
-
-/// The boolean value of an operand: a promoted `ValueKind::Bool` in the pool.
-/// `None` for any other operand.
-fn operand_bool(body: &Body, op: Operand) -> Option<bool> {
-    match body.values.kind(op.as_value()?) {
-        ValueKind::Bool(b) => Some(*b),
-        _ => None,
-    }
-}
-
-/// Recognize `match X { Case => true, _ => false }` as an equality test.
-fn try_match_bool_discriminator_a(
-    body: &Body,
-    arms: &[(Option<Operand>, PatId, Operand, crate::token::Span)],
-) -> Option<EnumEqReplacement> {
-    let [yes_arm, no_arm] = arms else {
-        return None;
-    };
-    if yes_arm.0.is_some() || no_arm.0.is_some() {
-        return None;
-    }
-    if !matches!(body.pats[no_arm.1].kind, PatKind::Wildcard) {
-        return None;
-    }
-    if operand_bool(body, yes_arm.2) != Some(true) {
-        return None;
-    }
-    if operand_bool(body, no_arm.2) != Some(false) {
-        return None;
-    }
-    let PatKind::Enum {
-        enum_type,
-        case_name,
-        case_index,
-    } = &body.pats[yes_arm.1].kind
-    else {
-        return None;
-    };
-    Some(EnumEqReplacement {
-        enum_type: *enum_type,
-        case_index: *case_index,
-        case_name: case_name.clone(),
-        span: yes_arm.3,
-    })
-}
-
-/// Whether `e` can be evaluated out of order (side-effect-free, cannot trap).
-fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
-    match &body.exprs[e].kind {
-        ExprKind::Local { .. } => true,
-        ExprKind::Binary { left, op, right } => {
-            !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-                && is_speculatable_operand_a(body, *left)
-                && is_speculatable_operand_a(body, *right)
-        }
-        ExprKind::Unary { op, expr: inner } => {
-            !matches!(op, NirUnaryOp::Deref) && is_speculatable_operand_a(body, *inner)
-        }
-        ExprKind::Cast { expr: inner, .. } => is_speculatable_operand_a(body, *inner),
-        ExprKind::FieldAccess { expr: inner, .. } => is_speculatable_operand_a(body, *inner),
-        _ => false,
-    }
-}
-
-/// Operand form of [`is_speculatable_a`]: a promoted pure value (constant)
-/// is always speculatable.
-fn is_speculatable_operand_a(body: &Body, op: crate::nir_arena::Operand) -> bool {
-    op.as_expr().is_none_or(|e| is_speculatable_a(body, e))
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// `match X { Pat => true, _ => false }` discriminator collapse
-// ──────────────────────────────────────────────────────────────────────────────
-
-/// The replacement shape produced by `try_match_bool_discriminator`. The
-/// scrutinee box is plugged in by the caller once it has taken ownership
-/// of the original `Match` expression.
-///
-/// Only the `EnumEq` shape exists today; `PatKind::Variant` is left
-/// intact because synthesising the matching `VariantTest` requires a
-/// variant→case-index lookup that the pattern itself doesn't carry
-/// (the WIR builder resolves it via the variant decl's case list,
-/// which the interpreter doesn't carry today). The fpfmt motivator
-/// (`SpecialKind`) is an `enum`, so the Enum-only scope is sufficient
-/// for this PR; expanding to `Variant` is a follow-up.
-struct EnumEqReplacement {
-    enum_type: TypeId,
-    case_index: u32,
-    case_name: String,
-    span: crate::token::Span,
-}
-
-impl EnumEqReplacement {}

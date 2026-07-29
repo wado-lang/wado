@@ -14,16 +14,16 @@ use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
-    ArenaStructField, ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, StmtId, StmtKind,
+    ArenaStructField, ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind,
+    StmtId, StmtKind,
 };
 use crate::nir_value_graph::ValueKind;
-use crate::tir::{PrimitiveType, TypeTable};
+use crate::nir_visitor::NirRefVisitor;
+use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
-use super::{
-    BodySink, EditSink, Interpreter, Lattice, PatBindings, PatternMatch, is_provably_exhaustive_a,
-    is_speculatable_a, operand_bool, operand_reads_any_local, rewrite_short_circuit_via,
-    try_match_bool_discriminator_a,
-};
+use super::lattice::is_provably_exhaustive_a;
+use super::pattern::PatternMatch;
+use super::{BodySink, EditSink, Interpreter, Lattice, PatBindings};
 
 impl Interpreter<'_> {
     /// The single-node rewrites at `e` (no recursion into children).
@@ -92,7 +92,7 @@ impl Interpreter<'_> {
                 // The scratch backend cannot promote (no parent map); memoize the
                 // fold so the scratch's later lattice reads see the constant. Falling
                 // through to the structural rewrites is a no-op for a pure constant.
-                self.scratch_folds.insert(e, value);
+                self.frame.scratch_folds.insert(e, value);
             } else if matches!(sink.body().exprs[e].kind, ExprKind::Call { .. })
                 && self.materialize_seq_via(sink, e, &value)
             {
@@ -311,43 +311,49 @@ impl Interpreter<'_> {
         self.reduce_local_block_via(&mut sink, block)
     }
 
-    /// Bottom-up reduce the subtree rooted at `e` over the kinds the engine
-    /// understands (Binary / Unary / Cast / If / Match), applying
+    /// Bottom-up reduce the subtree rooted at `e`, applying
     /// [`Self::reduce_local_a`] at each node so a child fold is observable at
-    /// its parent. Used by CTFE (`try_call_fold_a`) to evaluate a callee tail
-    /// whose children no outer walk has pre-reduced.
-    /// Reduce an operand in place: a no-op (`false`) for a promoted pure value
-    /// (already reduced), else reduce the skeleton subtree.
-    fn reduce_in_place_operand_a(&mut self, body: &mut Body, op: Operand) -> bool {
-        op.as_expr()
-            .is_some_and(|e| self.reduce_in_place_a(body, e))
+    /// its parent. Used by CTFE ([`Self::try_call_fold_a`]) to evaluate a callee
+    /// body whose children no outer walk has pre-reduced.
+    ///
+    /// The children come from [`Body::for_each_child`] rather than a list of
+    /// its own, so a node kind added to the IR is walked here without anyone
+    /// remembering to. Two positions that walk names are handled by
+    /// [`Self::reduce_children_a`] instead.
+    ///
+    /// Distinct from `optimize::const_folding`'s visitor, which walks the same
+    /// shape over a real body: that one also maintains the flow-sensitive
+    /// local env as it goes, and doing so here would record bindings from a
+    /// walk that performs nothing. Reducing an expression is not running it —
+    /// the frame is what binds.
+    pub fn reduce_in_place_a(&mut self, body: &mut Body, e: ExprId) -> bool {
+        self.reduce_in_place_node_a(body, NodeRef::Expr(e))
     }
 
-    pub fn reduce_in_place_a(&mut self, body: &mut Body, e: ExprId) -> bool {
-        let mut changed = match &body.exprs[e].kind {
-            ExprKind::Binary { left, right, .. } => {
-                let (l, r) = (*left, *right);
-                let a = self.reduce_in_place_operand_a(body, l);
-                let b = self.reduce_in_place_operand_a(body, r);
-                a || b
+    fn reduce_in_place_node_a(&mut self, body: &mut Body, node: NodeRef) -> bool {
+        let mut changed = match node {
+            NodeRef::Expr(e) => self.reduce_children_a(body, e),
+            NodeRef::Block(_) | NodeRef::Stmt(_) | NodeRef::Pat(_) => {
+                self.walk_children_a(body, node)
             }
-            ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-                let i = *inner;
-                self.reduce_in_place_operand_a(body, i)
-            }
-            ExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                let (c, t, e2) = (*condition, *then_branch, *else_branch);
-                let mut ch = self.reduce_in_place_operand_a(body, c);
-                ch |= self.reduce_in_place_block_a(body, t);
-                if let Some(eb) = e2 {
-                    ch |= self.reduce_in_place_block_a(body, eb);
-                }
-                ch
-            }
+        };
+        changed |= match node {
+            NodeRef::Expr(e) => self.reduce_local_a(body, e),
+            NodeRef::Block(b) => self.reduce_local_block_a(body, b),
+            NodeRef::Stmt(_) | NodeRef::Pat(_) => false,
+        };
+        changed
+    }
+
+    /// The children of an expression, with the two the generic walk must not
+    /// hand over as-is.
+    ///
+    /// A `Match` arm reduces under the bindings its own pattern makes, so each
+    /// is walked in its own scope. An `Assign` target names storage rather than
+    /// a value: folding it would put a literal where the program writes, so
+    /// only the receiver it projects out of is a read position.
+    fn reduce_children_a(&mut self, body: &mut Body, e: ExprId) -> bool {
+        match &body.exprs[e].kind {
             ExprKind::Match {
                 expr: scrutinee,
                 arms,
@@ -355,95 +361,50 @@ impl Interpreter<'_> {
                 let scrutinee = *scrutinee;
                 let arm_data: Vec<(Option<Operand>, PatId, Operand)> =
                     arms.iter().map(|a| (a.guard, a.pattern, a.body)).collect();
-                let mut ch = self.reduce_in_place_operand_a(body, scrutinee);
+                let mut changed = self.reduce_in_place_operand_a(body, scrutinee);
                 for (guard, pattern, arm_body) in arm_data {
                     let binds = self.arm_bindings(body, scrutinee, pattern);
                     let scope = self.enter_arm(&binds);
                     if let Some(g) = guard {
-                        ch |= self.reduce_in_place_operand_a(body, g);
+                        changed |= self.reduce_in_place_operand_a(body, g);
                     }
-                    ch |= self.reduce_in_place_operand_a(body, arm_body);
+                    changed |= self.reduce_in_place_operand_a(body, arm_body);
                     self.leave_arm(scope);
                 }
-                ch
+                changed
             }
-            ExprKind::FieldAccess { expr: inner, .. } => {
-                let inner = *inner;
-                self.reduce_in_place_operand_a(body, inner)
-            }
-            ExprKind::StructLiteral { fields, .. } => {
-                let values: Vec<Operand> = fields.iter().map(|f| f.value).collect();
-                let mut ch = false;
-                for v in values {
-                    ch |= self.reduce_in_place_operand_a(body, v);
+            ExprKind::Assign { target, value } => {
+                let (target, value) = (*target, *value);
+                let mut changed = self.reduce_in_place_operand_a(body, value);
+                let receiver = match &body.exprs[target].kind {
+                    ExprKind::FieldAccess { expr: inner, .. }
+                    | ExprKind::Index { expr: inner, .. } => Some(*inner),
+                    _ => None,
+                };
+                if let Some(receiver) = receiver {
+                    changed |= self.reduce_in_place_operand_a(body, receiver);
                 }
-                ch
+                changed
             }
-            ExprKind::TupleLiteral { elements } => {
-                let elements = elements.clone();
-                let mut ch = false;
-                for v in elements {
-                    ch |= self.reduce_in_place_operand_a(body, v);
-                }
-                ch
-            }
-            _ => false,
-        };
-        changed |= self.reduce_local_a(body, e);
-        changed
+            _ => self.walk_children_a(body, NodeRef::Expr(e)),
+        }
     }
 
-    /// Block-level recursion for [`Self::reduce_in_place_a`].
-    fn reduce_in_place_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
-        let stmts = body.blocks[block].stmts.clone();
+    fn walk_children_a(&mut self, body: &mut Body, node: NodeRef) -> bool {
+        let mut children = Vec::new();
+        body.for_each_child(node, |c| children.push(c));
         let mut changed = false;
-        for s in stmts {
-            changed |= self.reduce_in_place_stmt_a(body, s);
+        for child in children {
+            changed |= self.reduce_in_place_node_a(body, child);
         }
-        changed |= self.reduce_local_block_a(body, block);
         changed
     }
 
-    /// Statement-level recursion for [`Self::reduce_in_place_a`].
-    fn reduce_in_place_stmt_a(&mut self, body: &mut Body, s: StmtId) -> bool {
-        match &body.stmts[s].kind {
-            StmtKind::Expr(e) => {
-                let e = *e;
-                self.reduce_in_place_operand_a(body, e)
-            }
-            StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-                let v = *value;
-                self.reduce_in_place_operand_a(body, v)
-            }
-            StmtKind::Return { value } | StmtKind::Break { value, .. } => match *value {
-                Some(v) => self.reduce_in_place_operand_a(body, v),
-                None => false,
-            },
-            StmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                let (c, t, e2) = (*condition, *then_block, *else_block);
-                let mut ch = c
-                    .as_expr()
-                    .is_some_and(|ce| self.reduce_in_place_a(body, ce));
-                ch |= self.reduce_in_place_block_a(body, t);
-                if let Some(eb) = e2 {
-                    ch |= self.reduce_in_place_block_a(body, eb);
-                }
-                ch
-            }
-            StmtKind::Loop { body: b } => {
-                let b = *b;
-                self.reduce_in_place_block_a(body, b)
-            }
-            StmtKind::LabeledBlock { block, .. } => {
-                let b = *block;
-                self.reduce_in_place_block_a(body, b)
-            }
-            StmtKind::Continue => false,
-        }
+    /// Reduce an operand in place: a no-op (`false`) for a promoted pure value
+    /// (already reduced), else reduce the skeleton subtree.
+    fn reduce_in_place_operand_a(&mut self, body: &mut Body, op: Operand) -> bool {
+        op.as_expr()
+            .is_some_and(|e| self.reduce_in_place_a(body, e))
     }
 
     /// Project `e` to a lattice, assuming its children are already reduced (the
@@ -662,3 +623,205 @@ impl Interpreter<'_> {
         sink.replace_with_value(e, v)
     }
 }
+
+/// Whether the subtree under `op` reads any of the locals `binds` binds.
+pub(super) fn operand_reads_any_local(body: &Body, op: Operand, binds: &PatBindings) -> bool {
+    struct Reads<'a> {
+        binds: &'a PatBindings,
+        found: bool,
+    }
+    impl NirRefVisitor for Reads<'_> {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Expr(e) = node
+                && let ExprKind::Local { index, .. } = &body.exprs[e].kind
+                && self.binds.iter().any(|(bound, _)| bound == index)
+            {
+                self.found = true;
+            }
+            self.walk_node(body, node);
+        }
+    }
+    let Some(expr) = op.as_expr() else {
+        return false;
+    };
+    let mut visitor = Reads {
+        binds,
+        found: false,
+    };
+    visitor.visit_node(body, NodeRef::Expr(expr));
+    visitor.found
+}
+
+/// Simplify a short-circuit one operand already decides. The neutral element
+/// keeps the other operand (`true && x` / `false || x` — and their mirrors —
+/// become `x`); the absorbing element becomes the result (`false && x` /
+/// `true || x` become `false` / `true`).
+pub(super) fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) -> bool {
+    if let Some(absorbing) = absorbing_short_circuit(sink.body(), e) {
+        return sink.replace_with_value(e, Value::Bool(absorbing));
+    }
+    let body = sink.body();
+    let keep: Operand = match &body.exprs[e].kind {
+        ExprKind::Binary { left, op, right } => {
+            let (left, op, right) = (*left, *op, *right);
+            match (operand_bool(body, left), op, operand_bool(body, right)) {
+                (Some(false), NirBinaryOp::Or, _) | (Some(true), NirBinaryOp::And, _) => right,
+                (_, NirBinaryOp::Or, Some(false)) | (_, NirBinaryOp::And, Some(true)) => left,
+                _ => return false,
+            }
+        }
+        _ => return false,
+    };
+    // Become the kept operand. The other operand is left orphaned. A constant
+    // `keep` (a fully-constant short-circuit) is left to the const-fold path.
+    let Some(keep_e) = keep.as_expr() else {
+        return false;
+    };
+    sink.become_expr(e, keep_e);
+    true
+}
+
+/// The value a short-circuit collapses to when one operand is its absorbing
+/// element — `true` for `||`, `false` for `&&`. `None` unless the *other*
+/// operand is discardable: `x || true` still evaluates `x` first, so deleting
+/// it is only sound when it can neither trap nor be observed.
+pub(super) fn absorbing_short_circuit(body: &Body, e: ExprId) -> Option<bool> {
+    let ExprKind::Binary { left, op, right } = &body.exprs[e].kind else {
+        return None;
+    };
+    let (left, op, right) = (*left, *op, *right);
+    let absorbing = match op {
+        NirBinaryOp::Or => true,
+        NirBinaryOp::And => false,
+        _ => return None,
+    };
+    let discarded = if operand_bool(body, left) == Some(absorbing) {
+        right
+    } else if operand_bool(body, right) == Some(absorbing) {
+        left
+    } else {
+        return None;
+    };
+    is_discardable_operand_a(body, discarded).then_some(absorbing)
+}
+
+/// Whether `e` can be *deleted* outright: side-effect-free like
+/// [`is_speculatable_a`], and trap-free on top of that.
+///
+/// The two differ where a trap is possible. `is_speculatable_a` admits
+/// `FieldAccess` and `Cast`, which is right for its callers — they *reorder* an
+/// expression, so a trap it would raise still happens. Deleting the expression
+/// erases the trap, which the program is entitled to observe.
+pub(super) fn is_discardable_a(body: &Body, e: ExprId) -> bool {
+    match &body.exprs[e].kind {
+        ExprKind::Local { .. } => true,
+        ExprKind::Binary { left, op, right } => {
+            !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
+                && is_discardable_operand_a(body, *left)
+                && is_discardable_operand_a(body, *right)
+        }
+        ExprKind::Unary { op, expr: inner } => {
+            !matches!(op, NirUnaryOp::Deref) && is_discardable_operand_a(body, *inner)
+        }
+        _ => false,
+    }
+}
+
+/// Operand form of [`is_discardable_a`]: a promoted pure value (a constant) is
+/// always discardable.
+pub(super) fn is_discardable_operand_a(body: &Body, op: crate::nir_arena::Operand) -> bool {
+    op.as_expr().is_none_or(|e| is_discardable_a(body, e))
+}
+
+/// The boolean value of an operand: a promoted `ValueKind::Bool` in the pool.
+/// `None` for any other operand.
+pub(super) fn operand_bool(body: &Body, op: Operand) -> Option<bool> {
+    match body.values.kind(op.as_value()?) {
+        ValueKind::Bool(b) => Some(*b),
+        _ => None,
+    }
+}
+
+/// Recognize `match X { Case => true, _ => false }` as an equality test.
+pub(super) fn try_match_bool_discriminator_a(
+    body: &Body,
+    arms: &[(Option<Operand>, PatId, Operand, crate::token::Span)],
+) -> Option<EnumEqReplacement> {
+    let [yes_arm, no_arm] = arms else {
+        return None;
+    };
+    if yes_arm.0.is_some() || no_arm.0.is_some() {
+        return None;
+    }
+    if !matches!(body.pats[no_arm.1].kind, PatKind::Wildcard) {
+        return None;
+    }
+    if operand_bool(body, yes_arm.2) != Some(true) {
+        return None;
+    }
+    if operand_bool(body, no_arm.2) != Some(false) {
+        return None;
+    }
+    let PatKind::Enum {
+        enum_type,
+        case_name,
+        case_index,
+    } = &body.pats[yes_arm.1].kind
+    else {
+        return None;
+    };
+    Some(EnumEqReplacement {
+        enum_type: *enum_type,
+        case_index: *case_index,
+        case_name: case_name.clone(),
+        span: yes_arm.3,
+    })
+}
+
+/// Whether `e` can be evaluated out of order (side-effect-free, cannot trap).
+pub(super) fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
+    match &body.exprs[e].kind {
+        ExprKind::Local { .. } => true,
+        ExprKind::Binary { left, op, right } => {
+            !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
+                && is_speculatable_operand_a(body, *left)
+                && is_speculatable_operand_a(body, *right)
+        }
+        ExprKind::Unary { op, expr: inner } => {
+            !matches!(op, NirUnaryOp::Deref) && is_speculatable_operand_a(body, *inner)
+        }
+        ExprKind::Cast { expr: inner, .. } => is_speculatable_operand_a(body, *inner),
+        ExprKind::FieldAccess { expr: inner, .. } => is_speculatable_operand_a(body, *inner),
+        _ => false,
+    }
+}
+
+/// Operand form of [`is_speculatable_a`]: a promoted pure value (constant)
+/// is always speculatable.
+pub(super) fn is_speculatable_operand_a(body: &Body, op: crate::nir_arena::Operand) -> bool {
+    op.as_expr().is_none_or(|e| is_speculatable_a(body, e))
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// `match X { Pat => true, _ => false }` discriminator collapse
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// The replacement shape produced by `try_match_bool_discriminator`. The
+/// scrutinee box is plugged in by the caller once it has taken ownership
+/// of the original `Match` expression.
+///
+/// Only the `EnumEq` shape exists today; `PatKind::Variant` is left
+/// intact because synthesising the matching `VariantTest` requires a
+/// variant→case-index lookup that the pattern itself doesn't carry
+/// (the WIR builder resolves it via the variant decl's case list,
+/// which the interpreter doesn't carry today). The fpfmt motivator
+/// (`SpecialKind`) is an `enum`, so the Enum-only scope is sufficient
+/// for this PR; expanding to `Variant` is a follow-up.
+pub(super) struct EnumEqReplacement {
+    enum_type: TypeId,
+    case_index: u32,
+    case_name: String,
+    span: crate::token::Span,
+}
+
+impl EnumEqReplacement {}

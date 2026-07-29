@@ -8,18 +8,17 @@
 
 use crate::compiler_item::SeqField;
 use crate::const_eval::{
-    Value, eval_binary, eval_cast, eval_unary, is_f32_type, is_int_prim, prim_of,
+    MAX_SEQ_ELEMENTS, Value, eval_binary, eval_cast, eval_unary, is_f32_type, is_int_prim, prim_of,
 };
 use crate::module_source::ModuleSource;
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
+use crate::nir_arena::{ArmData, Body, BlockId, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind};
 use crate::nir_value_graph::{ValueId, ValueKind};
-use crate::tir::{PrimitiveType, TypeId};
+use crate::tir::{PrimitiveType, ResolvedType, TypeId};
 
-use super::{
-    GlobalKey, Interpreter, Lattice, PatBindings, PatternMatch, arm_lattice_for_feasible_join,
-    is_provably_exhaustive_a, join_all, local_binds_to_global_ref, option_to_lattice,
-};
+use super::pattern::PatternMatch;
+use super::CtfeBuiltin;
+use super::{GlobalKey, Interpreter, Lattice, PatBindings, local_binds_to_global_ref};
 
 impl Interpreter<'_> {
     /// What an operand denotes: the promoted constant for `Operand::Value`,
@@ -75,7 +74,7 @@ impl Interpreter<'_> {
                 name,
             } => Some((module_source.clone(), name.clone())),
             ExprKind::Local { index, .. } => {
-                let key = self.ref_global_aliases.get(index)?;
+                let key = self.frame.ref_global_aliases.get(index)?;
                 debug_assert!(
                     local_binds_to_global_ref(body, *index, key),
                     "ref_global_aliases[{index}] = {key:?} is stale: the body being folded does \
@@ -177,13 +176,13 @@ impl Interpreter<'_> {
 
     pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
         // A scratch-CTFE fold memoized for `e` (no node form for pure scalars).
-        if let Some(v) = self.scratch_folds.get(&e) {
+        if let Some(v) = self.frame.scratch_folds.get(&e) {
             return Lattice::Const(v.clone());
         }
         let node = &body.exprs[e];
         match &node.kind {
             ExprKind::Local { index, .. } => {
-                self.env.get(index).cloned().unwrap_or(Lattice::Unevaluated)
+                self.frame.env.get(index).cloned().unwrap_or(Lattice::Unevaluated)
             }
             ExprKind::FieldAccess {
                 expr: inner,
@@ -392,6 +391,111 @@ impl Interpreter<'_> {
         }
     }
 
+    /// Evaluate `array_get(seq, i)` / `array_len(seq)` over a constant
+    /// sequence, or the sequence `array_new(len)` allocates. A read's argument
+    /// is a reference to the array, and a reference to a constant reads as that
+    /// constant, so no separate deref step is needed.
+    pub(super) fn try_ctfe_builtin_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+            return Lattice::Unevaluated;
+        };
+        let Some(builtin) = self.ctfe_builtins.and_then(|m| m.get(func_id)) else {
+            return Lattice::Unevaluated;
+        };
+        match (builtin, args.as_slice()) {
+            (CtfeBuiltin::ArrayLen, [arr]) => {
+                let Lattice::Const(v) = self.operand_to_lattice_a(body, arr.expr) else {
+                    return Lattice::Unevaluated;
+                };
+                v.seq_len().map_or(Lattice::Unevaluated, |len| {
+                    Lattice::Const(Value::Int {
+                        value: len as u64,
+                        prim: PrimitiveType::I32,
+                    })
+                })
+            }
+            (CtfeBuiltin::ArrayGet, [arr, index]) => self.index_lattice(body, arr.expr, index.expr),
+            (CtfeBuiltin::ArrayNew, [len]) => self.allocation_lattice(body, e, len.expr),
+            (CtfeBuiltin::Select, [condition, if_true, if_false]) => {
+                self.select_lattice(body, condition.expr, if_true.expr, if_false.expr)
+            }
+            // A write denotes nothing; the executor performs it as a
+            // statement. Nor does a hint, which it steps past.
+            (
+                CtfeBuiltin::ArraySet
+                | CtfeBuiltin::ArrayCopy
+                | CtfeBuiltin::ColdPath
+                | CtfeBuiltin::Select
+                | CtfeBuiltin::ArrayLen
+                | CtfeBuiltin::ArrayGet
+                | CtfeBuiltin::ArrayNew,
+                _,
+            ) => Lattice::Unevaluated,
+        }
+    }
+
+    /// The arm `select` picks. Both arms run at run time, so the one not taken
+    /// has to compute rather than trap; a constant is exactly that.
+    fn select_lattice(
+        &self,
+        body: &Body,
+        condition: Operand,
+        if_true: Operand,
+        if_false: Operand,
+    ) -> Lattice {
+        let Lattice::Const(Value::Bool(condition)) = self.operand_lattice_folded_a(body, condition)
+        else {
+            return Lattice::Unevaluated;
+        };
+        let (Lattice::Const(if_true), Lattice::Const(if_false)) = (
+            self.operand_lattice_folded_a(body, if_true),
+            self.operand_lattice_folded_a(body, if_false),
+        ) else {
+            return Lattice::Unevaluated;
+        };
+        Lattice::Const(if condition { if_true } else { if_false })
+    }
+
+    /// The sequence `array_new(len)` allocates: `len` elements at the default
+    /// `array.new_default` leaves. A negative or oversized length, or an
+    /// element type with no compile-time default, is not a constant here — the
+    /// call stays and traps or allocates at run time as written.
+    fn allocation_lattice(&self, body: &Body, e: ExprId, len: Operand) -> Lattice {
+        let Lattice::Const(len) = self.operand_to_lattice_a(body, len) else {
+            return Lattice::Unevaluated;
+        };
+        let Some((len, PrimitiveType::I32)) = len.as_int() else {
+            return Lattice::Unevaluated;
+        };
+        let array_type = body.exprs[e].type_id;
+        let ResolvedType::BuiltinArray(element_type) = self.type_table.get(array_type) else {
+            return Lattice::Unevaluated;
+        };
+        let (Ok(len), Some(default)) = (
+            usize::try_from(len as i32),
+            prim_of(*element_type, self.type_table).and_then(Value::default_of),
+        ) else {
+            return Lattice::Unevaluated;
+        };
+        // Before building: an allocation the value model rejects must not be
+        // walked element by element first.
+        if len > MAX_SEQ_ELEMENTS {
+            return Lattice::Unevaluated;
+        }
+        Value::seq(array_type, vec![default; len]).map_or(Lattice::Unevaluated, Lattice::Const)
+    }
+
+    /// An argument's value, folding the arithmetic it may still be spelled as:
+    /// an argument reaches a call as written, and the structural projection
+    /// alone reads only what already stands as a literal.
+    pub(super) fn operand_lattice_folded_a(&self, body: &Body, op: Operand) -> Lattice {
+        match op.as_expr() {
+            Some(e) => self.reduce_to_lattice_a(body, e),
+            None => self.operand_to_lattice_a(body, op),
+        }
+    }
+
+
     /// Look up a `(module_source, name)` global in the installed
     /// [`GlobalEnv`]. Absent keys default to [`Lattice::Unevaluated`]
     /// — the engine simply has no information, same convention as
@@ -411,5 +515,61 @@ impl Interpreter<'_> {
             .get(&(module_source.clone(), name.to_string()))
             .cloned()
             .unwrap_or(Lattice::Unevaluated)
+    }
+}
+
+/// `Some(v)` ↦ `Const(v)`, `None` ↦ `NonConst`. Used at the boundary
+/// where a numeric-evaluation helper that still returns `Option<Value>`
+/// (because its failure modes are runtime traps, not "haven't tried")
+/// flows back into the lattice surface.
+pub(super) fn option_to_lattice(opt: Option<Value>) -> Lattice {
+    match opt {
+        Some(v) => Lattice::Const(v),
+        None => Lattice::NonConst,
+    }
+}
+
+/// Join a slice of lattice values via [`Lattice::join`]. Empty input
+/// returns [`Lattice::Unevaluated`] (the join's identity).
+pub(super) fn join_all(lats: &[Lattice]) -> Lattice {
+    let mut acc = Lattice::Unevaluated;
+    for l in lats {
+        acc = acc.join(l.clone());
+    }
+    acc
+}
+
+/// Adjust a block's raw lattice value before feeding it into an
+/// arm-feasible-join (the `if` non-constant-condition path).
+///
+/// `Lattice::Unevaluated` from `block_lattice` means "we couldn't
+/// analyze this block's value" — which is fine when the block is the
+/// chosen branch of a constant-condition `if` (the other arm is an
+/// infeasible edge, so the result really is "we don't know"), but
+/// becomes unsound under a non-constant condition: that arm is
+/// reachable, the absence of a known value means SCCP-Top
+/// (`NonConst`), not infeasibility. Promote here so that a subsequent
+/// `Lattice::join` cannot let an `Unevaluated` arm be silently
+/// absorbed by a `Const` peer (`join(Unevaluated, Const(v)) → Const(v)`
+/// is the infeasible-edge rule, valid only when the Unevaluated edge
+/// really is unreachable).
+pub(super) fn arm_lattice_for_feasible_join(lat: Lattice) -> Lattice {
+    match lat {
+        Lattice::Unevaluated => Lattice::NonConst,
+        other => other,
+    }
+}
+
+/// Whether the arms cover every scrutinee (a guardless catch-all exists).
+pub(super) fn is_provably_exhaustive_a(body: &Body, arms: &[ArmData]) -> bool {
+    arms.iter()
+        .any(|a| a.guard.is_none() && pattern_is_catch_all_a(body, a.pattern))
+}
+
+pub(super) fn pattern_is_catch_all_a(body: &Body, pat: PatId) -> bool {
+    match &body.pats[pat].kind {
+        PatKind::Wildcard | PatKind::Binding { .. } => true,
+        PatKind::Or(alts) => alts.iter().any(|p| pattern_is_catch_all_a(body, *p)),
+        _ => false,
     }
 }

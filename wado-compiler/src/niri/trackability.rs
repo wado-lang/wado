@@ -9,10 +9,10 @@
 use indexmap::IndexSet;
 
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{Body, ExprId, ExprKind, Operand, StmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, Operand, StmtKind};
 
 use super::place::{lvalue_root_local, place_of};
-use super::{CalleeMap, CtfeBuiltinMap, LocalSet, reachable_exprs};
+use super::{CalleeMap, CtfeBuiltinMap, reachable_exprs};
 
 /// The places a walk reaches, and how. A mention it does not reach disqualifies
 /// the local that mention roots at.

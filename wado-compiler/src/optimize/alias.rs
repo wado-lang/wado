@@ -2,7 +2,7 @@
 //!
 //! [`build_alias_info`] shares one body walk across the alias analysis and the
 //! mutable-escape scan, returning an [`AliasWalkResult`]: the finished
-//! [`crate::niri::AliasInfo`] (`aliased`, `untrackable`, `alias_groups`) plus
+//! [`AliasInfo`] (`aliased`, `untrackable`, `alias_groups`) plus
 //! the mutable-escape walk's raw `syntactic_mut` set. [`builder_alias_sets`]
 //! finishes `syntactic_mut` into `mut_escaped` via [`build_mut_escaped`], so
 //! every engine-driven pass feeds the [`ValueGraph`] the alias view it needs to
@@ -25,10 +25,33 @@ use cranelift_entity::SecondaryMap;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FuncId, NirUnaryOp};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::niri::{AliasInfo, LocalSet};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
+
+/// Per-function alias / aliasing-trackability annotations.
+///
+/// Computed once per function by [`build_alias_info`] (from the function's
+/// stable `address_taken_locals` / `stores_aliased_locals` plus a body walk
+/// that catches transient inlined-in copies) and consumed by the engine
+/// [`ValueGraph`] builder ([`builder_alias_sets`]) to bound heap-write
+/// invalidation at the right granularity.
+///
+/// - `aliased`: locals reachable through some other handle (`&x`,
+///   `&mut x`, captured by a closure, struct-field-stored, etc.).
+/// - `untrackable`: locals whose aliasing escapes the analysis (e.g.
+///   stashed across a `stores`-annotated callee).
+/// - `alias_groups`: union-find groups of locals connected by
+///   reference-typed `let dst = src` copies (`Box<T>`, `List<T>`,
+///   `&T`, `&mut T`).
+///
+/// [`ValueGraph`]: crate::nir_value_graph
+#[derive(Default, Clone, Debug)]
+pub struct AliasInfo {
+    pub aliased: LocalSet,
+    pub untrackable: LocalSet,
+    pub alias_groups: IndexMap<u32, IndexSet<u32>>,
+}
 
 /// Apply `f` to every node reachable from the body root, parents before
 /// children. Visiting every node and matching on `Stmt` / `Expr` gives the

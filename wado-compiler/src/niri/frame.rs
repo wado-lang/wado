@@ -10,16 +10,47 @@
 //! an unperformed write would leave the place it targets holding a value the
 //! program never produced.
 
-use crate::const_eval::{MAX_SEQ_ELEMENTS, Value};
+use crate::const_eval::Value;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_visitor::NirRefVisitor;
-use crate::tir::{PrimitiveType, ResolvedType};
 
 use super::place::{overlapping_places, place_of};
 use super::trackability::{Reached, aggregate_safe_locals, clobbered_locals};
-use super::{CallRun, CalleeKey, CtfeBuiltin, Interpreter, Lattice, prim_of};
+use super::{CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice};
+
+impl FrameState {
+    /// The state a call's body runs under: what `body` lets a frame track, with
+    /// the parameters already bound. A parameter the body can reach through
+    /// another handle binds nothing, so a stale constant cannot outlive the
+    /// write.
+    ///
+    /// `ref_global_aliases` starts empty because it is keyed by the caller's
+    /// local indices, and `scratch_folds` because ids never cross scratch
+    /// bodies.
+    fn for_call(
+        body: &Body,
+        reached: &Reached,
+        params: impl IntoIterator<Item = (u32, Value)>,
+    ) -> Self {
+        let ctfe_clobbered = clobbered_locals(body, reached);
+        let mut state = Self {
+            aggregate_locals: aggregate_safe_locals(body, reached),
+            ..Self::default()
+        };
+        for (index, value) in params {
+            let lattice = if ctfe_clobbered.contains(index) {
+                Lattice::NonConst
+            } else {
+                Lattice::Const(value)
+            };
+            state.env.insert(index, lattice);
+        }
+        state.ctfe_clobbered = ctfe_clobbered;
+        state
+    }
+}
 
 /// How control left a statement sequence during compile-time execution.
 ///
@@ -231,7 +262,7 @@ impl Interpreter<'_> {
                 other => return other,
             }
             snapshot.restore(body);
-            self.scratch_folds.clear();
+            self.frame.scratch_folds.clear();
         }
     }
 
@@ -306,7 +337,7 @@ impl Interpreter<'_> {
         path: &[u32],
         update: impl FnOnce(&Value) -> Option<Value>,
     ) -> Option<()> {
-        let Lattice::Const(container) = self.env.get(&root)?.clone() else {
+        let Lattice::Const(container) = self.frame.env.get(&root)?.clone() else {
             return None;
         };
         let target = path.iter().try_fold(&container, |v, i| v.field(*i))?;
@@ -409,106 +440,13 @@ impl Interpreter<'_> {
     /// Bind a local inside a compile-time frame. A local the frame may reach
     /// through another handle keeps no value.
     fn bind_ctfe_local(&mut self, index: u32, lattice: Lattice) {
-        if self.ctfe_clobbered.contains(index) {
-            self.env.insert(index, Lattice::NonConst);
+        if self.frame.ctfe_clobbered.contains(index) {
+            self.frame.env.insert(index, Lattice::NonConst);
         } else {
             self.bind_local(index, lattice);
         }
     }
 
-    /// Evaluate `array_get(seq, i)` / `array_len(seq)` over a constant
-    /// sequence, or the sequence `array_new(len)` allocates. A read's argument
-    /// is a reference to the array, and a reference to a constant reads as that
-    /// constant, so no separate deref step is needed.
-    pub(super) fn try_ctfe_builtin_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
-        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
-            return Lattice::Unevaluated;
-        };
-        let Some(builtin) = self.ctfe_builtins.and_then(|m| m.get(func_id)) else {
-            return Lattice::Unevaluated;
-        };
-        match (builtin, args.as_slice()) {
-            (CtfeBuiltin::ArrayLen, [arr]) => {
-                let Lattice::Const(v) = self.operand_to_lattice_a(body, arr.expr) else {
-                    return Lattice::Unevaluated;
-                };
-                v.seq_len().map_or(Lattice::Unevaluated, |len| {
-                    Lattice::Const(Value::Int {
-                        value: len as u64,
-                        prim: PrimitiveType::I32,
-                    })
-                })
-            }
-            (CtfeBuiltin::ArrayGet, [arr, index]) => self.index_lattice(body, arr.expr, index.expr),
-            (CtfeBuiltin::ArrayNew, [len]) => self.allocation_lattice(body, e, len.expr),
-            (CtfeBuiltin::Select, [condition, if_true, if_false]) => {
-                self.select_lattice(body, condition.expr, if_true.expr, if_false.expr)
-            }
-            // A write denotes nothing; the executor performs it as a
-            // statement. Nor does a hint, which it steps past.
-            (
-                CtfeBuiltin::ArraySet
-                | CtfeBuiltin::ArrayCopy
-                | CtfeBuiltin::ColdPath
-                | CtfeBuiltin::Select
-                | CtfeBuiltin::ArrayLen
-                | CtfeBuiltin::ArrayGet
-                | CtfeBuiltin::ArrayNew,
-                _,
-            ) => Lattice::Unevaluated,
-        }
-    }
-
-    /// The arm `select` picks. Both arms run at run time, so the one not taken
-    /// has to compute rather than trap; a constant is exactly that.
-    fn select_lattice(
-        &self,
-        body: &Body,
-        condition: Operand,
-        if_true: Operand,
-        if_false: Operand,
-    ) -> Lattice {
-        let Lattice::Const(Value::Bool(condition)) = self.operand_lattice_folded_a(body, condition)
-        else {
-            return Lattice::Unevaluated;
-        };
-        let (Lattice::Const(if_true), Lattice::Const(if_false)) = (
-            self.operand_lattice_folded_a(body, if_true),
-            self.operand_lattice_folded_a(body, if_false),
-        ) else {
-            return Lattice::Unevaluated;
-        };
-        Lattice::Const(if condition { if_true } else { if_false })
-    }
-
-    /// The sequence `array_new(len)` allocates: `len` elements at the default
-    /// `array.new_default` leaves. A negative or oversized length, or an
-    /// element type with no compile-time default, is not a constant here — the
-    /// call stays and traps or allocates at run time as written.
-    fn allocation_lattice(&self, body: &Body, e: ExprId, len: Operand) -> Lattice {
-        let Lattice::Const(len) = self.operand_to_lattice_a(body, len) else {
-            return Lattice::Unevaluated;
-        };
-        let Some((len, PrimitiveType::I32)) = len.as_int() else {
-            return Lattice::Unevaluated;
-        };
-        let array_type = body.exprs[e].type_id;
-        let ResolvedType::BuiltinArray(element_type) = self.type_table.get(array_type) else {
-            return Lattice::Unevaluated;
-        };
-        let (Ok(len), Some(default)) = (
-            usize::try_from(len as i32),
-            prim_of(*element_type, self.type_table).and_then(Value::default_of),
-        ) else {
-            return Lattice::Unevaluated;
-        };
-        // Before building: an allocation the value model rejects must not be
-        // walked element by element first.
-        if len > MAX_SEQ_ELEMENTS {
-            return Lattice::Unevaluated;
-        }
-        Value::seq(array_type, vec![default; len]).map_or(Lattice::Unevaluated, Lattice::Const)
-    }
 
     /// Fold a call to the value it computes. One that writes through a `&mut`
     /// parameter is never folded here: this projection is re-entrant, and a
@@ -617,31 +555,34 @@ impl Interpreter<'_> {
 
         self.step_budget -= 1;
         self.call_stack.push(key);
-        let saved_env = std::mem::take(&mut self.env);
-        // The scratch fold memo is scoped to this reduction; nested CTFE calls
-        // get a fresh map and ids never cross scratch bodies.
-        let saved_folds = std::mem::take(&mut self.scratch_folds);
-        let saved_aliases = std::mem::take(&mut self.ref_global_aliases);
-        // Local indices are per-function, so the caller's read-only-local set
-        // says nothing about the callee's.
-        let saved_aggregates = std::mem::take(&mut self.aggregate_locals);
-        let saved_clobbered = std::mem::take(&mut self.ctfe_clobbered);
         // Execute on a scratch copy so the shared callee body, held under an
         // immutable `Ref`, is not mutated.
         let mut scratch = callee_body.nodes_only_clone();
-        let writes = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
-        self.aggregate_locals = aggregate_safe_locals(&scratch, &writes);
-        self.ctfe_clobbered = clobbered_locals(&scratch, &writes);
-        for (index, value) in bound {
-            let lattice = if self.ctfe_clobbered.contains(index) {
-                Lattice::NonConst
-            } else {
-                Lattice::Const(value)
-            };
-            self.env.insert(index, lattice);
-        }
+        let reached = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
+        let caller = self.swap_frame(FrameState::for_call(&scratch, &reached, bound));
+        // Everything fallible is inside this one call: the caller's frame goes
+        // back on the next line whatever it decides, and no `?` can be
+        // introduced between the two.
+        let run = self.exec_frame(&mut scratch, targets, returns_unit);
+        self.swap_frame(caller);
+        self.call_stack.pop();
+        run
+    }
+
+    /// Run the scratch body already installed as the current frame, reporting
+    /// what it returned and what it left in each `&mut` parameter.
+    ///
+    /// `None` rather than an empty write list when a `&mut` parameter the
+    /// callee left untrackable has no value to write: losing it would leave
+    /// the caller's place holding what the program never produced.
+    fn exec_frame(
+        &mut self,
+        scratch: &mut Body,
+        targets: Vec<(u32, u32, Vec<u32>)>,
+        returns_unit: bool,
+    ) -> Option<CallRun> {
         let root = scratch.root;
-        let flow = self.exec_block_a(&mut scratch, root);
+        let flow = self.exec_block_a(scratch, root);
         // Only a body that ran to the end leaves parameters worth reading.
         let completed = matches!(flow, Flow::Return(_) | Flow::Fallthrough(_));
         let result = match flow {
@@ -652,45 +593,22 @@ impl Interpreter<'_> {
             | Flow::Continue
             | Flow::Bail => Lattice::Unevaluated,
         };
-        // Before the frame is torn down. A `&mut` parameter the callee left
-        // untrackable has no value to write, and the run is refused rather
-        // than losing it.
-        let written: Option<Vec<(u32, Vec<u32>, Value)>> = completed
-            .then(|| {
-                targets
-                    .into_iter()
-                    .map(|(index, root, path)| {
-                        let value = self.env.get(&index)?.as_const()?;
-                        Some((root, path, value))
-                    })
-                    .collect::<Option<Vec<_>>>()
-            })
-            .flatten();
-        self.env = saved_env;
-        self.scratch_folds = saved_folds;
-        self.ref_global_aliases = saved_aliases;
-        self.aggregate_locals = saved_aggregates;
-        self.ctfe_clobbered = saved_clobbered;
-        self.call_stack.pop();
-        Some(CallRun {
-            result,
-            writes: written?,
-        })
-    }
-
-    /// An argument's value, folding the arithmetic it may still be spelled as:
-    /// an argument reaches a call as written, and the structural projection
-    /// alone reads only what already stands as a literal.
-    fn operand_lattice_folded_a(&self, body: &Body, op: Operand) -> Lattice {
-        match op.as_expr() {
-            Some(e) => self.reduce_to_lattice_a(body, e),
-            None => self.operand_to_lattice_a(body, op),
+        if !completed {
+            return None;
         }
+        let writes = targets
+            .into_iter()
+            .map(|(index, root, path)| {
+                let value = self.frame.env.get(&index)?.as_const()?;
+                Some((root, path, value))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(CallRun { result, writes })
     }
 
     /// The frame's value for a place, or `None` when it holds none.
     fn place_value_a(&self, root: u32, path: &[u32]) -> Option<Value> {
-        let Lattice::Const(value) = self.env.get(&root)? else {
+        let Lattice::Const(value) = self.frame.env.get(&root)? else {
             return None;
         };
         path.iter().try_fold(value, |v, i| v.field(*i)).cloned()
