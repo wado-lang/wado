@@ -271,10 +271,18 @@ at both moments, and erasure redirects mean they need not: `FlagsBit<T>` is
 registered under one spelling and looked up under another, falling through to
 `AbstractRef`.
 
-So a derived name is not free the way a stored one was. Either the lookup keys
-on something erasure-stable, or registration derives its key the same way the
-lookup does. The second is the honest one — one function deciding the spelling —
-and is what `struct_rendered_name` exists to be.
+That diagnosis was wrong, and measuring killed it twice. Deriving the
+registration key the same way the lookup does is a **no-op** — the index it
+consults is already keyed on the rendered spelling, so the derivation returns
+the string it started from. And printing the map at the failure shows the real
+answer: asked for `FlagsBit<u32>`, the map holds **no FlagsBit entry at all**.
+
+So this is not a spelling mismatch. The monomorphized `FlagsBit<u32>` struct
+never reaches WIR registration — either the monomorphizer never queues it or
+nothing emits its `TirStruct`. The queue scans the type table for
+`GenericInstance`s, and a `Struct` now carries arguments, so the next thing to
+check is whether `FlagsBit<u32>` is reaching the type table already as a
+`Struct` and therefore never being queued as an instantiation.
 
 ## Consequences
 
