@@ -153,7 +153,7 @@ impl TypeSystem {
                 module_source,
                 ..
             } => self
-                .struct_field_type_ids(&name.as_mangled_str(), &module_source)
+                .struct_field_type_ids(&name, &module_source)
                 .unwrap_or_default(),
             ResolvedType::GenericInstance {
                 name, type_args, ..
@@ -325,10 +325,10 @@ impl TypeSystem {
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
     pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {
-            ResolvedType::Struct { name, .. } => Some(name.to_string()),
-            ResolvedType::GenericInstance { name, .. }
+            ResolvedType::Struct { name, .. }
+            | ResolvedType::GenericInstance { name, .. }
             | ResolvedType::Newtype { name, .. }
-            | ResolvedType::Flags { name, .. } => Some(name.clone().to_string()),
+            | ResolvedType::Flags { name, .. } => Some(name.clone()),
             _ => None,
         }
     }
@@ -365,7 +365,7 @@ impl TypeSystem {
         let mut current = type_id;
         loop {
             match self.type_table.borrow().get(current).clone() {
-                ResolvedType::Struct { name, .. } => return name.to_string(),
+                ResolvedType::Struct { name, .. } => return name,
                 ResolvedType::GenericInstance { name, .. } => return name,
                 ResolvedType::Newtype { base_type, .. } => current = base_type,
                 ResolvedType::Flags { .. } => return "u32".to_string(),
@@ -473,7 +473,7 @@ impl TypeSystem {
         let resolved = self.type_table.borrow().get(type_id).clone();
         match resolved {
             ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),
-            ResolvedType::Struct { name, .. } => name.to_string(),
+            ResolvedType::Struct { name, .. } => name,
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {

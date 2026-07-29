@@ -280,7 +280,7 @@ fn lower_type(
             ..
         } => {
             let nested = nested_struct_descriptor(
-                name.as_mangled_str(),
+                name,
                 module_source,
                 sem,
                 module,
@@ -289,7 +289,7 @@ fn lower_type(
                 diagnostics,
             )?;
             Some(OptionsType::Struct {
-                name: name.clone().to_string(),
+                name: name.clone(),
                 descriptor: nested,
             })
         }

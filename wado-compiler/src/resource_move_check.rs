@@ -34,7 +34,7 @@ fn type_carries_resource(sem: &Semantics, type_id: TypeId, visited: &mut Vec<Typ
             ..
         } => {
             let (name, module_source) = (name.clone(), module_source.clone());
-            sem.struct_field_type_ids(&name.as_mangled_str(), &module_source)
+            sem.struct_field_type_ids(&name, &module_source)
                 .unwrap_or_default()
         }
         ResolvedType::GenericInstance {

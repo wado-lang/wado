@@ -171,71 +171,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => (
-                crate::name::MangledName::new(name.clone()),
-                module_source.clone(),
-            ),
+            } => (name.clone(), module_source.clone()),
             // Primitive types have impl blocks in core:prelude/primitive
             ResolvedType::Primitive(_) => (
-                crate::name::MangledName::new(
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .mangle_type_name(base_type_id),
-                ),
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .mangle_type_name(base_type_id),
                 ModuleSource::primitive(),
             ),
             // Unit type () has impl blocks in core:prelude/primitive
             ResolvedType::Unit => (
-                crate::name::MangledName::new(TypeTable::UNIT_TYPE_NAME.to_string()),
+                TypeTable::UNIT_TYPE_NAME.to_string(),
                 ModuleSource::primitive(),
             ),
             // Enum types - use enum name and its defining module
             ResolvedType::Enum {
                 name,
                 module_source,
-            } => (
-                crate::name::MangledName::new(name.clone()),
-                module_source.clone(),
-            ),
+            } => (name.clone(), module_source.clone()),
             // Generic resource types (Future<T>, Stream<T>, etc.) - use resource name and module
             ResolvedType::GenericResource {
                 name,
                 module_source,
                 ..
-            } => (
-                crate::name::MangledName::new(name.clone()),
-                module_source.clone(),
-            ),
+            } => (name.clone(), module_source.clone()),
             // Newtype/Flags - use the type's own name and defining module
             ResolvedType::Newtype {
                 name,
                 module_source,
                 ..
-            } => (
-                crate::name::MangledName::new(name.clone()),
-                module_source.clone(),
-            ),
-            ResolvedType::Flags {
+            }
+            | ResolvedType::Flags {
                 name,
                 module_source,
-            } => (
-                crate::name::MangledName::new(name.clone()),
-                module_source.clone(),
-            ),
+            } => (name.clone(), module_source.clone()),
             // Raw GC array `Array<T>`: inherent methods live in
             // `impl Array<T>` (core:prelude/array.wado), keyed by "Array".
             ResolvedType::BuiltinArray(_) => (
-                crate::name::MangledName::new(TypeTable::ARRAY_TYPE_NAME),
+                TypeTable::ARRAY_TYPE_NAME.to_string(),
                 ModuleSource::array(),
             ),
             _ => (
-                crate::name::MangledName::new(
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .mangle_type_name(base_type_id),
-                ),
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .mangle_type_name(base_type_id),
                 self.current_module_source.clone(),
             ),
         };
@@ -328,25 +309,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Fall back to base type trait methods
         if method_info.is_none()
-            && let Some(trait_match) = {
-                // `struct_name` is the mangled spelling; the impl index keys on
-                // what a header writes, so read the declaration name off the
-                // type table.
-                let decl = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .fq_base_type_name(base_type_id)
-                    .decl_name();
-                let target = self.impl_target_of(base_type_id, &decl);
-                self.find_trait_method_for_type(
-                    &target,
-                    method_name,
-                    &struct_module,
-                    receiver_type_args_for_trait.as_deref(),
-                    Some(base_type_id),
-                )
-            }
+            && let Some(trait_match) = self.find_trait_method_for_type(
+                &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
+                method_name,
+                &struct_module,
+                receiver_type_args_for_trait.as_deref(),
+                Some(base_type_id),
+            )
         {
             matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
             if trait_match.impl_struct_name != struct_name {
@@ -789,7 +758,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             match reuse_params {
                 Some(params) => self.enforce_type_arg_bounds(&params, &method_type_args, span),
                 None => self.check_method_type_arg_bounds(
-                    &struct_name.as_mangled_str(),
+                    &struct_name,
                     &struct_module,
                     method_name,
                     trait_name.as_deref(),
@@ -1602,16 +1571,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => {
-                let name = &name.to_string();
-                (
-                    name.clone(),
-                    module_source.clone(),
-                    FqTypeName::declared(module_source, name),
-                    vec![],
-                )
             }
-            ResolvedType::Resource {
+            | ResolvedType::Resource {
                 name,
                 module_source,
             } => (
@@ -1705,8 +1666,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             module_source,
                             ..
                         } => {
-                            let fq = FqTypeName::declared(&module_source, &name.as_mangled_str());
-                            (name.to_string(), module_source, fq, vec![])
+                            let fq = FqTypeName::declared(&module_source, &name);
+                            (name, module_source, fq, vec![])
                         }
                         ResolvedType::GenericInstance {
                             name,
@@ -1732,11 +1693,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                         module_source,
                                         ..
                                     } => {
-                                        let fq = FqTypeName::declared(
-                                            &module_source,
-                                            name.as_mangled_str(),
-                                        );
-                                        break (name.to_string(), module_source, fq, vec![]);
+                                        let fq = FqTypeName::declared(&module_source, &name);
+                                        break (name, module_source, fq, vec![]);
                                     }
                                     ResolvedType::Newtype {
                                         base_type: next, ..
@@ -1811,7 +1769,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let method_ref = StaticMethodRef::new(
             struct_module.clone(),
-            struct_name.to_string(),
+            struct_name.clone(),
             static_call.method.clone(),
             trait_name_opt.clone(),
         );
@@ -1838,7 +1796,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Emit a compile error if the static method was not found anywhere
         if return_type == TypeTable::UNKNOWN {
             let _ = self.emit(TypeError::UnknownFunction {
-                name: format!("{struct_name}::{}", static_call.method),
+                name: format!("{}::{}", struct_name, static_call.method),
                 span: static_call.span,
             });
             return TypeTable::ERROR;
@@ -2503,15 +2461,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         name,
                         module_source,
                         ..
-                    } => {
-                        let name = &name.to_string();
-                        break Some((module_source, name.to_string()));
                     }
-                    ResolvedType::GenericInstance {
+                    | ResolvedType::GenericInstance {
                         name,
                         module_source,
                         ..
-                    } => break Some((module_source, name.to_string())),
+                    } => break Some((module_source, name)),
                     ResolvedType::Newtype { base_type, .. } => current_type = base_type,
                     ResolvedType::Flags { .. } => {
                         current_type = TypeTable::U32;

@@ -616,7 +616,7 @@ fn check_cm_boundary_representable_inner(
                     return Ok(());
                 }
                 let name = name.clone();
-                match find_struct_decl(&name.as_mangled_str(), tir_modules) {
+                match find_struct_decl(&name, tir_modules) {
                     Some(decl) if decl.fields.is_empty() => Err(format!(
                         "record `{name}` has no fields; an empty record has no \
                          Component Model representation — add at least one field"
@@ -1100,7 +1100,7 @@ fn flat_types_from_type_id_inner(
             if name == &names.string {
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
-            } else if let Some(struct_decl) = find_struct_decl(name.as_mangled_str(), tir_modules) {
+            } else if let Some(struct_decl) = find_struct_decl(name, tir_modules) {
                 flatten_struct_type(&struct_decl, out, tir_modules, type_table, names);
             } else {
                 // A record with no TIR declaration has no known field layout;
@@ -1364,7 +1364,7 @@ pub(super) fn type_id_to_ast_type(
             name,
             module_source,
             ..
-        } => cm_named(name.as_mangled_str(), module_source),
+        } => cm_named(name, module_source),
         ResolvedType::Variant {
             name,
             module_source,

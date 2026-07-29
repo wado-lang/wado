@@ -435,7 +435,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let struct_type = target_type;
 
                         let struct_field_types: Vec<(String, TypeId)> = self
-                            .lookup_struct_fields(&name.as_mangled_str())
+                            .lookup_struct_fields(&name)
                             .map(|info| {
                                 info.fields
                                     .iter()
@@ -446,8 +446,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                         // Check field visibility for cross-module struct literal
                         if module_source != self.current_module_source
-                            && let Some(struct_info) =
-                                self.lookup_struct_fields(&name.as_mangled_str())
+                            && let Some(struct_info) = self.lookup_struct_fields(&name)
                         {
                             let same_package =
                                 module_source.same_package(&self.current_module_source);
@@ -456,7 +455,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     && struct_lit.fields.iter().any(|f| f.name == *fname)
                                 {
                                     let _ = self.emit(TypeError::PrivateFieldAccess {
-                                        struct_name: name.clone().to_string(),
+                                        struct_name: name.clone(),
                                         field_name: fname.clone(),
                                         visibility: *vis,
                                         span: struct_lit.span,
@@ -471,7 +470,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 && !struct_field_types.is_empty()
                             {
                                 let _ = self.emit(TypeError::ExtraField {
-                                    struct_name: name.clone().to_string(),
+                                    struct_name: name.clone(),
                                     field_name: field.name.clone(),
                                     span: field.span,
                                 });
@@ -493,7 +492,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             struct_lit.id,
                             vec![],
                             struct_type,
-                            Some(name.to_string()),
+                            Some(name),
                         );
                         (struct_type, target_type)
                     } else if let Some(coerced) =
@@ -1081,11 +1080,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let expected_short = self
                         .strip_ns_prefix(expected_name)
                         .unwrap_or(expected_name.as_str());
-                    let actual_short = actual_name
-                        .as_mangled_str()
-                        .rsplit("::")
-                        .next()
-                        .unwrap_or(actual_name.as_mangled_str());
+                    let actual_short = actual_name.rsplit("::").next().unwrap_or(actual_name);
                     let matches = actual_short == expected_short;
                     if !matches {
                         let _ = self.emit(TypeError::PatternTypeMismatch {
@@ -1128,7 +1123,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Exhaustiveness check: without `..`, all fields must be listed
                 if !has_rest
                     && let Some(ref sname) = struct_name
-                    && let Some(struct_info) = self.lookup_struct_fields(sname.as_mangled_str())
+                    && let Some(struct_info) = self.lookup_struct_fields(sname)
                 {
                     let total_fields = struct_info.fields.len();
                     if fields.len() != total_fields {
@@ -1766,11 +1761,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let expected_short = self
                             .strip_ns_prefix(expected_name)
                             .unwrap_or(expected_name.as_str());
-                        let actual_short = name
-                            .as_mangled_str()
-                            .rsplit("::")
-                            .next()
-                            .unwrap_or(name.as_mangled_str());
+                        let actual_short = name.rsplit("::").next().unwrap_or(name);
                         if actual_short != expected_short {
                             let _ = self.emit(TypeError::PatternTypeMismatch {
                                 expected: expected_name.clone(),
@@ -1808,7 +1799,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     };
                     if let Some(ref sname) = struct_name
-                        && let Some(struct_info) = self.lookup_struct_fields(sname.as_mangled_str())
+                        && let Some(struct_info) = self.lookup_struct_fields(sname)
                     {
                         let total_fields = struct_info.fields.len();
                         if fields.len() != total_fields {

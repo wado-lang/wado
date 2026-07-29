@@ -630,7 +630,7 @@ fn lower_to_flat_inner(
         }
         ResolvedType::Struct { name, .. } if name != &names.string => {
             // Struct: concatenation of field flat types
-            if let Some(struct_decl) = find_struct_decl(name.as_mangled_str(), tir_modules) {
+            if let Some(struct_decl) = find_struct_decl(name, tir_modules) {
                 let mut result = Vec::new();
 
                 // Save value to a local

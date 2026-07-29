@@ -1207,7 +1207,7 @@ impl<'a> DceWalker<'a> {
                 // method name uses the original generic struct name so
                 // the inlining-induced graph stays mergeable.
                 let mangled_func_name = MethodName::format_local(
-                    &FqTypeName::declared(module_source, name.as_mangled_str()),
+                    &FqTypeName::declared(module_source, name),
                     trait_name.as_deref(),
                     &method_name,
                 );
@@ -1247,7 +1247,7 @@ impl<'a> DceWalker<'a> {
                 // Non-monomorphized struct method.
                 let method_id = FunctionId::Method(MethodName::new(
                     module_source.clone(),
-                    FqTypeName::declared(&module_source, &name.as_mangled_str()),
+                    FqTypeName::declared(&module_source, &name),
                     trait_name,
                     method_name,
                 ));
@@ -1670,13 +1670,13 @@ impl DceAnalysis {
                     base_name,
                 } => {
                     if base_name.is_some() {
-                        self.struct_monomorph_names.insert(name.clone().to_string());
+                        self.struct_monomorph_names.insert(name.clone());
                         if let Some(base) = base_name {
                             self.struct_monomorph_bases.insert(base.clone());
                         }
                     } else {
                         self.struct_exact
-                            .insert((name.clone().to_string(), module_source.clone()));
+                            .insert((name.clone(), module_source.clone()));
                     }
                 }
                 ResolvedType::Variant {

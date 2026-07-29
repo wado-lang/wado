@@ -404,10 +404,10 @@ impl Monomorphizer {
         type_table: &TypeTable,
     ) -> Option<String> {
         match type_table.get(type_id) {
-            ResolvedType::Struct { name, .. } => Some(name.to_string()),
-            ResolvedType::Enum { name, .. }
+            ResolvedType::Struct { name, .. }
+            | ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. }
-            | ResolvedType::Flags { name, .. } => Some(name.clone().to_string()),
+            | ResolvedType::Flags { name, .. } => Some(name.clone()),
             ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
             ResolvedType::GenericInstance {
                 name, type_args, ..
@@ -622,10 +622,10 @@ impl Monomorphizer {
             ResolvedType::Struct { name, .. } => {
                 // For monomorphized structs with names like "List<i32>", look up the
                 // original InstantiationKey to get the base name and type_args
-                if let Some(key) = self.structs.mangled_to_key.get(name.as_mangled_str()) {
-                    Some((key.name.to_string(), key.impl_type_args.clone()))
+                if let Some(key) = self.structs.mangled_to_key.get(name) {
+                    Some((key.name.clone(), key.impl_type_args.clone()))
                 } else {
-                    Some((name.clone().to_string(), vec![]))
+                    Some((name.clone(), vec![]))
                 }
             }
             // Newtypes are transparent — unwrap to base type for struct info lookup

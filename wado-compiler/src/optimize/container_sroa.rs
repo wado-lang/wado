@@ -707,7 +707,7 @@ fn element_layout_of(
         ..
     } = type_table.get(elem_ty)
     {
-        let tir_struct = struct_index.get(&(name.to_string(), module_source.clone()))?;
+        let tir_struct = struct_index.get(&(name.clone(), module_source.clone()))?;
         if tir_struct.fields.is_empty() {
             return None;
         }

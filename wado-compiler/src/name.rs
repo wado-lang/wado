@@ -1801,13 +1801,6 @@ impl MangledName {
         &self.0
     }
 
-    /// Whether the name is the empty spelling — the placeholder a few
-    /// synthesis paths use before a real name is known.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
     #[must_use]
     pub fn into_string(self) -> String {
         self.0
@@ -1817,32 +1810,6 @@ impl MangledName {
 impl fmt::Display for MangledName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
-    }
-}
-
-/// Comparing against a literal or an already-mangled `String` is sound; what
-/// the newtype prevents is this reaching a consumer that keys on declarations.
-impl PartialEq<str> for MangledName {
-    fn eq(&self, other: &str) -> bool {
-        self.0 == other
-    }
-}
-
-impl PartialEq<&str> for MangledName {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
-    }
-}
-
-impl PartialEq<String> for MangledName {
-    fn eq(&self, other: &String) -> bool {
-        self.0 == *other
-    }
-}
-
-impl PartialEq<MangledName> for String {
-    fn eq(&self, other: &MangledName) -> bool {
-        *self == other.0
     }
 }
 

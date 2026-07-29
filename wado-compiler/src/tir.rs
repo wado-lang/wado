@@ -349,13 +349,7 @@ pub enum ResolvedType {
     Unit,
     Never,
     Struct {
-        /// The type's rendered identity, and what interning keys on:
-        /// `TreeMap<String,i32>` for an instantiation, the declaration's own
-        /// name for one written as such. Typed as a [`MangledName`] because
-        /// only the second case is a declaration spelling — reading it as one
-        /// is the mistake behind every naming defect in WEP 2026-07-28. The
-        /// declaration name is [`TypeTable::fq_base_type_name`].
-        name: crate::name::MangledName,
+        name: String,
         module_source: ModuleSource,
         /// The generic declaration this was instantiated from (e.g. `TreeMap`
         /// for `TreeMap<String,i32>`), or `None` for a declaration written as
@@ -838,7 +832,7 @@ impl TypeTable {
         } = ty
         {
             self.struct_name_index
-                .insert((name.clone().to_string(), module_source.clone()), id);
+                .insert((name.clone(), module_source.clone()), id);
         }
         self.types.push(ty.clone());
         self.intern_map.insert(ty, id);
@@ -1179,7 +1173,7 @@ impl TypeTable {
             } = ty
             {
                 self.struct_name_index
-                    .insert((name.clone().to_string(), module_source.clone()), id);
+                    .insert((name.clone(), module_source.clone()), id);
             }
         }
     }
@@ -1553,7 +1547,7 @@ impl TypeTable {
 
     pub fn make_struct(&mut self, name: String, module_source: ModuleSource) -> TypeId {
         self.intern(ResolvedType::Struct {
-            name: crate::name::MangledName::new(name),
+            name,
             module_source,
             base_name: None,
         })
@@ -1576,7 +1570,7 @@ impl TypeTable {
         type_args: Vec<TypeId>,
     ) -> TypeId {
         let id = self.intern(ResolvedType::Struct {
-            name: crate::name::MangledName::new(name),
+            name,
             module_source,
             base_name: Some(base_name),
         });
@@ -1597,7 +1591,7 @@ impl TypeTable {
     pub fn find_struct_type(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
         // Use the existing intern_map for O(1) lookup
         let key = ResolvedType::Struct {
-            name: crate::name::MangledName::new(name.to_string()),
+            name: name.to_string(),
             module_source: module_source.clone(),
             base_name: None,
         };
@@ -1703,24 +1697,22 @@ impl TypeTable {
         let prefix = format!("{cm_package}/");
         for (type_id, resolved) in self.all_types() {
             let (n, ms) = match resolved {
-                // A struct's name is a mangled spelling, so it is rendered to
-                // compare rather than shared with the declaration-named arms.
-                ResolvedType::Struct {
-                    name: n,
-                    module_source,
-                    ..
-                } => (n.as_mangled_str().to_string(), module_source),
                 ResolvedType::Resource {
                     name: n,
                     module_source,
-                } => (n.clone(), module_source),
-                ResolvedType::Enum {
+                }
+                | ResolvedType::Enum {
                     name: n,
                     module_source,
                 }
                 | ResolvedType::Variant {
                     name: n,
                     module_source,
+                }
+                | ResolvedType::Struct {
+                    name: n,
+                    module_source,
+                    ..
                 }
                 | ResolvedType::Flags {
                     name: n,
@@ -1730,7 +1722,7 @@ impl TypeTable {
                     name: n,
                     module_source,
                     ..
-                } => (n.clone(), module_source),
+                } => (n, module_source),
                 _ => continue,
             };
             if n != name {
@@ -2824,9 +2816,7 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => {
                 format!("Array<{}>", self.type_name(*elem))
             }
-            ResolvedType::Struct { name, .. } => {
-                crate::name::strip_local_item_id(name.as_mangled_str()).to_string()
-            }
+            ResolvedType::Struct { name, .. } => crate::name::strip_local_item_id(name).to_string(),
             ResolvedType::Enum { name, .. } => name.clone(),
             ResolvedType::Resource { name, .. } => name.clone(),
             ResolvedType::Function {
@@ -3103,8 +3093,8 @@ impl TypeTable {
                 name,
                 module_source,
                 ..
-            } => format!("{module_source}/{name}"),
-            ResolvedType::Struct {
+            }
+            | ResolvedType::Struct {
                 name,
                 module_source,
                 ..
@@ -3237,7 +3227,7 @@ impl TypeTable {
     #[must_use]
     pub fn struct_decl_name(&self, id: TypeId) -> Option<String> {
         match self.get(id) {
-            ResolvedType::Struct { name, .. } => Some(name.clone().to_string()),
+            ResolvedType::Struct { name, .. } => Some(name.clone()),
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
@@ -3285,15 +3275,12 @@ impl TypeTable {
                 name,
                 module_source,
                 ..
-            } => declared(module_source, name.as_mangled_str()),
-            ResolvedType::Enum {
+            }
+            | ResolvedType::Enum {
                 name,
                 module_source,
-            } => {
-                let name = &name.to_string();
-                declared(module_source, name)
             }
-            ResolvedType::Variant {
+            | ResolvedType::Variant {
                 name,
                 module_source,
             }
@@ -3353,15 +3340,12 @@ impl TypeTable {
                 name,
                 module_source,
                 ..
-            } => crate::name::FqTypeName::declared(module_source, name.as_mangled_str()),
-            ResolvedType::Enum {
+            }
+            | ResolvedType::Enum {
                 name,
                 module_source,
-            } => {
-                let name = &name.to_string();
-                FqTypeName::declared(module_source, name)
             }
-            ResolvedType::Variant {
+            | ResolvedType::Variant {
                 name,
                 module_source,
             }
@@ -3481,21 +3465,18 @@ impl TypeTable {
                 }
                 // Arguments unrecorded and no `GenericInstance` left to match:
                 // the instantiated spelling is all the identity there is.
-                _ => crate::name::FqTypeName::declared(module_source, name.as_mangled_str()),
+                _ => FqTypeName::declared(module_source, name),
             },
             ResolvedType::Struct {
                 name,
                 module_source,
                 ..
-            } => crate::name::FqTypeName::declared(module_source, name.as_mangled_str()),
-            ResolvedType::Enum {
+            }
+            | ResolvedType::Enum {
                 name,
                 module_source,
-            } => {
-                let name = &name.to_string();
-                FqTypeName::declared(module_source, name)
             }
-            ResolvedType::Resource {
+            | ResolvedType::Resource {
                 name,
                 module_source,
                 ..
@@ -3558,13 +3539,13 @@ impl TypeTable {
                 name,
                 module_source,
                 ..
-            } => TypeNameInfo::Named(format!("{module_source}/{name}")),
-            ResolvedType::Enum {
+            }
+            | ResolvedType::Enum {
                 name,
                 module_source,
                 ..
-            } => TypeNameInfo::Named(format!("{module_source}/{name}")),
-            ResolvedType::Resource {
+            }
+            | ResolvedType::Resource {
                 name,
                 module_source,
                 ..
@@ -5502,7 +5483,7 @@ mod tests {
         // (bypassing the name-keyed intern_map, as a local declaration's
         // constructor will) and register it under its own AstId.
         let second_type = table.push_fresh(ResolvedType::Struct {
-            name: crate::name::MangledName::new("Point".to_string()),
+            name: "Point".to_string(),
             module_source: module,
             base_name: None,
         });

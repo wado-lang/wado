@@ -150,7 +150,7 @@ fn shadow_one_function(func: &mut crate::tir::TirFunction, plan: &BoxPlan, type_
             let wrap = TirExpr::new(
                 TirExprKind::StructLiteral {
                     struct_type: *box_type_id,
-                    struct_name: box_struct_name.to_string(),
+                    struct_name: box_struct_name,
                     fields: vec![TirStructField {
                         name: "value".to_string(),
                         value: param_read,

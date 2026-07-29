@@ -484,7 +484,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name,
                     module_source,
                     ..
-                } => (name.to_string(), module_source, Vec::new()),
+                } => (name, module_source, Vec::new()),
                 _ => {
                     let name = self.tysys.type_table.borrow().type_name(self_ty);
                     let module_source = self.find_struct_module_source(&name);

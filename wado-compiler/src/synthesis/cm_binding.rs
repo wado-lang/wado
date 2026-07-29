@@ -319,9 +319,9 @@ fn unresolvable_record_in_payload(
             crate::component_model::cm_payload_type_from_type_id(tt, type_id),
             Some(CmPayloadType::Named(_))
         )
-        && !registry.is_struct_registered_from(module_source, name.as_mangled_str())
+        && !registry.is_struct_registered_from(module_source, name)
     {
-        return Some(name.clone().to_string());
+        return Some(name.clone());
     }
     if let Some(inner) = tt.as_option(type_id).or_else(|| tt.as_list(type_id)) {
         return unresolvable_record_in_payload(tt, registry, inner);

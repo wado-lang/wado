@@ -511,11 +511,8 @@ fn distribute_bound_driven_requests(project: &mut Package) {
                     name,
                     module_source,
                     ..
-                } => {
-                    let name = &name.to_string();
-                    Some(((name.clone(), module_source.clone()), id))
                 }
-                ResolvedType::Enum {
+                | ResolvedType::Enum {
                     name,
                     module_source,
                 }
@@ -957,7 +954,7 @@ fn default_value_for_type(
             ..
         } => {
             if matches!(module_source, ModuleSource::Core { .. }) {
-                (name.to_string(), module_source.clone(), vec![])
+                (name.clone(), module_source.clone(), vec![])
             } else {
                 return null_expr(type_id);
             }

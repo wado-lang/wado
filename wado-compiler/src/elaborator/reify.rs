@@ -4825,11 +4825,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name,
                     module_source,
                     ..
-                } => {
-                    let name = &name.to_string();
-                    (name.clone(), module_source.clone())
                 }
-                ResolvedType::GenericInstance {
+                | ResolvedType::GenericInstance {
                     name,
                     module_source,
                     ..
@@ -8577,7 +8574,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name,
                     module_source,
                     ..
-                } => (name.to_string(), Some(module_source), vec![]),
+                } => (name, Some(module_source), vec![]),
                 ResolvedType::GenericInstance {
                     name,
                     module_source,
@@ -9134,9 +9131,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 name,
                 module_source,
                 ..
-            } if name == "u128" || name == "i128" => {
-                FqTypeName::declared(&module_source, &name.as_mangled_str())
-            }
+            } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name),
             _ => return None,
         };
 
@@ -9193,9 +9188,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 name,
                 module_source,
                 ..
-            } if name == "u128" || name == "i128" => {
-                FqTypeName::declared(&module_source, &name.as_mangled_str())
-            }
+            } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name),
             _ => return None,
         };
 
@@ -9851,8 +9844,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ResolvedType::Variant {
                 name,
                 module_source,
-            } => (name, module_source),
-            ResolvedType::GenericInstance {
+            }
+            | ResolvedType::GenericInstance {
                 name,
                 module_source,
                 ..
@@ -10348,10 +10341,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let scrutinee_struct_name =
             match self.tysys.type_table.borrow().get(peeled_scrutinee).clone() {
                 ResolvedType::Struct { name, .. } => name,
-                ResolvedType::GenericInstance { name, .. } => crate::name::MangledName::new(name),
-                _ => crate::name::MangledName::new(String::new()),
+                ResolvedType::GenericInstance { name, .. } => name,
+                _ => String::new(),
             };
-        let lookup_name = type_name.unwrap_or(&scrutinee_struct_name.as_mangled_str());
+        let lookup_name = type_name.unwrap_or(&scrutinee_struct_name);
 
         // Decl-interned struct info for field-name → (index, type)
         // lookup. Falls back to UNKNOWN-typed sub-patterns for

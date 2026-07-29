@@ -5508,14 +5508,13 @@ fn resolve_impl_module_via_env(
         }
         ResolvedType::Primitive(p) => Some(p.as_str().to_string()),
         ResolvedType::Unit => Some(TypeTable::UNIT_TYPE_NAME.to_string()),
-        // A struct's name is a mangled spelling; the rest are declaration ones.
-        ResolvedType::Struct { name, .. } => Some(name.to_string()),
-        ResolvedType::Enum { name, .. }
+        ResolvedType::Struct { name, .. }
+        | ResolvedType::Enum { name, .. }
         | ResolvedType::Variant { name, .. }
         | ResolvedType::Newtype { name, .. }
         | ResolvedType::Flags { name, .. }
         | ResolvedType::GenericInstance { name, .. }
-        | ResolvedType::GenericResource { name, .. } => Some(name.clone().to_string()),
+        | ResolvedType::GenericResource { name, .. } => Some(name.clone()),
         ResolvedType::BuiltinArray(_) => Some(TypeTable::ARRAY_TYPE_NAME.to_string()),
         _ => None,
     };

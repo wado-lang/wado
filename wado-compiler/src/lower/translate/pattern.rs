@@ -53,7 +53,7 @@ fn coerce_value_to_binding(
         // A `&primitive` / `&variant` / `&fn` binding type that boxing
         // has redefined to its `Box<T>` struct: build the struct literal.
         ResolvedType::Struct { name, .. } if type_table.box_payload_of(binding_type).is_some() => {
-            let struct_name = name.to_string();
+            let struct_name = name.clone();
             TirExpr::new(
                 TirExprKind::StructLiteral {
                     struct_type: binding_type,
@@ -303,7 +303,7 @@ impl<'a> PatternLowerer<'a> {
                 ..
             } => self
                 .struct_fields_map
-                .get(&(name.to_string(), module_source.clone()))
+                .get(&(name.clone(), module_source.clone()))
                 .cloned(),
             _ => None,
         }

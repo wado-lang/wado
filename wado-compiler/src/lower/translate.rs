@@ -755,7 +755,7 @@ impl FunctionTranslator<'_, '_> {
         self.alloc_expr(
             ExprKind::StructLiteral {
                 struct_type: box_type,
-                struct_name: box_struct_name.to_string(),
+                struct_name: box_struct_name,
                 fields: vec![ArenaStructField {
                     name: "value".to_string(),
                     value,
@@ -821,9 +821,9 @@ impl FunctionTranslator<'_, '_> {
         {
             self.base
                 .struct_fields_map
-                .get(&(name.to_string(), module_source))?
+                .get(&(name, module_source))?
                 .iter()
-                .map(|f| (f.name.to_string(), f.index, f.type_id))
+                .map(|f| (f.name.clone(), f.index, f.type_id))
                 .collect()
         } else {
             let (list_elem, tuple_elems) = {
@@ -1761,7 +1761,7 @@ impl FunctionTranslator<'_, '_> {
                         } if *base == box_name => self
                             .base
                             .struct_fields_map
-                            .get(&(name.to_string(), module_source.clone()))
+                            .get(&(name.clone(), module_source.clone()))
                             .and_then(|fields| fields.first())
                             .map(|f| f.type_id),
                         _ => None,

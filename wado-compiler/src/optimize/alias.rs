@@ -393,7 +393,7 @@ impl<'a> CallImmutability<'a> {
                 if is_box_or_list {
                     false
                 } else {
-                    let key = (name.to_string(), module_source.clone());
+                    let key = (name.clone(), module_source.clone());
                     match self.struct_fields.get(&key) {
                         Some(fields) => fields.iter().all(|&f| self.walk(f, stack)),
                         // Unknown layout (not in the registry) — conservative.
@@ -1018,7 +1018,7 @@ fn reference_pointee_struct_key(
             name,
             module_source,
             ..
-        } => Some((name.clone().to_string(), module_source.clone())),
+        } => Some((name.clone(), module_source.clone())),
         _ => None,
     }
 }

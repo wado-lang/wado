@@ -479,7 +479,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => (name.to_string(), Some(module_source.clone()), None, None),
+            } => (name.clone(), Some(module_source.clone()), None, None),
             // Resource types use reference semantics - handle like struct for method lookup
             ResolvedType::Resource {
                 name,
@@ -970,19 +970,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => {
-                let name = &name.to_string();
-
-                let params = self.find_method_type_param_names(
-                    name,
-                    Some(module_source),
-                    method_name,
-                    trait_name,
-                );
-                bound_check_params.clone_from(&params);
-                params
             }
-            ResolvedType::GenericInstance {
+            | ResolvedType::GenericInstance {
                 name,
                 module_source,
                 ..
@@ -1891,8 +1880,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         };
         let receiver_outer = match self.tysys.type_table.borrow().get(rt) {
-            ResolvedType::Struct { name, .. } => name.to_string(),
             ResolvedType::GenericInstance { name, .. }
+            | ResolvedType::Struct { name, .. }
             | ResolvedType::Enum { name, .. }
             | ResolvedType::Resource { name, .. }
             | ResolvedType::GenericResource { name, .. }
@@ -3037,14 +3026,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Struct { name, .. } => name,
-            ResolvedType::GenericInstance { name, .. } => crate::name::MangledName::new(name),
+            ResolvedType::GenericInstance { name, .. } => name,
             _ => return None, // Not a struct type
         };
 
         let index_type = self.resolve_expr(&index_expr.index, ctx, None);
 
-        let index_mut_info =
-            self.find_index_mut_trait_impl(&struct_name.as_mangled_str(), base_type_id)?;
+        let index_mut_info = self.find_index_mut_trait_impl(&struct_name, base_type_id)?;
 
         if let Some(key_type) = index_mut_info.index_type
             && key_type != index_type
@@ -3070,7 +3058,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => (name.to_string(), module_source, None),
+            } => (name, module_source, None),
             ResolvedType::GenericInstance {
                 name,
                 module_source,

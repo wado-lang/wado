@@ -701,7 +701,7 @@ impl<'a> WirContext<'a> {
                 } else {
                     module_source.clone()
                 };
-                let lookup_name = StructName::new(lookup_module, name.clone().to_string());
+                let lookup_name = StructName::new(lookup_module, name.clone());
                 if let Some(type_id) = self.struct_type_map.get(&lookup_name) {
                     WirType::Ref {
                         type_id: type_id.clone(),

@@ -1840,17 +1840,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 name,
                 module_source,
                 ..
-            } => {
-                let name = &name.to_string();
-
-                out.push((name.clone().to_string(), module_source.clone()));
             }
-            ResolvedType::Variant {
+            | ResolvedType::Variant {
                 name,
                 module_source,
                 ..
             } => {
-                out.push((name.clone().to_string(), module_source.clone()));
+                out.push((name.clone(), module_source.clone()));
             }
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)

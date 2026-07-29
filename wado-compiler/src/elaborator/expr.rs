@@ -79,7 +79,7 @@ pub(super) fn peel_to_struct(
             name,
             module_source,
             ..
-        } => Some((name.clone().to_string(), module_source.clone(), Vec::new())),
+        } => Some((name.clone(), module_source.clone(), Vec::new())),
         ResolvedType::GenericInstance {
             name,
             module_source,
@@ -1119,12 +1119,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => (name, module_source),
-            ResolvedType::GenericInstance {
+            }
+            | ResolvedType::GenericInstance {
                 name,
                 module_source,
                 ..
-            } => (crate::name::MangledName::new(name), module_source),
+            } => (name, module_source),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 return self.record_field_reference(inner, field_name, use_id);
             }
@@ -1133,9 +1133,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => return,
         };
-        if let Some(info) =
-            self.lookup_struct_fields_in(&struct_name.as_mangled_str(), &module_source)
-        {
+        if let Some(info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
             for ((fname, _, _), fid) in info.fields.iter().zip(info.field_ast_ids.iter()) {
                 if fname == field_name {
                     self.record_reference_to_def(use_id, *fid);
@@ -1161,9 +1159,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 module_source,
                 ..
             } => {
-                if let Some(struct_info) =
-                    self.lookup_struct_fields_in(&name.as_mangled_str(), &module_source)
-                {
+                if let Some(struct_info) = self.lookup_struct_fields_in(&name, &module_source) {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             return (index as u32, *ftype);
@@ -1246,7 +1242,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => (crate::name::MangledName::new(name), module_source),
+            } => (name, module_source),
             _ => return,
         };
 
@@ -1256,13 +1252,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let same_package = module_source.same_package(&self.current_module_source);
-        if let Some(struct_info) =
-            self.lookup_struct_fields_in(&struct_name.as_mangled_str(), &module_source)
-        {
+        if let Some(struct_info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
             for (fname, _, vis) in &struct_info.fields {
                 if fname == field_name && !vis.reachable_from(same_package) {
                     let _ = self.emit(TypeError::PrivateFieldAccess {
-                        struct_name: struct_name.to_string(),
+                        struct_name: struct_name.clone(),
                         field_name: field_name.to_string(),
                         visibility: *vis,
                         span,
@@ -1423,30 +1417,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (List implements IndexValue<i32> with type Output = T)
         let struct_name = match &base_type {
             ResolvedType::Struct { name, .. } => name.clone(),
-            ResolvedType::GenericInstance { name, .. } => {
-                crate::name::MangledName::new(name.clone())
-            }
-            ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
-                crate::name::MangledName::new(name.clone())
-            }
+            ResolvedType::GenericInstance { name, .. } => name.clone(),
+            ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name.clone(),
             // The raw GC array dispatches `[]` through `impl IndexValue /
             // IndexAssign for Array<T>`, keyed by the base name "Array".
-            ResolvedType::BuiltinArray(_) => {
-                crate::name::MangledName::new(TypeTable::ARRAY_TYPE_NAME.to_string())
-            }
-            _ => crate::name::MangledName::new(String::new()),
+            ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
+            _ => String::new(),
         };
 
         // For newtypes, also resolve the base type name for trait impl lookup
-        let (lookup_name, lookup_type_id) = self
-            .tysys
-            .newtype_base_lookup(&struct_name.as_mangled_str(), base_type_id);
+        let (lookup_name, lookup_type_id) =
+            self.tysys.newtype_base_lookup(&struct_name, base_type_id);
 
         if !struct_name.is_empty() {
             let expected_key = Self::is_coercible_compound_literal(&index.index)
                 .then(|| {
                     self.index_lookup_or_newtype_base(
-                        &struct_name.as_mangled_str(),
+                        &struct_name,
                         base_type_id,
                         &lookup_name,
                         lookup_type_id,
@@ -1469,7 +1456,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let index_trait_info = (!self.uses_intrinsic_index_dispatch(base_type_id))
                 .then(|| {
                     self.index_lookup_or_newtype_base(
-                        &struct_name.as_mangled_str(),
+                        &struct_name,
                         base_type_id,
                         &lookup_name,
                         lookup_type_id,
@@ -1527,7 +1514,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             let index_value_info = self.index_lookup_or_newtype_base(
-                &struct_name.as_mangled_str(),
+                &struct_name,
                 base_type_id,
                 &lookup_name,
                 lookup_type_id,
@@ -1605,23 +1592,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => recv_type,
         };
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct { name, .. } => name,
-            ResolvedType::GenericInstance { name, .. }
+            ResolvedType::Struct { name, .. }
+            | ResolvedType::GenericInstance { name, .. }
             | ResolvedType::Newtype { name, .. }
-            | ResolvedType::Flags { name, .. } => crate::name::MangledName::new(name),
-            ResolvedType::BuiltinArray(_) => {
-                crate::name::MangledName::new(TypeTable::ARRAY_TYPE_NAME.to_string())
-            }
+            | ResolvedType::Flags { name, .. } => name,
+            ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
             _ => return None,
         };
         if struct_name.is_empty() {
             return None;
         }
-        let (lookup_name, lookup_type_id) = self
-            .tysys
-            .newtype_base_lookup(&struct_name.as_mangled_str(), base_type_id);
+        let (lookup_name, lookup_type_id) =
+            self.tysys.newtype_base_lookup(&struct_name, base_type_id);
         self.index_lookup_or_newtype_base(
-            &struct_name.as_mangled_str(),
+            &struct_name,
             base_type_id,
             &lookup_name,
             lookup_type_id,
@@ -1630,7 +1614,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         .and_then(|(i, _)| i.index_type)
         .or_else(|| {
             self.index_lookup_or_newtype_base(
-                &struct_name.as_mangled_str(),
+                &struct_name,
                 base_type_id,
                 &lookup_name,
                 lookup_type_id,
@@ -2917,10 +2901,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => Some((
-                FqTypeName::declared(&module_source, &name.as_mangled_str()),
-                name,
-            )),
+            } => Some((FqTypeName::declared(&module_source, &name), name)),
             _ => None,
         };
 
