@@ -311,7 +311,7 @@ fn unresolvable_record_in_payload(
     type_id: TypeId,
 ) -> Option<String> {
     if let ResolvedType::Struct {
-        name,
+        decl_name: name,
         module_source,
         ..
     } = tt.get(type_id)

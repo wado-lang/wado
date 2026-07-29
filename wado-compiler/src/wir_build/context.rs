@@ -691,7 +691,7 @@ impl<'a> WirContext<'a> {
             ResolvedType::Unit => WirType::Unit,
             ResolvedType::Never => WirType::Unit, // placeholder
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => {

@@ -212,7 +212,7 @@ fn candidate_info_for(
     };
     let (struct_name, struct_module) = match type_table.get(struct_type_id) {
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => (name.clone(), module_source.clone()),
@@ -240,7 +240,7 @@ fn is_sroa_eligible_inner_type(type_id: TypeId, _type_table: &TypeTable) -> bool
 fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(String, ModuleSource)> {
     match type_table.get(type_id) {
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => Some((name.clone(), module_source.clone())),
@@ -330,7 +330,7 @@ fn type_transitively_contains(
     }
     match type_table.get(ty) {
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => {

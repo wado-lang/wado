@@ -476,7 +476,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (struct_name, struct_module_source, receiver_type_args, newtype_base) = match &base_type
         {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => (name.clone(), Some(module_source.clone()), None, None),
@@ -967,7 +967,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // to track, without re-resolving the method signature.
         let method_type_params = match &base_type {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             }
@@ -1881,7 +1881,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let receiver_outer = match self.tysys.type_table.borrow().get(rt) {
             ResolvedType::GenericInstance { name, .. }
-            | ResolvedType::Struct { name, .. }
+            | ResolvedType::Struct { decl_name: name, .. }
             | ResolvedType::Enum { name, .. }
             | ResolvedType::Resource { name, .. }
             | ResolvedType::GenericResource { name, .. }
@@ -3055,7 +3055,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .clone()
         {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => (name, module_source, None),

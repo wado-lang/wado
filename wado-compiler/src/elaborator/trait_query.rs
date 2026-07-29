@@ -792,7 +792,7 @@ impl TypeSystem {
                 }
             }
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => {
@@ -1002,7 +1002,7 @@ impl TypeSystem {
                 module_source,
             }
             | ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             }
@@ -1040,7 +1040,7 @@ impl TypeSystem {
         }
 
         if let ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } = &resolved
@@ -1059,7 +1059,7 @@ impl TypeSystem {
         let plain_reflect_subject = match (&resolved, on_bound) {
             (
                 ResolvedType::Struct {
-                    name,
+                    decl_name: name,
                     module_source,
                     ..
                 },
@@ -1121,7 +1121,7 @@ impl TypeSystem {
         // Get the type name and type args for looking up implementations
         let (type_name, type_args) = match &resolved {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             }

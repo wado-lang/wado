@@ -383,7 +383,7 @@ impl<'a> CallImmutability<'a> {
                 self.walk(base, stack)
             }
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 base_name,
                 ..
@@ -1015,7 +1015,7 @@ fn reference_pointee_struct_key(
             reference_pointee_struct_key(*base_type, type_table)
         }
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => Some((name.clone(), module_source.clone())),

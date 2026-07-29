@@ -353,7 +353,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // nothing re-resolves a written name.
             let struct_name = match &left_type {
                 ResolvedType::Struct {
-                    name,
+                    decl_name: name,
                     module_source,
                     ..
                 }

@@ -222,7 +222,7 @@ pub(super) fn aggregate_field_info(
     }
     let resolved = type_table.get(return_type);
     if let ResolvedType::Struct {
-        name,
+        decl_name: name,
         module_source,
         ..
     } = resolved

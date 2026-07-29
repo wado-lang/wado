@@ -927,7 +927,7 @@ impl<'a> Emitter<'a> {
         match self.types.get(id) {
             ResolvedType::Primitive(p) => map_primitive(*p),
             ResolvedType::Struct { decl_name: name, .. } if name == "String" => Ok(Type::String),
-            ResolvedType::Struct { name, .. }
+            ResolvedType::Struct { decl_name: name, .. }
             | ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. }
             | ResolvedType::Flags { name, .. }

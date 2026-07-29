@@ -120,7 +120,7 @@ pub fn cm_payload_type_from_type_id(
         // kiln records keep their own (registry-driven) paths, so they stay
         // `None` here and fall through to the legacy classification.
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } if !is_cm_owned_source(module_source) => Some(CmPayloadType::Named(to_kebab(name))),

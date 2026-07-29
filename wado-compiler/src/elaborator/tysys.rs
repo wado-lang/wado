@@ -149,7 +149,7 @@ impl TypeSystem {
             ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => return true,
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => self
@@ -325,7 +325,7 @@ impl TypeSystem {
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
     pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {
-            ResolvedType::Struct { name, .. }
+            ResolvedType::Struct { decl_name: name, .. }
             | ResolvedType::GenericInstance { name, .. }
             | ResolvedType::Newtype { name, .. }
             | ResolvedType::Flags { name, .. } => Some(name.clone()),

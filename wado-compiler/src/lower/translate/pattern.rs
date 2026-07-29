@@ -298,7 +298,7 @@ impl<'a> PatternLowerer<'a> {
     fn get_struct_fields(&self, type_id: TypeId, type_table: &TypeTable) -> Option<Vec<TirField>> {
         match type_table.get(type_id) {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => self

@@ -404,7 +404,7 @@ impl Monomorphizer {
         type_table: &TypeTable,
     ) -> Option<String> {
         match type_table.get(type_id) {
-            ResolvedType::Struct { name, .. }
+            ResolvedType::Struct { decl_name: name, .. }
             | ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. }
             | ResolvedType::Flags { name, .. } => Some(name.clone()),

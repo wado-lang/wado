@@ -275,7 +275,7 @@ fn lower_type(
         },
         ResolvedType::Struct { decl_name: name, .. } if name == "String" => Some(OptionsType::String),
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => {

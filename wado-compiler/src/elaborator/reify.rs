@@ -4822,7 +4822,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let peeled = tt.peel_refs(recorded_type);
             match tt.get(peeled) {
                 ResolvedType::Struct {
-                    name,
+                    decl_name: name,
                     module_source,
                     ..
                 }
@@ -8571,7 +8571,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (struct_name, module_source, type_args): (String, Option<ModuleSource>, Vec<TypeId>) =
             match resolved {
                 ResolvedType::Struct {
-                    name,
+                    decl_name: name,
                     module_source,
                     ..
                 } => (name, Some(module_source), vec![]),
@@ -9128,7 +9128,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let target_type = choice.target_type;
         let name = match self.tysys.type_table.borrow().get(target_type).clone() {
             crate::tir::ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name),
@@ -9185,7 +9185,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Option<TirExpr> {
         let name = match self.tysys.type_table.borrow().get(target_type).clone() {
             crate::tir::ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name),
@@ -10047,7 +10047,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 | PrimitiveType::U64
                                 | PrimitiveType::U128
                         )
-                    ) || matches!(resolved, ResolvedType::Struct { ref name, .. } if name == "u128")
+                    ) || matches!(resolved, ResolvedType::Struct { decl_name: ref name, .. } if name == "u128")
                 };
                 let int_pattern = |value: u128| {
                     if scrutinee_is_unsigned {

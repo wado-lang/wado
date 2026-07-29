@@ -183,7 +183,7 @@ fn carries_resource_rec(
             return false;
         }
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => sfr
@@ -447,7 +447,7 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
             None => Vec::new(),
         },
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => {

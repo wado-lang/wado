@@ -814,7 +814,7 @@ impl FunctionTranslator<'_, '_> {
         // Any other type falls through to the default single-statement lowering.
         let inner_resolved = self.base.type_table.borrow().get(inner_type_id).clone();
         let fields: Vec<(String, u32, tir::TypeId)> = if let crate::tir::ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } = inner_resolved
@@ -1754,7 +1754,7 @@ impl FunctionTranslator<'_, '_> {
                     .get_box_inner_type(peeled)
                     .or_else(|| match tt.get(peeled) {
                         tir::ResolvedType::Struct {
-                            name,
+                            decl_name: name,
                             module_source,
                             base_name: Some(base),
                             ..

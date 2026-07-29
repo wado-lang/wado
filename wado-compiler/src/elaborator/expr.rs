@@ -76,7 +76,7 @@ pub(super) fn peel_to_struct(
     let peeled = tt.peel_refs(type_id);
     match tt.get(peeled) {
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => Some((name.clone(), module_source.clone(), Vec::new())),
@@ -1116,7 +1116,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
         let (struct_name, module_source) = match resolved {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             }
@@ -1155,7 +1155,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match resolved {
             // Struct field access
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => {
@@ -1226,7 +1226,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
         let (struct_name, module_source) = match resolved {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => (name, module_source),
@@ -1592,7 +1592,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => recv_type,
         };
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct { name, .. }
+            ResolvedType::Struct { decl_name: name, .. }
             | ResolvedType::GenericInstance { name, .. }
             | ResolvedType::Newtype { name, .. }
             | ResolvedType::Flags { name, .. } => name,
@@ -2424,7 +2424,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     | crate::tir::PrimitiveType::U64
                     | crate::tir::PrimitiveType::U128
             )
-        ) || matches!(resolved, ResolvedType::Struct { ref name, .. } if name == "u128")
+        ) || matches!(resolved, ResolvedType::Struct { decl_name: ref name, .. } if name == "u128")
     }
 
     fn exh_literal(&self, lit: &Literal, scrutinee_type: TypeId) -> ExhPattern {
@@ -2898,7 +2898,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For large literals: 170... as i128 → i128::from_pair(low, high)
         let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => Some((FqTypeName::declared(&module_source, &name), name)),

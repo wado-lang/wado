@@ -1991,7 +1991,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         ) || matches!(
             scrutinee_resolved,
-            ResolvedType::Struct { ref name, .. } if name == "u128"
+            ResolvedType::Struct { decl_name: ref name, .. } if name == "u128"
         );
 
         let start_val = self.pattern_to_i128(start, is_unsigned);

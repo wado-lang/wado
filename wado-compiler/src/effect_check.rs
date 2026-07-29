@@ -231,7 +231,7 @@ fn collect_resource_refs(
             );
         }
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => {
@@ -1712,7 +1712,7 @@ impl TypeRefCtx {
             }
             ResolvedType::Newtype { base_type, .. } => self.walk(tt, *base_type, visited),
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => self

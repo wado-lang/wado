@@ -1361,7 +1361,7 @@ pub(super) fn type_id_to_ast_type(
         ResolvedType::Primitive(p) => named_no_source(p.as_str()),
         ResolvedType::Unit => Type::Tuple(Vec::new()),
         ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => cm_named(name, module_source),

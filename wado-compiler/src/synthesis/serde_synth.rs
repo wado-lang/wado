@@ -508,7 +508,7 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         tt.all_types()
             .filter_map(|(id, resolved)| match resolved {
                 ResolvedType::Struct {
-                    name,
+                    decl_name: name,
                     module_source,
                     ..
                 }
@@ -949,7 +949,7 @@ fn default_value_for_type(
             (p.as_str().to_string(), ModuleSource::primitive(), vec![])
         }
         crate::tir::ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } => {

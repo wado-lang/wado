@@ -1322,7 +1322,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let tt = self.tysys.type_table.borrow();
         match tt.get(tt.peel_refs(type_id)) {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             }

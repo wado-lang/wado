@@ -1361,7 +1361,7 @@ impl FunctionTranslator<'_, '_> {
     /// Resolve the `TypeId` of a struct field by name.
     fn resolve_struct_field_type(&self, struct_type: TypeId, field_name: &str) -> TypeId {
         if let ResolvedType::Struct {
-            name,
+            decl_name: name,
             module_source,
             ..
         } = self.type_table.get(struct_type)

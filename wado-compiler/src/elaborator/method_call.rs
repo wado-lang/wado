@@ -163,7 +163,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The struct_module is where the struct is defined (and inherent methods live)
         let (struct_name, struct_module) = match self.tysys.type_table.borrow().get(base_type_id) {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => (name.clone(), module_source.clone()),
@@ -1568,7 +1568,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(target_type_id)
         {
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             }
@@ -1662,7 +1662,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Fall back to the base type for inherited methods
                     match self.tysys.type_table.borrow().get(*base_type).clone() {
                         ResolvedType::Struct {
-                            name,
+                            decl_name: name,
                             module_source,
                             ..
                         } => {
@@ -1689,7 +1689,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             loop {
                                 match self.tysys.type_table.borrow().get(current).clone() {
                                     ResolvedType::Struct {
-                                        name,
+                                        decl_name: name,
                                         module_source,
                                         ..
                                     } => {
@@ -2458,7 +2458,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             loop {
                 match self.tysys.type_table.borrow().get(current_type).clone() {
                     ResolvedType::Struct {
-                        name,
+                        decl_name: name,
                         module_source,
                         ..
                     }

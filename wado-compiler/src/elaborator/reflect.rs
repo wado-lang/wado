@@ -481,7 +481,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     type_args,
                 } => (name, module_source, type_args),
                 ResolvedType::Struct {
-                    name,
+                    decl_name: name,
                     module_source,
                     ..
                 } => (name, module_source, Vec::new()),

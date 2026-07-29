@@ -1163,7 +1163,7 @@ impl TypeTable {
         for (id, ty) in self.types.iter() {
             self.intern_map.insert(ty.clone(), id);
             if let ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } = ty
@@ -3113,7 +3113,7 @@ impl TypeTable {
                 ..
             }
             | ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => format!("{module_source}/{name}"),
@@ -3515,7 +3515,7 @@ impl TypeTable {
             // `mangle_type_arg_for_generic` documents, reached from here as
             // well.
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             }

@@ -702,7 +702,7 @@ fn element_layout_of(
     // User struct element (e.g., `List<Point>`). Generic struct instances
     // appear as `ResolvedType::Struct` after monomorphization.
     if let ResolvedType::Struct {
-        name,
+        decl_name: name,
         module_source,
         ..
     } = type_table.get(elem_ty)

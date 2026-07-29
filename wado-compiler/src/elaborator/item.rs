@@ -1070,7 +1070,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.type_contains_closure_inner(type_table, *base_type, visited)
             }
             crate::tir::ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => {
