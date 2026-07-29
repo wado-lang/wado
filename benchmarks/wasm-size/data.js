@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785295771495,
+  "lastUpdate": 1785320771949,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44673,6 +44673,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9951dc10e3f04da5520e4a3eaa524ec4551f72df"
         },
         "date": 1785295771025,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16237,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276421,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3608e369373c45750b6f6a11afff76b826ff10d5",
+          "message": "Merge pull request #1714 from wado-lang/claude/niri-display-fmt-folding-mlb5cu\n\nfeat(niri): fill a container at compile time",
+          "timestamp": "2026-07-29T19:15:35+09:00",
+          "tree_id": "f32b9533d279a62b44cbac7f7cb581c555ed66cc",
+          "url": "https://github.com/wado-lang/wado/commit/3608e369373c45750b6f6a11afff76b826ff10d5"
+        },
+        "date": 1785320771450,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
