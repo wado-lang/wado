@@ -4816,9 +4816,12 @@ impl<'a> TirUnparser<'a> {
                 };
                 self.unparse_expr(actual_receiver);
                 self.output.push('.');
-                // Quote the full resolved method name (e.g. `"Type::method"`) so
-                // the output captures which impl was selected.
-                self.output.push_str(&Self::quote_if_needed(&func.name));
+                // Name the resolved method (e.g. `Type::method`) so the output
+                // captures which impl was selected, spelled as source writes
+                // it — this text is read back by `Inspect` on a closure.
+                self.output.push_str(&Self::quote_if_needed(
+                    &crate::name::display_method_name(&func.name),
+                ));
                 self.unparse_type_args(type_args);
                 self.delimited("(", ")", args, |s, arg| s.unparse_expr(&arg.expr));
             }

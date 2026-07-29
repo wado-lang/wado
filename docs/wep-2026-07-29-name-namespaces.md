@@ -437,6 +437,14 @@ Order:
 - [x] 4a. Delete `is_monomorphized` from `ResolvedType::Struct` and
       `FreeFunctionName`. It duplicated `base_name.is_some()`, and with only two
       constructors nothing could ever make the two disagree.
-- [ ] 4b. `name` holds the declaration and the arguments sit beside it as
-      `Vec<TypeId>`, so the fused spelling is derived. Blocked on an interning
-      decision — see below.
+- [x] 4b. `decl_name` holds the declaration and the arguments sit beside it as
+      `Vec<TypeId>`, so the fused spelling is derived. `struct_list_name` owns
+      the rendering; the struct-list registries are keyed by it.
+- [ ] 5. `StructListKey` as a type, so a registry cannot be keyed by
+      `(decl_name, module)` at all. Sixteen readers took the split field for
+      the stored name; a newtype makes that a compile error rather than a
+      convention.
+- [ ] 6. Split the fused spelling out of `ResolvedType::Newtype` the way 4b did
+      for `Struct`. Its `name` still bakes arguments into the head
+      (`MyArray<i32>`), which is why the impl index was queried under a name it
+      never registers.

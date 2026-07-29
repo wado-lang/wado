@@ -826,6 +826,25 @@ pub fn split_local_method_name(name: &str) -> Option<(&str, Option<&str>, &str)>
     Some((receiver, trait_name, method))
 }
 
+/// A method mangle as source spells it: the receiver and trait lose their
+/// declaring modules, the method keeps its name.
+///
+/// - `core:prelude/string.wado/String::len` → `String::len`
+/// - `a.wado/Box<b.wado/T>^c.wado/Ord::cmp` → `Box<T>^Ord::cmp`
+///
+/// A name with no `::` is a free function, displayed by its head alone.
+#[must_use]
+pub fn display_method_name(mangled: &str) -> String {
+    let Some((receiver, trait_name, method)) = split_local_method_name(mangled) else {
+        return display_type_name(mangled);
+    };
+    let receiver = display_type_name(receiver);
+    match trait_name {
+        Some(t) => format!("{receiver}^{}::{method}", display_type_name(t)),
+        None => format!("{receiver}::{method}"),
+    }
+}
+
 /// Rebuild a monomorphized method's base-name key: replace everything up to
 /// and including the first `::` with `base::`, keeping only the method suffix.
 ///
