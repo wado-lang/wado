@@ -691,10 +691,13 @@ impl<'a> WirContext<'a> {
             ResolvedType::Unit => WirType::Unit,
             ResolvedType::Never => WirType::Unit, // placeholder
             ResolvedType::Struct {
-                decl_name: name,
+                decl_name,
                 module_source,
-                ..
+                type_args,
             } => {
+                // The WIR struct map is keyed on the rendered spelling: each
+                // instantiation is its own struct type.
+                let name = &type_table.struct_rendered_name(decl_name, type_args);
                 // String is always at ModuleSource::string().
                 let lookup_module = if name == "String" {
                     ModuleSource::string()
