@@ -1713,8 +1713,11 @@ impl TypeTable {
                 ResolvedType::Resource {
                     name: n,
                     module_source,
+                } => {
+                    let name = &name.as_mangled_str().to_string();
+                    (n.clone(), module_source)
                 }
-                | ResolvedType::Enum {
+ResolvedType::Enum {
                     name: n,
                     module_source,
                 }
@@ -3287,8 +3290,11 @@ impl TypeTable {
             ResolvedType::Enum {
                 name,
                 module_source,
+            } => {
+                let name = &name.as_mangled_str().to_string();
+                declared(module_source, name)
             }
-            | ResolvedType::Variant {
+ResolvedType::Variant {
                 name,
                 module_source,
             }
@@ -3352,8 +3358,11 @@ impl TypeTable {
             ResolvedType::Enum {
                 name,
                 module_source,
+            } => {
+                let name = &name.as_mangled_str().to_string();
+                FqTypeName::declared(module_source, name)
             }
-            | ResolvedType::Variant {
+ResolvedType::Variant {
                 name,
                 module_source,
             }
@@ -3483,8 +3492,11 @@ impl TypeTable {
             ResolvedType::Enum {
                 name,
                 module_source,
+            } => {
+                let name = &name.as_mangled_str().to_string();
+                FqTypeName::declared(module_source, name)
             }
-            | ResolvedType::Resource {
+ResolvedType::Resource {
                 name,
                 module_source,
                 ..
@@ -3552,8 +3564,11 @@ impl TypeTable {
                 name,
                 module_source,
                 ..
+            } => {
+                let name = &name.as_mangled_str().to_string();
+                TypeNameInfo::Named(format!("{module_source}/{name}"))
             }
-            | ResolvedType::Resource {
+ResolvedType::Resource {
                 name,
                 module_source,
                 ..

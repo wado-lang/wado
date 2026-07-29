@@ -4825,8 +4825,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name,
                     module_source,
                     ..
+                } => {
+                    let name = &name.as_mangled_str().to_string();
+                    (name.clone(), module_source.clone())
                 }
-                | ResolvedType::GenericInstance {
+ResolvedType::GenericInstance {
                     name,
                     module_source,
                     ..
@@ -9844,8 +9847,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ResolvedType::Variant {
                 name,
                 module_source,
+            } => {
+                let name = &name.as_mangled_str().to_string();
+                (name, module_source)
             }
-            | ResolvedType::GenericInstance {
+ResolvedType::GenericInstance {
                 name,
                 module_source,
                 ..

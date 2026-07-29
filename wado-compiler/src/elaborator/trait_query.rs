@@ -1001,11 +1001,6 @@ impl TypeSystem {
                 name,
                 module_source,
             }
-            | ResolvedType::Struct {
-                name,
-                module_source,
-                ..
-            }
             | ResolvedType::Variant {
                 name,
                 module_source,
@@ -1124,8 +1119,11 @@ impl TypeSystem {
                 name,
                 module_source,
                 ..
+            } => {
+                let name = &name.as_mangled_str().to_string();
+                (FqTypeName::of_head(module_source, name.as_mangled_str()), None)
             }
-            | ResolvedType::Enum {
+ResolvedType::Enum {
                 name,
                 module_source,
                 ..

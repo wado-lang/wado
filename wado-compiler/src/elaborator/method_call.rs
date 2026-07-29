@@ -201,8 +201,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
+            } => {
+                let name = &name.as_mangled_str().to_string();
+                (name.clone(), module_source.clone())
             }
-            | ResolvedType::Flags {
+ResolvedType::Flags {
                 name,
                 module_source,
             } => (name.clone(), module_source.clone()),
@@ -1571,8 +1574,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
+            } => {
+                let name = &name.as_mangled_str().to_string();
+                (
+                name.clone(),
+                module_source.clone(),
+                FqTypeName::declared(module_source, name.as_mangled_str()),
+                vec![],
+            )
             }
-            | ResolvedType::Resource {
+ResolvedType::Resource {
                 name,
                 module_source,
             } => (
@@ -2461,8 +2472,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         name,
                         module_source,
                         ..
+                    } => {
+                        let name = &name.as_mangled_str().to_string();
+                        break Some((module_source, name.to_string()))
                     }
-                    | ResolvedType::GenericInstance {
+ResolvedType::GenericInstance {
                         name,
                         module_source,
                         ..

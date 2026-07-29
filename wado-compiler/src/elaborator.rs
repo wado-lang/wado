@@ -1325,8 +1325,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 name,
                 module_source,
                 ..
+            } => {
+                let name = &name.as_mangled_str().to_string();
+                Some((
+                module_source.clone(),
+                crate::name::split_base_name(name.as_mangled_str()).to_string(),
+            ))
             }
-            | ResolvedType::Enum {
+ResolvedType::Enum {
                 name,
                 module_source,
             }

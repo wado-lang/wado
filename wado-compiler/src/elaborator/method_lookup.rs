@@ -970,8 +970,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
+            } => {
+                let name = &name.as_mangled_str().to_string();
+
+                let params = self.find_method_type_param_names(
+                    name.as_mangled_str(),
+                    Some(module_source),
+                    method_name,
+                    trait_name,
+                );
+                bound_check_params.clone_from(&params);
+                params
             }
-            | ResolvedType::GenericInstance {
+ResolvedType::GenericInstance {
                 name,
                 module_source,
                 ..

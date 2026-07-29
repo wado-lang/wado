@@ -1840,8 +1840,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 name,
                 module_source,
                 ..
+            } => {
+                let name = &name.as_mangled_str().to_string();
+
+                out.push((name.clone().to_string(), module_source.clone()));
             }
-            | ResolvedType::Variant {
+ResolvedType::Variant {
                 name,
                 module_source,
                 ..

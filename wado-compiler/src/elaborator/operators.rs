@@ -356,8 +356,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name,
                     module_source,
                     ..
+                } => {
+                    let name = &name.as_mangled_str().to_string();
+                    Some(FqTypeName::declared(module_source, name.as_mangled_str()).into_string())
                 }
-                | ResolvedType::GenericInstance {
+ResolvedType::GenericInstance {
                     name,
                     module_source,
                     ..
