@@ -135,6 +135,31 @@ It should therefore run on a green branch, not on top of open regressions: it is
 the one step that changes behaviour, and diagnosing a regression is much harder
 once every `ResolvedType::Struct` site has moved.
 
+Attempted, then backed out: renaming the fields to force every read site to be
+revisited produced 143 compile errors across 20 files, which is the mechanical
+part and is fine. What stops it is not mechanical. `ResolvedType` is interned by
+structural equality, and today a monomorphized struct's identity is the
+*rendered* string `TreeMap<String,i32>` — so two distinct-but-equivalent
+argument `TypeId`s collapse onto one interned type. Holding `type_args:
+Vec<TypeId>` in the variant keys identity on those ids instead, and the same two
+arguments would mint two types where there was one. Such ids demonstrably exist:
+`Monomorphizer::try_queue_function` exists to dedupe a blanket instance reached
+from two dispatch sites whose derived args are "distinct-but-equivalent
+`TypeId`s".
+
+So 4b needs a decision first, not a rename:
+
+- canonicalize each argument through the table before interning, making
+  equivalent ids collapse by construction; or
+- keep the rendered spelling as the interning identity and store the arguments
+  beside it, which leaves the structure available and identity untouched — a
+  much smaller behaviour delta, and possibly enough for what 4b is for.
+
+The second is likely right, since what 4b buys is that the head and arguments
+are separately readable, not that identity changes. Deciding that on a branch
+with five open regressions would mean debugging type-duplication and those
+regressions at once.
+
 ## Consequences
 
 The compiler stops accepting the class of code this session kept producing. A
@@ -169,6 +194,5 @@ Order:
       `FreeFunctionName`. It duplicated `base_name.is_some()`, and with only two
       constructors nothing could ever make the two disagree.
 - [ ] 4b. `name` holds the declaration and the arguments sit beside it as
-      `Vec<TypeId>`, so the fused spelling is derived. Measured: 178 `base_name`
-      references and 159 `Struct { name, .. }` reads, plus a change in what the
-      interning key means. Multi-session, and it belongs on a green branch.
+      `Vec<TypeId>`, so the fused spelling is derived. Blocked on an interning
+      decision — see below.
