@@ -408,13 +408,34 @@ reflect stayed at 10 and serde went 4 to 6. Reverted. So the reachability set is
 not uniformly pre-erasure either; some of what it holds is spelled post-erasure
 and matches definitions named that way.
 
-Which means the retain check is comparing names minted at two different points
-in the pipeline and there is no single view that makes both sides agree. The
-honest fix is not a better spelling but removing the comparison: retention
-should key on the struct's `TypeId`, which erasure redirects consistently,
-rather than on a string that means different things depending on when it was
-built. That is a larger change than the ten fixtures, and it is where this
-should resume.
+Which means the retain check was comparing names minted at two different points
+in the pipeline, and no single view makes both sides agree. What it needed was
+not a better spelling but the same *derivation* on both sides: DCE's analysis
+renders `struct_rendered_name(decl_name, type_args)` off the resolved type, so
+retention now derives that same rendering from the instantiation the struct
+records in `monomorph_info`, instead of comparing the name monomorphize stored.
+Both sides then read the arguments through the erased view, and the drift has
+nowhere to enter.
+
+The stored name is still there, and retention still accepts it, because a
+non-monomorphized struct has no `monomorph_info` to derive from. That is the
+remaining seam — closing it means carrying the struct's `TypeId` on `TirStruct`
+/ `NirStruct`, which is step 7.
+
+### An invariant the arguments broke
+
+Splitting the arguments out gave the type table a second way to be
+inconsistent. `TypeTable::retain` documents an invariant — `get(id)` never
+panics for a surviving id — and closed the kept set over `redirects` to hold it.
+But a monomorphized struct records its arguments as they were *before* erasure,
+and the reachability walk reaches every type through the erased view, so nothing
+kept a flags argument's own id alive. The struct survived, spelling itself with
+an id that no longer resolved, and rendering it after DCE panicked. While the
+name was a stored string this could not happen: the string held no ids.
+
+`retain` now closes over each surviving struct's `type_args` transitively, which
+is the same reasoning that motivated the `redirects` closure — a type that
+survives must be readable.
 
 ## Consequences
 
@@ -460,3 +481,6 @@ Order:
       for `Struct`. Its `name` still bakes arguments into the head
       (`MyArray<i32>`), which is why the impl index was queried under a name it
       never registers.
+- [ ] 7. Carry the struct's `TypeId` on `TirStruct` / `NirStruct`, so DCE
+      retention asks identity instead of deriving a name that has to match one
+      built elsewhere.
