@@ -1326,10 +1326,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 module_source,
                 ..
             } => {
-                let name = &name.as_mangled_str().to_string();
+                let name = &name.to_string();
                 Some((
                 module_source.clone(),
-                crate::name::split_base_name(name.as_mangled_str()).to_string(),
+                crate::name::split_base_name(name).to_string(),
             ))
             }
 ResolvedType::Enum {
@@ -1364,7 +1364,7 @@ ResolvedType::Enum {
                 ..
             } => Some((
                 module_source.clone(),
-                crate::name::split_base_name(name.as_mangled_str()).to_string(),
+                crate::name::split_base_name(name).to_string(),
             )),
             _ => None,
         }

@@ -1841,7 +1841,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 module_source,
                 ..
             } => {
-                let name = &name.as_mangled_str().to_string();
+                let name = &name.to_string();
 
                 out.push((name.clone().to_string(), module_source.clone()));
             }

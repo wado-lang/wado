@@ -202,7 +202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 module_source,
                 ..
             } => {
-                let name = &name.as_mangled_str().to_string();
+                let name = &name.to_string();
                 (name.clone(), module_source.clone())
             }
 ResolvedType::Flags {
@@ -1575,11 +1575,11 @@ ResolvedType::Flags {
                 module_source,
                 ..
             } => {
-                let name = &name.as_mangled_str().to_string();
+                let name = &name.to_string();
                 (
                 name.clone(),
                 module_source.clone(),
-                FqTypeName::declared(module_source, name.as_mangled_str()),
+                FqTypeName::declared(module_source, name),
                 vec![],
             )
             }
@@ -1589,7 +1589,7 @@ ResolvedType::Resource {
             } => (
                 name.clone(),
                 module_source.clone(),
-                FqTypeName::declared(module_source, name.as_mangled_str()),
+                FqTypeName::declared(module_source, name),
                 vec![],
             ),
             // Generic resource types (Future<T>, Stream<T>, etc.) - handle like generic structs
@@ -2473,7 +2473,7 @@ ResolvedType::Resource {
                         module_source,
                         ..
                     } => {
-                        let name = &name.as_mangled_str().to_string();
+                        let name = &name.to_string();
                         break Some((module_source, name.to_string()))
                     }
 ResolvedType::GenericInstance {

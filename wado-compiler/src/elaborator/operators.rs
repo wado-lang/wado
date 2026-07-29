@@ -357,8 +357,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     module_source,
                     ..
                 } => {
-                    let name = &name.as_mangled_str().to_string();
-                    Some(FqTypeName::declared(module_source, name.as_mangled_str()).into_string())
+                    let name = &name.to_string();
+                    Some(FqTypeName::declared(module_source, name).into_string())
                 }
 ResolvedType::GenericInstance {
                     name,
@@ -368,7 +368,7 @@ ResolvedType::GenericInstance {
                 | ResolvedType::Variant {
                     name,
                     module_source,
-                } => Some(FqTypeName::declared(module_source, name.as_mangled_str()).into_string()),
+                } => Some(FqTypeName::declared(module_source, name).into_string()),
                 ResolvedType::Newtype { base_type, .. } => {
                     let tt = self.tysys.type_table.borrow();
                     let ultimate = tt.get_ultimate_base_type(*base_type);

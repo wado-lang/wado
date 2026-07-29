@@ -1252,7 +1252,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let same_package = module_source.same_package(&self.current_module_source);
-        if let Some(struct_info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
+        if let Some(struct_info) = self.lookup_struct_fields_in(&struct_name.as_mangled_str(), &module_source) {
             for (fname, _, vis) in &struct_info.fields {
                 if fname == field_name && !vis.reachable_from(same_package) {
                     let _ = self.emit(TypeError::PrivateFieldAccess {

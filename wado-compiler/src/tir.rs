@@ -1714,7 +1714,7 @@ impl TypeTable {
                     name: n,
                     module_source,
                 } => {
-                    let name = &name.as_mangled_str().to_string();
+                    let name = &name.to_string();
                     (n.clone(), module_source)
                 }
 ResolvedType::Enum {
@@ -3291,7 +3291,7 @@ ResolvedType::Enum {
                 name,
                 module_source,
             } => {
-                let name = &name.as_mangled_str().to_string();
+                let name = &name.to_string();
                 declared(module_source, name)
             }
 ResolvedType::Variant {
@@ -3354,12 +3354,12 @@ ResolvedType::Variant {
                 name,
                 module_source,
                 ..
-            } => declared(module_source, name.as_mangled_str()),
+            } => FqTypeName::declared(module_source, name.as_mangled_str()),
             ResolvedType::Enum {
                 name,
                 module_source,
             } => {
-                let name = &name.as_mangled_str().to_string();
+                let name = &name.to_string();
                 FqTypeName::declared(module_source, name)
             }
 ResolvedType::Variant {
@@ -3488,12 +3488,12 @@ ResolvedType::Variant {
                 name,
                 module_source,
                 ..
-            } => declared(module_source, name.as_mangled_str()),
+            } => FqTypeName::declared(module_source, name.as_mangled_str()),
             ResolvedType::Enum {
                 name,
                 module_source,
             } => {
-                let name = &name.as_mangled_str().to_string();
+                let name = &name.to_string();
                 FqTypeName::declared(module_source, name)
             }
 ResolvedType::Resource {
@@ -3559,13 +3559,13 @@ ResolvedType::Resource {
                 name,
                 module_source,
                 ..
-            } => declared(module_source, name.as_mangled_str()),
+            } => FqTypeName::declared(module_source, name.as_mangled_str()),
             ResolvedType::Enum {
                 name,
                 module_source,
                 ..
             } => {
-                let name = &name.as_mangled_str().to_string();
+                let name = &name.to_string();
                 TypeNameInfo::Named(format!("{module_source}/{name}"))
             }
 ResolvedType::Resource {

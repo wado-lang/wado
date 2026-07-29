@@ -1120,8 +1120,8 @@ impl TypeSystem {
                 module_source,
                 ..
             } => {
-                let name = &name.as_mangled_str().to_string();
-                (FqTypeName::of_head(module_source, name.as_mangled_str()), None)
+                let name = &name.to_string();
+                (FqTypeName::of_head(module_source, name), None)
             }
 ResolvedType::Enum {
                 name,
@@ -1132,7 +1132,7 @@ ResolvedType::Enum {
                 name,
                 module_source,
                 ..
-            } => (FqTypeName::of_head(module_source, name.as_mangled_str()), None),
+            } => (FqTypeName::of_head(module_source, name), None),
             // The raw GC array `Array<T>` carries its element as a single type
             // arg, so trait impls (`impl IntoIterator for Array<T>`) resolve
             // under the canonical name "Array".

@@ -512,7 +512,7 @@ fn distribute_bound_driven_requests(project: &mut Package) {
                     module_source,
                     ..
                 } => {
-                    let name = &name.as_mangled_str().to_string();
+                    let name = &name.to_string();
                     Some(((name.clone(), module_source.clone()), id))
                 }
 ResolvedType::Enum {
