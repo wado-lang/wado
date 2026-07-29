@@ -390,6 +390,18 @@ is indexed by. It replaces `struct_decl_name`, whose two arms disagreed —
 rendering the instance and not the struct — which is what made the wrong answer
 look like the local convention.
 
+### The fusion that is still there
+
+`ResolvedType::Newtype` was not split, and it shows. Its `name` bakes the
+arguments into the head (`MyArray<i32>`), so `impl_receiver_key` and
+`newtype_own_name` both handed the impl index a name no `impl` header writes.
+The guard that stops a newtype's own method from being retargeted at the base it
+inherits from therefore never fired for a generic newtype, and
+`impl MyArray<T> { fn second }` silently resolved to `List<i32>::second`, which
+no template defines. Both sites now split the head; the honest fix is to give
+`Newtype` the same `decl_name` / `type_args` split `Struct` has, which is
+step 6.
+
 Deriving through the unerased view was tried — spelling a newtype / flags
 argument by its own declaration rather than its base — and made things *worse*:
 reflect stayed at 10 and serde went 4 to 6. Reverted. So the reachability set is
