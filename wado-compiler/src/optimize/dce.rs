@@ -1196,11 +1196,12 @@ impl<'a> DceWalker<'a> {
 
         match base_receiver_type {
             ResolvedType::Struct {
-                ref name,
-                base_name: Some(ref base_struct),
+                ref decl_name,
+                ref type_args,
                 ref module_source,
-                ..
-            } => {
+            } if !type_args.is_empty() => {
+                let base_struct = decl_name;
+                let name = &self.type_table.struct_rendered_name(decl_name, type_args);
                 // Monomorphized struct method (e.g. `Box<i32>::get`):
                 // monomorphized functions live in the *using* module, so
                 // route the callee id through `current_module`. The base
@@ -1240,7 +1241,7 @@ impl<'a> DceWalker<'a> {
                 }
             }
             ResolvedType::Struct {
-                name,
+                decl_name: name,
                 module_source,
                 ..
             } => {
@@ -1575,7 +1576,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
             ));
             analysis.callees.insert(method_id);
         }
-        ResolvedType::Struct { name, .. } if name == "String" => {}
+        ResolvedType::Struct { decl_name, .. } if decl_name == "String" => {}
         _ => {}
     }
 }
@@ -1665,18 +1666,17 @@ impl DceAnalysis {
         for &id in &self.types {
             match type_table.get(id) {
                 ResolvedType::Struct {
-                    name,
+                    decl_name,
                     module_source,
-                    base_name,
+                    type_args,
                 } => {
-                    if base_name.is_some() {
-                        self.struct_monomorph_names.insert(name.clone());
-                        if let Some(base) = base_name {
-                            self.struct_monomorph_bases.insert(base.clone());
-                        }
-                    } else {
+                    if type_args.is_empty() {
                         self.struct_exact
-                            .insert((name.clone(), module_source.clone()));
+                            .insert((decl_name.clone(), module_source.clone()));
+                    } else {
+                        self.struct_monomorph_names
+                            .insert(type_table.struct_rendered_name(decl_name, type_args));
+                        self.struct_monomorph_bases.insert(decl_name.clone());
                     }
                 }
                 ResolvedType::Variant {
