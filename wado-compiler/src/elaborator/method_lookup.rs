@@ -1891,8 +1891,8 @@ ResolvedType::GenericInstance {
             return true;
         };
         let receiver_outer = match self.tysys.type_table.borrow().get(rt) {
+            ResolvedType::Struct { name, .. } => name.to_string(),
             ResolvedType::GenericInstance { name, .. }
-            | ResolvedType::Struct { name, .. }
             | ResolvedType::Enum { name, .. }
             | ResolvedType::Resource { name, .. }
             | ResolvedType::GenericResource { name, .. }
