@@ -150,5 +150,6 @@ Order:
 - [ ] 1c. `MangledName` on `func_map` / emitted names; `StructListKey` on the
       struct list.
 - [x] 2. `LocalMethodName::struct_name` field → derived method.
-- [ ] 3. `MethodOwner` replacing `inherited_from_base` and its sibling fields.
+- [x] 3. `MethodOwner` replacing `inherited_from_base`. Its sibling fields
+      were already gone with step 2, so the fact now has one encoding.
 - [ ] 4. `TypeIdentity` in `ResolvedType`; delete `base_name` / `is_monomorphized`.
