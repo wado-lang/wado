@@ -303,7 +303,7 @@ impl<'a> PatternLowerer<'a> {
                 ..
             } => self
                 .struct_fields_map
-                .get(&(name.clone(), module_source.clone()))
+                .get(&(name.to_string(), module_source.clone()))
                 .cloned(),
             _ => None,
         }
