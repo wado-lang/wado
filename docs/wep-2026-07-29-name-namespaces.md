@@ -205,6 +205,35 @@ understands pattern vs expression position; `rustc`'s machine-applicable
 suggestions cover only 49 of them and some of those wrap in the newtype's
 private tuple field.
 
+### 4b, second attempt: remove the fusion instead of annotating it
+
+The first attempt typed `Struct::name` as `MangledName`. It compiled and then
+regressed — an O0 run hung and five fixtures started failing, typically "type
+does not implement Eq". Clearing 179 type errors means inserting
+`as_mangled_str()` widely, and every insertion hands a declaration-keyed
+consumer a `&str` it accepts silently. The barrier was absent at exactly the
+sites it existed for. Backed out.
+
+The field asymmetry is the defect. `Struct` alone stored a rendered spelling
+where every other nominal variant stores a declaration name, and
+`GenericInstance` already models declaration-plus-arguments properly. So
+`Struct` now carries `decl_name` + `type_args`, and the rendered spelling is
+derived by `TypeTable::struct_rendered_name`. No fused name, so nothing to
+mistake; no annotation, so no accessor that strips it.
+
+The hazard in finishing this, and the reason it cannot be a bulk rename:
+renaming the pattern binding `name` → `decl_name` **compiles everywhere and is
+silently wrong** for a monomorphized struct, because the old `name` was the
+rendered spelling there. Each of the ~108 sites has to say which it wants, and
+the ones wanting the rendered form need the type table in scope to derive it —
+rendering is no longer free. A site that binds `name` today and uses it for
+identity or mangling wants `struct_rendered_name(decl_name, type_args)`; one
+that uses it for a declaration lookup wants `decl_name`.
+
+`make_monomorphized_struct` carries a `debug_assert_eq!` that the caller's
+rendering matches what `struct_rendered_name` derives, so a divergence between
+the two shows up in tests rather than as a wrong mangled name.
+
 ## Consequences
 
 The compiler stops accepting the class of code this session kept producing. A
