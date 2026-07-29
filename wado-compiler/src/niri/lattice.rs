@@ -234,12 +234,11 @@ impl Interpreter<'_> {
                 Value::seq(node.type_id, elements).map_or(Lattice::NonConst, Lattice::Const)
             }
             ExprKind::Index { expr: inner, index } => self.index_lattice(body, *inner, *index),
-            // A builtin denotes its value structurally, so a container built
-            // over one is constant before any rewrite — an allocation has no
+            // Answered here rather than after a rewrite: an allocation has no
             // literal node form to be rewritten to.
             ExprKind::Call { .. } => self.try_ctfe_builtin_fold_a(body, e),
-            // The engine models referents by value, so neither step changes
-            // what is denoted.
+            // Referents are modelled by value, so neither step changes what is
+            // denoted.
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::Deref,
                 expr: inner,

@@ -14,21 +14,17 @@ use crate::nir_arena::{Body, ExprId, ExprKind, Operand, StmtKind};
 use super::place::{lvalue_root_local, place_of};
 use super::{CalleeMap, CtfeBuiltinMap, LocalSet, reachable_exprs};
 
-/// What a walk reaches a place through, and so which locals keep a current
-/// value rather than a stale one. Every other mention disqualifies its root.
+/// The places a walk reaches, and how. A mention it does not reach disqualifies
+/// the local that mention roots at.
 #[derive(Default)]
-pub(super) struct ExecutedWrites {
-    /// Nothing can write through a read, so naming one says nothing about
-    /// whether the value stays current.
+pub(super) struct Reached {
     reads: IndexSet<ExprId>,
-    /// Exempt only inside a compile-time frame, which performs the write or
-    /// abandons the evaluation. An ordinary walk performs nothing, and a write
-    /// it steps over leaves its target stale.
     writes: IndexSet<ExprId>,
+    /// Reached through an `Assign`'s target rather than through an operand.
     place_assigns: IndexSet<ExprId>,
 }
 
-impl ExecutedWrites {
+impl Reached {
     pub(super) fn in_frame(
         body: &Body,
         ctfe_builtins: Option<&CtfeBuiltinMap>,
@@ -44,17 +40,17 @@ impl ExecutedWrites {
                 statements.insert(e);
             }
         }
-        let mut writes = Self::default();
+        let mut reached = Self::default();
         for e in &statements {
             if let ExprKind::Assign { target, .. } = &body.exprs[*e].kind
                 && place_of(body, (*target).into()).is_some()
             {
-                writes.place_assigns.insert(*e);
+                reached.place_assigns.insert(*e);
             }
         }
-        writes.collect_builtin_borrows(body, ctfe_builtins, &statements);
-        writes.collect_call_borrows(body, callees, &statements);
-        writes
+        reached.collect_builtin_borrows(body, ctfe_builtins, &statements);
+        reached.collect_call_borrows(body, callees, &statements);
+        reached
     }
 
     /// An ordinary walk performs nothing, so only the reads survive.
@@ -160,7 +156,7 @@ impl ExecutedWrites {
         }
     }
 
-    fn reaches(&self, body: &Body, op: Operand) -> bool {
+    fn covers(&self, body: &Body, op: Operand) -> bool {
         let mut op = op;
         loop {
             let Some(e) = op.as_expr() else {
@@ -202,19 +198,17 @@ enum Reach {
     Write,
 }
 
-/// Locals of `body` that may bind an aggregate constant: every mention only
-/// reads the value, and no store target, mutable borrow, method receiver, or
-/// mutable argument roots at them. A write in `writes` is exempt: the executor
-/// performs it, so the value it leaves is current.
+/// Locals of `body` that may bind an aggregate constant: ones every mention
+/// only reads.
 ///
 /// The read positions are listed rather than inferred from the absence of the
 /// others, so a node kind nobody taught this walk about costs a fold and never
-/// a wrong one. Under value semantics that list is long: returning, binding,
+/// a wrong one. Under value semantics that list is long — returning, binding,
 /// storing and composing all copy.
 ///
-/// Only the reachable body is scanned: a mention orphaned by an earlier rewrite
-/// cannot run, so it must not disqualify a local.
-pub(super) fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
+/// Only the reachable body is scanned: a mention an earlier rewrite orphaned
+/// cannot run, so it must not disqualify anything.
+pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
             set.insert(index);
@@ -253,7 +247,7 @@ pub(super) fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> Loc
             }
             ExprKind::Assign { target, value } => {
                 read_value(*value, &mut value_reads);
-                if !writes.place_assigns.contains(&e) {
+                if !reached.place_assigns.contains(&e) {
                     disqualify_root(body, (*target).into(), &mut disqualified);
                 }
             }
@@ -261,18 +255,18 @@ pub(super) fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> Loc
                 op: NirUnaryOp::MutRef,
                 expr,
             } => {
-                if !writes.reaches(body, *expr) {
+                if !reached.covers(body, *expr) {
                     disqualify_root(body, *expr, &mut disqualified);
                 }
             }
             ExprKind::MethodCall { receiver, args, .. } => {
-                if !writes.reaches(body, *receiver) {
+                if !reached.covers(body, *receiver) {
                     disqualify_root(body, *receiver, &mut disqualified);
                 }
                 for arg in args {
                     if !arg.is_mut {
                         read_value(arg.expr, &mut value_reads);
-                    } else if !writes.reaches(body, arg.expr) {
+                    } else if !reached.covers(body, arg.expr) {
                         disqualify_root(body, arg.expr, &mut disqualified);
                     }
                 }
@@ -281,7 +275,7 @@ pub(super) fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> Loc
                 for arg in args {
                     if !arg.is_mut {
                         read_value(arg.expr, &mut value_reads);
-                    } else if !writes.reaches(body, arg.expr) {
+                    } else if !reached.covers(body, arg.expr) {
                         disqualify_root(body, arg.expr, &mut disqualified);
                     }
                 }
@@ -298,7 +292,7 @@ pub(super) fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> Loc
             _ => {}
         }
     }
-    value_reads.extend(writes.reads.iter().chain(&writes.writes).copied());
+    value_reads.extend(reached.reads.iter().chain(&reached.writes).copied());
     for (e, index) in &local_mentions {
         if !value_reads.contains(e) {
             disqualified.insert(*index);
@@ -313,15 +307,13 @@ pub(super) fn aggregate_safe_locals(body: &Body, writes: &ExecutedWrites) -> Loc
     safe
 }
 
-/// Locals of `body` that a compile-time frame cannot track, because something
-/// other than a write it performs itself can reach them: a borrow, a mutable
-/// argument, a method receiver, or an assignment buried inside a larger
-/// expression.
+/// Locals of `body` a compile-time frame cannot track: something other than a
+/// write it performs itself can reach them — a borrow, a mutable argument, a
+/// method receiver, or an assignment buried inside a larger expression.
 ///
-/// Only the reachable body is scanned, as in [`aggregate_safe_locals`]: a
-/// borrow orphaned by an earlier rewrite cannot run, and the arena keeps every
-/// node an in-place rewrite displaced.
-pub(super) fn clobbered_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet {
+/// Reachable body only, as in [`aggregate_safe_locals`]. The arena keeps every
+/// node an in-place rewrite displaced, and one nothing refers to cannot run.
+pub(super) fn clobbered_locals(body: &Body, reached: &Reached) -> LocalSet {
     fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
             set.insert(index);
@@ -332,7 +324,7 @@ pub(super) fn clobbered_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet
         let node = &body.exprs[e];
         match &node.kind {
             ExprKind::Assign { target, .. } => {
-                if !writes.place_assigns.contains(&e) {
+                if !reached.place_assigns.contains(&e) {
                     disqualify(body, (*target).into(), &mut set);
                 }
             }
@@ -340,23 +332,23 @@ pub(super) fn clobbered_locals(body: &Body, writes: &ExecutedWrites) -> LocalSet
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr,
             } => {
-                if !writes.reaches(body, *expr) {
+                if !reached.covers(body, *expr) {
                     disqualify(body, *expr, &mut set);
                 }
             }
             ExprKind::MethodCall { receiver, args, .. } => {
-                if !writes.reaches(body, *receiver) {
+                if !reached.covers(body, *receiver) {
                     disqualify(body, *receiver, &mut set);
                 }
                 for arg in args.iter().filter(|a| a.is_mut) {
-                    if !writes.reaches(body, arg.expr) {
+                    if !reached.covers(body, arg.expr) {
                         disqualify(body, arg.expr, &mut set);
                     }
                 }
             }
             ExprKind::Call { args, .. } => {
                 for arg in args.iter().filter(|a| a.is_mut) {
-                    if !writes.reaches(body, arg.expr) {
+                    if !reached.covers(body, arg.expr) {
                         disqualify(body, arg.expr, &mut set);
                     }
                 }

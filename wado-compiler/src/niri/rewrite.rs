@@ -113,8 +113,7 @@ impl Interpreter<'_> {
 
     /// Write `value` back over `e` as the container literal the lower phase
     /// emits for a source string: a struct over a packed byte array and its
-    /// length. Every other aggregate stays inside the engine, having no
-    /// literal shape to be written as.
+    /// length.
     ///
     /// The bytes are the container's first `used`, not the whole backing array
     /// — a grown container's capacity outruns what it holds, and capacity is
@@ -125,10 +124,9 @@ impl Interpreter<'_> {
         let Value::Aggregate { type_id, .. } = value else {
             return false;
         };
-        // Any struct over an array and an `i32` has the shape written below,
-        // so the container is identified rather than recognised: over
-        // `Chunk { data, tag }` the literal drops a field and reads the second
-        // as a length.
+        // Identified rather than recognised: any struct over an array and an
+        // `i32` has the shape written below, and over `Chunk { data, tag }` the
+        // literal would drop a field and read the second as a length.
         if !self.type_table.is_seq_container(*type_id) {
             return false;
         }

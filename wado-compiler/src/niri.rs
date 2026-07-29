@@ -1,105 +1,25 @@
 //! NIR Interpreter (niri).
 //!
-//! Compile-time partial evaluator for Wado NIR, operating on the arena `Body`.
-//! [`Interpreter::reduce_local_a`] rewrites one node in place toward literal
-//! form, [`Interpreter::reduce_to_lattice_a`] projects a node to a [`Lattice`],
-//! and [`Interpreter::reduce_in_place_a`] reduces a whole subtree bottom-up.
-//! Constant folding is the primary consumer; branch pruning, constant
-//! propagation, and compile-time function evaluation reuse the same engine.
+//! Compile-time partial evaluator over the arena `Body`: it reduces what it can
+//! and leaves a residual otherwise. Constant folding is the primary consumer;
+//! branch pruning, constant propagation and compile-time function evaluation
+//! reuse the same engine.
 //!
-//! Reduction is **monotone** — it only moves expressions toward literal form,
-//! never the reverse — and **idempotent**. Literal leaves are preserved as-is
-//! so the original lexical repr (e.g. `0xFF`) survives a no-op pass.
+//! Reduction is monotone — an expression only moves toward literal form, never
+//! back — and idempotent. A literal leaf is left as written, so the source repr
+//! (`0xFF`) survives a no-op pass.
 //!
-//! The engine handles:
+//! Each module below answers one question:
 //!
-//! - Integer arithmetic: Add, Sub, Mul, Div, Mod
-//! - Integer comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
-//! - Integer bitwise: `BitAnd`, `BitOr`, `BitXor`, Shl, Shr
-//! - Integer unary: Neg, `BitNot`
-//! - Integer types: i8, i16, i32, i64, u8, u16, u32, u64
-//! - Float arithmetic: Add, Sub, Mul, Div (skipped when result is NaN)
-//! - Float comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
-//! - Float unary: Neg (via sign-bit flip, safe for all values including NaN)
-//! - Float types: f32, f64
-//! - Boolean logical: And, Or (including identity rules `false || X → X`,
-//!   `true && X → X`, `X || false → X`, `X && true → X`)
-//! - Boolean equality and ordering: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
-//!   (`false < true`)
-//! - Boolean unary: Not
-//! - Char comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq` (codepoint
-//!   order)
-//! - Casts (`expr as T`):
-//!   - int ↔ int (truncation / sign- or zero-extension)
-//!   - int ↔ float (signed / unsigned conversion; float → int uses
-//!     Wasm `trunc_sat` semantics: NaN ↦ 0, ±∞ saturate to MIN/MAX)
-//!   - f32 ↔ f64 (rounding on demote, exact on promote)
-//!   - bool → int / float (true ↦ 1 / 1.0, false ↦ 0 / 0.0)
-//!   - char → int (codepoint, then truncated to target width)
-//!   - u8 → char (the only int → char form the elaborator permits)
-//! - Local variables: immutable `let` bindings whose RHS reduces to a
-//!   constant flow into the env and are read back as that constant at
-//!   each use site. `let mut` and post-assign locals stay `NonConst`.
-//!   The driving visitor populates the env via
-//!   [`Interpreter::bind_local`] / [`Interpreter::invalidate_local`].
-//! - Global variables: immutable `global FOO: T = …;` declarations
-//!   whose initializer reduces to a constant flow into a project-wide
-//!   [`GlobalEnv`] and are read back at every `GlobalVarGet` site.
-//!   Mutable globals are recorded as `NonConst` so a parent fold like
-//!   `GLOBAL_MUT + 1` reports `NonConst` rather than `Unevaluated`. The
-//!   driving visitor builds the env once per pass via
-//!   [`Interpreter::with_globals`].
-//! - `if` expressions: a constant condition collapses to the chosen
-//!   arm; a non-constant condition with both arms reducing to the same
-//!   lattice constant (and an effect-free condition) folds to that
-//!   constant. The unreachable arm of a constant-condition `if` is
-//!   treated as an SCCP infeasible edge, so a trapping branch
-//!   (`else { panic(…) }`) does not contaminate the result.
-//! - `if` statements: a constant condition splices the chosen branch's
-//!   stmts into the parent block via
-//!   [`Interpreter::reduce_local_block`].
-//! - `match` expressions: a constant scrutinee collapses to the first
-//!   arm whose pattern provably matches (later arms become infeasible
-//!   edges); a non-constant speculatable scrutinee with every arm
-//!   reducing to the same lattice constant collapses to that constant.
-//!   Modelled patterns: `_`, a binding, integer / bool / char literal,
-//!   integer range (signed and unsigned), or-of the above,
-//!   `ConstantValue` whose inner expression reduces to a `Value`, and
-//!   struct / exact-arity tuple patterns whose every field pattern is
-//!   itself modelled. Tuple-with-rest, `Variant`, `Enum`, and string /
-//!   null literal patterns report `Unknown` — they never wrongly commit
-//!   a match and never wrongly drop a later arm. A definite field
-//!   mismatch still rules an arm out even when a sibling field binds,
-//!   and an arm's guard is decided with its bindings in scope.
-//! - Struct / tuple literals: an aggregate whose every field reduces to
-//!   a constant is itself a constant ([`Value::Aggregate`]), and
-//!   `receiver.field` projects a field back out — including out of a
-//!   CTFE-folded call result. Aggregates never leave the engine (the
-//!   value pool models pure scalars), so what reaches the IR is the
-//!   scalars projected out of them. A local carries an aggregate
-//!   constant only when every mention of it merely reads the value; see
-//!   [`Interpreter::record_aggregate_locals`].
-//! - Pure-call evaluation: a free `Call` whose args all reduce to
-//!   constants and whose callee was admitted to the [`CalleeMap`]
-//!   (pure, non-async, monomorphic — see [`is_ctfe_eligible`]) runs the
-//!   callee's body with the args bound into a fresh local environment.
-//!   The body is executed statement by statement — `let` bindings,
-//!   assignment to a local, a decidable `if`, an early `return`, a
-//!   labeled block completed by its `break`, and a loop run until it
-//!   breaks. Anything else abandons the evaluation, leaving the
-//!   original call — and any runtime trap inside it — in place. The
-//!   `call_stack` blocks recursive re-entry and the step budget caps
-//!   total work, so a loop needs no constant trip count.
-//!   `MethodCall` / `IndirectCall` / `CmRawCall` are out of scope.
+//! - `lattice` — what an expression denotes.
+//! - `frame` — what running a body does.
+//! - `rewrite` — what becomes of an expression once its value is known.
+//! - `trackability` — which locals a walk may hold a value for.
+//! - `pattern` — whether a pattern matches a value.
+//! - `place` — what a borrow or lvalue chain names.
 //!
-//! Float arithmetic uses native Rust IEEE 754 ops (same as Wasm), following
-//! cranelift's approach: fold the result, but skip if it is NaN since NaN
-//! bit patterns are nondeterministic across architectures.
-//!
-//! Integer division/modulo by zero and signed `MIN / -1` are left
-//! unfolded so the runtime trap is preserved.
-//!
-//! See `docs/wep-2026-04-27-nir-interpreter.md` for the design.
+//! What the engine can evaluate is the WEP's to state, and it is maintained
+//! there rather than here: `docs/wep-2026-04-27-nir-interpreter.md`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -350,7 +270,7 @@ mod place;
 mod rewrite;
 mod trackability;
 
-use trackability::{ExecutedWrites, aggregate_safe_locals};
+use trackability::{Reached, aggregate_safe_locals};
 
 /// A dense set of local indices, backed by a bitset indexed by the local
 /// index itself.
@@ -529,7 +449,7 @@ impl EditSink for BodySink<'_> {
 ///
 /// Nor is `stores`. The engine has no reference values — an argument reduces to
 /// its referent's value — so what the callee keeps is a snapshot, sound exactly
-/// while nothing can write the referent afterwards. [`ExecutedWrites`] is what
+/// while nothing can write the referent afterwards. [`Reached`] is what
 /// holds that: a stored argument is the one read it does not exempt.
 #[must_use]
 pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
@@ -770,7 +690,7 @@ impl<'a> Interpreter<'a> {
     /// Record `body`'s [`aggregate_safe_locals`]. The driving visitor calls
     /// this once per function, next to [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
-        let writes = ExecutedWrites::outside_frame(body, self.ctfe_builtins, self.callees);
+        let writes = Reached::outside_frame(body, self.ctfe_builtins, self.callees);
         self.aggregate_locals = aggregate_safe_locals(body, &writes);
     }
 

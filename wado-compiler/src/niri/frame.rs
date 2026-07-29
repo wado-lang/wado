@@ -18,7 +18,7 @@ use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{PrimitiveType, ResolvedType};
 
 use super::place::{overlapping_places, place_of};
-use super::trackability::{ExecutedWrites, aggregate_safe_locals, clobbered_locals};
+use super::trackability::{Reached, aggregate_safe_locals, clobbered_locals};
 use super::{CallRun, CalleeKey, CtfeBuiltin, Interpreter, Lattice, prim_of};
 
 /// How control left a statement sequence during compile-time execution.
@@ -261,9 +261,7 @@ impl Interpreter<'_> {
     }
 
     /// Run a call at statement position for the writes it performs. `None`
-    /// when the expression is not a call the frame knows; `Flow::Bail` when it
-    /// is one the frame cannot run — stepping past a call whose writes it did
-    /// not apply would leave the caller's places stale.
+    /// when the expression is not a call the frame knows.
     fn exec_call_stmt_a(&mut self, body: &Body, e: ExprId) -> Option<Flow> {
         let (key, _) = self.call_target_a(body, e)?;
         if !self.callees.is_some_and(|c| c.contains_key(&key)) {
@@ -279,9 +277,8 @@ impl Interpreter<'_> {
     }
 
     /// Perform `place = value`, updating the frame's value for the place's
-    /// root. A target that names no place, or a projection into a root the
-    /// frame holds no constant for, bails: stepping past a store it did not
-    /// apply would leave the container stale.
+    /// root. A target naming no place, or a projection into a root the frame
+    /// holds no constant for, bails.
     fn exec_store_a(&mut self, body: &mut Body, target: ExprId, value: Operand) -> Flow {
         let Some((root, path)) = place_of(body, target.into()) else {
             return Flow::Bail;
@@ -320,11 +317,7 @@ impl Interpreter<'_> {
 
     /// Perform a builtin at statement position, updating the frame's value for
     /// the place a write lands in. `None` when the statement is not a builtin
-    /// the engine knows; `Some(Flow::Bail)` when it is one it cannot follow —
-    /// stepping past a write it did not apply would leave the container stale.
-    ///
-    /// The root has to be a local the frame already holds a constant for, which
-    /// confines the write to values the engine itself built.
+    /// the engine knows.
     fn exec_builtin_stmt_a(&mut self, body: &mut Body, e: ExprId) -> Option<Flow> {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return None;
@@ -636,7 +629,7 @@ impl Interpreter<'_> {
         // Execute on a scratch copy so the shared callee body, held under an
         // immutable `Ref`, is not mutated.
         let mut scratch = callee_body.nodes_only_clone();
-        let writes = ExecutedWrites::in_frame(&scratch, self.ctfe_builtins, self.callees);
+        let writes = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
         self.aggregate_locals = aggregate_safe_locals(&scratch, &writes);
         self.ctfe_clobbered = clobbered_locals(&scratch, &writes);
         for (index, value) in bound {

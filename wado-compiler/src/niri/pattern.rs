@@ -129,12 +129,10 @@ impl Interpreter<'_> {
         }
     }
 
-    /// Conjunction of the sub-pattern results over an aggregate's fields:
-    /// definitely-no as soon as one field rules the pattern out, definitely-yes
-    /// only when every listed field matches. A field the value does not carry —
-    /// or a sub-pattern the engine does not model — makes the whole pattern
-    /// `Unknown`. A value that is not an aggregate is `Unknown` rather than
-    /// vacuously matching a field-less pattern.
+    /// The sub-pattern results conjoined over an aggregate's fields. A field
+    /// the value does not carry makes the whole pattern `Unknown`, as does a
+    /// value that is not an aggregate — vacuously matching a field-less pattern
+    /// would commit an arm on no evidence.
     fn all_fields_match(
         &self,
         body: &Body,
