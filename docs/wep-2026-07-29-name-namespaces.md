@@ -437,6 +437,28 @@ name was a stored string this could not happen: the string held no ids.
 is the same reasoning that motivated the `redirects` closure — a type that
 survives must be readable.
 
+### One spelling, two functions that build it
+
+A branch review found the same class again, in the one place the newtypes do not
+reach: a reference receiver is spelled by `Receiver::mangle_with_ref` when a
+definition is named and by `FqTypeName::to_mangled` when a call site looks one
+up. Nothing made the two agree, and they did not.
+
+`to_mangled` applied the receiver's arguments to a `&` head, giving
+`&<List<i32>>` for what the other spells `&List<i32>`, so every ref-impl lookup
+candidate matched no registered template and was silently dead. It also wrote a
+space after both ref prefixes: right for `&mut X`, wrong for `&X`. A reference
+is not a head with arguments — it is a pointee carrying a kind, which is what
+the `reference` field already said and the rendering ignored.
+
+The regression test asserts the two functions agree, rather than asserting
+either one's output. A test that pins one spelling would have passed throughout.
+
+DCE had the matching asymmetry a namespace type cannot catch either: definitions
+keyed on `full_method_name` and call sites on `method_name`, so a method with
+method type args was keyed two ways and could be collected as unreachable. Step
+7 removes the class by keying on identity.
+
 ## Consequences
 
 The compiler stops accepting the class of code this session kept producing. A

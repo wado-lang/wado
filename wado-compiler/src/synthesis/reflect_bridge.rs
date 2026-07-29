@@ -66,7 +66,7 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
             // the struct registry keys on. Minting is the unreached branch, and
             // it must rebuild the instantiation from its base and arguments —
             // `make_struct(decl.name)` would register the rendered spelling as a
-            // declaration name, the fusion WEP 2026-07-19 removes.
+            // declaration name, the fusion WEP 2026-07-29 removes.
             let subject = tt.find_struct_by_name(&decl.name, &module_source).unwrap_or_else(
                 || {
                     tt.make_monomorphized_struct(
