@@ -10,6 +10,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::ast::Type;
 use crate::cm_abi;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
@@ -25,9 +26,11 @@ use crate::synthesis::common::{
     local_ref, synth_span,
 };
 
+use super::cm_free::{CmShapeContext, FlatSlot, synthesize_free_cm_flat};
 use super::export_adapter::{synthesize_lower_to_flat, synthesize_variant_lower_to_flat};
 use super::types::{
-    LiftContext, cm_val_type_to_type_id, cm_zero, find_variant_decl, flat_types_from_type_id,
+    CmStdlibNames, LiftContext, cm_val_type_to_type_id, cm_zero, find_variant_decl,
+    flat_types_from_type_id,
 };
 
 /// Expand `TaskReturn` stmts in an `export async fn` user function into inline CM calls.
@@ -36,8 +39,10 @@ use super::types::{
 /// the flat lowering + `cm_raw_call(task_return_name, flat_args)` sequence, where
 /// `task_return_name` is this export's `task-return:<name>` import.
 /// New locals are appended to the function's `locals` and `local_count` is updated.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn expand_task_returns_in_func(
     user_func: &Rc<RefCell<TirFunction>>,
+    return_type: &Type,
     flat_return_types: &[cm_abi::CmValType],
     task_return_name: &str,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
@@ -52,6 +57,7 @@ pub(super) fn expand_task_returns_in_func(
         return;
     };
     let mut expander = TaskReturnExpander {
+        return_type,
         flat_return_types,
         task_return_name,
         next_local: func.local_count,
@@ -88,6 +94,9 @@ pub(super) fn strip_task_returns_in_func(user_func: &Rc<RefCell<TirFunction>>) {
 /// no nesting position is missed; `visit_block` rebuilds each block's
 /// statement list because one `task return` expands to several statements.
 struct TaskReturnExpander<'a> {
+    /// The export's world-declared result, whose flattening defines the slots
+    /// the value is lowered into — and therefore which of them own memory.
+    return_type: &'a Type,
     flat_return_types: &'a [cm_abi::CmValType],
     /// The `task.return` core import name for this export (`task-return:<name>`).
     task_return_name: &'a str,
@@ -111,6 +120,7 @@ impl TirOptVisitor for TaskReturnExpander<'_> {
                 {
                     new_stmts.extend(generate_inline_task_return(
                         value,
+                        self.return_type,
                         self.flat_return_types,
                         self.task_return_name,
                         &mut self.next_local,
@@ -157,8 +167,14 @@ impl TirOptVisitor for TaskReturnStripper {
 /// For other types, flattens `value` to its CM ABI flat slots and emits
 /// `task-return(...flat_values)`. For unit-returning exports, the value
 /// is evaluated for its side effects and `task-return()` is emitted.
+///
+/// `task.return` lifts eagerly, so every buffer the flattening allocated is
+/// the guest's again once the call returns, and `post-return` cannot reclaim
+/// it here — the sequence ends by freeing them.
+#[allow(clippy::too_many_arguments)]
 fn generate_inline_task_return(
     value: TirExpr,
+    return_type: &Type,
     flat_return_types: &[cm_abi::CmValType],
     task_return_name: &str,
     next_local: &mut u32,
@@ -174,6 +190,14 @@ fn generate_inline_task_return(
         type_table,
         cm_package,
         interner,
+    };
+    let names = CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
+    let shape_ctx = CmShapeContext {
+        cm_interface_registry,
+        cm_package,
+        names: &names,
+        tir_modules,
+        type_table,
     };
     let mut stmts: Vec<TirStmt> = Vec::new();
     let value_type_id = value.type_id;
@@ -400,6 +424,15 @@ fn generate_inline_task_return(
             span,
         );
         stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
+        // One free walk after the match, not one per arm: the slots outlive it
+        // and their discriminant tells the walk which case's payload is live.
+        stmts.extend(synthesize_free_cm_flat(
+            return_type,
+            &FlatSlot::joined(&flat_locals, flat_return_types),
+            &shape_ctx,
+            next_local,
+            locals,
+        ));
         // Suppress unused-variable warning for the case names since the
         // pattern paths now read them directly above (no separate
         // variant_test argument).
@@ -451,6 +484,19 @@ fn generate_inline_task_return(
                 task_return_args,
                 TypeTable::UNIT,
             )));
+            stmts.extend(synthesize_free_cm_flat(
+                return_type,
+                &lowered
+                    .iter()
+                    .map(|flat| FlatSlot {
+                        local: flat.index,
+                        cm_type: flat.cm_type,
+                    })
+                    .collect::<Vec<_>>(),
+                &shape_ctx,
+                next_local,
+                locals,
+            ));
         }
     }
 

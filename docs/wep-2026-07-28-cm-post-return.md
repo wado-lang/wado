@@ -117,7 +117,8 @@ D2 — a memory-backed `task.return` result is never freed. `task.return` lifts
 eagerly, so the guest may release the payload as soon as the call returns, but
 nothing does. `post-return` is illegal with `async`, and the value lives in flat
 slots rather than in memory, so it needs a different fold over the same ownership
-model. Filed as wado-lang/wado#1708.
+model. Filed as wado-lang/wado#1708 and fixed by
+[Reclaiming a `task.return` Payload](./wep-2026-07-29-cm-task-return-free.md).
 
 ## References
 
