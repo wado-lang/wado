@@ -617,7 +617,7 @@ ResolvedType::GenericInstance {
                 // Find the arithmetic trait implementation
                 let (trait_info_opt, (impl_name, impl_type_id)) = self
                     .find_arithmetic_trait_impl(&struct_name.as_mangled_str(), left.type_id, trait_name, method_name)
-                    .map(|info| (Some(info), (struct_name.clone(), left.type_id)))
+                    .map(|info| (Some(info), (struct_name.to_string(), left.type_id)))
                     .unwrap_or_else(|| {
                         let info = self.find_arithmetic_trait_impl(
                             &lookup_name,
@@ -625,7 +625,7 @@ ResolvedType::GenericInstance {
                             trait_name,
                             method_name,
                         );
-                        (info, (crate::name::MangledName::new(lookup_name.clone()), lookup_type_id))
+                        (info, (lookup_name.clone(), lookup_type_id))
                     });
                 if let Some(trait_info) = trait_info_opt {
                     let resolved = ResolvedTraitMethod {
@@ -732,7 +732,7 @@ ResolvedType::GenericInstance {
                 // Find the shift trait implementation
                 let (trait_info_opt, (impl_name, impl_type_id)) = self
                     .find_arithmetic_trait_impl(&struct_name.as_mangled_str(), left.type_id, trait_name, method_name)
-                    .map(|info| (Some(info), (struct_name.clone(), left.type_id)))
+                    .map(|info| (Some(info), (struct_name.to_string(), left.type_id)))
                     .unwrap_or_else(|| {
                         let info = self.find_arithmetic_trait_impl(
                             &lookup_name,
@@ -740,7 +740,7 @@ ResolvedType::GenericInstance {
                             trait_name,
                             method_name,
                         );
-                        (info, (crate::name::MangledName::new(lookup_name.clone()), lookup_type_id))
+                        (info, (lookup_name.clone(), lookup_type_id))
                     });
                 if let Some(trait_info) = trait_info_opt {
                     // Shift traits declare `rhs: u32` (not `&Self`), so the
