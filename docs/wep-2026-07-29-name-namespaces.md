@@ -291,11 +291,17 @@ and yet `instantiate_struct` *does* emit a `TirStruct` for it. So monomorphize
 is doing its job and the type is lost somewhere between there and WIR
 registration — DCE, link, or the flat-package assembly.
 
-The next probe belongs in that stretch: trace the emitted `TirStruct` forward
-and find which stage drops it. Note that `dce.rs`'s reachability keeps struct
-names in `struct_exact` / `struct_monomorph_names`, and this refactor rewrote
-how those two sets are populated (`base_name.is_some()` became
-`type_args.is_empty()`), so that is where to look first.
+Narrowed further by reading: `dce.rs` retains a monomorphized struct only when
+`struct_monomorph_names` contains its `TirStruct` name, and that set is
+populated from `analysis.used_types` — so a type absent from `used_types` has
+its struct dropped even though monomorphize emitted it. This refactor rewrote
+how that set is filled (`base_name.is_some()` became `type_args.is_empty()`,
+and the name is now derived rather than read off the type).
+
+So the probe is: is the `FlagsBit<u32>` `TypeId` in `analysis.used_types`, and
+if so does the derived name equal the `TirStruct` name the retain checks
+against? Those two questions separate a reachability failure from a spelling
+one, and everything so far says to measure before choosing between them.
 
 ## Consequences
 
