@@ -33,7 +33,6 @@
 //! - For standalone scripts: relative to the entry point's directory
 
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use std::borrow::Cow;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -673,11 +672,11 @@ impl Receiver {
     /// The canonical head string — identity key and mangle base. Module
     /// qualified, because that is what a mangled name embeds.
     #[must_use]
-    pub fn head_key(&self) -> Cow<'_, str> {
+    pub fn head_key(&self) -> MangledName {
         match self {
-            Receiver::Type(n) => Cow::Owned(n.to_mangled()),
-            Receiver::Ref(k) => Cow::Borrowed(k.prefix()),
-            Receiver::Projection { base, assoc } => Cow::Owned(format!("{base}::{assoc}")),
+            Receiver::Type(n) => MangledName::new(n.to_mangled()),
+            Receiver::Ref(k) => MangledName::new(k.prefix()),
+            Receiver::Projection { base, assoc } => MangledName::new(format!("{base}::{assoc}")),
         }
     }
 
@@ -701,7 +700,7 @@ impl Receiver {
     /// `S::SeqSerializer`).
     #[must_use]
     pub fn mangle(&self, type_args: &[String]) -> String {
-        Self::mangle_with_ref(&self.head_key(), self.ref_kind(), type_args)
+        Self::mangle_with_ref(self.head_key().as_mangled_str(), self.ref_kind(), type_args)
     }
 
     /// Mangle a base name, applying a `&` / `&mut` prefix when `ref_kind` marks
@@ -856,7 +855,7 @@ impl LocalMethodName {
     /// The base receiver identity string: `Point`, `&`, `&mut`, `S::SeqSerializer`.
     #[must_use]
     pub fn base_struct_name(&self) -> String {
-        self.receiver.head_key().into_owned()
+        self.receiver.head_key().into_string()
     }
 
     /// [`Self::base_struct_name`] as the receiver form a mangled name embeds —
@@ -941,7 +940,7 @@ impl LocalMethodName {
         let base_trait_name = trait_name
             .as_deref()
             .map(|n| split_base_name(n).to_string());
-        let struct_name = receiver.head_key().into_owned();
+        let struct_name = receiver.head_key().into_string();
         Self {
             receiver,
             struct_name,
@@ -1747,6 +1746,41 @@ impl DeclName {
 }
 
 impl fmt::Display for DeclName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// A name in the *mangled* namespace: module-qualified, type arguments
+/// rendered — what an emitted function name embeds and what `func_map` keys on.
+///
+/// The counterpart to [`DeclName`], and deliberately not convertible to it. A
+/// mangled head fed to a declaration lookup matched nothing and silently lost a
+/// trait segment, a resource requirement, or a go-to-definition edge; the two
+/// being interchangeable `String`s is what let that compile.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct MangledName(String);
+
+impl MangledName {
+    /// Mint from a spelling already in the mangled namespace — produced by
+    /// [`FqTypeName::to_mangled`] or by a mangler that qualifies the same way.
+    #[must_use]
+    pub(crate) fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
+    #[must_use]
+    pub fn as_mangled_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl fmt::Display for MangledName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
     }

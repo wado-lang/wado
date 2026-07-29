@@ -2043,8 +2043,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the same view of "does this type have `.eq` / `.cmp`?" that
         // operator dispatch gets via `find_eq_trait_impl` / `find_ord_trait_impl`.
         if let Some(recv_id) = receiver_type_id {
+            // A template is registered under its mangled head, so the probe
+            // is in that namespace, not the declaration one.
             return self.try_auto_derived_method_match(
-                &type_key.receiver().head_key(),
+                type_key.receiver().head_key().as_mangled_str(),
                 method_name,
                 recv_id,
             );

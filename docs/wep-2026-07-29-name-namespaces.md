@@ -137,7 +137,10 @@ Order:
 
 - [x] 1a. `DeclName` / `DeclPath` + the CM interface registry, the adapter map
       and `impl_target_of` keyed by them.
-- [ ] 1b. `MangledName` + `func_map` / emitted names; `StructListKey` + the struct list.
+- [x] 1b. `MangledName`, so `head_key` and `decl_key` are no longer
+      interchangeable — the swap behind three of the six defects.
+- [ ] 1c. `MangledName` on `func_map` / emitted names; `StructListKey` on the
+      struct list.
 - [ ] 2. `LocalMethodName::struct_name` field → derived method.
 - [ ] 3. `MethodOwner` replacing `inherited_from_base` and its sibling fields.
 - [ ] 4. `TypeIdentity` in `ResolvedType`; delete `base_name` / `is_monomorphized`.

@@ -601,7 +601,7 @@ impl Monomorphizer {
             c.push(Cow::Borrowed(own));
         }
         if let Some(info) = info {
-            c.push(info.receiver.head_key());
+            c.push(Cow::Owned(info.receiver.head_key().into_string()));
             c.push(Cow::Borrowed(info.struct_name.as_str()));
         }
         c.push(Cow::Borrowed(struct_name));
