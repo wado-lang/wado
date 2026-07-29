@@ -1743,6 +1743,12 @@ pub fn fn_type_arg_names(arity: usize, return_type_name: &str) -> Vec<String> {
     vec![arity.to_string(), return_type_name.to_string()]
 }
 
+/// [`fn_type_arg_names`] in the structured namespace.
+#[must_use]
+pub fn fn_type_args(arity: usize, return_type: &FqTypeName) -> Vec<FqTypeName> {
+    vec![FqTypeName::arity(arity), return_type.clone()]
+}
+
 /// Build an Option type name from inner type name.
 ///
 /// Examples:
@@ -2423,6 +2429,13 @@ impl FqTypeName {
     #[must_use]
     pub fn builtin(name: &str) -> Self {
         Self::of_head_kind(TypeHead::Builtin(name.to_string()))
+    }
+
+    /// The arity that spells a [`CLOSURE_FN_TRAIT`] head's first argument
+    /// (`Fn<2,i32>`). It names no type, so it mangles bare like a builtin shape.
+    #[must_use]
+    pub fn arity(arity: usize) -> Self {
+        Self::of_head_kind(TypeHead::Builtin(arity.to_string()))
     }
 
     /// A head written in source, resolved against the module that declares it:

@@ -2869,6 +2869,15 @@ impl SynthesisCtx<'_, '_, '_> {
         ))
     }
 
+    /// The receiver `type_name` indexes under in [`TraitEnv`]. A sub-pass names
+    /// the declarations of the module it is synthesising, so that module is the
+    /// declaring one; the key is built exactly as
+    /// [`super::super::elaborator::trait_env::ImplTargetKey::receiver`] builds
+    /// the definition side.
+    fn receiver(&self, type_name: &str) -> Receiver {
+        Receiver::Type(FqTypeName::of_head(&self.module, type_name))
+    }
+
     /// `true` when this pass already emitted `<trait_name> for <type_name>`.
     fn pending_has(&self, type_name: &str, trait_name: &str) -> bool {
         self.pending.contains(&(
@@ -2883,7 +2892,7 @@ impl SynthesisCtx<'_, '_, '_> {
     /// `impl Trait for Type;` marker does not count — it must not block the
     /// body it asks for.
     fn has_methodful_impl(&self, type_name: &str, trait_name: &str, scope: ImplScope) -> bool {
-        let type_key = Receiver::Type(type_name.to_string());
+        let type_key = self.receiver(type_name);
         let real = match scope {
             ImplScope::CurrentModule => {
                 self.trait_env
@@ -3502,7 +3511,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     // their dispatch stubs are keyed by `(arity, return_type)`, not `TypeId`.
     let span = synth_span();
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
-        let mangled = crate::name::mangle_generic_name(&base_name, &type_arg_names);
+        let mangled = tt.fq_type_name(type_id).to_mangled();
         if ctx.has_methodful_impl_anywhere(&mangled, &inspect_name) {
             continue;
         }
@@ -3586,8 +3595,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
 
     // `Fn` dispatch stubs — one per canonical `(arity, return_type)`.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled =
-            crate::name::mangle_generic_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
+        let mangled = sig.receiver().to_mangled();
         if ctx.has_methodful_impl_anywhere(&mangled, &inspect_name) {
             continue;
         }
@@ -3811,7 +3819,7 @@ fn generate_newtype_fmt_fn(
 /// (Debug Output) > Closure Inspect via Runtime Dispatch.
 fn generate_fn_inspect_fn(
     module_source: &ModuleSource,
-    type_arg_names: &[String],
+    type_arg_names: &[FqTypeName],
     arity: usize,
     return_type: TypeId,
     ref_fn_type: TypeId,
@@ -3836,7 +3844,7 @@ fn generate_fn_inspect_fn(
 /// Twin of [`generate_fn_inspect_fn`] for `Fn<N, Ret>^InspectAlt`.
 fn generate_fn_inspect_alt_fn(
     module_source: &ModuleSource,
-    type_arg_names: &[String],
+    type_arg_names: &[FqTypeName],
     arity: usize,
     return_type: TypeId,
     ref_fn_type: TypeId,
@@ -3867,7 +3875,7 @@ fn generate_fn_canonical_dispatch_stub(
     trait_kind: FnDispatchTrait,
     trait_name: &str,
     method_name: &str,
-    type_arg_names: &[String],
+    type_arg_names: &[FqTypeName],
     arity: usize,
     return_type: TypeId,
     ref_fn_type: TypeId,
@@ -3905,7 +3913,7 @@ fn generate_fn_canonical_dispatch_stub(
 #[allow(clippy::too_many_arguments)]
 fn generate_opaque_inspect_fn(
     base_name: &str,
-    type_arg_names: &[String],
+    type_arg_names: &[FqTypeName],
     type_name: &str,
     resource_type: TypeId,
     ref_type: TypeId,
@@ -4237,7 +4245,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // in `core:prelude/tuple.wado`. Opaque resource types delegate to their
     // `Inspect` counterpart. `Fn` signatures are handled separately below.
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
-        let mangled = crate::name::mangle_generic_name(&base_name, &type_arg_names);
+        let mangled = tt.fq_type_name(type_id).to_mangled();
         if ctx.has_methodful_impl_anywhere(&mangled, &inspect_alt_name)
             || !has_inspect(&mangled, type_id, ctx, &mut tt)
         {
@@ -4284,8 +4292,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // delegate would let the optimizer collapse InspectAlt to Inspect
     // before WIR build runs, defeating the per-literal source dispatch.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled =
-            crate::name::mangle_generic_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
+        let mangled = sig.receiver().to_mangled();
         if ctx.has_methodful_impl_anywhere(&mangled, &inspect_alt_name)
             || !has_inspect(&mangled, sig.repr_type_id, ctx, &mut tt)
         {
@@ -5126,7 +5133,7 @@ fn generate_fallback_impls(
         if base_name == TypeTable::TUPLE_TYPE_NAME {
             continue;
         }
-        let mangled = crate::name::mangle_generic_name(&base_name, &type_arg_names);
+        let mangled = tt.fq_type_name(type_id).to_mangled();
         if ctx.has_methodful_impl_anywhere(&mangled, &pair.target_trait) {
             continue;
         }
@@ -5163,8 +5170,7 @@ fn generate_fallback_impls(
 
     // `Fn` dispatch-stub fallbacks — one per canonical `(arity, return_type)`.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled =
-            crate::name::mangle_generic_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
+        let mangled = sig.receiver().to_mangled();
         if ctx.has_methodful_impl_anywhere(&mangled, &pair.target_trait) {
             continue;
         }
@@ -5246,57 +5252,38 @@ fn decompose_type_for_method_name(
     resolved: &ResolvedType,
     type_id: TypeId,
     tt: &TypeTable,
-) -> (Receiver, bool, Vec<String>) {
-    let named = |n: String| Receiver::Type(n);
+) -> (Receiver, bool, Vec<FqTypeName>) {
     match resolved {
-        ResolvedType::TypeParam { name, .. } => (named(name.clone()), true, vec![]),
-        ResolvedType::BuiltinArray(elem) => (
-            named(TypeTable::ARRAY_TYPE_NAME.to_string()),
-            false,
-            vec![tt.mangle_type_name(*elem)],
-        ),
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } => {
-            let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
-            (named(name.clone()), false, args)
-        }
         ResolvedType::Function {
             params,
             return_type,
             ..
-        } => {
-            let args =
-                crate::name::fn_type_arg_names(params.len(), &tt.mangle_type_name(*return_type));
-            (
-                named(crate::name::CLOSURE_FN_TRAIT.to_string()),
-                false,
-                args,
-            )
-        }
-        ResolvedType::GenericResource {
-            name, type_args, ..
-        } => {
-            let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
-            (named(name.clone()), false, args)
-        }
-        ResolvedType::Reactive(inner) => (
-            named("Reactive".to_string()),
+        } => (
+            Receiver::Type(FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT)),
             false,
-            vec![tt.mangle_type_name(*inner)],
+            crate::name::fn_type_args(params.len(), &tt.fq_type_name(*return_type)),
+        ),
+        ResolvedType::Reactive(inner) => (
+            Receiver::Type(FqTypeName::builtin("Reactive")),
+            false,
+            vec![tt.fq_type_name(*inner)],
         ),
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (
             Receiver::Ref(RefKind::from_resolved(resolved).expect("ref classify")),
             false,
-            vec![tt.mangle_type_name(*inner)],
+            vec![tt.fq_type_name(*inner)],
         ),
+        // Everything else is already the structured shape the type table
+        // reports: the head names the receiver, its arguments are the method
+        // name's type args.
         _ => {
-            let name = tt.mangle_type_name(type_id);
-            debug_assert!(
-                !name.contains('<'),
-                "decompose_type_for_method_name: unhandled parameterized type: {name}"
-            );
-            (named(name), false, vec![])
+            let fq = tt.fq_type_name(type_id);
+            let args = fq.args().to_vec();
+            (
+                Receiver::Type(fq.head_only()),
+                matches!(resolved, ResolvedType::TypeParam { .. }),
+                args,
+            )
         }
     }
 }
@@ -5393,7 +5380,7 @@ fn resolve_impl_module_via_env(
 /// collide on `function_id_for`, which is required to be injective over
 /// `project.functions` (asserted in `optimize/dce`). Use
 /// [`collect_canonical_fn_signatures`] for the `(arity, return_type)` view.
-fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<String>)> {
+fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<FqTypeName>)> {
     let is_concrete = |t: TypeId| !matches!(tt.get(t), ResolvedType::TypeParam { .. });
 
     tt.all_types()
@@ -5406,7 +5393,7 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
                 if !type_args.iter().all(|e| is_concrete(*e)) {
                     return None;
                 }
-                let args = type_args.iter().map(|e| tt.mangle_type_name(*e)).collect();
+                let args = type_args.iter().map(|e| tt.fq_type_name(*e)).collect();
                 Some((id, TypeTable::TUPLE_TYPE_NAME.to_string(), args))
             }
             ResolvedType::GenericResource {
@@ -5415,7 +5402,7 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
                 if !type_args.iter().all(|t| is_concrete(*t)) {
                     return None;
                 }
-                let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
+                let args = type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
                 Some((id, name.clone(), args))
             }
             _ => None,
@@ -5437,10 +5424,16 @@ struct FnSignature {
     repr_type_id: TypeId,
     arity: usize,
     return_type: TypeId,
-    /// `[arity, mangle_type_name(return_type)]` (see
-    /// [`crate::name::fn_type_arg_names`]) — the form consumed by
-    /// [`crate::name::mangle_generic_name`] and the dispatch-stub emitters.
-    type_arg_names: Vec<String>,
+    /// `[arity, return_type]` (see [`crate::name::fn_type_args`]) — the form
+    /// consumed by the dispatch-stub emitters.
+    type_arg_names: Vec<FqTypeName>,
+}
+
+impl FnSignature {
+    /// The `Fn<arity,ret>` receiver this signature's dispatch stubs hang off.
+    fn receiver(&self) -> FqTypeName {
+        FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT).with_args(self.type_arg_names.clone())
+    }
 }
 
 fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
@@ -5463,15 +5456,15 @@ fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
             continue;
         }
         let arity = params.len();
-        let return_type_name = tt.mangle_type_name(*return_type);
-        if !seen.insert((arity, return_type_name.clone())) {
+        let return_type_fq = tt.fq_type_name(*return_type);
+        if !seen.insert((arity, return_type_fq.to_mangled())) {
             continue;
         }
         result.push(FnSignature {
             repr_type_id: id,
             arity,
             return_type: *return_type,
-            type_arg_names: crate::name::fn_type_arg_names(arity, &return_type_name),
+            type_arg_names: crate::name::fn_type_args(arity, &return_type_fq),
         });
     }
     result

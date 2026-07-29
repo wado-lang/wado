@@ -944,10 +944,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
             return;
         }
+        let receiver = Receiver::Type(self.tysys.fq_receiver_head(target_type_id));
         if self.tysys.has_real_trait_impl_for_type(
             &self.annotate_ctx,
             &self.type_lookup(),
-            &Receiver::Type(target_type_name.to_string()),
+            &receiver,
             trait_name,
         ) {
             return;
@@ -1375,7 +1376,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // taking `impl_name` apart — a name is assembled, never parsed.
             if let Some(key) = self.type_decl_key(current)
                 && (key.1 == impl_name
-                    || crate::name::FqTypeName::declared(&key.0, &key.1).as_str() == impl_name)
+                    || crate::name::FqTypeName::declared(&key.0, &key.1).to_mangled() == impl_name)
             {
                 return Some(key);
             }

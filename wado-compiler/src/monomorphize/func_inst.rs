@@ -1668,10 +1668,10 @@ impl Monomorphizer {
             // self-call back to its own definition, and `-O3` walked
             // the recursive method into a stack overflow.
             method_info: generic.method_info.as_ref().map(|info| {
-                let impl_type_arg_names: Vec<String> = key
+                let impl_type_arg_names: Vec<FqTypeName> = key
                     .impl_type_args
                     .iter()
-                    .map(|&t| type_table.mangle_type_arg_for_generic(t))
+                    .map(|&t| type_table.fq_type_name(t))
                     .collect();
                 let method_type_arg_names: Vec<String> = key
                     .method_type_args
@@ -1685,8 +1685,7 @@ impl Monomorphizer {
                     .iter()
                     .any(|p| p.name == info.base_struct_name());
                 if is_blanket && !impl_type_arg_names.is_empty() {
-                    let base = type_table.fq_base_type_name(key.impl_type_args[0]).into_string();
-                    info.with_substituted_struct_name(&impl_type_arg_names[0], &base)
+                    info.with_substituted_struct_name(&impl_type_arg_names[0])
                 } else {
                     info.with_type_args(&impl_type_arg_names, &method_type_arg_names)
                 }
@@ -1934,9 +1933,9 @@ impl Monomorphizer {
                             Some(concrete_tid) => {
                                 let dispatch_tid =
                                     self.type_param_dispatch_tid(concrete_tid, &info, type_table);
-                                let type_name = type_table.mangle_type_name(dispatch_tid);
-                                let base = type_table.fq_base_type_name(dispatch_tid).into_string();
-                                info.with_substituted_struct_name(&type_name, &base)
+                                info.with_substituted_struct_name(
+                                    &type_table.fq_type_name(dispatch_tid),
+                                )
                             }
                             None => info.clone(),
                         }
@@ -1946,9 +1945,9 @@ impl Monomorphizer {
                         // qualified mangle so call sites match the
                         // function-definition naming produced by the
                         // `method_instantiation_name*` helpers.
-                        let impl_names: Vec<String> = sub_impl_type_args
+                        let impl_names: Vec<FqTypeName> = sub_impl_type_args
                             .iter()
-                            .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
+                            .map(|&tid| type_table.fq_type_name(tid))
                             .collect();
                         let method_names: Vec<String> = sub_method_type_args
                             .iter()
@@ -2880,7 +2879,7 @@ impl Monomorphizer {
         // Mirror the template ref arm (`method_call_info_for_type`): the call
         // name carries the shape + inner type; `call_rewrite` resolves it to the
         // queued `&<inner>^Trait::method` instance via the blanket `monomorph_info`.
-        let inner_name = type_table.mangle_type_name(inner);
+        let inner_name = type_table.fq_type_name(inner);
         let ref_info = LocalMethodName::new_ref(
             ref_kind,
             Some(trait_name.to_string()),
@@ -2989,37 +2988,31 @@ impl Monomorphizer {
             let inner = type_table.peel_refs(receiver_type_id);
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
             // then fall back to the base type name (e.g., "f64") if no direct impl exists.
-            let own_mangled = type_table.mangle_type_arg_for_generic(inner);
-            let own_base = type_table.fq_base_type_name(inner).into_string();
-            let candidate = info.with_substituted_struct_name(&own_mangled, &own_base);
+            let candidate =
+                info.with_substituted_struct_name(&type_table.fq_type_name(inner));
             if self.functions.has_impl(&candidate) {
                 candidate
             } else {
-                let mangled = type_table.mangle_type_arg_for_generic_resolving_newtypes(inner);
-                // Take the base name from the *resolved* type so newtypes
-                // (`type FieldValue = List<u8>`) inherit the underlying
-                // type's base ("List"), not the newtype's own name.
-                // Without this, `base_struct_name` stays "FieldValue" while
-                // `struct_name` becomes "List<u8>", and the trait_env
-                // candidate lookup misses the per-type impl.
+                // Name the *resolved* type so newtypes (`type FieldValue =
+                // List<u8>`) inherit the underlying type's head ("List"), not
+                // the newtype's own name — otherwise the trait_env candidate
+                // lookup misses the per-type impl.
                 let resolved_inner = type_table.resolve_newtype_base(inner);
-                let base = type_table.fq_base_type_name(resolved_inner).into_string();
-                info.with_substituted_struct_name(&mangled, &base)
+                info.with_substituted_struct_name(&type_table.fq_type_name(resolved_inner))
             }
         } else if needs_struct_type_args {
             // Derive the struct name from the already-substituted receiver type.
             // Resolve through newtypes so that e.g. MyArray<i32>::len → List<i32>::len.
             let recv_inner = type_table.peel_refs(receiver_type_id);
-            let recv_mangled = type_table.mangle_type_arg_for_generic_resolving_newtypes(recv_inner);
-            // `base_type_name(Newtype)` returns the newtype's own name (e.g.
-            // "MyBytes"), but the post-substitution body actually targets the
-            // base type's impl ("List"). Peel through the newtype first so
-            // `base_struct_name` lines up with the TraitEnv key for the
-            // template's home module — required by the `(module_source, name)`
-            // lookup in `monomorphize_with_externals` (issue #1110).
+            // A newtype's own head (e.g. "MyBytes") is not what the
+            // post-substitution body targets — the base type's impl ("List")
+            // is. Peel through the newtype first so the receiver lines up with
+            // the TraitEnv key for the template's home module — required by the
+            // `(module_source, name)` lookup in `monomorphize_with_externals`
+            // (issue #1110).
             let resolved_recv = type_table.resolve_newtype_base(recv_inner);
-            let recv_base = type_table.fq_base_type_name(resolved_recv).into_string();
-            let mut new_info = info.with_substituted_struct_name(&recv_mangled, &recv_base);
+            let mut new_info =
+                info.with_substituted_struct_name(&type_table.fq_type_name(resolved_recv));
             // For ref-type impls (e.g., impl IntoIterator for &List<T>), preserve
             // the ref receiver (`&` / `&mut`) so that the monomorphizer selects the
             // correct generic function template ("&^IntoIterator::into_iter" instead
@@ -3887,9 +3880,8 @@ impl Monomorphizer {
                 if Self::expr_uses_local(receiver, binding_local)
                     && let Some(info) = &mut func.method_info
                 {
-                    let type_name = type_table.mangle_type_name(elem_type);
-                    let base_name = type_table.fq_base_type_name(elem_type).into_string();
-                    *info = info.with_substituted_struct_name(&type_name, &base_name);
+                    *info =
+                        info.with_substituted_struct_name(&type_table.fq_type_name(elem_type));
                     func.name = info.to_mangled_name();
                     if let Some(ms) = module_source_for_trait_impl(type_table, elem_type) {
                         func.module_source = ms;
@@ -4410,7 +4402,7 @@ fn try_lower_comparison(
     type_table: &mut TypeTable,
 ) -> Option<TirExprKind> {
     let operand_type = type_table.get(left.type_id);
-    let (impl_type_args, type_module_source): (Vec<String>, Option<ModuleSource>) = match
+    let (impl_type_args, type_module_source): (Vec<FqTypeName>, Option<ModuleSource>) = match
         operand_type
     {
         ResolvedType::Struct { module_source, .. }
@@ -4426,20 +4418,12 @@ fn try_lower_comparison(
                 // and already lowered to method calls by the elaborator.
                 return None;
             }
-            // Use the qualified type-arg mangle so the call sites
-            // synthesised here (Eq / Ord operator lowering) name
-            // their target methods with the same struct-name form
-            // the monomorphizer's `method_instantiation_name_inner`
-            // uses to set the function definition's
-            // `MethodInfo.struct_name`. Falling back to
-            // `mangle_type_name` here used to emit `Foo<String>::eq`
-            // call sites against `Foo<core:prelude/string.wado/String>::eq`
-            // function definitions and broke the inliner's
-            // recursive-function detection.
-            let args: Vec<String> = type_args
-                .iter()
-                .map(|&t| type_table.mangle_type_arg_for_generic(t))
-                .collect();
+            // The call sites synthesised here (Eq / Ord operator lowering) name
+            // their target methods with the same struct-name form the
+            // monomorphizer's `method_instantiation_name_inner` uses to set the
+            // function definition's `MethodInfo.struct_name`.
+            let args: Vec<FqTypeName> =
+                type_args.iter().map(|&t| type_table.fq_type_name(t)).collect();
             (args, Some(module_source.clone()))
         }
         _ => return None,

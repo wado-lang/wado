@@ -454,7 +454,7 @@ impl Monomorphizer {
         type_id: TypeId,
         type_table: &TypeTable,
         trait_name: Option<&str>,
-    ) -> Option<String> {
+    ) -> Option<FqTypeName> {
         let trait_name = trait_name?;
         self.newtype_own_name(type_id, type_table, |_, tid| {
             self.has_own_trait_impl(type_table, tid, trait_name)
@@ -486,8 +486,8 @@ impl Monomorphizer {
         &self,
         type_id: TypeId,
         type_table: &TypeTable,
-        has_own_impl: impl Fn(&str, TypeId) -> bool,
-    ) -> Option<String> {
+        has_own_impl: impl Fn(&FqTypeName, TypeId) -> bool,
+    ) -> Option<FqTypeName> {
         let mut tid = type_id;
         loop {
             match type_table.get_unerased(tid) {
@@ -498,7 +498,7 @@ impl Monomorphizer {
                     module_source,
                 } => {
                     let base = *base_type;
-                    let own = FqTypeName::declared(module_source, name).into_string();
+                    let own = FqTypeName::declared(module_source, name);
                     if has_own_impl(&own, tid) {
                         return Some(own);
                     }
@@ -526,7 +526,7 @@ impl Monomorphizer {
                 )
             }),
         };
-        own.as_deref() == Some(info.struct_name.as_str())
+        own.map(|n| n.to_mangled()).as_deref() == Some(info.struct_name.as_str())
     }
 
     /// Build the ordered list of `(mangled_method_name, trait_name)` formats to
@@ -562,14 +562,13 @@ impl Monomorphizer {
                 ));
             }
         };
-        if let Some(ref own) = own_name {
-            // `newtype_own_name` reports the newtype's own mangle, already fq.
-            push_for(FqTypeName::from_mangled(own.clone()));
+        if let Some(own) = own_name.clone() {
+            push_for(own);
         }
         // The key's `impl_type_args` are empty here — the instantiation is
         // spelled into the name, so the receiver keeps its type arguments.
         push_for(super::dispatch_receiver_name(type_table, receiver_type_id));
-        (own_name, names)
+        (own_name.map(|n| n.to_mangled()), names)
     }
 
     /// Build the candidate struct-name set for trait-fallback template lookup,

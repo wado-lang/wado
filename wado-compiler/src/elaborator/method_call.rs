@@ -842,35 +842,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 // Qualify the base and the arguments alike, so a concrete-generic
                 // impl's method name matches its definition (issue #1348).
-                let type_arg_names: Vec<String> = type_args
+                let type_arg_names: Vec<FqTypeName> = type_args
                     .iter()
-                    .map(|t| {
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .mangle_type_arg_for_generic(*t)
-                    })
+                    .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                     .collect();
                 let base = FqTypeName::declared(&module_source, &name);
-                let mangled = mangle_generic_name(base.as_str(), &type_arg_names);
-                (mangled, base.into_string(), type_arg_names, Some(type_args))
+                let mangled = base.clone().with_args(type_arg_names.clone());
+                (mangled, base, type_arg_names, Some(type_args))
             }
             // The raw GC array splits like a generic instance: the receiver
             // name is the full `Array<T>` spelling, but the method-owner base
             // name is "Array" (matching `impl Array<T>`'s registration).
             ResolvedType::BuiltinArray(elem) => {
-                let arg_name = self.tysys.type_table.borrow().mangle_type_arg_for_generic(elem);
+                let arg_name = self.tysys.type_table.borrow().fq_type_name(elem);
                 // `Array` is a declaration like any other, so the receiver
                 // carries its module and the base name matches `impl Array<T>`'s
                 // registration.
                 let base = self.qualified_receiver_name(TypeTable::ARRAY_TYPE_NAME);
-                let mangled = mangle_generic_name(base.as_str(), &[arg_name.clone()]);
-                (
-                    mangled,
-                    base.into_string(),
-                    vec![arg_name],
-                    Some(vec![elem]),
-                )
+                let mangled = base.clone().with_args(vec![arg_name.clone()]);
+                (mangled, base, vec![arg_name], Some(vec![elem]))
             }
             // The newtype answers the call with its own impl. It is a
             // declaration like any other, so it is named by the module that
@@ -882,33 +872,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ..
             } if matched_impl_struct_name.as_deref() == Some(name.as_str()) => {
                 let base = FqTypeName::declared(&module_source, &name);
-                (base.as_str().to_string(), base.into_string(), vec![], None)
+                (base.clone(), base, vec![], None)
             }
-            ResolvedType::Newtype { name, .. } if name.contains('<') => {
+            // A generic newtype's stored `name` is its display form, which
+            // bakes the arguments into the head (`MyArray<i32>`). Split it
+            // there — that is the newtype's own spelling, not an fq name — and
+            // qualify the head by the module that declares it.
+            ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            } if name.contains('<') => {
                 let type_args = {
                     let tt = self.tysys.type_table.borrow();
                     let ultimate = tt.get_ultimate_base_type(method_impl_type_id);
                     tt.generic_type_args(ultimate).unwrap_or_default()
                 };
-                let head = crate::name::split_base_name(&name).to_string();
-                let type_arg_names: Vec<String> = type_args
+                let head =
+                    FqTypeName::declared(&module_source, crate::name::split_base_name(&name));
+                let type_arg_names: Vec<FqTypeName> = type_args
                     .iter()
-                    .map(|t| {
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .mangle_type_arg_for_generic(*t)
-                    })
+                    .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                     .collect();
-                (name, head, type_arg_names, Some(type_args))
+                let mangled = head.clone().with_args(type_arg_names.clone());
+                (mangled, head, type_arg_names, Some(type_args))
             }
             _ => {
                 let name = self
                     .tysys
                     .type_table
                     .borrow()
-                    .mangle_type_name(method_impl_type_id);
-                (name.clone(), name, vec![], None)
+                    .fq_type_name(method_impl_type_id);
+                let head = name.head_only();
+                (name, head, vec![], None)
             }
         };
 
@@ -916,13 +912,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // E.g., `loc.describe()` where `loc: Location`, `impl Describable for Point` →
         // use "Point" so the call resolves to "Point^Describable::describe".
         if let Some(impl_name) = trait_impl_struct_name {
-            let impl_name = impl_name.into_string();
             receiver_struct_name.clone_from(&impl_name);
             base_struct_name = impl_name;
         }
 
-        let mangled_method_name =
-            MethodName::format_local(&FqTypeName::from_mangled(receiver_struct_name.clone()), trait_name.as_deref(), method_name);
+        let mangled_method_name = MethodName::format_local(
+            &receiver_struct_name,
+            trait_name.as_deref(),
+            method_name,
+        );
 
         // Build monomorph_info for method calls on generic types or with method type args
         let monomorph_info = if from_concrete_impl {
@@ -939,7 +937,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None
             } else {
                 let generic_name = MethodName::format_local(
-                    &FqTypeName::from_mangled(receiver_struct_name.clone()),
+                    &receiver_struct_name,
                     trait_name.as_deref(),
                     method_name,
                 );
@@ -963,7 +961,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 is_blanket: true,
             })
         } else if receiver_type_args.is_some() || !method_type_args.is_empty() {
-            let generic_name = MethodName::format_local(&FqTypeName::from_mangled(base_struct_name.clone()), None, method_name);
+            let generic_name = MethodName::format_local(&base_struct_name, None, method_name);
             Some(MonomorphInfo {
                 generic_name,
                 impl_type_args: receiver_type_args.unwrap_or_default(),
@@ -994,7 +992,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let base_target = match matched_ref_kind {
             Some(kind) => ImplTargetKey::Ref(kind),
-            None => self.impl_target_of(base_type_id, &base_struct_name),
+            // `impl_target_of` falls back on a written name, so hand it the
+            // declaration name rather than the module-qualified head.
+            None => self.impl_target_of(base_type_id, base_struct_name.decl_name()),
         };
         let param_is_mut = self.lookup_method_param_is_mut(&base_target, method_name);
         let mut method_info =
@@ -1574,7 +1574,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } => (
                     name.clone(),
                     module_source.clone(),
-                    format!("{module_source}/{name}"),
+                    FqTypeName::declared(module_source, name),
                     vec![],
                 ),
                 // Generic resource types (Future<T>, Stream<T>, etc.) - handle like generic structs
@@ -1584,14 +1584,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     module_source,
                     type_args,
                 } => {
-                    let type_arg_names: Vec<String> = type_args
+                    let type_arg_names: Vec<FqTypeName> = type_args
                         .iter()
-                        .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+                        .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                         .collect();
-                    let mangled = mangle_generic_name(
-                        FqTypeName::declared(module_source, name).as_str(),
-                        &type_arg_names,
-                    );
+                    let mangled =
+                        FqTypeName::declared(module_source, name).with_args(type_arg_names);
                     (
                         name.clone(),
                         module_source.clone(),
@@ -1599,20 +1597,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         type_args.clone(),
                     )
                 }
-                ResolvedType::Primitive(prim) => {
-                    let name = prim.as_str().to_string();
-                    (name.clone(), ModuleSource::primitive(), name, vec![])
-                }
+                ResolvedType::Primitive(prim) => (
+                    prim.as_str().to_string(),
+                    ModuleSource::primitive(),
+                    FqTypeName::builtin(prim.as_str()),
+                    vec![],
+                ),
                 ResolvedType::BuiltinArray(elem) => {
                     let elem = *elem;
-                    let arg_name = self.tysys.type_table.borrow().mangle_type_name(elem);
-                    // `Array` is a builtin shape: no module declares it, so the
-                    // mangle already is the receiver's fq name.
-                    let mangled = crate::name::mangle_builtin_array_type(&arg_name);
+                    let arg = self.tysys.type_table.borrow().fq_type_name(elem);
                     (
                         TypeTable::ARRAY_TYPE_NAME.to_string(),
                         ModuleSource::array(),
-                        mangled,
+                        FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME).with_args(vec![arg]),
                         vec![elem],
                     )
                 }
@@ -1626,7 +1623,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } => (
                     name.clone(),
                     module_source.clone(),
-                    format!("{module_source}/{name}"),
+                    FqTypeName::declared(module_source, name),
                     vec![],
                 ),
                 ResolvedType::GenericInstance {
@@ -1634,16 +1631,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     module_source,
                     type_args,
                 } => {
-                    // Build mangled name for generic type: List<i32>
-                    let type_arg_names: Vec<String> = type_args
+                    let args: Vec<FqTypeName> = type_args
                         .iter()
-                        .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+                        .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                         .collect();
-                    let mangled = mangle_generic_name(name, &type_arg_names);
                     (
                         name.clone(),
                         module_source.clone(),
-                        format!("{module_source}/{mangled}"),
+                        FqTypeName::declared(module_source, name).with_args(args),
                         type_args.clone(),
                     )
                 }
@@ -1658,7 +1653,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Check if the newtype itself has the static method
                     if self.has_static_method_direct(&newtype_name, &static_call.method) {
-                        (newtype_name.clone(), newtype_module, newtype_name, vec![])
+                        let fq = FqTypeName::declared(&newtype_module, &newtype_name);
+                        (newtype_name, newtype_module, fq, vec![])
                     } else {
                         // Fall back to the base type for inherited methods
                         match self.tysys.type_table.borrow().get(*base_type).clone() {
@@ -1666,18 +1662,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 name,
                                 module_source,
                                 ..
-                            } => (name.clone(), module_source, name, vec![]),
+                            } => {
+                                let fq = FqTypeName::declared(&module_source, &name);
+                                (name, module_source, fq, vec![])
+                            }
                             ResolvedType::GenericInstance {
                                 name,
                                 module_source,
                                 type_args,
                             } => {
-                                let type_arg_names: Vec<String> = type_args
+                                let args: Vec<FqTypeName> = type_args
                                     .iter()
-                                    .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+                                    .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                                     .collect();
-                                let mangled = mangle_generic_name(&name, &type_arg_names);
-                                (name, module_source, mangled, type_args)
+                                let fq =
+                                    FqTypeName::declared(&module_source, &name).with_args(args);
+                                (name, module_source, fq, type_args)
                             }
                             ResolvedType::Newtype {
                                 base_type: inner_base,
@@ -1691,32 +1691,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                             module_source,
                                             ..
                                         } => {
-                                            break (name.clone(), module_source, name, vec![]);
+                                            let fq =
+                                                FqTypeName::declared(&module_source, &name);
+                                            break (name, module_source, fq, vec![]);
                                         }
                                         ResolvedType::Newtype {
                                             base_type: next, ..
                                         } => current = next,
                                         _ => {
-                                            break (
-                                                newtype_name.clone(),
-                                                newtype_module,
-                                                newtype_name,
-                                                vec![],
+                                            let fq = FqTypeName::declared(
+                                                &newtype_module,
+                                                &newtype_name,
                                             );
+                                            break (newtype_name, newtype_module, fq, vec![]);
                                         }
                                     }
                                 }
                             }
-                            ResolvedType::Primitive(prim) => {
-                                let prim_name = prim.as_str().to_string();
-                                (
-                                    prim_name.clone(),
-                                    ModuleSource::primitive(),
-                                    prim_name,
-                                    vec![],
-                                )
+                            ResolvedType::Primitive(prim) => (
+                                prim.as_str().to_string(),
+                                ModuleSource::primitive(),
+                                FqTypeName::builtin(prim.as_str()),
+                                vec![],
+                            ),
+                            _ => {
+                                let fq = FqTypeName::declared(&newtype_module, &newtype_name);
+                                (newtype_name, newtype_module, fq, vec![])
                             }
-                            _ => (newtype_name.clone(), newtype_module, newtype_name, vec![]),
                         }
                     }
                 }
@@ -1728,12 +1729,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let flags_name = name.clone();
                     let flags_module = module_source.clone();
                     if self.has_static_method_direct(&flags_name, &static_call.method) {
-                        (flags_name.clone(), flags_module, flags_name, vec![])
+                        let fq = FqTypeName::declared(&flags_module, &flags_name);
+                        (flags_name, flags_module, fq, vec![])
                     } else {
                         (
                             "u32".to_string(),
                             ModuleSource::primitive(),
-                            "u32".to_string(),
+                            FqTypeName::builtin("u32"),
                             vec![],
                         )
                     }
@@ -1761,7 +1763,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         let mangled_func_name = MethodName::format_local(
-            &FqTypeName::from_mangled(mangled_struct_name.clone()),
+            &mangled_struct_name,
             trait_name_opt.as_deref(),
             &static_call.method,
         );
@@ -1840,9 +1842,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
             .collect();
-        let impl_only_type_arg_names: Vec<String> = struct_type_args
+        let impl_only_type_arg_names: Vec<FqTypeName> = struct_type_args
             .iter()
-            .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+            .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
             .collect();
 
         let param_is_mut = struct_name_for_lookup
@@ -1940,7 +1942,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .mangle_type_name(receiver_type_id);
+            .fq_type_name(receiver_type_id);
         let method_type_arg_names: Vec<String> = method_type_args
             .iter()
             .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))

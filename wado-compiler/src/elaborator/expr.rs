@@ -4381,7 +4381,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::FromCallFacts {
                 module_source: module_source.clone(),
                 mangled_name: method_name.clone(),
-                target_name: target_receiver,
+                target_name: target_receiver.clone(),
                 from_name,
                 from_trait_name: from_trait_name.clone(),
             },
@@ -4393,22 +4393,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     module_source,
                     name: method_name,
                     monomorph_info: None,
-                    method_info: Some(crate::name::LocalMethodName {
-                        receiver: Receiver::Type(target_name.clone()),
-                        struct_name: target_name,
-                        trait_name: Some(from_trait),
-                        base_trait_name: Some(from_trait_name),
-                        // Auto-derived `From` impl (synthesis-side): the
-                        // dispatch builder never needs `From`'s declaring
-                        // module because it's not an effect / resource.
-                        base_trait_module: None,
-                        trait_type_args: vec![],
-                        method_name: "from".to_string(),
-                        method_type_args: vec![],
-                        is_type_param_receiver: false,
-                        is_ref_impl: false,
-                        cm_name: None,
-                    }),
+                    // Auto-derived `From` impl (synthesis-side): the dispatch
+                    // builder never needs `From`'s declaring module because
+                    // it's not an effect / resource, so `base_trait_module`
+                    // stays unset.
+                    method_info: Some(crate::name::LocalMethodName::new(
+                        target_receiver,
+                        Some(from_trait),
+                        "from".to_string(),
+                    )),
                 },
                 type_args: vec![],
                 args: vec![CallArg::new(value, false)],

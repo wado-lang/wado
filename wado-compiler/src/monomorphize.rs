@@ -212,9 +212,7 @@ fn dispatch_receiver_head(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTyp
 /// carries the impl's type parameters.
 fn dispatch_receiver_name(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTypeName {
     let tid = dispatch_receiver_type(tt, type_id);
-    dispatch_receiver_identity(tt, tid).unwrap_or_else(|| {
-        crate::name::FqTypeName::from_mangled(tt.mangle_type_arg_for_generic(tid))
-    })
+    dispatch_receiver_identity(tt, tid).unwrap_or_else(|| tt.fq_type_name(tid))
 }
 
 /// Determine the module where trait implementations for a concrete type are defined.
