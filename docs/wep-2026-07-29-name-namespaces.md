@@ -356,10 +356,20 @@ Everything measurable about this lookup agrees. The receiver is a
 present; the query key is `Decl((core:collections, "TreeMap"))`; the
 registration key is built from `get_type_name_static`, which answers `TreeMap`
 for the header. Query and registration therefore look identical, and the probe
-still finds nothing. Whatever is wrong is not the key, and the next session
-should instrument `probe_trait_impls` itself — print what the index actually
-holds for that target — rather than continue reasoning about how the key is
-built.
+still finds nothing. Whatever is wrong is not the key.
+
+Instrumenting `probe_trait_impls` says why: for
+`Decl((core:collections, "TreeMap"))` it finds **10 impl refs** with 2 concrete
+arguments. The impls are registered and reached. So the miss is in the *filter*,
+not the lookup — either the `trait_matches` predicate or the per-impl
+projection.
+
+That fits the error text, which names the trait `IndexAssign<K>` rather than
+`IndexAssign`. The header is `impl<K, V> IndexAssign<K> for TreeMap<K, V>`, so
+if the recorded trait name carries its argument while the predicate compares
+against the bare name, nothing matches. WEP 2026-07-28 left `split_base_name` on
+trait names as one of the two remaining string-parsers, which is where a trait
+name's base is stripped — so that is the next thing to read.
 
 Deriving through the unerased view was tried — spelling a newtype / flags
 argument by its own declaration rather than its base — and made things *worse*:
