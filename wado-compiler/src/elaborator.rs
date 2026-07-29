@@ -1911,7 +1911,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),
             );
-            let qualified_struct_name = scope.qualified_receiver_name(&struct_name).into_string();
+            let qualified_struct_name = scope.qualified_receiver_name(&struct_name);
             let receiver = match RefKind::from_ast(&impl_block.ty) {
                 Some(kind) => Receiver::Ref(kind),
                 None => Receiver::Type(qualified_struct_name.clone()),
@@ -1931,18 +1931,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             // Concrete-impl owner (`impl List<u8>`): the receiver's
             // qualified mangle, matching call sites (issue #1348).
-            let concrete_owner: Option<String> = if scope.impl_is_concrete_instantiation(
-                &impl_block.ty,
-                &impl_block.type_params,
-                &scope.current_module_source,
-            ) {
+            let concrete_owner: Option<crate::name::FqTypeName> = if scope
+                .impl_is_concrete_instantiation(
+                    &impl_block.ty,
+                    &impl_block.type_params,
+                    &scope.current_module_source,
+                ) {
                 let tt = scope.tysys.type_table.borrow();
                 let peeled = tt.peel_refs(self_type);
                 matches!(
                     tt.get(peeled),
                     crate::tir::ResolvedType::GenericInstance { .. }
                 )
-                .then(|| tt.mangle_type_name(peeled))
+                .then(|| tt.fq_type_name(peeled))
             } else {
                 None
             };

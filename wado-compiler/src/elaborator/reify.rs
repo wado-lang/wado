@@ -1355,12 +1355,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // decided AST-side by the elaborator and recorded on the facts so it
         // agrees with method dispatch's `from_concrete_impl` (and is not fooled
         // by a param named like a known type). Methods become concrete fns.
-        let concrete_owner: Option<String> = facts.concrete_owner.clone();
+        let concrete_owner: Option<FqTypeName> = facts.concrete_owner.clone();
 
         impl_block
             .methods
             .iter()
-            .filter_map(|method| self.reify_method(method, &facts, concrete_owner.as_deref()))
+            .filter_map(|method| self.reify_method(method, &facts, concrete_owner.as_ref()))
             .collect()
     }
 
@@ -1403,7 +1403,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Concrete generic instantiation owner (`"List<u8>"`) for
         // `impl Tag for List<u8>`, so default methods are also per-instantiation
         // concrete functions. Recorded AST-side by the elaborator.
-        let concrete_owner: Option<String> = facts.concrete_owner.clone();
+        let concrete_owner: Option<FqTypeName> = facts.concrete_owner.clone();
 
         let trait_decl_name = super::Elaborator::<H>::get_type_name_static(trait_ast);
         let Some(trait_sig) = super::trait_query::trait_sig_by_name_with(
@@ -1454,7 +1454,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 std::mem::replace(&mut self.current_module_source, trait_module.clone());
             let saved_module_items = std::mem::replace(&mut self.current_module_items, trait_items);
 
-            let tir_func_opt = self.reify_method(default_method, &facts, concrete_owner.as_deref());
+            let tir_func_opt = self.reify_method(default_method, &facts, concrete_owner.as_ref());
 
             self.current_module_items = saved_module_items;
             self.current_module_source = saved_module_source;
@@ -1469,9 +1469,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // safety net for the synthesis path and matches the
                 // combined walk byte-for-byte.
                 tir_func.name = MethodName::format_local(
-                    &FqTypeName::from_mangled(
-                        concrete_owner.as_deref().unwrap_or(&struct_name).to_string(),
-                    ),
+                    concrete_owner.as_ref().unwrap_or(&struct_name),
                     Some(&trait_name_mangled),
                     &default_method.name,
                 );
@@ -1502,7 +1500,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // function: named `List<u8>::method`, with no impl type params and no
         // monomorphization, so distinct instantiations stay distinct and call
         // sites resolve it directly (mirroring a monomorphized instance).
-        concrete_owner: Option<&str>,
+        concrete_owner: Option<&FqTypeName>,
     ) -> Option<TirFunction> {
         use crate::ast::SelfKind;
         use crate::name::LocalMethodName;
@@ -1588,7 +1586,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // special-cases and the `&T`-blanket "bare `&`" carve-out that
         // `get_type_name` (module.rs:581) already encodes — exactly the
         // parity-bug class WEP 2026-05-26 §"Stage 7 gap" calls out.
-        let base_struct_name = facts.struct_name.clone();
+        let _base_struct_name = facts.struct_name.clone();
         // Mangled / display names — read straight off the per-method facts
         // `resolve_method` already publishes; reify no longer runs
         // `format_local` itself.
@@ -1626,11 +1624,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // handle it, and `impl List<u8>` vs `impl List<i32>` stay distinct.
         if let Some(owner) = concrete_owner {
             mangled_name = crate::name::MethodName::format_local(
-                &FqTypeName::from_mangled(owner),
+                owner,
                 facts.trait_name_mangled.as_deref(),
                 &func.name,
             );
-            method_info = method_info.with_substituted_struct_name(owner, &base_struct_name);
+            method_info = method_info.with_substituted_struct_name(owner);
             impl_type_params = Vec::new();
         }
 
@@ -6398,7 +6396,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         None
                     } else {
                         Some(MonomorphInfo {
-                            generic_name: format!("{}::new_literal", facts.builder_base_name.as_str()),
+                            generic_name: format!("{}::new_literal", facts.builder_base_name),
                             impl_type_args: facts.type_arg_ids.clone(),
                             method_type_args: vec![],
                             is_blanket: false,
@@ -6471,7 +6469,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         None
                     } else {
                         Some(MonomorphInfo {
-                            generic_name: format!("{}::push_literal", facts.builder_base_name.as_str()),
+                            generic_name: format!("{}::push_literal", facts.builder_base_name),
                             impl_type_args: facts.type_arg_ids.clone(),
                             method_type_args: vec![],
                             is_blanket: false,
@@ -6511,7 +6509,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     None
                 } else {
                     Some(MonomorphInfo {
-                        generic_name: format!("{}::build", facts.builder_base_name.as_str()),
+                        generic_name: format!("{}::build", facts.builder_base_name),
                         impl_type_args: facts.type_arg_ids.clone(),
                         method_type_args: vec![],
                         is_blanket: false,
@@ -6619,7 +6617,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         None
                     } else {
                         Some(MonomorphInfo {
-                            generic_name: format!("{}::new_literal", facts.builder_base_name.as_str()),
+                            generic_name: format!("{}::new_literal", facts.builder_base_name),
                             impl_type_args: facts.type_arg_ids.clone(),
                             method_type_args: vec![],
                             is_blanket: false,
@@ -6743,7 +6741,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 None
             } else {
                 Some(MonomorphInfo {
-                    generic_name: format!("{}::build", facts.builder_base_name.as_str()),
+                    generic_name: format!("{}::build", facts.builder_base_name),
                     impl_type_args: facts.type_arg_ids.clone(),
                     method_type_args: vec![],
                     is_blanket: false,
@@ -6823,8 +6821,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name: facts.mangled_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName {
-                        receiver: Receiver::Type(facts.target_name.clone()),
-                        struct_name: facts.target_name,
+                        struct_name: facts.target_name.to_mangled(),
+                        receiver: Receiver::Type(facts.target_name),
+                        struct_type_args: Vec::new(),
                         trait_name: Some(from_trait),
                         base_trait_name: Some(facts.from_trait_name),
                         base_trait_module: None,

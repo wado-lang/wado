@@ -39,7 +39,7 @@ type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 struct PendingInspectEdge {
     closure_module: ModuleSource,
     /// `__Closure_{functor_id}` struct name.
-    struct_name: String,
+    struct_name: crate::name::FqTypeName,
     /// `(arity, return_type)` key into `InspectableSignatures`.
     key: (usize, TypeId),
 }
@@ -914,19 +914,13 @@ fn function_id_for(func: &NirFunction) -> FunctionId {
                 func.name.clone(),
                 monomorph_info.generic_name.clone(),
             ))
-        } else if let Some((struct_name, trait_name, method_name)) =
-            crate::name::split_local_method_name(&func.name)
-        {
-            FunctionId::Method(MethodName::new(
-                module_source.clone(),
-                struct_name.to_string(),
-                trait_name.map(String::from),
-                method_name.to_string(),
-            ))
         } else {
+            // `func.name` is `format_local(fq_struct, trait, method)`, so
+            // splitting it back apart only recovers what `info` already holds
+            // structurally. Read the structure.
             FunctionId::Method(MethodName::new(
                 module_source.clone(),
-                info.struct_name.clone(),
+                info.fq_struct_name(),
                 info.trait_name.clone(),
                 info.method_name.clone(),
             ))
@@ -1054,7 +1048,7 @@ impl<'a> DceWalker<'a> {
         let original_callee_module = func.module_source.clone();
         let func_name = func.name.clone();
 
-        if func.method_info.is_some() {
+        if let Some(call_info) = func.method_info.as_ref() {
             // Static method call (e.g. `Box::get`, `String^Display::fmt`):
             // `func_name` is `"Struct::method"` or `"Struct^Trait::method"`.
             let callee_id = if func.is_monomorphized() {
@@ -1068,22 +1062,14 @@ impl<'a> DceWalker<'a> {
                     base_name,
                 ))
             } else {
-                let callee_module = original_callee_module;
-                if let Some((struct_name, trait_name, method_name)) =
-                    crate::name::split_local_method_name(&func_name)
-                {
-                    FunctionId::Method(MethodName::new(
-                        callee_module,
-                        struct_name.to_string(),
-                        trait_name.map(String::from),
-                        method_name.to_string(),
-                    ))
-                } else {
-                    FunctionId::Free(FreeFunctionName::from_module_source(
-                        &callee_module,
-                        &func_name,
-                    ))
-                }
+                // The parts `func_name` would be split into are already on
+                // `call_info`, which is what built it.
+                FunctionId::Method(MethodName::new(
+                    original_callee_module,
+                    call_info.fq_struct_name(),
+                    call_info.trait_name.clone(),
+                    call_info.method_name.clone(),
+                ))
             };
             self.analysis.callees.insert(callee_id);
 
@@ -1184,7 +1170,7 @@ impl<'a> DceWalker<'a> {
         if let Some(info) = func.method_info.as_ref() {
             let resolved_id = FunctionId::Method(MethodName::new(
                 func.module_source.clone(),
-                info.struct_name.clone(),
+                info.fq_struct_name(),
                 info.trait_name.clone(),
                 info.method_name.clone(),
             ));
@@ -1195,8 +1181,8 @@ impl<'a> DceWalker<'a> {
         // the newtype's own methods as reachable (e.g., Perms^Inspect::inspect).
         if let Some((newtype_name, newtype_module)) = newtype_info {
             let method_id = FunctionId::Method(MethodName::new(
-                newtype_module,
-                newtype_name,
+                newtype_module.clone(),
+                FqTypeName::declared(&newtype_module, &newtype_name),
                 trait_name.clone(),
                 method_name.clone(),
             ));
@@ -1208,6 +1194,7 @@ impl<'a> DceWalker<'a> {
                 ref name,
                 is_monomorphized: true,
                 base_name: Some(ref base_struct),
+                ref module_source,
                 ..
             } => {
                 // Monomorphized struct method (e.g. `Box<i32>::get`):
@@ -1215,18 +1202,16 @@ impl<'a> DceWalker<'a> {
                 // route the callee id through `current_module`. The base
                 // method name uses the original generic struct name so
                 // the inlining-induced graph stays mergeable.
-                let mangled_func_name =
-                    MethodName::format_local(
-                        &FqTypeName::from_mangled(name.clone()),
-                        trait_name.as_deref(),
-                        &method_name,
-                    );
-                let base_method_name =
-                    MethodName::format_local(
-                        &FqTypeName::from_mangled(base_struct.clone()),
-                        trait_name.as_deref(),
-                        &method_name,
-                    );
+                let mangled_func_name = MethodName::format_local(
+                    &FqTypeName::declared(module_source, name),
+                    trait_name.as_deref(),
+                    &method_name,
+                );
+                let base_method_name = MethodName::format_local(
+                    &FqTypeName::declared(module_source, base_struct),
+                    trait_name.as_deref(),
+                    &method_name,
+                );
                 let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
                     self.current_module.clone(),
                     mangled_func_name,
@@ -1243,7 +1228,7 @@ impl<'a> DceWalker<'a> {
                 {
                     let original_method_id = FunctionId::Method(MethodName::new(
                         func.module_source.clone(),
-                        info.struct_name.clone(),
+                        info.fq_struct_name(),
                         info.trait_name.clone(),
                         info.method_name,
                     ));
@@ -1259,7 +1244,7 @@ impl<'a> DceWalker<'a> {
                 // Non-monomorphized struct method.
                 let method_id = FunctionId::Method(MethodName::new(
                     module_source.clone(),
-                    name,
+                    FqTypeName::declared(&module_source, &name),
                     trait_name,
                     method_name,
                 ));
@@ -1274,7 +1259,7 @@ impl<'a> DceWalker<'a> {
                 {
                     let alt_method_id = FunctionId::Method(MethodName::new(
                         func_module,
-                        info.struct_name.clone(),
+                        info.fq_struct_name(),
                         info.trait_name.clone(),
                         info.method_name,
                     ));
@@ -1289,7 +1274,7 @@ impl<'a> DceWalker<'a> {
                 }
                 let method_id = FunctionId::Method(MethodName::new(
                     ModuleSource::primitive(),
-                    prim.as_str().to_string(),
+                    FqTypeName::builtin(prim.as_str()),
                     trait_name,
                     method_name,
                 ));
@@ -1299,7 +1284,7 @@ impl<'a> DceWalker<'a> {
                 // `()` methods: `().to_string()`, `().fmt(&f)`, etc.
                 let method_id = FunctionId::Method(MethodName::new(
                     ModuleSource::primitive(),
-                    TypeTable::UNIT_TYPE_NAME.to_string(),
+                    FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME),
                     trait_name,
                     method_name,
                 ));
@@ -1309,15 +1294,13 @@ impl<'a> DceWalker<'a> {
                 name, type_args, ..
             } if TypeTable::is_tuple_type(&name) => {
                 // Tuple method call: synthesized with struct_name `"[]<f64,f64>"`.
-                let type_arg_names: Vec<String> = type_args
+                let elements: Vec<FqTypeName> = type_args
                     .iter()
-                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .map(|t| self.type_table.fq_type_name(*t))
                     .collect();
-                let mangled_struct =
-                    mangle_generic_name(TypeTable::TUPLE_TYPE_NAME, &type_arg_names);
                 let method_id = FunctionId::Method(MethodName::new(
                     self.current_module.clone(),
-                    mangled_struct,
+                    FqTypeName::builtin(TypeTable::TUPLE_TYPE_NAME).with_args(elements),
                     trait_name,
                     method_name,
                 ));
@@ -1359,8 +1342,8 @@ impl<'a> DceWalker<'a> {
             } => {
                 // Enum method (user-defined or auto-derived trait impl).
                 let method_id = FunctionId::Method(MethodName::new(
-                    module_source,
-                    name,
+                    module_source.clone(),
+                    FqTypeName::declared(&module_source, &name),
                     trait_name,
                     method_name,
                 ));
@@ -1379,8 +1362,8 @@ impl<'a> DceWalker<'a> {
             } => {
                 // Variant method, e.g. `Shape^Inspect::inspect`.
                 let method_id = FunctionId::Method(MethodName::new(
-                    module_source,
-                    name,
+                    module_source.clone(),
+                    FqTypeName::declared(&module_source, &name),
                     trait_name,
                     method_name,
                 ));
@@ -1392,14 +1375,15 @@ impl<'a> DceWalker<'a> {
                 ..
             } => {
                 // `Fn<arity, ret>` method, e.g. `Fn<2,i32>^Inspect::inspect`.
-                let type_arg_names = vec![
-                    params.len().to_string(),
-                    self.type_table.mangle_type_name(return_type),
+                // The arity is a literal, not a type — a builtin head with no
+                // module, same as the `Fn` shape itself.
+                let shape_args = vec![
+                    FqTypeName::builtin(&params.len().to_string()),
+                    self.type_table.fq_type_name(return_type),
                 ];
-                let mangled_struct = mangle_generic_name("Fn", &type_arg_names);
                 let method_id = FunctionId::Method(MethodName::new(
                     self.current_module.clone(),
-                    mangled_struct,
+                    FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT).with_args(shape_args),
                     trait_name,
                     method_name,
                 ));
@@ -1409,14 +1393,13 @@ impl<'a> DceWalker<'a> {
                 name, type_args, ..
             } => {
                 // Generic resource method, e.g. `Future<T>^Inspect::inspect`.
-                let type_arg_names: Vec<String> = type_args
+                let resource_args: Vec<FqTypeName> = type_args
                     .iter()
-                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .map(|t| self.type_table.fq_type_name(*t))
                     .collect();
-                let mangled_struct = mangle_generic_name(name.as_str(), &type_arg_names);
                 let method_id = FunctionId::Method(MethodName::new(
                     self.current_module.clone(),
-                    mangled_struct,
+                    FqTypeName::builtin(name.as_str()).with_args(resource_args),
                     trait_name,
                     method_name,
                 ));
@@ -1453,8 +1436,7 @@ impl<'a> DceWalker<'a> {
                 "{prefix}{functor_id}",
                 prefix = crate::name::CLOSURE_STRUCT_PREFIX,
             ),
-        )
-        .into_string();
+        );
         self.analysis
             .callees
             .insert(FunctionId::Method(MethodName::new(
@@ -1575,7 +1557,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
         ResolvedType::Primitive(prim) => {
             let method_id = FunctionId::Method(MethodName::new(
                 ModuleSource::primitive(),
-                prim.as_str().to_string(),
+                FqTypeName::builtin(prim.as_str()),
                 None,
                 "to_string".to_string(),
             ));
@@ -1584,7 +1566,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
         ResolvedType::Unit => {
             let method_id = FunctionId::Method(MethodName::new(
                 ModuleSource::primitive(),
-                TypeTable::UNIT_TYPE_NAME.to_string(),
+                FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME),
                 None,
                 "to_string".to_string(),
             ));

@@ -577,7 +577,7 @@ pub(crate) struct FromCallFacts {
     pub(crate) mangled_name: String,
     /// `type_name(target_type)` — the call's struct prefix
     /// (`LocalMethodName::struct_name` / `base_struct_name`).
-    pub(crate) target_name: String,
+    pub(crate) target_name: crate::name::FqTypeName,
     /// `type_name(from_type)` — the conversion source type's name,
     /// used to build `LocalMethodName::trait_name`'s `From<…>` form.
     pub(crate) from_name: String,
@@ -607,8 +607,8 @@ pub(crate) struct SequenceCoercionFacts {
     pub(crate) builder_base_name: crate::name::FqTypeName,
     /// Type-arg `TypeId`s on the builder (e.g. `[i32]` for `List<i32>`).
     pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
-    /// Type-arg display names (mangled) parallel to `type_arg_ids`.
-    pub(crate) type_arg_names: Vec<String>,
+    /// Type-arg names parallel to `type_arg_ids`, kept structured.
+    pub(crate) type_arg_names: Vec<crate::name::FqTypeName>,
     /// When `Some`, the literal is being coerced into a newtype over
     /// the builder's output — reify wraps the final `__b.build()` call
     /// in a `Cast` to this newtype `TypeId`.
@@ -646,8 +646,8 @@ pub(crate) struct KeyValueCoercionFacts {
     pub(crate) builder_base_name: crate::name::FqTypeName,
     /// Type-arg `TypeId`s on the builder.
     pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
-    /// Type-arg display names (mangled) parallel to `type_arg_ids`.
-    pub(crate) type_arg_names: Vec<String>,
+    /// Type-arg names parallel to `type_arg_ids`, kept structured.
+    pub(crate) type_arg_names: Vec<crate::name::FqTypeName>,
     /// `true` when the trait is `KeyValueLiteralBuilder` (new API
     /// taking a capacity arg + emitting `__b.build()`); `false` for
     /// the legacy `KeyValueLiteral` shape that breaks with `__b`.
@@ -881,7 +881,7 @@ pub(crate) struct ImplFacts {
     /// `get_type_name` already encodes — `module.rs:581`). Keeping the
     /// canonical name on the impl facts prevents the parity-bug class
     /// called out in WEP 2026-05-26 §"Stage 7 gap".
-    pub(crate) struct_name: String,
+    pub(crate) struct_name: crate::name::FqTypeName,
     /// The impl target's typed receiver, decided from the AST type at record
     /// time (`Receiver::Ref` for `&T` / `&mut T`, `Receiver::Type` otherwise).
     /// Reify builds the method's `LocalMethodName` from this so a ref impl's
@@ -896,7 +896,7 @@ pub(crate) struct ImplFacts {
     /// declared impl type params excluded) so it agrees with method dispatch's
     /// `from_concrete_impl`, regardless of how `self_type` resolved a param
     /// that happens to be named like a known type.
-    pub(crate) concrete_owner: Option<String>,
+    pub(crate) concrete_owner: Option<crate::name::FqTypeName>,
 }
 
 /// Operator-dispatch decision recorded when the elaborator lowers a

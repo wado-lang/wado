@@ -4367,11 +4367,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Use "From<SourceType>" as the trait name in mangled names to disambiguate
         // multiple From impls on the same target type.
         let from_trait = format!("{from_trait_name}<{from_name}>");
-        let method_name = MethodName::format_local(
-            &self.qualified_receiver_name(&target_name),
-            Some(&from_trait),
-            "from",
-        );
+        // The receiver the method name is built from — the same value reify
+        // puts on the call's `method_info`, so the two cannot drift.
+        let target_receiver = self.qualified_receiver_name(&target_name);
+        let method_name = MethodName::format_local(&target_receiver, Some(&from_trait), "from");
 
         // Find the module source that provides the From impl
         let module_source = self.find_from_impl_module(&target_name, &from_name);
@@ -4382,7 +4381,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::FromCallFacts {
                 module_source: module_source.clone(),
                 mangled_name: method_name.clone(),
-                target_name: target_name.clone(),
+                target_name: target_receiver,
                 from_name,
                 from_trait_name: from_trait_name.clone(),
             },

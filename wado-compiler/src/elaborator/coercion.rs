@@ -588,28 +588,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Get type args for monomorphization from builder type
         let builder_base_name = self.tysys.fq_receiver_head(builder_type);
-        let (type_arg_names, type_arg_ids): (Vec<String>, Vec<TypeId>) = {
+        let (type_arg_names, type_arg_ids): (Vec<FqTypeName>, Vec<TypeId>) = {
             let tt = self.tysys.type_table.borrow();
             match tt.get(builder_type) {
                 ResolvedType::GenericInstance { type_args, .. } => {
-                    let names: Vec<String> = type_args
-                        .iter()
-                        .map(|&id| tt.mangle_type_name(id))
-                        .collect();
+                    let names: Vec<FqTypeName> =
+                        type_args.iter().map(|&id| tt.fq_type_name(id)).collect();
                     (names, type_args.clone())
                 }
                 _ => (Vec::new(), Vec::new()),
             }
         };
 
-        let mangled_builder_name = if type_arg_names.is_empty() {
-            builder_base_name.clone()
-        } else {
-            FqTypeName::from_mangled(crate::name::mangle_generic_name(
-                builder_base_name.as_str(),
-                &type_arg_names,
-            ))
-        };
+        let mangled_builder_name = builder_base_name.clone().with_args(type_arg_names.clone());
 
         let new_mangled_name =
             MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
@@ -758,28 +749,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let span = expr.span();
 
-        let (type_arg_names, type_arg_ids): (Vec<String>, Vec<TypeId>) = {
+        let (type_arg_names, type_arg_ids): (Vec<FqTypeName>, Vec<TypeId>) = {
             let tt = self.tysys.type_table.borrow();
             match tt.get(builder_type) {
                 ResolvedType::GenericInstance { type_args, .. } => {
-                    let names: Vec<String> = type_args
-                        .iter()
-                        .map(|&id| tt.mangle_type_name(id))
-                        .collect();
+                    let names: Vec<FqTypeName> =
+                        type_args.iter().map(|&id| tt.fq_type_name(id)).collect();
                     (names, type_args.clone())
                 }
                 _ => (Vec::new(), Vec::new()),
             }
         };
 
-        let mangled_builder_name = if type_arg_names.is_empty() {
-            builder_base_name.clone()
-        } else {
-            FqTypeName::from_mangled(crate::name::mangle_generic_name(
-                builder_base_name.as_str(),
-                &type_arg_names,
-            ))
-        };
+        let mangled_builder_name = builder_base_name.clone().with_args(type_arg_names.clone());
 
         let new_mangled_name =
             MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
