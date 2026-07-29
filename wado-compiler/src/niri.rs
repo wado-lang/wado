@@ -262,7 +262,13 @@ impl Callee {
     }
 
     fn writes_receiver(&self) -> bool {
-        self.mut_params.first().copied().unwrap_or(false)
+        self.writes_param(0)
+    }
+
+    /// Whether the parameter at `index` is a `&mut T` borrow — the only kind
+    /// that reaches the caller's storage.
+    fn writes_param(&self, index: usize) -> bool {
+        self.mut_params.get(index).copied().unwrap_or(false)
     }
 
     /// Whether the parameter at `index` is one a passing read describes. A
@@ -723,6 +729,19 @@ fn place_of(body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
     }
 }
 
+/// How many of `places` reach storage the place `(root, path)` reaches. Two
+/// places overlap when one is a prefix of the other: `c.repr` covers `c`, and
+/// `c.repr` and `c.used` cover nothing of each other.
+fn overlapping_places(places: &[(u32, Vec<u32>)], root: u32, path: &[u32]) -> usize {
+    places
+        .iter()
+        .filter(|(other_root, other_path)| {
+            *other_root == root
+                && (other_path.starts_with(path) || path.starts_with(other_path))
+        })
+        .count()
+}
+
 /// `base` with the value at `path` replaced by `new`. `None` when the path does
 /// not reach a field the value has.
 fn value_with_path(base: &Value, path: &[u32], new: Value) -> Option<Value> {
@@ -884,8 +903,13 @@ impl ExecutedWrites {
                 }
             }
             for (i, arg) in args.iter().enumerate() {
-                match (arg.is_mut, at_statement) {
-                    (false, _) if callee.reads_only(first_arg + i) => {
+                // `ArenaCallArg::is_mut` is the callee's `mut x: T` prefix — a
+                // parameter it may rebind in its own copy, which reaches no
+                // caller storage. Only `&mut T` does, and that is the
+                // parameter's kind.
+                let index = first_arg + i;
+                match (callee.writes_param(index), at_statement) {
+                    (false, _) if callee.reads_only(index) => {
                         self.record(body, arg.expr, Reach::Read);
                     }
                     (true, true) => self.record(body, arg.expr, Reach::Write),
@@ -2504,10 +2528,17 @@ impl<'a> Interpreter<'a> {
                 let op = *op;
                 self.exec_expr_stmt_a(body, op)
             }
-            StmtKind::Return { value } => {
-                let lattice = self.eval_optional_operand_a(body, *value);
-                Flow::Return(lattice)
-            }
+            StmtKind::Return { value } => match *value {
+                None => Flow::Return(Lattice::Unevaluated),
+                // A returned expression the frame could not evaluate is one it
+                // stepped over, and whatever that expression would have
+                // written did not happen. The run has to be abandoned rather
+                // than reported as one that reached the end.
+                Some(op) => match self.eval_operand_a(body, op) {
+                    lattice @ (Lattice::Const(_) | Lattice::NonConst) => Flow::Return(lattice),
+                    Lattice::Unevaluated => Flow::Bail,
+                },
+            },
             StmtKind::If {
                 condition,
                 then_block,
@@ -2951,16 +2982,29 @@ impl<'a> Interpreter<'a> {
 
         let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());
         let mut targets: Vec<(u32, u32, Vec<u32>)> = Vec::new();
+        let mut places: Vec<(u32, Vec<u32>)> = Vec::new();
         for (arg, param) in args.iter().zip(&callee.params) {
+            let place = place_of(body, *arg);
             let value = if param.is_mut_ref {
-                let (root, path) = place_of(body, *arg)?;
+                let (root, path) = place.clone()?;
                 let value = self.place_value_a(root, &path)?;
                 targets.push((param.local_index, root, path));
                 value
             } else {
                 self.operand_lattice_folded_a(body, *arg).as_const()?
             };
+            places.extend(place);
             bound.push((param.local_index, value));
+        }
+        // Each parameter binds its own snapshot and each write-back replays
+        // whole, so two arguments naming the same storage would let the later
+        // one undo the earlier. Wado has no borrow checker, so `f(&mut v, &v)`
+        // is ordinary source; the frame declines it and the call runs.
+        if targets
+            .iter()
+            .any(|(_, root, path)| overlapping_places(&places, *root, path) > 1)
+        {
+            return None;
         }
 
         self.step_budget -= 1;

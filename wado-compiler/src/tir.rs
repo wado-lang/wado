@@ -1047,25 +1047,26 @@ impl TypeTable {
     /// writes as `{ repr, used }`. Shape does not identify one: a struct over
     /// an array and an `i32` looks the same and means something else, so the
     /// answer comes from the registered item rather than the field positions.
+    ///
+    /// By declared name, as everywhere else the compiler asks this — a
+    /// monomorphized instance carries the instantiation's module, not the one
+    /// the generic was declared in.
     #[must_use]
     pub fn is_seq_container(&self, type_id: TypeId) -> bool {
-        let ResolvedType::Struct {
-            name,
-            module_source,
-            base_name,
-            ..
-        } = self.get(type_id)
-        else {
-            return false;
+        let declared = match self.get(type_id) {
+            ResolvedType::Struct {
+                name, base_name, ..
+            } => base_name.as_deref().unwrap_or(name.as_str()),
+            ResolvedType::GenericInstance { name, .. } => name.as_str(),
+            _ => return false,
         };
-        let declared = base_name.as_deref().unwrap_or(name.as_str());
         [
             crate::compiler_item::CompilerItem::String,
             crate::compiler_item::CompilerItem::List,
         ]
         .into_iter()
         .filter_map(|item| self.compiler_items().struct_owned_opt(item))
-        .any(|(owner, item_name)| owner == *module_source && item_name == declared)
+        .any(|(_, item_name)| item_name == declared)
     }
 
     /// Find the `TypeId` of a user-declared type (struct, enum, variant, flags,
