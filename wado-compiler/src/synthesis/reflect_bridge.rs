@@ -30,16 +30,17 @@ pub fn synthesize_monomorphized_reflect_bridges(flat: &mut FlatPackage) {
 /// `$field_get$S$F` for each monomorphized struct instantiated from a
 /// `ReflectStruct`-derived generic base.
 fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<TirFunction>>>) {
-    let targets: Vec<(usize, String)> = {
+    let targets: Vec<(usize, String, Vec<TypeId>)> = {
         let tt = flat.type_table.borrow();
         flat.structs
             .iter()
             .enumerate()
             .filter_map(|(i, s)| {
-                let base = &s.monomorph_info.as_ref()?.generic_name;
+                let mono = s.monomorph_info.as_ref()?;
+                let base = &mono.generic_name;
                 let base_decl = tt.decl_by_name(base, &s.module_source)?;
                 tt.has_generic_assoc_type_def_for_decl(base_decl, REFLECT_MEMBERS_ASSOC)
-                    .then(|| (i, base.clone()))
+                    .then(|| (i, base.clone(), mono.impl_type_args.clone()))
             })
             .collect()
     };
@@ -51,7 +52,7 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
     // helper is named after, so two ids that spell the same way would still
     // produce one name twice. The variant path keys the same way.
     let mut seen_subjects: crate::hashmap::IndexSet<String> = crate::hashmap::IndexSet::default();
-    for (index, base_name) in targets {
+    for (index, base_name, impl_type_args) in targets {
         let decl = &flat.structs[index];
         let module_source = decl.module_source.clone();
         let fields: Vec<(String, TypeId, u32)> = decl
@@ -61,14 +62,12 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
             .collect();
         let (subject, ref_subject) = {
             let mut tt = flat.type_table.borrow_mut();
-            // The instantiation site already registered this type; look it up
-            // by the spelling the struct index is keyed on rather than minting
-            // one. Minting here with no arguments would create a second,
-            // argument-less type that is not the instance the declaration is.
-            let subject = tt
-                .find_struct_by_name(&decl.name, &module_source)
-                .unwrap_or_else(|| tt.make_struct(decl.name.clone(), module_source.clone()));
-            let _ = base_name;
+            // The instantiation, not the declaration: `decl.name` alone does
+            // not identify it, and `monomorph_info` carries the arguments the
+            // instance was made with. Minting here would create a second type
+            // that is not the instance this declaration describes.
+            let subject =
+                tt.make_monomorphized_struct_from_args(base_name, module_source.clone(), impl_type_args);
             let ref_subject = tt.make_ref(subject);
             (subject, ref_subject)
         };

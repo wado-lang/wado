@@ -1597,6 +1597,21 @@ impl TypeTable {
         })
     }
 
+    /// Intern the instantiation of `base_name` with `type_args`, deriving its
+    /// rendered spelling rather than taking one from the caller.
+    pub fn make_monomorphized_struct_from_args(
+        &mut self,
+        base_name: String,
+        module_source: ModuleSource,
+        type_args: Vec<TypeId>,
+    ) -> TypeId {
+        self.intern(ResolvedType::Struct {
+            decl_name: base_name,
+            module_source,
+            type_args,
+        })
+    }
+
     pub fn make_variant(&mut self, name: String, module_source: ModuleSource) -> TypeId {
         self.intern(ResolvedType::Variant {
             name,
