@@ -311,11 +311,11 @@ type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // Typ
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(70)
 
-type "functype//core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<u8>>") -> ref null "core:prelude//List<u8>";  // TypeId(71)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<u8>>") -> ref null "core:prelude//List<u8>";  // TypeId(71)
 
-type "functype//core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push" = fn(ref "core:prelude//List<core:prelude/list.wado/List<u8>>", ref "core:prelude//List<u8>");  // TypeId(72)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push" = fn(ref "core:prelude//List<core:prelude/list.wado/List<u8>>", ref "core:prelude//List<u8>");  // TypeId(72)
 
-type "functype//core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow" = fn(ref "core:prelude//List<core:prelude/list.wado/List<u8>>");  // TypeId(73)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow" = fn(ref "core:prelude//List<core:prelude/list.wado/List<u8>>");  // TypeId(73)
 
 type "functype//wasi/future-new:transmission-http" = fn() -> i64;  // TypeId(74)
 
@@ -512,7 +512,7 @@ fn "stream_http_echo.wado/handle"(request) {
         l1: loop {
             chunk_7 = "core:rt/cm_stream_read_u8"(body_stream, 4096);
             break_if b0 chunk_7.used == 0;
-            "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(chunks, chunk_7);
+            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(chunks, chunk_7);
             continue l1;
         };
     };
@@ -823,7 +823,7 @@ fn "stream_http_echo.wado/handle"(request) {
     __iter_15 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<u8>>" { repr: chunks.repr, index: 0, end: chunks.used };
     b64: block {
         l65: loop {
-            __match_173 = "core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^Iterator::next"(__iter_15);
+            __match_173 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^Iterator::next"(__iter_15);
             if ref.is_null(__match_173) == 0 {
                 chunk_16 = ref.as_non_null(__match_173);
                 "core:rt/cm_stream_write_u8"(tx_186, chunk_16);
@@ -1297,7 +1297,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^Iterator::next"(self) {
     let item: ref "core:prelude//List<u8>";
     let v: ref "core:prelude//List<u8>";
     if self.index >= self.end {
@@ -1309,18 +1309,18 @@ fn "core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^Iterator:
     return item;
 }
 
-fn "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(self, value) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(self, value) {
     let used: i32;
     used = self.used;
     if @unlikely(used >= builtin::array_len(self.repr)) {
         cold_path;
-        "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(self);
+        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(self);
     }
     builtin::array_set<ref "core:prelude//List<u8>">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(self) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "Array<core:prelude/list.wado/List<u8>>";
