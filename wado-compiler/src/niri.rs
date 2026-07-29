@@ -104,10 +104,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::const_eval::{is_int_prim, is_signed_int, prim_of};
-// `Value` lives in `const_eval`; re-export it so `niri::Value` resolves for
-// the public API and tests.
-pub use crate::const_eval::{MAX_SEQ_ELEMENTS, Value};
+use crate::const_eval::{Value, is_int_prim, is_signed_int, prim_of};
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;

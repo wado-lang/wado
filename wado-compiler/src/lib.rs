@@ -10,7 +10,7 @@ pub mod comment;
 pub mod compiler_host;
 pub mod compiler_item;
 pub mod component_model;
-pub(crate) mod const_eval;
+pub mod const_eval;
 pub mod doc;
 pub mod effect_check;
 pub mod elaborator;

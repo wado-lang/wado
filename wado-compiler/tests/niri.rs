@@ -13,6 +13,7 @@ use std::rc::Rc;
 
 use wado_compiler::Span;
 use wado_compiler::compiler_item::SeqField;
+use wado_compiler::const_eval::{MAX_SEQ_ELEMENTS, Value};
 use wado_compiler::hashmap::IndexSet;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::nir::{
@@ -26,7 +27,7 @@ use wado_compiler::nir_arena::{
 use wado_compiler::nir_value_graph::ValueKind;
 use wado_compiler::niri::{
     Callee, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, GlobalEnv, Interpreter, Lattice,
-    MAX_SEQ_ELEMENTS, Value, is_ctfe_eligible,
+    is_ctfe_eligible,
 };
 use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
 
