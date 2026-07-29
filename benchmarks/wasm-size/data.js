@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785320771949,
+  "lastUpdate": 1785363305757,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44717,6 +44717,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3608e369373c45750b6f6a11afff76b826ff10d5"
         },
         "date": 1785320771450,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16237,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276421,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "86bcd83517574b6bd80bcf408d87481998404a50",
+          "message": "Merge pull request #1715 from wado-lang/claude/niri-code-quality-yho1c8\n\nfix(optimizer): make constant folding agree with the runtime on casts and traps",
+          "timestamp": "2026-07-30T07:04:43+09:00",
+          "tree_id": "bba8fb2d03183170b53baeae89b2eea57d18595b",
+          "url": "https://github.com/wado-lang/wado/commit/86bcd83517574b6bd80bcf408d87481998404a50"
+        },
+        "date": 1785363304958,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
