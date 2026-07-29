@@ -148,11 +148,18 @@ runs, and everything downstream is behaving correctly on bad input. The fixture
 has exactly one `second` call inside a generic function (`via_generic<U>`),
 which is the obvious candidate.
 
-Next step: find why `lookup_method_info` reports that call as inherited when
-the same receiver type resolves to the newtype's own impl at the other two
-sites — `lookup_method_info` caches by `(base_type_id, method_name)`, so start
-by checking whether the generic-function call peels to a different
-`base_type_id`.
+Narrowed further: the fixture has three `second()` call sites, but
+`lookup_method_info` is reached by only **two** of them, and both answer with
+the newtype's own impl (`inherited_from_base: None`) on a receiver that reads
+as `Newtype { name: "MyArray<i32>" / "MyArray<String>" }`. The third — the one
+inside the generic function `via_generic<U>` — never reaches method lookup at
+all, so its `List<i32>::second` name comes from some other resolution path.
+
+Next step: find which path names `a.second()` inside a generic function body.
+It is not the inherent/trait method lookup, so the receiver's newtype identity
+is being dropped before that point — start from how a `let a: MyArray<i32> =
+[...]` annotation is resolved inside a generic function, since the two working
+sites use the identical annotation at non-generic scope.
 
 Root cause of the three serde regressions, established by instrumentation.
 
