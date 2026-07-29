@@ -55,11 +55,21 @@ and so fails an over-eager free as loudly as a leak. It covers a bare `string`,
 a `result<string, string>` (the joined-slot case), and a `list<string>` (element
 buffers out of the outer pointer's reach).
 
+The WIR golden fixtures carry the nested cases the harness does not reach on
+its own — `wasi:http`'s `error-code` payloads, and the widened slot a join
+produces, where the pointer comes back out through `i32_wrap_i64`.
+
 ## Consequences
 
-An async export whose result owns no linear memory — every WASI world in use
-today, whose results are handles and enums — emits no extra code. `wasi:http`'s
-handler is unaffected for that reason.
+An async export whose result owns no linear memory emits no extra code, so a
+result of handles, enums and numbers is unchanged.
+
+`wasi:http`'s handler is not one of those. Its `Result<response, error-code>`
+looks like a handle beside an enum, but `error-code` is a variant whose cases
+carry strings — a `field-size-payload` name, an `internal-error` message — so
+every error response leaked those payloads. Reclaiming them is the walk's
+nested case: the `Err` discriminant, then the active `error-code` case, then
+that case's `option<string>`, each guarding the next.
 
 The frees are no-ops under `bump`, which never reclaims, as they are for
 `post-return`; the same reasoning applies, and the emitted code does not depend
