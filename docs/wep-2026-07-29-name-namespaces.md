@@ -457,6 +457,28 @@ keyed on `full_method_name` and call sites on `method_name`, so a method with
 method type args was keyed two ways and could be collected as unreachable. Step
 7 removes the class by keying on identity.
 
+### The module a method name records twice
+
+Regenerating the goldens — the first regeneration since this refactor began, as
+its commits touched none — showed every method name carrying its module twice:
+
+    core:prelude/string.wado/core:prelude/string.wado/String::with_capacity
+
+`Receiver::head_key` returns a module-qualified `to_mangled`, `struct_name`
+returns that, and `MangledName::in_module` prefixes the defining module again.
+It is redundant, not wrong: the key is `(impl module, qualified struct, trait,
+method)`, and both the definition and the lookup build it the same way, so names
+stay injective and both suites pass.
+
+Neither half is removable on its own. Drop the module prefix and a builtin
+receiver loses its only qualifier — `i32^Display::fmt` names no module at all,
+so two modules implementing `Display for i32` collide. Make the struct head
+local instead and `impl Foo for a/T` and `impl Foo for b/T`, both written in
+`c`, collide as `c/T^Foo::m`. The redundancy is what currently keeps both cases
+apart, and only a key that carries the two modules as separate fields removes it
+without losing either — which is step 5's `StructListKey` generalized to method
+keys.
+
 ## Consequences
 
 The compiler stops accepting the class of code this session kept producing. A
@@ -509,3 +531,8 @@ Order:
   7. [ ] Carry the struct's `TypeId` on `TirStruct` / `NirStruct`, so DCE
          retention asks identity instead of deriving a name that has to match one
          built elsewhere.
+
+  8. [ ] A method key holding the impl module and the receiver's module as
+         separate fields, so the spelling stops carrying one module twice.
+         Blocked on 5 for the same reason: the redundancy is load-bearing until
+         the key is structured.
