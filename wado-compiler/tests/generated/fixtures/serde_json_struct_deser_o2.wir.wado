@@ -1097,7 +1097,7 @@ fn "core:json/scanned_to_f64"(n) {
     let eff_p: i32;
     let v: f64;
     if n.digits == 0_i64 {
-        return -0;
+        return select f64(n.neg, -0, 0);
     }
     eff_p = ((n.exp - n.frac_digits) - n.frac_lead_zeros) + (if n.int_digits > 19 -> i32 {
         n.int_digits - 19;
@@ -1112,7 +1112,7 @@ fn "core:json/scanned_to_f64"(n) {
         });
     }
     if eff_p < -351 {
-        return -0;
+        return select f64(n.neg, -0, 0);
     }
     v = "core:prelude/fpfmt.wado/parse"(n.digits, eff_p);
     return select f64(n.neg, builtin::f64_neg(v), v);
