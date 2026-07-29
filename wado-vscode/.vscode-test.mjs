@@ -6,6 +6,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(here, 'src', 'test', 'fixtures', 'workspace');
 
 export default defineConfig({
+  // Pinned so a VS Code release cannot break CI on its own.
+  version: '1.131.0',
   files: 'out/test/suite/**/*.test.js',
   workspaceFolder: fixtureWorkspace,
   mocha: {
