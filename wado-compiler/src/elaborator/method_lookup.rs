@@ -3025,7 +3025,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct { name, .. } => name,
+            ResolvedType::Struct { decl_name: name, .. } => name,
             ResolvedType::GenericInstance { name, .. } => name,
             _ => return None, // Not a struct type
         };

@@ -201,7 +201,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !util::is_float_only_literal(repr)
         {
             let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
-                ResolvedType::Struct { name, .. } => Some(name),
+                ResolvedType::Struct { decl_name: name, .. } => Some(name),
                 _ => None,
             };
 
@@ -236,7 +236,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !util::is_float_only_literal(repr)
         {
             let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
-                ResolvedType::Struct { name, .. } => Some(name),
+                ResolvedType::Struct { decl_name: name, .. } => Some(name),
                 _ => None,
             };
 
@@ -371,7 +371,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .to_string();
             let is_string_newtype = matches!(
                 self.tysys.type_table.borrow().get(base_id),
-                ResolvedType::Struct { name, .. } if name == &string_struct_name
+                ResolvedType::Struct { decl_name: name, .. } if name == &string_struct_name
             ) && target_type != base_id;
             if is_string_newtype {
                 // Walk the inner literal / template for fact recording.

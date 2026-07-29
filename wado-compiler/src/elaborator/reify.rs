@@ -9306,7 +9306,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
         };
         let source_name = match self.tysys.type_table.borrow().get(source_base).clone() {
-            ResolvedType::Struct { name, .. } if name == "u128" || name == "i128" => name,
+            ResolvedType::Struct { decl_name: name, .. } if name == "u128" || name == "i128" => name,
             _ => return None,
         };
         let signed_source = source_name == "i128";
@@ -9342,7 +9342,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | PrimitiveType::I8
                 | PrimitiveType::U8,
             ) => Lowering::LowThenCast,
-            ResolvedType::Struct { name, .. } if name == source_name => {
+            ResolvedType::Struct { decl_name: name, .. } if name == source_name => {
                 if target_type == source_type {
                     Lowering::Identity
                 } else {
@@ -9352,10 +9352,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return None;
                 }
             }
-            ResolvedType::Struct { name, .. } if name == "i128" => {
+            ResolvedType::Struct { decl_name: name, .. } if name == "i128" => {
                 Lowering::Reinterpret(CompilerItem::I128FromU128)
             }
-            ResolvedType::Struct { name, .. } if name == "u128" => {
+            ResolvedType::Struct { decl_name: name, .. } if name == "u128" => {
                 Lowering::Reinterpret(CompilerItem::U128FromI128)
             }
             _ => return None,
@@ -9742,7 +9742,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     ),
                 ) || matches!(
                     self.tysys.type_table.borrow().get(scrutinee_type),
-                    ResolvedType::Struct { name, .. } if name == "u128",
+                    ResolvedType::Struct { decl_name: name, .. } if name == "u128",
                 );
                 if is_unsigned {
                     if let Ok(v) = super::util::parse_u128_literal(repr) {
@@ -10340,7 +10340,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let peeled_scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
         let scrutinee_struct_name =
             match self.tysys.type_table.borrow().get(peeled_scrutinee).clone() {
-                ResolvedType::Struct { name, .. } => name,
+                ResolvedType::Struct { decl_name: name, .. } => name,
                 ResolvedType::GenericInstance { name, .. } => name,
                 _ => String::new(),
             };

@@ -1096,7 +1096,7 @@ fn flat_types_from_type_id_inner(
             }
         },
         ResolvedType::Unit => {} // no flat values
-        ResolvedType::Struct { name, .. } => {
+        ResolvedType::Struct { decl_name: name, .. } => {
             if name == &names.string {
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len

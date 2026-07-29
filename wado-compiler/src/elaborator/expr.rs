@@ -1416,7 +1416,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For List and custom types, look for Index or IndexValue trait implementation
         // (List implements IndexValue<i32> with type Output = T)
         let struct_name = match &base_type {
-            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::Struct { decl_name: name, .. } => name.clone(),
             ResolvedType::GenericInstance { name, .. } => name.clone(),
             ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name.clone(),
             // The raw GC array dispatches `[]` through `impl IndexValue /
@@ -3021,7 +3021,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             let source_is_wide_int = matches!(
                 tt.get(tt.get_ultimate_base_type(source_type)),
-                ResolvedType::Struct { name, .. } if name == "i128" || name == "u128"
+                ResolvedType::Struct { decl_name: name, .. } if name == "i128" || name == "u128"
             );
             let target_supported = !source_is_wide_int
                 || match tt.get(tt.get_ultimate_base_type(target_type)) {
@@ -3038,7 +3038,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | PrimitiveType::U8
                         | PrimitiveType::Char,
                     ) => true,
-                    ResolvedType::Struct { name, .. } => name == "i128" || name == "u128",
+                    ResolvedType::Struct { decl_name: name, .. } => name == "i128" || name == "u128",
                     _ => false,
                 };
             if !target_supported {

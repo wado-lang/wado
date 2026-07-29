@@ -745,7 +745,7 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn wrap_in_box(&self, value: Operand, box_type: tir::TypeId, span: Span) -> ExprId {
-        let box_struct_name = if let crate::tir::ResolvedType::Struct { name, .. } =
+        let box_struct_name = if let crate::tir::ResolvedType::Struct { decl_name: name, .. } =
             self.base.type_table.borrow().get(box_type)
         {
             name.clone()
