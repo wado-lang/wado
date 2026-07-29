@@ -169,7 +169,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             None,
             crate::name::CLOSURE_CALL_METHOD,
         );
-        let call_method_fq = format!("{module_source}/{call_method_local}");
+        let call_method_fq = crate::name::MangledName::in_module(module_source, &call_method_local);
         let call_func_id = match ctx.func_map.get(&call_method_fq).cloned() {
             Some(id) => id,
             None => continue,
@@ -495,7 +495,7 @@ fn register_inspect_wrapper(
         Some(trait_name),
         method_name,
     );
-    let target_fq = format!("{module_source}/{impl_local_name}");
+    let target_fq = crate::name::MangledName::in_module(module_source, &impl_local_name);
     let target_func_id = ctx.func_map.get(&target_fq).cloned();
 
     // Look up the Formatter struct WIR type id once; needed to
@@ -2675,8 +2675,10 @@ impl FunctionTranslator<'_, '_> {
                 let translated_args: Vec<WirInstr> =
                     args.iter().map(|a| self.translate_operand(*a)).collect();
                 // Look up in WASI imports (registered by register_imports from TIR imports)
-                let func_id = if let Some(func_id) =
-                    self.ctx.func_map.get(&format!("wasi/{local_name}"))
+                let func_id = if let Some(func_id) = self
+                    .ctx
+                    .func_map
+                    .get(&crate::name::MangledName::wasi_import(local_name))
                 {
                     func_id.clone()
                 } else {
@@ -2706,7 +2708,7 @@ impl FunctionTranslator<'_, '_> {
                         // Look up the pre-registered import function
                         self.ctx
                             .func_map
-                            .get(&format!("wasi/{local_name}"))
+                            .get(&crate::name::MangledName::wasi_import(local_name))
                             .cloned()
                             .unwrap_or_else(|| {
                                 // No pre-registered import; fall back to ensure_canonical

@@ -6,6 +6,7 @@
 //! the struct definition and the primary translation dispatch.
 
 use crate::module_source::ModuleSource;
+use crate::name::MangledName;
 use crate::tir::{TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType, WirTypeId};
 
@@ -127,19 +128,19 @@ impl FunctionTranslator<'_, '_> {
         let name = &func_ref.name;
 
         // Try direct name lookup
-        let fq = format!("{module_source}/{name}");
+        let fq = MangledName::in_module(module_source, name);
         if let Some(id) = self.ctx.func_map.get(&fq) {
             return Some(id.clone());
         }
         // Try alias registered during import collection (builtin/{func_name})
-        let alias = format!("builtin/{name}");
+        let alias = MangledName::builtin_alias(name);
         if let Some(id) = self.ctx.func_map.get(&alias) {
             return Some(id.clone());
         }
         // Try with method info
         if let Some(method_info) = &func_ref.method_info {
             let mangled = method_info.to_mangled_name();
-            let fq2 = format!("{module_source}/{mangled}");
+            let fq2 = MangledName::in_module(module_source, &mangled);
             if let Some(id) = self.ctx.func_map.get(&fq2) {
                 return Some(id.clone());
             }
@@ -700,7 +701,7 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     "wasi:cli/Stdout::write_via_stream"
                 };
-                let key = format!("wasi/{wasi_func_name}");
+                let key = MangledName::wasi_import(&wasi_func_name);
                 match self.ctx.func_map.get(&key).cloned() {
                     Some(func_id) => {
                         let call_args: Vec<WirInstr> = args

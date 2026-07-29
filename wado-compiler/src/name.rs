@@ -1780,6 +1780,26 @@ impl MangledName {
         Self(name.into())
     }
 
+    /// A function's project-wide key: the module it is emitted in and the name
+    /// it is emitted under. The one way `func_map` keys are built, so a caller
+    /// cannot assemble the pair in a namespace the map does not store.
+    #[must_use]
+    pub fn in_module(module: &crate::module_source::ModuleSource, local_name: &str) -> Self {
+        Self(format!("{module}/{local_name}"))
+    }
+
+    /// The `builtin/<name>` alias an imported builtin is registered under.
+    #[must_use]
+    pub fn builtin_alias(name: &str) -> Self {
+        Self(format!("builtin/{name}"))
+    }
+
+    /// The `wasi/<name>` key a WASI canonical import is registered under.
+    #[must_use]
+    pub fn wasi_import(name: &str) -> Self {
+        Self(format!("wasi/{name}"))
+    }
+
     #[must_use]
     pub fn as_mangled_str(&self) -> &str {
         &self.0
