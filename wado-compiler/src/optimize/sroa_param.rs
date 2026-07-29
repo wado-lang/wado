@@ -46,7 +46,7 @@ type FnKey = crate::nir::FuncId;
 #[derive(Clone)]
 struct SroaInfo {
     /// Canonical struct identity — `(struct_name, module_source)`.
-    struct_key: (String, ModuleSource),
+    struct_key: (crate::name::MangledName, ModuleSource),
     /// Type of the wrapper's sole field — the new scalar parameter type.
     inner_type_id: TypeId,
     /// Field name of the wrapper struct's sole field.
@@ -93,7 +93,7 @@ fn become_expr(body: &mut Body, id: ExprId, src: ExprId) {
 // Phase 1 + 2
 // -----------------------------------------------------------------------
 
-type SingleFieldIndex = IndexMap<(String, ModuleSource), (String, TypeId)>;
+type SingleFieldIndex = IndexMap<(crate::name::MangledName, ModuleSource), (String, TypeId)>;
 
 fn build_single_field_index(project: &NirPackage) -> SingleFieldIndex {
     let mut out: SingleFieldIndex = IndexMap::default();
@@ -103,7 +103,7 @@ fn build_single_field_index(project: &NirPackage) -> SingleFieldIndex {
         }
         let f = &s.fields[0];
         out.insert(
-            (s.name.clone(), s.module_source.clone()),
+            (crate::name::MangledName::new(s.name.clone()), s.module_source.clone()),
             (f.name.clone(), f.type_id),
         );
     }
@@ -237,13 +237,13 @@ fn is_sroa_eligible_inner_type(type_id: TypeId, _type_table: &TypeTable) -> bool
     true
 }
 
-fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(String, ModuleSource)> {
+fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(crate::name::MangledName, ModuleSource)> {
     match type_table.get(type_id) {
         ResolvedType::Struct {
             name,
             module_source,
             ..
-        } => Some((name.clone().to_string(), module_source.clone())),
+        } => Some((crate::name::MangledName::new(name.clone().to_string()), module_source.clone())),
         _ => None,
     }
 }
@@ -251,7 +251,7 @@ fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(String, Mod
 fn reference_param_struct_key(
     type_id: TypeId,
     type_table: &TypeTable,
-) -> Option<(String, ModuleSource)> {
+) -> Option<(crate::name::MangledName, ModuleSource)> {
     match type_table.get(type_id) {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => struct_key_of(*inner, type_table),
         _ => None,
@@ -273,7 +273,7 @@ fn reference_param_struct_key(
 fn param_snapshot_unsound(
     func: &NirFunction,
     pi: usize,
-    struct_key: &(String, ModuleSource),
+    struct_key: &(crate::name::MangledName, ModuleSource),
     type_table: &TypeTable,
     struct_fields: &StructFieldsIndex,
     writes_global: bool,
@@ -302,13 +302,13 @@ fn param_snapshot_unsound(
 }
 
 /// Map a struct's identity → its field types, for transitive-containment queries.
-type StructFieldsIndex = IndexMap<(String, ModuleSource), Vec<TypeId>>;
+type StructFieldsIndex = IndexMap<(crate::name::MangledName, ModuleSource), Vec<TypeId>>;
 
 fn build_struct_fields_index(project: &NirPackage) -> StructFieldsIndex {
     let mut out: StructFieldsIndex = IndexMap::default();
     for s in &project.structs {
         out.insert(
-            (s.name.clone(), s.module_source.clone()),
+            (crate::name::MangledName::new(s.name.clone()), s.module_source.clone()),
             s.fields.iter().map(|f| f.type_id).collect(),
         );
     }
@@ -320,7 +320,7 @@ fn build_struct_fields_index(project: &NirPackage) -> StructFieldsIndex {
 /// arguments. `visited` breaks cycles over recursive types.
 fn type_transitively_contains(
     ty: TypeId,
-    target: &(String, ModuleSource),
+    target: &(crate::name::MangledName, ModuleSource),
     type_table: &TypeTable,
     struct_fields: &StructFieldsIndex,
     visited: &mut IndexSet<TypeId>,
@@ -477,7 +477,7 @@ fn global_type_index(project: &NirPackage) -> IndexMap<(ModuleSource, String), T
 /// the only writes that can stale a call-time snapshot of that reference param.
 fn writes_aliasing_global(
     writes: &GlobalWrites,
-    target: &(String, ModuleSource),
+    target: &(crate::name::MangledName, ModuleSource),
     global_types: &IndexMap<(ModuleSource, String), TypeId>,
     type_table: &TypeTable,
     struct_fields: &StructFieldsIndex,
@@ -701,7 +701,7 @@ fn rewrite_call_sites(
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let Some(key) = func.id else { continue };
-        let mut scalar_param_struct: IndexMap<u32, (String, ModuleSource)> = IndexMap::default();
+        let mut scalar_param_struct: IndexMap<u32, (crate::name::MangledName, ModuleSource)> = IndexMap::default();
         for (pi, param) in func.params.iter().enumerate() {
             if let Some(info) = candidates.get(&(key, pi)) {
                 scalar_param_struct.insert(param.local_index, info.struct_key.clone());
@@ -741,7 +741,7 @@ fn rewrite_calls_node(
     body: &mut Body,
     node: NodeRef,
     sroa_positions: &IndexMap<FnKey, IndexMap<usize, SroaInfo>>,
-    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+    scalar_param_struct: &IndexMap<u32, (crate::name::MangledName, ModuleSource)>,
     type_table: &TypeTable,
 ) -> bool {
     let mut kids = Vec::new();
@@ -760,7 +760,7 @@ fn rewrite_call_expr(
     body: &mut Body,
     id: ExprId,
     sroa_positions: &IndexMap<FnKey, IndexMap<usize, SroaInfo>>,
-    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+    scalar_param_struct: &IndexMap<u32, (crate::name::MangledName, ModuleSource)>,
     type_table: &TypeTable,
 ) -> bool {
     match &body.exprs[id].kind {
@@ -841,7 +841,7 @@ fn rewrite_arg_operand(
     body: &mut Body,
     op: Operand,
     info: &SroaInfo,
-    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+    scalar_param_struct: &IndexMap<u32, (crate::name::MangledName, ModuleSource)>,
     type_table: &TypeTable,
 ) {
     if let Some(e) = op.as_expr() {
@@ -853,7 +853,7 @@ fn rewrite_arg(
     body: &mut Body,
     arg: ExprId,
     info: &SroaInfo,
-    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+    scalar_param_struct: &IndexMap<u32, (crate::name::MangledName, ModuleSource)>,
     type_table: &TypeTable,
 ) {
     // Peel auto-ref wrappers (`&x`, `&mut x`).
