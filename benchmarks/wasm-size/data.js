@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785367118793,
+  "lastUpdate": 1785368193723,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44820,6 +44820,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 16237,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276421,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "38e449de7578fb57bc50d9110e9836bbb0257c7e",
+          "message": "Merge pull request #1717 from wado-lang/claude/reflection-api-continuation-5y7oud\n\nfeat(reflect): blanket Inspect derivation and ReflectStruct::from_fields",
+          "timestamp": "2026-07-30T08:23:15+09:00",
+          "tree_id": "10668d6258a880b64e35e753f3d1e0bc1cf96793",
+          "url": "https://github.com/wado-lang/wado/commit/38e449de7578fb57bc50d9110e9836bbb0257c7e"
+        },
+        "date": 1785368192908,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16302,
             "unit": "bytes"
           },
           {
