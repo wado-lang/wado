@@ -957,7 +957,7 @@ fn default_value_for_type(
             ..
         } => {
             if matches!(module_source, ModuleSource::Core { .. }) {
-                (name.clone(), module_source.clone(), vec![])
+                (name.to_string(), module_source.clone(), vec![])
             } else {
                 return null_expr(type_id);
             }

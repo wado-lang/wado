@@ -187,7 +187,7 @@ fn carries_resource_rec(
             module_source,
             ..
         } => sfr
-            .get(&(name, module_source))
+            .get(&(name.to_string(), module_source))
             .map(|fields| fields.iter().map(|(_, _, t)| *t).collect())
             .unwrap_or_default(),
         _ => {
@@ -453,7 +453,7 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
         } => {
             let fields = cx
                 .struct_fields
-                .get(&(name, module_source))
+                .get(&(name.to_string(), module_source))
                 .cloned()
                 .unwrap_or_default();
             drop_projected(scrutinee, &fields, cx)

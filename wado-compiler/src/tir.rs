@@ -3104,8 +3104,8 @@ ResolvedType::Enum {
                 name,
                 module_source,
                 ..
-            }
-            | ResolvedType::Struct {
+            } => format!("{module_source}/{name}"),
+            ResolvedType::Struct {
                 name,
                 module_source,
                 ..
