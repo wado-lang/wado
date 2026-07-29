@@ -155,10 +155,21 @@ So 4b needs a decision first, not a rename:
   beside it, which leaves the structure available and identity untouched — a
   much smaller behaviour delta, and possibly enough for what 4b is for.
 
-The second is likely right, since what 4b buys is that the head and arguments
-are separately readable, not that identity changes. Deciding that on a branch
-with five open regressions would mean debugging type-duplication and those
-regressions at once.
+The second is right, since what 4b buys is that the head and arguments are
+separately readable, not that identity changes — and the arguments already are,
+via `monomorphized_struct_args`. So under it, what is left of 4b is one thing:
+`ResolvedType::Struct::name` holds a *rendered* spelling for an instantiation
+and a *declaration* spelling for a declaration, and nothing stops a caller
+reading the first as the second. That is the same hazard steps 1a and 1b closed
+elsewhere, and it closes the same way — type the field `MangledName`, leaving
+interning untouched because the newtype hashes and compares as its `String`.
+
+Measured, with the `PartialEq<str>` / `Display` conveniences already in place:
+179 sites need to say which spelling they are taking. That is mechanical and
+carries no behaviour change, but it is a single uninterruptible edit — the crate
+does not compile between the first site and the last — so it wants a session
+that can run it to completion and then the e2e suite. Landing it half-done would
+block work on the five open regressions entirely.
 
 ## Consequences
 
