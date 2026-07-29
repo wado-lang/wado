@@ -437,27 +437,37 @@ impl Monomorphizer {
         }
     }
 
-    /// If `type_id` (peeling references) is a newtype that has its OWN
-    /// non-blanket impl of `trait_name`, return the newtype's own mangled name
-    /// (e.g. `"ByteList"`); otherwise `None`.
+    /// If `type_id` (peeling references) is a newtype that answers this call
+    /// with its OWN impl, return the newtype's own name (e.g. `"ByteList"`);
+    /// otherwise `None`.
     ///
     /// Unlike [`Self::get_struct_name_from_type`], which makes newtypes
     /// transparent by peeling to the base, this preserves the newtype's identity
-    /// — but only when the newtype actually overrides the trait. The collect path
-    /// tries this name first so the queued instantiation (`ByteList^Trait::method`)
-    /// matches the call the rewrite emits, not the inherited base
-    /// (`List^Trait::method`). Newtypes without their own impl (e.g. `Meters`,
-    /// simd `v128` lanes) return `None` and keep peeling to the base, so their
-    /// dispatch is unchanged.
+    /// — but only when the newtype actually overrides the method. The collect
+    /// path tries this name first so the queued instantiation
+    /// (`ByteList^Trait::method`) matches the call the rewrite emits, not the
+    /// inherited base (`List^Trait::method`). Newtypes without their own impl
+    /// (e.g. `Meters`, simd `v128` lanes) return `None` and keep peeling to the
+    /// base, so their dispatch is unchanged.
+    ///
+    /// A trait method asks for an `impl <Trait> for`; an inherent method asks
+    /// for a method of that name. Answering only the first left
+    /// `impl MyArray<T> { fn second() }` invisible, so an inherent call on a
+    /// generic newtype was named after the base it inherits from — a function
+    /// that does not exist.
     pub fn newtype_own_struct_name_with_impl(
         &self,
         type_id: TypeId,
         type_table: &TypeTable,
+        method_name: &str,
         trait_name: Option<&str>,
     ) -> Option<FqTypeName> {
-        let trait_name = trait_name?;
-        self.newtype_own_name(type_id, type_table, |_, tid| {
-            self.has_own_trait_impl(type_table, tid, trait_name)
+        self.newtype_own_name(type_id, type_table, |_, tid| match trait_name {
+            Some(trait_name) => self.has_own_trait_impl(type_table, tid, trait_name),
+            None => self
+                .functions
+                .trait_env
+                .has_inherent_method_by_receiver(&type_table.impl_receiver_key(tid), method_name),
         })
     }
 
@@ -515,18 +525,17 @@ impl Monomorphizer {
         type_table: &TypeTable,
         info: &LocalMethodName,
     ) -> bool {
-        let own = match info.trait_name.as_deref() {
-            Some(trait_name) => self.newtype_own_name(receiver_type_id, type_table, |_, tid| {
-                self.has_own_trait_impl(type_table, tid, trait_name)
-            }),
-            None => self.newtype_own_name(receiver_type_id, type_table, |_, tid| {
-                self.functions.trait_env.has_inherent_method_by_receiver(
-                    &type_table.impl_receiver_key(tid),
-                    &info.method_name,
-                )
-            }),
-        };
-        own.map(|n| n.to_mangled()).as_deref() == Some(info.struct_name.as_str())
+        let own = self.newtype_own_struct_name_with_impl(
+            receiver_type_id,
+            type_table,
+            &info.method_name,
+            info.trait_name.as_deref(),
+        );
+        // Against the *base* receiver: `newtype_own_name` answers a declaration
+        // (`MyArray`), while `struct_name` is an instantiation (`MyArray<i32>`).
+        // Comparing those two never matched for a generic newtype, so the guard
+        // never fired and the receiver was peeled to the base it inherits from.
+        own.as_ref() == Some(&info.fq_base_struct_name())
     }
 
     /// Build the ordered list of `(mangled_method_name, trait_name)` formats to
@@ -551,7 +560,12 @@ impl Monomorphizer {
         trait_name: Option<&str>,
     ) -> (Option<String>, Vec<(String, Option<String>)>) {
         let own_name =
-            self.newtype_own_struct_name_with_impl(receiver_type_id, type_table, trait_name);
+            self.newtype_own_struct_name_with_impl(
+                receiver_type_id,
+                type_table,
+                method_name,
+                trait_name,
+            );
         let mut names: Vec<(String, Option<String>)> = Vec::new();
         let mut push_for = |s: FqTypeName| {
             names.push((MethodName::format_local(&s, None, method_name), None));
