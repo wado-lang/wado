@@ -29,10 +29,13 @@ pub enum TypeDecl<'a> {
 fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
     match type_table.get(type_id) {
         ResolvedType::Struct {
-            decl_name: name,
+            decl_name,
             module_source,
-            ..
-        } => vec![format!("{module_source}//{name}")],
+            type_args,
+        } => {
+            let name = type_table.struct_rendered_name(decl_name, type_args);
+            vec![format!("{module_source}//{name}")]
+        }
         ResolvedType::Variant {
             name,
             module_source,

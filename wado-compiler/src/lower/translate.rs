@@ -745,14 +745,12 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn wrap_in_box(&self, value: Operand, box_type: tir::TypeId, span: Span) -> ExprId {
-        let box_struct_name = if let crate::tir::ResolvedType::Struct {
-            decl_name: name, ..
-        } = self.base.type_table.borrow().get(box_type)
-        {
-            name.clone()
-        } else {
-            panic!("Box type should be a struct");
-        };
+        let box_struct_name = self
+            .base
+            .type_table
+            .borrow()
+            .struct_list_name(box_type)
+            .expect("Box type should be a struct");
         self.alloc_expr(
             ExprKind::StructLiteral {
                 struct_type: box_type,

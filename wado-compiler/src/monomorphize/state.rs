@@ -514,7 +514,11 @@ impl Monomorphizer {
                     module_source,
                 } => {
                     let base = *base_type;
-                    let own = FqTypeName::declared(module_source, name);
+                    // A generic newtype's stored name bakes its arguments into
+                    // the head; every consumer of this wants the declaration an
+                    // `impl` header writes.
+                    let own =
+                        FqTypeName::declared(module_source, crate::name::split_base_name(name));
                     if has_own_impl(&own, tid) {
                         return Some(own);
                     }

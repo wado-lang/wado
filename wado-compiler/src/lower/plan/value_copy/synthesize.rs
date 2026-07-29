@@ -422,7 +422,7 @@ fn build_copy_return_expr(
     };
     let mangled = type_table
         .borrow()
-        .struct_decl_name(type_id)
+        .struct_list_name(type_id)
         .expect("struct-shaped type has a stored struct name");
     if let Some(struct_def) = lookup_struct(project, &mangled, module.as_ref()) {
         return Some(build_struct_copy(

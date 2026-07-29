@@ -1361,13 +1361,14 @@ impl FunctionTranslator<'_, '_> {
     /// Resolve the `TypeId` of a struct field by name.
     fn resolve_struct_field_type(&self, struct_type: TypeId, field_name: &str) -> TypeId {
         if let ResolvedType::Struct {
-            decl_name: name,
+            decl_name,
             module_source,
-            ..
+            type_args,
         } = self.type_table.get(struct_type)
         {
+            let name = self.type_table.struct_rendered_name(decl_name, type_args);
             for s in &self.ctx.package.structs {
-                if s.module_source == *module_source && s.name == *name {
+                if s.module_source == *module_source && s.name == name {
                     for f in &s.fields {
                         if f.name == field_name {
                             return f.type_id;

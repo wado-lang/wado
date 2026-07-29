@@ -3264,12 +3264,18 @@ impl TypeTable {
     /// `ModuleSource` rather than folded into the string.
     ///
     /// Every mangler qualifies a declared head by its module; this namespace
-    /// must not, because that is how the struct list is keyed. `None` for a
-    /// type that is not struct-shaped.
+    /// must not, because that is how the struct list is keyed. The list holds
+    /// one entry per instantiation, so an instantiation is spelled with its
+    /// arguments — `decl_name` alone names a template nothing stores. `None`
+    /// for a type that is not struct-shaped.
     #[must_use]
-    pub fn struct_decl_name(&self, id: TypeId) -> Option<String> {
+    pub fn struct_list_name(&self, id: TypeId) -> Option<String> {
         match self.get(id) {
-            ResolvedType::Struct { decl_name, .. } => Some(decl_name.clone()),
+            ResolvedType::Struct {
+                decl_name,
+                type_args,
+                ..
+            } => Some(self.struct_rendered_name(decl_name, type_args)),
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
@@ -3321,11 +3327,6 @@ impl TypeTable {
                 name,
                 module_source,
             }
-            | ResolvedType::Newtype {
-                name,
-                module_source,
-                ..
-            }
             | ResolvedType::Flags {
                 name,
                 module_source,
@@ -3340,6 +3341,13 @@ impl TypeTable {
                 module_source,
                 ..
             } => declared(module_source, name),
+            // A generic newtype's stored name bakes the arguments into the head
+            // (`MyArray<i32>`); an `impl` header writes only `MyArray`.
+            ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            } => declared(module_source, crate::name::split_base_name(name)),
             // A generic resource and a binder name no declaration of their own.
             ResolvedType::GenericResource { name, .. } => builtin(name),
             ResolvedType::TypeParam { name, .. } => Receiver::Type(FqTypeName::binder(name)),

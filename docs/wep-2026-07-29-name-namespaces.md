@@ -362,6 +362,34 @@ silent dependency on the encoding. `get_struct_name_from_type` — the sibling t
 genuinely wants the rendering — keeps working, because it renders rather than
 parses.
 
+### The two namespaces the split exposed
+
+Splitting the field made `decl_name` reachable at every one of the ~160 match
+sites, and it reads like "the struct's name" while being the one spelling
+nothing is stored under. Sixteen sites took it as such, in two shapes:
+
+- **A registry lookup.** `struct_fields_map`, `struct_fields`, `struct_index`,
+  `single_field`, `package.structs` — every struct registry is keyed by the
+  *rendered* name, because it holds one entry per instantiation. Keyed by
+  `decl_name` they miss every instantiation and fall through to the
+  conservative branch.
+- **A minted name.** A `StructLiteral`'s `struct_name` and a `Box` wrapper's
+  name must spell the instantiation, or WIR build resolves them to nothing.
+
+One inversion was worse than a miss. `needs_copy_in_env` translated
+`base_name.as_deref() != Some(box_name)` into
+`!(type_args.is_empty() || decl_name == box_name)`, which is not the same
+predicate: the original says "not a `Box` instantiation", the rewrite says
+"is an instantiation and not `Box`". Every non-generic struct lost its deep
+copy, so `let snapshot = c` aliased `c` — a silent miscompile that eleven
+fixtures caught.
+
+`TypeTable::struct_list_name` now owns this namespace: the rendered name for a
+`Struct` and for a `GenericInstance` alike, documented as the key a struct list
+is indexed by. It replaces `struct_decl_name`, whose two arms disagreed —
+rendering the instance and not the struct — which is what made the wrong answer
+look like the local convention.
+
 Deriving through the unerased view was tried — spelling a newtype / flags
 argument by its own declaration rather than its base — and made things *worse*:
 reflect stayed at 10 and serde went 4 to 6. Reverted. So the reachability set is

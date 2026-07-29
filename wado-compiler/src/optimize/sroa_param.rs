@@ -210,15 +210,7 @@ fn candidate_info_for(
         ResolvedType::Struct { .. } => param_type,
         _ => return None,
     };
-    let (struct_name, struct_module) = match type_table.get(struct_type_id) {
-        ResolvedType::Struct {
-            decl_name: name,
-            module_source,
-            ..
-        } => (name.clone(), module_source.clone()),
-        _ => return None,
-    };
-    let key = (struct_name, struct_module);
+    let key = struct_key_of(struct_type_id, type_table)?;
     let (field_name, inner_type_id) = single_field.get(&key)?.clone();
     if !is_sroa_eligible_inner_type(inner_type_id, type_table) {
         return None;
@@ -239,11 +231,10 @@ fn is_sroa_eligible_inner_type(type_id: TypeId, _type_table: &TypeTable) -> bool
 
 fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(String, ModuleSource)> {
     match type_table.get(type_id) {
-        ResolvedType::Struct {
-            decl_name: name,
-            module_source,
-            ..
-        } => Some((name.clone(), module_source.clone())),
+        ResolvedType::Struct { module_source, .. } => Some((
+            type_table.struct_list_name(type_id)?,
+            module_source.clone(),
+        )),
         _ => None,
     }
 }

@@ -1019,11 +1019,10 @@ fn reference_pointee_struct_key(
         ResolvedType::Newtype { base_type, .. } => {
             reference_pointee_struct_key(*base_type, type_table)
         }
-        ResolvedType::Struct {
-            decl_name: name,
-            module_source,
-            ..
-        } => Some((name.clone(), module_source.clone())),
+        ResolvedType::Struct { module_source, .. } => Some((
+            type_table.struct_list_name(type_id)?,
+            module_source.clone(),
+        )),
         _ => None,
     }
 }
