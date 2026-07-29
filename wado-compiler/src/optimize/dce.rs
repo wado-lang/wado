@@ -1983,6 +1983,17 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
     // 1. Its Struct type is reachable, OR
     // 2. Any GenericInstance with its base name is reachable (e.g., Box<i32> for Box)
     // 3. Any monomorphized Struct with its base name is reachable
+    // A monomorphized struct is kept by identity, not by spelling. Its
+    // `TirStruct` name was fixed before erasure while the reachability set is
+    // built after it, so the two spell the same type differently
+    // (`FlagsBit<Perms>` against `FlagsBit<u32>`) and neither view makes both
+    // sides agree. The `TypeId` erasure redirects consistently, so ask that.
+    let reachable_struct_id = |s: &crate::nir::NirStruct| {
+        let type_table = project.type_table.borrow();
+        type_table
+            .find_struct_by_name(&s.name, &s.module_source)
+            .is_some_and(|id| analysis.types.contains(&id))
+    };
     project.structs.retain(|s| {
         if s.monomorph_info.is_none() {
             analysis
@@ -1991,7 +2002,7 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
                 || analysis.generic_instance_names.contains(s.name.as_str())
                 || analysis.struct_monomorph_bases.contains(s.name.as_str())
         } else {
-            analysis.struct_monomorph_names.contains(s.name.as_str())
+            analysis.struct_monomorph_names.contains(s.name.as_str()) || reachable_struct_id(s)
         }
     });
     project.variants.retain(|v| {
