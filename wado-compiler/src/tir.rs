@@ -349,7 +349,13 @@ pub enum ResolvedType {
     Unit,
     Never,
     Struct {
-        name: String,
+        /// The type's rendered identity, and what interning keys on:
+        /// `TreeMap<String,i32>` for an instantiation, the declaration's own
+        /// name for one written as such. Typed as a [`MangledName`] because
+        /// only the second case is a declaration spelling — reading it as one
+        /// is the mistake behind every naming defect in WEP 2026-07-28. The
+        /// declaration name is [`TypeTable::fq_base_type_name`].
+        name: crate::name::MangledName,
         module_source: ModuleSource,
         /// The generic declaration this was instantiated from (e.g. `TreeMap`
         /// for `TreeMap<String,i32>`), or `None` for a declaration written as
@@ -3275,8 +3281,8 @@ impl TypeTable {
                 name,
                 module_source,
                 ..
-            }
-            | ResolvedType::Enum {
+            } => declared(module_source, name.as_mangled_str()),
+            ResolvedType::Enum {
                 name,
                 module_source,
             }
@@ -3340,8 +3346,8 @@ impl TypeTable {
                 name,
                 module_source,
                 ..
-            }
-            | ResolvedType::Enum {
+            } => declared(module_source, name.as_mangled_str()),
+            ResolvedType::Enum {
                 name,
                 module_source,
             }
@@ -3471,8 +3477,8 @@ impl TypeTable {
                 name,
                 module_source,
                 ..
-            }
-            | ResolvedType::Enum {
+            } => declared(module_source, name.as_mangled_str()),
+            ResolvedType::Enum {
                 name,
                 module_source,
             }
@@ -3539,8 +3545,8 @@ impl TypeTable {
                 name,
                 module_source,
                 ..
-            }
-            | ResolvedType::Enum {
+            } => declared(module_source, name.as_mangled_str()),
+            ResolvedType::Enum {
                 name,
                 module_source,
                 ..

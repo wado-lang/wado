@@ -169,6 +169,23 @@ Measured, with the `PartialEq<str>` / `Display` conveniences already in place:
 carries no behaviour change, but it is a single uninterruptible edit — the crate
 does not compile between the first site and the last.
 
+In progress on this branch — the crate does not compile, by agreement, so the
+work can continue from a real mid-point rather than a description of one.
+
+The structural finding, which the earlier estimates missed: `ResolvedType`'s
+nominal variants are matched together in or-patterns that bind one `name`
+across `Struct | Enum | Variant | Newtype | Flags | Resource | GenericInstance`.
+Typing only `Struct::name` splits those bindings, so each such group needs
+`Struct` lifted into its own arm. That is not churn — it is the point. A
+monomorphized struct is the one nominal type whose `name` is not a declaration
+spelling, and the or-patterns were what let it be read as though it were.
+
+Four such groups in `tir.rs` are split; 179 errors are down to 158. What is left,
+by kind: 35 `&str` ← `&MangledName`, 34 `&MangledName` ← `&String`, 26 `String`
+← `MangledName`, 14 `MangledName` ← `String`, 9 map keys typed
+`(String, ModuleSource)` that must become `(MangledName, ModuleSource)`, and 6
+`&String` ← `&MangledName`.
+
 Driving it from `rustc`'s own diagnostics was tried and does not work
 unsupervised. A fixer that appends the right accessor at each primary span
 cleared 70 of the 179, then stalled: the remaining classes need the expression
