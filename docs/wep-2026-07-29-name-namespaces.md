@@ -234,6 +234,22 @@ that uses it for a declaration lookup wants `decl_name`.
 rendering matches what `struct_rendered_name` derives, so a divergence between
 the two shows up in tests rather than as a wrong mangled name.
 
+The rule for converting the remaining sites, derived while doing the core
+accessors:
+
+- `struct_rendered_name(decl_name, type_args)` is the **behaviour-preserving**
+  answer. The old `name` was the rendered spelling, so this reproduces today's
+  behaviour exactly. Default to it.
+- `decl_name` is a **behaviour change**, and where it is right the old code was
+  wrong — those are the WEP 2026-07-28 defects, now visible one at a time.
+
+Many sites turn out not to need either. A recurring shape is
+`FqTypeName::declared(module_source, name)` built from the *rendered* name —
+which is the fusion bug written out longhand. Those collapse to
+`fq_type_name(id)`, which is structurally correct now that head and arguments
+come off the type. Prefer that over threading `decl_name` and `type_args`
+through by hand.
+
 ## Consequences
 
 The compiler stops accepting the class of code this session kept producing. A
