@@ -364,12 +364,16 @@ arguments. The impls are registered and reached. So the miss is in the *filter*,
 not the lookup — either the `trait_matches` predicate or the per-impl
 projection.
 
-That fits the error text, which names the trait `IndexAssign<K>` rather than
-`IndexAssign`. The header is `impl<K, V> IndexAssign<K> for TreeMap<K, V>`, so
-if the recorded trait name carries its argument while the predicate compares
-against the bare name, nothing matches. WEP 2026-07-28 left `split_base_name` on
-trait names as one of the two remaining string-parsers, which is where a trait
-name's base is stripped — so that is the next thing to read.
+Not the trait name either: the predicate is
+`|trait_base| trait_base.starts_with(trait_base_name)`, so `IndexAssign<K>`
+matches `IndexAssign` regardless. Which leaves the per-impl projection — it is
+handed all 10 impls and returns `None` for every one.
+
+So the sequence is established end to end by measurement: key correct, index
+populated, filter permissive, projection rejecting. The projection instantiates
+the impl signature against the receiver's arguments, which is the first step in
+this chain that consumes `type_args` rather than names — and this refactor moved
+where a struct's arguments live. That is where to instrument next.
 
 Deriving through the unerased view was tried — spelling a newtype / flags
 argument by its own declaration rather than its base — and made things *worse*:
