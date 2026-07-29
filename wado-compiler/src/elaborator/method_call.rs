@@ -213,10 +213,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ModuleSource::array(),
             ),
             _ => (
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .mangle_type_name(base_type_id),
+                crate::name::MangledName::new(
+                    self.tysys.type_table.borrow().mangle_type_name(base_type_id),
+                ),
                 self.current_module_source.clone(),
             ),
         };
@@ -310,7 +309,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Fall back to base type trait methods
         if method_info.is_none()
             && let Some(trait_match) = self.find_trait_method_for_type(
-                &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
+                &self.impl_target_of(
+                    base_type_id,
+                    // `struct_name` is the mangled spelling; the impl index
+                    // keys on what a header writes.
+                    &self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .fq_base_type_name(base_type_id)
+                        .decl_name(),
+                ),
                 method_name,
                 &struct_module,
                 receiver_type_args_for_trait.as_deref(),
@@ -758,7 +767,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             match reuse_params {
                 Some(params) => self.enforce_type_arg_bounds(&params, &method_type_args, span),
                 None => self.check_method_type_arg_bounds(
-                    &struct_name,
+                    &struct_name.as_mangled_str(),
                     &struct_module,
                     method_name,
                     trait_name.as_deref(),
@@ -1777,7 +1786,7 @@ ResolvedType::Resource {
 
         let method_ref = StaticMethodRef::new(
             struct_module.clone(),
-            struct_name.clone.to_string()(),
+            struct_name.clone(),
             static_call.method.clone(),
             trait_name_opt.clone(),
         );
