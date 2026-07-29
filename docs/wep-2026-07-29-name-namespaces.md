@@ -250,6 +250,32 @@ which is the fusion bug written out longhand. Those collapse to
 come off the type. Prefer that over threading `decl_name` and `type_args`
 through by hand.
 
+### Where the second attempt stands
+
+`ResolvedType::Struct` carries `decl_name` + `type_args`; `base_name`, the
+`monomorphized_struct_args` side table, `generic_type_args`'s table scan and
+`fq_type_name`'s recovery step are all gone. e2e went 1444 failures to 10, all
+in `reflect_*`.
+
+Eight faults were fixed on the way, and seven were the same mistake: a bulk
+rename bound `decl_name` where the site wanted the rendered spelling — the
+struct name index, WIR type resolution, monomorphize's method names,
+`get_type_name_info`. The WEP said a bulk rename compiles and is silently wrong;
+it was written before doing exactly that twice.
+
+The remaining 10 share one cause, and it is the design's real cost. Registration
+keys the WIR struct map on `NirStruct.name` — a string the monomorphizer
+produced — while the lookup now *re-derives* the spelling from `decl_name` and
+`type_args`. Those agree only while the argument `TypeId`s render the same way
+at both moments, and erasure redirects mean they need not: `FlagsBit<T>` is
+registered under one spelling and looked up under another, falling through to
+`AbstractRef`.
+
+So a derived name is not free the way a stored one was. Either the lookup keys
+on something erasure-stable, or registration derives its key the same way the
+lookup does. The second is the honest one — one function deciding the spelling —
+and is what `struct_rendered_name` exists to be.
+
 ## Consequences
 
 The compiler stops accepting the class of code this session kept producing. A
