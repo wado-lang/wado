@@ -26,8 +26,8 @@ export returning 1 MiB exhausts a 12 MiB memory cap after eight calls, growing b
 exactly one payload per call.
 
 `post-return` is illegal alongside `async`, so async-lifted exports — the WASI
-worlds and `export async fn` — are outside this design by construction. Their
-equivalent leak is D2 below.
+worlds and `export async fn` — cannot use it. They reclaim the same buffers
+straight after `task.return`; see D2.
 
 ## Decision
 
@@ -105,7 +105,7 @@ follow-up, and the `freelist` double-free trap is what would make it safe.
 ### Adjacent leaks
 
 Two leaks of the same family surfaced while auditing the boundary. Neither is
-fixed by `post-return`.
+reachable by `post-return`; both are fixed here, off the same ownership model.
 
 D1 — a top-level `string` parameter was never freed. The caller lowers it into
 guest memory using the guest's own allocator, so the buffer belongs to the guest
@@ -113,11 +113,33 @@ once it has been copied onto the GC heap. Nested strings were already released b
 the lift sites that read them; only the top-level case had no such site. Fixed
 with this WEP.
 
-D2 — a memory-backed `task.return` result is never freed. `task.return` lifts
-eagerly, so the guest may release the payload as soon as the call returns, but
-nothing does. `post-return` is illegal with `async`, and the value lives in flat
-slots rather than in memory, so it needs a different fold over the same ownership
-model. Filed as wado-lang/wado#1708.
+D2 — a memory-backed `task.return` result was never freed. `task.return` lifts
+eagerly, so the guest may release the payload as soon as the call returns.
+`post-return` is illegal with `async`, so freeing right after the call is the
+only mechanism there is. Fixed with this WEP (wado-lang/wado#1708), by the fold
+below.
+
+#### The flat fold
+
+The value sits in the flat slots handed to `task.return`, not behind one
+pointer, so reclamation starts from a `(ptr, len)` pair per `string` or `list`
+rather than from an address. Below that first pointer the two folds are the same
+walk — a `list<string>`'s elements are in memory either way — and both read the
+one ownership model, so neither can drift from the other.
+
+Two things only the flat side faces. A variant's cases share the slots after
+their discriminant, so the walk reads it first: freeing unconditionally would
+take an `Err` payload's slots for the `Ok` buffer's `(ptr, len)`. And a join may
+have widened a slot past `i32`, so the pointer comes back out through the
+coercion that put it in.
+
+This reaches further than the sync side suggests. `wasi:http`'s handler returns
+what looks like a handle beside an enum, but `error-code` is a variant whose
+cases carry strings, so every error response owned linear memory.
+
+A result wider than `MAX_FLAT_PARAMS` (16) is passed indirectly instead, through
+a buffer the memory walk above would reclaim directly. That form is not lowered
+at all (wado-lang/wado#1712), so no such buffer exists yet.
 
 ## References
 

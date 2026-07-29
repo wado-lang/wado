@@ -43,13 +43,15 @@ use crate::synthesis::common::{
     synth_span,
 };
 
-use super::cm_free::{CmShapeContext, cm_shape, synthesize_free_cm_value};
+use super::cm_free::{
+    CmShapeContext, FlatSlot, cm_shape, synthesize_free_cm_flat, synthesize_free_cm_value,
+};
 use super::import_adapter::make_binding_function;
 use super::lift::synthesize_lift_list;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
-    LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id, cm_zero,
-    coerce_flat_lift, coerce_flat_lower, compute_export_flat_param_types,
+    CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id,
+    cm_zero, coerce_flat_lift, coerce_flat_lower, compute_export_flat_param_types,
     compute_export_flat_return_types, export_needs_param_lifting, field_access, find_struct_decl,
     find_variant_decl, flat_types_from_type_id, flatten_export_type, is_unit_type,
     type_id_to_ast_type, variant_payload, variant_tag, variant_test,
@@ -1509,6 +1511,16 @@ impl<'a> ExportBindingEnv<'a> {
             ),
         }
     }
+
+    fn shape_ctx<'n: 'a>(&self, names: &'n CmStdlibNames) -> CmShapeContext<'a> {
+        CmShapeContext {
+            cm_interface_registry: self.cm_interface_registry,
+            cm_package: self.cm_package,
+            names,
+            tir_modules: self.tir_modules,
+            type_table: self.type_table,
+        }
+    }
 }
 
 /// Synthesize the CM export binding for a world export: lift flat CM params
@@ -1790,11 +1802,7 @@ pub(super) fn synthesize_post_return(
 
     let names =
         super::types::CmStdlibNames::from_compiler_items(env.type_table.borrow().compiler_items());
-    let shape_ctx = CmShapeContext {
-        cm_interface_registry: env.cm_interface_registry,
-        cm_package: env.cm_package,
-        names: &names,
-    };
+    let shape_ctx = env.shape_ctx(&names);
     let shape = cm_shape(ty, &shape_ctx);
 
     let ptr = param_local("__ret_ptr", TypeTable::I32, false);
@@ -1984,6 +1992,14 @@ fn push_result_task_return_epilogue(
         task_return_args,
         TypeTable::UNIT,
     )));
+
+    body_stmts.extend(synthesize_free_cm_flat(
+        return_ast,
+        &FlatSlot::joined(&flat_locals, &flat_return_types),
+        &env.shape_ctx(&names),
+        next_local,
+        locals,
+    ));
 }
 
 /// Build one arm body of the Result epilogue's Ok/Err match: set the

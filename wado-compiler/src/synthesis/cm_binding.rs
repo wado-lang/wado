@@ -572,6 +572,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                     let task_return_name = format!("task-return:{}", export.name);
                     expand_task_returns_in_func(
                         &user_func_rc,
+                        return_type,
                         &flat_types,
                         &task_return_name,
                         &project.tir_modules,

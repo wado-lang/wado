@@ -1210,7 +1210,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let expected = ctx.task_return_type;
-        self.resolve_expr(&tr_stmt.value, ctx, expected);
+        let mut value_type = self.resolve_expr(&tr_stmt.value, ctx, expected);
+        // Unchecked, a mismatch reaches the CM binding, which flattens the
+        // value against the *declared* result and mis-lowers it.
+        let Some(expected) = expected else {
+            return;
+        };
+        if self.type_has_infer_hole(value_type) {
+            self.solve_infer_holes_against(value_type, expected);
+            value_type = self.apply_infer_holes(value_type);
+        }
+        self.typecheck_return(value_type, expected, tr_stmt.span);
     }
 
     /// Resolve an if statement (Stage 7-B: records-only). reify rebuilds the
