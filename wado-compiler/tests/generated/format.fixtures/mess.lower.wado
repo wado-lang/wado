@@ -6737,13 +6737,7 @@ pub fn "()::to_string"(self: &()) -> String {
 }
 
 fn bool::fmt_into(self: Box<bool>, f: &mut Formatter) {
-<<<<<<< HEAD
-    f."core:prelude/format.wado/Formatter::pad"("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(if self.value {
-||||||| 2738e686c
-    f.Formatter::pad("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(if self.value {
-=======
-    f.Formatter::pad(if self.value {
->>>>>>> origin/main
+    f."core:prelude/format.wado/Formatter::pad"(if self.value {
         String { repr: packed"true", used: 4 };
     } else {
         String { repr: packed"false", used: 5 };
@@ -11017,16 +11011,8 @@ fn "core:prelude/string.wado/String::internal_raw_bytes_mut"(self: &mut String) 
     return &mut self.repr as &mut Array<u8>;
 }
 
-<<<<<<< HEAD
 fn "core:prelude/string.wado/String::internal_from_utf8_raw"(bytes: Array<u8>, len: i32) -> String {
-    return String { repr: "mess_dirty.wado::$value_copy$Array<u8>"(bytes as Array<u8>), used: len };
-||||||| 2738e686c
-fn String::internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {
-    return String { repr: "mess_dirty.wado::$value_copy$Array<u8>"(bytes as Array<u8>), used: len };
-=======
-fn String::internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {
     return String { repr: bytes as Array<u8>, used: len };
->>>>>>> origin/main
 }
 
 fn "core:prelude/string.wado/String::realloc_to"(self: &mut String, new_capacity: i32) {
@@ -11873,34 +11859,14 @@ pub fn "core:prelude/string.wado/String::is_valid_utf8"(bytes: ArraySlice<u8>) -
     return true;
 }
 
-<<<<<<< HEAD
 pub fn "core:prelude/string.wado/String::split"(self: &String, sep: String) -> StrSplitIter with stores[self] {
     let sep_len: i32 = sep."core:prelude/string.wado/String::len"();
-    return StrSplitIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, sep_repr: "mess_dirty.wado::$value_copy$Array<u8>"(sep.repr as Array<u8>), sep_len: sep_len, finished: false };
-||||||| 2738e686c
-pub fn String::split(self: &String, sep: String) -> StrSplitIter with stores[self] {
-    let sep_len: i32 = sep.String::len();
-    return StrSplitIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, sep_repr: "mess_dirty.wado::$value_copy$Array<u8>"(sep.repr as Array<u8>), sep_len: sep_len, finished: false };
-=======
-pub fn String::split(self: &String, sep: String) -> StrSplitIter with stores[self] {
-    let sep_len: i32 = sep.String::len();
     return StrSplitIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, sep_repr: sep.repr as Array<u8>, sep_len: sep_len, finished: false };
->>>>>>> origin/main
 }
 
-<<<<<<< HEAD
 pub fn "core:prelude/string.wado/String::splitn"(self: &String, n: i32, sep: String) -> StrSplitNIter with stores[self] {
     let sep_len: i32 = sep."core:prelude/string.wado/String::len"();
-    return StrSplitNIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, sep_repr: "mess_dirty.wado::$value_copy$Array<u8>"(sep.repr as Array<u8>), sep_len: sep_len, remaining: n, finished: (n <= 0) };
-||||||| 2738e686c
-pub fn String::splitn(self: &String, n: i32, sep: String) -> StrSplitNIter with stores[self] {
-    let sep_len: i32 = sep.String::len();
-    return StrSplitNIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, sep_repr: "mess_dirty.wado::$value_copy$Array<u8>"(sep.repr as Array<u8>), sep_len: sep_len, remaining: n, finished: (n <= 0) };
-=======
-pub fn String::splitn(self: &String, n: i32, sep: String) -> StrSplitNIter with stores[self] {
-    let sep_len: i32 = sep.String::len();
     return StrSplitNIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, sep_repr: sep.repr as Array<u8>, sep_len: sep_len, remaining: n, finished: (n <= 0) };
->>>>>>> origin/main
 }
 
 pub fn "core:prelude/string.wado/String::split_whitespace"(self: &String) -> StrSplitWhitespaceIter with stores[self] {
