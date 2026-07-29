@@ -404,8 +404,8 @@ impl Monomorphizer {
         type_table: &TypeTable,
     ) -> Option<String> {
         match type_table.get(type_id) {
-            ResolvedType::Struct { name, .. }
-            | ResolvedType::Enum { name, .. }
+            ResolvedType::Struct { name, .. } => Some(name.to_string()),
+            ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. }
             | ResolvedType::Flags { name, .. } => Some(name.clone().to_string()),
             ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),

@@ -821,7 +821,7 @@ impl FunctionTranslator<'_, '_> {
         {
             self.base
                 .struct_fields_map
-                .get(&(name, module_source))?
+                .get(&(name.to_string(), module_source))?
                 .iter()
                 .map(|f| (f.name.to_string(), f.index, f.type_id))
                 .collect()
