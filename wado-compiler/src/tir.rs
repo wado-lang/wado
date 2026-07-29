@@ -695,6 +695,15 @@ pub struct TypeTable {
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
     variant_case_index: IndexMap<(String, ModuleSource), Vec<(String, u32, TypeId)>>,
+    /// The type arguments a monomorphized struct was instantiated with.
+    ///
+    /// `ResolvedType::Struct` spells them into `name` (`Wrapper<i32>`), which
+    /// makes them unreadable: nothing can recover the base head and the
+    /// arguments from that string, so a name built off such a type answers the
+    /// instantiated spelling to *both* questions. Recording them where the
+    /// instantiation happens is what lets [`Self::fq_type_name`] hand back a
+    /// structured name for these types like it does for every other shape.
+    monomorphized_struct_args: IndexMap<TypeId, Vec<TypeId>>,
 }
 
 impl Default for TypeTable {
@@ -781,6 +790,7 @@ impl TypeTable {
             symbol_by_type: TypeMap::default(),
             bound_driven_synth_requests: IndexSet::default(),
             variant_case_index: IndexMap::default(),
+            monomorphized_struct_args: IndexMap::default(),
         };
 
         // Pre-populate primitive types matching the constants above
@@ -1547,18 +1557,28 @@ impl TypeTable {
     ///
     /// - `name`: The fully mangled name (e.g., "`TreeMap`<String,i32>")
     /// - `base_name`: The original generic struct name (e.g., "`TreeMap`")
+    /// - `type_args`: what it was instantiated with, recorded in
+    ///   [`Self::monomorphized_struct_args`] because `name` cannot be taken
+    ///   apart. Empty when the caller is re-deriving a type the instantiation
+    ///   site already registered — interning hands back that same `TypeId`, so
+    ///   its arguments are already recorded and must not be overwritten.
     pub fn make_monomorphized_struct(
         &mut self,
         name: String,
         module_source: ModuleSource,
         base_name: String,
+        type_args: Vec<TypeId>,
     ) -> TypeId {
-        self.intern(ResolvedType::Struct {
+        let id = self.intern(ResolvedType::Struct {
             name,
             module_source,
             is_monomorphized: true,
             base_name: Some(base_name),
-        })
+        });
+        if !type_args.is_empty() {
+            self.monomorphized_struct_args.insert(id, type_args);
+        }
+        id
     }
 
     pub fn make_variant(&mut self, name: String, module_source: ModuleSource) -> TypeId {
@@ -3375,7 +3395,12 @@ impl TypeTable {
                 base_name: Some(base_name),
                 ..
             } => {
-                // Search for a GenericInstance with matching base name and mangled name
+                if let Some(args) = self.monomorphized_struct_args.get(&id) {
+                    return Some(args.clone());
+                }
+                // A type recorded before its instantiation site ran — or by a
+                // producer that has none — is still matchable against the
+                // `GenericInstance` it was mangled from, while one survives.
                 for tid in self.iter_type_ids() {
                     if let ResolvedType::GenericInstance {
                         name: gi_name,
@@ -3427,6 +3452,25 @@ impl TypeTable {
             ResolvedType::Primitive(prim) => FqTypeName::builtin(prim.as_str()),
             ResolvedType::Unit => FqTypeName::builtin(Self::UNIT_TYPE_NAME),
             ResolvedType::Never => FqTypeName::builtin("!"),
+            // A monomorphized struct spells its arguments into `name`, so the
+            // head and the arguments are handed back separately — the same
+            // shape every other instantiated type already has. Without this a
+            // name built off one answers `Wrapper<i32>` to both "what is the
+            // base?" and "what is the instance?", and a template lookup then
+            // asks for `Wrapper<i32>^Trait::method`, which nothing declares.
+            ResolvedType::Struct {
+                name,
+                module_source,
+                base_name: Some(base),
+                ..
+            } => match self.generic_type_args(id) {
+                Some(type_args) if !type_args.is_empty() => {
+                    FqTypeName::declared(module_source, base).with_args(args_of(&type_args))
+                }
+                // Arguments unrecorded and no `GenericInstance` left to match:
+                // the instantiated spelling is all the identity there is.
+                _ => FqTypeName::declared(module_source, name),
+            },
             ResolvedType::Struct {
                 name,
                 module_source,

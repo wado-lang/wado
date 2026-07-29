@@ -918,11 +918,16 @@ fn function_id_for(func: &NirFunction) -> FunctionId {
             // `func.name` is `format_local(fq_struct, trait, method)`, so
             // splitting it back apart only recovers what `info` already holds
             // structurally. Read the structure.
+            //
+            // The method's type arguments are part of its identity exactly as
+            // the receiver's are: `field<T>` (the template) and `field<i32>`
+            // (its instance) are two functions, and the bare method name
+            // collapses them onto one id.
             FunctionId::Method(MethodName::new(
                 module_source.clone(),
                 info.fq_struct_name(),
                 info.trait_name.clone(),
-                info.method_name.clone(),
+                info.full_method_name(),
             ))
         }
     } else if let Some(monomorph_info) = &func.monomorph_info {

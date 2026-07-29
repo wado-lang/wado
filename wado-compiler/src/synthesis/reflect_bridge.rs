@@ -54,8 +54,14 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
             .collect();
         let (subject, ref_subject) = {
             let mut tt = flat.type_table.borrow_mut();
-            let subject =
-                tt.make_monomorphized_struct(decl.name.clone(), module_source.clone(), base_name);
+            // Re-derives a struct the instantiation site already registered, so
+            // it has no arguments of its own to record.
+            let subject = tt.make_monomorphized_struct(
+                decl.name.clone(),
+                module_source.clone(),
+                base_name,
+                vec![],
+            );
             let ref_subject = tt.make_ref(subject);
             (subject, ref_subject)
         };
