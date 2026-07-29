@@ -2545,7 +2545,11 @@ impl FqTypeName {
         out
     }
 
-    /// The name as source writes it: modules dropped from the head and,
+    /// The declaration namespace: the name as source writes it, which is what
+    /// an `impl` header spells and what every by-name declaration lookup keys
+    /// on. Also the form diagnostics show.
+    ///
+    /// Modules dropped from the head and,
     /// recursively, from every type argument. Diagnostics only.
     #[must_use]
     pub fn to_display(&self) -> String {

@@ -256,10 +256,18 @@ impl TypeSystem {
                     type_param_type_id,
                 };
             }
+            // The rewritten prefix is consumed as a declaration name —
+            // `is_static_method`, `locate_static_method_impl`,
+            // `find_impl_method_ast_id` all key on what an `impl` header
+            // writes. A mangled name carries the declaring module, which no
+            // header does, so it matched nothing and the trait segment was
+            // silently dropped from the callee. `i32` only worked because a
+            // builtin is spelled the same in both namespaces.
             let concrete_name = self
                 .type_table
                 .borrow()
-                .mangle_type_name(type_param_type_id);
+                .fq_type_name(type_param_type_id)
+                .to_display();
             return CalleeIdentKind::Rewritten(format!("{concrete_name}::{suffix}"));
         }
 
