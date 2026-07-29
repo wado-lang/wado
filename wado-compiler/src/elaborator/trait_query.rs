@@ -796,7 +796,7 @@ impl TypeSystem {
                 module_source,
                 ..
             } => {
-                let info = scope.struct_fields_in(name, module_source)?;
+                let info = scope.struct_fields_in(name.as_mangled_str(), module_source)?;
                 Some(walk_struct(info, &[], visit))
             }
             ResolvedType::Variant {
@@ -1045,11 +1045,11 @@ impl TypeSystem {
             ..
         } = &resolved
             && on_bound == Some(OnBoundTrait::Default)
-            && self.auto_derive_default_struct_type(scope, name).is_some()
+            && self.auto_derive_default_struct_type(scope, name.as_mangled_str()).is_some()
         {
             self.type_table
                 .borrow_mut()
-                .record_bound_driven_synth_request(name, module_source, trait_name);
+                .record_bound_driven_synth_request(name.as_mangled_str(), module_source, trait_name);
             return true;
         }
 
@@ -1065,7 +1065,7 @@ impl TypeSystem {
                 },
                 Some(OnBoundTrait::ReflectStruct),
             ) => scope
-                .struct_fields_in(name, module_source)
+                .struct_fields_in(name.as_mangled_str(), module_source)
                 .is_some_and(|info| self.has_visible_fields(scope, info)),
             // Kinds are disjoint, so a variant never satisfies `ReflectStruct` —
             // its payload layout registers struct-shaped fields under its own
@@ -1134,7 +1134,7 @@ impl TypeSystem {
                 name,
                 module_source,
                 ..
-            } => (FqTypeName::of_head(module_source, name), None),
+            } => (FqTypeName::of_head(module_source, name.as_mangled_str()), None),
             // The raw GC array `Array<T>` carries its element as a single type
             // arg, so trait impls (`impl IntoIterator for Array<T>`) resolve
             // under the canonical name "Array".

@@ -407,7 +407,7 @@ impl Monomorphizer {
             ResolvedType::Struct { name, .. }
             | ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. }
-            | ResolvedType::Flags { name, .. } => Some(name.clone()),
+            | ResolvedType::Flags { name, .. } => Some(name.clone().to_string()),
             ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
             ResolvedType::GenericInstance {
                 name, type_args, ..
@@ -625,7 +625,7 @@ impl Monomorphizer {
                 if let Some(key) = self.structs.mangled_to_key.get(name) {
                     Some((key.name.clone(), key.impl_type_args.clone()))
                 } else {
-                    Some((name.clone(), vec![]))
+                    Some((name.clone().to_string(), vec![]))
                 }
             }
             // Newtypes are transparent — unwrap to base type for struct info lookup

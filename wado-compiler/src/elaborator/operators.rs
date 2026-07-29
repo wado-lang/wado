@@ -365,7 +365,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 | ResolvedType::Variant {
                     name,
                     module_source,
-                } => Some(FqTypeName::declared(module_source, name).into_string()),
+                } => Some(FqTypeName::declared(module_source, name.as_mangled_str()).into_string()),
                 ResolvedType::Newtype { base_type, .. } => {
                     let tt = self.tysys.type_table.borrow();
                     let ultimate = tt.get_ultimate_base_type(*base_type);

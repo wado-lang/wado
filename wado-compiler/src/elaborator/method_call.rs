@@ -1578,7 +1578,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => (
                 name.clone(),
                 module_source.clone(),
-                FqTypeName::declared(module_source, name),
+                FqTypeName::declared(module_source, name.as_mangled_str()),
                 vec![],
             ),
             // Generic resource types (Future<T>, Stream<T>, etc.) - handle like generic structs
@@ -1666,7 +1666,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             module_source,
                             ..
                         } => {
-                            let fq = FqTypeName::declared(&module_source, &name);
+                            let fq = FqTypeName::declared(&module_source, &name.as_mangled_str());
                             (name, module_source, fq, vec![])
                         }
                         ResolvedType::GenericInstance {
@@ -1693,7 +1693,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                         module_source,
                                         ..
                                     } => {
-                                        let fq = FqTypeName::declared(&module_source, &name);
+                                        let fq = FqTypeName::declared(&module_source, &name.as_mangled_str());
                                         break (name, module_source, fq, vec![]);
                                     }
                                     ResolvedType::Newtype {
@@ -2466,7 +2466,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         name,
                         module_source,
                         ..
-                    } => break Some((module_source, name)),
+                    } => break Some((module_source, name.to_string())),
                     ResolvedType::Newtype { base_type, .. } => current_type = base_type,
                     ResolvedType::Flags { .. } => {
                         current_type = TypeTable::U32;

@@ -1078,7 +1078,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // pre-built field registry. Self-recursive structs are
                 // protected by `visited`.
                 let field_types: Vec<TypeId> = self
-                    .lookup_struct_fields_in(name, module_source)
+                    .lookup_struct_fields_in(name.as_mangled_str(), module_source)
                     .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
                     .unwrap_or_default();
                 field_types

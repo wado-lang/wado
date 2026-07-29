@@ -755,7 +755,7 @@ impl FunctionTranslator<'_, '_> {
         self.alloc_expr(
             ExprKind::StructLiteral {
                 struct_type: box_type,
-                struct_name: box_struct_name,
+                struct_name: box_struct_name.to_string(),
                 fields: vec![ArenaStructField {
                     name: "value".to_string(),
                     value,

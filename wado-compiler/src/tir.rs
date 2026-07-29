@@ -838,7 +838,7 @@ impl TypeTable {
         } = ty
         {
             self.struct_name_index
-                .insert((name.clone(), module_source.clone()), id);
+                .insert((name.clone().to_string(), module_source.clone()), id);
         }
         self.types.push(ty.clone());
         self.intern_map.insert(ty, id);
@@ -1179,7 +1179,7 @@ impl TypeTable {
             } = ty
             {
                 self.struct_name_index
-                    .insert((name.clone(), module_source.clone()), id);
+                    .insert((name.clone().to_string(), module_source.clone()), id);
             }
         }
     }
@@ -1703,6 +1703,13 @@ impl TypeTable {
         let prefix = format!("{cm_package}/");
         for (type_id, resolved) in self.all_types() {
             let (n, ms) = match resolved {
+                // A struct's name is a mangled spelling, so it is rendered to
+                // compare rather than shared with the declaration-named arms.
+                ResolvedType::Struct {
+                    name: n,
+                    module_source,
+                    ..
+                } => (n.as_mangled_str().to_string(), module_source),
                 ResolvedType::Resource {
                     name: n,
                     module_source,
@@ -1715,11 +1722,6 @@ impl TypeTable {
                     name: n,
                     module_source,
                 }
-                | ResolvedType::Struct {
-                    name: n,
-                    module_source,
-                    ..
-                }
                 | ResolvedType::Flags {
                     name: n,
                     module_source,
@@ -1728,7 +1730,7 @@ impl TypeTable {
                     name: n,
                     module_source,
                     ..
-                } => (n, module_source),
+                } => (n.clone(), module_source),
                 _ => continue,
             };
             if n != name {
@@ -2822,7 +2824,7 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => {
                 format!("Array<{}>", self.type_name(*elem))
             }
-            ResolvedType::Struct { name, .. } => crate::name::strip_local_item_id(name).to_string(),
+            ResolvedType::Struct { name, .. } => crate::name::strip_local_item_id(name.as_mangled_str()).to_string(),
             ResolvedType::Enum { name, .. } => name.clone(),
             ResolvedType::Resource { name, .. } => name.clone(),
             ResolvedType::Function {
@@ -3233,7 +3235,7 @@ impl TypeTable {
     #[must_use]
     pub fn struct_decl_name(&self, id: TypeId) -> Option<String> {
         match self.get(id) {
-            ResolvedType::Struct { name, .. } => Some(name.clone()),
+            ResolvedType::Struct { name, .. } => Some(name.clone().to_string()),
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
@@ -3471,7 +3473,7 @@ impl TypeTable {
                 }
                 // Arguments unrecorded and no `GenericInstance` left to match:
                 // the instantiated spelling is all the identity there is.
-                _ => FqTypeName::declared(module_source, name),
+                _ => FqTypeName::declared(module_source, name.as_mangled_str()),
             },
             ResolvedType::Struct {
                 name,

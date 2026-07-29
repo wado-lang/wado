@@ -79,7 +79,7 @@ pub(super) fn peel_to_struct(
             name,
             module_source,
             ..
-        } => Some((name.clone(), module_source.clone(), Vec::new())),
+        } => Some((name.clone().to_string(), module_source.clone(), Vec::new())),
         ResolvedType::GenericInstance {
             name,
             module_source,
@@ -1133,7 +1133,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => return,
         };
-        if let Some(info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
+        if let Some(info) = self.lookup_struct_fields_in(&struct_name.as_mangled_str(), &module_source) {
             for ((fname, _, _), fid) in info.fields.iter().zip(info.field_ast_ids.iter()) {
                 if fname == field_name {
                     self.record_reference_to_def(use_id, *fid);
@@ -1159,7 +1159,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 module_source,
                 ..
             } => {
-                if let Some(struct_info) = self.lookup_struct_fields_in(&name, &module_source) {
+                if let Some(struct_info) = self.lookup_struct_fields_in(&name.as_mangled_str(), &module_source) {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             return (index as u32, *ftype);
@@ -2901,7 +2901,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => Some((FqTypeName::declared(&module_source, &name), name)),
+            } => Some((FqTypeName::declared(&module_source, &name.as_mangled_str()), name)),
             _ => None,
         };
 

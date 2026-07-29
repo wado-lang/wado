@@ -977,7 +977,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ..
             } => {
                 let params = self.find_method_type_param_names(
-                    name,
+                    name.as_mangled_str(),
                     Some(module_source),
                     method_name,
                     trait_name,

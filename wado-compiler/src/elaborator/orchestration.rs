@@ -1846,7 +1846,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 module_source,
                 ..
             } => {
-                out.push((name.clone(), module_source.clone()));
+                out.push((name.clone().to_string(), module_source.clone()));
             }
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)

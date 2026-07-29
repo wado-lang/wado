@@ -243,7 +243,7 @@ fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(String, Mod
             name,
             module_source,
             ..
-        } => Some((name.clone(), module_source.clone())),
+        } => Some((name.clone().to_string(), module_source.clone())),
         _ => None,
     }
 }

@@ -931,7 +931,7 @@ impl<'a> Emitter<'a> {
             | ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. }
             | ResolvedType::Flags { name, .. }
-            | ResolvedType::Newtype { name, .. } => Ok(self.named(name, id)),
+            | ResolvedType::Newtype { name, .. } => Ok(self.named(name.as_mangled_str(), id)),
             ResolvedType::Resource { name, .. } => Ok(Type::named(to_kebab(name))),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let inner = *inner;

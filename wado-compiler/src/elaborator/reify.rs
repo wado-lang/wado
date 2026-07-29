@@ -8574,7 +8574,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name,
                     module_source,
                     ..
-                } => (name, Some(module_source), vec![]),
+                } => (name.to_string(), Some(module_source), vec![]),
                 ResolvedType::GenericInstance {
                     name,
                     module_source,
@@ -9131,7 +9131,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 name,
                 module_source,
                 ..
-            } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name),
+            } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name.as_mangled_str()),
             _ => return None,
         };
 
@@ -9188,7 +9188,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 name,
                 module_source,
                 ..
-            } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name),
+            } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name.as_mangled_str()),
             _ => return None,
         };
 

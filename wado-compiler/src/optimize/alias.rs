@@ -1018,7 +1018,7 @@ fn reference_pointee_struct_key(
             name,
             module_source,
             ..
-        } => Some((name.clone(), module_source.clone())),
+        } => Some((name.clone().to_string(), module_source.clone())),
         _ => None,
     }
 }

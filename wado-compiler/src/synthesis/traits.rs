@@ -5514,7 +5514,7 @@ fn resolve_impl_module_via_env(
         | ResolvedType::Newtype { name, .. }
         | ResolvedType::Flags { name, .. }
         | ResolvedType::GenericInstance { name, .. }
-        | ResolvedType::GenericResource { name, .. } => Some(name.clone()),
+        | ResolvedType::GenericResource { name, .. } => Some(name.clone().to_string()),
         ResolvedType::BuiltinArray(_) => Some(TypeTable::ARRAY_TYPE_NAME.to_string()),
         _ => None,
     };
