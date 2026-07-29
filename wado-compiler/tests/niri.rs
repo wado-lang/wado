@@ -3631,12 +3631,35 @@ fn seq_lit(type_id: TypeId, bytes: Vec<u8>) -> Build {
     })
 }
 
+/// Register the container items `materialize_seq_via` identifies by, and the
+/// `Array<u8>` the literal it writes names. A bare table has neither, and the
+/// compiler's own has both.
+fn register_seq_containers(table: &mut TypeTable) {
+    table.make_builtin_array(TypeTable::U8);
+    for (item, name) in [
+        (wado_compiler::compiler_item::CompilerItem::String, "String"),
+        (wado_compiler::compiler_item::CompilerItem::List, "List"),
+    ] {
+        table
+            .compiler_items_mut()
+            .register(
+                item,
+                wado_compiler::compiler_item::Resolved::Struct {
+                    module_source: ModuleSource::default(),
+                    name: name.to_string(),
+                },
+            )
+            .expect("a struct item takes a struct");
+    }
+}
+
 #[test]
 fn a_constant_string_call_result_becomes_a_literal() {
     // A CTFE call returning a `String` reduces to the container it denotes, and
     // the exit writes that container back as the literal the lower phase emits
     // for a source string — instead of discarding it for not being a scalar.
     let mut table = TypeTable::new();
+    register_seq_containers(&mut table);
     let string_ty = table.make_struct("String".to_string(), ModuleSource::default());
     let greeting = make_pure_fn(
         "greeting",
@@ -3971,6 +3994,7 @@ fn a_container_the_frame_never_filled_stays_an_allocation() {
     // Materializing it would write the reservation back as an empty literal,
     // trading a capacity the source asked for against nothing.
     let mut table = TypeTable::new();
+    register_seq_containers(&mut table);
     let string_ty = table.make_struct("String".to_string(), ModuleSource::default());
     let array_ty = table.make_builtin_array(TypeTable::U8);
     let new_id = next_test_func_id();
