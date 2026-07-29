@@ -286,11 +286,16 @@ is not the path either. Three proposed fixes for these ten have now been
 implemented and measured, and all three were no-ops. Each was reverted rather
 than kept for looking principled.
 
-What is established and what is not: the WIR struct map genuinely holds no
-`FlagsBit` entry (measured). Why it does not is still unknown — the queue scan
-is not the reason. The next probe belongs at the point a `TirStruct` is emitted
-for an instantiation, asking whether one is emitted for `FlagsBit<u32>` at all,
-rather than reasoning backwards from the WIR failure.
+What is established, all measured: the WIR struct map holds no `FlagsBit` entry,
+and yet `instantiate_struct` *does* emit a `TirStruct` for it. So monomorphize
+is doing its job and the type is lost somewhere between there and WIR
+registration — DCE, link, or the flat-package assembly.
+
+The next probe belongs in that stretch: trace the emitted `TirStruct` forward
+and find which stage drops it. Note that `dce.rs`'s reachability keeps struct
+names in `struct_exact` / `struct_monomorph_names`, and this refactor rewrote
+how those two sets are populated (`base_name.is_some()` became
+`type_args.is_empty()`), so that is where to look first.
 
 ## Consequences
 
