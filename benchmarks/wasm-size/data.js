@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785402047402,
+  "lastUpdate": 1785445745433,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44893,6 +44893,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c3ea7301c15d7b67bb113ad13cd2bb14051e9b89"
         },
         "date": 1785402046649,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16302,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276421,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "748f5b10b43215e63fdb023c67bccc346677756f",
+          "message": "Merge pull request #1719 from wado-lang/claude/reflection-api-remaining-tasks-tizhfj\n\nfeat(coherence): implement variadic coherence Rules 1 and 2",
+          "timestamp": "2026-07-31T05:57:48+09:00",
+          "tree_id": "4a993110c26ee1c978adeb01be3083660a1b4f8d",
+          "url": "https://github.com/wado-lang/wado/commit/748f5b10b43215e63fdb023c67bccc346677756f"
+        },
+        "date": 1785445744674,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
