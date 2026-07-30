@@ -8,72 +8,15 @@ Open work towards full ANTLR4 compatibility and the performance budget it implie
 
 This file lists what is **not yet done** at a behavioral level; find the code via search, not line pointers. Closed work belongs in commit history.
 
-## Diagnostics & introspection ([#1246](https://github.com/wado-lang/wado/issues/1246))
+## Order of attack
 
-Grammar-authoring DX follow-ups:
+1. **Soundness and compatibility divergence** — these mis-parse valid input, so they outrank every feature below.
+2. **Structured diagnostic-to-rule identity** before the diagnostics that depend on it.
+3. **A descriptor re-extract** whenever a JDK and the `vendor/antlr4` submodule are at hand — it is the only way to re-triage the skip buckets, and several entries are stale rather than blocked.
+4. **Stage C**, starting with the SuperClass action-op replay: the largest block, and the gate for drop-in ANTLR4 replacement.
+5. Everything else, in whatever order a live case surfaces it.
 
-- **Optional-scan-guard-fallback warning.** Lowering warns on an overlap tournament today; the obvious next warning fires when an `e?` resolves to a scan-guarded optional (live case: a rule in `example/Wado.g4`). Deferred because it needs the enclosing rule name available at the warn site; add the diagnostic kind, the warn, and a fixture together.
-- **Structured diagnostic-to-rule identity.** A diagnostic's owning rule is carried today as the free-form human label the warn was raised with, and tooling re-associates it by substring-matching the quoted rule name — so group-scoped warnings (no quoted rule name) never inline under their owning rule. Carry a structured owner (rule name / index), set it at the warn site, and compare by equality, keeping the label display-only. The same change lets the overlap-dispatch builder be told explicitly whether it is on the scan pass instead of recovering that from a label suffix.
-
-## LL prediction — remaining gaps
-
-### Iter-body K-prefix for `Repeat` inner rule references
-
-The K-prefix follow-mask path closes the multi-token tail-greedy gap at the outer alternative position, but a rule reference inside a `Repeat` body still falls back to the 1-token mask path. The fixed-point "next iteration | exit-to-caller" computation that would let it gate is straightforward but not yet plumbed. Few real grammars need it; revisit when a descriptor surfaces a regression.
-
-### Multi-alt rule-reference expansion in the caller-side mask analysis
-
-The K-prefix caller-side mask analysis halts at a multi-alternative rule reference because a per-depth union of the alternatives' prefixes would over-yield by matching cross-alternative sequences no real alternative admits. A per-alternative sequence representation could extend the walk safely — useful when a caller's continuation passes through a multi-alternative rule like `expr : literal | name`.
-
-## Stage B′ — JVM-oracle integration
-
-The Stage B′ pipeline covers `FullContextParsing`, `LeftRecursion`, `ParserErrors`, `ParserExec`, `SemPredEvalParser`, and `Sets`, with the remaining prediction divergences pinned as oracle-todo. The infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md)) is in place; Java is needed only at extract time, not in CI.
-
-Remaining:
-
-- **Extend coverage to the remaining parser categories** (`ParseTrees`, `Listeners`) and re-triage the oracle-skip / oracle-todo entries after each re-extract. Several oracle-skip entries were recorded because StringTemplate directives sat outside action bodies where the stripper cannot reach; extract-time action-template expansion (see `antlr4-compatibility.md`) now turns those into plain Java type slots, so re-triage them at the next JDK-equipped re-extract — some should graduate from skip.
-
-## Composite (slave-grammar) descriptors
-
-Every `CompositeLexers` / `CompositeParsers` descriptor short-circuits on the presence of imported slave grammars. Independent blockers:
-
-- **Importer multi-input plumbing.** A grammar import (`import S;`) must resolve against the sibling slave-grammar files. Kiln already supports multi-input; lift the short-circuit once resolution lands.
-- **Host-side output (Stage C).** Every composite descriptor's expected output is a host-side artefact — action prints, token dumps, or empty — so none survive the Stage B output normalizer. Re-evaluate once Stage C lands.
-
-## Stage C — action / predicate execution
-
-Design in [`action.md`](./action.md). Remaining:
-
-- Lexer actions under a `Repeat`. The action replay places each action at the cursor it was written at, covering mid-element and nested-group placement, but a `Repeat` matches an unknown number of times and the non-greedy / lookahead-aware emitters restructure the sequence around it. An alt carrying one keeps the flat emit: top-level actions run at the end of the match, anything nested inside warns.
-- The ATN-class lexer path.
-- The rest of the lexer `$`-attribute surface — `$type` and member methods reading match position / text. The char-position half is covered: java2wado resolves `getCharPositionInLine()` and `_tokenStartCharPositionInLine`, but only in a Java body; the identity translator still has no `$`-form for either.
-- `@lexer::members` for a `language = Java` grammar. A Java member method takes `&mut self`, but a lexer predicate runs inside `try_<rule>(lx: &Lexer, ...)` — the tournament must not mutate through a losing candidate. Java lexer bodies therefore see no members, and a reference is reported. Wiring them needs a split between members a predicate may read and members only an action may touch.
-- Two same-named rule labels bound to _different_ rules in different alternatives (`x=a | x=b`). Per-alternative resolution disambiguates token-vs-rule, which is all the binding records, so a `.field` read still resolves against the first-declared rule's value channel. `$<label>.text` is unaffected — it reads the call's own span.
-- The SuperClass effect interface for the real-world grammars below. Landed for **predicate-only** lexer bases, including `language = Java`: RustLexer tokenizes and parses end to end through a hand-written `impl RustLexerBase`. See `action.md` ("SuperClass — an effect interface"). Remaining before TypeScript / ANTLRv4 run: action ops (`{this.m();}` — the winner-replay path), the parser side (parser-rule superClass predicates like `{this.NextGT()}?`, currently discarded), and lifecycle hooks (`nextToken` for last-token tracking). Action-op bases stay carved out (byte-identical) until the replay path lands.
-- Make the ANTLR descriptor output corpus codegen-and-compare (parse-only today), unblocking the output acceptance.
-- Extend the Stage C output-compare beyond `Sets` and `SemPredEvalParser`, the categories it runs for today. The remaining ones are a mechanical extractor re-run plus triage of whatever lands in `[stage_c_todo]` / `[stage_c_skip]`.
-- Parser actions on the paths that still warn: a non-transparent group's alternatives (the transparent path inlines its actions with its elements), an LR suffix, and a multi-alt prequel. Each surfaces `UnsupportedAction`, so a grammar that needs one is never silently wrong.
-- The recognizer accessors ANTLR exposes to an action that Gale does not model: `getExpectedTokens()` and `getVocabulary()` (live case: the `ParserErrors/LL1ErrorInfo` descriptor prints the expected set), and `PredictionMode` / `dumpDFA`, which describe ANTLR's simulator rather than the grammar.
-- java2wado numeric promotion: an `i32` token member (`$X.int` / `.type` / `.line` / `.pos` / `.index`) mixed with a wider value-channel field (`returns [long v]` / `[float]` / `[double]`) mismatches Wado's strict widths, since Wado has no implicit widening. Loud compile error, not silent; no corpus grammar hits it. A proper fix threads Java's promotion rules through the translator.
-
-Gale still silently discards action / predicate contents for the real-world grammars whose constructs the parser subset does not yet cover (`ANTLRv4Lexer`, `RustLexer`, `RustParser`, `TypeScriptLexer`, `TypeScriptParser`): they load cleanly, but the generated recognizer behaves as if every predicate were `true` and every action a no-op. That is wrong for:
-
-- Rust's `>>` / `>>=` token splitting in generics (`{this.NextGT()}?`) and float-literal disambiguation (`{this.FloatLiteralPossible()}?`); without them Gale mis-parses nested generics. (Raw-string `#`-count matching is _not_ a Stage C case — it is a recursive fragment, an ATN-class lexer concern.)
-- TypeScript's regex-vs-division disambiguation and other context-sensitive lexer and parser rules.
-
-All of these call `this.<method>()` against a hand-written `superClass` base that lives outside the `.g4` — executing them needs the SuperClass mechanism, not just action translation.
-
-Stage C is a hard prerequisite for treating Gale as a drop-in ANTLR4 replacement, for any lexer-level optimization (a fast tokenizer is meaningless if it tokenizes incorrectly), and for `superClass` / `tokenVocab`. It also unblocks composite-descriptor output comparison and parser descriptors whose output is purely action-print stdout.
-
-## gale-highlight — theme vocabulary
-
-`gale-highlight` provides a grammar-agnostic `Theme` (capture-class → CSS color), `stylesheet`, and `default_theme`. The _color → class_ half is covered; the _rule → class_ half is not: the set of capture classes is grammar-defined (the `.scm` highlight query), so a theme author keys colors by hand-typed class names with nothing to validate against, and a class the grammar emits but the theme omits is silently unstyled.
-
-- **Expose a grammar's capture vocabulary from the generator.** Gale already parses the `.scm` at generation time; emit the capture names it uses as a generated artefact (e.g. a `pub const CAPTURES: List<String>`, or a class → default-color map) alongside the parser. A grammar package could then build or validate a `Theme` against the real class set, turning a mistyped or dropped class into a signal instead of silent unstyled output.
-
-## Performance
-
-Runtime performance — the benchmark state, the live profile, the directions that would move the needle, and measured dead-ends (e.g. data-driven scan) — lives in [`perf.md`](./perf.md).
+The two LL-prediction gaps are deliberately parked, not queued — see below.
 
 ## Code-health bugs
 
@@ -86,12 +29,12 @@ The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that c
 Entries state the symptom, how to reproduce it, and anything already measured — not a diagnosis or a proposed fix. A diagnosis written here reads as an instruction later, and two have been wrong: one would have broken compatibility if implemented as written, the other described a difference that did not exist.
 
 - [ ] Valid input is rejected — the emitted dispatch has no else-fallback: `a : X+ Y | X Z` fails on `X X Y`. The opaque-rule expansion path separately drops at-end alternatives its template keeps.
-- [ ] Two operator alternatives of an ATN-class LR rule that open on the same token (`expr NOT? IN …` and `expr NOT? BETWEEN …`, both on `NOT`) are decided by alternative order rather than by lookahead. No committed grammar has the shape: `lr_between.g4` and `lr_atn_mid_operand.g4` run their loops on the simulator, but their operators open on distinct tokens, and SQLite — which does have the shared `NOT` — is not ATN-class at its loop. Reproducing it needs a new fixture with both properties.
 - [ ] A lexer alternation that is _not_ in tail position takes the first matching arm, not the one that lets the whole rule match: `I : ('a' | 'ab') 'bc'` rejects `abc`. Tail-position alternations are maximal-munch and unaffected.
+- [ ] Overlapping-but-unequal first-char ranges in the lexer dispatch shadow later rules: a char in the intersection only tries the first range group, and the wildcard fallback is unreachable for it.
+- [ ] A wildcard alternative gets an empty-token branch in a direct dispatch at the lowered-IR level, and `w=.` escapes the wildcard machinery entirely (the check does not unwrap labels). The surface-IR paths apply the wildcard soundness invariant; these do not.
+- [ ] Two operator alternatives of an ATN-class LR rule that open on the same token (`expr NOT? IN …` and `expr NOT? BETWEEN …`, both on `NOT`) are decided by alternative order rather than by lookahead. No committed grammar has the shape: `lr_between.g4` and `lr_atn_mid_operand.g4` run their loops on the simulator, but their operators open on distinct tokens, and SQLite — which does have the shared `NOT` — is not ATN-class at its loop. Reproducing it needs a new fixture with both properties.
 - [ ] A label on a transparent group (`x=(ID)`) silently drops the binding.
 - [ ] `\P{...}` (negated Unicode property) is parsed as literal chars — only lowercase `\p` is detected — and an unknown `\p{...}` property expands to an empty set with no diagnostic.
-- [ ] A wildcard alternative gets an empty-token branch in a direct dispatch at the lowered-IR level, and `w=.` escapes the wildcard machinery entirely (the check does not unwrap labels). The surface-IR paths apply the wildcard soundness invariant; these do not.
-- [ ] Overlapping-but-unequal first-char ranges in the lexer dispatch shadow later rules: a char in the intersection only tries the first range group, and the wildcard fallback is unreachable for it.
 - [ ] A surrogate code point in a char range (legal in ANTLR4 for matching UTF-16 code units) collapses to a single replacement char — range endpoints are Unicode scalars.
 
 ### Pipeline and tooling correctness
@@ -100,7 +43,7 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 
 ### Deleted-terminal rendering
 
-`to_string_tree` matches ANTLR4's `Trees.toStringTree` everywhere except a deleted terminal: Gale prints `<skip z>` where ANTLR4 prints the bare token (`<missing X>` already matches). The marker is a deliberate extension — it is what makes Gale's own error-recovery fixtures able to tell recovery from a clean parse — so `ParseTrees/ExtraToken` sits in `[stage_b_skip]` rather than being forced to pass. Decide once: either the corpus gets an ANTLR-identical rendering mode, or the marker becomes opt-in and the recovery fixtures read the `Skip` rows structurally.
+`to_string_tree` matches ANTLR4's `Trees.toStringTree` everywhere except a deleted terminal: Gale prints `<skip z>` where ANTLR4 prints the bare token (`<missing X>` already matches). The marker is a deliberate extension — it is what makes Gale's own error-recovery fixtures able to tell recovery from a clean parse — so `ParseTrees/ExtraToken` sits in `[stage_b_skip]` rather than being forced to pass. Decide once: either the corpus gets an ANTLR-identical rendering mode, or the marker becomes opt-in and the recovery fixtures read the `Skip` rows structurally. This is a decision, not an implementation task — nothing else moves until it is made.
 
 ### Diagnostics and minor
 
@@ -113,3 +56,80 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 ### Unchecked-argument quality nits (non-crash)
 
 - [ ] Malformed lexer command _arguments_ are unchecked (the paren panics are fixed): `pushMode(42)` interns a mode literally named `42`, and `-> ;` yields the odd "unknown lexer command ;".
+
+## Diagnostics & introspection
+
+Grammar-authoring DX follow-ups, from the review in [#1246](https://github.com/wado-lang/wado/issues/1246) (closed — these are what it left behind). Take them in this order; the first is a prerequisite for the second.
+
+- **Structured diagnostic-to-rule identity.** A diagnostic's owning rule is carried today as the free-form human label the warn was raised with, and tooling re-associates it by substring-matching the quoted rule name — so group-scoped warnings (no quoted rule name) never inline under their owning rule. Carry a structured owner (rule name / index), set it at the warn site, and compare by equality, keeping the label display-only. The same change lets the overlap-dispatch builder be told explicitly whether it is on the scan pass instead of recovering that from a label suffix.
+- **Optional-scan-guard-fallback warning.** Lowering warns on an overlap tournament today; the obvious next warning fires when an `e?` resolves to a scan-guarded optional (live case: a rule in `example/Wado.g4`). Deferred because it needs the enclosing rule name available at the warn site; add the diagnostic kind, the warn, and a fixture together.
+
+## Stage C — action / predicate execution
+
+Design in [`action.md`](./action.md). The largest remaining block, and a hard prerequisite for treating Gale as a drop-in ANTLR4 replacement, for any lexer-level optimization (a fast tokenizer is meaningless if it tokenizes incorrectly), and for `superClass` / `tokenVocab`. It also unblocks composite-descriptor output comparison and parser descriptors whose output is purely action-print stdout.
+
+Gale still silently discards action / predicate contents for the real-world grammars whose constructs the parser subset does not yet cover (`ANTLRv4Lexer`, `RustLexer`, `RustParser`, `TypeScriptLexer`, `TypeScriptParser`): they load cleanly, but the generated recognizer behaves as if every predicate were `true` and every action a no-op. That is wrong for:
+
+- Rust's `>>` / `>>=` token splitting in generics (`{this.NextGT()}?`) and float-literal disambiguation (`{this.FloatLiteralPossible()}?`); without them Gale mis-parses nested generics. (Raw-string `#`-count matching is _not_ a Stage C case — it is a recursive fragment, an ATN-class lexer concern.)
+- TypeScript's regex-vs-division disambiguation and other context-sensitive lexer and parser rules.
+
+All of these call `this.<method>()` against a hand-written `superClass` base that lives outside the `.g4` — executing them needs the SuperClass mechanism, not just action translation. So that comes first:
+
+- **The SuperClass effect interface** for those grammars. Landed for **predicate-only** lexer bases, including `language = Java`: RustLexer tokenizes and parses end to end through a hand-written `impl RustLexerBase`. See `action.md` ("SuperClass — an effect interface"). Remaining before TypeScript / ANTLRv4 run: action ops (`{this.m();}` — the winner-replay path), the parser side (parser-rule superClass predicates like `{this.NextGT()}?`, currently discarded), and lifecycle hooks (`nextToken` for last-token tracking). Action-op bases stay carved out (byte-identical) until the replay path lands.
+
+Then the paths that still warn — each surfaces `UnsupportedAction`, so a grammar that needs one is never silently wrong:
+
+- Parser actions on a non-transparent group's alternatives (the transparent path inlines its actions with its elements), an LR suffix, and a multi-alt prequel.
+- Lexer actions under a `Repeat`. The action replay places each action at the cursor it was written at, covering mid-element and nested-group placement, but a `Repeat` matches an unknown number of times and the non-greedy / lookahead-aware emitters restructure the sequence around it. An alt carrying one keeps the flat emit: top-level actions run at the end of the match, anything nested inside warns.
+
+Then the surface gaps:
+
+- The rest of the lexer `$`-attribute surface — `$type` and member methods reading match position / text. The char-position half is covered: java2wado resolves `getCharPositionInLine()` and `_tokenStartCharPositionInLine`, but only in a Java body; the identity translator still has no `$`-form for either.
+- `@lexer::members` for a `language = Java` grammar. A Java member method takes `&mut self`, but a lexer predicate runs inside `try_<rule>(lx: &Lexer, ...)` — the tournament must not mutate through a losing candidate. Java lexer bodies therefore see no members, and a reference is reported. Wiring them needs a split between members a predicate may read and members only an action may touch.
+- The recognizer accessors ANTLR exposes to an action that Gale does not model: `getExpectedTokens()` and `getVocabulary()` (live case: the `ParserErrors/LL1ErrorInfo` descriptor, one of the `[stage_c_todo]` entries, prints the expected set), and `PredictionMode` / `dumpDFA`, which describe ANTLR's simulator rather than the grammar — decide whether those two are ever in scope.
+- Two same-named rule labels bound to _different_ rules in different alternatives (`x=a | x=b`). Per-alternative resolution disambiguates token-vs-rule, which is all the binding records, so a `.field` read still resolves against the first-declared rule's value channel. `$<label>.text` is unaffected — it reads the call's own span.
+- The ATN-class lexer path.
+- java2wado numeric promotion: an `i32` token member (`$X.int` / `.type` / `.line` / `.pos` / `.index`) mixed with a wider value-channel field (`returns [long v]` / `[float]` / `[double]`) mismatches Wado's strict widths, since Wado has no implicit widening. Loud compile error, not silent; no corpus grammar hits it — lowest priority here. A proper fix threads Java's promotion rules through the translator.
+
+And the corpus side, which is extractor work rather than codegen work (see "Descriptor corpus" below):
+
+- Make the ANTLR descriptor output corpus codegen-and-compare (parse-only today), unblocking the output acceptance.
+- Extend the Stage C output-compare beyond `Sets` and `SemPredEvalParser`, the categories it runs for today. The remaining ones are a mechanical extractor re-run plus triage of whatever lands in `[stage_c_todo]` / `[stage_c_skip]`.
+
+## Descriptor corpus — coverage and re-triage
+
+The Stage B′ JVM-oracle infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md)) is in place and its pinned trees all pass — `[stage_b_oracle_todo]` is empty, so no prediction divergence is currently pinned there. Java is needed only at extract time, not in CI; the extract also needs the `vendor/antlr4` submodule initialized.
+
+Remaining, all gated on a JDK-equipped re-extract:
+
+- **Extend Stage B′ to the categories it does not cover** — `ParseTrees` (which has Stage A / B / C coverage but no oracle pin) and `Listeners` (no coverage at any stage: every descriptor sits in `[skip]`).
+- **Re-triage the skip buckets after each re-extract.** Several `[skip]` / `[stage_b_oracle_skip]` entries were recorded because StringTemplate directives sat outside action bodies where the stripper cannot reach; extract-time action-template expansion (see `antlr4-compatibility.md`) now turns those into plain Java type slots, so some should graduate from skip. Entries parked on a downstream `wado-compiler` failure need the failure re-checked rather than assumed — the note is only as fresh as the last run.
+
+### Composite (slave-grammar) descriptors
+
+Every `CompositeLexers` / `CompositeParsers` descriptor short-circuits on the presence of imported slave grammars. Independent blockers:
+
+- **Importer multi-input plumbing.** A grammar import (`import S;`) must resolve against the sibling slave-grammar files. Kiln already supports multi-input; lift the short-circuit once resolution lands. Actionable on its own, ahead of Stage C.
+- **Host-side output (Stage C).** Every composite descriptor's expected output is a host-side artefact — action prints, token dumps, or empty — so none survive the Stage B output normalizer. Re-evaluate once Stage C lands.
+
+## gale-highlight — theme vocabulary
+
+`gale-highlight` provides a grammar-agnostic `Theme` (capture-class → CSS color), `stylesheet`, and `default_theme`. The _color → class_ half is covered; the _rule → class_ half is not: the set of capture classes is grammar-defined (the `.scm` highlight query), so a theme author keys colors by hand-typed class names with nothing to validate against, and a class the grammar emits but the theme omits is silently unstyled.
+
+- **Expose a grammar's capture vocabulary from the generator.** Gale already parses the `.scm` at generation time; emit the capture names it uses as a generated artefact (e.g. a `pub const CAPTURES: List<String>`, or a class → default-color map) alongside the parser. A grammar package could then build or validate a `Theme` against the real class set, turning a mistyped or dropped class into a signal instead of silent unstyled output.
+
+## LL prediction — parked gaps
+
+Not queued work: both are known edges of the static path, and the complete answer is the runtime ATN simulator (`AGENTS.md` records three over-broad static repairs that each silently broke a real grammar). Revisit only when a descriptor or a real grammar surfaces a regression, and pair any repair with a rejection-case fixture.
+
+### Iter-body K-prefix for `Repeat` inner rule references
+
+The K-prefix follow-mask path closes the multi-token tail-greedy gap at the outer alternative position, but a rule reference inside a `Repeat` body still falls back to the 1-token mask path. The fixed-point "next iteration | exit-to-caller" computation that would let it gate is straightforward but not yet plumbed.
+
+### Multi-alt rule-reference expansion in the caller-side mask analysis
+
+The K-prefix caller-side mask analysis halts at a multi-alternative rule reference because a per-depth union of the alternatives' prefixes would over-yield by matching cross-alternative sequences no real alternative admits. A per-alternative sequence representation could extend the walk safely — useful when a caller's continuation passes through a multi-alternative rule like `expr : literal | name`.
+
+## Performance
+
+Runtime performance — the benchmark state, the live profile, the directions that would move the needle, and measured dead-ends (e.g. data-driven scan) — lives in [`perf.md`](./perf.md).

@@ -132,17 +132,17 @@
 "ParserExec/ReservedWordsEscaping" = "oracle: `returns [<IntArg(\"\")> return_]` — StringTemplate directive in a return-type slot the stripper cannot reach"
 "SemPredEvalParser/DependentPredNotInOuterCtxShouldBeIgnored" = "oracle: `returns [<IntArg(\"\")> i]` — StringTemplate directive in a return-type slot the stripper cannot reach"
 
-# wado-compiler downstream — the Gale-emitted parser source triggers
-# `Internal compiler error: WIR pipeline generated invalid core Wasm
-# module` (`wado-compiler/src/codegen.rs:45`) when compiled. The same
-# descriptors' Stage A `_parse_test.wado` files compile fine, so the
-# panic is specific to a code path the Stage B′ test exercises (likely
-# `to_tree(&root).to_string_tree()` over a deeply-nested grammar). Move
-# back to active once the wado-compiler bug is filed and fixed; the
-# oracle's tree is in oracle-pending/ ready to go.
-"ParserExec/OpenDeviceStatement_Case1" = "downstream wado-compiler codegen panic on the Gale-emitted parser source — `WIR pipeline generated invalid core Wasm module` (codegen.rs:45). Stage A parse test for the same descriptor compiles fine, so the panic is specific to the to_string_tree path."
-"ParserExec/OpenDeviceStatement_Case2" = "same wado-compiler codegen panic as OpenDeviceStatement_Case1"
-"ParserExec/OpenDeviceStatement_Case3" = "same wado-compiler codegen panic as OpenDeviceStatement_Case1"
+# Stale — awaiting a re-extract, not blocked. These were parked on a
+# downstream wado-compiler ICE (`WIR pipeline generated invalid core
+# Wasm module`) on the Gale-emitted parser source. Re-measured
+# 2026-07-30: all three grammars generate, compile and run their
+# `to_string_tree` path cleanly, so the ICE is gone. Drop these three
+# entries at the next JDK-equipped re-extract so the oracle pins their
+# trees; they are kept here only because a `_skip` cannot be lifted
+# without the oracle run that emits the test.
+"ParserExec/OpenDeviceStatement_Case1" = "stale: parked on a wado-compiler ICE that no longer reproduces — drop at the next re-extract so the oracle can pin the tree"
+"ParserExec/OpenDeviceStatement_Case2" = "same as OpenDeviceStatement_Case1"
+"ParserExec/OpenDeviceStatement_Case3" = "same as OpenDeviceStatement_Case1"
 
 # Oracle TestRig mojibakes non-ASCII output to `?`. The descriptors
 # below have grammars that accept Unicode characters and emit them as
