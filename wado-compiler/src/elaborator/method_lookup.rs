@@ -2511,18 +2511,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Choose the winning match: drop a trait's variadic impl when that same
     /// trait also has a non-variadic one (coherence Rule 1, WEP 2026-03-14 §5),
     /// prefer a trait impl in the current module, dedup `(trait, module)`
-    /// pairs, return the first remaining (multiple survivors are ambiguous,
-    /// resolved later by explicit disambiguation).
+    /// pairs, take the first remaining.
     fn select_trait_match(
         &self,
         mut found_traits: Vec<super::types::TraitMethodMatch>,
         method_name: &str,
         span: Span,
     ) -> Option<super::types::TraitMethodMatch> {
-        // Rule 1 ranks the impls of *one* trait against each other. It says
-        // nothing about a different trait's impl, so it must not outrank
-        // locality between traits: a foreign blanket `impl<T> A for T` would
-        // otherwise beat a local `impl<..T> B for [..T]`.
+        // Rule 1 ranks the impls of *one* trait against each other, so it must
+        // not outrank locality between traits: a foreign blanket
+        // `impl<T> A for T` would otherwise beat a local `impl<..T> B for [..T]`.
         let traits_with_non_variadic: IndexSet<String> = found_traits
             .iter()
             .filter(|m| !m.is_variadic_impl)
@@ -2545,19 +2543,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits.into_iter().next()
     }
 
-    /// One trait implemented for this receiver at two different argument lists
-    /// (`impl Take<A> for bool` and `impl Take<B> for bool`) leaves the method
-    /// name pointing at two signatures. Nothing downstream can choose between
-    /// them: the arguments are elaborated *against* the chosen signature, and
-    /// Wado has no qualified call form to name one. Left alone the first
-    /// candidate wins silently and the call site reports a type mismatch
-    /// against a signature the author never asked for, so say what is actually
-    /// wrong.
+    /// One trait implemented for this receiver at two argument lists
+    /// (`impl Take<A> for bool` beside `impl Take<B> for bool`) leaves the
+    /// method name pointing at two signatures. Nothing downstream can choose:
+    /// arguments are elaborated *against* the chosen signature, and Wado has no
+    /// qualified call form to name one.
     ///
-    /// Operators do not come through here — indexing and arithmetic pick their
-    /// impl by operand type in [`Self::find_indexing_trait_impl`] and friends,
-    /// which is why `List<T>` can carry `IndexValue<i32>` alongside
-    /// `IndexValue<RangeExclusive<i32>>`.
+    /// Operators do not come through here — [`Self::find_indexing_trait_impl`]
+    /// and friends pick by operand type, which is why `List<T>` can carry
+    /// `IndexValue<i32>` alongside `IndexValue<RangeExclusive<i32>>`.
     fn report_trait_argument_ambiguity(
         &self,
         found_traits: &[super::types::TraitMethodMatch],

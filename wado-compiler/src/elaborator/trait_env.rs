@@ -1755,19 +1755,15 @@ fn report_supertrait_cycle(
     ));
 }
 
-/// How a variadic impl target is shaped: `[..T]` alone, which the compiler
-/// implements, or a pack with further elements beside it, which it does not.
 enum VariadicTarget {
-    /// The bare `[..T]` — the only shape the compiler implements.
+    /// The bare `[..T]`, the only shape the compiler implements.
     PackOnly,
-    /// A pack anywhere else: beside other elements (`[i32, ..T]`) or under a
-    /// reference (`&[..T]`).
+    /// A pack beside other elements (`[i32, ..T]`) or under a reference.
     Unsupported,
 }
 
-/// Classify an impl target that spreads a type pack, or `None` when it spreads
-/// none (the impl is then not variadic). A pack spreads only inside a tuple, so
-/// a tuple is the only head that can carry one.
+/// Classify an impl target that spreads a type pack; `None` when it spreads
+/// none. Only a tuple can carry one.
 fn variadic_target(ty: &ast::Type) -> Option<VariadicTarget> {
     match ty {
         ast::Type::Tuple(elems) => {
@@ -1783,9 +1779,8 @@ fn variadic_target(ty: &ast::Type) -> Option<VariadicTarget> {
                 VariadicTarget::Unsupported
             })
         }
-        // A pack under `&` / `&mut` never resolves — the type checker reports
-        // it as an unknown type, naming the pack the impl plainly declares.
-        // Catch it here so the impl gets told what is actually wrong.
+        // A pack under a reference never reaches the impl's type-param scope,
+        // so type resolution would report the declared pack as unknown.
         ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
             variadic_target(inner).map(|_| VariadicTarget::Unsupported)
         }
@@ -1794,9 +1789,8 @@ fn variadic_target(ty: &ast::Type) -> Option<VariadicTarget> {
 }
 
 /// Whether two impl-written types can denote the same type. An impl's own type
-/// parameter is a wildcard: it matches whatever the other side names. Shapes
-/// this cannot decide unify, so an undecidable pair is reported rather than
-/// silently admitted — the sound direction for a coherence rule.
+/// parameter is a wildcard. An undecidable pair unifies: for a coherence rule,
+/// reporting is the sound direction.
 fn types_can_unify(
     a: &ast::Type,
     a_params: &IndexSet<&str>,
@@ -1827,7 +1821,7 @@ fn types_can_unify(
         | (ast::Type::MutReference(x), ast::Type::MutReference(y)) => {
             types_can_unify(x, a_params, y, b_params)
         }
-        // Two decidable shapes that did not pair up above have different heads.
+        // Decidable shapes that did not pair up above have different heads.
         (
             ast::Type::Named(_)
             | ast::Type::Generic(_)
@@ -1840,8 +1834,8 @@ fn types_can_unify(
             | ast::Type::Reference(_)
             | ast::Type::MutReference(_),
         ) => false,
-        // A projection, a function type, a nested pack, or a parse/inference
-        // placeholder is not decidable here, so it unifies.
+        // Projections, function types, nested packs and placeholders are not
+        // decidable here.
         (
             ast::Type::NamespacedGeneric(_)
             | ast::Type::Function(_)
@@ -1861,8 +1855,6 @@ fn types_can_unify(
     }
 }
 
-/// A variadic impl as coherence sees it: which trait it implements, and with
-/// which trait arguments.
 struct VariadicImpl<'a> {
     module_source: &'a ModuleSource,
     span: Span,
@@ -1872,10 +1864,9 @@ struct VariadicImpl<'a> {
 }
 
 impl VariadicImpl<'_> {
-    /// Whether the two accept a common tuple. Their targets are both the bare
-    /// `[..T]` — the only shape that reaches here — so they agree on every
-    /// arity, and only the trait's own arguments can hold them apart:
-    /// `Conv<i32>` and `Conv<String>` are implementations of different things.
+    /// Whether the two accept a common tuple. Both targets are the bare
+    /// `[..T]`, so only the trait's own arguments can hold them apart:
+    /// `Conv<i32>` and `Conv<String>` implement different things.
     fn overlaps(&self, other: &Self) -> bool {
         self.trait_args.len() == other.trait_args.len()
             && self
@@ -1887,25 +1878,16 @@ impl VariadicImpl<'_> {
 }
 
 /// Coherence Rule 2 (WEP 2026-03-14 §5): two variadic impls of one trait accept
-/// the same tuples, and bounds do not separate them — the type-checking model
-/// resolves a pack's bounds only at monomorphization, long after selection.
-/// Reject the later of the pair where it is written.
+/// the same tuples, and a pack's bounds are resolved only at monomorphization,
+/// so nothing separates them at selection. Reject the later one where it is
+/// written; a stdlib impl is considered but never reported, being unfixable by
+/// the user.
 ///
-/// Grouped by the trait's *declaration*, not its written name, so two modules
-/// each declaring a `Tag` keep their own variadic impls. Within a group,
-/// `overlaps` decides, so differing trait arguments (`Conv<i32>` vs
-/// `Conv<String>`) keep two impls apart.
+/// Grouping is by trait *declaration*, so two modules may each declare a `Tag`
+/// and keep their own variadic impls.
 ///
-/// Only a user-local impl is reported — a stdlib one is unfixable by the user
-/// — but every impl is considered, so a user impl that collides with the
-/// stdlib's is still caught and reported against the user's own file.
-///
-/// The same walk rejects a variadic target that carries elements beside its
-/// pack (`impl<..T> Trait for [i32, ..T]`), which the compiler does not
-/// implement: selection ignores the fixed elements, the pack binds to the whole
-/// receiver, and every such impl of one trait mangles to a single template
-/// name. Left to compile it miscompiles or trips the WIR validator, so it is
-/// refused where it is written.
+/// The same walk refuses a target the compiler does not implement, which would
+/// otherwise miscompile or trip the WIR validator.
 fn check_variadic_impl_overlap(
     modules: &IndexMap<ModuleSource, Module>,
     resolve_trait: ResolveTrait<'_>,
@@ -1957,10 +1939,9 @@ fn check_variadic_impl_overlap(
     }
 
     for impls in groups.values_mut() {
-        // A stdlib impl always holds the ground it covers, and among user impls
-        // the earlier one in (file, position) order does — an order that is
-        // source order within a file and stable across files, unlike the
-        // module map's load order.
+        // A stdlib impl holds its ground; among user impls the earlier one in
+        // (file, position) order does. The module map's order is load order,
+        // which is neither source order nor stable across entry points.
         impls.sort_by_key(|i| {
             (
                 is_user_local(i.module_source),
@@ -1996,9 +1977,8 @@ fn check_variadic_impl_overlap(
     violations
 }
 
-/// Whether an impl target names one of the impl's own type parameters among
-/// its arguments, making the impl generic over the head rather than written for
-/// a single instantiation of it.
+/// Whether the target names one of the impl's own type parameters, making the
+/// impl generic over the head rather than written for one instantiation.
 fn target_mentions_impl_param(ty: &ast::Type, params: &IndexSet<&str>) -> bool {
     match ty {
         ast::Type::Named(named) => params.contains(named.name.as_str()),
@@ -2018,27 +1998,17 @@ fn target_mentions_impl_param(ty: &ast::Type, params: &IndexSet<&str>) -> bool {
     }
 }
 
-/// A method on an inherent impl written for one instantiation
-/// (`impl Box_<i32>`) collides with a same-named method on an inherent impl
-/// generic over the same head (`impl<T> Box_<T>`): both own the name
-/// `Box_<i32>::a`.
-///
-/// For a *trait* impl the trait forces one signature on both, so coherence
-/// Rule 1 can let the specific one win and callers stay well-typed. An inherent
-/// impl has no such contract — the two may return different types, and a
-/// generic caller type-checked against the general method then links to the
-/// specific one. Wado rejects the pair instead, as Rust does.
+/// An inherent `impl Box_<i32>` and an inherent `impl<T> Box_<T>` defining the
+/// same method both own the name `Box_<i32>::a`. A trait impl would force one
+/// signature on both, letting coherence Rule 1 pick the specific one; an
+/// inherent impl carries no such contract, so a generic caller type-checked
+/// against the general method would link to a differently-typed function.
+/// Rejected, as in Rust.
 fn check_inherent_impl_collisions(
     modules: &IndexMap<ModuleSource, Module>,
 ) -> Vec<(ModuleSource, TypeError)> {
-    struct InherentImpl<'a> {
-        head: String,
-        is_generic: bool,
-        methods: &'a [ast::Function],
-    }
-
-    let mut by_head: IndexMap<String, Vec<InherentImpl<'_>>> = IndexMap::default();
-    let mut candidates = Vec::new();
+    let mut generic_methods_by_head: IndexMap<String, IndexSet<&str>> = IndexMap::default();
+    let mut instantiations = Vec::new();
 
     for (module_source, module) in modules {
         for item in &module.items {
@@ -2054,33 +2024,28 @@ fn check_inherent_impl_collisions(
                 .map(|p| p.name.as_str())
                 .collect();
             let head = get_type_name_static(&impl_block.ty);
-            let entry = InherentImpl {
-                head: head.clone(),
-                is_generic: target_mentions_impl_param(&impl_block.ty, &params),
-                methods: &impl_block.methods,
-            };
-            if !entry.is_generic && is_user_local(module_source) {
-                candidates.push((module_source, impl_block, head.clone()));
+            if target_mentions_impl_param(&impl_block.ty, &params) {
+                generic_methods_by_head
+                    .entry(head)
+                    .or_default()
+                    .extend(impl_block.methods.iter().map(|m| m.name.as_str()));
+            } else if is_user_local(module_source) {
+                instantiations.push((module_source, impl_block, head));
             }
-            by_head.entry(head).or_default().push(entry);
         }
     }
 
     let mut violations = Vec::new();
-    for (module_source, impl_block, head) in candidates {
-        let Some(siblings) = by_head.get(&head) else {
+    for (module_source, impl_block, head) in instantiations {
+        let Some(generic_methods) = generic_methods_by_head.get(&head) else {
             continue;
         };
         for method in &impl_block.methods {
-            let shadowed = siblings
-                .iter()
-                .filter(|s| s.is_generic && s.head == head)
-                .any(|s| s.methods.iter().any(|m| m.name == method.name));
-            if shadowed {
+            if generic_methods.contains(method.name.as_str()) {
                 violations.push((
                     module_source.clone(),
                     TypeError::DuplicateInherentMethod {
-                        self_type_name: get_type_name_static(&impl_block.ty),
+                        self_type_name: head.clone(),
                         method_name: method.name.clone(),
                         span: method.span,
                     },

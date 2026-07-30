@@ -1,9 +1,7 @@
-// One trait implemented for a receiver at two different argument lists leaves
-// the method name pointing at two signatures. Wado has no qualified call form
-// to name one, and arguments are elaborated *against* the chosen signature, so
-// nothing downstream can choose. Previously the first candidate won silently
-// and the call site reported a type mismatch against a signature the author
-// never asked for.
+// One trait implemented for a receiver at two argument lists leaves the method
+// name pointing at two signatures, and nothing downstream can choose. The first
+// candidate used to win silently, so the call site reported a type mismatch
+// against a signature the author never asked for.
 
 struct A {
     v: i32,

@@ -2069,10 +2069,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// impl are per-instantiation concrete functions, named `List<u8>::method`
     /// and called directly.
     ///
-    /// The tuple arm is what gives coherence Rule 1 (WEP 2026-03-14 §5) its
-    /// teeth: `impl Tag for [i32, i32]` names its method `[i32,i32]^Tag::tag`,
-    /// the very name a call on a `[i32, i32]` receiver looks up, so the
-    /// variadic template is never instantiated for that arity.
+    /// The tuple arm carries coherence Rule 1 (WEP 2026-03-14 §5):
+    /// `impl Tag for [i32, i32]` names its method `[i32,i32]^Tag::tag`, the
+    /// name a `[i32, i32]` receiver looks up, so the variadic template is never
+    /// instantiated for that arity.
     pub(super) fn impl_is_concrete_instantiation(
         &self,
         impl_ty: &ast::Type,

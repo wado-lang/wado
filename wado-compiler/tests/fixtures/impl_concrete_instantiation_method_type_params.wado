@@ -1,8 +1,7 @@
 // Coherence Rule 1 (WEP 2026-03-14 §5) is a rivalry between *impls*, so it
 // holds when the trait method declares type params of its own: both
 // `impl Tag for Box_<i32>` and `impl<T> Tag for Box_<T>` reach
-// `Box_<i32>^Tag::tag<i32>`. The specific impl wins; the general template is
-// not instantiated onto the name. This previously aborted the compile with a
+// `Box_<i32>^Tag::tag<i32>`. This previously aborted the compile with a
 // duplicate-function panic.
 
 struct Box_<T> {

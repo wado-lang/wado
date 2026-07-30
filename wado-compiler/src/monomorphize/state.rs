@@ -52,12 +52,10 @@ pub(super) struct FuncInstState {
     /// post-variadic-expansion type-arg inference needs in order to tell a
     /// method type param from an ordinary parameter.
     pub templates: Rc<IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>>,
-    /// Every already-concrete function, per module, named the way an
-    /// instantiation names itself. A hand-written impl for one instantiation
-    /// (`impl Tag for Box_<i32>`, `impl Tag for [i32, i32]`) emits exactly the
-    /// function a template instantiation would, so this is what makes the
-    /// specific impl win over the general one — coherence Rule 1
-    /// (WEP 2026-03-14 §5).
+    /// Per module, the names written impls already define. An impl for one
+    /// instantiation (`impl Tag for Box_<i32>`) emits exactly the function a
+    /// template instantiation would, which is what lets the specific impl win
+    /// over the general one — coherence Rule 1 (WEP 2026-03-14 §5).
     pub concrete_names: IndexMap<ModuleSource, IndexSet<String>>,
 }
 
@@ -229,17 +227,15 @@ impl Monomorphizer {
         self.functions.instantiated.get(key)
     }
 
-    /// Coherence Rule 1 (WEP 2026-03-14 §5): whether an impl written for this
-    /// very instantiation already occupies the name, so that instantiating the
-    /// template would both shadow the specific impl and collide with it in the
-    /// module namespace.
+    /// Coherence Rule 1 (WEP 2026-03-14 §5): whether a written impl already
+    /// occupies this instantiation's name, so queueing the template would both
+    /// shadow that impl and collide with it in the module namespace.
     ///
-    /// Only a template carrying impl-level arguments has such a rival — those
-    /// are the ones a written impl can pin down. A concrete impl's own generic
-    /// method carries none, so it still reaches its instantiations even though
-    /// its base name is exactly what sits in `concrete_names`; that base is
-    /// what a method-generic template must be compared against, since the two
-    /// differ only in the method type args tacked onto the end.
+    /// Only a template carrying impl-level arguments has such a rival. A
+    /// concrete impl's own generic method carries none, so it still reaches its
+    /// instantiations even though its base name is what sits in
+    /// `concrete_names` — and that base is what a method-generic template is
+    /// compared against, the two differing only by the trailing method args.
     fn concrete_impl_owns_name(
         &self,
         key: &InstantiationKey,
