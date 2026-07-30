@@ -7477,3 +7477,88 @@ fn a_deref_read_binds_a_copy_not_the_place() {
         "the deref bound a copy, so the write through `p` must not reach it",
     );
 }
+
+#[test]
+fn a_unit_typed_region_does_not_fold_to_its_last_value() {
+    // Inlining `g(b);` leaves a block whose trailing statement still carries
+    // the callee's result while the block itself stands where the program
+    // expects nothing. The value must not be substituted there.
+    let table = TypeTable::new();
+    let region = block_expr_of(
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            expr_stmt_b(binary(
+                NirBinaryOp::Add,
+                local_expr(0, TypeTable::I32),
+                int_lit(1, TypeTable::I32, "1"),
+                TypeTable::I32,
+            )),
+        ],
+        TypeTable::UNIT,
+    );
+    let (mut body, e) = into_body_expr(&region);
+    let mut interp = Interpreter::new(&table);
+    assert!(
+        !interp.reduce_local_in_body(&mut body, e),
+        "a block yielding nothing has no value to stand in for it",
+    );
+    assert!(matches!(body.exprs[e].kind, ExprKind::Block(_)));
+
+    // The same region typed as what it computes still folds, so the refusal
+    // above is about the unit position and not about the shape.
+    let valued = block_expr_of(
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            expr_stmt_b(binary(
+                NirBinaryOp::Add,
+                local_expr(0, TypeTable::I32),
+                int_lit(1, TypeTable::I32, "1"),
+                TypeTable::I32,
+            )),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&valued);
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice_full(&mut body, e),
+        Lattice::Const(Value::Int {
+            value: 3,
+            prim: PrimitiveType::I32,
+        })
+    );
+}
+
+#[test]
+fn a_region_already_run_is_not_run_again() {
+    // The scratch sink promotes nothing, so a scalar region records its value
+    // in the fold memo. Reading it back is what keeps a region inside a
+    // compile-time body from being re-run — and re-charged — at every visit:
+    // with a budget for one run only, the second visit still answers.
+    let table = TypeTable::new();
+    let region = block_expr_of(
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            expr_stmt_b(binary(
+                NirBinaryOp::Add,
+                local_expr(0, TypeTable::I32),
+                int_lit(1, TypeTable::I32, "1"),
+                TypeTable::I32,
+            )),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&region);
+    let mut interp = Interpreter::new(&table);
+    let expected = Lattice::Const(Value::Int {
+        value: 3,
+        prim: PrimitiveType::I32,
+    });
+    interp.set_step_budget(8);
+    assert_eq!(interp.reduce_to_lattice_full(&mut body, e), expected);
+    interp.set_step_budget(0);
+    assert_eq!(
+        interp.reduce_to_lattice_full(&mut body, e),
+        expected,
+        "the second visit must read the memo rather than pay for a re-run",
+    );
+}

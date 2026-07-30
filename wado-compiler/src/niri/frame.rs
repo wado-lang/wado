@@ -15,6 +15,7 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_visitor::NirRefVisitor;
+use crate::tir::TypeTable;
 
 use super::place::{borrowed_place_operand, overlapping_places, place_of};
 use super::region::{region_is_self_contained, region_shape};
@@ -474,12 +475,19 @@ impl Interpreter<'_> {
 
     /// Bind a local inside a compile-time frame. A local the frame may reach
     /// through another handle keeps no value.
+    ///
+    /// Both outcomes go through [`Interpreter::bind_local`], which is where a
+    /// binding displaces a place alias the index held. A clobbered local that
+    /// wrote its `NonConst` straight into the environment would leave the
+    /// alias standing, and a later write through it would land in the local
+    /// the alias still named.
     fn bind_ctfe_local(&mut self, index: u32, lattice: Lattice) {
-        if self.frame.ctfe_clobbered.contains(index) {
-            self.frame.env.insert(index, Lattice::NonConst);
+        let lattice = if self.frame.ctfe_clobbered.contains(index) {
+            Lattice::NonConst
         } else {
-            self.bind_local(index, lattice);
-        }
+            lattice
+        };
+        self.bind_local(index, lattice);
     }
 
     /// The operand a `let` binds as a place rather than as a value: a borrow
@@ -606,7 +614,7 @@ impl Interpreter<'_> {
         if self.step_budget == 0 {
             return None;
         }
-        let returns_unit = callee.return_type == crate::tir::TypeTable::UNIT;
+        let returns_unit = callee.return_type == TypeTable::UNIT;
 
         let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());
         let mut targets: Vec<(u32, u32, Vec<u32>)> = Vec::new();
@@ -692,7 +700,22 @@ impl Interpreter<'_> {
     /// closedness confines every write to locals of the scratch run, so
     /// nothing is performed twice against the program's own state.
     pub(super) fn try_region_fold(&mut self, body: &Body, e: ExprId) -> Option<Value> {
+        // A block yielding nothing denotes nothing, whatever its last
+        // statement computed: an inlined `g(b);` keeps the callee's result on
+        // its trailing statement while the block that replaced the call stands
+        // in unit position. Substituting the value there would leave a typed
+        // constant where the program expects none — the same reason a unit
+        // callee's result is discarded when a frame runs one.
+        if body.exprs[e].type_id == TypeTable::UNIT {
+            return None;
+        }
         let (block, label) = region_shape(body, e)?;
+        // What a previous visit already ran. The scratch sink promotes
+        // nothing, so without reading the memo back here a region inside a
+        // compile-time body is re-run — and re-charged — at every visit.
+        if let Some(value) = self.frame.scratch_folds.get(&e) {
+            return Some(value.clone());
+        }
         if !region_is_self_contained(body, block, self.callees, self.ctfe_builtins) {
             return None;
         }

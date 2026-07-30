@@ -97,14 +97,19 @@ impl Interpreter<'_> {
             }
         }
         if let Some(value) = self.try_region_fold(sink.body(), e) {
-            if value.is_scalar() {
-                if sink.replace_with_value(e, value.clone()) {
-                    return true;
-                }
-                self.frame.scratch_folds.insert(e, value);
-            } else if self.materialize_seq_via(sink, e, &value) {
+            let committed = if value.is_scalar() {
+                sink.replace_with_value(e, value.clone())
+            } else {
+                self.materialize_seq_via(sink, e, &value)
+            };
+            if committed {
                 return true;
             }
+            // Nothing took the value — a scratch sink promotes nothing, and an
+            // aggregate with no literal form has nowhere to go. Record what
+            // the run produced anyway, so a later visit reads it back instead
+            // of re-running the region and paying for the copy again.
+            self.frame.scratch_folds.insert(e, value);
         }
         if rewrite_short_circuit_via(sink, e) {
             return true;
@@ -132,6 +137,12 @@ impl Interpreter<'_> {
             return false;
         };
         if !self.type_table.is_seq_container(*type_id) {
+            return false;
+        }
+        // The literal is written over `e` but typed from the value, so the two
+        // have to agree about what stands there. A node yielding nothing never
+        // does.
+        if sink.body().exprs[e].type_id == TypeTable::UNIT {
             return false;
         }
         let Some(Value::Seq { elements, .. }) = value.field(SeqField::Backing.index()) else {
