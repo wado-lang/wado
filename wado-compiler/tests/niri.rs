@@ -7209,3 +7209,60 @@ fn a_region_writing_a_global_is_refused() {
     let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
     assert_eq!(lat, Lattice::Unevaluated);
 }
+
+#[test]
+fn a_region_write_behind_a_cast_still_lands() {
+    // Monomorphization wraps builtin borrows in reference-shaped casts
+    // (`&mut c.repr as &mut Array<u8>`). Place naming reads through them, so
+    // the region still folds — refusing it would cost exactly the shape the
+    // inlined stdlib append path has.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let backing = || {
+        field_access(
+            local_expr(0, list_ty),
+            SeqField::Backing.index(),
+            "repr",
+            list_ty,
+        )
+    };
+    let region = block_expr_of(
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    cast_expr(mut_ref(backing(), list_ty), list_ty),
+                    int_lit(1, TypeTable::I32, "1"),
+                    int_lit(9, TypeTable::U8, "9"),
+                ],
+                TypeTable::UNIT,
+            )),
+            expr_stmt_b(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(backing(), list_ty),
+                    int_lit(1, TypeTable::I32, "1"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+        TypeTable::U8,
+    );
+    let mut interp = Interpreter::new(&table);
+    interp.with_ctfe_builtins(&builtins);
+    let (mut body, e) = into_body_expr(&region);
+    let lat = interp.reduce_to_lattice_full(&mut body, e);
+    assert_eq!(
+        lat,
+        Lattice::Const(Value::Int {
+            value: 9,
+            prim: PrimitiveType::U8,
+        })
+    );
+}

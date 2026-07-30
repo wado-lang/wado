@@ -190,14 +190,15 @@ Regions:
 - A closed block runs as a frame the engine starts from scratch: one that
   builds its value in locals of its own, writes only to those locals, and
   yields the result as its value is as self-contained as a call body, except
-  that the caller wrote it inline. Closedness is judged on where writes land —
-  every written root must be declared inside the block, since the executor
-  performs a whole-local assignment by binding its environment, and one
-  targeting an outer local would be silently dropped with the fold. Everything
-  else — a read of an outer local, a call the frame cannot run, control flow
-  leaving the block — the run itself refuses by abandoning the evaluation.
-  This is what folds a fully-constant string template to the literal the
-  source could have written.
+  that the caller wrote it inline. Closedness needs only two static facts —
+  an assignment's root and a `&mut` borrow's root must be locals the block
+  declares — because every other write channel commits through the frame's
+  environment, which a region starts empty and which gains keys through
+  exactly those two mentions. A call on an outer receiver, a global write, a
+  read the frame cannot answer all abandon the evaluation at run time, which
+  forfeits the fold rather than dropping a write. This is what folds a
+  fully-constant string template to the literal the source could have
+  written.
 - A `let` binding a borrow of a local place resolves to an alias inside a
   frame, not a value: reads through it project the place's current value and
   writes land in the place, which is what carries the desugared template's
