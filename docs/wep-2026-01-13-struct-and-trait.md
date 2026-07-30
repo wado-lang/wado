@@ -509,6 +509,17 @@ trait Sized {}
    - **Mitigation**: Newtype pattern (`struct MyString(String)`)
 3. **No Copy trait**: Unlike Rust, no distinction between bitwise-copy and clone
    - **Mitigation**: Compiler handles this automatically
+4. **One trait per receiver at one argument list**: a call names only the method, and
+   method resolution reads neither the argument nor the expected type, so
+   `impl Take<A> for bool` beside `impl Take<B> for bool` makes `f.take(..)` ambiguous.
+   Selecting on either would be overload resolution: arguments are elaborated _against_
+   the resolved signature, so choosing by argument type means typing the arguments
+   first, independently of any candidate.
+   - **Mitigation**: the ambiguity is reported at the call site, naming both traits.
+     Operators are unaffected — they select by operand type on their own path, which is
+     what lets `List<T>` implement `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>`
+     and `IndexValue<RangeInclusive<i32>>` at once. `From` likewise has a dedicated
+     resolution path (WEP 2026-03-16).
 
 ### Comparison with Rust
 
