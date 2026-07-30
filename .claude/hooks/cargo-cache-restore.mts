@@ -18,11 +18,11 @@
 //   WADO_CACHE_SCCACHE_OBJECT, SCCACHE_DIR.
 
 import { createSign } from "node:crypto";
-import { createWriteStream, readFileSync, mkdirSync } from "node:fs";
-import { execFileSync, spawn } from "node:child_process";
+import { readFileSync, mkdirSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { tmpdir, homedir } from "node:os";
+import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -75,7 +75,19 @@ async function accessToken({ client_email, private_key, token_uri }: ServiceAcco
   return (await res.json()).access_token;
 }
 
-async function restore(token: string, object: string, destDir: string, tarName: string): Promise<boolean> {
+// Unpack straight from the network into destDir. Staging the tarball on disk
+// first would cost a peak of ~500 MB (sccache) of the session's fixed disk
+// allowance, which is the resource under pressure here.
+async function untar(body: ReadableStream<Uint8Array>, destDir: string): Promise<void> {
+  const tar = spawn("tar", ["-xzf", "-", "-C", destDir], { stdio: ["pipe", "ignore", "inherit"] });
+  const exited = new Promise<void>((resolve, reject) => {
+    tar.on("error", reject);
+    tar.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`tar exited with code ${code}`))));
+  });
+  await Promise.all([pipeline(Readable.fromWeb(body), tar.stdin!), exited]);
+}
+
+async function restore(token: string, object: string, destDir: string): Promise<boolean> {
   const url =
     `https://storage.googleapis.com/storage/v1/b/${BUCKET}` +
     `/o/${encodeURIComponent(object)}?alt=media`;
@@ -90,9 +102,7 @@ async function restore(token: string, object: string, destDir: string, tarName: 
   if (!res.ok) throw new Error(`download failed: HTTP ${res.status} ${await res.text()}`);
 
   mkdirSync(destDir, { recursive: true });
-  const tarPath = join(tmpdir(), tarName);
-  await pipeline(Readable.fromWeb(res.body!), createWriteStream(tarPath));
-  execFileSync("tar", ["-xzf", tarPath, "-C", destDir]);
+  await untar(res.body!, destDir);
   log(`restored gs://${BUCKET}/${object} into ${destDir}`);
   return true;
 }
@@ -124,8 +134,8 @@ async function main(): Promise<void> {
   // Independent and best-effort: a missing sccache object must not stop the
   // registry restore, and vice versa.
   const [registry, sccache] = await Promise.allSettled([
-    restore(token, REGISTRY_OBJECT, CARGO_HOME, "cargo-registry-cache.tar.gz"),
-    restore(token, SCCACHE_OBJECT, SCCACHE_DIR, "cargo-sccache-cache.tar.gz"),
+    restore(token, REGISTRY_OBJECT, CARGO_HOME),
+    restore(token, SCCACHE_OBJECT, SCCACHE_DIR),
   ]);
   for (const r of [registry, sccache]) {
     if (r.status === "rejected") log(`skipped: ${(r.reason as Error).message}`);

@@ -32,14 +32,14 @@ mise run warm-cache
 """
 
 [tasks.warm-cache]
-description = "Reconstruct target/ from the restored sccache cache, then warm the incremental dev loop"
+description = "Reconstruct target/ from the restored sccache cache"
 run = """
 #!/usr/bin/env bash
 # Turns the restored sccache cache (see .claude/hooks/cargo-cache-restore.mts)
 # into a warm target/: an ~8 min cold dependency build becomes an ~80s
-# sccache-backed rebuild. sccache is used ONLY here — it disables incremental,
-# which cripples the edit/rebuild inner loop (measured ~12x slower on
-# wado-compiler edits), so we hand off to incremental immediately after.
+# sccache-backed rebuild. sccache is used ONLY here, because its cache key
+# depends on the CARGO_* set normalized below — a plain `cargo build` in this
+# container has a different set and would only add misses.
 # No-ops cleanly when sccache or the cache is absent (e.g. local dev).
 set -e -o pipefail
 export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/.cargo/sccache}"
@@ -51,19 +51,17 @@ if [ ! -d "$SCCACHE_DIR" ] || [ -z "$(ls -A "$SCCACHE_DIR" 2>/dev/null)" ]; then
   echo "no restored sccache cache at $SCCACHE_DIR; skipping warm-cache"
   exit 0
 fi
-# 1) Reconstruct dependency artifacts from the content-addressed cache.
-#    sccache hashes every CARGO_* env var into the Rust cache key, so expose
-#    exactly the CARGO_* set the cargo-cache.yml runner used — this container
-#    otherwise leaks CARGO_HTTP_CAINFO and drops the runner's three.
+# Reconstruct dependency artifacts from the content-addressed cache. sccache
+# hashes every CARGO_* env var into the Rust cache key, so expose exactly the
+# CARGO_* set the cargo-cache.yml runner used — this container otherwise leaks
+# CARGO_HTTP_CAINFO and drops the runner's three.
 unset $(compgen -e | grep '^CARGO_' || true)
 env CARGO_HOME="$HOME/.cargo" CARGO_TARGET_DIR="$PWD/target" CARGO_INCREMENTAL=0 \
   RUSTC_WRAPPER=sccache cargo build --workspace --locked
 sccache --show-stats || true
-# 2) Hand off to incremental so the first real edit is a fast relink rather
-#    than a full non-incremental recompile (sccache and incremental are
-#    mutually exclusive). Only the workspace crates rebuild here; the cached
-#    dependencies are reused.
-CARGO_INCREMENTAL=1 cargo build --workspace --locked
+# The dev loop also runs with CARGO_INCREMENTAL=0 (see AGENTS.md), so these
+# artifacts are exactly what a later plain `cargo build` wants: no hand-off
+# build is needed, and target/debug/incremental never materializes.
 """
 
 [tasks.on-task-done]

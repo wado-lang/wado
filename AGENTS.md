@@ -54,6 +54,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture and fix it. A workaround that lets the current task proceed is never a reason to skip or defer any of these.
 - A pre-existing issue — whether you find it or a reviewer points it out — must be fixed, with TDD when practical.
 - Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and deps so dev-build runtime is close to release for the parts that matter. `--release` is only for distributing binaries, not for the inner dev loop.
+- Cloud sessions run with `CARGO_INCREMENTAL=0`: `target/debug/incremental` does not fit the session's fixed disk allowance. Every rebuild is a full recompile of the touched crates, so scope the inner loop with `cargo check` and `-p <crate>` instead of relying on incremental relinks. Never set `CARGO_INCREMENTAL=1` in a task or script.
 - Use the `rust` skill when writing Rust.
 - Use the `wado` skill when writing Wado code or designing Wado language features.
 
