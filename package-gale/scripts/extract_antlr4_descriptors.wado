@@ -2127,6 +2127,12 @@ fn normalize_output_for_stage_b(raw: &String) -> Option<String> {
     if !s.starts_with("(") {
         return null;
     }
+    // A tree render ends at its closing paren. Anything after it is
+    // host-side print output the descriptor emits alongside the tree, so
+    // the `[output]` as a whole is not a tree to compare.
+    if !s.ends_with(")") {
+        return null;
+    }
     let chars: List<char> = s.chars().collect();
     if chars.len() < 2 {
         return null;
@@ -2311,6 +2317,18 @@ test "normalize: action print like (a+b) without separator after name is rejecte
     assert normalize_output_for_stage_b(&"(s a)") matches { Some(_) };
     assert normalize_output_for_stage_b(&"(s\n  a)") matches { Some(_) };
     assert normalize_output_for_stage_b(&"(s\ta)") matches { Some(_) };
+}
+
+test "normalize: host-side prints after the tree are rejected" {
+    // A `to_string_tree` render ends at its closing paren. The Listeners
+    // descriptors print the tree and then let a listener print more lines
+    // (`(a 1 2)\n1\n2`); comparing that as one tree would silently pin the
+    // listener output as tree content — the whitespace-collapsing
+    // `normalize_tree` on the expected side hides the difference.
+    assert normalize_output_for_stage_b(&"(a 1 2)\n1\n2") matches { None };
+    assert normalize_output_for_stage_b(&"(a x)\n[a, s]") matches { None };
+    // An indented tree still ends at its closing paren.
+    assert normalize_output_for_stage_b(&"(s\n  (a x))") matches { Some(_) };
 }
 
 test "normalize: line-noise output starting with paren but no name is rejected" {

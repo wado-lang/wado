@@ -163,3 +163,40 @@ test "expand: TokenStartColumnEquals lexer predicate" {
     let expected = "INDENT : [ \\t]+ { _tokenStartCharPositionInLine == 0 }? ;";
     assert expand(&g) == expected, `got '${expand(&g)}'`;
 }
+
+test "expand: StringTemplate comment is dropped" {
+    let g = "a: 'a' myset 'd' ; <! bit complicated because of the JavaScript target !>";
+    assert expand(&g) == "a: 'a' myset 'd' ; ", `got '${expand(&g)}'`;
+}
+
+test "expand: StringTemplate comment spanning lines is dropped" {
+    let g = "grammar T;\n<!\n  a note\n!>\ns : ID ;";
+    assert expand(&g) == "grammar T;\n\ns : ID ;", `got '${expand(&g)}'`;
+}
+
+test "expand: listener scaffolding expands to nothing" {
+    let g = "grammar T;\n\n<ImportListener(\"T\")>\n<BasicListener(\"T\")>\n\ns : r=a ;";
+    assert expand(&g) == "grammar T;\n\n\n\n\ns : r=a ;", `got '${expand(&g)}'`;
+}
+
+test "expand: every listener class helper expands to nothing" {
+    let g = "<LRListener(\"T\")><LRWithLabelsListener(\"T\")><RuleGetterListener(\"T\")><TokenGetterListener(\"T\")>";
+    assert expand(&g) == "", `got '${expand(&g)}'`;
+}
+
+test "expand: ContextMember chained into ToStringTree and writeln" {
+    let g = "s @after {<ContextMember(\"$ctx\", \"r\"):ToStringTree():writeln()>} : r=a ;";
+    let expected = "s @after {System.out.println($ctx.r.toStringTree(this));} : r=a ;";
+    assert expand(&g) == expected, `got '${expand(&g)}'`;
+}
+
+test "expand: WalkListener drops its receiver" {
+    let g = "s @after {<ContextMember(\"$ctx\", \"r\"):WalkListener()>} : r=a ;";
+    assert expand(&g) == "s @after {} : r=a ;", `got '${expand(&g)}'`;
+}
+
+test "expand: rule invocation stack helpers" {
+    let g = "grammar T;\n<ImportRuleInvocationStack()>\na : 'x' {<RuleInvocationStack():writeln()>} ;";
+    let expected = "grammar T;\n\na : 'x' {System.out.println(getRuleInvocationStack());} ;";
+    assert expand(&g) == expected, `got '${expand(&g)}'`;
+}

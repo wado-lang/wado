@@ -102,11 +102,12 @@ The Stage B′ JVM-oracle infrastructure (design in [`antlr4-compatibility.md`](
 
 `[stage_b_oracle_skip]` has been re-triaged (2026-07-30) and is down to the seven descriptors whose oracle output is not a valid pin at all — TestRig encodes non-ASCII as `?` while Gale renders the real code points, so pinning would strictly worsen Gale. Those are permanent unless the oracle's output encoding is fixed upstream; nothing else is parked there.
 
+Stage B′ is the **fallback** for descriptors Stage B cannot compare, not a parallel pin: the oracle manifest is written only on the paths where the descriptor's own `[output]` is not a tree Stage B can use. So a category having no `stage_b_oracle/` directory is not by itself a gap — it can equally mean every comparable descriptor is already covered by Stage B directly. Read coverage per descriptor, not per directory.
+
 Remaining:
 
-- **Extend Stage B′ to the categories it does not cover** — `ParseTrees` (which has Stage A / B / C coverage but no oracle pin) and `Listeners` (no coverage at any stage: every descriptor sits in `[skip]`). Needs a JDK-equipped re-extract.
-- **Graduate the `[skip]` bucket, which a re-extract alone will not move.** Those thirteen descriptors carry StringTemplate directives that name host-side artefacts — `<ImportListener(...)>`, `<BasicListener(...)>`, `<ParserPropertyMember()>`, `<PositionAdjustingLexer()>` — and none are in the expansion table (`src/g4/action_templates.wado`), which only covers directives with a grammar-level meaning. Each needs either a table entry or the judgement that it is genuinely target-language-specific; the Listeners ones look like the latter.
-- **Stage B compares its expected trees through `normalize_tree`.** Stage B′ no longer does (it lost a real divergence that way — see the whitespace note in the extractor), and Stage B is exposed to the same class of masking. No committed Stage B expected tree currently contains whitespace inside token text, so this is latent rather than live; decide it when one does.
+- **The `[skip]` bucket is down to three, each held by a directive that changes what the parser produces**: `ParseTrees/AltNum` (`contextSuperClass` + `<TreeNodeWithAltNumField>` render alt numbers into node names), `ParserExec/ParserProperty` (`<ParserPropertyMember()>` declares the member a semantic predicate calls), `LexerExec/PositionAdjustingLexer` (`<PositionAdjustingLexer()>` overrides `nextToken()`). Expanding any of them away would leave a test that no longer tests what the descriptor is for, so each needs the host-side construct genuinely modelled — or the judgement that it is target-language-specific and stays skipped.
+- **Stage B compares its expected trees through `normalize_tree`.** Stage B′ no longer does — it lost a real divergence that way (a token whose own text ends in a space). Stage B is exposed to the same class of masking; no committed Stage B expected tree currently contains whitespace inside token text, so this is latent rather than live.
 
 ### Composite (slave-grammar) descriptors
 

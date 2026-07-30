@@ -47,19 +47,9 @@
 [todo]
 
 [skip]
-"ParseTrees/AltNum" = "grammar-level <...> StringTemplate directive that the ANTLR4 testsuite substitutes per target before antlr4 ever sees the .g4 — not a self-contained grammar"
-"ParseTrees/TokenAndRuleContextString" = "grammar-level <...> StringTemplate directive that the ANTLR4 testsuite substitutes per target before antlr4 ever sees the .g4 — not a self-contained grammar"
-"Listeners/Basic" = "top-level <ImportListener(...)> / <BasicListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
-"Listeners/LR" = "top-level <ImportListener(...)> / <LRListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
-"Listeners/LRWithLabels" = "top-level <ImportListener(...)> / <LRWithLabelsListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
-"Listeners/RuleGetters_1" = "top-level <ImportListener(...)> / <RuleGetterListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
-"Listeners/RuleGetters_2" = "top-level <ImportListener(...)> / <RuleGetterListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
-"Listeners/TokenGetters_1" = "top-level <ImportListener(...)> / <TokenGetterListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
-"Listeners/TokenGetters_2" = "top-level <ImportListener(...)> / <TokenGetterListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
-"ParserExec/ParserProperty" = "top-level <ParserPropertyMember()> StringTemplate directive the testsuite substitutes per target — not a self-contained .g4"
+"ParseTrees/AltNum" = "contextSuperClass + <TreeNodeWithAltNumField(...)> make ANTLR4 render alt numbers into node names ((a:3 x (b:2 y) z)); the rendering is a host-side class Gale does not model, so expanding the directive away would silently change what the descriptor tests"
+"ParserExec/ParserProperty" = "<ParserPropertyMember()> declares the member a semantic predicate then calls; dropping it would leave the predicate referencing a method that does not exist"
 "LexerExec/PositionAdjustingLexer" = "@definitions / @members carry <PositionAdjustingLexerDef()> / <PositionAdjustingLexer()> directives that override Java nextToken() — the [output] depends on the host-side implementation, not the .g4"
-"ParserErrors/SingleSetInsertionConsumption" = "trailing <! ... !> StringTemplate comment outside any rule — testsuite descriptor artifact, not a self-contained .g4"
-"ParserErrors/SingleTokenDeletionConsumption" = "trailing <! ... !> StringTemplate comment outside any rule — testsuite descriptor artifact, not a self-contained .g4"
 
 [stage_a_todo]
 # IfIfElseNonGreedyBinding1's parse-accepts-input claim (b) is met
@@ -133,9 +123,22 @@
 "ParseTrees/ExtraTokensAndAltLabels" = "error-recovery path prints differently from ANTLR; flips with error-recovery output alignment."
 "ParserErrors/LL1ErrorInfo" = "the `@init` prints `getExpectedTokens().toString(getVocabulary())`; neither the expected-token set nor the vocabulary is in the recognizer API java2wado maps, so the body is reported and dropped."
 "LeftRecursion/MultipleAlternativesWithCommonLabel_4" = "common alt label across LR alternatives with a return value the print reads; label-to-vals wiring incomplete for this shape."
+"ParseTrees/TokenAndRuleContextString" = "the action prints getRuleInvocationStack() ([a, s]); that recognizer accessor is not in the API java2wado maps, so the body is reported and dropped. Same family as the LL1ErrorInfo entry above."
 
 # Stage C — descriptors whose [output] is not a property of the grammar,
 # so no amount of Stage C work can make Gale reproduce it.
 [stage_c_skip]
-"ParserExec/BuildParseTree_FALSE" = "expected output is `r` only because the ANTLR4 test harness sets buildParseTree=false before running; the grammar prints $ctx.toStringTree() and Gale always builds the tree, so the divergence is a host-option artefact, not a grammar-level gap"
+# The Listeners descriptors print from the generated parse-tree listener
+# the testsuite injects per target. Gale generates no listener — a
+# consumer walks the CST — so the walk's output has no Gale equivalent to
+# produce, at any amount of Stage C work. Their parse trees are pinned by
+# Stage B′ instead, which derives the tree from the oracle and ignores
+# `[output]` entirely.
+"Listeners/Basic" = "output is the generated listener's walk, not a property of the grammar; the tree is pinned by Stage B′"
+"Listeners/LR" = "same as Listeners/Basic"
+"Listeners/LRWithLabels" = "same as Listeners/Basic"
+"Listeners/RuleGetters_1" = "same as Listeners/Basic"
+"Listeners/RuleGetters_2" = "same as Listeners/Basic"
+"Listeners/TokenGetters_1" = "same as Listeners/Basic"
+"ParserExec/BuildParseTree_FALSE" ="expected output is `r` only because the ANTLR4 test harness sets buildParseTree=false before running; the grammar prints $ctx.toStringTree() and Gale always builds the tree, so the divergence is a host-option artefact, not a grammar-level gap"
 "Sets/UnicodeEscapedSMPRangeSetMismatch" = "oracle: TestRig drops the non-ASCII code points from [output] (`ad`) while Gale prints what it actually matched (`a...d`); pinning to the oracle would strictly worsen Gale. Same root cause as the Unicode entries in [stage_b_oracle_skip]."
