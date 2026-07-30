@@ -1,0 +1,22 @@
+// A variadic impl target carrying elements beside its pack is not implemented:
+// selection ignores the fixed elements, the pack binds to the whole receiver,
+// and every such impl of one trait mangles to a single template name. Left to
+// compile it trips the WIR validator, so it is refused where it is written.
+
+trait Tag {
+    fn tag(&self) -> String;
+}
+
+impl<..T: Inspect> Tag for [i32, ..T] {
+    fn tag(&self) -> String {
+        return `${self:?}`;
+    }
+}
+
+export fn run() {
+    let t = [1, "a"];
+    assert t.tag() != "";
+}
+
+__DATA__
+{"compile_error": "a variadic impl target must be the bare `[..T]`"}

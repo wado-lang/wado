@@ -397,11 +397,30 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// Coherence violation: two variadic impls of the same trait for the same
-    /// head type. They apply at every arity and bounds do not separate them.
+    /// Coherence violation: two variadic impls of the same trait accepting a
+    /// common tuple. They apply at every such arity and bounds do not separate
+    /// them.
     OverlappingVariadicImpls {
         trait_name: String,
         self_type_name: String,
+        /// Where the impl this one collides with lives, named so the other
+        /// half of the pair is not left for the reader to hunt down.
+        conflicting_impl: String,
+        span: Span,
+    },
+
+    /// Coherence violation: an inherent impl for one instantiation defines a
+    /// method an inherent impl generic over the same head already defines.
+    DuplicateInherentMethod {
+        self_type_name: String,
+        method_name: String,
+        span: Span,
+    },
+
+    /// A variadic impl target carrying elements beside its pack
+    /// (`impl<..T> Trait for [i32, ..T]`), which the compiler does not
+    /// implement.
+    UnsupportedVariadicImplTarget {
         span: Span,
     },
 
@@ -960,12 +979,29 @@ impl TypeError {
             TypeError::OverlappingVariadicImpls {
                 trait_name,
                 self_type_name,
+                conflicting_impl,
                 span,
             } => (
                 Code::OrphanRule,
                 format!(
-                    "overlapping variadic impls of `{trait_name}` for `{self_type_name}`: they apply at every arity, and a pack's bounds are only checked at monomorphization, so neither can be selected over the other"
+                    "overlapping variadic impls of `{trait_name}` for `{self_type_name}`: this one and {conflicting_impl} accept the same tuples, and a pack's bounds are only checked at monomorphization, so neither can be selected over the other"
                 ),
+                *span,
+            ),
+            TypeError::DuplicateInherentMethod {
+                self_type_name,
+                method_name,
+                span,
+            } => (
+                Code::OrphanRule,
+                format!(
+                    "duplicate definition of `{method_name}` for `{self_type_name}`: an inherent impl generic over the same type already defines it, and an inherent impl carries no trait contract to make the two interchangeable"
+                ),
+                *span,
+            ),
+            TypeError::UnsupportedVariadicImplTarget { span } => (
+                Code::OrphanRule,
+                "a variadic impl target must be the bare `[..T]`: a pack alongside other elements (`[i32, ..T]`) is not supported yet".to_string(),
                 *span,
             ),
             TypeError::InherentImplOnForeignType {

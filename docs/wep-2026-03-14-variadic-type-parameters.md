@@ -115,9 +115,28 @@ Rule 1 needs no priority table. A concrete tuple impl is a concrete _instantiati
 impl — the same shape as `impl Tag for List<u8>` — so it defines the very function a
 `[i32, i32]` receiver calls, and the template is not instantiated onto a name an impl
 already occupies. The specific impl wins because it got there first, and the general
-one is never asked. Rule 2 is a definition-time check: two variadic impls of one trait
-for one head apply at every arity, and a pack's bounds are resolved only at
-monomorphization, so nothing could separate them at selection time.
+one is never asked. The rivalry is between the _impls_, so it holds when the method
+declares type params of its own: `impl Tag for Box_<i32> { fn tag<U>() }` and
+`impl<T> Tag for Box_<T> { fn tag<U>() }` both reach `Box_<i32>^Tag::tag<i32>`.
+
+Rule 1 is scoped to one trait in both directions. It ranks a trait's own impls against
+each other and says nothing about another trait's, so a foreign blanket `impl<T> A for T`
+must not outrank a local `impl<..T> B for [..T]`. And it needs the trait's signature to
+make the specific and general methods interchangeable, so it does not extend to inherent
+impls: `impl<T> Box_<T> { fn a() -> String }` beside `impl Box_<i32> { fn a() -> i32 }`
+is a duplicate definition, rejected as in Rust, rather than a specialization that would
+relink a generic caller to a differently-typed function.
+
+Rule 2 is a definition-time check: two variadic impls of one trait apply at every arity,
+and a pack's bounds are resolved only at monomorphization, so nothing could separate them
+at selection time. The trait's own _arguments_ do separate them — `Conv<i32>` and
+`Conv<String>` are implementations of different things — so the grouping is by trait
+declaration plus trait arguments, not by trait name.
+
+A variadic impl target must be the bare `[..T]`. `[i32, ..T]` is a legal type (§2) but
+not yet a legal impl target: selection ignores the fixed elements, the pack binds to the
+whole receiver, and every such impl of one trait mangles to a single template name, so it
+is refused where it is written rather than miscompiled.
 
 Orphan rules apply normally: a variadic impl `impl<..T> Trait for [..T]` is only legal
 if either `Trait` or the tuple type family (`type [...T]` from `core:prelude`) is owned
@@ -418,7 +437,10 @@ where T: ReflectStruct<FieldTypes = [..F]>
       _instantiation_ impl, so it emits the function name the instantiated
       receiver already calls, and the template is never instantiated onto it
 - [x] Coherence Rule 2 (variadic overlap forbidden): rejected where the second
-      impl is written, grouped by the trait's declaration
+      impl is written, grouped by the trait's declaration and arguments
+- [ ] Variadic impl targets with fixed elements (`impl<..T> Trait for [i32, ..T]`):
+      rejected for now; selection, pack binding, and template naming all ignore
+      the fixed elements
 - [x] `ReflectStruct` trait: synthesize per-struct impl (`type_name`, `members`,
       `wire_name_policy`, and the `FieldTypes` / `Members` associated tuples) in the
       synthesis pass

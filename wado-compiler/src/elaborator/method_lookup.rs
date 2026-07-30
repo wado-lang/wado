@@ -2503,23 +2503,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits
     }
 
-    /// Choose the winning match: rank a non-variadic impl above a variadic one
-    /// (coherence Rule 1, WEP 2026-03-14 §5), then prefer a trait impl in the
-    /// current module, dedup `(trait, module)` pairs, return the first
-    /// remaining (multiple survivors are ambiguous, resolved later by explicit
-    /// disambiguation).
+    /// Choose the winning match: drop a trait's variadic impl when that same
+    /// trait also has a non-variadic one (coherence Rule 1, WEP 2026-03-14 §5),
+    /// prefer a trait impl in the current module, dedup `(trait, module)`
+    /// pairs, return the first remaining (multiple survivors are ambiguous,
+    /// resolved later by explicit disambiguation).
     fn select_trait_match(
         &self,
         mut found_traits: Vec<super::types::TraitMethodMatch>,
     ) -> Option<super::types::TraitMethodMatch> {
+        // Rule 1 ranks the impls of *one* trait against each other. It says
+        // nothing about a different trait's impl, so it must not outrank
+        // locality between traits: a foreign blanket `impl<T> A for T` would
+        // otherwise beat a local `impl<..T> B for [..T]`.
+        let traits_with_non_variadic: IndexSet<String> = found_traits
+            .iter()
+            .filter(|m| !m.is_variadic_impl)
+            .map(|m| m.trait_name.clone())
+            .collect();
+        found_traits
+            .retain(|m| !m.is_variadic_impl || !traits_with_non_variadic.contains(&m.trait_name));
+
         // Sort BEFORE dedup_by, since dedup_by only removes adjacent duplicates.
         let current_module = &self.current_module_source;
         found_traits.sort_by(|a, b| {
             let a_local = &a.impl_module_source == current_module;
             let b_local = &b.impl_module_source == current_module;
-            a.is_variadic_impl
-                .cmp(&b.is_variadic_impl)
-                .then(b_local.cmp(&a_local))
+            b_local.cmp(&a_local)
         });
         found_traits.dedup_by(|a, b| {
             a.trait_name == b.trait_name && a.impl_module_source == b.impl_module_source

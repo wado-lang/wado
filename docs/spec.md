@@ -2861,9 +2861,16 @@ impl Tag for [i32, i32] { … }         // specific — wins for [i32, i32]
 The specific impl applies to the instantiation it names; every other
 instantiation takes the general one. Declaration order does not matter.
 
-Two impls that are general in the same way cannot be ordered this way, so a
-second variadic impl of one trait for one head type is rejected where it is
-written:
+This holds only for a **trait** impl, where the trait gives both methods one
+signature. An inherent impl carries no such contract, so the pair is rejected:
+
+```wado
+impl<T> Box_<T> { fn a(&self) -> String { … } }
+impl Box_<i32> { fn a(&self) -> i32 { … } }   // ERROR: duplicate definition of `a`
+```
+
+Two impls that are general in the same way cannot be ordered at all, so a second
+variadic impl of one trait is rejected where it is written:
 
 ```wado
 impl<..T: Inspect> Tag for [..T] { … }
@@ -2871,7 +2878,20 @@ impl<..T: Eq> Tag for [..T] { … }     // ERROR: overlapping variadic impls
 ```
 
 Bounds do not separate them: a pack's bounds are checked at monomorphization,
-not at selection.
+not at selection. A trait's own arguments do separate them, since they make the
+two impls of different traits:
+
+```wado
+impl<..T> Conv<i32> for [..T] { … }    // OK
+impl<..T> Conv<String> for [..T] { … } // OK — a different trait
+```
+
+A variadic impl target must be the bare `[..T]`. A pack alongside other
+elements is not supported yet:
+
+```wado
+impl<..T> Tag for [i32, ..T] { … }    // ERROR: not supported yet
+```
 
 ### Iterator Traits
 

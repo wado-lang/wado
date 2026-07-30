@@ -1,0 +1,32 @@
+// Coherence Rule 1 ranks the impls of *one* trait against each other. A
+// different trait's non-variadic impl must not outrank a variadic one: a
+// foreign blanket `impl<T: Inspect> A for T` would otherwise beat the local
+// `impl<..T> B for [..T]` and `[1, 2].go()` would dispatch to A.
+
+trait A {
+    fn go(&self) -> String;
+}
+
+impl<T: Inspect> A for T {
+    fn go(&self) -> String {
+        return "blanket-A";
+    }
+}
+
+trait B {
+    fn go(&self) -> String;
+}
+
+impl<..T: Inspect> B for [..T] {
+    fn go(&self) -> String {
+        return "variadic-B";
+    }
+}
+
+test "a variadic impl still wins locality against another trait's blanket" {
+    let pair = [1, 2];
+    assert pair.go() == "variadic-B";
+}
+
+__DATA__
+{"test": {}}

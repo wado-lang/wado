@@ -1,0 +1,34 @@
+// An inherent impl carries no trait contract, so a method on
+// `impl Box_<i32>` and a same-named method on `impl<T> Box_<T>` may have
+// different signatures while owning the same name `Box_<i32>::a`. Letting the
+// specific one win would relink a generic caller that type-checked against the
+// general one, so the pair is rejected. Previously this reached codegen and
+// tripped the WIR validator.
+
+struct Box_<T> {
+    v: T,
+}
+
+impl<T> Box_<T> {
+    fn a(&self) -> String {
+        return "generic";
+    }
+}
+
+impl Box_<i32> {
+    fn a(&self) -> i32 {
+        return 1;
+    }
+}
+
+fn call_generic<T>(b: Box_<T>) -> String {
+    return b.a();
+}
+
+export fn run() {
+    let b = Box_ { v: 1 };
+    assert call_generic(b) == "generic";
+}
+
+__DATA__
+{"compile_error": "duplicate definition of `a` for `Box_`"}

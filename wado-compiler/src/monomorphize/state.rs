@@ -229,6 +229,42 @@ impl Monomorphizer {
         self.functions.instantiated.get(key)
     }
 
+    /// Coherence Rule 1 (WEP 2026-03-14 §5): whether an impl written for this
+    /// very instantiation already occupies the name, so that instantiating the
+    /// template would both shadow the specific impl and collide with it in the
+    /// module namespace.
+    ///
+    /// Only a template carrying impl-level arguments has such a rival — those
+    /// are the ones a written impl can pin down. A concrete impl's own generic
+    /// method carries none, so it still reaches its instantiations even though
+    /// its base name is exactly what sits in `concrete_names`; that base is
+    /// what a method-generic template must be compared against, since the two
+    /// differ only in the method type args tacked onto the end.
+    fn concrete_impl_owns_name(
+        &self,
+        key: &InstantiationKey,
+        mangled_name: &str,
+        type_table: &TypeTable,
+    ) -> bool {
+        if key.impl_type_args.is_empty() {
+            return false;
+        }
+        let Some(names) = self.functions.concrete_names.get(&key.module_source) else {
+            return false;
+        };
+        if names.contains(mangled_name) {
+            return true;
+        }
+        if key.method_type_args.is_empty() {
+            return false;
+        }
+        let base_key = InstantiationKey {
+            method_type_args: Vec::new(),
+            ..key.clone()
+        };
+        names.contains(&self.method_instantiation_name(&base_key, type_table))
+    }
+
     /// Queue a function instantiation if not already queued. Returns true
     /// if newly queued.
     ///
@@ -242,19 +278,16 @@ impl Monomorphizer {
     /// makes `function_id_for(func)` injective over `project.functions`
     /// by construction — the load-bearing invariant for DCE's
     /// position-based retain (asserted at `optimize/dce.rs:675`).
-    pub fn try_queue_function(&mut self, key: InstantiationKey, mangled_name: String) -> bool {
+    pub fn try_queue_function(
+        &mut self,
+        key: InstantiationKey,
+        mangled_name: String,
+        type_table: &TypeTable,
+    ) -> bool {
         if self.functions.instantiated.contains_key(&key) {
             return false;
         }
-        // Coherence Rule 1: an impl written for this very instantiation already
-        // occupies the name, so instantiating the template would both shadow
-        // the specific impl and collide with it in the module namespace.
-        if self
-            .functions
-            .concrete_names
-            .get(&key.module_source)
-            .is_some_and(|names| names.contains(&mangled_name))
-        {
+        if self.concrete_impl_owns_name(&key, &mangled_name, type_table) {
             return false;
         }
         // A blanket instance reaches the same function from two dispatch sites —

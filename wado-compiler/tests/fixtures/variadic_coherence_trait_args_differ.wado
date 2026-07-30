@@ -1,0 +1,34 @@
+// Coherence Rule 2 (WEP 2026-03-14 §5) groups variadic impls by the trait they
+// implement, and a trait's own arguments are part of that identity. `Conv<i32>`
+// and `Conv<String>` are implementations of different things, so two variadic
+// impls of them do not overlap and must both be accepted — this file did not
+// compile when Rule 2 grouped on the trait's name alone.
+//
+// Which of the two an argument-less `pair.conv()` selects is a separate
+// question (Wado does not drive trait selection from the expected type), so
+// only the first is called here.
+
+trait Conv<O> {
+    fn conv(&self) -> O;
+}
+
+impl<..T> Conv<i32> for [..T] {
+    fn conv(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl<..T> Conv<String> for [..T] {
+    fn conv(&self) -> String {
+        return "s";
+    }
+}
+
+test "variadic impls of a trait at different arguments both compile" {
+    let pair = [1, 2];
+    let n: i32 = pair.conv();
+    assert n == 1;
+}
+
+__DATA__
+{"test": {}}
