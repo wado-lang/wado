@@ -280,6 +280,21 @@ impl Monomorphizer {
         external_generic_functions: &IndexMap<GenericFunctionKey, Rc<RefCell<TirFunction>>>,
         external_generic_structs: &IndexMap<(String, ModuleSource), TirStruct>,
     ) -> TirModule {
+        // Phase 0: index the already-concrete functions, so a template
+        // instantiation that would land on a name an explicit impl already
+        // defines is never queued (coherence Rule 1, WEP 2026-03-14 §5).
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if func.has_real_type_params() || !func.impl_type_params.is_empty() {
+                continue;
+            }
+            self.functions
+                .concrete_names
+                .entry(func.module_source.clone())
+                .or_default()
+                .insert(func.name.clone());
+        }
+
         // Phase 1: Collect all generic struct definitions keyed by (name, module_source).
         // Same-named structs from different modules coexist; the InstantiationKey's
         // module_source selects the correct template at instantiation time.

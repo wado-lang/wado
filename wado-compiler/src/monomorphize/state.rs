@@ -52,6 +52,13 @@ pub(super) struct FuncInstState {
     /// post-variadic-expansion type-arg inference needs in order to tell a
     /// method type param from an ordinary parameter.
     pub templates: Rc<IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>>,
+    /// Every already-concrete function, per module, named the way an
+    /// instantiation names itself. A hand-written impl for one instantiation
+    /// (`impl Tag for Box_<i32>`, `impl Tag for [i32, i32]`) emits exactly the
+    /// function a template instantiation would, so this is what makes the
+    /// specific impl win over the general one — coherence Rule 1
+    /// (WEP 2026-03-14 §5).
+    pub concrete_names: IndexMap<ModuleSource, IndexSet<String>>,
 }
 
 impl FuncInstState {
@@ -194,6 +201,7 @@ impl Monomorphizer {
                 pending: Vec::new(),
                 trait_env,
                 templates: Rc::new(IndexMap::default()),
+                concrete_names: IndexMap::default(),
             },
             current_impl_type_param_count: 0,
             current_impl_struct_name: None,
@@ -236,6 +244,17 @@ impl Monomorphizer {
     /// position-based retain (asserted at `optimize/dce.rs:675`).
     pub fn try_queue_function(&mut self, key: InstantiationKey, mangled_name: String) -> bool {
         if self.functions.instantiated.contains_key(&key) {
+            return false;
+        }
+        // Coherence Rule 1: an impl written for this very instantiation already
+        // occupies the name, so instantiating the template would both shadow
+        // the specific impl and collide with it in the module namespace.
+        if self
+            .functions
+            .concrete_names
+            .get(&key.module_source)
+            .is_some_and(|names| names.contains(&mangled_name))
+        {
             return false;
         }
         // A blanket instance reaches the same function from two dispatch sites —

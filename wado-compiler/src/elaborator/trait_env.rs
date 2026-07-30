@@ -1083,6 +1083,8 @@ impl TraitEnv {
             }
             decl_index.get(&canonical_key(module, declared)).cloned()
         };
+        violations.extend(check_variadic_impl_overlap(modules, &resolve_trait));
+
         let (supertrait_closures, cycles) =
             build_supertrait_closures(&trait_decl_headers, &resolve_trait);
         violations.extend(cycles);
@@ -1750,6 +1752,68 @@ fn report_supertrait_cycle(
             span: header.span,
         },
     ));
+}
+
+/// Whether an impl target spreads a type pack, making the impl variadic. A
+/// pack spreads only inside a tuple, so the tuple is the only head this finds.
+fn target_spreads_a_pack(ty: &ast::Type) -> bool {
+    match ty {
+        ast::Type::Tuple(elems) => elems
+            .iter()
+            .any(|e| matches!(e, ast::Type::TypePackSpread(..))),
+        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+            target_spreads_a_pack(inner)
+        }
+        _ => false,
+    }
+}
+
+/// Coherence Rule 2 (WEP 2026-03-14 §5): two variadic impls of the same trait
+/// overlap for every arity, and bounds do not separate them — the type-checking
+/// model resolves a pack's bounds only at monomorphization, long after
+/// selection. Reject the second where it is written.
+///
+/// Grouped by the trait's *declaration*, not its written name, so two modules
+/// each declaring a `Tag` keep their own variadic impls. The head needs no
+/// grouping: a pack spreads only inside a tuple, so every variadic impl of one
+/// trait shares the tuple head.
+fn check_variadic_impl_overlap(
+    modules: &IndexMap<ModuleSource, Module>,
+    resolve_trait: ResolveTrait<'_>,
+) -> Vec<(ModuleSource, TypeError)> {
+    let mut violations = Vec::new();
+    let mut seen: IndexSet<TraitDeclLoc> = IndexSet::default();
+
+    for (module_source, module) in modules {
+        for item in &module.items {
+            let Item::Impl(impl_block) = item else {
+                continue;
+            };
+            let Some(trait_type) = &impl_block.trait_type else {
+                continue;
+            };
+            if !target_spreads_a_pack(&impl_block.ty) {
+                continue;
+            }
+            let trait_name = get_type_name_static(trait_type);
+            let Some(trait_loc) = resolve_trait(module_source, &trait_name) else {
+                continue;
+            };
+            if seen.insert(trait_loc) {
+                continue;
+            }
+            violations.push((
+                module_source.clone(),
+                TypeError::OverlappingVariadicImpls {
+                    trait_name,
+                    self_type_name: "[..]".to_string(),
+                    span: impl_block.span,
+                },
+            ));
+        }
+    }
+
+    violations
 }
 
 /// Check orphan rules for all trait impl blocks across all modules.

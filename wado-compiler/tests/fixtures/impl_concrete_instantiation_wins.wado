@@ -1,0 +1,39 @@
+// An impl written for one instantiation (`impl Tag for Box_<i32>`) and a
+// generic impl over the same head (`impl<T> Tag for Box_<T>`) name the same
+// function once the template is instantiated. The specific impl wins and the
+// template is not instantiated for that argument — the named-type half of
+// coherence Rule 1 (WEP 2026-03-14 §5), which previously aborted the compile
+// with a duplicate-function panic.
+
+struct Box_<T> {
+    v: T,
+}
+
+trait Tag {
+    fn tag(&self) -> String;
+}
+
+impl<T> Tag for Box_<T> {
+    fn tag(&self) -> String {
+        return "generic";
+    }
+}
+
+impl Tag for Box_<i32> {
+    fn tag(&self) -> String {
+        return "concrete";
+    }
+}
+
+test "the impl for one instantiation wins over the generic one" {
+    let boxed = Box_ { v: 1 };
+    assert boxed.tag() == "concrete";
+}
+
+test "another instantiation still takes the generic impl" {
+    let boxed = Box_ { v: "s" };
+    assert boxed.tag() == "generic";
+}
+
+__DATA__
+{"test": {}}

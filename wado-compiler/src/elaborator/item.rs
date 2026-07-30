@@ -2062,10 +2062,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `impl_block` is a concrete generic instantiation (`impl List<u8>`,
-    /// `impl Tag for List<u8>`): its self type is a generic type all of whose
-    /// arguments are concrete (no free type params, accounting for any
-    /// impl-declared parameters). Methods on such an impl are per-instantiation
-    /// concrete functions, named `List<u8>::method` and called directly.
+    /// `impl Tag for List<u8>`, `impl Tag for [i32, i32]`): its self type is a
+    /// generic type — tuples included, since a tuple is a generic instance of
+    /// the tuple family — all of whose arguments are concrete (no free type
+    /// params, accounting for any impl-declared parameters). Methods on such an
+    /// impl are per-instantiation concrete functions, named `List<u8>::method`
+    /// and called directly.
+    ///
+    /// The tuple arm is what gives coherence Rule 1 (WEP 2026-03-14 §5) its
+    /// teeth: `impl Tag for [i32, i32]` names its method `[]<i32,i32>^Tag::tag`,
+    /// the very name a call on a `[i32, i32]` receiver looks up, so the
+    /// variadic template is never instantiated for that arity.
     pub(super) fn impl_is_concrete_instantiation(
         &self,
         impl_ty: &ast::Type,
@@ -2076,11 +2083,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Type::Reference(i) | ast::Type::MutReference(i) => i.as_ref(),
             other => other,
         };
-        matches!(inner, ast::Type::Generic(g)
-        if !g.args.is_empty()
-            && g.args.iter().all(|a| {
-                self.is_concrete_type_arg(a, impl_type_params, impl_module)
-            }))
+        let args: &[ast::Type] = match inner {
+            ast::Type::Generic(g) => &g.args,
+            ast::Type::Tuple(elems) => elems,
+            _ => return false,
+        };
+        !args.is_empty()
+            && args
+                .iter()
+                .all(|a| self.is_concrete_type_arg(a, impl_type_params, impl_module))
     }
 
     /// Resolve a method (function with &self parameter).

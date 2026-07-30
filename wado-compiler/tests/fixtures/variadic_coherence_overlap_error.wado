@@ -1,0 +1,27 @@
+// Coherence Rule 2 (WEP 2026-03-14 §5): two variadic impls of the same trait
+// for the same head type overlap. Bounds do not separate them, so the pair is
+// rejected where it is written, not at the ambiguous call site.
+
+trait Tag {
+    fn tag(&self) -> String;
+}
+
+impl<..T: Inspect> Tag for [..T] {
+    fn tag(&self) -> String {
+        return "a";
+    }
+}
+
+impl<..T: Eq> Tag for [..T] {
+    fn tag(&self) -> String {
+        return "b";
+    }
+}
+
+export fn run() {
+    let pair = [1, 2];
+    assert pair.tag() != "";
+}
+
+__DATA__
+{"compile_error": "overlapping variadic impls of `Tag` for `[..]`"}

@@ -2845,6 +2845,34 @@ the trait is local. The owning package itself (e.g. `core` for `String` /
 `Array<T>` / `List<T>`) is of course free to spread inherent impls across its own
 modules.
 
+#### Specific Impls Win
+
+Two impls of one trait may cover a type when one is written for a single
+instantiation and the other is generic over the head:
+
+```wado
+impl<T> Tag for Box_<T> { … }         // general
+impl Tag for Box_<i32> { … }          // specific — wins for Box_<i32>
+
+impl<..T> Tag for [..T] { … }         // general
+impl Tag for [i32, i32] { … }         // specific — wins for [i32, i32]
+```
+
+The specific impl applies to the instantiation it names; every other
+instantiation takes the general one. Declaration order does not matter.
+
+Two impls that are general in the same way cannot be ordered this way, so a
+second variadic impl of one trait for one head type is rejected where it is
+written:
+
+```wado
+impl<..T: Inspect> Tag for [..T] { … }
+impl<..T: Eq> Tag for [..T] { … }     // ERROR: overlapping variadic impls
+```
+
+Bounds do not separate them: a pack's bounds are checked at monomorphization,
+not at selection.
+
 ### Iterator Traits
 
 The prelude defines iterator traits for generic iteration over collections.

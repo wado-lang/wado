@@ -325,7 +325,7 @@ type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArraySlice<u8>::
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(113)
 
-type "functype//core:serde/[]<i32,core:prelude/string.wado/String,bool>^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool]", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(114)
+type "functype//core:serde/[i32,core:prelude/string.wado/String,bool]^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool]", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(114)
 
 type "functype//core:json/core:json/JsonSeqSerializer^SerializeSeq::element<bool>" = fn(ref "core:json//JsonSeqSerializer", bool) -> ref null "core:serde//SerializeError";  // TypeId(115)
 
@@ -1408,7 +1408,7 @@ fn "core:json/core/json/to_string<[i32,core:prelude/string.wado/String,bool]>"(v
     let c: char;
     let __match_7: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    __match_7 = "core:serde/[]<i32,core:prelude/string.wado/String,bool>^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
+    __match_7 = "core:serde/[i32,core:prelude/string.wado/String,bool]^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
     if @likely(ref.is_null(__match_7)) {
     } else {
         __qm_e = ref.as_non_null(__match_7);
@@ -2989,7 +2989,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(self, value) 
     self.used = used + 1;
 }
 
-fn "core:serde/[]<i32,core:prelude/string.wado/String,bool>^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
+fn "core:serde/[i32,core:prelude/string.wado/String,bool]^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
     let __qm_v_2: ref "core:json//JsonSeqSerializer";
     let __qm_e_3: ref "core:serde//SerializeError";
     let seq: ref "core:json//JsonSeqSerializer";

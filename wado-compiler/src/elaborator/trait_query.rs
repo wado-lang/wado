@@ -2441,6 +2441,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_struct_name: struct_name.to_string(),
             impl_struct_fq: self.tysys.fq_receiver_head(base_type_id),
             is_blanket_ref_impl: false,
+            is_variadic_impl: false,
         })
     }
 }

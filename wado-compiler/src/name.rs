@@ -1749,12 +1749,19 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
 
 /// Build a monomorphized type name from base name and type arguments.
 ///
+/// The tuple head is spelled `[a,b]`, not `[]<a,b>` — the one spelling
+/// [`FqTypeName::to_mangled`] gives it, so an instantiated tuple receiver and a
+/// concrete tuple impl (`impl Trait for [i32, i32]`) name the same function.
+///
 /// Examples:
 /// - `mangle_generic_name("Box", &["i32"])` → `"Box<i32>"`
 /// - `mangle_generic_name("Map", &["String", "i32"])` → `"Map<String,i32>"`
+/// - `mangle_generic_name("[]", &["i32", "i32"])` → `"[i32,i32]"`
 pub fn mangle_generic_name(base_name: &str, type_args: &[String]) -> String {
     if type_args.is_empty() {
         base_name.to_string()
+    } else if base_name == TUPLE_TYPE_NAME {
+        mangle_tuple_type(type_args)
     } else {
         format!("{}<{}>", base_name, type_args.join(","))
     }

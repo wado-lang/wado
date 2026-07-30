@@ -2428,6 +2428,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 impl_struct_name: impl_struct_name.clone(),
                 impl_struct_fq: impl_struct_fq.clone(),
                 is_blanket_ref_impl,
+                is_variadic_impl: variadic_pack_entry.is_some(),
             });
             method_found = true;
         }
@@ -2491,6 +2492,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_struct_name,
                     impl_struct_fq,
                     is_blanket_ref_impl,
+                    is_variadic_impl: variadic_pack_entry.is_some(),
                 });
             }
         }
@@ -2501,9 +2503,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits
     }
 
-    /// Choose the winning match: prefer a trait impl in the current module,
-    /// dedup `(trait, module)` pairs, return the first remaining (multiple
-    /// survivors are ambiguous, resolved later by explicit disambiguation).
+    /// Choose the winning match: rank a non-variadic impl above a variadic one
+    /// (coherence Rule 1, WEP 2026-03-14 §5), then prefer a trait impl in the
+    /// current module, dedup `(trait, module)` pairs, return the first
+    /// remaining (multiple survivors are ambiguous, resolved later by explicit
+    /// disambiguation).
     fn select_trait_match(
         &self,
         mut found_traits: Vec<super::types::TraitMethodMatch>,
@@ -2513,7 +2517,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits.sort_by(|a, b| {
             let a_local = &a.impl_module_source == current_module;
             let b_local = &b.impl_module_source == current_module;
-            b_local.cmp(&a_local)
+            a.is_variadic_impl
+                .cmp(&b.is_variadic_impl)
+                .then(b_local.cmp(&a_local))
         });
         found_traits.dedup_by(|a, b| {
             a.trait_name == b.trait_name && a.impl_module_source == b.impl_module_source

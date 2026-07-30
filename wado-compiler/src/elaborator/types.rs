@@ -397,6 +397,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// Coherence violation: two variadic impls of the same trait for the same
+    /// head type. They apply at every arity and bounds do not separate them.
+    OverlappingVariadicImpls {
+        trait_name: String,
+        self_type_name: String,
+        span: Span,
+    },
+
     /// Coherence violation: an inherent `impl Type { ... }` on a foreign type
     /// (one defined outside this package — a primitive, `Array<T>`, `String`,
     /// or any other stdlib type). Inherent impls may only extend types owned by
@@ -946,6 +954,17 @@ impl TypeError {
                 Code::OrphanRule,
                 format!(
                     "orphan rule violation: cannot implement foreign trait `{trait_name}` for foreign type `{self_type_name}`"
+                ),
+                *span,
+            ),
+            TypeError::OverlappingVariadicImpls {
+                trait_name,
+                self_type_name,
+                span,
+            } => (
+                Code::OrphanRule,
+                format!(
+                    "overlapping variadic impls of `{trait_name}` for `{self_type_name}`: they apply at every arity, and a pack's bounds are only checked at monomorphization, so neither can be selected over the other"
                 ),
                 *span,
             ),
@@ -1727,6 +1746,10 @@ pub(super) struct TraitMethodMatch {
     /// the inner type is a type parameter. False for specific ref impls like
     /// `impl IntoIterator for &List<T>` where the inner type is a concrete generic.
     pub(super) is_blanket_ref_impl: bool,
+    /// True when the impl target spreads a type pack (`impl<..T> Trait for
+    /// [..T]`). Coherence Rule 1 (WEP 2026-03-14 §5) ranks such a match below
+    /// every non-variadic one.
+    pub(super) is_variadic_impl: bool,
 }
 
 /// Read-only view that resolves a type name from a given module's perspective

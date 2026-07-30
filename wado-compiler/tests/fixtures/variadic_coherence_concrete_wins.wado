@@ -1,0 +1,54 @@
+// Coherence Rule 1 (WEP 2026-03-14 §5): when a concrete tuple impl and a
+// variadic tuple impl both apply to a receiver, the non-variadic one wins.
+// Declaration order must not decide it, so each order is exercised.
+
+trait Tag {
+    fn tag(&self) -> String;
+}
+
+impl<..T> Tag for [..T] {
+    fn tag(&self) -> String {
+        return "variadic";
+    }
+}
+
+impl Tag for [i32, i32] {
+    fn tag(&self) -> String {
+        return "concrete";
+    }
+}
+
+trait Mark {
+    fn mark(&self) -> String;
+}
+
+impl Mark for [i32, i32] {
+    fn mark(&self) -> String {
+        return "concrete";
+    }
+}
+
+impl<..T> Mark for [..T] {
+    fn mark(&self) -> String {
+        return "variadic";
+    }
+}
+
+test "a concrete tuple impl wins over the variadic one" {
+    let pair = [1, 2];
+    assert pair.tag() == "concrete";
+    assert pair.mark() == "concrete";
+}
+
+test "a tuple the concrete impl does not cover falls back to the variadic one" {
+    let triple = [1, 2, 3];
+    assert triple.tag() == "variadic";
+    assert triple.mark() == "variadic";
+
+    let strings = ["a", "b"];
+    assert strings.tag() == "variadic";
+    assert strings.mark() == "variadic";
+}
+
+__DATA__
+{"test": {}}

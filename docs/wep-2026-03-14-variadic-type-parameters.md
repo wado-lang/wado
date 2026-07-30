@@ -111,6 +111,14 @@ impl<..T: Ord> Eq for [..T] { ... }   // ERROR: overlapping variadic impls
 These two rules together mirror the priority model used in WEP-2026-02-10 for tuple
 enumeration and keep the coherence model simple without a full trait solver overhaul.
 
+Rule 1 needs no priority table. A concrete tuple impl is a concrete _instantiation_
+impl — the same shape as `impl Tag for List<u8>` — so it defines the very function a
+`[i32, i32]` receiver calls, and the template is not instantiated onto a name an impl
+already occupies. The specific impl wins because it got there first, and the general
+one is never asked. Rule 2 is a definition-time check: two variadic impls of one trait
+for one head apply at every arity, and a pack's bounds are resolved only at
+monomorphization, so nothing could separate them at selection time.
+
 Orphan rules apply normally: a variadic impl `impl<..T> Trait for [..T]` is only legal
 if either `Trait` or the tuple type family (`type [...T]` from `core:prelude`) is owned
 by the current crate. Because `core:prelude` owns tuples, the standard library can write
@@ -406,7 +414,11 @@ where T: ReflectStruct<FieldTypes = [..F]>
 - [x] Standard library: add variadic impls for `Serialize` and `Deserialize` for tuples
       in `core:serde`; monomorphizer handles cross-module variadic impls with method-level
       type params (e.g., `fn serialize<S: Serializer>`) and associated type projections
-- [ ] Coherence: implement Rule 1 (non-VG wins) and Rule 2 (VG overlap forbidden)
+- [x] Coherence Rule 1 (non-variadic wins): a concrete tuple impl is a concrete
+      _instantiation_ impl, so it emits the function name the instantiated
+      receiver already calls, and the template is never instantiated onto it
+- [x] Coherence Rule 2 (variadic overlap forbidden): rejected where the second
+      impl is written, grouped by the trait's declaration
 - [x] `ReflectStruct` trait: synthesize per-struct impl (`type_name`, `members`,
       `wire_name_policy`, and the `FieldTypes` / `Members` associated tuples) in the
       synthesis pass

@@ -841,12 +841,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 module_source,
             } => {
                 // Qualify the base and the arguments alike, so a concrete-generic
-                // impl's method name matches its definition (issue #1348).
+                // impl's method name matches its definition (issue #1348). A
+                // tuple carries the tuple head, not a declared one, so it keeps
+                // the `[a,b]` spelling every other namespace gives it.
                 let type_arg_names: Vec<FqTypeName> = type_args
                     .iter()
                     .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                     .collect();
-                let base = FqTypeName::declared(&module_source, &name);
+                let base = if TypeTable::is_tuple_type(&name) {
+                    FqTypeName::tuple(Vec::new())
+                } else {
+                    FqTypeName::declared(&module_source, &name)
+                };
                 let mangled = base.clone().with_args(type_arg_names.clone());
                 (mangled, base, type_arg_names, Some(type_args))
             }

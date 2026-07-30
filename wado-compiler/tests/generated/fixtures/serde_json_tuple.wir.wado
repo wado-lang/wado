@@ -349,11 +349,11 @@ type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArraySlice<u8>::
 
 type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArraySlice<u8>::len" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> i32;  // TypeId(121)
 
-type "functype//core:serde/[]<i32,core:prelude/string.wado/String,bool>^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool]", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(122)
+type "functype//core:serde/[i32,core:prelude/string.wado/String,bool]^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool]", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(122)
 
-type "functype//core:serde/[]<i32,core:prelude/string.wado/String>^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "tuple//[i32, core:prelude/string.wado/String]", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(123)
+type "functype//core:serde/[i32,core:prelude/string.wado/String]^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "tuple//[i32, core:prelude/string.wado/String]", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(123)
 
-type "functype//core:serde/[]<f64,f64>^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "tuple//[f64, f64]", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(124)
+type "functype//core:serde/[f64,f64]^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "tuple//[f64, f64]", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(124)
 
 type "functype//core:json/core:json/JsonSeqSerializer^SerializeSeq::element<f64>" = fn(ref "core:json//JsonSeqSerializer", f64) -> ref null "core:serde//SerializeError";  // TypeId(125)
 
@@ -407,7 +407,7 @@ type "functype//core:json/core:json/JsonDeserializer::read_hex4" = fn(ref "core:
 
 type "functype//core:json/core:json/JsonDeserializer::parse_i32_direct" = fn(ref "core:json//JsonDeserializer") -> [i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(150)
 
-type "functype//core:serde/[]<i32,core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "tuple//[i32, core:prelude/string.wado/String]", ref null "core:serde//DeserializeError"];  // TypeId(151)
+type "functype//core:serde/[i32,core:prelude/string.wado/String]^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "tuple//[i32, core:prelude/string.wado/String]", ref null "core:serde//DeserializeError"];  // TypeId(151)
 
 type "functype//core:json/core:json/JsonSeqAccess^DeserializeSeq::next_element<core:prelude/string.wado/String>" = fn(ref "core:json//JsonSeqAccess") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(152)
 
@@ -1759,7 +1759,7 @@ fn "core:json/core/json/to_string<[f64,f64]>"(value, trailing_char) {
     let c: char;
     let __match_7: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    __match_7 = "core:serde/[]<f64,f64>^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
+    __match_7 = "core:serde/[f64,f64]^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
     if @likely(ref.is_null(__match_7)) {
     } else {
         __qm_e = ref.as_non_null(__match_7);
@@ -1780,7 +1780,7 @@ fn "core:json/core/json/to_string<[i32,core:prelude/string.wado/String]>"(value,
     let c: char;
     let __match_7: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    __match_7 = "core:serde/[]<i32,core:prelude/string.wado/String>^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
+    __match_7 = "core:serde/[i32,core:prelude/string.wado/String]^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
     if @likely(ref.is_null(__match_7)) {
     } else {
         __qm_e = ref.as_non_null(__match_7);
@@ -1801,7 +1801,7 @@ fn "core:json/core/json/to_string<[i32,core:prelude/string.wado/String,bool]>"(v
     let c: char;
     let __match_7: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    __match_7 = "core:serde/[]<i32,core:prelude/string.wado/String,bool>^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
+    __match_7 = "core:serde/[i32,core:prelude/string.wado/String,bool]^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
     if @likely(ref.is_null(__match_7)) {
     } else {
         __qm_e = ref.as_non_null(__match_7);
@@ -1827,7 +1827,7 @@ fn "core:json/core/json/from_bytes<[i32,core:prelude/string.wado/String],core:pr
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: ref null "tuple//[i32, core:prelude/string.wado/String]";
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_case0_payload_0, __sroa___match_scrut_0_case1_payload_0] = "core:serde/[]<i32,core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
+    multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_case0_payload_0, __sroa___match_scrut_0_case1_payload_0] = "core:serde/[i32,core:prelude/string.wado/String]^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
     v = (if @likely(__sroa___match_scrut_0_discriminant == 0) -> ref "tuple//[i32, core:prelude/string.wado/String]" {
         __qm_v = ref.as_non_null(__sroa___match_scrut_0_case0_payload_0);
         __qm_v;
@@ -3085,7 +3085,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArraySlice<u8>::len"(self) {
     return self.end - self.start;
 }
 
-fn "core:serde/[]<i32,core:prelude/string.wado/String,bool>^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
+fn "core:serde/[i32,core:prelude/string.wado/String,bool]^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
     let __qm_v_2: ref "core:json//JsonSeqSerializer";
     let __qm_e_3: ref "core:serde//SerializeError";
     let seq: ref "core:json//JsonSeqSerializer";
@@ -3136,7 +3136,7 @@ fn "core:serde/[]<i32,core:prelude/string.wado/String,bool>^Serialize::serialize
     return self_22 = seq.buf, start_24 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self_22, 1), builtin::array_set_u8(self_22.repr, start_24, 93), ref.null none;
 }
 
-fn "core:serde/[]<i32,core:prelude/string.wado/String>^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
+fn "core:serde/[i32,core:prelude/string.wado/String]^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
     let __qm_v_2: ref "core:json//JsonSeqSerializer";
     let __qm_e_3: ref "core:serde//SerializeError";
     let seq: ref "core:json//JsonSeqSerializer";
@@ -3178,7 +3178,7 @@ fn "core:serde/[]<i32,core:prelude/string.wado/String>^Serialize::serialize<core
     return self_18 = seq.buf, start_20 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self_18, 1), builtin::array_set_u8(self_18.repr, start_20, 93), ref.null none;
 }
 
-fn "core:serde/[]<f64,f64>^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
+fn "core:serde/[f64,f64]^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
     let __qm_v_2: ref "core:json//JsonSeqSerializer";
     let __qm_e_3: ref "core:serde//SerializeError";
     let seq: ref "core:json//JsonSeqSerializer";
@@ -3235,7 +3235,7 @@ fn "core:json/core:json/JsonSeqSerializer^SerializeSeq::element<f64>"(self, valu
     return r;
 }
 
-fn "core:serde/[]<i32,core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
+fn "core:serde/[i32,core:prelude/string.wado/String]^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
     let __qm_v_1: ref "core:json//JsonSeqAccess";
     let __qm_v_4: i32;
     let __qm_e_5: ref "core:serde//DeserializeError";
