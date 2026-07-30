@@ -12,13 +12,11 @@ use t from "../../grammars/Sets/PlusLexerSingleElement.g4"
             output_dir: "../../../generated/antlr4_compat_b_oracle/Sets/PlusLexerSingleElement",
         },
     };
-use { normalize_tree } from "../../grammars/Sets/PlusLexerSingleElement.g4";
 
 test "stage_b_oracle: Sets/PlusLexerSingleElement" {
     let input = "bbbbc";
     let expected = "(a bbbbc)";
     let result = t::parse_a(&input);
     let actual = t::to_string_tree(&result);
-    let norm = normalize_tree(&expected);
-    assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
+    assert actual == expected, `actual:   ${actual}\nexpected: ${expected}`;
 }

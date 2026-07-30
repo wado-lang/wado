@@ -100,10 +100,13 @@ And the corpus side, which is extractor work rather than codegen work (see "Desc
 
 The Stage B′ JVM-oracle infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md)) is in place and its pinned trees all pass — `[stage_b_oracle_todo]` is empty, so no prediction divergence is currently pinned there. Java is needed only at extract time, not in CI; the extract also needs the `vendor/antlr4` submodule initialized.
 
-Remaining, all gated on a JDK-equipped re-extract:
+`[stage_b_oracle_skip]` has been re-triaged (2026-07-30) and is down to the seven descriptors whose oracle output is not a valid pin at all — TestRig encodes non-ASCII as `?` while Gale renders the real code points, so pinning would strictly worsen Gale. Those are permanent unless the oracle's output encoding is fixed upstream; nothing else is parked there.
 
-- **Extend Stage B′ to the categories it does not cover** — `ParseTrees` (which has Stage A / B / C coverage but no oracle pin) and `Listeners` (no coverage at any stage: every descriptor sits in `[skip]`).
-- **Re-triage the skip buckets after each re-extract.** Several `[skip]` / `[stage_b_oracle_skip]` entries were recorded because StringTemplate directives sat outside action bodies where the stripper cannot reach; extract-time action-template expansion (see `antlr4-compatibility.md`) now turns those into plain Java type slots, so some should graduate from skip. Entries parked on a downstream `wado-compiler` failure need the failure re-checked rather than assumed — the note is only as fresh as the last run.
+Remaining:
+
+- **Extend Stage B′ to the categories it does not cover** — `ParseTrees` (which has Stage A / B / C coverage but no oracle pin) and `Listeners` (no coverage at any stage: every descriptor sits in `[skip]`). Needs a JDK-equipped re-extract.
+- **Graduate the `[skip]` bucket, which a re-extract alone will not move.** Those thirteen descriptors carry StringTemplate directives that name host-side artefacts — `<ImportListener(...)>`, `<BasicListener(...)>`, `<ParserPropertyMember()>`, `<PositionAdjustingLexer()>` — and none are in the expansion table (`src/g4/action_templates.wado`), which only covers directives with a grammar-level meaning. Each needs either a table entry or the judgement that it is genuinely target-language-specific; the Listeners ones look like the latter.
+- **Stage B compares its expected trees through `normalize_tree`.** Stage B′ no longer does (it lost a real divergence that way — see the whitespace note in the extractor), and Stage B is exposed to the same class of masking. No committed Stage B expected tree currently contains whitespace inside token text, so this is latent rather than live; decide it when one does.
 
 ### Composite (slave-grammar) descriptors
 

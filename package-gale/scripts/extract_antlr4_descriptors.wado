@@ -2056,6 +2056,12 @@ fn strip_tail_eof_marker(s: &String) -> String {
     return out;
 }
 
+/// The oracle's tree is compared verbatim, not through `normalize_tree`.
+/// That helper collapses whitespace runs so a hand-written driver test can
+/// indent its expected tree; the oracle's is already one line, so collapsing
+/// can only lose information — and it does whenever a token's own text
+/// contains whitespace (`BREAK: 'break '` renders `break  break `, two
+/// spaces: the token's trailing space plus the child separator).
 fn emit_stage_b_oracle_test_file(
     category: &String,
     name: &String,
@@ -2074,7 +2080,7 @@ fn emit_stage_b_oracle_test_file(
             triage_doc_line(&"stage_b_oracle"),
         ],
         output_subdir: "antlr4_compat_b_oracle",
-        import_names: ["normalize_tree"],
+        import_names: [],
         test_label: "stage_b_oracle",
         triage: *triage,
     };
@@ -2083,8 +2089,7 @@ fn emit_stage_b_oracle_test_file(
         w.line(&`let expected = "${escape_for_wado_str(expected_tree)}";`);
         w.line(&`let result = t::${parse_call_for_start(start)}(&input);`);
         w.line(&"let actual = t::to_string_tree(&result);");
-        w.line(&"let norm = normalize_tree(&expected);");
-        w.line(&"assert actual == norm, `actual:   ${actual}\\nexpected: ${norm}`;");
+        w.line(&"assert actual == expected, `actual:   ${actual}\\nexpected: ${expected}`;");
     });
 }
 

@@ -110,40 +110,6 @@
 # closed.
 
 [stage_b_oracle_skip]
-# Stripped grammar still doesn't `javac` cleanly — the descriptors below
-# declare return-types via the testsuite's StringTemplate directives
-# (`<IntArg("")>`, `<StringType()>`, `<StringList()>`) directly inside
-# the rule's `returns [...]` bracket. The action-body stripper only
-# reaches `{...}` blocks and `[...]` character classes / rule-arg
-# brackets, not the type-slot inside a `returns` list. ANTLR4's Java
-# target codegens the directive as the literal Java type, which javac
-# then rejects with `> expected` / `illegal start of type`. Bringing
-# these into Stage B′ would require either a smarter stripper that
-# rewrites `returns [<X()> name]` to a stub, or a parallel
-# `_stage_b_oracle_aware.g4` rendering of the descriptor — Stage C-
-# tier work, not worth the complexity for 9 descriptors.
-"LeftRecursion/PrefixOpWithActionAndLabel_1" = "oracle: `returns [<StringType()> result]` — StringTemplate directive in a return-type slot the stripper cannot reach"
-"LeftRecursion/PrefixOpWithActionAndLabel_2" = "oracle: `returns [<StringType()> result]` — same root cause as PrefixOpWithActionAndLabel_1"
-"LeftRecursion/PrefixOpWithActionAndLabel_3" = "oracle: `returns [<StringType()> result]` — same root cause as PrefixOpWithActionAndLabel_1"
-"LeftRecursion/ReturnValueAndActions_1" = "oracle: `returns [<StringList()> ignored]` — StringTemplate directive in a return-type slot the stripper cannot reach"
-"LeftRecursion/ReturnValueAndActions_2" = "oracle: `returns [<StringList()> ignored]` — same root cause as ReturnValueAndActions_1"
-"LeftRecursion/ReturnValueAndActions_3" = "oracle: `returns [<StringList()> ignored]` — same root cause as ReturnValueAndActions_1"
-"LeftRecursion/ReturnValueAndActions_4" = "oracle: `returns [<StringList()> ignored]` — same root cause as ReturnValueAndActions_1"
-"ParserExec/ReservedWordsEscaping" = "oracle: `returns [<IntArg(\"\")> return_]` — StringTemplate directive in a return-type slot the stripper cannot reach"
-"SemPredEvalParser/DependentPredNotInOuterCtxShouldBeIgnored" = "oracle: `returns [<IntArg(\"\")> i]` — StringTemplate directive in a return-type slot the stripper cannot reach"
-
-# Stale — awaiting a re-extract, not blocked. These were parked on a
-# downstream wado-compiler ICE (`WIR pipeline generated invalid core
-# Wasm module`) on the Gale-emitted parser source. Re-measured
-# 2026-07-30: all three grammars generate, compile and run their
-# `to_string_tree` path cleanly, so the ICE is gone. Drop these three
-# entries at the next JDK-equipped re-extract so the oracle pins their
-# trees; they are kept here only because a `_skip` cannot be lifted
-# without the oracle run that emits the test.
-"ParserExec/OpenDeviceStatement_Case1" = "stale: parked on a wado-compiler ICE that no longer reproduces — drop at the next re-extract so the oracle can pin the tree"
-"ParserExec/OpenDeviceStatement_Case2" = "same as OpenDeviceStatement_Case1"
-"ParserExec/OpenDeviceStatement_Case3" = "same as OpenDeviceStatement_Case1"
-
 # Oracle TestRig mojibakes non-ASCII output to `?`. The descriptors
 # below have grammars that accept Unicode characters and emit them as
 # token text; Gale correctly reproduces the actual code points, while
