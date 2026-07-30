@@ -227,6 +227,10 @@ impl Reached {
         }
     }
 
+    /// Both directions of the mention check peel casts as well as borrows:
+    /// an argument reaches a builtin as `&x.repr as &Array<u8>`, and a
+    /// mention recorded at the cast would never match the borrow the
+    /// disqualification walk asks about.
     fn covers(&self, body: &Body, op: Operand) -> bool {
         let mut op = op;
         loop {
@@ -237,13 +241,15 @@ impl Reached {
                 ExprKind::Unary {
                     op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
                     expr,
-                } => op = *expr,
+                }
+                | ExprKind::Cast { expr, .. } => op = *expr,
                 _ => return self.reads.contains(&e) || self.writes.contains(&e),
             }
         }
     }
 
-    /// Records the place `op` names, peeling the borrow it may be wrapped in.
+    /// Records the place `op` names, peeling the borrows and casts it may be
+    /// wrapped in.
     fn record(&mut self, body: &Body, op: Operand, reach: Reach) {
         let Some(e) = op.as_expr() else {
             return;
@@ -252,7 +258,8 @@ impl Reached {
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
                 expr,
-            } => self.record(body, *expr, reach),
+            }
+            | ExprKind::Cast { expr, .. } => self.record(body, *expr, reach),
             _ => {
                 match reach {
                     Reach::Read => self.reads.insert(e),

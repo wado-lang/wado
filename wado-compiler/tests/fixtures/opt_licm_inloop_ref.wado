@@ -12,6 +12,13 @@
 
 use { println, Stdout } from "core:cli";
 
+// The thresholds are laundered through mutable globals: a constant argument
+// would let niri run the whole pure call at compile time — `&config` resolves
+// to an alias inside a frame — and a folded call has no loop left for LICM to
+// work on.
+global mut THRESHOLD_ONE: i32 = 100;
+global mut THRESHOLD_TWO: i32 = 1;
+
 struct Config {
     threshold: i32,
     scale: i32,
@@ -51,8 +58,8 @@ fn pick(n: i32, t: i32, u: i32) -> i32 {
 }
 
 export fn run() with Stdout {
-    println(`${accumulate(5, 100)}`);
-    println(`${pick(5, 100, 1)}`);
+    println(`${accumulate(5, THRESHOLD_ONE)}`);
+    println(`${pick(5, THRESHOLD_ONE, THRESHOLD_TWO)}`);
 }
 
 __DATA__

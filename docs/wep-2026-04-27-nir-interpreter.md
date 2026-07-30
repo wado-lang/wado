@@ -207,7 +207,10 @@ Regions:
 - A cast between the same reference shape — duplicate-interned `Array<u8>`
   ids, a borrow over them — denotes its operand; monomorphization leaves such
   casts over every buffer the formatting path builds. A converting cast still
-  folds only through the primitive-cast evaluator.
+  folds only through the primitive-cast evaluator. Place naming and the
+  trackability mentions read through casts the same way, so a borrow reaching
+  a builtin as `&mut x.repr as &mut Array<u8>` still names — and keeps
+  trackable — the local it writes.
 
 ## TODO
 
@@ -273,14 +276,12 @@ Regions:
 
 ### Regions
 
-- A region's frame starts empty, so an outer binding the pool did not promote
-  reads as nothing and the evaluation abandons. A scalar constant reaches the
-  region as a promoted operand and folds; a constant aggregate — a `String`
-  local interpolated into a template — only becomes readable once
-  globalization hoists it, and the post-globalization cleanup folds only what
-  one pass reaches. Seeding the region frame from the walker's environment is
-  the likely answer; it waits on deciding which entries stay sound under the
-  frame's own writes.
+- A region's frame starts empty, so an outer binding reaches it only as a
+  promoted scalar operand or as a constant global. A constant `String` local
+  interpolated into a template folds because globalization hoists it first;
+  an outer aggregate nothing hoists stays out of reach. Seeding the region
+  frame from the walker's environment is the likely extension; it waits on
+  deciding which entries stay sound under the frame's own writes.
 
 ### Compile-time string formatting
 

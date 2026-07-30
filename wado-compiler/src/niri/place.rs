@@ -26,13 +26,18 @@ pub(super) fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
 /// The local a borrow or lvalue chain roots at, and the field path reaching
 /// into its value. [`lvalue_root_local`] answers only which local is touched;
 /// a write also needs to know where inside it lands.
+///
+/// A cast names the same storage as its operand — `&mut x.repr as
+/// &mut Array<u8>` is how a borrow reaches a builtin after monomorphization —
+/// so the chain is followed through it.
 pub(super) fn place_of(body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
     match &body.exprs[op.as_expr()?].kind {
         ExprKind::Local { index, .. } => Some((*index, Vec::new())),
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
             expr,
-        } => place_of(body, *expr),
+        }
+        | ExprKind::Cast { expr, .. } => place_of(body, *expr),
         ExprKind::FieldAccess {
             expr, field_index, ..
         } => {
