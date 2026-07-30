@@ -1083,6 +1083,9 @@ impl TraitEnv {
             }
             decl_index.get(&canonical_key(module, declared)).cloned()
         };
+        violations.extend(check_variadic_impl_overlap(modules, &resolve_trait));
+        violations.extend(check_inherent_impl_collisions(modules));
+
         let (supertrait_closures, cycles) =
             build_supertrait_closures(&trait_decl_headers, &resolve_trait);
         violations.extend(cycles);
@@ -1750,6 +1753,308 @@ fn report_supertrait_cycle(
             span: header.span,
         },
     ));
+}
+
+enum VariadicTarget {
+    /// The bare `[..T]`, the only shape the compiler implements.
+    PackOnly,
+    /// A pack beside other elements (`[i32, ..T]`) or under a reference.
+    Unsupported,
+}
+
+/// Classify an impl target that spreads a type pack; `None` when it spreads
+/// none. Only a tuple can carry one.
+fn variadic_target(ty: &ast::Type) -> Option<VariadicTarget> {
+    match ty {
+        ast::Type::Tuple(elems) => {
+            if !elems
+                .iter()
+                .any(|e| matches!(e, ast::Type::TypePackSpread(..)))
+            {
+                return None;
+            }
+            Some(if elems.len() == 1 {
+                VariadicTarget::PackOnly
+            } else {
+                VariadicTarget::Unsupported
+            })
+        }
+        // A pack under a reference never reaches the impl's type-param scope,
+        // so type resolution would report the declared pack as unknown.
+        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+            variadic_target(inner).map(|_| VariadicTarget::Unsupported)
+        }
+        _ => None,
+    }
+}
+
+/// Whether two impl-written types can denote the same type. An impl's own type
+/// parameter is a wildcard. An undecidable pair unifies: for a coherence rule,
+/// reporting is the sound direction.
+fn types_can_unify(
+    a: &ast::Type,
+    a_params: &IndexSet<&str>,
+    b: &ast::Type,
+    b_params: &IndexSet<&str>,
+) -> bool {
+    let is_wildcard = |ty: &ast::Type, params: &IndexSet<&str>| match ty {
+        ast::Type::Named(named) => params.contains(named.name.as_str()),
+        _ => false,
+    };
+    if is_wildcard(a, a_params) || is_wildcard(b, b_params) {
+        return true;
+    }
+    let unify_all = |xs: &[ast::Type], ys: &[ast::Type]| {
+        xs.len() == ys.len()
+            && xs
+                .iter()
+                .zip(ys)
+                .all(|(x, y)| types_can_unify(x, a_params, y, b_params))
+    };
+    match (a, b) {
+        (ast::Type::Named(x), ast::Type::Named(y)) => x.name == y.name,
+        (ast::Type::Generic(x), ast::Type::Generic(y)) => {
+            x.name == y.name && unify_all(&x.args, &y.args)
+        }
+        (ast::Type::Tuple(xs), ast::Type::Tuple(ys)) => unify_all(xs, ys),
+        (ast::Type::Reference(x), ast::Type::Reference(y))
+        | (ast::Type::MutReference(x), ast::Type::MutReference(y)) => {
+            types_can_unify(x, a_params, y, b_params)
+        }
+        // Decidable shapes that did not pair up above have different heads.
+        (
+            ast::Type::Named(_)
+            | ast::Type::Generic(_)
+            | ast::Type::Tuple(_)
+            | ast::Type::Reference(_)
+            | ast::Type::MutReference(_),
+            ast::Type::Named(_)
+            | ast::Type::Generic(_)
+            | ast::Type::Tuple(_)
+            | ast::Type::Reference(_)
+            | ast::Type::MutReference(_),
+        ) => false,
+        // Projections, function types, nested packs and placeholders are not
+        // decidable here.
+        (
+            ast::Type::NamespacedGeneric(_)
+            | ast::Type::Function(_)
+            | ast::Type::TypePackSpread(..)
+            | ast::Type::Infer(_)
+            | ast::Type::Error(_),
+            _,
+        )
+        | (
+            _,
+            ast::Type::NamespacedGeneric(_)
+            | ast::Type::Function(_)
+            | ast::Type::TypePackSpread(..)
+            | ast::Type::Infer(_)
+            | ast::Type::Error(_),
+        ) => true,
+    }
+}
+
+struct VariadicImpl<'a> {
+    module_source: &'a ModuleSource,
+    span: Span,
+    trait_name: String,
+    trait_args: &'a [ast::Type],
+    params: IndexSet<&'a str>,
+}
+
+impl VariadicImpl<'_> {
+    /// Whether the two accept a common tuple. Both targets are the bare
+    /// `[..T]`, so only the trait's own arguments can hold them apart:
+    /// `Conv<i32>` and `Conv<String>` implement different things.
+    fn overlaps(&self, other: &Self) -> bool {
+        self.trait_args.len() == other.trait_args.len()
+            && self
+                .trait_args
+                .iter()
+                .zip(other.trait_args)
+                .all(|(a, b)| types_can_unify(a, &self.params, b, &other.params))
+    }
+}
+
+/// Coherence Rule 2 (WEP 2026-03-14 §5): two variadic impls of one trait accept
+/// the same tuples, and a pack's bounds are resolved only at monomorphization,
+/// so nothing separates them at selection. Reject the later one where it is
+/// written; a stdlib impl is considered but never reported, being unfixable by
+/// the user.
+///
+/// Grouping is by trait *declaration*, so two modules may each declare a `Tag`
+/// and keep their own variadic impls.
+///
+/// The same walk refuses a target the compiler does not implement, which would
+/// otherwise miscompile or trip the WIR validator.
+fn check_variadic_impl_overlap(
+    modules: &IndexMap<ModuleSource, Module>,
+    resolve_trait: ResolveTrait<'_>,
+) -> Vec<(ModuleSource, TypeError)> {
+    let mut violations = Vec::new();
+    let mut groups: IndexMap<TraitDeclLoc, Vec<VariadicImpl<'_>>> = IndexMap::default();
+
+    for (module_source, module) in modules {
+        for item in &module.items {
+            let Item::Impl(impl_block) = item else {
+                continue;
+            };
+            let Some(trait_type) = &impl_block.trait_type else {
+                continue;
+            };
+            let Some(target) = variadic_target(&impl_block.ty) else {
+                continue;
+            };
+            if let VariadicTarget::Unsupported = target {
+                if is_user_local(module_source) {
+                    violations.push((
+                        module_source.clone(),
+                        TypeError::UnsupportedVariadicImplTarget {
+                            span: impl_block.span,
+                        },
+                    ));
+                }
+                continue;
+            }
+            let trait_name = get_type_name_static(trait_type);
+            let Some(trait_loc) = resolve_trait(module_source, &trait_name) else {
+                continue;
+            };
+            groups.entry(trait_loc).or_default().push(VariadicImpl {
+                module_source,
+                span: impl_block.span,
+                trait_name,
+                trait_args: match trait_type {
+                    ast::Type::Generic(generic) => &generic.args,
+                    _ => &[],
+                },
+                params: impl_block
+                    .type_params
+                    .iter()
+                    .map(|p| p.name.as_str())
+                    .collect(),
+            });
+        }
+    }
+
+    for impls in groups.values_mut() {
+        // A stdlib impl holds its ground; among user impls the earlier one in
+        // (file, position) order does. The module map's order is load order,
+        // which is neither source order nor stable across entry points.
+        impls.sort_by_key(|i| {
+            (
+                is_user_local(i.module_source),
+                i.module_source.to_string(),
+                i.span.start,
+            )
+        });
+        let mut held: Vec<&VariadicImpl<'_>> = Vec::new();
+        for candidate in impls.iter() {
+            let Some(conflict) = held.iter().find(|h| h.overlaps(candidate)) else {
+                held.push(candidate);
+                continue;
+            };
+            if !is_user_local(candidate.module_source) {
+                continue;
+            }
+            violations.push((
+                candidate.module_source.clone(),
+                TypeError::OverlappingVariadicImpls {
+                    trait_name: candidate.trait_name.clone(),
+                    self_type_name: "[..]".to_string(),
+                    conflicting_impl: if conflict.module_source == candidate.module_source {
+                        "the earlier one in this file".to_string()
+                    } else {
+                        format!("the one in `{}`", conflict.module_source)
+                    },
+                    span: candidate.span,
+                },
+            ));
+        }
+    }
+
+    violations
+}
+
+/// Whether the target names one of the impl's own type parameters, making the
+/// impl generic over the head rather than written for one instantiation.
+fn target_mentions_impl_param(ty: &ast::Type, params: &IndexSet<&str>) -> bool {
+    match ty {
+        ast::Type::Named(named) => params.contains(named.name.as_str()),
+        ast::Type::Generic(generic) => generic
+            .args
+            .iter()
+            .any(|a| target_mentions_impl_param(a, params)),
+        ast::Type::Tuple(elems) => elems.iter().any(|e| target_mentions_impl_param(e, params)),
+        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+            target_mentions_impl_param(inner, params)
+        }
+        ast::Type::TypePackSpread(name, _) => params.contains(name.as_str()),
+        ast::Type::NamespacedGeneric(_)
+        | ast::Type::Function(_)
+        | ast::Type::Infer(_)
+        | ast::Type::Error(_) => false,
+    }
+}
+
+/// An inherent `impl Box_<i32>` and an inherent `impl<T> Box_<T>` defining the
+/// same method both own the name `Box_<i32>::a`. A trait impl would force one
+/// signature on both, letting coherence Rule 1 pick the specific one; an
+/// inherent impl carries no such contract, so a generic caller type-checked
+/// against the general method would link to a differently-typed function.
+/// Rejected, as in Rust.
+fn check_inherent_impl_collisions(
+    modules: &IndexMap<ModuleSource, Module>,
+) -> Vec<(ModuleSource, TypeError)> {
+    let mut generic_methods_by_head: IndexMap<String, IndexSet<&str>> = IndexMap::default();
+    let mut instantiations = Vec::new();
+
+    for (module_source, module) in modules {
+        for item in &module.items {
+            let Item::Impl(impl_block) = item else {
+                continue;
+            };
+            if impl_block.trait_type.is_some() {
+                continue;
+            }
+            let params: IndexSet<&str> = impl_block
+                .type_params
+                .iter()
+                .map(|p| p.name.as_str())
+                .collect();
+            let head = get_type_name_static(&impl_block.ty);
+            if target_mentions_impl_param(&impl_block.ty, &params) {
+                generic_methods_by_head
+                    .entry(head)
+                    .or_default()
+                    .extend(impl_block.methods.iter().map(|m| m.name.as_str()));
+            } else if is_user_local(module_source) {
+                instantiations.push((module_source, impl_block, head));
+            }
+        }
+    }
+
+    let mut violations = Vec::new();
+    for (module_source, impl_block, head) in instantiations {
+        let Some(generic_methods) = generic_methods_by_head.get(&head) else {
+            continue;
+        };
+        for method in &impl_block.methods {
+            if generic_methods.contains(method.name.as_str()) {
+                violations.push((
+                    module_source.clone(),
+                    TypeError::DuplicateInherentMethod {
+                        self_type_name: head.clone(),
+                        method_name: method.name.clone(),
+                        span: method.span,
+                    },
+                ));
+            }
+        }
+    }
+
+    violations
 }
 
 /// Check orphan rules for all trait impl blocks across all modules.

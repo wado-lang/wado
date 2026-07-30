@@ -1,0 +1,36 @@
+// One trait implemented for a receiver at two argument lists leaves the method
+// name pointing at two signatures, and nothing downstream can choose. The first
+// candidate used to win silently, so the call site reported a type mismatch
+// against a signature the author never asked for.
+
+struct A {
+    v: i32,
+}
+
+struct B {
+    v: i32,
+}
+
+trait Take<S> {
+    fn take(&self, s: S) -> i32;
+}
+
+impl Take<A> for bool {
+    fn take(&self, s: A) -> i32 {
+        return s.v;
+    }
+}
+
+impl Take<B> for bool {
+    fn take(&self, s: B) -> i32 {
+        return s.v + 1;
+    }
+}
+
+export fn run() {
+    let f = true;
+    assert f.take(B { v: 1 }) == 2;
+}
+
+__DATA__
+{"compile_error": "ambiguous call to 'take': the receiver implements 'Take<A>' and 'Take<B>'"}

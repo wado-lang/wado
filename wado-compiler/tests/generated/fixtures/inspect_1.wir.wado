@@ -322,7 +322,7 @@ type "functype//core:prelude/primitive.wado/f32::inspect_into$spec0" = fn(f32, r
 
 type "functype//core:prelude/format.wado/core:prelude/string.wado/String^Inspect::inspect$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(118)
 
-type "functype//core:prelude/tuple.wado/[]<i32,core:prelude/string.wado/String,bool>^Inspect::inspect$spec0" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool]", ref "core:prelude/format.wado//Formatter");  // TypeId(119)
+type "functype//core:prelude/tuple.wado/[i32,core:prelude/string.wado/String,bool]^Inspect::inspect$spec0" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool]", ref "core:prelude/format.wado//Formatter");  // TypeId(119)
 
 type "functype//core:prelude/traits.wado/inspect_1.wado/InspShape^Inspect::inspect$spec0" = fn(ref "core:prelude/types.wado//Box<inspect_1.wado/InspShape>", ref "core:prelude/format.wado//Formatter");  // TypeId(120)
 
@@ -330,7 +330,7 @@ type "functype//core:prelude/primitive.wado/u64::fmt_base$spec0" = fn(u64, ref "
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(122)
 
-type "functype//core:prelude/tuple.wado/[]<f64,f64>^Inspect::inspect$spec0" = fn(ref "tuple//[f64, f64]", ref "core:prelude/format.wado//Formatter");  // TypeId(123)
+type "functype//core:prelude/tuple.wado/[f64,f64]^Inspect::inspect$spec0" = fn(ref "tuple//[f64, f64]", ref "core:prelude/format.wado//Formatter");  // TypeId(123)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(124)
 
@@ -788,7 +788,7 @@ fn "inspect_1.wado/__test_3_tuple"() {
     global:inspect_1.wado::__const_obj_162 = struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 };
     __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
-    "core:prelude/tuple.wado/[]<i32,core:prelude/string.wado/String,bool>^Inspect::inspect$spec0"(global:inspect_1.wado::__const_obj_162, __local_4);
+    "core:prelude/tuple.wado/[i32,core:prelude/string.wado/String,bool]^Inspect::inspect$spec0"(global:inspect_1.wado::__const_obj_162, __local_4);
     __cond = "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(__local_3, global:inspect_1.wado::__const_obj_161);
     if @unlikely(__cond == 0) {
         cold_path;
@@ -3403,7 +3403,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^Inspect::inspect$sp
     }
 }
 
-fn "core:prelude/tuple.wado/[]<i32,core:prelude/string.wado/String,bool>^Inspect::inspect$spec0"(self, f) {
+fn "core:prelude/tuple.wado/[i32,core:prelude/string.wado/String,bool]^Inspect::inspect$spec0"(self, f) {
     let s_9: ref "core:prelude/string.wado//String";
     let v_11: ref "core:prelude/string.wado//String";
     let s_19: ref "core:prelude/string.wado//String";
@@ -3495,7 +3495,7 @@ fn "core:prelude/traits.wado/inspect_1.wado/InspShape^Inspect::inspect$spec0"(se
         if case_5.is_unit == 0 {
             s_36 = global:core:prelude/traits.wado::__const_obj_375;
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_36);
-            "core:prelude/tuple.wado/[]<f64,f64>^Inspect::inspect$spec0"(v_38 = self.value; index_66 = case_5.index; if @unlikely(v_38.discriminant != index_66) {
+            "core:prelude/tuple.wado/[f64,f64]^Inspect::inspect$spec0"(v_38 = self.value; index_66 = case_5.index; if @unlikely(v_38.discriminant != index_66) {
                 unreachable;
             }; (if @likely(index_66 == 1) -> ref "tuple//[f64, f64]" {
                 ref.cast "inspect_1.wado//InspShape::Rectangle"(v_38).payload_0;
@@ -3570,7 +3570,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     return "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
 }
 
-fn "core:prelude/tuple.wado/[]<f64,f64>^Inspect::inspect$spec0"(self, f) {
+fn "core:prelude/tuple.wado/[f64,f64]^Inspect::inspect$spec0"(self, f) {
     let s_8: ref "core:prelude/string.wado//String";
     let s_15: ref "core:prelude/string.wado//String";
     let s_19: ref "core:prelude/string.wado//String";

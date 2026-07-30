@@ -300,6 +300,16 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// One trait implemented for a receiver at two different argument lists,
+    /// so a call on it names two signatures. Reported where it is called: the
+    /// impls are individually fine, and coherence permits them.
+    AmbiguousTraitArguments {
+        method: String,
+        /// The competing trait spellings, in candidate order.
+        traits: Vec<String>,
+        span: Span,
+    },
+
     /// A type argument whose associated type does not match the constraint
     /// written on the bound (`T: Collect<Item = i32>` given `Item = String`).
     AssocTypeBoundNotSatisfied {
@@ -394,6 +404,33 @@ pub enum TypeError {
     OrphanViolation {
         trait_name: String,
         self_type_name: String,
+        span: Span,
+    },
+
+    /// Coherence violation: two variadic impls of the same trait accepting a
+    /// common tuple. They apply at every such arity and bounds do not separate
+    /// them.
+    OverlappingVariadicImpls {
+        trait_name: String,
+        self_type_name: String,
+        /// Where the impl this one collides with lives, named so the other
+        /// half of the pair is not left for the reader to hunt down.
+        conflicting_impl: String,
+        span: Span,
+    },
+
+    /// Coherence violation: an inherent impl for one instantiation defines a
+    /// method an inherent impl generic over the same head already defines.
+    DuplicateInherentMethod {
+        self_type_name: String,
+        method_name: String,
+        span: Span,
+    },
+
+    /// A variadic impl target whose pack is not the whole of it — beside other
+    /// elements (`impl<..T> Trait for [i32, ..T]`) or under a reference
+    /// (`&[..T]`) — which the compiler does not implement.
+    UnsupportedVariadicImplTarget {
         span: Span,
     },
 
@@ -810,6 +847,22 @@ impl TypeError {
                 ),
                 *span,
             ),
+            TypeError::AmbiguousTraitArguments {
+                method,
+                traits,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "ambiguous call to '{method}': the receiver implements {}, and Wado cannot pick between a trait's argument lists at a call site",
+                    traits
+                        .iter()
+                        .map(|t| format!("'{t}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and ")
+                ),
+                *span,
+            ),
             TypeError::AmbiguousTraitMethod {
                 method,
                 traits,
@@ -947,6 +1000,34 @@ impl TypeError {
                 format!(
                     "orphan rule violation: cannot implement foreign trait `{trait_name}` for foreign type `{self_type_name}`"
                 ),
+                *span,
+            ),
+            TypeError::OverlappingVariadicImpls {
+                trait_name,
+                self_type_name,
+                conflicting_impl,
+                span,
+            } => (
+                Code::OrphanRule,
+                format!(
+                    "overlapping variadic impls of `{trait_name}` for `{self_type_name}`: this one and {conflicting_impl} accept the same tuples, and a pack's bounds are only checked at monomorphization, so neither can be selected over the other"
+                ),
+                *span,
+            ),
+            TypeError::DuplicateInherentMethod {
+                self_type_name,
+                method_name,
+                span,
+            } => (
+                Code::OrphanRule,
+                format!(
+                    "duplicate definition of `{method_name}` for `{self_type_name}`: an inherent impl generic over the same type already defines it, and an inherent impl carries no trait contract to make the two interchangeable"
+                ),
+                *span,
+            ),
+            TypeError::UnsupportedVariadicImplTarget { span } => (
+                Code::OrphanRule,
+                "a variadic impl target must be the bare `[..T]`: a pack alongside other elements (`[i32, ..T]`) or under a reference (`&[..T]`) is not supported yet".to_string(),
                 *span,
             ),
             TypeError::InherentImplOnForeignType {
@@ -1727,6 +1808,14 @@ pub(super) struct TraitMethodMatch {
     /// the inner type is a type parameter. False for specific ref impls like
     /// `impl IntoIterator for &List<T>` where the inner type is a concrete generic.
     pub(super) is_blanket_ref_impl: bool,
+    /// True when the impl target spreads a type pack (`impl<..T> Trait for
+    /// [..T]`). Coherence Rule 1 (WEP 2026-03-14 §5) ranks such a match below
+    /// every non-variadic one.
+    pub(super) is_variadic_impl: bool,
+    /// [`Self::trait_name`] without its type arguments (`Take` for `Take<A>`).
+    /// Two matches agreeing here but not on `trait_name` are impls of one
+    /// trait at different arguments — a selection this resolver cannot make.
+    pub(super) trait_base_name: String,
 }
 
 /// Read-only view that resolves a type name from a given module's perspective

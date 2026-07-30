@@ -52,6 +52,11 @@ pub(super) struct FuncInstState {
     /// post-variadic-expansion type-arg inference needs in order to tell a
     /// method type param from an ordinary parameter.
     pub templates: Rc<IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>>,
+    /// Per module, the names written impls already define. An impl for one
+    /// instantiation (`impl Tag for Box_<i32>`) emits exactly the function a
+    /// template instantiation would, which is what lets the specific impl win
+    /// over the general one — coherence Rule 1 (WEP 2026-03-14 §5).
+    pub concrete_names: IndexMap<ModuleSource, IndexSet<String>>,
 }
 
 impl FuncInstState {
@@ -194,6 +199,7 @@ impl Monomorphizer {
                 pending: Vec::new(),
                 trait_env,
                 templates: Rc::new(IndexMap::default()),
+                concrete_names: IndexMap::default(),
             },
             current_impl_type_param_count: 0,
             current_impl_struct_name: None,
@@ -221,6 +227,40 @@ impl Monomorphizer {
         self.functions.instantiated.get(key)
     }
 
+    /// Coherence Rule 1 (WEP 2026-03-14 §5): whether a written impl already
+    /// occupies this instantiation's name, so queueing the template would both
+    /// shadow that impl and collide with it in the module namespace.
+    ///
+    /// Only a template carrying impl-level arguments has such a rival. A
+    /// concrete impl's own generic method carries none, so it still reaches its
+    /// instantiations even though its base name is what sits in
+    /// `concrete_names` — and that base is what a method-generic template is
+    /// compared against, the two differing only by the trailing method args.
+    fn concrete_impl_owns_name(
+        &self,
+        key: &InstantiationKey,
+        mangled_name: &str,
+        type_table: &TypeTable,
+    ) -> bool {
+        if key.impl_type_args.is_empty() {
+            return false;
+        }
+        let Some(names) = self.functions.concrete_names.get(&key.module_source) else {
+            return false;
+        };
+        if names.contains(mangled_name) {
+            return true;
+        }
+        if key.method_type_args.is_empty() {
+            return false;
+        }
+        let base_key = InstantiationKey {
+            method_type_args: Vec::new(),
+            ..key.clone()
+        };
+        names.contains(&self.method_instantiation_name(&base_key, type_table))
+    }
+
     /// Queue a function instantiation if not already queued. Returns true
     /// if newly queued.
     ///
@@ -234,8 +274,16 @@ impl Monomorphizer {
     /// makes `function_id_for(func)` injective over `project.functions`
     /// by construction — the load-bearing invariant for DCE's
     /// position-based retain (asserted at `optimize/dce.rs:675`).
-    pub fn try_queue_function(&mut self, key: InstantiationKey, mangled_name: String) -> bool {
+    pub fn try_queue_function(
+        &mut self,
+        key: InstantiationKey,
+        mangled_name: String,
+        type_table: &TypeTable,
+    ) -> bool {
         if self.functions.instantiated.contains_key(&key) {
+            return false;
+        }
+        if self.concrete_impl_owns_name(&key, &mangled_name, type_table) {
             return false;
         }
         // A blanket instance reaches the same function from two dispatch sites —

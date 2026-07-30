@@ -2768,6 +2768,9 @@ impl<T: Eq> Eq for Pair<T> {
 - Trait objects (`dyn Trait`)
 - Fully qualified syntax for disambiguation (`<Type as Trait>::method()`)
 - Using bounds for method resolution on type parameters (calling `T.method()` where `T: Trait`)
+- Choosing between one trait's argument lists at a call site, from the argument
+  or expected types (`impl Take<A> for bool` alongside `impl Take<B> for bool`);
+  such a call is reported as ambiguous
 
 ### Coherence and Orphan Rules
 
@@ -2844,6 +2847,74 @@ that type (`impl MyExt for String`) — the orphan rule above permits this becau
 the trait is local. The owning package itself (e.g. `core` for `String` /
 `Array<T>` / `List<T>`) is of course free to spread inherent impls across its own
 modules.
+
+#### Specific Impls Win
+
+Two impls of one trait may cover a type when one is written for a single
+instantiation and the other is generic over the head:
+
+```wado
+impl<T> Tag for Box_<T> { … }         // general
+impl Tag for Box_<i32> { … }          // specific — wins for Box_<i32>
+
+impl<..T> Tag for [..T] { … }         // general
+impl Tag for [i32, i32] { … }         // specific — wins for [i32, i32]
+```
+
+The specific impl applies to the instantiation it names; every other
+instantiation takes the general one. Declaration order does not matter.
+
+This holds only for a **trait** impl, where the trait gives both methods one
+signature. An inherent impl carries no such contract, so the pair is rejected:
+
+```wado
+impl<T> Box_<T> { fn a(&self) -> String { … } }
+impl Box_<i32> { fn a(&self) -> i32 { … } }   // ERROR: duplicate definition of `a`
+```
+
+Two impls that are general in the same way cannot be ordered at all, so a second
+variadic impl of one trait is rejected where it is written:
+
+```wado
+impl<..T: Inspect> Tag for [..T] { … }
+impl<..T: Eq> Tag for [..T] { … }     // ERROR: overlapping variadic impls
+```
+
+Bounds do not separate them: a pack's bounds are checked at monomorphization,
+not at selection. A trait's own arguments do separate them, since they make the
+two impls of different traits:
+
+```wado
+impl<..T> Conv<i32> for [..T] { … }    // OK
+impl<..T> Conv<String> for [..T] { … } // OK — a different trait
+```
+
+A variadic impl target must be the bare `[..T]`. A pack alongside other
+elements, or under a reference, is not supported yet:
+
+```wado
+impl<..T> Tag for [i32, ..T] { … }    // ERROR: not supported yet
+impl<..T> Tag for &[..T] { … }        // ERROR: not supported yet
+```
+
+#### One Trait at Two Argument Lists
+
+A trait may be implemented for one type at several argument lists, and each
+impl is legal — they implement different traits. But a method call names only
+the method, so a call on such a receiver is ambiguous and is rejected:
+
+```wado
+impl Take<A> for bool { … }
+impl Take<B> for bool { … }
+
+f.take(B { v: 1 })   // ERROR: ambiguous call to 'take'
+```
+
+Wado has no qualified call form (`<Type as Trait>::method()`) to pick one, and
+selection does not consider the argument or expected types. Operators are not
+affected: indexing and arithmetic resolve their impl by operand type, which is
+why `List<T>` implements `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>`,
+and `IndexValue<RangeInclusive<i32>>` at once.
 
 ### Iterator Traits
 

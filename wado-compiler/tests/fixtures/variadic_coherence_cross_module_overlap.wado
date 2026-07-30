@@ -1,0 +1,20 @@
+// Coherence Rule 2 spans modules, and the error must name both halves: it is
+// reported against whichever impl loses a deterministic (file, position)
+// ordering, and the message says where the impl it collides with lives.
+
+use {} from "./sub/variadic_coherence_other_module.wado";
+use { Tag } from "./sub/variadic_coherence_trait_decl.wado";
+
+impl<..T> Tag for [..T] {
+    fn tag(&self) -> String {
+        return "entry-module";
+    }
+}
+
+export fn run() {
+    let pair = [1, 2];
+    assert pair.tag() != "";
+}
+
+__DATA__
+{"compile_error": "overlapping variadic impls of `Tag`"}

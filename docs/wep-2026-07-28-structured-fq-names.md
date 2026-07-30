@@ -34,10 +34,12 @@ pub struct FqTypeName {
 pub enum TypeHead {
     /// A declaration, named by the module that declares it.
     Declared { module: ModuleSource, name: String },
-    /// A shape no module declares — primitive, `()`, `!`, `Array`, `[]`, `Fn`.
+    /// A shape no module declares — primitive, `()`, `!`, `Array`, `Fn`.
     Builtin(String),
     /// A template's own binder (`T`, a pack member `F`).
     Binder(String),
+    /// A tuple, spelled `[a,b]` rather than `Head<a,b>`.
+    Tuple,
 }
 ```
 
@@ -45,8 +47,15 @@ Every question that used to need a split becomes a field access:
 `decl_name()`, `module()`, `args()`, `reference()`. Rendering is
 `to_mangled()`; `to_display()` gives the source-facing form for diagnostics.
 
-The three head kinds are the distinction a `String` loses, and the one every
+The head kinds are the distinction a `String` loses, and the one every
 bug turned on: whether a module qualifies this name.
+
+A tuple is its own head because it is the one instantiated shape spelled by
+surrounding its arguments rather than following its head. Every mangler goes
+through this: `mangle_generic_name` renders the tuple head as `[a,b]` too, so
+an instantiated tuple receiver and an `impl Trait for [i32, i32]` name one
+function. While the two spellings coexisted, that impl and the variadic
+template both claimed the name and the compile aborted on the duplicate.
 
 ## Producer
 

@@ -2434,6 +2434,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let impl_module_source = self.find_struct_module_source(struct_name);
         Some(TraitMethodMatch {
+            // Auto-derived `Eq` / `Ord` take no type arguments.
+            trait_base_name: trait_name.clone(),
             trait_name,
             method_info,
             impl_module_source,
@@ -2441,6 +2443,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_struct_name: struct_name.to_string(),
             impl_struct_fq: self.tysys.fq_receiver_head(base_type_id),
             is_blanket_ref_impl: false,
+            is_variadic_impl: false,
         })
     }
 }

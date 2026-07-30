@@ -205,7 +205,7 @@ fn needs_copy_in_env(
             decl_name,
             type_args,
             ..
-        } => !(decl_name == box_name && !type_args.is_empty()),
+        } => decl_name != box_name || type_args.is_empty(),
         ResolvedType::GenericInstance {
             name,
             module_source,

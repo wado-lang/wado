@@ -111,6 +111,27 @@ impl<..T: Ord> Eq for [..T] { ... }   // ERROR: overlapping variadic impls
 These two rules together mirror the priority model used in WEP-2026-02-10 for tuple
 enumeration and keep the coherence model simple without a full trait solver overhaul.
 
+Rule 1 needs no priority table. A concrete tuple impl is a concrete _instantiation_
+impl — the same shape as `impl Tag for List<u8>` — so it defines the very function a
+`[i32, i32]` receiver calls, and the template is not instantiated onto a name an impl
+already occupies. The specific impl wins because it got there first.
+
+Rule 1 is scoped to one trait in both directions. It ranks a trait's own impls against
+each other and says nothing about another trait's, so a foreign blanket `impl<T> A for T`
+must not outrank a local `impl<..T> B for [..T]`. And it needs the trait's signature to
+make the specific and general methods interchangeable, so it does not extend to inherent
+impls: `impl<T> Box_<T> { fn a() -> String }` beside `impl Box_<i32> { fn a() -> i32 }`
+is a duplicate definition, rejected as in Rust, rather than a specialization that would
+relink a generic caller to a differently-typed function.
+
+Rule 2 is a definition-time check: two variadic impls of one trait apply at every arity,
+and a pack's bounds are resolved only at monomorphization, so nothing could separate them
+at selection time. The trait's own _arguments_ do separate them — `Conv<i32>` and
+`Conv<String>` are implementations of different things.
+
+A variadic impl target must be the bare `[..T]`. `[i32, ..T]` is a legal type (§2) but
+not yet a legal impl target.
+
 Orphan rules apply normally: a variadic impl `impl<..T> Trait for [..T]` is only legal
 if either `Trait` or the tuple type family (`type [...T]` from `core:prelude`) is owned
 by the current crate. Because `core:prelude` owns tuples, the standard library can write
@@ -406,7 +427,16 @@ where T: ReflectStruct<FieldTypes = [..F]>
 - [x] Standard library: add variadic impls for `Serialize` and `Deserialize` for tuples
       in `core:serde`; monomorphizer handles cross-module variadic impls with method-level
       type params (e.g., `fn serialize<S: Serializer>`) and associated type projections
-- [ ] Coherence: implement Rule 1 (non-VG wins) and Rule 2 (VG overlap forbidden)
+- [x] Coherence Rule 1 (non-variadic wins): a concrete tuple impl is a concrete
+      _instantiation_ impl, so it emits the function name the instantiated
+      receiver already calls, and the template is never instantiated onto it
+- [x] Coherence Rule 2 (variadic overlap forbidden): rejected where the second
+      impl is written, grouped by the trait's declaration and arguments
+- [ ] Variadic impl targets other than the bare `[..T]` — fixed elements
+      (`[i32, ..T]`) or under a reference (`&[..T]`): rejected for now.
+      Selection, pack binding, and template naming all ignore the fixed
+      elements, and a pack under a reference never reaches the impl's
+      type-param scope
 - [x] `ReflectStruct` trait: synthesize per-struct impl (`type_name`, `members`,
       `wire_name_policy`, and the `FieldTypes` / `Members` associated tuples) in the
       synthesis pass

@@ -615,7 +615,7 @@ impl Monomorphizer {
                         method_info: func.method_info.clone(),
                     };
                     let mangled = self.function_instantiation_name(&key, type_table);
-                    self.try_queue_function(key, mangled);
+                    self.try_queue_function(key, mangled, type_table);
                 }
                 // Also check if this is a static method call on a monomorphized struct.
                 // Use method_info metadata to get struct/method name.
@@ -706,7 +706,7 @@ impl Monomorphizer {
                                     type_table,
                                     &generic_func.impl_type_params,
                                 );
-                                self.try_queue_function(key, mangled);
+                                self.try_queue_function(key, mangled, type_table);
                             }
                             break;
                         }
@@ -798,7 +798,7 @@ impl Monomorphizer {
                                     type_table,
                                     &generic_func.impl_type_params,
                                 );
-                                self.try_queue_function(key, mangled);
+                                self.try_queue_function(key, mangled, type_table);
                             }
                             break;
                         }
@@ -871,7 +871,7 @@ impl Monomorphizer {
                                     method_info: Some(method_info),
                                 };
                                 let mangled = self.method_instantiation_name(&key, type_table);
-                                self.try_queue_function(key, mangled);
+                                self.try_queue_function(key, mangled, type_table);
                                 found = true;
                                 break;
                             }
@@ -977,7 +977,7 @@ impl Monomorphizer {
                                             };
                                             let mangled =
                                                 self.method_instantiation_name(&key, type_table);
-                                            self.try_queue_function(key, mangled);
+                                            self.try_queue_function(key, mangled, type_table);
                                             break;
                                         }
                                     }
@@ -1137,7 +1137,7 @@ impl Monomorphizer {
                                     method_info,
                                 };
                                 let mangled = self.method_instantiation_name(&key, type_table);
-                                self.try_queue_function(key, mangled);
+                                self.try_queue_function(key, mangled, type_table);
                                 break;
                             }
                         }
@@ -1219,7 +1219,7 @@ impl Monomorphizer {
                                     method_info,
                                 };
                                 let mangled = self.method_instantiation_name(&key, type_table);
-                                self.try_queue_function(key, mangled);
+                                self.try_queue_function(key, mangled, type_table);
                                 break;
                             }
                         }
@@ -1355,7 +1355,7 @@ impl Monomorphizer {
                         type_table,
                         &generic_func.impl_type_params,
                     );
-                    self.try_queue_function(key, mangled);
+                    self.try_queue_function(key, mangled, type_table);
                 }
 
                 // Tuple variadic impl (e.g. `[]^Eq::eq` from `impl<..T: Eq> Eq for [..T]`):
@@ -1430,7 +1430,7 @@ impl Monomorphizer {
                                 type_table,
                                 &impl_type_params,
                             );
-                            self.try_queue_function(key, mangled);
+                            self.try_queue_function(key, mangled, type_table);
                         }
                     }
                 }
@@ -1456,7 +1456,7 @@ impl Monomorphizer {
                             method_info: None,
                         };
                         let mangled = self.function_instantiation_name(&key, type_table);
-                        self.try_queue_function(key, mangled);
+                        self.try_queue_function(key, mangled, type_table);
                     }
                 }
             }
@@ -2059,9 +2059,8 @@ impl Monomorphizer {
                             let concrete_impl_module = self
                                 .functions
                                 .impl_module(&new_info, receiver_module.as_ref());
-                            let concrete_module = concrete_impl_module
-                                .or(blanket_module.clone())
-                                .or(receiver_module);
+                            let concrete_module =
+                                concrete_impl_module.or(blanket_module).or(receiver_module);
                             let method_type_arg_tids: Vec<TypeId> = if let FunctionRef {
                                 monomorph_info: Some(mi),
                                 ..
