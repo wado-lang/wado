@@ -1758,13 +1758,16 @@ fn report_supertrait_cycle(
 /// How a variadic impl target is shaped: `[..T]` alone, which the compiler
 /// implements, or a pack with further elements beside it, which it does not.
 enum VariadicTarget {
+    /// The bare `[..T]` — the only shape the compiler implements.
     PackOnly,
-    PackWithFixedElements,
+    /// A pack anywhere else: beside other elements (`[i32, ..T]`) or under a
+    /// reference (`&[..T]`).
+    Unsupported,
 }
 
 /// Classify an impl target that spreads a type pack, or `None` when it spreads
 /// none (the impl is then not variadic). A pack spreads only inside a tuple, so
-/// a tuple is the only head this matches.
+/// a tuple is the only head that can carry one.
 fn variadic_target(ty: &ast::Type) -> Option<VariadicTarget> {
     match ty {
         ast::Type::Tuple(elems) => {
@@ -1777,10 +1780,15 @@ fn variadic_target(ty: &ast::Type) -> Option<VariadicTarget> {
             Some(if elems.len() == 1 {
                 VariadicTarget::PackOnly
             } else {
-                VariadicTarget::PackWithFixedElements
+                VariadicTarget::Unsupported
             })
         }
-        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => variadic_target(inner),
+        // A pack under `&` / `&mut` never resolves — the type checker reports
+        // it as an unknown type, naming the pack the impl plainly declares.
+        // Catch it here so the impl gets told what is actually wrong.
+        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+            variadic_target(inner).map(|_| VariadicTarget::Unsupported)
+        }
         _ => None,
     }
 }
@@ -1916,7 +1924,7 @@ fn check_variadic_impl_overlap(
             let Some(target) = variadic_target(&impl_block.ty) else {
                 continue;
             };
-            if let VariadicTarget::PackWithFixedElements = target {
+            if let VariadicTarget::Unsupported = target {
                 if is_user_local(module_source) {
                     violations.push((
                         module_source.clone(),

@@ -438,9 +438,11 @@ where T: ReflectStruct<FieldTypes = [..F]>
       receiver already calls, and the template is never instantiated onto it
 - [x] Coherence Rule 2 (variadic overlap forbidden): rejected where the second
       impl is written, grouped by the trait's declaration and arguments
-- [ ] Variadic impl targets with fixed elements (`impl<..T> Trait for [i32, ..T]`):
-      rejected for now; selection, pack binding, and template naming all ignore
-      the fixed elements
+- [ ] Variadic impl targets other than the bare `[..T]` — fixed elements
+      (`[i32, ..T]`) or under a reference (`&[..T]`): rejected for now.
+      Selection, pack binding, and template naming all ignore the fixed
+      elements, and a pack under a reference never reaches the impl's
+      type-param scope
 - [x] `ReflectStruct` trait: synthesize per-struct impl (`type_name`, `members`,
       `wire_name_policy`, and the `FieldTypes` / `Members` associated tuples) in the
       synthesis pass

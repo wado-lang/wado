@@ -1,0 +1,21 @@
+// A pack under a reference never reaches the impl's type-param scope, so the
+// type checker used to report the pack the impl plainly declares as an unknown
+// type. Coherence refuses the target first, naming the actual restriction.
+
+trait Tag {
+    fn tag(&self) -> i32;
+}
+
+impl<..T> Tag for &[..T] {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    let pair = [1, 2];
+    assert pair.tag() == 1;
+}
+
+__DATA__
+{"compile_error": "a variadic impl target must be the bare `[..T]`"}

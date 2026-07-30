@@ -1,0 +1,14 @@
+// The ambiguity check is on the method-dispatch path only. Operators resolve
+// their impl by operand type on a separate path, which is what lets `List<T>`
+// carry `IndexValue<i32>` alongside `IndexValue<RangeExclusive<i32>>` and
+// `IndexValue<RangeInclusive<i32>>` without any of them being ambiguous.
+
+test "every IndexValue impl on List stays reachable" {
+    let a: List<i32> = [1, 2, 3];
+    assert a[0] == 1;
+    assert a[0..<2].len() == 2;
+    assert a[0..=1].len() == 2;
+}
+
+__DATA__
+{"test": {}}

@@ -2768,6 +2768,9 @@ impl<T: Eq> Eq for Pair<T> {
 - Trait objects (`dyn Trait`)
 - Fully qualified syntax for disambiguation (`<Type as Trait>::method()`)
 - Using bounds for method resolution on type parameters (calling `T.method()` where `T: Trait`)
+- Choosing between one trait's argument lists at a call site, from the argument
+  or expected types (`impl Take<A> for bool` alongside `impl Take<B> for bool`);
+  such a call is reported as ambiguous
 
 ### Coherence and Orphan Rules
 
@@ -2887,11 +2890,31 @@ impl<..T> Conv<String> for [..T] { … } // OK — a different trait
 ```
 
 A variadic impl target must be the bare `[..T]`. A pack alongside other
-elements is not supported yet:
+elements, or under a reference, is not supported yet:
 
 ```wado
 impl<..T> Tag for [i32, ..T] { … }    // ERROR: not supported yet
+impl<..T> Tag for &[..T] { … }        // ERROR: not supported yet
 ```
+
+#### One Trait at Two Argument Lists
+
+A trait may be implemented for one type at several argument lists, and each
+impl is legal — they implement different traits. But a method call names only
+the method, so a call on such a receiver is ambiguous and is rejected:
+
+```wado
+impl Take<A> for bool { … }
+impl Take<B> for bool { … }
+
+f.take(B { v: 1 })   // ERROR: ambiguous call to 'take'
+```
+
+Wado has no qualified call form (`<Type as Trait>::method()`) to pick one, and
+selection does not consider the argument or expected types. Operators are not
+affected: indexing and arithmetic resolve their impl by operand type, which is
+why `List<T>` implements `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>`,
+and `IndexValue<RangeInclusive<i32>>` at once.
 
 ### Iterator Traits
 

@@ -282,6 +282,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &struct_module,
                     receiver_type_args_for_trait.as_deref(),
                     Some(base_type_id),
+                    span,
                 );
                 // Only use ref-type impls that target a concrete container type
                 // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
@@ -315,6 +316,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &struct_module,
                 receiver_type_args_for_trait.as_deref(),
                 Some(base_type_id),
+                span,
             )
         {
             matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
@@ -1929,7 +1931,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let method_ref = StaticMethodRef::new(
             blanket_module.clone(),
-            blanket_param.clone(),
+            blanket_param,
             method.to_string(),
             Some(trait_name.clone()),
         );
@@ -1954,7 +1956,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         let method_info = LocalMethodName::new(
             self.tysys.fq_receiver_head(receiver_type_id),
-            Some(trait_name.clone()),
+            Some(trait_name),
             method.to_string(),
         )
         .with_type_args(&[receiver_arg_name], &method_type_arg_names);
@@ -2964,7 +2966,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.has_static_method_direct(struct_name, method_name) {
                 (
                     struct_name.to_string(),
-                    qualified_struct_name.clone(),
+                    qualified_struct_name,
                     mangled_func_name.to_string(),
                 )
             } else {
@@ -3001,7 +3003,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     (
                         struct_name.to_string(),
-                        qualified_struct_name.clone(),
+                        qualified_struct_name,
                         mangled_func_name.to_string(),
                     )
                 }
@@ -3009,7 +3011,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             (
                 struct_name.to_string(),
-                qualified_struct_name.clone(),
+                qualified_struct_name,
                 mangled_func_name.to_string(),
             )
         };

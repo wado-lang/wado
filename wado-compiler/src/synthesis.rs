@@ -26,14 +26,6 @@ use crate::name::LocalMethodName;
 use crate::package::Package;
 use crate::tir::ResolvedType;
 
-/// Run pre-monomorphize synthesis phases on the project.
-///
-/// Execution order:
-/// 1. Reflection metadata — `Reflect{Struct,Variant,Enum,Flags}` members, which
-///    the auto-derived bodies dispatch through
-/// 2. Traits — generates `Eq`/`Ord` for enums, `Inspect`/`Display` for all types
-/// 3. Template expansion — expands `TemplateString` nodes into trait method calls
-/// 4. CM bindings — generates Component Model boundary adapters
 /// The four reflection kinds' metadata (WEP 2026-06-13 §1, §3b–d). Driven by
 /// the declarations themselves, not by demand, so it runs exactly once: a
 /// second run would re-emit every member function.
@@ -44,6 +36,14 @@ fn synthesize_reflect_metadata(project: &mut Package) {
     traits::synthesize_reflect_flags(project);
 }
 
+/// Run pre-monomorphize synthesis phases on the project.
+///
+/// Execution order:
+/// 1. Reflection metadata — `Reflect{Struct,Variant,Enum,Flags}` members, which
+///    the auto-derived bodies dispatch through
+/// 2. Traits — generates `Eq`/`Ord` for enums, `Inspect`/`Display` for all types
+/// 3. Template expansion — expands `TemplateString` nodes into trait method calls
+/// 4. CM bindings — generates Component Model boundary adapters
 pub fn synthesize(project: Package) -> Result<Package, String> {
     let mut project = project;
 
@@ -224,7 +224,7 @@ fn record_concrete_instantiation(
 ) {
     if info.struct_name() != info.base_struct_name() {
         record(
-            info.struct_name().clone(),
+            info.struct_name(),
             trait_name.to_string(),
             module_source,
             true,

@@ -300,6 +300,16 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// One trait implemented for a receiver at two different argument lists,
+    /// so a call on it names two signatures. Reported where it is called: the
+    /// impls are individually fine, and coherence permits them.
+    AmbiguousTraitArguments {
+        method: String,
+        /// The competing trait spellings, in candidate order.
+        traits: Vec<String>,
+        span: Span,
+    },
+
     /// A type argument whose associated type does not match the constraint
     /// written on the bound (`T: Collect<Item = i32>` given `Item = String`).
     AssocTypeBoundNotSatisfied {
@@ -417,9 +427,9 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A variadic impl target carrying elements beside its pack
-    /// (`impl<..T> Trait for [i32, ..T]`), which the compiler does not
-    /// implement.
+    /// A variadic impl target whose pack is not the whole of it — beside other
+    /// elements (`impl<..T> Trait for [i32, ..T]`) or under a reference
+    /// (`&[..T]`) — which the compiler does not implement.
     UnsupportedVariadicImplTarget {
         span: Span,
     },
@@ -837,6 +847,22 @@ impl TypeError {
                 ),
                 *span,
             ),
+            TypeError::AmbiguousTraitArguments {
+                method,
+                traits,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "ambiguous call to '{method}': the receiver implements {}, and Wado cannot pick between a trait's argument lists at a call site",
+                    traits
+                        .iter()
+                        .map(|t| format!("'{t}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and ")
+                ),
+                *span,
+            ),
             TypeError::AmbiguousTraitMethod {
                 method,
                 traits,
@@ -1001,7 +1027,7 @@ impl TypeError {
             ),
             TypeError::UnsupportedVariadicImplTarget { span } => (
                 Code::OrphanRule,
-                "a variadic impl target must be the bare `[..T]`: a pack alongside other elements (`[i32, ..T]`) is not supported yet".to_string(),
+                "a variadic impl target must be the bare `[..T]`: a pack alongside other elements (`[i32, ..T]`) or under a reference (`&[..T]`) is not supported yet".to_string(),
                 *span,
             ),
             TypeError::InherentImplOnForeignType {
@@ -1786,6 +1812,10 @@ pub(super) struct TraitMethodMatch {
     /// [..T]`). Coherence Rule 1 (WEP 2026-03-14 §5) ranks such a match below
     /// every non-variadic one.
     pub(super) is_variadic_impl: bool,
+    /// [`Self::trait_name`] without its type arguments (`Take` for `Take<A>`).
+    /// Two matches agreeing here but not on `trait_name` are impls of one
+    /// trait at different arguments — a selection this resolver cannot make.
+    pub(super) trait_base_name: String,
 }
 
 /// Read-only view that resolves a type name from a given module's perspective

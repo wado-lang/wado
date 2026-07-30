@@ -1701,6 +1701,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_module: &ModuleSource,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
+        span: Span,
     ) -> Option<super::types::TraitMethodMatch> {
         // Resolving a trait method's signature here walks (possibly foreign)
         // impl-block parameter / return type AST nodes. Those nodes are owned
@@ -1716,6 +1717,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 struct_module,
                 receiver_type_args,
                 receiver_type_id,
+                span,
             )
         })
     }
@@ -1886,9 +1888,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             let impl_module = impl_ref.0.clone();
             let impl_scope = trait_env.import_scope(&impl_module);
-            let written = impl_struct_name.clone();
+            let written = &impl_struct_name;
             self.with_module_perspective(impl_module, impl_scope, |s| {
-                s.qualified_receiver_name(&written)
+                s.qualified_receiver_name(written)
             })
         };
         Some((impl_struct_name, impl_struct_fq, is_blanket_type_param))
@@ -2050,6 +2052,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         _struct_module: &ModuleSource,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
+        span: Span,
     ) -> Option<super::types::TraitMethodMatch> {
         use super::types::TraitMethodMatch;
         let mut found_traits: Vec<TraitMethodMatch> = Vec::new();
@@ -2074,7 +2077,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ));
         }
 
-        if let Some(m) = self.select_trait_match(found_traits) {
+        if let Some(m) = self.select_trait_match(found_traits, method_name, span) {
             return Some(m);
         }
 
@@ -2407,6 +2410,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             found_traits.push(TraitMethodMatch {
                 trait_name,
+                trait_base_name: trait_name_base,
                 method_info: MethodInfo {
                     impl_offset: Some(impl_offset),
                     return_type,
@@ -2457,6 +2461,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
                     trait_name: trait_name_str,
+                    trait_base_name: trait_name_base,
                     method_info: MethodInfo {
                         impl_offset: Some(default_method.sig.declaring_slot_count),
                         return_type: instantiated.return_type,
@@ -2511,6 +2516,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn select_trait_match(
         &self,
         mut found_traits: Vec<super::types::TraitMethodMatch>,
+        method_name: &str,
+        span: Span,
     ) -> Option<super::types::TraitMethodMatch> {
         // Rule 1 ranks the impls of *one* trait against each other. It says
         // nothing about a different trait's impl, so it must not outrank
@@ -2534,7 +2541,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits.dedup_by(|a, b| {
             a.trait_name == b.trait_name && a.impl_module_source == b.impl_module_source
         });
+        self.report_trait_argument_ambiguity(&found_traits, method_name, span);
         found_traits.into_iter().next()
+    }
+
+    /// One trait implemented for this receiver at two different argument lists
+    /// (`impl Take<A> for bool` and `impl Take<B> for bool`) leaves the method
+    /// name pointing at two signatures. Nothing downstream can choose between
+    /// them: the arguments are elaborated *against* the chosen signature, and
+    /// Wado has no qualified call form to name one. Left alone the first
+    /// candidate wins silently and the call site reports a type mismatch
+    /// against a signature the author never asked for, so say what is actually
+    /// wrong.
+    ///
+    /// Operators do not come through here — indexing and arithmetic pick their
+    /// impl by operand type in [`Self::find_indexing_trait_impl`] and friends,
+    /// which is why `List<T>` can carry `IndexValue<i32>` alongside
+    /// `IndexValue<RangeExclusive<i32>>`.
+    fn report_trait_argument_ambiguity(
+        &self,
+        found_traits: &[super::types::TraitMethodMatch],
+        method_name: &str,
+        span: Span,
+    ) {
+        let Some(first) = found_traits.first() else {
+            return;
+        };
+        let rivals: Vec<&super::types::TraitMethodMatch> = found_traits
+            .iter()
+            .filter(|m| {
+                m.trait_base_name == first.trait_base_name && m.trait_name != first.trait_name
+            })
+            .collect();
+        if rivals.is_empty() {
+            return;
+        }
+        let mut traits: Vec<String> = std::iter::once(first)
+            .chain(rivals)
+            .map(|m| m.trait_name.clone())
+            .collect();
+        traits.dedup();
+        let _ = self.emit(TypeError::AmbiguousTraitArguments {
+            method: method_name.to_string(),
+            traits,
+            span,
+        });
     }
 
     /// Run an indexing-trait lookup on `(struct_name, base_type_id)`, falling
@@ -3156,6 +3207,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &output_module_source,
                 output_type_args.as_deref(),
                 Some(output_type),
+                method_call.span,
             )
         {
             method_trait_name = Some(trait_match.trait_name);

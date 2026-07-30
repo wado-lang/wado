@@ -4,9 +4,9 @@
 // impls of them do not overlap and must both be accepted — this file did not
 // compile when Rule 2 grouped on the trait's name alone.
 //
-// Which of the two an argument-less `pair.conv()` selects is a separate
-// question (Wado does not drive trait selection from the expected type), so
-// only the first is called here.
+// Accepting both is all this pins. *Calling* `conv` on a tuple is ambiguous,
+// because a call names only the method and Wado cannot pick between a trait's
+// argument lists; `trait_ambiguous_argument_lists.wado` covers that.
 
 trait Conv<O> {
     fn conv(&self) -> O;
@@ -26,8 +26,7 @@ impl<..T> Conv<String> for [..T] {
 
 test "variadic impls of a trait at different arguments both compile" {
     let pair = [1, 2];
-    let n: i32 = pair.conv();
-    assert n == 1;
+    assert pair.0 == 1;
 }
 
 __DATA__

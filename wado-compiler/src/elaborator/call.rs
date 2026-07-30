@@ -2684,7 +2684,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
                 .collect();
             let mut method_info = LocalMethodName::new(
-                FqTypeName::binder(&type_param_name),
+                FqTypeName::binder(type_param_name),
                 Some(found_trait),
                 method_name.to_string(),
             );

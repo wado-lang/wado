@@ -701,7 +701,7 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     "wasi:cli/Stdout::write_via_stream"
                 };
-                let key = MangledName::wasi_import(&wasi_func_name);
+                let key = MangledName::wasi_import(wasi_func_name);
                 match self.ctx.func_map.get(&key).cloned() {
                     Some(func_id) => {
                         let call_args: Vec<WirInstr> = args
