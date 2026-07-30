@@ -614,18 +614,26 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
     w.blank();
     w.line(&"use { parse } from \"../../src/g4/parser.wado\";");
     w.blank();
+    let mut needs_separator = false;
     for let e of entries {
         match &e.triage {
             Skip(_) => {
                 continue;
             },
             Todo(reason) => {
+                if needs_separator {
+                    w.blank();
+                }
                 w.line(&`// triage: ${escape_for_wado_str(reason)}`);
                 w.line(&"#[TODO]");
             },
             Pass => {
+                if needs_separator {
+                    w.blank();
+                }
             },
         }
+        needs_separator = true;
         w.begin(&`test "${*category}/${e.name}"`);
         w.line(&`let input = #include_str("./grammars/${e.g4_relpath}");`);
         for let slave of &e.slave_relpaths {
@@ -640,7 +648,6 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
         w.dedent();
         w.line(&"}");
         w.end();
-        w.blank();
     }
     return w.to_string();
 }
