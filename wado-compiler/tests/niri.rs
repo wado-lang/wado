@@ -7010,3 +7010,202 @@ fn if_with_identical_zero_arms_collapses() {
         })
     );
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Regions: a closed block runs as a frame started from scratch
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn block_expr_of(stmts: Vec<StmtBuild>, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let block = block_of(b, &stmts);
+        Operand::Expr(pe(b, ExprKind::Block(block), type_id))
+    })
+}
+
+fn labeled_block_expr_of(label: &'static str, stmts: Vec<StmtBuild>, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let block = block_of(b, &stmts);
+        Operand::Expr(pe(
+            b,
+            ExprKind::LabeledBlock {
+                label: label.to_string(),
+                block,
+                result_type: type_id,
+            },
+            type_id,
+        ))
+    })
+}
+
+#[test]
+fn a_closed_region_folds_to_the_value_it_builds() {
+    // `{ let a = 5; let b = a + 1; b }` — a block that builds its value in
+    // locals of its own and yields one is as self-contained as a call body.
+    let table = TypeTable::new();
+    let region = block_expr_of(
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(5, TypeTable::I32, "5")),
+            let_stmt_b(
+                "b",
+                1,
+                TypeTable::I32,
+                binary(
+                    NirBinaryOp::Add,
+                    local_expr(0, TypeTable::I32),
+                    int_lit(1, TypeTable::I32, "1"),
+                    TypeTable::I32,
+                ),
+            ),
+            expr_stmt_b(local_expr(1, TypeTable::I32)),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&region);
+    let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
+    assert_eq!(
+        lat,
+        Lattice::Const(Value::Int {
+            value: 6,
+            prim: PrimitiveType::I32,
+        })
+    );
+}
+
+#[test]
+fn a_region_write_through_an_alias_lands_in_the_borrowed_local() {
+    // The template shape: the buffer is written through a `let p = &mut c`
+    // binding, so the write must reach `c`'s value rather than a copy bound at
+    // borrow time.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let alias_backing = || {
+        field_access(
+            local_expr(1, list_ty),
+            SeqField::Backing.index(),
+            "repr",
+            list_ty,
+        )
+    };
+    let region = block_expr_of(
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    mut_ref(alias_backing(), list_ty),
+                    int_lit(1, TypeTable::I32, "1"),
+                    int_lit(7, TypeTable::U8, "7"),
+                ],
+                TypeTable::UNIT,
+            )),
+            expr_stmt_b(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(alias_backing(), list_ty),
+                    int_lit(1, TypeTable::I32, "1"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+        TypeTable::U8,
+    );
+    let mut interp = Interpreter::new(&table);
+    interp.with_ctfe_builtins(&builtins);
+    let (mut body, e) = into_body_expr(&region);
+    let lat = interp.reduce_to_lattice_full(&mut body, e);
+    assert_eq!(
+        lat,
+        Lattice::Const(Value::Int {
+            value: 7,
+            prim: PrimitiveType::U8,
+        })
+    );
+}
+
+#[test]
+fn a_region_writing_an_outer_local_is_refused() {
+    // The assignment targets a local the block does not declare, so replacing
+    // the block with its value would drop that write. The block survives as
+    // written.
+    let table = TypeTable::new();
+    let region = block_expr_of(
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(5, TypeTable::I32, "5")),
+            assign_local_stmt_b(9, TypeTable::I32, int_lit(1, TypeTable::I32, "1")),
+            expr_stmt_b(local_expr(0, TypeTable::I32)),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&region);
+    let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
+    assert_eq!(lat, Lattice::Unevaluated);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Block(_)));
+}
+
+#[test]
+fn a_labeled_region_folds_through_its_own_break() {
+    let table = TypeTable::new();
+    let region = labeled_block_expr_of(
+        "__tmpl",
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            break_stmt_b(Some("__tmpl"), Some(local_expr(0, TypeTable::I32))),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&region);
+    let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
+    assert_eq!(
+        lat,
+        Lattice::Const(Value::Int {
+            value: 2,
+            prim: PrimitiveType::I32,
+        })
+    );
+}
+
+#[test]
+fn a_region_breaking_to_an_outer_label_is_refused() {
+    // Control flow leaves the block, so its value cannot stand for it.
+    let table = TypeTable::new();
+    let region = labeled_block_expr_of(
+        "__tmpl",
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            break_stmt_b(Some("outer"), Some(local_expr(0, TypeTable::I32))),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&region);
+    let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
+    assert_eq!(lat, Lattice::Unevaluated);
+    assert!(matches!(body.exprs[e].kind, ExprKind::LabeledBlock { .. }));
+}
+
+#[test]
+fn a_region_writing_a_global_is_refused() {
+    // A global write can never land in a region-declared local, so the scan
+    // refuses before anything runs.
+    let table = TypeTable::new();
+    let region = block_expr_of(
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(5, TypeTable::I32, "5")),
+            expr_stmt_b(global_set(
+                "G",
+                TypeTable::I32,
+                int_lit(1, TypeTable::I32, "1"),
+            )),
+            expr_stmt_b(local_expr(0, TypeTable::I32)),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&region);
+    let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
+    assert_eq!(lat, Lattice::Unevaluated);
+}

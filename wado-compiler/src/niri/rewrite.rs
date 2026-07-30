@@ -78,9 +78,11 @@ impl Interpreter<'_> {
     ///
     /// A scalar the scratch backend declines to promote is memoized instead, so
     /// its later lattice reads still see the constant. An aggregate is
-    /// materialized only over a `Call`: the literal a materialization writes
-    /// denotes the same value, so re-materializing one would report a change at
-    /// every visit and the worklist would never settle.
+    /// materialized only over a `Call` or a closed region: the literal a
+    /// materialization writes denotes the same value, so re-materializing one
+    /// would report a change at every visit and the worklist would never
+    /// settle — and both rewrites replace the node with a kind neither ever
+    /// matches again.
     pub(crate) fn reduce_local<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
         if let Some(value) = self.flow_fold_candidate(sink.body(), e) {
             if value.is_scalar() {
@@ -91,6 +93,16 @@ impl Interpreter<'_> {
             } else if matches!(sink.body().exprs[e].kind, ExprKind::Call { .. })
                 && self.materialize_seq_via(sink, e, &value)
             {
+                return true;
+            }
+        }
+        if let Some(value) = self.try_region_fold(sink.body(), e) {
+            if value.is_scalar() {
+                if sink.replace_with_value(e, value.clone()) {
+                    return true;
+                }
+                self.frame.scratch_folds.insert(e, value);
+            } else if self.materialize_seq_via(sink, e, &value) {
                 return true;
             }
         }

@@ -16,7 +16,8 @@ use crate::nir_arena::{
 };
 use crate::nir_visitor::NirRefVisitor;
 
-use super::place::{overlapping_places, place_of};
+use super::place::{borrowed_place_operand, overlapping_places, place_of};
+use super::region::{region_is_closed, region_shape};
 use super::trackability::{Reached, aggregate_safe_locals, clobbered_locals};
 use super::{CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice};
 
@@ -170,9 +171,28 @@ impl Interpreter<'_> {
         self.step_budget -= 1;
         match &body.stmts[s].kind {
             StmtKind::Let {
-                local_index, value, ..
+                local_index,
+                is_mut,
+                value,
+                ..
             } => {
-                let (index, value) = (*local_index, *value);
+                let (index, is_mut, value) = (*local_index, *is_mut, *value);
+                // A fresh binding forks the local's storage; an alias taken
+                // over the same index would keep pointing at the old one.
+                if self
+                    .frame
+                    .place_aliases
+                    .values()
+                    .any(|(root, _)| *root == index)
+                {
+                    return Flow::Bail;
+                }
+                if !is_mut && let Some((_, inner)) = borrowed_place_operand(body, value) {
+                    return match self.record_place_alias(body, index, inner) {
+                        Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
+                        None => Flow::Bail,
+                    };
+                }
                 let lattice = match value.as_expr().and_then(|e| self.exec_call_stmt(body, e)) {
                     Some(Flow::Fallthrough(lattice)) => lattice,
                     Some(Flow::Bail | Flow::Return(_) | Flow::Break { .. } | Flow::Continue) => {
@@ -313,7 +333,7 @@ impl Interpreter<'_> {
     /// root. A target naming no place, or a projection into a root the frame
     /// holds no constant for, bails.
     fn exec_store(&mut self, body: &mut Body, target: ExprId, value: Operand) -> Flow {
-        let Some((root, path)) = place_of(body, target.into()) else {
+        let Some((root, path)) = self.frame_place_of(body, target.into()) else {
             return Flow::Bail;
         };
         let Lattice::Const(value) = self.eval_operand(body, value) else {
@@ -372,7 +392,7 @@ impl Interpreter<'_> {
         let [seq, index, element] = *args else {
             return Flow::Bail;
         };
-        let Some((root, path)) = place_of(body, seq) else {
+        let Some((root, path)) = self.frame_place_of(body, seq) else {
             return Flow::Bail;
         };
         let (Lattice::Const(index), Lattice::Const(element)) = (
@@ -396,7 +416,7 @@ impl Interpreter<'_> {
         let [destination, at, source, from, len] = *args else {
             return Flow::Bail;
         };
-        let Some((root, path)) = place_of(body, destination) else {
+        let Some((root, path)) = self.frame_place_of(body, destination) else {
             return Flow::Bail;
         };
         let (Lattice::Const(at), Lattice::Const(source), Lattice::Const(from), Lattice::Const(len)) = (
@@ -446,6 +466,35 @@ impl Interpreter<'_> {
             self.frame.env.insert(index, Lattice::NonConst);
         } else {
             self.bind_local(index, lattice);
+        }
+    }
+
+    /// Resolve `index` to the place `inner` borrows, so later reads and writes
+    /// through it reach the borrowed storage rather than a copy. Recorded
+    /// pre-flattened through the aliases already in effect, so a chain never
+    /// needs chasing. An alias over its own storage — an index reuse this
+    /// frame cannot express — refuses instead.
+    fn record_place_alias(&mut self, body: &Body, index: u32, inner: Operand) -> Option<()> {
+        let (root, path) = self.frame_place_of(body, inner)?;
+        if root == index {
+            return None;
+        }
+        self.frame.env.swap_remove(&index);
+        self.frame.place_aliases.insert(index, (root, path));
+        Some(())
+    }
+
+    /// [`place_of`] with the frame's borrow aliases applied: a chain rooted at
+    /// an alias re-roots at the place the alias was taken over.
+    pub(super) fn frame_place_of(&self, body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
+        let (root, mut path) = place_of(body, op)?;
+        match self.frame.place_aliases.get(&root) {
+            Some((alias_root, alias_path)) => {
+                let mut full = alias_path.clone();
+                full.append(&mut path);
+                Some((*alias_root, full))
+            }
+            None => Some((root, path)),
         }
     }
 
@@ -529,7 +578,7 @@ impl Interpreter<'_> {
         let mut targets: Vec<(u32, u32, Vec<u32>)> = Vec::new();
         let mut places: Vec<(u32, Vec<u32>)> = Vec::new();
         for (arg, param) in args.iter().zip(&callee.params) {
-            let place = place_of(body, *arg);
+            let place = self.frame_place_of(body, *arg);
             let value = if param.is_mut_ref {
                 let (root, path) = place.clone()?;
                 let value = self.place_value(root, &path)?;
@@ -598,8 +647,45 @@ impl Interpreter<'_> {
         Some(CallRun { result, writes })
     }
 
+    /// The constant a closed region denotes: the block runs as a frame the
+    /// engine starts from scratch, since a region that builds its value in
+    /// locals of its own and writes only to those is as self-contained as a
+    /// call body. `None` when the block is not such a region, or when running
+    /// it does not finish on a constant — the block survives as written, so
+    /// anything it would do at run time still happens there.
+    ///
+    /// Safe on the re-entrant projection path even though it executes writes:
+    /// closedness confines every write to locals of the scratch run, so
+    /// nothing is performed twice against the program's own state.
+    pub(super) fn try_region_fold(&mut self, body: &Body, e: ExprId) -> Option<Value> {
+        let (block, label) = region_shape(body, e)?;
+        if !region_is_closed(body, block) {
+            return None;
+        }
+        if self.step_budget == 0 {
+            return None;
+        }
+        self.step_budget -= 1;
+        let mut scratch = body.nodes_only_clone();
+        scratch.root = block;
+        let reached = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
+        let region = FrameState::for_call(&scratch, &reached, std::iter::empty());
+        let caller = self.swap_frame(region);
+        let flow = self.exec_block(&mut scratch, block);
+        self.swap_frame(caller);
+        let lattice = match flow {
+            Flow::Fallthrough(lattice) => lattice,
+            Flow::Break {
+                label: Some(broke),
+                value,
+            } if label == Some(broke.as_str()) => value,
+            Flow::Break { .. } | Flow::Return(_) | Flow::Continue | Flow::Bail => return None,
+        };
+        lattice.as_const()
+    }
+
     /// The frame's value for a place, or `None` when it holds none.
-    fn place_value(&self, root: u32, path: &[u32]) -> Option<Value> {
+    pub(super) fn place_value(&self, root: u32, path: &[u32]) -> Option<Value> {
         let Lattice::Const(value) = self.frame.env.get(&root)? else {
             return None;
         };

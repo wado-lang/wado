@@ -1,0 +1,22 @@
+// A template whose interpolations are all constant folds to the literal the
+// source could have written (WEP: NIR Interpreter, region recognition).
+//
+// `` `a${"b"}` `` desugars to a closed block: a buffer built in a local of its
+// own, appended to through `internal_reserve_uninit` / `array_set`, and yielded
+// as the block's value. The region is a frame the engine starts from scratch,
+// so at -O2 the whole block collapses to `String { repr: packed"ab", used: 2 }`
+// and the append helpers drop out of the binary.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let s = `a${"b"}`;
+    println(s);
+}
+
+__DATA__
+{
+    "stdout": "ab\n",
+    "wir_expect:O2": ["array.new_fixed<u8>(97, 98)"],
+    "wir_not_expect:O2": ["internal_reserve_uninit"]
+}

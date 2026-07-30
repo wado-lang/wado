@@ -180,9 +180,34 @@ Sequences:
   literal the lower phase emits for a source string — a struct over a packed
   byte array and its length. The bytes are the container's first `used`, since
   a grown container's capacity outruns what it holds and capacity is not
-  observable. Only a call is rewritten this way: the literal denotes the value
-  it replaced, so materializing one again would report a change at every visit
-  and the worklist would never settle.
+  observable. Only a call or a closed region is rewritten this way: the literal
+  denotes the value it replaced, so materializing one again would report a
+  change at every visit and the worklist would never settle — and both rewrites
+  replace the node with a kind neither matches again.
+
+Regions:
+
+- A closed block runs as a frame the engine starts from scratch: one that
+  builds its value in locals of its own, writes only to those locals, and
+  yields the result as its value is as self-contained as a call body, except
+  that the caller wrote it inline. Closedness is judged on where writes land —
+  every written root must be declared inside the block, since the executor
+  performs a whole-local assignment by binding its environment, and one
+  targeting an outer local would be silently dropped with the fold. Everything
+  else — a read of an outer local, a call the frame cannot run, control flow
+  leaving the block — the run itself refuses by abandoning the evaluation.
+  This is what folds a fully-constant string template to the literal the
+  source could have written.
+- A `let` binding a borrow of a local place resolves to an alias inside a
+  frame, not a value: reads through it project the place's current value and
+  writes land in the place, which is what carries the desugared template's
+  `let self = &mut __r` shape through `internal_reserve_uninit` and the
+  element writes that follow. An ordinary walk still performs nothing, so
+  outside a frame such a binding keeps clobbering its referent.
+- A cast between the same reference shape — duplicate-interned `Array<u8>`
+  ids, a borrow over them — denotes its operand; monomorphization leaves such
+  casts over every buffer the formatting path builds. A converting cast still
+  folds only through the primitive-cast evaluator.
 
 ## TODO
 
@@ -191,6 +216,10 @@ Sequences:
 - Enum and variant values with their payloads. Today an enum or variant
   pattern cannot be decided, so an `Option` / `Result` accessor exposed by
   inlining leaves a residual match the engine walks past.
+- An aggregate carrying a `&mut` field. A borrow denotes its referent, so
+  building the aggregate would copy the referent in and writes through the
+  field would land in the copy; what the field needs to hold is the place
+  itself. `Formatter { buf: &mut __r }` is the shape waiting on this.
 - An aggregate that is not a byte sequence has no way back into the IR. A
   `List<T>` of scalars would want the `ArrayLiteral` shape, and a plain struct
   a `StructLiteral` over its materialized fields; both are exits to add beside
@@ -244,13 +273,14 @@ Sequences:
 
 ### Regions
 
-- A closed block is not evaluated, only a call is. A block that builds a value
-  in locals of its own, writes only to those locals, and yields one of them is
-  as self-contained as a call body and needs no more machinery to run — the
-  difference is that the caller wrote it inline. Recognizing that shape is what
-  turns the string-template case below from a call-level problem, which needs a
-  contract about the caller's buffer, into a frame the engine starts from
-  scratch.
+- A region's frame starts empty, so an outer binding the pool did not promote
+  reads as nothing and the evaluation abandons. A scalar constant reaches the
+  region as a promoted operand and folds; a constant aggregate — a `String`
+  local interpolated into a template — only becomes readable once
+  globalization hoists it, and the post-globalization cleanup folds only what
+  one pass reaches. Seeding the region frame from the walker's environment is
+  the likely answer; it waits on deciding which entries stay sound under the
+  frame's own writes.
 
 ### Compile-time string formatting
 
@@ -264,11 +294,15 @@ Every `${}` over constants, every `to_string()` on a literal, every constant
 `assert` message, and every constant `${x:?}` pays this.
 
 Nothing here waits on trait dispatch: `Display::fmt` is monomorphized and
-devirtualized to a free call before the optimizer runs. What it waits on is the
-four entries above — the aggregate exit, the store, the frame-executable call,
-and region recognition. Together they fold the region to the literal the source
-could have written, after which constant-object globalization deduplicates it
-and DCE drops the formatting functions no live call reaches.
+devirtualized to a free call before the optimizer runs. The aggregate exit, the
+store, the frame-executable call, and region recognition together fold the
+region to the literal the source could have written, after which
+constant-object globalization deduplicates it and DCE drops the formatting
+functions no live call reaches. What the remaining coverage waits on is the
+value model: an interpolation that keeps its `Formatter` literal needs an enum
+value for the alignment field and a place-naming value for the `&mut` buffer
+field, so a callee's write through `f.buf` lands in the region's buffer rather
+than in a copy inside the `Formatter` aggregate.
 
 Fold the region, not the call. A region constructs its own buffer, so every
 value inside it is concrete and nothing is assumed about it.
@@ -341,13 +375,19 @@ Milestones, each red/green with the fixture first:
       `push` makes of its own capacity. A `&mut` one is exempt only inside a
       frame, which performs the write or abandons the evaluation. An ordinary
       walk performs nothing, and a write it steps over leaves its target stale.
-- [ ] Region recognition. `` `ab` `` and `` `a${"b"}` `` fold to one literal.
+- [x] Region recognition. `` `ab` `` and `` `a${"b"}` `` fold to one literal:
+      the template's block runs as a frame started from scratch, with the
+      desugared `let self = &mut __r` borrows resolved as place aliases and
+      the identity array casts monomorphization leaves read through.
 - [ ] Coverage, in order of engine cost: `bool` / `char` / `String`, then
       integers, then width / zero-pad / radix specs, then `Inspect`, then
-      floats. Each step measures what it spends against the step budget:
-      integer formatting is two short loops and fits, and `fpfmt` is the
-      candidate for overrunning it — if it does, floats are the wasm-CTFE
-      backend's case rather than a reason to raise the budget.
+      floats. A `String` literal interpolation folds already — its `fmt`
+      inlines down to reserve-and-write, so no `Formatter` value survives —
+      and every other type keeps a `Formatter` literal, which waits on the
+      enum and `&mut`-field values above. Each step measures what it spends
+      against the step budget: integer formatting is two short loops and fits,
+      and `fpfmt` is the candidate for overrunning it — if it does, floats are
+      the wasm-CTFE backend's case rather than a reason to raise the budget.
 - [ ] A remark for a region that nearly folded — one runtime interpolation, or
       an exhausted budget — so a missed fold is visible instead of silent, plus
       a `wasm-size` and `benchmark` run to record what the whole thing bought.

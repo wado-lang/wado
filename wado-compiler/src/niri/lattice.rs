@@ -205,12 +205,19 @@ impl Interpreter<'_> {
         }
         let node = &body.exprs[e];
         match &node.kind {
-            ExprKind::Local { index, .. } => self
-                .frame
-                .env
-                .get(index)
-                .cloned()
-                .unwrap_or(Lattice::Unevaluated),
+            // An alias reads its place's current value, never a copy bound at
+            // borrow time — the write the borrow was taken for happens after.
+            ExprKind::Local { index, .. } => match self.frame.place_aliases.get(index) {
+                Some((root, path)) => self
+                    .place_value(*root, path)
+                    .map_or(Lattice::Unevaluated, Lattice::Const),
+                None => self
+                    .frame
+                    .env
+                    .get(index)
+                    .cloned()
+                    .unwrap_or(Lattice::Unevaluated),
+            },
             ExprKind::FieldAccess {
                 expr: inner,
                 field_index,
@@ -248,6 +255,18 @@ impl Interpreter<'_> {
                 op: NirUnaryOp::Ref | NirUnaryOp::Deref,
                 expr: inner,
             } => self.operand_to_lattice(body, *inner),
+            // A reference-shaped cast converts nothing — `array_new(n) as
+            // Array<u8>` and `&x as &Array<u8>` are the shapes monomorphization
+            // leaves behind, over array types the table interned more than
+            // once — so it denotes its operand. A converting cast is
+            // `try_fold`'s case, and a shape this test does not cover stays
+            // unevaluated.
+            ExprKind::Cast { expr: inner, .. }
+                if operand_type(body, *inner)
+                    .is_some_and(|t| self.same_ref_shape(node.type_id, t)) =>
+            {
+                self.operand_to_lattice(body, *inner)
+            }
             ExprKind::GlobalVarGet {
                 module_source,
                 name,
@@ -507,6 +526,28 @@ impl Interpreter<'_> {
         }
     }
 
+    /// Whether `a` and `b` are the same array or borrow structure, so a cast
+    /// between them cannot convert a value. Identical ids are trivially so;
+    /// otherwise both must be the same reference shape over element types that
+    /// are — which is what makes duplicate-interned `Array<u8>` ids compare
+    /// equal. A borrow denotes its referent either way, so `&mut` and `&`
+    /// over the same referent shape read alike.
+    fn same_ref_shape(&self, a: TypeId, b: TypeId) -> bool {
+        if a == b {
+            return true;
+        }
+        match (self.type_table.get(a), self.type_table.get(b)) {
+            (ResolvedType::BuiltinArray(x), ResolvedType::BuiltinArray(y)) => {
+                self.same_ref_shape(*x, *y)
+            }
+            (
+                ResolvedType::Ref(x) | ResolvedType::MutRef(x),
+                ResolvedType::Ref(y) | ResolvedType::MutRef(y),
+            ) => self.same_ref_shape(*x, *y),
+            _ => false,
+        }
+    }
+
     /// Look up a `(module_source, name)` global in the installed
     /// [`GlobalEnv`]. Absent keys default to [`Lattice::Unevaluated`]
     /// — the engine simply has no information, same convention as
@@ -519,6 +560,15 @@ impl Interpreter<'_> {
             .get(&(module_source.clone(), name.to_string()))
             .cloned()
             .unwrap_or(Lattice::Unevaluated)
+    }
+}
+
+/// The static type of an operand: the node's recorded type for a skeleton
+/// expression, the pool's for a promoted value.
+fn operand_type(body: &Body, op: Operand) -> Option<TypeId> {
+    match op {
+        Operand::Expr(e) => Some(body.exprs[e].type_id),
+        Operand::Value(v) => body.values.type_of(v),
     }
 }
 
