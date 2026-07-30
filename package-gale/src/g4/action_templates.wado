@@ -328,8 +328,8 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
             require_args(args, 2, name)?;
             return Result::Ok(`${r}.${args[0]}.${args[1]}`);
         },
-        // Walks the tree with the generated listener — a host-side effect
-        // with no bearing on the parse tree, so the receiver is discarded.
+        // Host-side scaffolding (see the group below); the receiver it
+        // would walk is discarded with it.
         "WalkListener" => {
             let _ = require_receiver(recv, name)?;
             return Result::Ok("");
@@ -362,13 +362,11 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
         "GetExpectedTokenNames" => Result::Ok("getExpectedTokens().toString(getVocabulary())"),
         "Invoke_foo" => Result::Ok("this.foo();"),
         "RuleInvocationStack" => Result::Ok("getRuleInvocationStack()"),
-        // Host-side scaffolding: a listener import or class definition the
-        // testsuite injects per target. None of it is observable in the
-        // parse tree, which is all the corpus compares, so it expands away
-        // rather than being modelled. A directive that *does* change what
-        // the parser produces — `PositionAdjustingLexer` overriding
-        // `nextToken()`, `TreeNodeWithAltNumField` changing node rendering —
-        // must not be added here; those descriptors stay `[skip]`.
+        // Host-side scaffolding — a listener import or class the testsuite
+        // injects per target, invisible in the parse tree the corpus
+        // compares. A helper that changes what the parser *produces* must
+        // not join this group; see the action-template section of
+        // `antlr4-compatibility.md` for what that rules out and why.
         "ImportRuleInvocationStack" => Result::Ok(""),
         "ImportListener" | "BasicListener" | "LRListener" | "LRWithLabelsListener" | "RuleGetterListener"
         | "TokenGetterListener" => {

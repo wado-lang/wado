@@ -12,7 +12,7 @@ This file lists what is **not yet done** at a behavioral level; find the code vi
 
 1. **Soundness and compatibility divergence** — these mis-parse valid input, so they outrank every feature below.
 2. **Structured diagnostic-to-rule identity** before the diagnostics that depend on it.
-3. **A descriptor re-extract** whenever a JDK and the `vendor/antlr4` submodule are at hand — it is the only way to re-triage the skip buckets, and several entries are stale rather than blocked.
+3. **A descriptor re-extract** whenever a JDK and the `vendor/antlr4` submodule are at hand. The skip buckets were re-triaged this way on 2026-07-30 and are now small; the standing value is that a re-extract is what proves an entry is still blocked rather than merely old.
 4. **Stage C**, starting with the SuperClass action-op replay: the largest block, and the gate for drop-in ANTLR4 replacement.
 5. Everything else, in whatever order a live case surfaces it.
 
@@ -93,8 +93,7 @@ Then the surface gaps:
 
 And the corpus side, which is extractor work rather than codegen work (see "Descriptor corpus" below):
 
-- Make the ANTLR descriptor output corpus codegen-and-compare (parse-only today), unblocking the output acceptance.
-- Extend the Stage C output-compare beyond `Sets` and `SemPredEvalParser`, the categories it runs for today. The remaining ones are a mechanical extractor re-run plus triage of whatever lands in `[stage_c_todo]` / `[stage_c_skip]`.
+- The output-compare itself has landed across the parser categories (`FullContextParsing`, `LeftRecursion`, `ParseTrees`, `ParserErrors`, `ParserExec`, `SemPredEvalParser`, `Sets`), and lexer action output is compared by Stage A claim (d) instead. What is left is not more categories but the gaps above: the five `[stage_c_todo]` entries, and the descriptors that auto-skip because their action bodies hit a path that still warns.
 
 ## Descriptor corpus — coverage and re-triage
 

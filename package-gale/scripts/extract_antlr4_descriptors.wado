@@ -2056,12 +2056,10 @@ fn strip_tail_eof_marker(s: &String) -> String {
     return out;
 }
 
-/// The oracle's tree is compared verbatim, not through `normalize_tree`.
-/// That helper collapses whitespace runs so a hand-written driver test can
-/// indent its expected tree; the oracle's is already one line, so collapsing
-/// can only lose information — and it does whenever a token's own text
-/// contains whitespace (`BREAK: 'break '` renders `break  break `, two
-/// spaces: the token's trailing space plus the child separator).
+/// Compares verbatim, unlike Stage B's `normalize_tree` — the oracle's tree
+/// is already one line, so collapsing whitespace can only lose information,
+/// and it does whenever a token's own text carries whitespace
+/// (`BREAK: 'break '` renders `break  break `).
 fn emit_stage_b_oracle_test_file(
     category: &String,
     name: &String,
@@ -2127,9 +2125,8 @@ fn normalize_output_for_stage_b(raw: &String) -> Option<String> {
     if !s.starts_with("(") {
         return null;
     }
-    // A tree render ends at its closing paren. Anything after it is
-    // host-side print output the descriptor emits alongside the tree, so
-    // the `[output]` as a whole is not a tree to compare.
+    // Anything past the closing paren is a host-side print emitted
+    // alongside the tree, so the `[output]` as a whole is not one.
     if !s.ends_with(")") {
         return null;
     }
@@ -2320,11 +2317,8 @@ test "normalize: action print like (a+b) without separator after name is rejecte
 }
 
 test "normalize: host-side prints after the tree are rejected" {
-    // A `to_string_tree` render ends at its closing paren. The Listeners
-    // descriptors print the tree and then let a listener print more lines
-    // (`(a 1 2)\n1\n2`); comparing that as one tree would silently pin the
-    // listener output as tree content — the whitespace-collapsing
-    // `normalize_tree` on the expected side hides the difference.
+    // The Listeners descriptors print the tree, then let a listener print
+    // more lines; accepting that pins listener output as tree content.
     assert normalize_output_for_stage_b(&"(a 1 2)\n1\n2") matches { None };
     assert normalize_output_for_stage_b(&"(a x)\n[a, s]") matches { None };
     // An indented tree still ends at its closing paren.
