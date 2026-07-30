@@ -1,29 +1,23 @@
-//! Which blocks are closed enough to run as a frame.
+//! Which blocks are self-contained enough to run as a frame.
 //!
-//! A closed region builds a value in locals of its own, writes only to those
-//! locals, and yields the result as its value — as self-contained as a call
-//! body, except that the caller wrote it inline. Recognizing that shape is what
-//! lets a fully-constant string template fold to the literal the source could
-//! have written.
+//! A self-contained region builds a value in locals of its own, reads and
+//! writes only those locals, and yields the result as its value — as
+//! self-contained as a call body, except that the caller wrote it inline.
+//! Recognizing that shape is what lets a fully-constant string template fold
+//! to the literal the source could have written.
 //!
-//! The check here is deliberately minimal, because the frame guards most write
-//! channels itself: a call's write-back and every builtin write land through
-//! [`Interpreter::place_value`] / `update_place`, which require the
-//! environment to already hold the root — and a region frame's environment
-//! starts empty, gaining keys only from the region's own `let`s, from
-//! whole-local assignments, and through borrow aliases. So two static facts
-//! close the induction: an assignment's root and a `&mut` borrow's root must
-//! be locals the region declares. Everything else that touches outer state —
-//! an unrunnable call, a global write, a read the frame cannot answer —
-//! abandons the evaluation at run time, which forfeits the fold rather than
-//! dropping a write.
+//! One question decides it: does every local the region touches belong to the
+//! region. A region's frame starts with an empty environment, so a read of an
+//! outer local yields nothing and the run abandons, and a write to one would
+//! be dropped along with the block the fold replaces. Asking it here rather
+//! than letting the run answer is what keeps the attempt cheap: the check is a
+//! walk over the block, while the run clones the whole body first.
 //!
-//! [`Interpreter::place_value`]: super::Interpreter::place_value
+//! Everything else the run still decides for itself — a call it cannot
+//! execute, a global it cannot read, a loop past the budget — by abandoning
+//! the evaluation, which forfeits the fold rather than dropping a write.
 
-use crate::nir::NirUnaryOp;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, LocalSet, NodeRef, PatKind, StmtKind};
-
-use super::place::place_of;
 
 /// The block behind a region-shaped expression: a `Block` or `LabeledBlock`
 /// with enough statements to be worth running, ending on a statement that
@@ -54,20 +48,17 @@ pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&s
     }
 }
 
-/// Whether every place the region can commit to roots at a local it declares.
+/// Whether every local `block` mentions is one `block` itself declares, and
+/// nothing writes a global.
 ///
-/// Only two mention kinds matter (see the module doc): an assignment target,
-/// which the executor performs by binding its root's environment entry, and a
-/// `&mut` borrow, which can become an alias the executor later commits
-/// through. A mention that names no local place needs no accounting — the
-/// frame has nothing to bind it to and abandons the evaluation instead.
-///
-/// A global write is refused eagerly. The frame would abandon on it anyway,
-/// so this loses no fold; it only skips cloning a body for a region that can
-/// never finish.
-pub(super) fn region_is_closed(body: &Body, block: BlockId) -> bool {
+/// Only the reachable nodes are scanned, so a mention an earlier rewrite
+/// orphaned neither disqualifies the region nor keeps it from folding. What
+/// the scan cannot see is which reachable mentions actually execute: a free
+/// local read on a statically dead path costs the fold, which is the price of
+/// answering before the body is cloned rather than after.
+pub(super) fn region_is_self_contained(body: &Body, block: BlockId) -> bool {
     let mut declared = LocalSet::default();
-    let mut written = LocalSet::default();
+    let mut mentioned = LocalSet::default();
     let mut stack = vec![NodeRef::Block(block)];
     while let Some(node) = stack.pop() {
         match node {
@@ -81,23 +72,16 @@ pub(super) fn region_is_closed(body: &Body, block: BlockId) -> bool {
                     declared.insert(*local_index);
                 }
             }
-            NodeRef::Expr(e) => {
-                let committed = match &body.exprs[e].kind {
-                    ExprKind::GlobalVarSet { .. } => return false,
-                    ExprKind::Assign { target, .. } => place_of(body, (*target).into()),
-                    ExprKind::Unary {
-                        op: NirUnaryOp::MutRef,
-                        expr,
-                    } => place_of(body, *expr),
-                    _ => None,
-                };
-                if let Some((root, _)) = committed {
-                    written.insert(root);
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::GlobalVarSet { .. } => return false,
+                ExprKind::Local { index, .. } => {
+                    mentioned.insert(*index);
                 }
-            }
+                _ => {}
+            },
             NodeRef::Block(_) => {}
         }
         body.for_each_child(node, |c| stack.push(c));
     }
-    written.iter().all(|index| declared.contains(index))
+    mentioned.iter().all(|index| declared.contains(index))
 }

@@ -112,7 +112,7 @@ impl Interpreter<'_> {
                 return known;
             }
         }
-        match self.operand_to_lattice(body, inner) {
+        match self.projected_lattice(body, inner) {
             Lattice::Const(receiver) => receiver
                 .field(field_index)
                 .cloned()
@@ -122,11 +122,30 @@ impl Interpreter<'_> {
         }
     }
 
+    /// What a projection's receiver denotes, resolving a frame place alias.
+    ///
+    /// Reading *through* a reference is what a borrow is for, so a field read,
+    /// an element read and a deref all reach the place's current value. Reading
+    /// the reference *itself* is a different act — it names storage the engine
+    /// has no value for — and [`Self::expr_to_lattice`] leaves that
+    /// unevaluated, so a rebind or a capture never turns into a copy.
+    pub(super) fn projected_lattice(&self, body: &Body, op: Operand) -> Lattice {
+        if let Some(e) = op.as_expr()
+            && let ExprKind::Local { index, .. } = &body.exprs[e].kind
+            && let Some((root, path)) = self.frame.place_aliases.get(index)
+        {
+            return self
+                .place_value(*root, path)
+                .map_or(Lattice::Unevaluated, Lattice::Const);
+        }
+        self.operand_to_lattice(body, op)
+    }
+
     /// Read an element out of a constant sequence. An index past the end is
     /// `NonConst`, so the run-time trap survives.
     pub(super) fn index_lattice(&self, body: &Body, receiver: Operand, index: Operand) -> Lattice {
         let (Lattice::Const(receiver), Lattice::Const(index)) = (
-            self.operand_to_lattice(body, receiver),
+            self.projected_lattice(body, receiver),
             self.operand_to_lattice(body, index),
         ) else {
             return Lattice::Unevaluated;
@@ -205,19 +224,20 @@ impl Interpreter<'_> {
         }
         let node = &body.exprs[e];
         match &node.kind {
-            // An alias reads its place's current value, never a copy bound at
-            // borrow time — the write the borrow was taken for happens after.
-            ExprKind::Local { index, .. } => match self.frame.place_aliases.get(index) {
-                Some((root, path)) => self
-                    .place_value(*root, path)
-                    .map_or(Lattice::Unevaluated, Lattice::Const),
-                None => self
-                    .frame
-                    .env
-                    .get(index)
-                    .cloned()
-                    .unwrap_or(Lattice::Unevaluated),
-            },
+            // A local carrying a place alias denotes nothing on its own: the
+            // engine has no reference values, so handing back the referent
+            // here would turn a rebind or a capture into a copy that a later
+            // write through the reference would never reach. Only a
+            // projection resolves one — see [`Self::projected_lattice`].
+            ExprKind::Local { index, .. } if self.frame.place_aliases.contains_key(index) => {
+                Lattice::Unevaluated
+            }
+            ExprKind::Local { index, .. } => self
+                .frame
+                .env
+                .get(index)
+                .cloned()
+                .unwrap_or(Lattice::Unevaluated),
             ExprKind::FieldAccess {
                 expr: inner,
                 field_index,
@@ -254,7 +274,7 @@ impl Interpreter<'_> {
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::Deref,
                 expr: inner,
-            } => self.operand_to_lattice(body, *inner),
+            } => self.projected_lattice(body, *inner),
             // A reference-shaped cast converts nothing — `array_new(n) as
             // Array<u8>` and `&x as &Array<u8>` are the shapes monomorphization
             // leaves behind, over array types the table interned more than

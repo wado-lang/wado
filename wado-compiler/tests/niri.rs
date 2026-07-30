@@ -7266,3 +7266,142 @@ fn a_region_write_behind_a_cast_still_lands() {
         })
     );
 }
+
+#[test]
+fn an_alias_read_as_a_value_does_not_become_a_copy() {
+    // A `&mut` is a reference: rebinding it (`let s = p`) makes `s` name the
+    // same storage, so a write through `s` must reach `c`. Reading the alias
+    // as a value instead would bind a copy, and the write would land in it
+    // while `c` kept the constant it no longer holds.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let region = block_expr_of(
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
+            let_stmt_b("s", 2, list_ty, local_expr(1, list_ty)),
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    mut_ref(
+                        field_access(
+                            local_expr(2, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            list_ty,
+                        ),
+                        list_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                    int_lit(9, TypeTable::U8, "9"),
+                ],
+                TypeTable::UNIT,
+            )),
+            expr_stmt_b(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(
+                        field_access(
+                            local_expr(0, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            list_ty,
+                        ),
+                        list_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+        TypeTable::U8,
+    );
+    let mut interp = Interpreter::new(&table);
+    interp.with_ctfe_builtins(&builtins);
+    let (mut body, e) = into_body_expr(&region);
+    let lat = interp.reduce_to_lattice_full(&mut body, e);
+    assert_eq!(
+        lat,
+        Lattice::Const(Value::Int {
+            value: 9,
+            prim: PrimitiveType::U8,
+        }),
+        "the rebound alias must name `c`, not a copy of it",
+    );
+}
+
+#[test]
+fn an_alias_captured_in_an_aggregate_is_not_a_constant() {
+    // A struct field holding a `&mut` — `Formatter { buf: &mut __r }` — would
+    // have to carry the place, not the referent's value. The engine has no
+    // such value, so capturing one is not a constant: a write through the
+    // field would otherwise land in the copy while `c` kept a value it no
+    // longer holds.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let holder_ty = table.make_struct("Holder".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let region = block_expr_of(
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
+            let_stmt_b(
+                "h",
+                2,
+                holder_ty,
+                struct_lit(holder_ty, vec![(0, "buf", local_expr(1, list_ty))]),
+            ),
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    mut_ref(
+                        field_access(
+                            field_access(local_expr(2, holder_ty), 0, "buf", list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            list_ty,
+                        ),
+                        list_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                    int_lit(9, TypeTable::U8, "9"),
+                ],
+                TypeTable::UNIT,
+            )),
+            expr_stmt_b(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(
+                        field_access(
+                            local_expr(0, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            list_ty,
+                        ),
+                        list_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+        TypeTable::U8,
+    );
+    let mut interp = Interpreter::new(&table);
+    interp.with_ctfe_builtins(&builtins);
+    let (mut body, e) = into_body_expr(&region);
+    assert_eq!(
+        interp.reduce_to_lattice_full(&mut body, e),
+        Lattice::Unevaluated,
+        "a captured reference must not fold to the referent it copied",
+    );
+}

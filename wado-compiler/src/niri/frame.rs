@@ -17,7 +17,7 @@ use crate::nir_arena::{
 use crate::nir_visitor::NirRefVisitor;
 
 use super::place::{borrowed_place_operand, overlapping_places, place_of};
-use super::region::{region_is_closed, region_shape};
+use super::region::{region_is_self_contained, region_shape};
 use super::trackability::{Reached, aggregate_safe_locals, clobbered_locals};
 use super::{CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice};
 
@@ -187,8 +187,8 @@ impl Interpreter<'_> {
                 {
                     return Flow::Bail;
                 }
-                if !is_mut && let Some((_, inner)) = borrowed_place_operand(body, value) {
-                    return match self.record_place_alias(body, index, inner) {
+                if !is_mut && let Some(named) = self.aliased_operand(body, value) {
+                    return match self.record_place_alias(body, index, named) {
                         Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
                         None => Flow::Bail,
                     };
@@ -469,6 +469,21 @@ impl Interpreter<'_> {
         }
     }
 
+    /// The operand a `let` binds as a place rather than as a value: a borrow
+    /// names the place it is taken over, and a bare local that already names
+    /// one rebinds the same place — copying a reference copies the reference,
+    /// not its referent, so both handles must reach the same storage.
+    ///
+    /// A projection out of an alias (`p.field`) is not one of these: it reads
+    /// through the reference, and what it yields is a value.
+    fn aliased_operand(&self, body: &Body, value: Operand) -> Option<Operand> {
+        if let Some((_, borrowed)) = borrowed_place_operand(body, value) {
+            return Some(borrowed);
+        }
+        let (root, path) = place_of(body, value)?;
+        (path.is_empty() && self.frame.place_aliases.contains_key(&root)).then_some(value)
+    }
+
     /// Resolve `index` to the place `inner` borrows, so later reads and writes
     /// through it reach the borrowed storage rather than a copy. Recorded
     /// pre-flattened through the aliases already in effect, so a chain never
@@ -659,7 +674,7 @@ impl Interpreter<'_> {
     /// nothing is performed twice against the program's own state.
     pub(super) fn try_region_fold(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         let (block, label) = region_shape(body, e)?;
-        if !region_is_closed(body, block) {
+        if !region_is_self_contained(body, block) {
             return None;
         }
         if self.step_budget == 0 {

@@ -187,24 +187,33 @@ Sequences:
 
 Regions:
 
-- A closed block runs as a frame the engine starts from scratch: one that
-  builds its value in locals of its own, writes only to those locals, and
-  yields the result as its value is as self-contained as a call body, except
-  that the caller wrote it inline. Closedness needs only two static facts —
-  an assignment's root and a `&mut` borrow's root must be locals the block
-  declares — because every other write channel commits through the frame's
-  environment, which a region starts empty and which gains keys through
-  exactly those two mentions. A call on an outer receiver, a global write, a
-  read the frame cannot answer all abandon the evaluation at run time, which
-  forfeits the fold rather than dropping a write. This is what folds a
+- A self-contained block runs as a frame the engine starts from scratch: one
+  that builds its value in locals of its own, reads and writes only those
+  locals, and yields the result as its value is as self-contained as a call
+  body, except that the caller wrote it inline. This is what folds a
   fully-constant string template to the literal the source could have
   written.
+- One question decides it: does every local the block mentions belong to the
+  block. A region's frame starts with an empty environment, so a read of an
+  outer local yields nothing and the run abandons anyway, and a write to one
+  would be dropped along with the block the fold replaces. Asking before the
+  run rather than during it is what keeps the attempt cheap — the check walks
+  the block, the run clones the whole body first, and a codebase's blocks are
+  overwhelmingly not regions. The one fold it gives up is a free-local mention
+  on a statically dead path, which the scan cannot tell from a live one.
 - A `let` binding a borrow of a local place resolves to an alias inside a
-  frame, not a value: reads through it project the place's current value and
-  writes land in the place, which is what carries the desugared template's
-  `let self = &mut __r` shape through `internal_reserve_uninit` and the
-  element writes that follow. An ordinary walk still performs nothing, so
-  outside a frame such a binding keeps clobbering its referent.
+  frame, not a value, and so does rebinding a local that already carries one:
+  copying a reference copies the reference, so both handles name the same
+  storage. That carries the desugared template's `let self = &mut __r` shape
+  through `internal_reserve_uninit` and the element writes that follow.
+- An alias is resolved by a projection — a field read, an element read, a
+  deref — and by nothing else. Reading the reference itself denotes nothing,
+  because the engine has no reference values: handing back the referent there
+  would turn a capture into a copy, and a later write through the reference
+  would land in the copy while the referent kept a value it no longer holds.
+  A `Formatter { buf: &mut __r }` is refused on exactly this ground rather
+  than by accident. An ordinary walk still performs nothing, so outside a
+  frame such a binding keeps clobbering its referent.
 - A cast between the same reference shape — duplicate-interned `Array<u8>`
   ids, a borrow over them — denotes its operand; monomorphization leaves such
   casts over every buffer the formatting path builds. A converting cast still
@@ -220,10 +229,12 @@ Regions:
 - Enum and variant values with their payloads. Today an enum or variant
   pattern cannot be decided, so an `Option` / `Result` accessor exposed by
   inlining leaves a residual match the engine walks past.
-- An aggregate carrying a `&mut` field. A borrow denotes its referent, so
-  building the aggregate would copy the referent in and writes through the
-  field would land in the copy; what the field needs to hold is the place
-  itself. `Formatter { buf: &mut __r }` is the shape waiting on this.
+- A place-valued field, so an aggregate can carry a `&mut`. Today such an
+  aggregate is simply not a constant, since a field holding the referent's
+  value would take a write meant for the referent. What the field needs to
+  hold is the place the frame already names elsewhere, which would make the
+  alias machinery reach through a struct as well as through a local.
+  `Formatter { buf: &mut __r }` is the shape waiting on this.
 - An aggregate that is not a byte sequence has no way back into the IR. A
   `List<T>` of scalars would want the `ArrayLiteral` shape, and a plain struct
   a `StructLiteral` over its materialized fields; both are exits to add beside
