@@ -7,8 +7,8 @@
 # The registry cache saves the download; the sccache cache saves the compile of
 # the ~440 dependencies (an ~8 min cold build becomes an ~80s sccache-backed
 # rebuild in the container). See .claude/hooks/cargo-cache-restore.mts (consumer)
-# and the `warm-cache` task in mise.toml (which uses it, then hands off to
-# incremental for the dev loop).
+# and the `warm-cache` task in mise.toml (which turns it into a warm target/ the
+# dev loop then builds on directly).
 #
 # PATH PARITY IS LOAD-BEARING. sccache's Rust cache key is sensitive to the
 # absolute build paths (build-script OUT_DIR and dependency paths bake into it),
