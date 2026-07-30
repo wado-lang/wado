@@ -6,18 +6,27 @@
 //! Recognizing that shape is what lets a fully-constant string template fold
 //! to the literal the source could have written.
 //!
-//! One question decides it: does every local the region touches belong to the
-//! region. A region's frame starts with an empty environment, so a read of an
-//! outer local yields nothing and the run abandons, and a write to one would
-//! be dropped along with the block the fold replaces. Asking it here rather
-//! than letting the run answer is what keeps the attempt cheap: the check is a
-//! walk over the block, while the run clones the whole body first.
+//! Two questions decide it, and both are asked before the run, because the run
+//! clones the whole enclosing body while these only walk the block.
 //!
-//! Everything else the run still decides for itself — a call it cannot
-//! execute, a global it cannot read, a loop past the budget — by abandoning
-//! the evaluation, which forfeits the fold rather than dropping a write.
+//! Does every local the region touches belong to the region. A region's frame
+//! starts with an empty environment, so a read of an outer local yields
+//! nothing and the run abandons, and a write to one would be dropped along
+//! with the block the fold replaces.
+//!
+//! Is every call one a frame could run. A callee the map does not hold has no
+//! body to execute and an indirect one no known target, so the run reaches it
+//! and abandons — which is what `` `${f()}` `` over an unfoldable `f` does.
+//! That shape is common, and paying a body clone per visit for it is the
+//! difference between linear and quadratic const folding.
+//!
+//! What is left the run still decides for itself — a global it cannot read, a
+//! loop past the budget, an operation that would trap — by abandoning the
+//! evaluation, which forfeits the fold rather than dropping a write.
 
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, LocalSet, NodeRef, PatKind, StmtKind};
+
+use super::{CalleeMap, CtfeBuiltinMap};
 
 /// The block behind a region-shaped expression: a `Block` or `LabeledBlock`
 /// with enough statements to be worth running, ending on a statement that
@@ -48,15 +57,24 @@ pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&s
     }
 }
 
-/// Whether every local `block` mentions is one `block` itself declares, and
-/// nothing writes a global.
+/// Whether every local `block` mentions is one `block` itself declares, every
+/// call in it is one a frame could run, and nothing writes a global.
 ///
 /// Only the reachable nodes are scanned, so a mention an earlier rewrite
 /// orphaned neither disqualifies the region nor keeps it from folding. What
-/// the scan cannot see is which reachable mentions actually execute: a free
-/// local read on a statically dead path costs the fold, which is the price of
-/// answering before the body is cloned rather than after.
-pub(super) fn region_is_self_contained(body: &Body, block: BlockId) -> bool {
+/// the scan cannot see is which reachable nodes actually execute: a free local
+/// read or an unrunnable call on a statically dead path costs the fold, which
+/// is the price of answering before the body is cloned rather than after.
+pub(super) fn region_is_self_contained(
+    body: &Body,
+    block: BlockId,
+    callees: Option<&CalleeMap>,
+    ctfe_builtins: Option<&CtfeBuiltinMap>,
+) -> bool {
+    let runnable = |func_id| {
+        callees.is_some_and(|m| m.contains_key(&func_id))
+            || ctfe_builtins.is_some_and(|m| m.contains_key(&func_id))
+    };
     let mut declared = LocalSet::default();
     let mut mentioned = LocalSet::default();
     let mut stack = vec![NodeRef::Block(block)];
@@ -73,7 +91,14 @@ pub(super) fn region_is_self_contained(body: &Body, block: BlockId) -> bool {
                 }
             }
             NodeRef::Expr(e) => match &body.exprs[e].kind {
-                ExprKind::GlobalVarSet { .. } => return false,
+                ExprKind::GlobalVarSet { .. }
+                | ExprKind::IndirectCall { .. }
+                | ExprKind::CmRawCall { .. } => return false,
+                ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => {
+                    if !runnable(*func_id) {
+                        return false;
+                    }
+                }
                 ExprKind::Local { index, .. } => {
                     mentioned.insert(*index);
                 }

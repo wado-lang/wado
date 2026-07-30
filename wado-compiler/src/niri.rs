@@ -190,6 +190,12 @@ pub type GlobalFieldEnv = IndexMap<GlobalKey, IndexMap<String, Value>>;
 /// whether the next one folds.
 pub const DEFAULT_STEP_BUDGET: u32 = 10_000;
 
+/// How many body nodes a region run's copy charges as one step. The copy is
+/// real work the budget must see, but it is bulk memory rather than
+/// interpretation, so it costs a fraction of what executing that many
+/// statements would.
+pub const CLONE_CHARGE_DIVISOR: usize = 16;
+
 mod frame;
 mod lattice;
 mod pattern;

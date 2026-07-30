@@ -780,7 +780,7 @@ impl ClosureLowerer {
             .struct_name(CompilerItem::Formatter)
             .to_string();
         let formatter_fq = type_table.compiler_struct_fq_name(CompilerItem::Formatter);
-        let formatter_type = type_table.make_struct(formatter_name.clone(), ModuleSource::format());
+        let formatter_type = type_table.make_struct(formatter_name, ModuleSource::format());
         let formatter_mut_ref = type_table.make_mut_ref(formatter_type);
         let string_type = type_table.make_compiler_struct(CompilerItem::String);
 

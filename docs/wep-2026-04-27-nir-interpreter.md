@@ -193,14 +193,22 @@ Regions:
   body, except that the caller wrote it inline. This is what folds a
   fully-constant string template to the literal the source could have
   written.
-- One question decides it: does every local the block mentions belong to the
-  block. A region's frame starts with an empty environment, so a read of an
-  outer local yields nothing and the run abandons anyway, and a write to one
-  would be dropped along with the block the fold replaces. Asking before the
-  run rather than during it is what keeps the attempt cheap — the check walks
-  the block, the run clones the whole body first, and a codebase's blocks are
-  overwhelmingly not regions. The one fold it gives up is a free-local mention
-  on a statically dead path, which the scan cannot tell from a live one.
+- Two questions decide it, both asked before the run, because the run copies
+  the whole enclosing body while the checks only walk the block. Does every
+  local the block mentions belong to the block: a region's frame starts with
+  an empty environment, so a read of an outer local yields nothing and the run
+  abandons anyway, and a write to one would be dropped along with the block
+  the fold replaces. And is every call one a frame could run: a callee outside
+  the map has no body to execute and an indirect one no known target. What
+  either check gives up is a mention on a statically dead path, which a scan
+  cannot tell from a live one.
+- A run's copy of the body is charged to the step budget, since it is the
+  work — a region that reaches the run and then abandons costs a whole-body
+  copy, and a function full of templates would pay one per template per pass.
+  Charging it is what keeps const folding linear in function size instead of
+  quadratic. The budget is a ceiling on CTFE work and this is CTFE work; the
+  consequence is that in a very large function the later regions may find it
+  spent, which is the same trade every other budgeted evaluation makes.
 - A `let` binding a borrow of a local place resolves to an alias inside a
   frame, not a value, and so does rebinding a local that already carries one:
   copying a reference copies the reference, so both handles name the same

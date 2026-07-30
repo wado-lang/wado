@@ -1886,7 +1886,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             let impl_module = impl_ref.0.clone();
             let impl_scope = trait_env.import_scope(&impl_module);
-            let written = impl_struct_name.clone();
+            let written = impl_struct_name;
             self.with_module_perspective(impl_module, impl_scope, |s| {
                 s.qualified_receiver_name(&written)
             })

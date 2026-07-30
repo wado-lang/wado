@@ -7405,3 +7405,75 @@ fn an_alias_captured_in_an_aggregate_is_not_a_constant() {
         "a captured reference must not fold to the referent it copied",
     );
 }
+
+#[test]
+fn a_deref_read_binds_a_copy_not_the_place() {
+    // `let v = *p` reads *through* the reference, so `v` is a copy and a later
+    // write through `p` must not show up in it. Deciding by place shape would
+    // say otherwise: a write target wants the storage behind a deref, which is
+    // why place naming peels one and this does not.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let region = block_expr_of(
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
+            let_stmt_b(
+                "v",
+                2,
+                list_ty,
+                unary(NirUnaryOp::Deref, local_expr(1, list_ty), list_ty),
+            ),
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    mut_ref(
+                        field_access(
+                            local_expr(1, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            list_ty,
+                        ),
+                        list_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                    int_lit(9, TypeTable::U8, "9"),
+                ],
+                TypeTable::UNIT,
+            )),
+            expr_stmt_b(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(
+                        field_access(
+                            local_expr(2, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            list_ty,
+                        ),
+                        list_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+        TypeTable::U8,
+    );
+    let mut interp = Interpreter::new(&table);
+    interp.with_ctfe_builtins(&builtins);
+    let (mut body, e) = into_body_expr(&region);
+    assert_eq!(
+        interp.reduce_to_lattice_full(&mut body, e),
+        Lattice::Const(Value::Int {
+            value: 0,
+            prim: PrimitiveType::U8,
+        }),
+        "the deref bound a copy, so the write through `p` must not reach it",
+    );
+}

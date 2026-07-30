@@ -19,7 +19,7 @@ use crate::nir_visitor::NirRefVisitor;
 use super::place::{borrowed_place_operand, overlapping_places, place_of};
 use super::region::{region_is_self_contained, region_shape};
 use super::trackability::{Reached, aggregate_safe_locals, clobbered_locals};
-use super::{CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice};
+use super::{CLONE_CHARGE_DIVISOR, CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice};
 
 impl FrameState {
     /// The state a call's body runs under: what `body` lets a frame track, with
@@ -132,6 +132,17 @@ impl LoopSnapshot {
         for (b, stmts) in &self.blocks {
             body.blocks[*b].stmts.clone_from(stmts);
         }
+    }
+}
+
+/// The local `op` writes out, through the casts monomorphization leaves. A
+/// deref or a projection is not one: those name storage reached *through* a
+/// value rather than the value itself.
+fn named_local(body: &Body, op: Operand) -> Option<u32> {
+    match &body.exprs[op.as_expr()?].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::Cast { expr, .. } => named_local(body, *expr),
+        _ => None,
     }
 }
 
@@ -474,14 +485,20 @@ impl Interpreter<'_> {
     /// one rebinds the same place — copying a reference copies the reference,
     /// not its referent, so both handles must reach the same storage.
     ///
-    /// A projection out of an alias (`p.field`) is not one of these: it reads
-    /// through the reference, and what it yields is a value.
+    /// Nothing else qualifies. A projection out of an alias reads *through*
+    /// the reference and yields a value, and `*p` is the same act spelled with
+    /// a deref — so the RHS is matched as a local written out, not through
+    /// [`place_of`], which peels a deref precisely because a write target
+    /// wants the storage behind it.
     fn aliased_operand(&self, body: &Body, value: Operand) -> Option<Operand> {
         if let Some((_, borrowed)) = borrowed_place_operand(body, value) {
             return Some(borrowed);
         }
-        let (root, path) = place_of(body, value)?;
-        (path.is_empty() && self.frame.place_aliases.contains_key(&root)).then_some(value)
+        let index = named_local(body, value)?;
+        self.frame
+            .place_aliases
+            .contains_key(&index)
+            .then_some(value)
     }
 
     /// Resolve `index` to the place `inner` borrows, so later reads and writes
@@ -674,13 +691,20 @@ impl Interpreter<'_> {
     /// nothing is performed twice against the program's own state.
     pub(super) fn try_region_fold(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         let (block, label) = region_shape(body, e)?;
-        if !region_is_self_contained(body, block) {
+        if !region_is_self_contained(body, block, self.callees, self.ctfe_builtins) {
             return None;
         }
-        if self.step_budget == 0 {
+        // A run copies the enclosing body before it executes a statement, so
+        // the copy is the work — charge it. Left uncharged, a region that
+        // bails costs a whole-body clone per visit and const folding grows
+        // quadratic in the size of a function full of templates.
+        let clone_cost = u32::try_from(body.exprs.len() / CLONE_CHARGE_DIVISOR)
+            .unwrap_or(u32::MAX)
+            .max(1);
+        if self.step_budget < clone_cost {
             return None;
         }
-        self.step_budget -= 1;
+        self.step_budget -= clone_cost;
         let mut scratch = body.nodes_only_clone();
         scratch.root = block;
         let reached = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
