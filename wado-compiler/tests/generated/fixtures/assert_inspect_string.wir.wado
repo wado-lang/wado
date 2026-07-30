@@ -144,7 +144,6 @@ global global:core:prelude/format.wado::__const_obj_6: ref null "core:prelude/st
 global global:core:prelude/format.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
 
 fn "assert_inspect_string.wado/run"() with Stdout {
-    let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
@@ -154,8 +153,7 @@ fn "assert_inspect_string.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:assert_inspect_string.wado::__modules_initialized = 1;
     };
-    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
-    global:assert_inspect_string.wado::__const_obj_4 = s;
+    global:assert_inspect_string.wado::__const_obj_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
     __cond = "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(global:assert_inspect_string.wado::__const_obj_4, global:assert_inspect_string.wado::__const_obj_3);
     if @unlikely(__cond == 0) {
         cold_path;
