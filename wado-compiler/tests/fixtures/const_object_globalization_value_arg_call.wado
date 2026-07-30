@@ -8,12 +8,14 @@
 // must not re-run per iteration.
 //
 // `byte_total` is `#[inline(never)]` and only reads its by-value parameter, so
-// the callee gate admits it.
+// the callee gate admits it. `encode_key`'s capacity request sits past the
+// engine's sequence cap, so CTFE cannot fold the call away from under the
+// hoist — capacity is unobservable, so the result is unchanged.
 
 use { println, Stdout } from "core:cli";
 
 fn encode_key(name: &String) -> String {
-    let mut s = String::with_capacity(name.len() + 3);
+    let mut s = String::with_capacity(name.len() + 2000);
     s.push('"');
     s.push_str(name);
     s.push_str(&"\":");
