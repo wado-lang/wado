@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785445745433,
+  "lastUpdate": 1785446847375,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44937,6 +44937,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/748f5b10b43215e63fdb023c67bccc346677756f"
         },
         "date": 1785445744674,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16302,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276421,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ac6de33f7e0ffa8df9872d0d67103f19f8dea536",
+          "message": "Merge pull request #1720 from wado-lang/claude/package-gale-todo-xac6j2\n\nfix(gale): correct the descriptor tree comparators, and extend Stage B′ to 98 pins",
+          "timestamp": "2026-07-31T05:58:01+09:00",
+          "tree_id": "5ad7eb589f0744de77d70e982d336f3ef4f2d40a",
+          "url": "https://github.com/wado-lang/wado/commit/ac6de33f7e0ffa8df9872d0d67103f19f8dea536"
+        },
+        "date": 1785446847170,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
