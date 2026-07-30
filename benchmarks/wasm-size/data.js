@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785368193723,
+  "lastUpdate": 1785402047402,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44849,6 +44849,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/38e449de7578fb57bc50d9110e9836bbb0257c7e"
         },
         "date": 1785368192908,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16302,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276421,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c3ea7301c15d7b67bb113ad13cd2bb14051e9b89",
+          "message": "Merge pull request #1718 from wado-lang/claude/claude-hooks-cargo-incremental-tyn53s\n\nchore(dev): align session setup with CARGO_INCREMENTAL=0",
+          "timestamp": "2026-07-30T17:49:40+09:00",
+          "tree_id": "092b0b4cbaf82bfae280466c68dbfd95ddc77511",
+          "url": "https://github.com/wado-lang/wado/commit/c3ea7301c15d7b67bb113ad13cd2bb14051e9b89"
+        },
+        "date": 1785402046649,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
