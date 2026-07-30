@@ -19,7 +19,9 @@ use crate::nir_visitor::NirRefVisitor;
 use super::place::{borrowed_place_operand, overlapping_places, place_of};
 use super::region::{region_is_self_contained, region_shape};
 use super::trackability::{Reached, aggregate_safe_locals, clobbered_locals};
-use super::{CLONE_CHARGE_DIVISOR, CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice};
+use super::{
+    CLONE_CHARGE_DIVISOR, CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice,
+};
 
 impl FrameState {
     /// The state a call's body runs under: what `body` lets a frame track, with

@@ -224,7 +224,7 @@ fn record_concrete_instantiation(
 ) {
     if info.struct_name() != info.base_struct_name() {
         record(
-            info.struct_name(),
+            info.struct_name().clone(),
             trait_name.to_string(),
             module_source,
             true,

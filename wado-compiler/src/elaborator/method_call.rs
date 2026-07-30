@@ -1923,7 +1923,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let method_ref = StaticMethodRef::new(
             blanket_module.clone(),
-            blanket_param,
+            blanket_param.clone(),
             method.to_string(),
             Some(trait_name.clone()),
         );
@@ -1948,7 +1948,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         let method_info = LocalMethodName::new(
             self.tysys.fq_receiver_head(receiver_type_id),
-            Some(trait_name),
+            Some(trait_name.clone()),
             method.to_string(),
         )
         .with_type_args(&[receiver_arg_name], &method_type_arg_names);
@@ -2958,7 +2958,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.has_static_method_direct(struct_name, method_name) {
                 (
                     struct_name.to_string(),
-                    qualified_struct_name,
+                    qualified_struct_name.clone(),
                     mangled_func_name.to_string(),
                 )
             } else {
@@ -2995,7 +2995,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     (
                         struct_name.to_string(),
-                        qualified_struct_name,
+                        qualified_struct_name.clone(),
                         mangled_func_name.to_string(),
                     )
                 }
@@ -3003,7 +3003,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             (
                 struct_name.to_string(),
-                qualified_struct_name,
+                qualified_struct_name.clone(),
                 mangled_func_name.to_string(),
             )
         };

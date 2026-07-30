@@ -2060,7 +2060,7 @@ impl Monomorphizer {
                                 .functions
                                 .impl_module(&new_info, receiver_module.as_ref());
                             let concrete_module = concrete_impl_module
-                                .or(blanket_module)
+                                .or(blanket_module.clone())
                                 .or(receiver_module);
                             let method_type_arg_tids: Vec<TypeId> = if let FunctionRef {
                                 monomorph_info: Some(mi),

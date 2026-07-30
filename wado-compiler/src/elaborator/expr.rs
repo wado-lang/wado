@@ -4392,7 +4392,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 mangled_name: method_name.clone(),
                 target_name: target_receiver.clone(),
                 from_name,
-                from_trait_name: from_trait_name,
+                from_trait_name: from_trait_name.clone(),
             },
         );
 

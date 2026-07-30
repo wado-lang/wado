@@ -3561,7 +3561,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         .collect();
 
     let mut tt = module.type_table.borrow_mut();
-    let formatter_type = tt.make_struct(formatter_name, ModuleSource::format());
+    let formatter_type = tt.make_struct(formatter_name.clone(), ModuleSource::format());
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
@@ -3744,7 +3744,7 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
         .collect();
 
     let mut tt = module.type_table.borrow_mut();
-    let formatter_type = tt.make_struct(formatter_name, ModuleSource::format());
+    let formatter_type = tt.make_struct(formatter_name.clone(), ModuleSource::format());
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
@@ -3809,7 +3809,7 @@ fn generate_enum_display_fn(
                 string_type,
                 ref_string_type,
                 span,
-                formatter_fq,
+                &formatter_fq,
             )],
             span,
         );
@@ -3933,7 +3933,7 @@ fn generate_fn_inspect_fn(
     inspect_method: &str,
 ) -> TirFunction {
     generate_fn_canonical_dispatch_stub(
-        module_source,
+        &module_source,
         FnDispatchTrait::Inspect,
         inspect_trait,
         inspect_method,
@@ -3959,7 +3959,7 @@ fn generate_fn_inspect_alt_fn(
     inspect_alt_method: &str,
 ) -> TirFunction {
     generate_fn_canonical_dispatch_stub(
-        module_source,
+        &module_source,
         FnDispatchTrait::InspectAlt,
         inspect_alt_trait,
         inspect_alt_method,
@@ -4074,7 +4074,7 @@ fn generate_opaque_inspect_fn(
                 string_type,
                 ref_string_type,
                 span,
-                formatter_fq,
+                &formatter_fq,
             ),
             hex_stmt,
         ],
@@ -4529,7 +4529,7 @@ fn build_struct_inspect_alt_body(
             string_type,
             ref_string_type,
             span,
-            formatter_fq,
+            &formatter_fq,
         )
     };
     let newline_indent = || {
@@ -4538,7 +4538,7 @@ fn build_struct_inspect_alt_body(
             fmt(),
             None::<(&str, TypeId)>,
             span,
-            formatter_fq,
+            &formatter_fq,
         )
     };
 
@@ -4552,7 +4552,7 @@ fn build_struct_inspect_alt_body(
             string_type,
             ref_string_type,
             span,
-            formatter_fq,
+            &formatter_fq,
         ));
         return stmts;
     }
@@ -4562,7 +4562,7 @@ fn build_struct_inspect_alt_body(
         fmt(),
         Some((format!("{struct_name} {{"), string_type)),
         span,
-        formatter_fq,
+        &formatter_fq,
     ));
     for (field_name, field_type, field_index) in fields {
         stmts.push(newline_indent());
@@ -4572,7 +4572,7 @@ fn build_struct_inspect_alt_body(
             string_type,
             ref_string_type,
             span,
-            formatter_fq,
+            &formatter_fq,
         ));
         let field_access = field_access_local(
             0,
@@ -4605,7 +4605,7 @@ fn build_struct_inspect_alt_body(
         fmt(),
         Some(("}", string_type)),
         span,
-        formatter_fq,
+        &formatter_fq,
     ));
     stmts
 }
@@ -4732,7 +4732,7 @@ fn build_variant_inspect_alt_body(
                     string_type,
                     ref_string_type,
                     span,
-                    formatter_fq,
+                    &formatter_fq,
                 ));
                 Vec::new()
             } else {
@@ -4741,14 +4741,14 @@ fn build_variant_inspect_alt_body(
                     fmt_local(),
                     Some((format!("{variant_name}::{case_name}("), string_type)),
                     span,
-                    formatter_fq,
+                    &formatter_fq,
                 ));
                 body_stmts.push(formatter_call(
                     "write_newline_indent",
                     fmt_local(),
                     None::<(&str, TypeId)>,
                     span,
-                    formatter_fq,
+                    &formatter_fq,
                 ));
                 let binding_idx = binding_idx.expect("non-unit case must have a payload binding");
                 let binding_name = format!("__inspect_alt_{case_name}_{binding_idx}");
@@ -4770,14 +4770,14 @@ fn build_variant_inspect_alt_body(
                     string_type,
                     ref_string_type,
                     span,
-                    formatter_fq,
+                    &formatter_fq,
                 ));
                 body_stmts.push(formatter_call(
                     "close_brace",
                     fmt_local(),
                     Some((")", string_type)),
                     span,
-                    formatter_fq,
+                    &formatter_fq,
                 ));
                 vec![TirPattern::Binding {
                     name: binding_name,
