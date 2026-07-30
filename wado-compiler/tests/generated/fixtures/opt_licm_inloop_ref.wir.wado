@@ -102,8 +102,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:opt_licm_inloop_ref.wado::THRESHOLD_ONE: i32 = 100;
-global mut global:opt_licm_inloop_ref.wado::THRESHOLD_TWO: i32 = 1;
 global mut global:opt_licm_inloop_ref.wado::__modules_initialized: bool = 0;
 global global:core:prelude/primitive.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
@@ -169,8 +167,8 @@ fn "opt_licm_inloop_ref.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:opt_licm_inloop_ref.wado::__modules_initialized = 1;
     };
-    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_8("opt_licm_inloop_ref.wado/accumulate"(5, global:opt_licm_inloop_ref.wado::THRESHOLD_ONE)), __local_1); __local_0);
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_14("opt_licm_inloop_ref.wado/pick"(5, global:opt_licm_inloop_ref.wado::THRESHOLD_ONE, global:opt_licm_inloop_ref.wado::THRESHOLD_TWO)), __local_3); __local_2);
+    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_8("opt_licm_inloop_ref.wado/accumulate"(5, 100)), __local_1); __local_0);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_14("opt_licm_inloop_ref.wado/pick"(5, 100, 1)), __local_3); __local_2);
 }
 
 fn "opt_licm_inloop_ref.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
