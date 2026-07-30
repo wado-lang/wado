@@ -111,6 +111,10 @@ pub fn expand_action_templates(src: &String) -> ExpandOutcome {
                 i = end;
                 continue;
             },
+            '<' && i + 1 < n && chars[i + 1] == '!' => {
+                i = scan_st_comment(&chars, i);
+                continue;
+            },
             '<' && is_template_start(&chars, i) => {
                 match eval_template(&chars, i) {
                     Ok(expanded) => {
@@ -131,6 +135,21 @@ pub fn expand_action_templates(src: &String) -> ExpandOutcome {
         i += 1;
     }
     return ExpandOutcome { text: out, warnings };
+}
+
+/// Scan a `<! ... !>` StringTemplate comment. `pos` must point at the `<`.
+/// Returns the index just past the closing `!>`, or `chars.len()` if
+/// unterminated.
+fn scan_st_comment(chars: &List<char>, pos: i32) -> i32 {
+    let n = chars.len();
+    let mut i = pos + 2;
+    while i + 1 < n {
+        if chars[i] == '!' && chars[i + 1] == '>' {
+            return i + 2;
+        }
+        i += 1;
+    }
+    return n;
 }
 
 struct Expanded {
@@ -287,6 +306,9 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
         "write" => {
             return Result::Ok(`System.out.print(${chain_or_arg(recv, args, name)?});`);
         },
+        "ToStringTree" => {
+            return Result::Ok(`${chain_or_arg(recv, args, name)?}.toStringTree(this)`);
+        },
         "Invoke_pred" => {
             return Result::Ok(`this.pred(${require_receiver(recv, name)?})`);
         },
@@ -305,6 +327,12 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
             let r = require_receiver(recv, name)?;
             require_args(args, 2, name)?;
             return Result::Ok(`${r}.${args[0]}.${args[1]}`);
+        },
+        // Host-side scaffolding (see the group below); the receiver it
+        // would walk is discarded with it.
+        "WalkListener" => {
+            let _ = require_receiver(recv, name)?;
+            return Result::Ok("");
         },
         _ => {
         },
@@ -333,15 +361,22 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
         "BailErrorStrategy" => Result::Ok("setErrorHandler(new BailErrorStrategy());"),
         "GetExpectedTokenNames" => Result::Ok("getExpectedTokens().toString(getVocabulary())"),
         "Invoke_foo" => Result::Ok("this.foo();"),
+        "RuleInvocationStack" => Result::Ok("getRuleInvocationStack()"),
+        // Host-side scaffolding — a listener import or class the testsuite
+        // injects per target, invisible in the parse tree the corpus
+        // compares. A helper that changes what the parser *produces* must
+        // not join this group; see the action-template section of
+        // `antlr4-compatibility.md` for what that rules out and why.
+        "ImportRuleInvocationStack" => Result::Ok(""),
+        "ImportListener" | "BasicListener" | "LRListener" | "LRWithLabelsListener" | "RuleGetterListener" | "TokenGetterListener" => {
+            require_args(args, 1, name)?;
+            Result::Ok("");
+        },
         "Declare_pred" => Result::Ok("boolean pred(boolean v) {\n\tSystem.out.println(\"eval=\" + v);\n\treturn v;\n}"),
         "Declare_foo" => Result::Ok("public void foo() {\n\tSystem.out.println(\"foo\");\n}"),
         // Compile-time check that the rule context exposes list getters.
         "DeclareContextListGettersFunction" => Result::Ok("void foo() {\n\tSContext s = null;\n\ts.a();\n\ts.b();\n}"),
         // One argument.
-        "ToStringTree" => {
-            require_args(args, 1, name)?;
-            Result::Ok(`${args[0]}.toStringTree(this)`);
-        },
         "PlusText" => {
             require_args(args, 1, name)?;
             Result::Ok(`"${args[0]}" + getText()`);
@@ -376,7 +411,7 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
             require_args(args, 2, name)?;
             Result::Ok(`((${args[0]})${args[1]})`);
         },
-        "ContextRuleFunction" | "ParserToken" => {
+        "ContextRuleFunction" | "ParserToken" | "ContextMember" => {
             require_args(args, 2, name)?;
             Result::Ok(`${args[0]}.${args[1]}`);
         },

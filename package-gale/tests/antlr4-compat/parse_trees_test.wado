@@ -54,6 +54,14 @@ test "ParseTrees/Token2" {
     }
 }
 
+test "ParseTrees/TokenAndRuleContextString" {
+    let input = #include_str("./grammars/ParseTrees/TokenAndRuleContextString.g4");
+    let result = parse(input);
+    if let Err(err) = &result {
+        panic(`parse failed: ${err.message} at ${err.span.start}..${err.span.end}`);
+    }
+}
+
 test "ParseTrees/TwoAltLoop" {
     let input = #include_str("./grammars/ParseTrees/TwoAltLoop.g4");
     let result = parse(input);

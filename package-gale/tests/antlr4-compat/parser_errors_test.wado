@@ -166,6 +166,14 @@ test "ParserErrors/SingleSetInsertion" {
     }
 }
 
+test "ParserErrors/SingleSetInsertionConsumption" {
+    let input = #include_str("./grammars/ParserErrors/SingleSetInsertionConsumption.g4");
+    let result = parse(input);
+    if let Err(err) = &result {
+        panic(`parse failed: ${err.message} at ${err.span.start}..${err.span.end}`);
+    }
+}
+
 test "ParserErrors/SingleTokenDeletion" {
     let input = #include_str("./grammars/ParserErrors/SingleTokenDeletion.g4");
     let result = parse(input);
@@ -200,6 +208,14 @@ test "ParserErrors/SingleTokenDeletionBeforeLoop2" {
 
 test "ParserErrors/SingleTokenDeletionBeforePredict" {
     let input = #include_str("./grammars/ParserErrors/SingleTokenDeletionBeforePredict.g4");
+    let result = parse(input);
+    if let Err(err) = &result {
+        panic(`parse failed: ${err.message} at ${err.span.start}..${err.span.end}`);
+    }
+}
+
+test "ParserErrors/SingleTokenDeletionConsumption" {
+    let input = #include_str("./grammars/ParserErrors/SingleTokenDeletionConsumption.g4");
     let result = parse(input);
     if let Err(err) = &result {
         panic(`parse failed: ${err.message} at ${err.span.start}..${err.span.end}`);

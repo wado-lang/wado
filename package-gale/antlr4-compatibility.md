@@ -159,7 +159,10 @@ Test sources covering Stage B:
    `tests/antlr4-compat/stage_b/<Category>/<Name>_test.wado`, emitted
    by the descriptor extractor for every descriptor whose `[output]` is
    a clean parse tree (rejected by the Stage B output normalizer
-   otherwise — action-body prints, token dumps, ATN traces).
+   otherwise — action-body prints, token dumps, ATN traces). A tree
+   render both starts and ends at a paren, so an `[output]` that
+   continues past the closing paren is host-side print output the
+   descriptor emits alongside its tree, not a tree to compare.
    Two emit shapes:
    - **Full-tree** when the `[output]` root rule equals `[start]`.
      Compares `t::to_tree(&root).to_string_tree()` against the
@@ -188,10 +191,19 @@ reproducible.
 Stage B′ extends Stage B to descriptors whose own `[output]` is host-
 language chatter (`<writeln(...)>` action prints, `Token.toString`
 dumps, ATN traces) by sourcing the expected parse tree from the
-published ANTLR4 jar instead of from `[output]`. Stage B and Stage B′
-share the same parse-tree comparator and the same generated parser
-under `tests/generated/antlr4_compat_b/`; they differ only in where
-"the right answer" comes from.
+published ANTLR4 jar instead of from `[output]`. Because Stage B′
+ignores `[output]` entirely, a descriptor blocked only by host-side
+scaffolding in its `[output]` is still reachable — the scaffolding has
+to leave the grammar loadable, not be reproducible.
+
+Stage B and Stage B′ share the generated parser under
+`tests/generated/antlr4_compat_b/`, but not the comparator. Stage B
+compares through `normalize_tree`, which collapses whitespace runs so a
+hand-written expected tree can be indented. Stage B′ compares verbatim:
+the oracle's tree is already one line, so collapsing can only lose
+information — and it does whenever a token's own text carries
+whitespace (`BREAK: 'break '` renders `break  break`, the token's
+trailing space plus the child separator).
 
 The oracle is the published jar treated as a black box; the wrapper
 script `package-gale/scripts/antlr4-oracle.sh` runs it, captures the
@@ -204,9 +216,10 @@ hygiene rule in [`AGENTS.md`](./AGENTS.md)).
 Stage B′ runs at descriptor-extraction time, not at test time. Its
 inputs (grammar + input) are stable; its output (the oracle tree) is
 committed to the generated test file so CI does not need Java. The
-jar version used for a given extraction is recorded as a `// Generated
-against ANTLR4 4.x.y` comment in the emitted test file so any diff in
-the oracle's answer surfaces in commit history.
+jar version used for a given extraction is recorded as an `// Expected
+tree: antlr-4.x.y-complete.jar on the action-body-stripped grammar`
+comment in the emitted test file so any diff in the oracle's answer
+surfaces in commit history.
 
 For grammars that contain action bodies (`{ ... }` or `{ ... }?`),
 the extractor strips them before invoking the oracle. Extracted
@@ -652,10 +665,10 @@ tests/antlr4-compat/stage_b/<Category>/<Name>_test.wado
                   │              │                   — full-tree or sub-tree;
                   │              │                   one file per eligible descriptor)
 tests/antlr4-compat/stage_b_oracle/<Category>/<Name>_test.wado
-                  │              │                  (Stage B′: same comparator, but
-                  │              │                   expected tree comes from running
-                  │              │                   scripts/antlr4-oracle.sh on the
-                  │              │                   stripped grammar at extract time)
+                  │              │                  (Stage B′: expected tree comes from
+                  │              │                   running scripts/antlr4-oracle.sh on
+                  │              │                   the stripped grammar at extract time,
+                  │              │                   and is compared verbatim)
                   │              └── all consult tests/antlr4-compat/status.toml
                   │                  to decorate todo / skip entries
                   ▼
@@ -679,6 +692,17 @@ expansion table was pinned clean-room — helper names, descriptor
 `.stg` files (License hygiene in [`AGENTS.md`](./AGENTS.md)). An
 unknown helper is left verbatim and warned to stderr: either add it to
 the table or triage the descriptor into `[skip]`.
+
+Some helpers name host-side scaffolding — a generated listener class, an
+import — that no Gale artefact corresponds to. Those expand to nothing,
+which is sound precisely because the corpus compares parse trees and the
+scaffolding is not observable in one. The line to hold: a helper that
+changes what the parser produces must **not** expand away, or the
+descriptor is left testing something other than what it is for. So
+`TreeNodeWithAltNumField` (renders alt numbers into node names),
+`ParserPropertyMember` (declares the member a semantic predicate calls),
+and `PositionAdjustingLexer` (overrides `nextToken()`) stay `[skip]`
+rather than being stubbed out.
 
 `scripts/expand_action_templates_in_place.wado` applies the identical
 transform to the committed corpus without `vendor/antlr4` (used for the
@@ -729,21 +753,29 @@ triage state) live under `package-gale/tests/antlr4-compat/`:
 [stage_b_oracle_skip]
 "<Category>/<Name>" = "one-line reason this descriptor opts OUT of Stage B′ (oracle crash, action-stripper corruption, irrelevant comparison)"
 
-[stage_b_oracle_force]
-"<Category>/<Name>" = "one-line reason this descriptor uses the oracle EVEN THOUGH its own [output] is already a clean tree (rare; testsuite [output] is stale)"
+[stage_b_oracle_todo]
+"<Category>/<Name>" = "one-line reason Gale's tree differs from the oracle's, which is the right answer"
+
+[stage_c_todo]
+"<Category>/<Name>" = "one-line reason the action-print output does not match yet"
+
+[stage_c_skip]
+"<Category>/<Name>" = "one-line reason no amount of Stage C work can reproduce this [output]"
 ```
 
-| State                    | Effect                                                                                  | When to use                                                                                                                                                         |
-| ------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| (default)                | Test runs, must pass                                                                    | Descriptor is a clean ANTLR4 grammar Gale should accept                                                                                                             |
-| `[todo]`                 | Per-category claim-(a) test marked `#[TODO]` so failure is expected and recorded        | Descriptor exposes a real Gale gap (parser, lexer, or IR feature). Add a corresponding entry to `TODO.md`                                                           |
-| `[skip]`                 | Per-category claim-(a) test not emitted at all                                          | Descriptor relies on the upstream test runner's StringTemplate substitution / target-language template, so it is not a self-contained `.g4`                         |
-| `[stage_a_todo]`         | Per-descriptor claim-(b/c/d) variant test emitted with `#[TODO]` so failure is expected | Generated parser/lexer behaviour diverges (LL prediction gap, codegen bug, lexer behavior gap, channel-routing gap, or Stage-C-blocked action / semantic predicate) |
-| `[stage_a_skip]`         | Per-descriptor claim-(b/c/d) variant test not emitted                                   | Gale codegen produces invalid Wado for the descriptor's grammar, so the test cannot even compile. Runtime gaps go to `[stage_a_todo]`.                              |
-| `[stage_b_todo]`         | Stage B test emitted with `#[TODO]` so divergence is expected                           | Tree-shape comparison fails at runtime (Gale codegen, LR rewriting, or Stage-C-blocked action handling)                                                             |
-| `[stage_b_skip]`         | Stage B test not emitted                                                                | Gale codegen produces invalid Wado for the descriptor's grammar; a `#[TODO]` marker would have nothing to attach to                                                 |
-| `[stage_b_oracle_skip]`  | Stage B′ test not emitted; descriptor falls back to its previous auto-skip behaviour    | The oracle crashes on the grammar, the action-body stripper would corrupt it, or the descriptor's parse tree is irrelevant for some reason                          |
-| `[stage_b_oracle_force]` | Stage B′ test emitted even when the descriptor's own `[output]` is already a clean tree | The testsuite's recorded `[output]` is stale relative to the oracle and we trust the oracle's answer; rare                                                          |
+| State                   | Effect                                                                                  | When to use                                                                                                                                                         |
+| ----------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| (default)               | Test runs, must pass                                                                    | Descriptor is a clean ANTLR4 grammar Gale should accept                                                                                                             |
+| `[todo]`                | Per-category claim-(a) test marked `#[TODO]` so failure is expected and recorded        | Descriptor exposes a real Gale gap (parser, lexer, or IR feature). Add a corresponding entry to `TODO.md`                                                           |
+| `[skip]`                | Per-category claim-(a) test not emitted at all                                          | Descriptor relies on the upstream test runner's StringTemplate substitution / target-language template, so it is not a self-contained `.g4`                         |
+| `[stage_a_todo]`        | Per-descriptor claim-(b/c/d) variant test emitted with `#[TODO]` so failure is expected | Generated parser/lexer behaviour diverges (LL prediction gap, codegen bug, lexer behavior gap, channel-routing gap, or Stage-C-blocked action / semantic predicate) |
+| `[stage_a_skip]`        | Per-descriptor claim-(b/c/d) variant test not emitted                                   | Gale codegen produces invalid Wado for the descriptor's grammar, so the test cannot even compile. Runtime gaps go to `[stage_a_todo]`.                              |
+| `[stage_b_todo]`        | Stage B test emitted with `#[TODO]` so divergence is expected                           | Tree-shape comparison fails at runtime (Gale codegen, LR rewriting, or Stage-C-blocked action handling)                                                             |
+| `[stage_b_skip]`        | Stage B test not emitted                                                                | Gale codegen produces invalid Wado for the descriptor's grammar; a `#[TODO]` marker would have nothing to attach to                                                 |
+| `[stage_b_oracle_skip]` | Stage B′ test not emitted; descriptor falls back to its previous auto-skip behaviour    | The oracle crashes on the grammar, the action-body stripper would corrupt it, or the oracle's tree is not a valid pin (e.g. TestRig mojibakes non-ASCII to `?`)     |
+| `[stage_b_oracle_todo]` | Stage B′ test emitted with `#[TODO]`                                                    | The oracle's tree is the right expected value but Gale's parser produces a different one; flipping to unmarked is the signal that the gap closed                    |
+| `[stage_c_todo]`        | Stage C output-compare emitted with `#[TODO]`                                           | Action bodies execute but the printed output does not match yet — a gap that can close                                                                              |
+| `[stage_c_skip]`        | Stage C output-compare not emitted                                                      | The `[output]` is not a property of the grammar (a host-option artefact, or a generated listener's walk), so no amount of Stage C work reaches it                   |
 
 The reason text is written verbatim into the generated test as a
 comment. Keep it free of backslashes and double quotes — the script's

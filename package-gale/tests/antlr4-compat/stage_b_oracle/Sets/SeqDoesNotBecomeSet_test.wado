@@ -12,13 +12,11 @@ use t from "../../grammars/Sets/SeqDoesNotBecomeSet.g4"
             output_dir: "../../../generated/antlr4_compat_b_oracle/Sets/SeqDoesNotBecomeSet",
         },
     };
-use { normalize_tree } from "../../grammars/Sets/SeqDoesNotBecomeSet.g4";
 
 test "stage_b_oracle: Sets/SeqDoesNotBecomeSet" {
     let input = "34";
     let expected = "(a 34)";
     let result = t::parse_a(&input);
     let actual = t::to_string_tree(&result);
-    let norm = normalize_tree(&expected);
-    assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
+    assert actual == expected, `actual:   ${actual}\nexpected: ${expected}`;
 }

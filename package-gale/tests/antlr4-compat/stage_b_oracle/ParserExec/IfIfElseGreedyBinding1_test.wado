@@ -12,13 +12,11 @@ use t from "../../grammars/ParserExec/IfIfElseGreedyBinding1.g4"
             output_dir: "../../../generated/antlr4_compat_b_oracle/ParserExec/IfIfElseGreedyBinding1",
         },
     };
-use { normalize_tree } from "../../grammars/ParserExec/IfIfElseGreedyBinding1.g4";
 
 test "stage_b_oracle: ParserExec/IfIfElseGreedyBinding1" {
     let input = "if y if y x else x";
     let expected = "(start (statement (ifStatement if y (statement (ifStatement if y (statement x) else (statement x))))))";
     let result = t::parse_start(&input);
     let actual = t::to_string_tree(&result);
-    let norm = normalize_tree(&expected);
-    assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
+    assert actual == expected, `actual:   ${actual}\nexpected: ${expected}`;
 }

@@ -1,2 +1,2 @@
 parser grammar T;
-a : B {System.out.println("T.a");};<! hidden by S.a !>
+a : B {System.out.println("T.a");};
