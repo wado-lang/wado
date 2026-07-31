@@ -1,0 +1,45 @@
+// Regression: a compile-time frame evaluating a block in expression position
+// must not pre-reduce the block's statements against the environment as it
+// stands *before* the block runs. The pure reducer folded `w` reads (and
+// collapsed the `if`) from the pre-block env, so the write the block performs
+// first was never observed: `stale_sum` folded to 1 (runtime 2) and
+// `stale_pick` took the wrong branch, folding to 10 (runtime 20).
+//
+// Both functions must still fold — to the value the program computes — so
+// their names must not survive to WIR.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn stale_sum() -> i32 {
+    let mut w = 1;
+    return sum: {
+        w = w + 1;
+        break sum: w;
+    };
+}
+
+#[inline(never)]
+fn stale_pick() -> i32 {
+    let mut w = 1;
+    return pick: {
+        w = 2;
+        if w == 1 {
+            break pick: 10;
+        }
+        break pick: 20;
+    };
+}
+
+export fn run() with Stdout {
+    println(`${stale_sum()} ${stale_pick()}`);
+}
+
+__DATA__
+{
+    "stdout": "2 20\n",
+    "wir_not_expect:O2": [
+        "stale_sum",
+        "stale_pick"
+    ]
+}

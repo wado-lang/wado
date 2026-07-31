@@ -258,8 +258,20 @@ impl Interpreter<'_> {
             }
             StmtKind::Break { label, value } => {
                 let (label, value) = (label.clone(), *value);
-                let value = self.eval_optional_operand(body, value);
-                Flow::Break { label, value }
+                match value {
+                    None => Flow::Break {
+                        label,
+                        value: Lattice::Unevaluated,
+                    },
+                    // A carried value the frame cannot produce abandons the
+                    // run: evaluating it may have executed a block whose
+                    // writes already landed, and this is the one statement
+                    // whose consumers would step past an unevaluated result.
+                    Some(op) => match self.eval_operand(body, op) {
+                        value @ Lattice::Const(_) => Flow::Break { label, value },
+                        Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
+                    },
+                }
             }
             StmtKind::Continue => Flow::Continue,
             StmtKind::Loop { body: block } => {
@@ -455,41 +467,40 @@ impl Interpreter<'_> {
         }
     }
 
-    fn eval_optional_operand(&mut self, body: &mut Body, op: Option<Operand>) -> Lattice {
-        match op {
-            Some(op) => self.eval_operand(body, op),
-            None => Lattice::Unevaluated,
-        }
-    }
-
     /// Reducing in place first is what lets a nested call fold before the
-    /// operand is projected.
+    /// operand is projected. A block-shaped operand is not pre-reduced: it
+    /// executes instead, so its reads reduce as each statement runs rather
+    /// than against the environment as it stood before the block.
     fn eval_operand(&mut self, body: &mut Body, op: Operand) -> Lattice {
         match op.as_expr() {
-            Some(e) => {
-                self.reduce_in_place(body, e);
-                match self.reduce_to_lattice(body, e) {
-                    Lattice::Unevaluated => self.exec_value_block(body, e),
-                    lattice => lattice,
+            Some(e) => match &body.exprs[e].kind {
+                ExprKind::Block(_) | ExprKind::LabeledBlock { .. } => {
+                    self.exec_value_block(body, e)
                 }
-            }
+                _ => {
+                    self.reduce_in_place(body, e);
+                    self.reduce_to_lattice(body, e)
+                }
+            },
             None => self.operand_to_lattice(body, op),
         }
     }
 
-    /// Evaluate a multi-statement block in expression position by executing its
-    /// statements — the shape inlining leaves (`{ let v = …; tail }` and the
-    /// labeled block a spliced `return` breaks out of), which the pure
-    /// projection cannot value. Only a frame may run one: its `let`s bind into
-    /// the frame env and its writes land in frame-owned places, and an
-    /// abandoned run discards the whole call, so a partial execution is never
-    /// observed. Control leaving the block — a `return`, a `continue`, or a
-    /// `break` past its own label — is not a value; the evaluation stays
-    /// `Unevaluated` and the caller abandons.
+    /// Evaluate a block in expression position by executing its statements —
+    /// the shape inlining leaves (`{ let v = …; tail }` and the labeled block
+    /// a spliced `return` breaks out of), which the pure projection cannot
+    /// value. Only a frame may run one: its `let`s bind into the frame env and
+    /// its writes land in frame-owned places, and every consumer of the value
+    /// abandons the frame on a non-constant, so a partial execution is never
+    /// observed. A unit-typed block yields nothing whatever its last statement
+    /// computed, and control leaving the block — a `return`, a `continue`, or
+    /// a `break` past its own label — is not a value; both stay `Unevaluated`.
     fn exec_value_block(&mut self, body: &mut Body, e: ExprId) -> Lattice {
-        let (block, label) = match &body.exprs[e].kind {
-            ExprKind::Block(b) => (*b, None),
-            ExprKind::LabeledBlock { block, label, .. } => (*block, Some(label.clone())),
+        if body.exprs[e].type_id == TypeTable::UNIT {
+            return Lattice::Unevaluated;
+        }
+        let block = match &body.exprs[e].kind {
+            ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => *b,
             _ => return Lattice::Unevaluated,
         };
         match self.exec_block(body, block) {
@@ -497,10 +508,17 @@ impl Interpreter<'_> {
             Flow::Break {
                 label: Some(broke),
                 value,
-            } if label.as_deref() == Some(broke.as_str()) => value,
-            Flow::Break { .. } | Flow::Return(_) | Flow::Continue | Flow::Bail => {
-                Lattice::Unevaluated
+            } => {
+                let own = matches!(
+                    &body.exprs[e].kind,
+                    ExprKind::LabeledBlock { label, .. } if *label == broke
+                );
+                if own { value } else { Lattice::Unevaluated }
             }
+            Flow::Break { label: None, .. }
+            | Flow::Return(_)
+            | Flow::Continue
+            | Flow::Bail => Lattice::Unevaluated,
         }
     }
 
