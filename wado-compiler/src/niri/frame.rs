@@ -18,7 +18,7 @@ use crate::nir_visitor::NirRefVisitor;
 use crate::tir::TypeTable;
 
 use super::place::{borrowed_place_operand, overlapping_places, place_of};
-use super::region::{region_is_self_contained, region_shape};
+use super::region::{region_is_self_contained, region_shape, value_block_shape};
 use super::trackability::{Reached, aggregate_safe_locals, clobbered_locals};
 use super::{
     COPY_CHARGE_DIVISOR, CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice,
@@ -70,6 +70,21 @@ enum Flow {
     /// The engine could not follow the program: abandon the evaluation so the
     /// original call survives.
     Bail,
+}
+
+/// The value `flow` leaves a value block with: its fallthrough, or what a
+/// `break` carries to the block's own label. Anything else — a `return`, a
+/// `continue`, a `break` past the block — is control, not a value, and is the
+/// caller's to handle.
+fn value_of_block_flow(flow: Flow, label: Option<&str>) -> Result<Lattice, Flow> {
+    match flow {
+        Flow::Fallthrough(value) => Ok(value),
+        Flow::Break {
+            label: Some(broke),
+            value,
+        } if label == Some(broke.as_str()) => Ok(value),
+        other => Err(other),
+    }
 }
 
 /// The loop-body nodes one iteration may rewrite, kept so the next iteration
@@ -278,12 +293,9 @@ impl Interpreter<'_> {
             }
             StmtKind::LabeledBlock { label, block } => {
                 let (label, block) = (label.clone(), *block);
-                match self.exec_block(body, block) {
-                    Flow::Break {
-                        label: Some(broke),
-                        value,
-                    } if broke == label => Flow::Fallthrough(value),
-                    other => other,
+                match value_of_block_flow(self.exec_block(body, block), Some(&label)) {
+                    Ok(value) => Flow::Fallthrough(value),
+                    Err(other) => other,
                 }
             }
             StmtKind::LetDestructure { .. } => Flow::Bail,
@@ -490,29 +502,17 @@ impl Interpreter<'_> {
     /// value; both stay `Unevaluated`, and every consumer abandons the frame
     /// on a non-constant, so a partial execution is never observed.
     fn exec_value_block(&mut self, body: &mut Body, e: ExprId) -> Lattice {
-        if body.exprs[e].type_id == TypeTable::UNIT {
+        let Some((block, _)) = value_block_shape(body, e) else {
             return Lattice::Unevaluated;
-        }
-        let block = match &body.exprs[e].kind {
-            ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => *b,
-            _ => return Lattice::Unevaluated,
         };
-        match self.exec_block(body, block) {
-            Flow::Fallthrough(value) => value,
-            Flow::Break {
-                label: Some(broke),
-                value,
-            } => {
-                let own = matches!(
-                    &body.exprs[e].kind,
-                    ExprKind::LabeledBlock { label, .. } if *label == broke
-                );
-                if own { value } else { Lattice::Unevaluated }
-            }
-            Flow::Break { label: None, .. }
-            | Flow::Return(_)
-            | Flow::Continue
-            | Flow::Bail => Lattice::Unevaluated,
+        let flow = self.exec_block(body, block);
+        let label = match &body.exprs[e].kind {
+            ExprKind::LabeledBlock { label, .. } => Some(label.as_str()),
+            _ => None,
+        };
+        match value_of_block_flow(flow, label) {
+            Ok(value) => value,
+            Err(_) => Lattice::Unevaluated,
         }
     }
 
@@ -761,15 +761,7 @@ impl Interpreter<'_> {
         let caller = self.swap_frame(region);
         let flow = self.exec_block(&mut scratch, block);
         self.swap_frame(caller);
-        let lattice = match flow {
-            Flow::Fallthrough(lattice) => lattice,
-            Flow::Break {
-                label: Some(broke),
-                value,
-            } if label == Some(broke.as_str()) => value,
-            Flow::Break { .. } | Flow::Return(_) | Flow::Continue | Flow::Bail => return None,
-        };
-        lattice.as_const()
+        value_of_block_flow(flow, label).ok()?.as_const()
     }
 
     /// Charge the step budget for the copy of `body` a region run makes before
