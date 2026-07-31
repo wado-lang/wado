@@ -520,6 +520,10 @@ trait Sized {}
      what lets `List<T>` implement `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>`
      and `IndexValue<RangeInclusive<i32>>` at once. `From` likewise has a dedicated
      resolution path (WEP 2026-03-16).
+   - **Resolution**: [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)
+     (not yet implemented) generalizes the operand-type selection to named method
+     calls within one trait's argument lists, and adds qualified call forms for
+     cross-trait collisions.
 
 ### Comparison with Rust
 

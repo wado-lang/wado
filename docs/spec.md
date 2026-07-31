@@ -2584,7 +2584,8 @@ fn dedup_sorted<T: Ord>(items: List<T>) -> List<T> { ... }
 
 A trait that reaches itself through supertraits is an error. A method name
 reachable through more than one of a receiver's bounds is ambiguous at the call
-site and must be renamed — Wado has no qualified call form to disambiguate one.
+site and must be renamed — Wado has no qualified call form to disambiguate one
+yet (designed in [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)).
 
 #### Multiple Traits
 
@@ -2766,11 +2767,13 @@ impl<T: Eq> Eq for Pair<T> {
 #### Not Yet Implemented
 
 - Trait objects (`dyn Trait`)
-- Fully qualified syntax for disambiguation (`<Type as Trait>::method()`)
+- Fully qualified syntax for disambiguation (`<Type as Trait>::method()`);
+  designed in [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)
 - Using bounds for method resolution on type parameters (calling `T.method()` where `T: Trait`)
 - Choosing between one trait's argument lists at a call site, from the argument
-  or expected types (`impl Take<A> for bool` alongside `impl Take<B> for bool`);
-  such a call is reported as ambiguous
+  types (`impl Take<A> for bool` alongside `impl Take<B> for bool`); such a
+  call is reported as ambiguous. The selection rule is designed in
+  [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)
 
 ### Coherence and Orphan Rules
 
@@ -2915,6 +2918,10 @@ selection does not consider the argument or expected types. Operators are not
 affected: indexing and arithmetic resolve their impl by operand type, which is
 why `List<T>` implements `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>`,
 and `IndexValue<RangeInclusive<i32>>` at once.
+
+[WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md) designs the
+lifting of this restriction (not yet implemented): argument-directed selection
+among one trait's argument lists, and qualified call forms for everything else.
 
 ### Iterator Traits
 

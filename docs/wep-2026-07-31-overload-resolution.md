@@ -1,0 +1,301 @@
+# WEP: Overload Resolution
+
+## Context
+
+A method call `recv.m(args)` resolves by receiver type and method name alone.
+Lookup is strictly sequential and first-hit-wins — concrete ref impls, inherent
+impls, trait impls on the base type, type-parameter bounds, associated-type
+projection bounds (`resolve_method_call_with`,
+`wado-compiler/src/elaborator/method_call.rs`). Arguments play no part in
+selection; they are elaborated _after_ it, against the winner's signature, so
+that parameter types drive literal coercion and default insertion. This is the
+chicken-and-egg noted in
+[Struct and Trait System](./wep-2026-01-13-struct-and-trait.md): selecting by
+argument type would require typing the arguments first, independently of any
+candidate.
+
+The name-only rule leaves three collision shapes, with inconsistent outcomes:
+
+| Shape                                                              | Today                                                         |
+| ------------------------------------------------------------------ | ------------------------------------------------------------- |
+| One trait at two argument lists (`Take<A>` / `Take<B>` for `bool`) | Rejected: `AmbiguousTraitArguments`                           |
+| Two traits sharing a method name, concrete receiver                | Silently takes the first after a local-impls-first sort       |
+| Two traits sharing a method name via bounds / supertraits          | Rejected: `AmbiguousTraitMethod` — and no escape but renaming |
+
+The second row is a defect: which trait's method runs depends on an internal
+sort order the user never sees. The third row is the gap
+[Super Traits](./wep-2026-07-27-super-traits.md) documents — "a qualified call
+form that does not exist yet".
+
+Meanwhile, two resolution paths already select an implementation from types at
+the call site:
+
+- Indexing filters `IndexValue<I>` / `IndexRef<I>` impls by the operand's type
+  (`find_indexing_trait_impl`), which is what lets `List<T>` implement
+  `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>`, and
+  `IndexValue<RangeInclusive<i32>>` at once.
+- `Type::from(x)` / `try_from` filter `From<T>` / `TryFrom<T>` impls by the
+  argument's type (`locate_static_method_impl` with an `arg_type_hint`).
+
+Both bake the winning trait's spelling into the mangled method name
+(`Type^Trait::method`), which is also how monomorphization discriminates
+instances (`InstantiationKey` keys on the mangled name plus type-argument
+vectors). The backend is already argument-sensitive; only named method calls
+lack the mechanism.
+
+Arithmetic operators are a third, inconsistent case: `find_arithmetic_trait_impl`
+matches `Add` by base name and takes the first impl, so `Add<X>` beside `Add<Y>`
+resolves by declaration order rather than by RHS type.
+
+The design constraint is the
+[design philosophy](./design-philosophy.md): no function overloading. This WEP
+does not add it. What it defines is which candidate sets are legal, how a unique
+candidate is chosen from types available at the call site, and the explicit
+syntax for naming one when the compiler cannot.
+
+## Decision
+
+### What can and cannot overload
+
+Never overloadable — declaring a second one with the same name is an error, as
+today:
+
+- free functions,
+- inherent methods on one type (per instantiation),
+- methods within one trait declaration,
+- arity of one function (default arguments cover optional parameters).
+
+The only overload set Wado has: one trait implemented for one receiver at
+several argument lists (`impl Take<A> for bool` beside `impl Take<B> for bool`).
+Coherence already accepts these — they are different traits instantiation-wise,
+but they share one declaration, so every member has one contract and one
+signature shape, parameterized by the trait's type arguments. Selecting among
+them by argument type is the same operation indexing already performs, now
+available to every generic trait.
+
+Distinct traits never form an overload set. A method name reachable through two
+different trait declarations is an ambiguity error at the call site — in every
+shape, including the concrete-receiver case that today resolves silently. The
+rationale is twofold: impls of different traits share no contract, so a
+type-directed pick is a semantic guess; and allowing it would reintroduce ad-hoc
+overloading through one-method traits, which the design philosophy rules out.
+The escape is the qualified call syntax below, not renaming.
+
+### Resolution algorithm
+
+For the trait-impl step of method lookup (inherent methods still shadow trait
+methods; the ref-impl priority and the earlier steps are unchanged):
+
+1. Collect the candidate impls providing `m` for the receiver, as today
+   (impl-index buckets along the newtype chain, plus satisfied blankets; for a
+   generic receiver, the transitive closure of its bounds).
+2. Group candidates by trait identity: base trait name plus declaring module.
+3. More than one group → ambiguity error naming every group's method as
+   `Type^Trait::m` and suggesting a qualified call.
+4. One group with one argument list → resolved; today's path, unchanged.
+5. One group with several argument lists → argument-directed selection:
+   1. Probe-type each argument (next section).
+   2. Keep each candidate whose substituted parameter list matches: at a
+      position where the probe produced a concrete type, the parameter must
+      accept exactly that type (the standard `&mut T` → `&T` coercion counts;
+      nothing else does); at a position where the argument is a literal, the
+      parameter must merely _admit_ the literal (see the admissibility table);
+      a parameter still containing an unsubstituted method-level type parameter
+      accepts anything.
+   3. All survivors naming the same trait instantiation → the existing
+      [specific-impls-win rule](./spec.md#specific-impls-win) picks the impl.
+      Survivors naming distinct instantiations → ambiguity error. No other
+      ranking exists — there is no best match, only a unique match.
+   4. A unique survivor is selected: its full trait spelling is recorded in the
+      dispatch fact and mangled name, and the arguments are then elaborated
+      against its signature exactly as an unambiguous call is today (literal
+      coercion, range checks, defaults, effect checking).
+
+Static calls `Type::m(args)` follow the same grouping and selection over
+associated functions. `from` / `try_from` keep their dedicated hint-based path
+for now (see Interactions).
+
+Because a trait declaration fixes its methods' arity and owns their default
+arguments, every candidate in an overload set has the same argument count —
+arity never discriminates, and no arity filter exists.
+
+### Probe typing
+
+Selection needs argument types before any signature is chosen, so arguments are
+probe-typed: elaborated bottom-up with no expected type, under a speculation
+discipline — no facts recorded, no diagnostics emitted. Expressions with
+context-free types (variables, field reads, calls with known return types,
+named struct literals, ranges) produce their type. Literals produce a class,
+not a type:
+
+| Argument                       | Probe result  | Admissible parameters                          |
+| ------------------------------ | ------------- | ---------------------------------------------- |
+| integer literal                | IntLit        | integer types, floats, their newtypes          |
+| float literal                  | FloatLit      | float types, their newtypes                    |
+| string / template literal      | StrLit        | `String`, its newtypes                         |
+| `null`                         | NullLit       | any `Option<T>`                                |
+| `[…]` sequence literal         | SeqLit        | tuples of that arity, sequence-coercible types |
+| `{…}` anonymous struct literal | MapLit        | struct types, `TreeMap`-coercible types        |
+| closure literal                | its `fn` type | parameters are annotated, so the type is exact |
+| unresolvable expression        | Unknown       | every parameter (e.g. a nested ambiguous call) |
+
+A literal class admits candidates; it never selects one. `f.take(42)` against
+`Take<i32>` beside `Take<i64>` is an ambiguity error — the fix is `42 as i64`,
+a binding with a type annotation, or a qualified call — because letting the
+literal's default type decide would make adding an `impl Take<i32>` silently
+retarget every existing call that meant `Take<i64>`. The common cases are
+unaffected: `l[0]` still resolves, because an integer literal does not admit
+the range-typed candidates; `f.take(B { v: 1 })` resolves, because a named
+struct literal has a context-free type.
+
+Probe results exist only to filter. After selection the winning signature
+drives ordinary argument elaboration, so a literal still coerces to the chosen
+parameter type, and value-range checks run there — selection never depends on a
+literal's value.
+
+### Qualified calls
+
+Two Rust-compatible forms name a candidate explicitly.
+
+Trait-qualified (UFCS): `Trait::method(receiver, args…)`. The `self` parameter
+becomes the first argument, spelled to match its mode — `&x` for `&self`,
+`&mut x` for `&mut self`, the value for `self`. This resolves every cross-trait
+collision, including supertrait diamonds inside generic bodies
+(`Base::name(&x)`), closing the escape gap Super Traits documents. If the named
+trait itself has several argument lists for the receiver, argument-directed
+selection applies within it.
+
+Fully qualified: `<Type as Trait<Args>>::method(args…)`. Pins the receiver
+type, the trait, and its argument list. This is the general escape — required
+for associated functions without `self` (`<Config as Loadable>::load(path)`)
+and for pinning one argument list (`<bool as Take<A>>::take(f, x)`). The
+leading `<` is unambiguous in expression position: no expression starts with
+`<` today.
+
+For a static path `Head::name(args)`, `Head` resolves in the type namespace
+first as today (type → associated function; `interface` → effect operation);
+a trait head makes it a UFCS call. The reflect intrinsics
+(`ReflectStruct::<T>::members()`) keep their existing spelling, where the
+turbofish names the reflected type.
+
+Rejected spelling: `Type^Trait::method` in source. `^` is the xor operator, so
+`A ^ B::m(x)` already parses as an expression; the caret form stays what it is
+— the internal mangled-name and
+[symbol-notation](./wep-2026-06-14-symbol-notation.md) grammar for tooling,
+docs, and diagnostics.
+
+### Diagnostics
+
+Both ambiguity errors follow
+[Diagnostic Reason Chains](./wep-2026-06-02-diagnostic-reason-chains.md): the
+error names every surviving candidate in symbol notation, states per candidate
+why it survived or was filtered ("argument 1 is an integer literal, admitted by
+both `Take<i32>` and `Take<i64>`"; "argument 2 has type `String`, parameter is
+`i32`"), and carries a fix-it: a qualified call for cross-trait collisions, an
+`as` cast or annotation for literal-only distinctions. The no-survivor case
+(candidates exist, all filtered) reports each candidate with the position that
+rejected it instead of a bare "method not found".
+
+### Interactions
+
+| Feature           | Interaction                                                                                                                                                                                                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Operators         | Indexing already conforms to this rule. Arithmetic is brought under it: `Add<X>` beside `Add<Y>` selects by RHS probe type instead of declaration order. `Eq` / `Ord` take no trait arguments — unaffected.                                                                                                                    |
+| `From` / `?`      | Unchanged. `?`'s conversion is target-type-directed by design; `Type::from(x)`'s hint path resolves the argument fully (a literal's default type selects), which the general rule deliberately refuses. Unifying `from` onto the general rule is follow-up, gated on accepting that `i64::from(42)`-style calls become errors. |
+| Default arguments | Owned by the trait declaration, identical across an overload set — no interaction with selection.                                                                                                                                                                                                                              |
+| Effects           | Never considered by selection; the chosen method's `with` clause is checked as today.                                                                                                                                                                                                                                          |
+| Coherence         | Untouched. Selection picks an argument list among impls coherence already accepts; overlapping impls of one instantiation remain errors.                                                                                                                                                                                       |
+| Newtypes          | Inherited impls are candidates on the newtype receiver as today; the same grouping and selection apply.                                                                                                                                                                                                                        |
+| Monomorphization  | Unaffected. The chosen trait's spelling lands in the mangled name, which `InstantiationKey` already discriminates on — the same shape the indexing and `From` paths produce today.                                                                                                                                             |
+| LSP / tooling     | Hover and go-to-definition read the recorded dispatch fact; probe typing leaves no persistent state.                                                                                                                                                                                                                           |
+
+### Non-goals
+
+- Ad-hoc overloading of free functions or inherent methods — permanently out,
+  per the design philosophy.
+- Expected-type or return-type directed selection. Inference stays forward;
+  `?` / `From` remains the one target-directed conversion, on its own path.
+- Ranking. Beyond the existing specific-impls-win rule there is no preference
+  order; resolution is unique-or-error, so adding a preference later would only
+  turn errors into compiles (backward-compatible), while removing one never is.
+- Trait-import scoping of candidates. Trait impls stay globally visible to
+  method lookup, as today; scoping candidates by `use` is a separate question.
+
+## Implementation
+
+Landing order — each phase keeps the suite green and is useful alone:
+
+1. Qualified call forms: parser support for `<Type as Trait<Args>>::method` and
+   trait-head resolution in `resolve_static_method_call`
+   (`method_call.rs:1116`), recording an ordinary `MethodDispatch` /
+   `StaticMethodDispatch`. Pure addition; provides the escape hatch before any
+   tightening.
+2. Cross-trait ambiguity on concrete receivers: `select_trait_match`
+   (`method_lookup.rs:2515`) stops taking the first of two trait groups and
+   reports the error, extending `report_trait_argument_ambiguity` beyond
+   same-base-name survivors. The local-impls-first sort survives only as the
+   tie-break among identical instantiations. Requires an audit of stdlib and
+   fixtures for calls that today resolve through the silent preference — the
+   blanket `Inspect` / `ReflectStruct` impls put same-named methods on every
+   struct, so user traits reusing stdlib method names will surface here.
+3. Argument-directed selection: probe typing as a speculative `resolve_expr`
+   run against a scratch `TypeAnnotations` that is discarded, then the filter in
+   `select_trait_match`. Only calls whose candidate set has several argument
+   lists pay the probe cost. `find_method_in_trait_bounds`
+   (`trait_query.rs:1610`) gets the same grouping so `T: Take<A> + Take<B>`
+   behaves like the concrete case.
+4. Follow-ups: arithmetic RHS selection in `find_arithmetic_trait_impl`;
+   folding the `from` / `try_from` hint path into the general mechanism.
+
+Test surface: extend `trait_ambiguous_argument_lists.wado` (resolvable variants
+with a discriminating concrete argument), a cross-trait concrete-receiver
+ambiguity fixture, qualified-call fixtures for each collision shape,
+`trait_query.rs` cases proving `Base::name(&x)` resolves a diamond, and a guard
+that `trait_argument_lists_operators_unaffected.wado` behavior is now the
+general rule rather than an exception.
+
+## Consequences
+
+Benefits:
+
+- The `Take<A>` / `Take<B>` pattern becomes callable — trait-argument APIs
+  (unit-typed conversions, protocol selectors) no longer dead-end at the call
+  site.
+- Silent wrong dispatch disappears: the undiagnosed cross-trait first-wins is
+  replaced by an error with an explicit escape.
+- Supertrait diamonds and bound collisions get a fix that is not "rename the
+  method".
+- One principle covers what were three carve-outs (indexing, `From`,
+  specific-impls-win) plus named calls: within one trait, types select; across
+  traits, the user selects.
+
+Trade-offs:
+
+- Making the concrete-receiver collision an error is a breaking change where
+  code relied on the locality preference; phase 2's audit and the phase-1
+  escape hatch bound the migration.
+- Probe typing elaborates ambiguous-call arguments twice. Only multi-argument-
+  list candidate sets pay; single-candidate calls (the overwhelming majority)
+  are untouched.
+- Literal-only distinctions error where other languages would pick a default.
+  This is deliberate — predictability over convenience — and the diagnostic
+  carries the one-token fix.
+- Two new syntax forms. Both are Rust's, chosen over inventing a Wado-specific
+  spelling precisely because they are already familiar and already reserved in
+  the spec's "not yet implemented" list.
+
+## See Also
+
+- [Struct and Trait System](./wep-2026-01-13-struct-and-trait.md) — the
+  name-only resolution rule this WEP extends
+- [Super Traits](./wep-2026-07-27-super-traits.md) — the bound-collision rule
+  and the escape gap closed here
+- [Operator Overloading](./wep-2026-01-18-operator-overloading.md) and
+  [Indexing Traits Design](./wep-2026-01-20-indexing-traits.md) — the operand-
+  type selection precedent
+- [Conversion Traits](./wep-2026-03-16-conversion-traits.md) — the `From` hint
+  path
+- [Default Arguments](./wep-2026-04-11-default-arguments.md) — why arity never
+  discriminates
+- [Symbol Notation](./wep-2026-06-14-symbol-notation.md) — the `Type^Trait`
+  spelling that stays tooling-only

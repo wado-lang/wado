@@ -88,9 +88,11 @@ supertraits of a diamond sharing one, and a `<T: Left + Right>` written by hand.
 Rejecting at the declaration would cover only the first, and leave the other two
 resolving silently to whichever bound came first.
 
-Unlike Rust, Wado offers no escape: `Base::name(&x)` needs a qualified call form
-that does not exist yet, so today the only fix is to rename. Still better than a
-silent wrong dispatch.
+Unlike Rust, Wado offers no escape yet: `Base::name(&x)` needs a qualified call
+form, designed in
+[WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md) but not yet
+implemented, so today the only fix is to rename. Still better than a silent
+wrong dispatch.
 
 ### Standard library
 
