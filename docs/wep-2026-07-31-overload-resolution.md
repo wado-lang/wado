@@ -47,6 +47,18 @@ Arithmetic operators are a third, inconsistent case: `find_arithmetic_trait_impl
 matches `Add` by base name and takes the first impl, so `Add<X>` beside `Add<Y>`
 resolves by declaration order rather than by RHS type.
 
+The static path is not merely name-only, it is circular. `Type::m(args)`
+elaborates its arguments against parameter types that
+`lookup_static_method_param_types_keyed` finds by (receiver, method) name —
+`static_method_index` is searched with `find`, so with two conversion impls it
+returns whichever comes first — and _then_ selects the impl from the resulting
+argument type. Selection shapes the argument, and the argument drives selection.
+Where the two disagree, no impl matches: `Wrapper::from(42)` against
+`From<String>` beside `From<i64>` typed the literal `i32` and matched neither,
+which is now reported rather than reaching WIR build as a trait-less
+`Wrapper::from` (an ICE until this WEP's groundwork landed). Argument-directed
+selection is what removes the circularity, not an extra feature layered on it.
+
 The design constraint is the
 [design philosophy](./design-philosophy.md): no function overloading. This WEP
 does not add it. What it defines is which candidate sets are legal, how a unique
@@ -291,7 +303,11 @@ Landing order — each phase keeps the suite green and is useful alone:
    (`trait_query.rs:1610`) gets the same grouping so `T: Take<A> + Take<B>`
    behaves like the concrete case.
 4. Follow-ups: arithmetic RHS selection in `find_arithmetic_trait_impl`;
-   folding the `from` / `try_from` hint path into the general mechanism.
+   folding the `from` / `try_from` hint path into the general mechanism. That
+   fold is what turns `Wrapper::from(42)` from the diagnostic it now reports
+   into a resolved call — an integer literal admits `From<i64>` and not
+   `From<String>`, so exactly one candidate survives. Until then the circular
+   ordering stands and the error asks for `42 as i64`.
 
 Test surface: extend `trait_ambiguous_argument_lists.wado` (resolvable variants
 with a discriminating concrete argument), a cross-trait concrete-receiver

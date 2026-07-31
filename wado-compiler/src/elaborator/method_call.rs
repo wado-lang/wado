@@ -1778,6 +1778,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             arg_type_hint.as_deref(),
         );
 
+        // The expected type that shaped the argument came from
+        // `lookup_static_method_param_types_keyed`, which keys on (receiver,
+        // method) alone — with two conversion impls it can be a different
+        // impl's than the one the argument's type then selects. Left alone the
+        // mangled name loses its trait and reaches WIR build unresolved, so the
+        // disagreement is reported here instead of ICE-ing there.
+        if trait_name_opt.is_none()
+            && let Some(arg_type) = arg_type_hint.as_deref()
+        {
+            let candidates = self.conversion_impl_arg_types(&struct_name, &static_call.method);
+            if !candidates.is_empty() {
+                let _ = self.emit(TypeError::NoMatchingTraitArgument {
+                    trait_name: self.conversion_trait_name(&static_call.method),
+                    receiver: struct_name,
+                    method: static_call.method.clone(),
+                    arg_type: arg_type.to_string(),
+                    candidates,
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
+            }
+        }
+
         let mangled_func_name = MethodName::format_local(
             &mangled_struct_name,
             trait_name_opt.as_deref(),
@@ -2644,6 +2667,85 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .and_then(|r| r.trait_name)
     }
 
+    /// Which conversion trait a static `from` / `try_from` call names.
+    pub(super) fn conversion_trait_name(&self, method_name: &str) -> String {
+        if method_name == "try_from" {
+            "TryFrom".to_string()
+        } else {
+            self.tysys
+                .type_table
+                .borrow()
+                .compiler_trait_name(crate::compiler_item::CompilerItem::From)
+                .to_string()
+        }
+    }
+
+    /// The source types the receiver's conversion impls accept
+    /// (`From<String>` beside `From<i64>` → `["String", "i64"]`), in candidate
+    /// order. Diagnostic-only: it names the alternatives in
+    /// [`TypeError::NoMatchingTraitArgument`] and never decides a call, so it
+    /// walks the impls directly rather than sharing
+    /// [`Self::locate_static_method_impl`]'s early-return traversal.
+    pub(super) fn conversion_impl_arg_types(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Vec<String> {
+        let from_trait_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_trait_name(crate::compiler_item::CompilerItem::From)
+            .to_string();
+        let mut found = Vec::new();
+        let mut collect = |impl_block: &ast::ImplBlock, module: &ModuleSource| {
+            let Some(trait_type) = impl_block.trait_type.as_ref() else {
+                return;
+            };
+            let base = Self::get_type_name_static(trait_type);
+            if Self::get_type_name_static(&impl_block.ty) != struct_name
+                || (base != from_trait_name && base != "TryFrom")
+                || !impl_block.methods.iter().any(|m| m.name == method_name)
+            {
+                return;
+            }
+            if let ast::Type::Generic(g) = trait_type
+                && let Some(arg) = g.args.first()
+            {
+                let arg_name = Self::get_type_name_static(arg);
+                // The current module's impls are in the impl index too, so the
+                // two passes below see each of them twice. Coherence forbids
+                // two impls of one conversion, so a repeat is always the same
+                // impl seen again.
+                let resolved = self.import_original_name(&arg_name, module);
+                if !found.contains(&resolved) {
+                    found.push(resolved);
+                }
+            }
+        };
+
+        for item in self.current_module_items {
+            if let Item::Impl(impl_block) = item {
+                collect(impl_block, &self.current_module_source);
+            }
+        }
+        if let Some(entries) = self
+            .tysys
+            .trait_env
+            .impl_index
+            .get(&self.impl_target(struct_name))
+        {
+            for (module_source, item_id) in entries {
+                if let Some(module) = self.loaded_modules.get(module_source)
+                    && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
+                {
+                    collect(impl_block, module_source);
+                }
+            }
+        }
+        found
+    }
+
     /// Locate a static trait method impl, returning the resolved identity
     /// (`module`, `type_name`, `method_name`, `trait_name`). Used so that
     /// `FunctionRef` gets the correct `module_source` — especially when a
@@ -3049,6 +3151,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name,
             arg_type_hint.as_deref(),
         );
+        // The expected type that shaped the argument came from
+        // `lookup_static_method_param_types_keyed`, which keys on (receiver,
+        // method) alone — with two conversion impls it can be a different
+        // impl's than the one the argument's type then selects. Left alone the
+        // mangled name loses its trait and reaches WIR build unresolved, so the
+        // disagreement is reported here instead of ICE-ing there.
+        if resolved.is_none()
+            && let Some(arg_type) = arg_type_hint.as_deref()
+        {
+            let candidates = self.conversion_impl_arg_types(&actual_struct_name, method_name);
+            if !candidates.is_empty() {
+                let _ = self.emit(TypeError::NoMatchingTraitArgument {
+                    trait_name: self.conversion_trait_name(method_name),
+                    receiver: actual_struct_name.clone(),
+                    method: method_name.to_string(),
+                    arg_type: arg_type.to_string(),
+                    candidates,
+                    span,
+                });
+                return placeholder(TypeTable::ERROR, span);
+            }
+        }
+
         let method_ref = resolved.unwrap_or_else(|| {
             StaticMethodRef::new(
                 self.find_struct_module_source(&actual_struct_name),

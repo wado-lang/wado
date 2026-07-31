@@ -310,6 +310,20 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A static call whose receiver provides the method only through trait
+    /// impls, none of which takes an argument of the call's type —
+    /// `Wrapper::from(42)` against `From<String>` and `From<i64>`. Reported at
+    /// the call: every impl is fine on its own, the argument matches none.
+    NoMatchingTraitArgument {
+        trait_name: String,
+        receiver: String,
+        method: String,
+        arg_type: String,
+        /// The argument types the impls do take, in candidate order.
+        candidates: Vec<String>,
+        span: Span,
+    },
+
     /// A type argument whose associated type does not match the constraint
     /// written on the bound (`T: Collect<Item = i32>` given `Item = String`).
     AssocTypeBoundNotSatisfied {
@@ -874,6 +888,25 @@ impl TypeError {
                     traits
                         .iter()
                         .map(|t| format!("'{t}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and ")
+                ),
+                *span,
+            ),
+            TypeError::NoMatchingTraitArgument {
+                trait_name,
+                receiver,
+                method,
+                arg_type,
+                candidates,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "no impl of '{trait_name}' for '{receiver}' takes an argument of type '{arg_type}'; '{receiver}::{method}' is available for {}",
+                    candidates
+                        .iter()
+                        .map(|c| format!("'{c}'"))
                         .collect::<Vec<_>>()
                         .join(" and ")
                 ),
