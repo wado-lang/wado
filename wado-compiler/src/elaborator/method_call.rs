@@ -1180,14 +1180,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
-        self.resolve_method_call_with(
+        // `call_id: None` — the dispatcher would file the decision under
+        // `method_dispatch`, which reify only reads for a `MethodCallExpr`
+        // node. A qualified call spells its receiver's mode itself (`&x` for
+        // `&self`), so no receiver adjustment is owed and the call is an
+        // ordinary one whose first argument happens to be the receiver: the
+        // decision is recorded as a static dispatch, which reify's `Call` arm
+        // already replays.
+        let outcome = self.resolve_method_call_with(
             MethodCallInput {
                 receiver: placeholder(receiver_type, receiver_ast.span()),
                 receiver_ast: Some(receiver_ast),
                 method_name,
                 method_id: None,
-                call_id: Some(call.id),
-                type_args,
+                call_id: None,
+                type_args: type_args.clone(),
                 type_arg_holes: vec![],
                 args: rest,
                 expected_type,
@@ -1195,9 +1202,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 required_trait: Some(trait_name.to_string()),
             },
             ctx,
-        )
-        .expr
-        .type_id
+        );
+        if let Some((_, _, function_ref)) = outcome.dispatch {
+            let param_is_mut = vec![false; call.args.len()];
+            self.sem.types.static_method_dispatch.insert(
+                call.id,
+                super::sem::types::StaticMethodDispatch {
+                    function_ref,
+                    param_is_mut,
+                    type_args,
+                    param_defaults: vec![],
+                },
+            );
+        }
+        outcome.expr.type_id
     }
 
     /// Resolve a static method call: `List::<i32>::with_capacity(100)` or `Point::origin()`

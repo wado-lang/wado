@@ -288,17 +288,20 @@ Landing order — each phase keeps the suite green and is useful alone:
    distinct candidates rather than one repeated string. The ambiguity errors
    below build on that helper.
 
-   Landed so far: `MethodCallInput::required_trait` constrains which impls may
-   answer, filtered in `find_trait_method_for_type_inner` before
-   `select_trait_match` sees the candidates (so naming a trait resolves what
-   would otherwise be reported ambiguous), and `resolve_call` routes
-   `Trait::method(recv, …)` to the method dispatcher ahead of its argument
-   walk, matching how `T::method(...)` already branches. Annotate types such a
-   call correctly. Reify does not yet replay it: the fact lands in
-   `method_dispatch` under a `Call` node's `AstId`, and reify's `Call` arm
-   looks for `static_method_dispatch`, so the call reaches later phases
-   untyped. Closing that — a dispatch fact reify can replay for the UFCS shape
-   — is what remains of this phase.
+   `MethodCallInput::required_trait` constrains which impls may answer,
+   filtered in `find_trait_method_for_type_inner` before `select_trait_match`
+   sees the candidates — so naming a trait resolves what would otherwise be
+   reported ambiguous — and `resolve_call` routes `Trait::method(recv, …)` to
+   the method dispatcher ahead of its argument walk, matching how
+   `T::method(...)` already branches.
+
+   The decision is filed as a _static_ dispatch, not a method dispatch: a
+   qualified call spells its receiver's mode itself (`&x` for `&self`), so no
+   receiver adjustment is owed and the call is an ordinary one whose first
+   argument happens to be the receiver. That is the shape reify's `Call` arm
+   already replays, and it is why the form needs no reify work of its own —
+   `method_dispatch` would have been the wrong drawer, since reify reads it
+   only for a `MethodCallExpr` node.
 
 2. Cross-trait ambiguity on concrete receivers: `select_trait_match`
    (`method_lookup.rs:2515`) stops taking the first of two trait groups and
