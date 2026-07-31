@@ -18,25 +18,29 @@ use crate::tir::TypeTable;
 
 use super::{CalleeMap, CtfeBuiltinMap};
 
-/// The block behind a region-shaped expression: a `Block` or `LabeledBlock`
-/// with enough statements to be worth running, yielding a value, and ending on
-/// a statement that produces one.
-///
-/// A single-statement block is the lattice projection's case. A block that
-/// yields nothing has no value to fold to, whatever its last statement
-/// computed — an inlined statement call leaves the callee's result there while
-/// the block stands where the program expects none — and the type is what says
-/// so. Refusing both here is what keeps the attempt cheap on the blocks that
-/// are not regions.
-pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&str>)> {
+/// The block behind a `Block` / `LabeledBlock` expression that can yield a
+/// value. A unit-typed block has no value to fold to, whatever its last
+/// statement computed — an inlined statement call leaves the callee's result
+/// there while the block stands where the program expects none — and the type
+/// is what says so.
+pub(super) fn value_block_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&str>)> {
     if body.exprs[e].type_id == TypeTable::UNIT {
         return None;
     }
-    let (block, label) = match &body.exprs[e].kind {
-        ExprKind::Block(b) => (*b, None),
-        ExprKind::LabeledBlock { block, label, .. } => (*block, Some(label.as_str())),
-        _ => return None,
-    };
+    match &body.exprs[e].kind {
+        ExprKind::Block(b) => Some((*b, None)),
+        ExprKind::LabeledBlock { block, label, .. } => Some((*block, Some(label.as_str()))),
+        _ => None,
+    }
+}
+
+/// The value block behind a region-shaped expression: enough statements to be
+/// worth running, ending on a statement that produces the value.
+///
+/// A single-statement block is the lattice projection's case. Refusing it here
+/// is what keeps the attempt cheap on the blocks that are not regions.
+pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&str>)> {
+    let (block, label) = value_block_shape(body, e)?;
     let stmts = &body.blocks[block].stmts;
     if stmts.len() < 2 {
         return None;

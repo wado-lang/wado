@@ -315,6 +315,7 @@ pub(super) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             "builtin::array_copy" => CtfeBuiltin::ArrayCopy,
             "builtin::cold_path" => CtfeBuiltin::ColdPath,
             "builtin::select" => CtfeBuiltin::Select,
+            "builtin::i32_as_char" => CtfeBuiltin::I32AsChar,
             _ => continue,
         };
         map.insert(id, builtin);

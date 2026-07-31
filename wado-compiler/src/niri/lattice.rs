@@ -476,10 +476,30 @@ impl Interpreter<'_> {
                 }
                 _ => Lattice::Unevaluated,
             },
+            CtfeBuiltin::I32AsChar => match args {
+                [value] => self.i32_as_char_lattice(body, value.expr),
+                _ => Lattice::Unevaluated,
+            },
             CtfeBuiltin::ArraySet | CtfeBuiltin::ArrayCopy | CtfeBuiltin::ColdPath => {
                 Lattice::Unevaluated
             }
         }
+    }
+
+    /// `i32_as_char` reinterprets unchecked, so a codepoint outside the
+    /// scalar-value range stays as written rather than folding a value
+    /// `char` cannot hold.
+    fn i32_as_char_lattice(&self, body: &Body, value: Operand) -> Lattice {
+        let Lattice::Const(value) = self.operand_lattice_folded(body, value) else {
+            return Lattice::Unevaluated;
+        };
+        let Some((value, _)) = value.as_int() else {
+            return Lattice::Unevaluated;
+        };
+        u32::try_from(value)
+            .ok()
+            .and_then(char::from_u32)
+            .map_or(Lattice::Unevaluated, |c| Lattice::Const(Value::Char(c)))
     }
 
     /// The arm `select` picks. Both arms run at run time, so the one not taken
