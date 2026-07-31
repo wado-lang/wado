@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785446847375,
+  "lastUpdate": 1785492003761,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -44981,6 +44981,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ac6de33f7e0ffa8df9872d0d67103f19f8dea536"
         },
         "date": 1785446847170,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16302,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276421,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "80528ac2c924cc3a58aad6cce07e5dec01f8f698",
+          "message": "Merge pull request #1721 from wado-lang/claude/niri-string-interpolation-ne0sn1\n\nfeat(niri): fold a self-contained region as a frame started from scratch",
+          "timestamp": "2026-07-31T18:48:48+09:00",
+          "tree_id": "45f28a36eba74f551c3b28bdb3d7e9c64072c0f1",
+          "url": "https://github.com/wado-lang/wado/commit/80528ac2c924cc3a58aad6cce07e5dec01f8f698"
+        },
+        "date": 1785492002904,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
