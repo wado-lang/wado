@@ -2767,8 +2767,11 @@ impl<T: Eq> Eq for Pair<T> {
 #### Not Yet Implemented
 
 - Trait objects (`dyn Trait`)
-- Fully qualified syntax for disambiguation (`<Type as Trait>::method()`);
-  designed in [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)
+- Qualified calls for disambiguation. Designed as UFCS
+  (`Trait::method(recv, …)`) in
+  [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md), which
+  rejects Rust's `<Type as Trait>::method()` spelling; an associated function
+  with no `self` stays unspellable there
 - Using bounds for method resolution on type parameters (calling `T.method()` where `T: Trait`)
 - Choosing between one trait's argument lists at a call site, from the argument
   types (`impl Take<A> for bool` alongside `impl Take<B> for bool`); such a
@@ -2921,7 +2924,8 @@ and `IndexValue<RangeInclusive<i32>>` at once.
 
 [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md) designs the
 lifting of this restriction (not yet implemented): argument-directed selection
-among one trait's argument lists, and qualified call forms for everything else.
+among one trait's argument lists, and a UFCS call form
+(`Trait::method(recv, …)`) for everything else.
 
 ### Iterator Traits
 

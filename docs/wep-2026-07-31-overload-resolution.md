@@ -155,34 +155,68 @@ literal's value.
 
 ### Qualified calls
 
-Two Rust-compatible forms name a candidate explicitly.
+One form names a candidate explicitly: trait-qualified (UFCS)
+`Trait::method(receiver, args…)`. The `self` parameter becomes the first
+argument, spelled to match its mode — `&x` for `&self`, `&mut x` for
+`&mut self`, the value for `self`:
 
-Trait-qualified (UFCS): `Trait::method(receiver, args…)`. The `self` parameter
-becomes the first argument, spelled to match its mode — `&x` for `&self`,
-`&mut x` for `&mut self`, the value for `self`. This resolves every cross-trait
-collision, including supertrait diamonds inside generic bodies
-(`Base::name(&x)`), closing the escape gap Super Traits documents. If the named
-trait itself has several argument lists for the receiver, argument-directed
-selection applies within it.
+```wado
+Display::fmt(&p, f);          // p implements two traits declaring `fmt`
+Base::name(&x);               // supertrait diamond inside a generic body
+Take::<A>::take(f, B { … });  // one trait's argument list, pinned
+```
 
-Fully qualified: `<Type as Trait<Args>>::method(args…)`. Pins the receiver
-type, the trait, and its argument list. This is the general escape — required
-for associated functions without `self` (`<Config as Loadable>::load(path)`)
-and for pinning one argument list (`<bool as Take<A>>::take(f, x)`). The
-leading `<` is unambiguous in expression position: no expression starts with
-`<` today.
+The receiver argument supplies `Self`, so the trait's own type arguments are
+all a turbofish needs to carry. That covers both collision shapes: across
+traits, the trait name discriminates; within one trait, the turbofish pins the
+argument list. This closes the escape gap Super Traits documents. If the named
+trait still has several argument lists for the receiver and no turbofish is
+written, argument-directed selection applies within it.
 
-For a static path `Head::name(args)`, `Head` resolves in the type namespace
-first as today (type → associated function; `interface` → effect operation);
-a trait head makes it a UFCS call. The reflect intrinsics
-(`ReflectStruct::<T>::members()`) keep their existing spelling, where the
-turbofish names the reflected type.
+No new grammar: `Take::<A>::take(f, x)` is the static-path shape
+`List::<i32>::with_capacity(10)` already uses. What is new is only resolution —
+for a static path `Head::name(args)`, `Head` resolves in the type namespace as
+today (type → associated function; `interface` → effect operation), and a trait
+head, today an `UnknownFunction` error, now makes it a UFCS call. The reflect
+intrinsics (`ReflectStruct::<T>::members()`) keep their existing spelling,
+where the turbofish names the reflected type instead — they are compiler
+intrinsics whose traits declare no type parameters, so the two readings never
+meet.
 
-Rejected spelling: `Type^Trait::method` in source. `^` is the xor operator, so
+Rejected: `<Type as Trait<Args>>::method(args…)`. It pins the receiver type as
+well, which is redundant wherever a receiver argument exists, and it costs a
+whole angle-bracket path grammar. The one thing it would buy is named below,
+and does not pay for the syntax.
+
+Rejected: `Type^Trait::method` in source. `^` is the xor operator, so
 `A ^ B::m(x)` already parses as an expression; the caret form stays what it is
 — the internal mangled-name and
 [symbol-notation](./wep-2026-06-14-symbol-notation.md) grammar for tooling,
 docs, and diagnostics.
+
+### The uncovered case
+
+An associated function with no `self` has no receiver argument, so UFCS cannot
+supply `Self`. When one type implements two traits that each declare an
+associated function of the same name, the call is ambiguous with no escape:
+
+```wado
+trait Loadable   { fn load(p: String) -> Self; }
+trait Restorable { fn load(p: String) -> Self; }
+impl Loadable for Config { … }
+impl Restorable for Config { … }
+
+Config::load(p);    // ERROR: ambiguous, and unspellable — rename one
+```
+
+This is left open. The shape is narrow — `From` / `TryFrom` keep their own
+path, and the prelude's `Default::default` / `FromStr::from_str` do not collide
+with each other — so renaming is an acceptable answer for a case that has not
+arisen. If it does, the follow-up is a spelling that names `Self` without a
+receiver, not the angle-bracket path: either binding `Self` from the expected
+type (`let c: Config = Loadable::load(p)`, which contradicts this WEP's
+forward-inference non-goal and so needs its own decision), or a turbofish that
+names `Self` on the trait head.
 
 ### Diagnostics
 
@@ -225,11 +259,11 @@ rejected it instead of a bare "method not found".
 
 Landing order — each phase keeps the suite green and is useful alone:
 
-1. Qualified call forms: parser support for `<Type as Trait<Args>>::method` and
-   trait-head resolution in `resolve_static_method_call`
-   (`method_call.rs:1116`), recording an ordinary `MethodDispatch` /
-   `StaticMethodDispatch`. Pure addition; provides the escape hatch before any
-   tightening.
+1. Qualified calls: trait-head resolution in `resolve_static_method_call`
+   (`method_call.rs:1116`) — where a trait head is today an `UnknownFunction`
+   error (`method_call.rs:1168`) — binding the first argument as the receiver
+   and recording an ordinary `MethodDispatch`. No parser change. Pure addition;
+   provides the escape hatch before any tightening.
 2. Cross-trait ambiguity on concrete receivers: `select_trait_match`
    (`method_lookup.rs:2515`) stops taking the first of two trait groups and
    reports the error, extending `report_trait_argument_ambiguity` beyond
@@ -280,9 +314,12 @@ Trade-offs:
 - Literal-only distinctions error where other languages would pick a default.
   This is deliberate — predictability over convenience — and the diagnostic
   carries the one-token fix.
-- Two new syntax forms. Both are Rust's, chosen over inventing a Wado-specific
-  spelling precisely because they are already familiar and already reserved in
-  the spec's "not yet implemented" list.
+- One new call form, and no new grammar for it — but `Trait::method(recv, …)`
+  makes a static path's meaning depend on whether its head is a type or a
+  trait. The two never collide (a name is one or the other), and Rust sets the
+  precedent.
+- Colliding associated functions stay unspellable (see The uncovered case). The
+  spec's "not yet implemented" list keeps that entry, narrowed.
 
 ## See Also
 
