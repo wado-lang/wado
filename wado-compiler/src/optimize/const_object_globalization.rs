@@ -268,13 +268,15 @@ fn collect_candidates(
 ) {
     let single_decl_locals = locals_declared_once(body);
     let siblings = sibling_const_locals(body, gate, &single_decl_locals);
-    // Skeleton mentions plus value-pool reads: a local read only through a
-    // promoted `Operand::Value` has no `Local` node left, and the write-only
-    // elider keeps exactly those, so the dead-binding gate must count them
-    // as live too.
+    // Skeleton mentions only. The pool-wide `opaque_local_sources` is not a
+    // usable substitute for the missing pool reads: the pool is append-only,
+    // so it also names locals whose promoted reads have long folded away, and
+    // counting those as live resurrects exactly the dead hoists the gate
+    // exists to refuse. The cost is a skipped hoist for a binding whose every
+    // surviving read is a promoted operand — which the write-only elider then
+    // keeps as a local, unhoisted.
     let mut read_locals = IndexSet::default();
     collect_reads(body, &mut read_locals);
-    read_locals.extend(body.values.opaque_local_sources());
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
