@@ -78,7 +78,7 @@ impl Interpreter<'_> {
     ///
     /// A scalar the scratch backend declines to promote is memoized instead, so
     /// its later lattice reads still see the constant. An aggregate is
-    /// materialized only over a `Call` or a closed region: the literal a
+    /// materialized only over a `Call` or a self-contained region: the literal a
     /// materialization writes denotes the same value, so re-materializing one
     /// would report a change at every visit and the worklist would never
     /// settle — and both rewrites replace the node with a kind neither ever
@@ -105,10 +105,8 @@ impl Interpreter<'_> {
             if committed {
                 return true;
             }
-            // Nothing took the value — a scratch sink promotes nothing, and an
-            // aggregate with no literal form has nowhere to go. Record what
-            // the run produced anyway, so a later visit reads it back instead
-            // of re-running the region and paying for the copy again.
+            // Nothing took the value, so record it: a later visit reads it
+            // back instead of running the region again.
             self.frame.scratch_folds.insert(e, value);
         }
         if rewrite_short_circuit_via(sink, e) {
@@ -139,9 +137,8 @@ impl Interpreter<'_> {
         if !self.type_table.is_seq_container(*type_id) {
             return false;
         }
-        // The literal is written over `e` but typed from the value, so the two
-        // have to agree about what stands there. A node yielding nothing never
-        // does.
+        // The literal is written over `e` but typed from the value, and a node
+        // yielding nothing can hold neither.
         if sink.body().exprs[e].type_id == TypeTable::UNIT {
             return false;
         }

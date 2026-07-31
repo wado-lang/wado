@@ -8,6 +8,8 @@
 //!
 //! A reference denotes its referent's value: the engine has no reference
 //! values, so borrowing and dereferencing change nothing about what is denoted.
+//! Where a frame gave a local a place of its own, that holds only for reads
+//! made *through* it — see [`Interpreter::projected_lattice`].
 
 use crate::compiler_item::SeqField;
 use crate::const_eval::{
@@ -224,11 +226,8 @@ impl Interpreter<'_> {
         }
         let node = &body.exprs[e];
         match &node.kind {
-            // A local carrying a place alias denotes nothing on its own: the
-            // engine has no reference values, so handing back the referent
-            // here would turn a rebind or a capture into a copy that a later
-            // write through the reference would never reach. Only a
-            // projection resolves one — see [`Self::projected_lattice`].
+            // Only a projection resolves an alias — see
+            // [`Self::projected_lattice`].
             ExprKind::Local { index, .. } if self.frame.place_aliases.contains_key(index) => {
                 Lattice::Unevaluated
             }
@@ -275,12 +274,8 @@ impl Interpreter<'_> {
                 op: NirUnaryOp::Ref | NirUnaryOp::Deref,
                 expr: inner,
             } => self.projected_lattice(body, *inner),
-            // A reference-shaped cast converts nothing — `array_new(n) as
-            // Array<u8>` and `&x as &Array<u8>` are the shapes monomorphization
-            // leaves behind, over array types the table interned more than
-            // once — so it denotes its operand. A converting cast is
-            // `try_fold`'s case, and a shape this test does not cover stays
-            // unevaluated.
+            // A cast that converts nothing denotes its operand; a converting
+            // one is `try_fold`'s case.
             ExprKind::Cast { expr: inner, .. }
                 if operand_type(body, *inner)
                     .is_some_and(|t| self.same_ref_shape(node.type_id, t)) =>

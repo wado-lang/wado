@@ -180,7 +180,11 @@ Sequences:
   literal the lower phase emits for a source string — a struct over a packed
   byte array and its length. The bytes are the container's first `used`, since
   a grown container's capacity outruns what it holds and capacity is not
-  observable. Only a call or a closed region is rewritten this way: the literal
+  observable. A container the frame never filled stays as the source wrote it:
+  an empty one is a reservation rather than a result, and a literal cannot
+  carry the capacity it asked for. Only a call or a self-contained region is
+  rewritten
+  this way: the literal
   denotes the value it replaced, so materializing one again would report a
   change at every visit and the worklist would never settle — and both rewrites
   replace the node with a kind neither matches again.
@@ -188,47 +192,46 @@ Sequences:
 Regions:
 
 - A self-contained block runs as a frame the engine starts from scratch: one
-  that builds its value in locals of its own, reads and writes only those
-  locals, and yields the result as its value is as self-contained as a call
-  body, except that the caller wrote it inline. This is what folds a
-  fully-constant string template to the literal the source could have
-  written.
-- Two questions decide it, both asked before the run, because the run copies
-  the whole enclosing body while the checks only walk the block. Does every
-  local the block mentions belong to the block: a region's frame starts with
-  an empty environment, so a read of an outer local yields nothing and the run
-  abandons anyway, and a write to one would be dropped along with the block
-  the fold replaces. And is every call one a frame could run: a callee outside
-  the map has no body to execute and an indirect one no known target. What
-  either check gives up is a mention on a statically dead path, which a scan
-  cannot tell from a live one.
-- A run's copy of the body is charged to the step budget, since it is the
-  work — a region that reaches the run and then abandons costs a whole-body
-  copy, and a function full of templates would pay one per template per pass.
-  Charging it is what keeps const folding linear in function size instead of
-  quadratic. The budget is a ceiling on CTFE work and this is CTFE work; the
-  consequence is that in a very large function the later regions may find it
-  spent, which is the same trade every other budgeted evaluation makes.
+  that builds its value in locals of its own, reads and writes only those, and
+  yields the result is as self-contained as a call body — the difference is
+  that the caller wrote it inline. This is what folds a fully-constant string
+  template to the literal the source could have written.
+- Self-containment is decided before the run rather than during it: every
+  local the block mentions must be one it declares, and every call one a frame
+  could run. A region's frame starts empty, so a read of an outer local yields
+  nothing and an unrunnable call has no body to execute — the run abandons on
+  either. Deciding first is what keeps the attempt cheap, since the run copies
+  the whole enclosing body while the checks only walk the block. What they give
+  up is a mention on a statically dead path, which no scan can tell from a live
+  one.
+- A block yielding nothing denotes nothing, whatever its last statement
+  computed. An inlined statement call leaves the callee's result there while
+  the block stands where the program expects no value, and a constant put in
+  that position is one the surrounding type cannot hold.
+- The copy a run makes is charged to the step budget, because it is the work.
+  Uncharged, a function full of templates pays a whole-body copy per template
+  per pass and const folding turns quadratic in function size. A very large
+  function may find the budget spent before its later regions, which is the
+  trade every budgeted evaluation makes.
 - A `let` binding a borrow of a local place resolves to an alias inside a
-  frame, not a value, and so does rebinding a local that already carries one:
-  copying a reference copies the reference, so both handles name the same
-  storage. That carries the desugared template's `let self = &mut __r` shape
-  through `internal_reserve_uninit` and the element writes that follow.
+  frame rather than to a value, and so does rebinding a local that already
+  carries one: copying a reference copies the reference, so both handles name
+  the same storage. That is what carries the desugared template's
+  `let self = &mut __r` through the appends that follow.
 - An alias is resolved by a projection — a field read, an element read, a
-  deref — and by nothing else. Reading the reference itself denotes nothing,
-  because the engine has no reference values: handing back the referent there
-  would turn a capture into a copy, and a later write through the reference
-  would land in the copy while the referent kept a value it no longer holds.
-  A `Formatter { buf: &mut __r }` is refused on exactly this ground rather
-  than by accident. An ordinary walk still performs nothing, so outside a
-  frame such a binding keeps clobbering its referent.
-- A cast between the same reference shape — duplicate-interned `Array<u8>`
-  ids, a borrow over them — denotes its operand; monomorphization leaves such
-  casts over every buffer the formatting path builds. A converting cast still
-  folds only through the primitive-cast evaluator. Place naming and the
-  trackability mentions read through casts the same way, so a borrow reaching
-  a builtin as `&mut x.repr as &mut Array<u8>` still names — and keeps
-  trackable — the local it writes.
+  deref — and by nothing else. The engine has no reference values, so handing
+  the referent back where the reference itself is read would turn a capture
+  into a copy, and a later write through the reference would land in that copy
+  while the referent kept a value it no longer holds. `Formatter { buf: &mut
+  __r }` is refused on that ground rather than by accident. An ordinary walk
+  performs nothing, so outside a frame such a binding still clobbers its
+  referent.
+- A cast between the same reference shape denotes its operand;
+  monomorphization leaves one over every buffer the formatting path builds. A
+  converting cast still folds only through the primitive-cast evaluator. Place
+  naming and the trackability mentions read through casts alike, so a borrow
+  reaching a builtin wrapped in one still names — and keeps trackable — the
+  local it writes.
 
 ## TODO
 
@@ -366,40 +369,8 @@ test and `realloc_to`'s prefix copy are never interpreted. The reserved region a
 primitive hands back is the same place the frame store hands out, so the two
 capabilities want the same representation.
 
-Milestones, each red/green with the fixture first:
+What is left, each red/green with the fixture first:
 
-- [x] The aggregate exit. A compile-time call returning a constant `String`
-      folds. No cap of its own is needed: `MAX_SEQ_ELEMENTS` already bounds what
-      becomes a sequence value, and a payload past the inline threshold reaches
-      the binary as a data segment rather than as code. A container the frame
-      never filled stays as the source wrote it: an empty one is a reservation
-      rather than a result, and a literal cannot carry the capacity it asked
-      for.
-- [x] Places and the frame store. Element writes, field stores, allocations and
-      copies all land through a frame-owned place.
-- [x] Frame-executable calls. A call writing through a `&mut` parameter runs
-      and writes back into the caller frame's place, so a compile-time call that
-      fills and returns a `List<u8>` folds, growth included. The write-back is
-      not separable from running the call: what fills a container is `push`,
-      which returns nothing, so the caller's place is the only thing the run
-      produces.
-
-      It is confined to statement and `let` position, where the executor runs a
-      call exactly once. The lattice projection is re-entrant, so a mutating
-      call is refused there outright — a write applied twice is worse than a
-      fold missed.
-
-      Which places stay trackable divides on what reaches them, not on where
-      the question is asked. A shared receiver, a by-value argument and a
-      builtin's source cannot be written through, so they are exempt wherever
-      they appear; that is what carries a container through the `&self` reads
-      `push` makes of its own capacity. A `&mut` one is exempt only inside a
-      frame, which performs the write or abandons the evaluation. An ordinary
-      walk performs nothing, and a write it steps over leaves its target stale.
-- [x] Region recognition. `` `ab` `` and `` `a${"b"}` `` fold to one literal:
-      the template's block runs as a frame started from scratch, with the
-      desugared `let self = &mut __r` borrows resolved as place aliases and
-      the identity array casts monomorphization leaves read through.
 - [ ] Coverage, in order of engine cost: `bool` / `char` / `String`, then
       integers, then width / zero-pad / radix specs, then `Inspect`, then
       floats. A `String` literal interpolation folds already — its `fmt`

@@ -21,7 +21,7 @@ use super::place::{borrowed_place_operand, overlapping_places, place_of};
 use super::region::{region_is_self_contained, region_shape};
 use super::trackability::{Reached, aggregate_safe_locals, clobbered_locals};
 use super::{
-    CLONE_CHARGE_DIVISOR, CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice,
+    COPY_CHARGE_DIVISOR, CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice,
 };
 
 impl FrameState {
@@ -689,47 +689,28 @@ impl Interpreter<'_> {
         Some(CallRun { result, writes })
     }
 
-    /// The constant a closed region denotes: the block runs as a frame the
-    /// engine starts from scratch, since a region that builds its value in
-    /// locals of its own and writes only to those is as self-contained as a
-    /// call body. `None` when the block is not such a region, or when running
+    /// The constant a self-contained region denotes: the block runs as a frame
+    /// the engine starts from scratch, since a region that builds its value in
+    /// locals of its own and touches only those is as self-contained as a call
+    /// body. `None` when the block is not such a region, or when running
     /// it does not finish on a constant — the block survives as written, so
     /// anything it would do at run time still happens there.
     ///
     /// Safe on the re-entrant projection path even though it executes writes:
-    /// closedness confines every write to locals of the scratch run, so
-    /// nothing is performed twice against the program's own state.
+    /// self-containment confines every write to locals of the scratch run, so
+    /// nothing is performed twice against the program's own state. A run an
+    /// earlier visit already made answers from the fold memo, since the
+    /// scratch sink promotes nothing and the region would otherwise be re-run
+    /// at every visit.
     pub(super) fn try_region_fold(&mut self, body: &Body, e: ExprId) -> Option<Value> {
-        // A block yielding nothing denotes nothing, whatever its last
-        // statement computed: an inlined `g(b);` keeps the callee's result on
-        // its trailing statement while the block that replaced the call stands
-        // in unit position. Substituting the value there would leave a typed
-        // constant where the program expects none — the same reason a unit
-        // callee's result is discarded when a frame runs one.
-        if body.exprs[e].type_id == TypeTable::UNIT {
-            return None;
-        }
         let (block, label) = region_shape(body, e)?;
-        // What a previous visit already ran. The scratch sink promotes
-        // nothing, so without reading the memo back here a region inside a
-        // compile-time body is re-run — and re-charged — at every visit.
         if let Some(value) = self.frame.scratch_folds.get(&e) {
             return Some(value.clone());
         }
         if !region_is_self_contained(body, block, self.callees, self.ctfe_builtins) {
             return None;
         }
-        // A run copies the enclosing body before it executes a statement, so
-        // the copy is the work — charge it. Left uncharged, a region that
-        // bails costs a whole-body clone per visit and const folding grows
-        // quadratic in the size of a function full of templates.
-        let clone_cost = u32::try_from(body.exprs.len() / CLONE_CHARGE_DIVISOR)
-            .unwrap_or(u32::MAX)
-            .max(1);
-        if self.step_budget < clone_cost {
-            return None;
-        }
-        self.step_budget -= clone_cost;
+        self.charge_body_copy(body)?;
         let mut scratch = body.nodes_only_clone();
         scratch.root = block;
         let reached = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
@@ -746,6 +727,19 @@ impl Interpreter<'_> {
             Flow::Break { .. } | Flow::Return(_) | Flow::Continue | Flow::Bail => return None,
         };
         lattice.as_const()
+    }
+
+    /// Charge the step budget for the copy of `body` a region run makes before
+    /// it executes a statement. Uncharged, a region that reaches the run and
+    /// then abandons costs a whole-body copy per visit, which makes const
+    /// folding quadratic in the size of a function full of templates. `None`
+    /// when the budget cannot cover it.
+    fn charge_body_copy(&mut self, body: &Body) -> Option<()> {
+        let cost = u32::try_from(body.exprs.len() / COPY_CHARGE_DIVISOR)
+            .unwrap_or(u32::MAX)
+            .max(1);
+        self.step_budget = self.step_budget.checked_sub(cost)?;
+        Some(())
     }
 
     /// The frame's value for a place, or `None` when it holds none.

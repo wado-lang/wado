@@ -14,7 +14,7 @@
 //! - `trackability` — which locals a walk may hold a value for.
 //! - `pattern` — whether a pattern matches a value.
 //! - `place` — what a borrow or lvalue chain names.
-//! - `region` — which blocks are closed enough to run as a frame.
+//! - `region` — which blocks are self-contained enough to run as a frame.
 //!
 //! What the engine can evaluate is stated in
 //! `docs/wep-2026-04-27-nir-interpreter.md`, not here.
@@ -194,7 +194,7 @@ pub const DEFAULT_STEP_BUDGET: u32 = 10_000;
 /// real work the budget must see, but it is bulk memory rather than
 /// interpretation, so it costs a fraction of what executing that many
 /// statements would.
-pub const CLONE_CHARGE_DIVISOR: usize = 16;
+pub const COPY_CHARGE_DIVISOR: usize = 16;
 
 mod frame;
 mod lattice;

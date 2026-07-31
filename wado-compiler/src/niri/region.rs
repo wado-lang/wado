@@ -6,35 +6,32 @@
 //! Recognizing that shape is what lets a fully-constant string template fold
 //! to the literal the source could have written.
 //!
-//! Two questions decide it, and both are asked before the run, because the run
-//! clones the whole enclosing body while these only walk the block.
-//!
-//! Does every local the region touches belong to the region. A region's frame
-//! starts with an empty environment, so a read of an outer local yields
-//! nothing and the run abandons, and a write to one would be dropped along
-//! with the block the fold replaces.
-//!
-//! Is every call one a frame could run. A callee the map does not hold has no
-//! body to execute and an indirect one no known target, so the run reaches it
-//! and abandons — which is what `` `${f()}` `` over an unfoldable `f` does.
-//! That shape is common, and paying a body clone per visit for it is the
-//! difference between linear and quadratic const folding.
-//!
-//! What is left the run still decides for itself — a global it cannot read, a
-//! loop past the budget, an operation that would trap — by abandoning the
-//! evaluation, which forfeits the fold rather than dropping a write.
+//! Everything here is asked before the run, because the run copies the whole
+//! enclosing body while these only walk the block, and a codebase's blocks are
+//! overwhelmingly not regions. What is left the run decides for itself — a
+//! global it cannot read, a loop past the budget, an operation that would trap
+//! — by abandoning the evaluation, which forfeits the fold rather than
+//! dropping a write.
 
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, LocalSet, NodeRef, PatKind, StmtKind};
+use crate::tir::TypeTable;
 
 use super::{CalleeMap, CtfeBuiltinMap};
 
 /// The block behind a region-shaped expression: a `Block` or `LabeledBlock`
-/// with enough statements to be worth running, ending on a statement that
-/// yields the block's value. A single-statement block is the lattice
-/// projection's case, and a block whose last statement yields nothing has no
-/// value to fold to — refusing those before anything is cloned is what keeps
-/// the attempt cheap on the blocks that are not regions.
+/// with enough statements to be worth running, yielding a value, and ending on
+/// a statement that produces one.
+///
+/// A single-statement block is the lattice projection's case. A block that
+/// yields nothing has no value to fold to, whatever its last statement
+/// computed — an inlined statement call leaves the callee's result there while
+/// the block stands where the program expects none — and the type is what says
+/// so. Refusing both here is what keeps the attempt cheap on the blocks that
+/// are not regions.
 pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&str>)> {
+    if body.exprs[e].type_id == TypeTable::UNIT {
+        return None;
+    }
     let (block, label) = match &body.exprs[e].kind {
         ExprKind::Block(b) => (*b, None),
         ExprKind::LabeledBlock { block, label, .. } => (*block, Some(label.as_str())),
