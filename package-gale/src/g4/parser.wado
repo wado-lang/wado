@@ -1213,9 +1213,8 @@ impl G4Parser {
                         ),
                     );
                 }
-                // Decode the endpoints from source: the token text already
-                // collapsed an unpaired surrogate escape to U+FFFD, which
-                // would silently widen the range to a real character.
+                // From source, not the token text: that already collapsed an
+                // unpaired surrogate escape to U+FFFD.
                 let lo = string_literal_code_points(&self.chars, start_span)[0];
                 let hi = string_literal_code_points(&self.chars, end_tok.span)[0];
                 return Result::<LexerElement, ParseError>::Ok(scalar_char_range(lo, hi));
@@ -1375,9 +1374,9 @@ fn parse_char_class(text: &String, span: Span) -> Result<CharClass, ParseError> 
     return Result::<CharClass, ParseError>::Ok(CharClass { ranges, negated });
 }
 
-/// `'lo'..'hi'` as a lexer element, restricted to the Unicode scalars.
-/// The plain `CharRange` shape survives whenever the range holds no
-/// surrogates — every grammar that stays inside the scalars is unchanged.
+/// `'lo'..'hi'` restricted to the Unicode scalars. A range holding no
+/// surrogates keeps the plain `CharRange` shape, so grammars that stay inside
+/// the scalars are unchanged.
 fn scalar_char_range(lo: i32, hi: i32) -> LexerElement {
     let mut ranges: List<CharRange> = [];
     clip_to_scalars(&mut ranges, lo, hi);
@@ -1396,14 +1395,12 @@ global SURROGATE_LAST: i32 = 0xDFFF;
 /// Push `[lo, hi]` as `CharRange`s, keeping only its Unicode-scalar part.
 ///
 /// ANTLR4 matches UTF-16 code units, so a surrogate endpoint is legal there;
-/// Gale matches decoded scalars, which no input character can ever equal.
-/// Dropping the surrogate part is what "matches nothing" looks like in a
-/// scalar range set — collapsing the endpoint to U+FFFD instead would make
-/// the class match a real, unrelated character.
+/// Gale matches decoded scalars, which no input character equals. Dropping the
+/// surrogate part is what "matches nothing" looks like in a scalar range set —
+/// collapsing it to U+FFFD would match a real, unrelated character instead.
 fn clip_to_scalars(ranges: &mut List<CharRange>, lo: i32, hi: i32) {
-    // Both endpoints scalar: the range is already a scalar range — a `char`
-    // cannot hold a surrogate, so splitting at the gap would only churn the
-    // emitted pattern without changing what it matches.
+    // Already a scalar range: a `char` cannot hold a surrogate, so splitting
+    // at the gap would churn the emitted pattern and match the same set.
     if is_scalar(lo) && is_scalar(hi) {
         push_scalar_segment(ranges, lo, hi);
         return;
@@ -1454,12 +1451,10 @@ fn complement_char_ranges(ranges: &List<CharRange>) -> List<CharRange> {
     return out;
 }
 
-/// Expand a `\p{...}` property into its ranges. Returns false for a property
-/// Gale has no table for — the caller rejects rather than silently producing
-/// an empty set that matches nothing.
-///
-/// General categories only. Scripts, blocks and binary properties are the
-/// loud gap; see `TODO.md`.
+/// Expand a `\p{...}` property into its ranges. False for a property with no
+/// table, so the caller can reject rather than yield a set matching nothing.
+/// General categories only; scripts, blocks and binary properties are the loud
+/// gap (`TODO.md`).
 fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool {
     let group = general_category_group(name);
     if !group.is_empty() {

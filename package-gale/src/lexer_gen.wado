@@ -2762,10 +2762,8 @@ fn char_matches_ranges(c: char, ranges: &List<[char, char]>) -> bool {
 }
 
 /// True when `ranges` shares a char with `probe` that no single-char branch
-/// already claims. Single-char branches are emitted ahead of the range ones,
-/// so a rule whose first set inside `probe` is entirely `claimed` chars can
-/// never be reached from the range branch — listing it there is a `try_` call
-/// that always fails.
+/// already claims. Those branches come first, so a rule whose first set inside
+/// `probe` is entirely `claimed` chars is unreachable from the range branch.
 fn ranges_meet_unclaimed(ranges: &List<[char, char]>, probe: [char, char], claimed: &List<char>) -> bool {
     for let r of ranges {
         let lo = if r[0] > probe[0] { r[0] } else { probe[0] };
@@ -2786,15 +2784,20 @@ fn ranges_meet_unclaimed(ranges: &List<[char, char]>, probe: [char, char], claim
     return false;
 }
 
-/// Build dispatch groups: for each unique first char, which try calls apply?
+/// The pattern of the branch every other branch falls through to; emitted as
+/// a bare `else` rather than a match arm.
+global FALLBACK_PATTERN: String = "_";
+
+/// One branch of the emitted first-char dispatch: a char pattern and the
+/// `try_` calls a char matching it must run, in grammar order.
 struct DispatchGroup {
-    guard: String,
+    pattern: String,
     calls: List<i32>,
 }
 
-fn has_group_guard(groups: &List<DispatchGroup>, guard: &String) -> bool {
+fn has_pattern(groups: &List<DispatchGroup>, pattern: &String) -> bool {
     for let g of groups {
-        if g.guard == *guard {
+        if g.pattern == *pattern {
             return true;
         }
     }
@@ -2802,18 +2805,16 @@ fn has_group_guard(groups: &List<DispatchGroup>, guard: &String) -> bool {
 }
 
 /// Fold each branch into its immediate predecessor when the two have the same
-/// call list. Adjacency is the whole safety argument: the chain is
-/// first-match-wins, so folding a branch into a *non*-adjacent earlier one
-/// would let a char skip whichever branch sits between them, and that branch
-/// may well have a different call list (a single-char branch overlapping a
-/// range branch is the normal case). Adjacent folding cannot reorder anything.
+/// call list — `[\p{L}]` is ~700 ranges that all route to the same rules.
 ///
-/// Runs before the `true` fallback is appended, so no guard here is universal.
+/// Adjacency is the safety argument: the chain is first-match-wins, so folding
+/// into a *non*-adjacent earlier branch would let a char skip the branch
+/// between them, which usually has a different call list.
 fn coalesce_equal_groups(groups: &mut List<DispatchGroup>) {
     let mut merged: List<DispatchGroup> = [];
     for let g of groups {
         if !merged.is_empty() && merged[merged.len() - 1].calls == g.calls {
-            merged[merged.len() - 1].guard.push_str(&` | ${g.guard}`);
+            merged[merged.len() - 1].pattern.push_str(&` | ${g.pattern}`);
         } else {
             merged.push(*g);
         }
@@ -2822,7 +2823,6 @@ fn coalesce_equal_groups(groups: &mut List<DispatchGroup>) {
 }
 
 fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
-    // Collect all unique single chars from first_chars
     let mut all_chars: List<char> = [];
     for let call of calls {
         if call.is_wildcard {
@@ -2862,55 +2862,30 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         let mut merged = false;
         for let mut gi = 0; gi < groups.len(); gi += 1 {
             if groups[gi].calls == matching {
-                // Add char to existing group's guard
-                groups[gi].guard.push_str(&` | ${char_lit(*c)}`);
+                groups[gi].pattern.push_str(&` | ${char_lit(*c)}`);
                 merged = true;
             }
         }
         if !merged {
             groups.push(DispatchGroup {
-                guard: `${char_lit(*c)}`,
+                pattern: `${char_lit(*c)}`,
                 calls: matching,
             });
         }
     }
 
-    // Collect all ranged entries (ranges where start != end)
-    let mut range_calls: List<i32> = [];
+    // One group per distinct range. The chain is first-match-wins, so a char in
+    // two rules' overlapping ranges only reaches the first group covering it —
+    // that group therefore carries every rule the range meets, not just the one
+    // the range came from. A rule that cannot match simply fails its `try_`.
     for let mut i = 0; i < calls.len(); i += 1 {
         if calls[i].is_wildcard {
             continue;
         }
         for let r of &calls[i].first_chars {
             if r[0] != r[1] {
-                let mut found = false;
-                for let existing of &range_calls {
-                    if *existing == i {
-                        found = true;
-                        break;
-                    }
-                }
-                if !found {
-                    range_calls.push(i);
-                }
-            }
-        }
-    }
-
-    // One group per distinct multi-char first-char range. The branches form an
-    // `if / else if` chain, so a char in two rules' overlapping ranges only
-    // ever reaches the first group covering it — that group therefore carries
-    // every rule whose first set meets the range, not just the rule the range
-    // came from. Taking the whole intersecting set is a superset of what the
-    // char itself can match; a rule that cannot match simply fails its `try_`.
-    for let mut i = 0; i < calls.len(); i += 1 {
-        if calls[i].is_wildcard {
-            continue;
-        }
-        for let r of &calls[i].first_chars {
-            if r[0] != r[1] {
-                let guard = `${char_lit(r[0])}..=${char_lit(r[1])}`;
-                if !has_group_guard(&groups, &guard) {
+                let pattern = `${char_lit(r[0])}..=${char_lit(r[1])}`;
+                if !has_pattern(&groups, &pattern) {
                     let mut cs: List<i32> = [];
                     for let mut j = 0; j < calls.len(); j += 1 {
                         if calls[j].is_catch_all {
@@ -2920,22 +2895,16 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
                             cs.push(j);
                         }
                     }
-                    groups.push(DispatchGroup { guard, calls: cs });
+                    groups.push(DispatchGroup { pattern, calls: cs });
                 }
             }
         }
     }
 
-    // A large first set (`[\p{L}]` is ~700 general-category ranges) would emit
-    // one branch per range even though they all route to the same rules. Fold
-    // branches whose call list is identical into one guard: the chain is
-    // first-match-wins, so a char that moves to an earlier branch with the same
-    // calls gets the same outcome.
     coalesce_equal_groups(&mut groups);
 
-    // Wildcard fallback: only include wildcard calls, range-based calls,
-    // and calls whose first_chars include characters not covered by specific groups.
-    // Single-char-only calls are fully covered by their specific dispatch branches.
+    // The fallback branch. A single-char-only call is fully covered by its own
+    // branch above; a range-based one can still admit a char no branch claims.
     let mut wildcard_calls: List<i32> = [];
     for let mut i = 0; i < calls.len(); i += 1 {
         if calls[i].is_wildcard {
@@ -2953,13 +2922,11 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         }
     }
     if !wildcard_calls.is_empty() {
-        groups.push(DispatchGroup { guard: String::from("true"), calls: wildcard_calls });
+        groups.push(DispatchGroup { pattern: String::from(FALLBACK_PATTERN), calls: wildcard_calls });
     }
 
-    // Sort each group's calls by original index to preserve grammar priority order.
-    // When wildcards and range-based calls are mixed in a group, the insertion order
-    // may not match grammar order — sorting restores it so that same-length matches
-    // respect ANTLR4-style "first rule in grammar wins" priority.
+    // Grammar order, so a same-length match goes to the first rule in the
+    // grammar (ANTLR4's tie-break). Insertion order does not carry it.
     for let mut gi = 0; gi < groups.len(); gi += 1 {
         groups[gi].calls.sort();
     }
@@ -2976,13 +2943,13 @@ fn gen_dispatch_groups(
     has_members: bool,
 ) {
     // If only a wildcard group exists, emit calls directly without dispatch
-    if groups.len() == 1 && groups[0].guard == "true" {
+    if groups.len() == 1 && groups[0].pattern == FALLBACK_PATTERN {
         gen_group_calls(w, calls, &groups[0].calls, needs_extras, has_actions, has_members);
         return;
     }
     let mut first_group = true;
     for let g of groups {
-        let is_wc = g.guard == "true";
+        let is_wc = g.pattern == FALLBACK_PATTERN;
         if is_wc {
             if first_group {
                 gen_group_calls(w, calls, &g.calls, needs_extras, has_actions, has_members);
@@ -2990,9 +2957,9 @@ fn gen_dispatch_groups(
             }
             w.else_begin(&"else");
         } else if first_group {
-            w.begin(&`if first_char matches \{ ${g.guard} \}`);
+            w.begin(&`if first_char matches \{ ${g.pattern} \}`);
         } else {
-            w.else_begin(&`else if first_char matches \{ ${g.guard} \}`);
+            w.else_begin(&`else if first_char matches \{ ${g.pattern} \}`);
         }
         first_group = false;
         gen_group_calls(w, calls, &g.calls, needs_extras, has_actions, has_members);

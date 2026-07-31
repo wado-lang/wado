@@ -122,8 +122,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // before any structural pass (lowering, ATN build) sees them, so both
     // the emitter and `build_atn` agree on the canonical repeat shape.
     canonicalize_empty_alt_groups(grammar);
-    // `(e)` around a labelled element is syntax only. Strip it before the
-    // stamping passes so lower and emit agree on the element's shape.
+    // Before the stamping passes, so lower and emit see the same shape.
     unwrap_labeled_transparent_groups(grammar);
     // Number every surface `RuleRef` call site so `build_atn`'s
     // `call_site_returns` correspondence (read by codegen to push exact ATN

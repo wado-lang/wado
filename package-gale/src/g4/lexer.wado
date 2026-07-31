@@ -295,9 +295,8 @@ pub fn decode_string_escape(chars: &List<char>, pos: &mut i32) -> i32 {
 
 /// Code points a string-literal token denotes, decoded from its source span
 /// (`'…'`, quotes included). Unlike the token text, an unpaired surrogate
-/// escape survives as its own code point instead of collapsing to U+FFFD —
-/// `char` cannot hold one, but a char-range endpoint must not silently become
-/// a different, matchable character.
+/// escape survives as its own code point rather than collapsing to U+FFFD —
+/// a char-range endpoint must not silently become a different, matchable char.
 pub fn string_literal_code_points(chars: &List<char>, span: Span) -> List<i32> {
     let mut out: List<i32> = [];
     let mut pos = span.start + 1;

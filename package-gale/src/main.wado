@@ -168,10 +168,9 @@ fn cmd_dump(paths: List<String>, atn: bool) with Stdout, Stderr, Preopens, Exit 
     }
     let mut merged = load_and_merge(&paths);
 
-    // `dump` reports what the emitter sees, so it runs the same surface
-    // normalizations `generate` does before lowering — otherwise a report can
-    // show a shape (an empty-alt group, a labelled `( … )` wrapper) that no
-    // emitted parser is ever built from.
+    // `dump` reports what the emitter sees, so it runs `generate`'s surface
+    // normalizations too — otherwise it can report a shape no parser is
+    // built from.
     canonicalize_empty_alt_groups(&mut merged);
     unwrap_labeled_transparent_groups(&mut merged);
 

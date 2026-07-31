@@ -188,14 +188,13 @@ re-measure before committing. Three candidates read off the profile above:
   `eq_ignore_ascii_case` calls over the distinct first letters (~6–20 deep per length
   bucket). Lowercase the first char once and `match` on it (br_table), and drop the
   redundant `kc = 0` guard. Pure compute, so it carries to release intact.
-- **First-char dispatch is linear in the ranges, not the rules.** `build_dispatch_groups`
-  emits an `if / else if` chain over the first-char sets, so a rule opening on a large
-  set pays a comparison per range. A `[\p{L}]` rule is ~700 general-category ranges;
-  branches with identical call lists are coalesced into one guard, which keeps the
-  emitted code small (Rust's dispatch is 56 branches / 325 `try_` calls) but leaves ~2000
-  range comparisons on the fall-through path. ASCII input still resolves early — the
-  single-char branches are sorted and come first — so this is a worst-case, not a
-  benchmark-visible, cost. A sorted interval table with a binary search would bound it.
+- **First-char dispatch is linear in the ranges, not the rules.** The dispatch is an
+  `if / else if` chain over the first-char sets, so a rule opening on a large set costs
+  a comparison per range — a `[\p{L}]` rule is ~700. Coalescing branches with identical
+  call lists keeps the emitted code small (Rust: 56 branches, 325 `try_` calls) but
+  leaves ~2000 comparisons on the fall-through path. ASCII resolves early (single-char
+  branches are sorted and come first), so this is a worst case rather than a
+  benchmark-visible cost. A sorted interval table with a binary search would bound it.
 - **`HighlightVisitor::classify` (6.2%).** A non-inlined call per token that walks the
   override list before the `default_ids[kind]` lookup, even when — as for SQLite — there
   is exactly one override. Hoisting the common `default_ids` path to the call site
