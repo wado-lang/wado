@@ -2037,83 +2037,80 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == '!' {
+        } else if first_char matches { '!' } {
             end = try_lit_bang(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_BANG; }
             end = try_lit_bangeq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_BANGEQ; }
-        } else if first_char == '"' {
+        } else if first_char matches { '"' } {
             end = try_DQ_STRING(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DQ_STRING; }
-        } else if first_char == '%' {
+        } else if first_char matches { '%' } {
             end = try_lit_percent(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_PERCENT; }
-        } else if first_char == '&' {
+        } else if first_char matches { '&' } {
             end = try_lit_amp(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_AMP; }
-        } else if first_char == '\'' {
+        } else if first_char matches { '\'' } {
             end = try_DATE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DATE; }
             end = try_SQ_STRING(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SQ_STRING; }
-        } else if first_char == '(' {
+        } else if first_char matches { '(' } {
             end = try_lit_lparen(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
-        } else if first_char == ')' {
+        } else if first_char matches { ')' } {
             end = try_lit_rparen(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
-        } else if first_char == '*' {
+        } else if first_char matches { '*' } {
             end = try_lit_star(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
-        } else if first_char == '+' {
+        } else if first_char matches { '+' } {
             end = try_lit_plus(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
-        } else if first_char == ',' {
+        } else if first_char matches { ',' } {
             end = try_lit_comma(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
-        } else if first_char == '-' {
+        } else if first_char matches { '-' } {
             end = try_lit_minus(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
-        } else if first_char == '/' {
+        } else if first_char matches { '/' } {
             end = try_lit_slash(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
             end = try_COMMENTS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_COMMENTS; }
-        } else if first_char == '<' {
+        } else if first_char matches { '<' } {
             end = try_lit_lt(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
             end = try_lit_lteq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LTEQ; }
-        } else if first_char == '=' {
+        } else if first_char matches { '=' } {
             end = try_lit_eq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
-        } else if first_char == '>' {
+        } else if first_char matches { '>' } {
             end = try_lit_gt(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
             end = try_lit_gteq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_GTEQ; }
-        } else if first_char == '[' {
+        } else if first_char matches { '[' } {
             end = try_lit_lbracket(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
-        } else if first_char == ']' {
+        } else if first_char matches { ']' } {
             end = try_lit_rbracket(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
-        } else if first_char == '^' {
+        } else if first_char matches { '^' } {
             end = try_lit_caret(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_CARET; }
-        } else if first_char == '|' {
+        } else if first_char matches { '|' } {
             end = try_lit_pipe(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; }
-        } else if 'a' <= first_char <= 'z' {
+        } else if first_char matches { 'a'..='z' | 'A'..='Z' } {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if 'A' <= first_char <= 'Z' {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if '0' <= first_char <= '9' {
+        } else if first_char matches { '0'..='9' } {
             end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else {

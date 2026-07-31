@@ -1547,45 +1547,38 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == '"' {
+        } else if first_char matches { '"' } {
             end = try_STRING(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_STRING; }
-        } else if first_char == ',' {
+        } else if first_char matches { ',' } {
             end = try_COMMA(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_COMMA; }
-        } else if first_char == ':' {
+        } else if first_char matches { ':' } {
             end = try_COLON(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_COLON; }
-        } else if first_char == ';' {
+        } else if first_char matches { ';' } {
             end = try_SEMI(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SEMI; }
-        } else if first_char == '=' {
+        } else if first_char matches { '=' } {
             end = try_EQ(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_EQ; }
-        } else if first_char == '_' {
+        } else if first_char matches { '_' } {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char == 'l' {
+        } else if first_char matches { 'l' } {
             end = try_LIST(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIST; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char == 'p' {
+        } else if first_char matches { 'p' } {
             end = try_PAIR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PAIR; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if 'a' <= first_char <= 'z' {
-            end = try_PAIR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PAIR; }
-            end = try_LIST(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIST; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if 'A' <= first_char <= 'Z' {
+        } else if first_char matches { 'a'..='z' | 'A'..='Z' } {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else {

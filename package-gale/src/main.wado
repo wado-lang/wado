@@ -3,7 +3,7 @@ use { Deserialize } from "core:serde";
 use { parse, ArgsError } from "core:args";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
 use { assemble_grammar, AssembleError } from "./g4/parser.wado";
-use { Grammar, normalize_caches } from "./ir.wado";
+use { Grammar, normalize_caches, canonicalize_empty_alt_groups, unwrap_labeled_transparent_groups } from "./ir.wado";
 use { generate, GenerateOptions } from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
 use { lower } from "./lower.wado";
@@ -167,6 +167,13 @@ fn cmd_dump(paths: List<String>, atn: bool) with Stdout, Stderr, Preopens, Exit 
         exit(1);
     }
     let mut merged = load_and_merge(&paths);
+
+    // `dump` reports what the emitter sees, so it runs the same surface
+    // normalizations `generate` does before lowering — otherwise a report can
+    // show a shape (an empty-alt group, a labelled `( … )` wrapper) that no
+    // emitted parser is ever built from.
+    canonicalize_empty_alt_groups(&mut merged);
+    unwrap_labeled_transparent_groups(&mut merged);
 
     // `--atn` short-circuits the GIR dump: build the surface-IR ATN (the
     // data the runtime simulator walks) and print it.

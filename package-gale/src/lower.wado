@@ -1709,10 +1709,17 @@ fn build_overlap_dispatch(
     // that carries the rule-facing label.
     if !ends_with_scan(owner_label) {
         let shared = shared_overlap_tokens(first_sets);
+        // An open-ended alt (`.` / `~X`) has no enumerable first set, so
+        // reporting the shared token set would read as an empty overlap.
+        let cause = if shared.is_empty() {
+            "an open-ended alternative (`.` / `~X`) overlaps every lookahead";
+        } else {
+            `share lookahead ${join_kind_set(&shared)}`;
+        };
         ctx.warn(
             owner_label,
             DiagnosticKind::OverlapTournament,
-            `alts ${join_kind_list(indices)} share lookahead ${join_kind_set(&shared)}; resolved by longest-match scan tournament, not a token-led branch`,
+            `alts ${join_kind_list(indices)} ${cause}; resolved by longest-match scan tournament, not a token-led branch`,
         );
     }
 
@@ -3987,26 +3994,6 @@ fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String
     }
 }
 
-/// Strip the purely syntactic `( … )` wrappers off a labelled element:
-/// `x=(ID)` binds exactly what `x=ID` binds. A Transparent `GroupOp`
-/// carries no field slot, so `rebind_op_field` would have nowhere to
-/// put the label and the binding would be dropped.
-///
-/// Only the wrapper shapes that carry nothing of their own unwrap — a
-/// group with `options`, or a single alt bearing a label or actions,
-/// keeps its structure.
-fn unwrap_transparent_group(elem: &Element) -> Element {
-    if let Group(g) = elem {
-        if g.options.is_empty() && g.alternatives.len() == 1 {
-            let alt = &g.alternatives[0];
-            if alt.elements.len() == 1 && alt.options.is_empty() && alt.actions.is_empty() && alt.label matches { None } {
-                return unwrap_transparent_group(&alt.elements[0]);
-            }
-        }
-    }
-    return *elem;
-}
-
 /// Lower a `Label` element by recursively lowering its inner
 /// element, then overriding the inner op's field name with the
 /// label's name (deduped against the surrounding alt's name table).
@@ -4031,14 +4018,13 @@ fn lower_label_op(
 ) -> Op {
     let label_field = dedup_name(&lab.field_name, name_counts);
     let mut inner_counts: List<[String, i32]> = [];
-    let labelled = unwrap_transparent_group(&lab.element);
     // A label `name=elem` is positionally identical to `elem` at the
     // surrounding alt, so the FollowArg / tail-gate propagate verbatim —
     // the RuleRef inside the label still sees the same caller
     // continuation, and a Repeat inside still gates at the same tail
     // position.
     let inner_op = lower_op(
-        &labelled,
+        &lab.element,
         &mut inner_counts,
         rule_name,
         ctx,

@@ -11,3 +11,10 @@ test "a label over a transparent group binds the inner leaf" {
     assert result.ok(), "clean parse";
     assert result.output == "foo-bar", `output: '${result.output}'`;
 }
+
+test "a list label over a transparent group repeats the inner leaf" {
+    let result = lg::parse_s(&"a b c");
+    assert result.ok(), "clean parse";
+    let actual = lg::to_string_tree(&result);
+    assert actual == "(s a b c)", `actual: ${actual}`;
+}

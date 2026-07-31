@@ -1533,10 +1533,10 @@ pub fn tokenize(input: &String) -> TokenStream {
         let first_char = lexer.chars[start];
         let mut best_more = false;
         let mut best_channel: i32 = 0;
-        if first_char == '\n' || first_char == ' ' {
+        if first_char matches { '\n' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; best_more = false; best_channel = 0; best_act = -1; }
-        } else if first_char == 'a' {
+        } else if first_char matches { 'a' } {
             end = try_I(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_I; best_more = false; best_channel = 0; best_act = 0; }
         } else {

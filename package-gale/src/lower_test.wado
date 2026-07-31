@@ -28,7 +28,7 @@ use {
 use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
 use { GenContext } from "./gen_context.wado";
-use { assign_atn_call_sites } from "./ir.wado";
+use { assign_atn_call_sites, unwrap_labeled_transparent_groups } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
 use {
     Rule,
@@ -1607,8 +1607,8 @@ test "lower scalar Label rebinds inner field name" {
 test "lower scalar Label over a transparent Group binds the inner leaf" {
     // `labelled : x=(ID) ;` — `(e)` is a purely syntactic wrapper, so
     // `x=(ID)` must bind exactly what `x=ID` binds. A Transparent
-    // GroupOp has no field slot of its own, so the label has to land on
-    // the inner leaf or the binding is dropped.
+    // GroupOp has no field slot of its own, so the wrapper is stripped
+    // before lowering or the binding is dropped.
     let mut g = empty_grammar(&"T");
     g.parser_rules = [
         ParserRule::new(
@@ -1626,6 +1626,7 @@ test "lower scalar Label over a transparent Group binds the inner leaf" {
             ],
         ),
     ];
+    unwrap_labeled_transparent_groups(&mut g);
 
     let lowered = lower(&g, &no_lit_tokens());
     if let Simple(s) = &lowered.parser_rules[0] {

@@ -1477,7 +1477,7 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == 'a' || first_char == 'c' || first_char == 'ä' || first_char == 'あ' || first_char == '亜' {
+        if first_char matches { 'a' | 'c' | 'ä' | 'あ' | '亜' } {
             end = try_LETTERS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LETTERS; }
         }

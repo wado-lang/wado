@@ -1440,13 +1440,13 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == ' ' {
+        if first_char matches { ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == '+' {
+        } else if first_char matches { '+' } {
             end = try_lit_plus(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
-        } else if 'a' <= first_char <= 'z' {
+        } else if first_char matches { 'a'..='z' } {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else {
@@ -1485,8 +1485,9 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 pub global RK_R: NodeKind = 0;
+pub global RK_S: NodeKind = 1;
 
-global RULE_NAMES: List<String> = ["r"];
+global RULE_NAMES: List<String> = ["r", "s"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1839,6 +1840,21 @@ fn scan_r(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
+fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    while pos < tokens.len() && tokens[pos] == TK_ID {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos] != TK_ID { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_r__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let x = p.expect(TK_ID, &SYNC_0);
@@ -1858,6 +1874,41 @@ fn _parse_r(p: &mut Parser) -> () {
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("r");
+    }
+}
+
+fn _parse_s__inner(p: &mut Parser) -> () {
+    let start = p.peek_start();
+    let mut _plus_first = true;
+    loop {
+        if p.recovering { break; }
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break rep_scan; }
+                pos += 1;
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        _plus_first = false;
+        let id = p.expect(TK_ID, &EMPTY_SYNC);
+    }
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_s(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_S, _start);
+    _parse_s__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("s");
     }
 }
 
@@ -1885,6 +1936,10 @@ pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 
 pub fn parse_r(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_r(p));
+}
+
+pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_s(p));
 }
 
 fn _ctx_token_names() -> List<String> {

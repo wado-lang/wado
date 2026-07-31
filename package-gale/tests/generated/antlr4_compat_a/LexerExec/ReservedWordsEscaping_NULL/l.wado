@@ -1475,7 +1475,7 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == 'N' || first_char == 'n' {
+        if first_char matches { 'N' | 'n' } {
             end = try_NULL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NULL; }
         }

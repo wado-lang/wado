@@ -18,15 +18,13 @@
 use { Alternative, Element } from "./ir.wado";
 use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 
-/// True when `alt` can match any single token at its first input position
-/// — i.e. its first non-nullable element is `Wildcard` (`.`). The static
-/// `first_of_element` returns an empty set for `Wildcard` because we
-/// cannot enumerate "every token kind", but a wildcard alt effectively
-/// overlaps with every other alt that consumes at least one token. We
-/// use this flag to merge wildcard alts into the surrounding overlap
-/// group so the parse-side dispatch routes through scan-based first-
-/// success-wins (which correctly falls back to the wildcard alt when
-/// the more specific alt's scan fails) instead of a kind-check that
+/// True when `alt` opens on an open-ended token set — `.` or `~X`, the two
+/// elements `first_of_element` returns an empty set for because we cannot
+/// enumerate "every token kind". Such an alt effectively overlaps with every
+/// other alt that consumes at least one token. We use this flag to merge it
+/// into the surrounding overlap group so the parse-side dispatch routes
+/// through scan-based first-success-wins (which correctly falls back to it
+/// when the more specific alt's scan fails) instead of a kind-check that
 /// commits to the first alt whose FIRST set covers the lookahead.
 pub fn alt_is_wildcard_led(alt: &Alternative) -> bool {
     for let elem of &alt.elements {
@@ -40,14 +38,23 @@ pub fn alt_is_wildcard_led(alt: &Alternative) -> bool {
     return false;
 }
 
-/// A label binds a name to its element and changes nothing about what the
-/// element matches, so `w=.` is as much a wildcard as `.` is.
+/// `.` and `~X` both carry the empty static FIRST set. Neither a label nor a
+/// `( … )` wrapper changes what an element matches, so `w=.` and `x=(~X)` are
+/// as open-ended as the bare forms.
 fn element_is_wildcard(elem: &Element) -> bool {
     if let Wildcard(_) = elem {
         return true;
     }
+    if let Not(_) = elem {
+        return true;
+    }
     if let Label(lab) = elem {
         return element_is_wildcard(&lab.element);
+    }
+    if let Group(g) = elem {
+        if g.alternatives.len() == 1 && g.alternatives[0].elements.len() == 1 {
+            return element_is_wildcard(&g.alternatives[0].elements[0]);
+        }
     }
     return false;
 }

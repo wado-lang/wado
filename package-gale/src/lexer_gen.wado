@@ -2761,10 +2761,25 @@ fn char_matches_ranges(c: char, ranges: &List<[char, char]>) -> bool {
     return false;
 }
 
-/// True when any of `ranges` shares a char with `probe`.
-fn ranges_meet(ranges: &List<[char, char]>, probe: [char, char]) -> bool {
+/// True when `ranges` shares a char with `probe` that no single-char branch
+/// already claims. Single-char branches are emitted ahead of the range ones,
+/// so a rule whose first set inside `probe` is entirely `claimed` chars can
+/// never be reached from the range branch — listing it there is a `try_` call
+/// that always fails.
+fn ranges_meet_unclaimed(ranges: &List<[char, char]>, probe: [char, char], claimed: &List<char>) -> bool {
     for let r of ranges {
-        if r[0] <= probe[1] && probe[0] <= r[1] {
+        let lo = if r[0] > probe[0] { r[0] } else { probe[0] };
+        let hi = if r[1] < probe[1] { r[1] } else { probe[1] };
+        if lo > hi {
+            continue;
+        }
+        let mut covered = 0;
+        for let c of claimed {
+            if lo <= *c && *c <= hi {
+                covered += 1;
+            }
+        }
+        if covered < hi as i32 - lo as i32 + 1 {
             return true;
         }
     }
@@ -2784,6 +2799,26 @@ fn has_group_guard(groups: &List<DispatchGroup>, guard: &String) -> bool {
         }
     }
     return false;
+}
+
+/// Fold each branch into its immediate predecessor when the two have the same
+/// call list. Adjacency is the whole safety argument: the chain is
+/// first-match-wins, so folding a branch into a *non*-adjacent earlier one
+/// would let a char skip whichever branch sits between them, and that branch
+/// may well have a different call list (a single-char branch overlapping a
+/// range branch is the normal case). Adjacent folding cannot reorder anything.
+///
+/// Runs before the `true` fallback is appended, so no guard here is universal.
+fn coalesce_equal_groups(groups: &mut List<DispatchGroup>) {
+    let mut merged: List<DispatchGroup> = [];
+    for let g of groups {
+        if !merged.is_empty() && merged[merged.len() - 1].calls == g.calls {
+            merged[merged.len() - 1].guard.push_str(&` | ${g.guard}`);
+        } else {
+            merged.push(*g);
+        }
+    }
+    *groups = merged;
 }
 
 fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
@@ -2828,13 +2863,13 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         for let mut gi = 0; gi < groups.len(); gi += 1 {
             if groups[gi].calls == matching {
                 // Add char to existing group's guard
-                groups[gi].guard.push_str(&` || first_char == ${char_lit(*c)}`);
+                groups[gi].guard.push_str(&` | ${char_lit(*c)}`);
                 merged = true;
             }
         }
         if !merged {
             groups.push(DispatchGroup {
-                guard: `first_char == ${char_lit(*c)}`,
+                guard: `${char_lit(*c)}`,
                 calls: matching,
             });
         }
@@ -2874,14 +2909,14 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         }
         for let r of &calls[i].first_chars {
             if r[0] != r[1] {
-                let guard = `${char_lit(r[0])} <= first_char <= ${char_lit(r[1])}`;
+                let guard = `${char_lit(r[0])}..=${char_lit(r[1])}`;
                 if !has_group_guard(&groups, &guard) {
                     let mut cs: List<i32> = [];
                     for let mut j = 0; j < calls.len(); j += 1 {
                         if calls[j].is_catch_all {
                             continue;
                         }
-                        if calls[j].is_wildcard || ranges_meet(&calls[j].first_chars, *r) {
+                        if calls[j].is_wildcard || ranges_meet_unclaimed(&calls[j].first_chars, *r, &all_chars) {
                             cs.push(j);
                         }
                     }
@@ -2890,6 +2925,13 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
             }
         }
     }
+
+    // A large first set (`[\p{L}]` is ~700 general-category ranges) would emit
+    // one branch per range even though they all route to the same rules. Fold
+    // branches whose call list is identical into one guard: the chain is
+    // first-match-wins, so a char that moves to an earlier branch with the same
+    // calls gets the same outcome.
+    coalesce_equal_groups(&mut groups);
 
     // Wildcard fallback: only include wildcard calls, range-based calls,
     // and calls whose first_chars include characters not covered by specific groups.
@@ -2948,9 +2990,9 @@ fn gen_dispatch_groups(
             }
             w.else_begin(&"else");
         } else if first_group {
-            w.begin(&`if ${g.guard}`);
+            w.begin(&`if first_char matches \{ ${g.guard} \}`);
         } else {
-            w.else_begin(&`else if ${g.guard}`);
+            w.else_begin(&`else if first_char matches \{ ${g.guard} \}`);
         }
         first_group = false;
         gen_group_calls(w, calls, &g.calls, needs_extras, has_actions, has_members);

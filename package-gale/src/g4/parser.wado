@@ -45,6 +45,7 @@ use {
 use { G4Token } from "./token.wado";
 use { tokenize_chars, resolve_unicode_escape_code, string_literal_code_points } from "./lexer.wado";
 use { scan_balanced, is_id_continue_char } from "./scan.wado";
+use { general_category_ranges, general_category_group } from "./unicode_tables.wado";
 
 pub struct G4Parser {
     tokens: List<Token>,
@@ -1456,69 +1457,50 @@ fn complement_char_ranges(ranges: &List<CharRange>) -> List<CharRange> {
 /// Expand a `\p{...}` property into its ranges. Returns false for a property
 /// Gale has no table for — the caller rejects rather than silently producing
 /// an empty set that matches nothing.
+///
+/// General categories only. Scripts, blocks and binary properties are the
+/// loud gap; see `TODO.md`.
 fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool {
-    match *name {
-        "L" | "Letter" => {
-            ranges.push(CharRange::range('A', 'Z'));
-            ranges.push(CharRange::range('a', 'z'));
-            ranges.push(CharRange::range('\u00C0', '\u00D6'));
-            ranges.push(CharRange::range('\u00D8', '\u00F6'));
-            ranges.push(CharRange::range('\u00F8', '\u00FF'));
-            ranges.push(CharRange::range('\u0100', '\u024F'));
-            ranges.push(CharRange::range('\u0370', '\u03FF'));
-            ranges.push(CharRange::range('\u0400', '\u04FF'));
-            ranges.push(CharRange::range('\u0600', '\u06FF'));
-            ranges.push(CharRange::range('\u0900', '\u097F'));
-            ranges.push(CharRange::range('\u4E00', '\u9FFF'));
-            ranges.push(CharRange::range('\u3040', '\u309F'));
-            ranges.push(CharRange::range('\u30A0', '\u30FF'));
-            ranges.push(CharRange::range('\uAC00', '\uD7AF'));
-        },
-        "Nl" | "Letter_Number" => {
-            ranges.push(CharRange::range('\u2160', '\u2188'));
-            ranges.push(CharRange::range('\u16EE', '\u16F0'));
-        },
-        "Mn" | "Nonspacing_Mark" => {
-            ranges.push(CharRange::range('\u0300', '\u036F'));
-            ranges.push(CharRange::range('\u1AB0', '\u1AFF'));
-            ranges.push(CharRange::range('\u0901', '\u0902'));
-            ranges.push(CharRange::single('\u093C'));
-            ranges.push(CharRange::range('\u0941', '\u0948'));
-            ranges.push(CharRange::single('\u094D'));
-        },
-        "Mc" | "Spacing_Mark" => {
-            ranges.push(CharRange::single('\u0903'));
-            ranges.push(CharRange::range('\u093E', '\u0940'));
-            ranges.push(CharRange::range('\u0949', '\u094C'));
-        },
-        "Nd" | "Decimal_Number" => {
-            ranges.push(CharRange::range('0', '9'));
-            ranges.push(CharRange::range('\u0660', '\u0669'));
-            ranges.push(CharRange::range('\u06F0', '\u06F9'));
-            ranges.push(CharRange::range('\u0966', '\u096F'));
-        },
-        "Pc" | "Connector_Punctuation" => {
-            ranges.push(CharRange::single('_'));
-            ranges.push(CharRange::range('\u203F', '\u2040'));
-            ranges.push(CharRange::single('\u2054'));
-            ranges.push(CharRange::range('\uFE33', '\uFE34'));
-            ranges.push(CharRange::range('\uFE4D', '\uFE4F'));
-            ranges.push(CharRange::single('\uFF3F'));
-        },
-        "Zs" | "Space_Separator" => {
-            ranges.push(CharRange::single(' '));
-            ranges.push(CharRange::single('\u00A0'));
-            ranges.push(CharRange::single('\u1680'));
-            ranges.push(CharRange::range('\u2000', '\u200A'));
-            ranges.push(CharRange::single('\u202F'));
-            ranges.push(CharRange::single('\u205F'));
-            ranges.push(CharRange::single('\u3000'));
-        },
-        _ => {
-            return false;
-        },
+    let group = general_category_group(name);
+    if !group.is_empty() {
+        for let sub of &group {
+            push_encoded_ranges(&general_category_ranges(sub), ranges);
+        }
+        return true;
     }
+    let encoded = general_category_ranges(name);
+    if encoded.is_empty() {
+        return false;
+    }
+    push_encoded_ranges(&encoded, ranges);
     return true;
+}
+
+/// Decode a `START[-END],…` hex range list from the generated tables.
+fn push_encoded_ranges(encoded: &String, ranges: &mut List<CharRange>) {
+    let chars: List<char> = encoded.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let lo = take_hex(&chars, &mut i);
+        let mut hi = lo;
+        if i < chars.len() && chars[i] == '-' {
+            i += 1;
+            hi = take_hex(&chars, &mut i);
+        }
+        clip_to_scalars(ranges, lo, hi);
+        if i < chars.len() && chars[i] == ',' {
+            i += 1;
+        }
+    }
+}
+
+fn take_hex(chars: &List<char>, i: &mut i32) -> i32 {
+    let mut value = 0;
+    while *i < chars.len() && chars[*i].is_hexdigit() {
+        value = value * 16 + chars[*i].hex_digit_value();
+        *i += 1;
+    }
+    return value;
 }
 
 fn intern_mode(mode_names: &mut List<String>, name: &String) -> i32 {

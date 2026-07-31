@@ -1473,31 +1473,22 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == 'E' {
+        } else if first_char matches { 'E' } {
             end = try_IDENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENT; }
             end = try_EXACT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_EXACT; }
-        } else if first_char == 'I' || first_char == 'i' {
+        } else if first_char matches { 'I' | 'i' } {
             end = try_KEYWORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KEYWORD; }
             end = try_IDENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENT; }
-        } else if 'a' <= first_char <= 'z' {
-            end = try_KEYWORD(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KEYWORD; }
+        } else if first_char matches { 'a'..='z' | 'A'..='Z' } {
             end = try_IDENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENT; }
-        } else if 'A' <= first_char <= 'Z' {
-            end = try_KEYWORD(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KEYWORD; }
-            end = try_IDENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENT; }
-            end = try_EXACT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_EXACT; }
         } else {
             end = try_IDENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENT; }

@@ -1526,16 +1526,16 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == 'a' {
+        if first_char matches { 'a' } {
             end = try_I(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_I; }
-        } else if first_char == 'm' {
+        } else if first_char matches { 'm' } {
             end = try_M(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_M; }
-        } else if first_char == 'n' {
+        } else if first_char matches { 'n' } {
             end = try_N(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_N; }
-        } else if first_char == 'x' {
+        } else if first_char matches { 'x' } {
             end = try_K(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_K; }
         } else {

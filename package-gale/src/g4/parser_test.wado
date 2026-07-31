@@ -343,6 +343,45 @@ X : [\\P{Nd}a] ;");
     assert class_admits(&cc, 'Z');
 }
 
+test "unicode property ranges are the real general category" {
+    let cc = class_of(&"grammar Test;
+L : [\\p{L}] ;");
+    // Letters the hand-maintained approximation used to miss. `\P{L}` is the
+    // complement, so a gap here is not a miss but an admission.
+    assert class_admits(&cc, 'א'), "Hebrew alef is Lo";
+    assert class_admits(&cc, 'ก'), "Thai ko kai is Lo";
+    assert class_admits(&cc, '\u{10400}'), "Deseret capital long I is Lu";
+    assert !class_admits(&cc, '0');
+    assert !class_admits(&cc, ' ');
+}
+
+test "negated unicode property excludes every member of the category" {
+    let cc = class_of(&"grammar Test;
+X : [\\P{L}] ;");
+    assert !class_admits(&cc, 'א');
+    assert !class_admits(&cc, 'ก');
+    assert !class_admits(&cc, '\u{10400}');
+    assert class_admits(&cc, '0');
+    assert class_admits(&cc, ' ');
+}
+
+test "two-letter general categories resolve on their own" {
+    let upper = class_of(&"grammar Test;
+X : [\\p{Lu}] ;");
+    assert class_admits(&upper, 'A');
+    assert !class_admits(&upper, 'a');
+    let lower = class_of(&"grammar Test;
+X : [\\p{Ll}] ;");
+    assert class_admits(&lower, 'a');
+    assert !class_admits(&lower, 'A');
+}
+
+test "the surrogate category is empty in a scalar range set" {
+    let cc = class_of(&"grammar Test;
+X : [\\p{Cs}] ;");
+    assert cc.ranges.is_empty(), "no input character can be a surrogate";
+}
+
 test "unsupported unicode property is rejected, not silently empty" {
     assert parse("grammar Test;\nX : [\\p{Bogus}] ;") matches { Err(_) }, "an unknown \\p{...} must not expand to a set that matches nothing";
     assert parse("grammar Test;\nX : [\\P{Bogus}] ;") matches { Err(_) };

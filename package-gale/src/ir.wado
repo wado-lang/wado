@@ -1251,6 +1251,70 @@ pub fn canonicalize_empty_alt_groups(grammar: &mut Grammar) {
     }
 }
 
+/// Strip the purely syntactic `( … )` wrappers off a labelled element:
+/// `x=(ID)` binds exactly what `x=ID` binds, and `x+=(ID)+` repeats exactly
+/// what `x+=ID+` repeats. A wrapper carries no binding slot of its own, so
+/// leaving it in place either drops the binding or leaves the lowered op and
+/// the surface element disagreeing about the element's shape.
+///
+/// Only wrappers that carry nothing of their own unwrap — a group with
+/// `options`, or a single alt bearing an alt label or actions, keeps its
+/// structure. Runs before `assign_atn_call_sites`, whose numbering must see
+/// the final shape.
+pub fn unwrap_labeled_transparent_groups(grammar: &mut Grammar) {
+    for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
+        let unwrapped = unwrap_label_alternatives(&grammar.parser_rules[ri].alternatives);
+        grammar.parser_rules[ri].alternatives = unwrapped;
+    }
+}
+
+fn unwrap_label_alternatives(alts: &List<Alternative>) -> List<Alternative> {
+    let mut out: List<Alternative> = [];
+    for let alt of alts {
+        let mut elems: List<Element> = [];
+        for let e of &alt.elements {
+            elems.push(unwrap_label_element(e));
+        }
+        out.push(Alternative { label: alt.label, options: alt.options, elements: elems, actions: alt.actions });
+    }
+    return out;
+}
+
+fn unwrap_label_element(elem: &Element) -> Element {
+    return match *elem {
+        Label(lab) => Element::Label(LabelElement {
+            name: lab.name,
+            list: lab.list,
+            element: strip_transparent_wrappers(&unwrap_label_element(&lab.element)),
+            snake_name: lab.snake_name,
+            field_name: lab.field_name,
+        }),
+        Repeat(rep) => Element::Repeat(RepeatElement {
+            kind: rep.kind,
+            element: unwrap_label_element(&rep.element),
+            non_greedy: rep.non_greedy,
+        }),
+        Not(n) => Element::Not(NotElement { element: unwrap_label_element(&n.element) }),
+        Group(g) => Element::Group(GroupElement {
+            alternatives: unwrap_label_alternatives(&g.alternatives),
+            options: g.options,
+        }),
+        _ => *elem,
+    };
+}
+
+fn strip_transparent_wrappers(elem: &Element) -> Element {
+    if let Group(g) = elem {
+        if g.options.is_empty() && g.alternatives.len() == 1 {
+            let alt = &g.alternatives[0];
+            if alt.elements.len() == 1 && alt.options.is_empty() && alt.actions.is_empty() && alt.label matches { None } {
+                return strip_transparent_wrappers(&alt.elements[0]);
+            }
+        }
+    }
+    return *elem;
+}
+
 /// Assign every parser-rule `RuleRefElement` a unique `atn_call_site` id, the
 /// correspondence key `build_atn` records as `call_site -> return_state` so
 /// codegen can push the exact caller continuation. Runs after
