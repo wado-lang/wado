@@ -1,0 +1,29 @@
+// A hoisted literal too long for the eager `array.new_fixed` repr must keep
+// the lazy-init guard (WEP: Constant Object Globalization).
+//
+// The `&`-shape hoist rewrites the in-place literal to
+// `{ GlobalVarSet(G, <literal>); GlobalVarGet(G) }` and leaves it unguarded,
+// counting on `wir_optimize::const_global` to promote the global eager and
+// delete the assignment. Past `INLINE_REF_EAGER_MAX_BYTES` the literal lowers
+// to `array.new_data`, which is not Wasm-const-expressible, so the assignment
+// survives — and an unguarded one rebuilds the string and rewrites the global
+// on every pass through the expression, here once per loop iteration.
+//
+// The runtime `${i}` keeps the template from folding away, so the literal is
+// still standing in-region when globalization runs.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    for let mut i = 0; i < 2; i += 1 {
+        println(`${i}:${"this literal is intentionally longer than sixty-four bytes so it stays lazy!"}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "0:this literal is intentionally longer than sixty-four bytes so it stays lazy!\n1:this literal is intentionally longer than sixty-four bytes so it stays lazy!\n",
+    "wir_expect:O2": [
+        "if ref.is_null(global:const_object_globalization_long_literal_ref.wado::__const_obj_"
+    ]
+}

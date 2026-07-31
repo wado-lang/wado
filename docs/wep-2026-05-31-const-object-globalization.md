@@ -177,20 +177,28 @@ for a global.
 
 #### Lazy-init guard
 
-A call initializer is never Wasm-const-expressible, so the classifier cannot
-promote it to an eager `init`; the inline assignment survives and, unguarded,
-re-runs on every activation. Such an assignment is wrapped in
-`if builtin::is_uninitialized(G)`, which reads the global's slot at a nullable
-type and tests the `null` placeholder — the slot itself records whether
-initialization has happened, so no companion flag global is needed.
+An initializer the classifier cannot promote to an eager `init` leaves its
+inline assignment standing, where, unguarded, it would re-run on every
+activation. Two shapes are non-promotable and get the guard, decided by one
+predicate (`needs_lazy_guard`) over the hoisted value — including any sibling
+`let`s moved into it:
+
+- a call, never Wasm-const-expressible;
+- a `PackedArray` past its eager bound — `string_inline_max_bytes` for a
+  `let`-shape global, `INLINE_REF_EAGER_MAX_BYTES` on top of that for an
+  in-place one — whose repr is `array.new_data`, not a constant instruction.
+
+The guard is `if builtin::is_uninitialized(G)`, which reads the global's slot
+at a nullable type and tests the `null` placeholder — the slot itself records
+whether initialization has happened, so no companion flag global is needed.
 
 The guard also pins the semantics: initialization happens at the first execution
 of the expression it replaced, so a callee that traps or diverges still does so,
 at the same point. Moving the work to module init would drag both to
 instantiation time.
 
-A literal initializer keeps the unguarded shape, since the classifier deletes
-its assignment outright.
+An initializer within the eager bounds keeps the unguarded shape, since the
+classifier deletes its assignment outright.
 
 #### Representation and scope
 
