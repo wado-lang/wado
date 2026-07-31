@@ -16,10 +16,10 @@ use std::path::Path;
 
 use wado_compiler::{CompilerOptions, OptLevel};
 
-// The loop bound is far past `niri`'s step budget, so the calls — and the
-// template region around them — stay unfolded and the hoists actually form;
-// with a small bound the whole program folds to one string and there is
-// nothing left to dedup.
+// `black_box` keeps the loop bound opaque, so the calls — and the template
+// region around them — stay unfolded and the hoists actually form; with a
+// constant bound the whole program folds to one string and there is nothing
+// left to dedup.
 const DEDUP_SOURCE: &str = r#"
 use { println, Stdout } from "core:cli";
 
@@ -46,7 +46,7 @@ fn sum_b(n: i32) -> i32 {
 }
 
 export fn run() with Stdout {
-    println(`${sum_a(100000)},${sum_b(100000)}`);
+    println(`${sum_a(builtin::black_box(4))},${sum_b(builtin::black_box(4))}`);
 }
 "#;
 

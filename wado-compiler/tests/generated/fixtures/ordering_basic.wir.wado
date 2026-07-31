@@ -119,9 +119,15 @@ fn "ordering_basic.wado/run"() with Stdout {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr3 >= arr1"), used: 12 });
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 == arr3"), used: 12 });
-    global:ordering_basic.wado::__const_obj_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
-    global:ordering_basic.wado::__const_obj_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 };
-    global:ordering_basic.wado::__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
+    if ref.is_null(global:ordering_basic.wado::__const_obj_2) {
+        global:ordering_basic.wado::__const_obj_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
+    }
+    if ref.is_null(global:ordering_basic.wado::__const_obj_1) {
+        global:ordering_basic.wado::__const_obj_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 };
+    }
+    if ref.is_null(global:ordering_basic.wado::__const_obj_0) {
+        global:ordering_basic.wado::__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
+    }
     if "core:prelude/string.wado/core:prelude/string.wado/String^Ord::cmp"(global:ordering_basic.wado::__const_obj_2, global:ordering_basic.wado::__const_obj_1) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple < banana"), used: 14 });
     }
@@ -197,12 +203,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b12: block {
-        l13: loop {
-            break_if b12 i >= len;
+    b15: block {
+        l16: loop {
+            break_if b15 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l13;
+            continue l16;
         };
     };
 }
@@ -233,20 +239,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b14: block {
-        l15: loop {
-            break_if b14 offset >= count;
+    b17: block {
+        l18: loop {
+            break_if b17 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b14 (if (result >> 4) == 0 -> i32 {
+            break_if b17 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l15;
+            continue l18;
         };
     };
 }
@@ -269,9 +275,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^Ord::cmp"(self, oth
     a_repr = self.repr;
     b_repr = other.repr;
     i = 0;
-    b18: block {
-        l19: loop {
-            break_if b18 i >= min_len;
+    b21: block {
+        l22: loop {
+            break_if b21 i >= min_len;
             a_byte = builtin::array_get<u8>(a_repr, i);
             b_byte = builtin::array_get<u8>(b_repr, i);
             if a_byte <u b_byte {
@@ -281,7 +287,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^Ord::cmp"(self, oth
                 return 2;
             }
             i = i + 1;
-            continue l19;
+            continue l22;
         };
     };
     if len_a < len_b {
@@ -308,9 +314,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^Ord::cmp"(self, othe
     i = 0;
     _licm_repr_18 = self.repr;
     _licm_repr_19 = other.repr;
-    b24: block {
-        l25: loop {
-            break_if b24 i >= min_len;
+    b27: block {
+        l28: loop {
+            break_if b27 i >= min_len;
             a_4 = builtin::array_get<i32>(_licm_repr_18, i);
             b_5 = builtin::array_get<i32>(_licm_repr_19, i);
             if __inline_i32_Ord__cmp_3: block -> "core:prelude/traits.wado//enum:Ordering" {
@@ -336,7 +342,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^Ord::cmp"(self, othe
                 return 2;
             }
             i = i + 1;
-            continue l25;
+            continue l28;
         };
     };
     if self.used < other.used {
@@ -356,14 +362,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq$spec0"(self,
         haystack = self.repr;
         needle = other.repr;
         j = 0;
-        b34: block {
-            l35: loop {
-                break_if b34 j >= 5;
+        b37: block {
+            l38: loop {
+                break_if b37 j >= 5;
                 if builtin::array_get<u8>(haystack, 0 + j) != builtin::array_get<u8>(needle, j) {
                     break __inline_bytes_match_at_2: 0;
                 }
                 j = j + 1;
-                continue l35;
+                continue l38;
             };
         };
         break __inline_bytes_match_at_2: 1;
@@ -379,9 +385,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^Ord::cmp$spec0"(sel
     a_repr = self.repr;
     b_repr = other.repr;
     i = 0;
-    b37: block {
-        l38: loop {
-            break_if b37 i >= 5;
+    b40: block {
+        l41: loop {
+            break_if b40 i >= 5;
             a_byte = builtin::array_get<u8>(a_repr, i);
             b_byte = builtin::array_get<u8>(b_repr, i);
             if a_byte <u b_byte {
@@ -391,7 +397,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^Ord::cmp$spec0"(sel
                 return 2;
             }
             i = i + 1;
-            continue l38;
+            continue l41;
         };
     };
     return 2;
@@ -406,9 +412,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^Ord::cmp$spec1"(sel
     a_repr = self.repr;
     b_repr = other.repr;
     i = 0;
-    b41: block {
-        l42: loop {
-            break_if b41 i >= 5;
+    b44: block {
+        l45: loop {
+            break_if b44 i >= 5;
             a_byte = builtin::array_get<u8>(a_repr, i);
             b_byte = builtin::array_get<u8>(b_repr, i);
             if a_byte <u b_byte {
@@ -418,7 +424,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^Ord::cmp$spec1"(sel
                 return 2;
             }
             i = i + 1;
-            continue l42;
+            continue l45;
         };
     };
     return 1;
