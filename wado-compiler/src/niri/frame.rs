@@ -15,7 +15,8 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_visitor::NirRefVisitor;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::name::RefKind;
+use crate::tir::TypeTable;
 
 use super::place::{borrowed_place_operand, overlapping_places, place_of};
 use super::region::{region_free_reads, region_shape};
@@ -299,6 +300,7 @@ impl Interpreter<'_> {
             }
             snapshot.restore(body);
             self.frame.scratch_folds.clear();
+            self.frame.region_misses.clear();
         }
     }
 
@@ -694,10 +696,10 @@ impl Interpreter<'_> {
     /// locals of its own and touches only those is as self-contained as a call
     /// body. An outer local the region only reads is seeded from the walker's
     /// environment when it holds a constant there — a value snapshot at the
-    /// region's own flow point, sound because the region cannot write it back
-    /// ([`region_free_reads`] rejects write positions, and a reference-typed
-    /// mention, which would hand the same capability to a callee, is refused
-    /// here). `None` when the block is not such a region, or when running
+    /// region's own flow point, sound because the region cannot write it back:
+    /// [`region_free_reads`] rejects write positions and reference-typed
+    /// mentions, and a local involved in a live place alias is refused here.
+    /// `None` when the block is not such a region, or when running
     /// it does not finish on a constant — the block survives as written, so
     /// anything it would do at run time still happens there.
     ///
@@ -716,17 +718,20 @@ impl Interpreter<'_> {
         if let Some(value) = self.frame.scratch_folds.get(&e) {
             return Some(value.clone());
         }
-        if self.is_reference_type(body.exprs[e].type_id) {
+        if RefKind::from_resolved(self.type_table.get(body.exprs[e].type_id)).is_some() {
             return None;
         }
-        let free = region_free_reads(body, block, self.callees, self.ctfe_builtins)?;
+        if self.frame.region_misses.contains(&e) {
+            return None;
+        }
+        let free =
+            region_free_reads(body, block, self.callees, self.ctfe_builtins, self.type_table)?;
         let mut seeds: Vec<(u32, Value)> = Vec::with_capacity(free.len());
-        for (index, ty) in free {
-            if self.is_reference_type(ty) || self.frame.place_aliases.contains_key(&index) {
-                crate::compiler_trace!(
-                    "region_seed",
-                    "region {e:?}: local {index} unseedable (reference-typed or aliased)"
-                );
+        for index in free {
+            if self.frame.place_aliases.contains_key(&index)
+                || self.frame.place_aliases.values().any(|(root, _)| *root == index)
+            {
+                crate::compiler_trace!("region_seed", "region {e:?}: local {index} is aliased");
                 return None;
             }
             let Some(Lattice::Const(value)) = self.frame.env.get(&index) else {
@@ -754,19 +759,15 @@ impl Interpreter<'_> {
             } if label == Some(broke.as_str()) => value,
             Flow::Break { .. } | Flow::Return(_) | Flow::Continue | Flow::Bail => {
                 crate::compiler_trace!("region_seed", "region {e:?}: run abandoned");
+                self.frame.region_misses.insert(e);
                 return None;
             }
         };
-        lattice.as_const()
-    }
-
-    /// Whether `ty` is a `&T` / `&mut T`. A region yielding one, or seeding
-    /// one, would trade an alias for a fresh value.
-    fn is_reference_type(&self, ty: TypeId) -> bool {
-        matches!(
-            self.type_table.get(ty),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        )
+        let value = lattice.as_const();
+        if value.is_none() {
+            self.frame.region_misses.insert(e);
+        }
+        value
     }
 
     /// Charge the step budget for the copy of `body` a region run makes before

@@ -303,8 +303,10 @@ Regions:
   the region only reads, constant at the region's flow point, is bound in the
   frame as a value snapshot. The write test is what keeps that sound —
   `region_free_reads` rejects an outer local in a write position (an `Assign`
-  target or `&mut` borrow root), and a reference-typed mention is refused,
-  since reading a `&mut T` value hands a callee the same write capability. A
+  target, a `&mut` borrow root, a receiver whose callee takes `&mut self`, or
+  a `mut` call argument, refusing outright when a write's place no local
+  roots), and a reference-typed mention is refused, since reading a `&mut T`
+  value hands a callee the same write capability. A
   reference-typed region result is refused for its own reason: the fold would
   materialize a fresh value where the program yields an alias, and `ref.eq`
   tells the two apart. A constant outer local therefore folds during the

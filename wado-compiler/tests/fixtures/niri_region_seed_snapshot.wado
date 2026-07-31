@@ -1,7 +1,7 @@
-// A seeded region reads the outer local's value at the region's own flow
-// point (WEP: NIR Interpreter, regions). A later mutation of the local must
-// not reach the already-built template value — value semantics — and the
-// mutation itself must survive the fold.
+// A mutable outer local never seeds a region: the walker records `let mut`
+// as non-constant, so the template keeps its runtime build (pinned below)
+// and both the pre-mutation template value and the mutation itself survive
+// (WEP: NIR Interpreter, regions).
 
 use { println, Stdout } from "core:cli";
 
@@ -15,5 +15,6 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "xab\nabc\n"
+    "stdout": "xab\nabc\n",
+    "wir_expect:O2": ["internal_reserve_uninit"]
 }

@@ -7,14 +7,15 @@
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprKind, Operand};
 
-/// The local an lvalue or borrow chain roots at: `x`, `x.f`, `x[i]`, `*x`, and
-/// any nesting of those.
+/// The local an lvalue or borrow chain roots at: `x`, `x.f`, `x[i]`, `*x`, a
+/// cast over any of those (a cast names the same storage as its operand), and
+/// any nesting.
 pub(super) fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
     match &body.exprs[op.as_expr()?].kind {
         ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
-            lvalue_root_local(body, *inner)
-        }
+        ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. } => lvalue_root_local(body, *inner),
         ExprKind::Unary {
             op: NirUnaryOp::Deref,
             expr: inner,

@@ -14,8 +14,10 @@ use crate::wir::{WirData, WirInstr, WirPackage, WirType, WirTypeDef};
 use crate::wir_visitor::WirMutVisitor;
 
 /// Minimum element count to trigger `array.new_data` promotion. Arrays with
-/// fewer constant elements keep using `array.new_fixed`.
-const ARRAY_NEW_DATA_THRESHOLD: usize = 128;
+/// fewer constant elements keep using `array.new_fixed`. Read by
+/// `const_object_globalization` to predict which hoisted array literals lose
+/// const-expressibility here and therefore need the lazy-init guard.
+pub(crate) const ARRAY_NEW_DATA_THRESHOLD: usize = 128;
 
 /// Promote constant primitive `ArrayNewFixed` to `ArrayNewData`.
 ///

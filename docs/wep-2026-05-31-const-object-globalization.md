@@ -179,14 +179,18 @@ for a global.
 
 An initializer the classifier cannot promote to an eager `init` leaves its
 inline assignment standing, where, unguarded, it would re-run on every
-activation. Two shapes are non-promotable and get the guard, decided by one
+activation. Three shapes are non-promotable and get the guard, decided by one
 predicate (`needs_lazy_guard`) over the hoisted value — including any sibling
 `let`s moved into it:
 
 - a call, never Wasm-const-expressible;
-- a `PackedArray` past its eager bound — `string_inline_max_bytes` for a
-  `let`-shape global, `INLINE_REF_EAGER_MAX_BYTES` on top of that for an
-  in-place one — whose repr is `array.new_data`, not a constant instruction.
+- a `PackedArray` past its eager bound (`name::packed_array_is_eager`, the
+  same choice `translate_packed_array` makes — `string_inline_max_bytes` for
+  a `let`-shape global, `INLINE_REF_EAGER_MAX_BYTES` on top for an in-place
+  one) whose repr is `array.new_data`, not a constant instruction;
+- an `ArrayLiteral` of scalar constants at or past the `array.new_data`
+  promotion threshold, which `promote_constant_arrays_to_data` rewrites out
+  of const-expressibility before the classifier runs.
 
 The guard is `if builtin::is_uninitialized(G)`, which reads the global's slot
 at a nullable type and tests the `null` placeholder — the slot itself records

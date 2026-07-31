@@ -112,6 +112,21 @@ enum CandidateKind {
     },
 }
 
+impl CandidateKind {
+    /// Whether the hoisted global gets `prefer_fixed_string_repr`: an in-place
+    /// hoist keeps the value at its original call site, where a lazy
+    /// `array.new_data` global would cost a guard branch per call, so WIR
+    /// raises its eager bound to `INLINE_REF_EAGER_MAX_BYTES`. Both the guard
+    /// decision at collection time and the global's marking at mutation time
+    /// derive from this one answer.
+    fn prefer_fixed_repr(&self) -> bool {
+        match self {
+            CandidateKind::InlineRef { .. } | CandidateKind::ValueArg { .. } => true,
+            CandidateKind::LetBinding { .. } => false,
+        }
+    }
+}
+
 pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.clone();
     // One id serves every instantiation — the hoisted type rides the call node.
@@ -170,13 +185,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             kind,
             guarded,
         } = cand;
-        // An in-place hoist keeps the value at its original call site, where a
-        // lazy `array.new_data` global would cost a guard branch per call; the
-        // fixed repr lets `wir_optimize::const_global` promote it to eager.
-        let prefer_fixed_repr = matches!(
-            kind,
-            CandidateKind::InlineRef { .. } | CandidateKind::ValueArg { .. }
-        );
+        let prefer_fixed_repr = kind.prefer_fixed_repr();
 
         let mut func = project.functions[func_idx].borrow_mut();
         let body = func.body.as_mut().expect("candidate function has a body");
@@ -273,18 +282,24 @@ fn collect_candidates(
             // The sibling `let`s move into the initializer at mutation time,
             // so a non-promotable value among them needs the guard just as
             // much as one in the candidate's own value.
-            let guarded = stmt_needs_lazy_guard(body, s, gate.string_inline_max_bytes)
-                || sibling_lets
-                    .iter()
-                    .any(|&sib| stmt_needs_lazy_guard(body, sib, gate.string_inline_max_bytes));
+            let kind = CandidateKind::LetBinding {
+                local_index: *local_index,
+                sibling_lets,
+            };
+            let guarded = {
+                let sibling_lets = match &kind {
+                    CandidateKind::LetBinding { sibling_lets, .. } => sibling_lets.as_slice(),
+                    CandidateKind::InlineRef { .. } | CandidateKind::ValueArg { .. } => &[],
+                };
+                std::iter::once(s)
+                    .chain(sibling_lets.iter().copied())
+                    .any(|st| stmt_needs_lazy_guard(body, st, gate, kind.prefer_fixed_repr()))
+            };
             out.push(Candidate {
                 func_idx,
                 ty: *type_id,
                 module_source: module_source.clone(),
-                kind: CandidateKind::LetBinding {
-                    local_index: *local_index,
-                    sibling_lets,
-                },
+                kind,
                 guarded,
             });
             continue;
@@ -301,12 +316,14 @@ fn collect_candidates(
                 && is_globalizable_const(body, inner, gate, &mut IndexSet::default())
                 && contains_aggregate(body, inner, gate)
             {
+                let kind = CandidateKind::InlineRef { ref_expr: id };
+                let guarded = needs_lazy_guard(body, inner, gate, kind.prefer_fixed_repr());
                 out.push(Candidate {
                     func_idx,
                     ty: inner_ty,
                     module_source: module_source.clone(),
-                    kind: CandidateKind::InlineRef { ref_expr: id },
-                    guarded: needs_lazy_guard(body, inner, gate.in_place_eager_max_bytes()),
+                    kind,
+                    guarded,
                 });
                 continue;
             }
@@ -315,12 +332,14 @@ fn collect_candidates(
             let hoisted = value_arg_candidates(body, id, gate);
             if !hoisted.is_empty() {
                 for &arg in &hoisted {
+                    let kind = CandidateKind::ValueArg { arg_expr: arg };
+                    let guarded = needs_lazy_guard(body, arg, gate, kind.prefer_fixed_repr());
                     out.push(Candidate {
                         func_idx,
                         ty: body.exprs[arg].type_id,
                         module_source: module_source.clone(),
-                        kind: CandidateKind::ValueArg { arg_expr: arg },
-                        guarded: needs_lazy_guard(body, arg, gate.in_place_eager_max_bytes()),
+                        kind,
+                        guarded,
                     });
                 }
                 // The hoisted arguments keep their subtrees verbatim inside the
@@ -956,14 +975,6 @@ struct Gate<'a> {
 }
 
 impl Gate<'_> {
-    /// The eager `array.new_fixed` bound for an in-place hoist's value. Such a
-    /// global is marked `prefer_fixed_string_repr`, so `translate_packed_array`
-    /// admits `INLINE_REF_EAGER_MAX_BYTES` on top of the opt-level bound.
-    fn in_place_eager_max_bytes(&self) -> usize {
-        self.string_inline_max_bytes
-            .max(crate::name::INLINE_REF_EAGER_MAX_BYTES)
-    }
-
     fn is_reference_type(&self, ty: TypeId) -> bool {
         !matches!(
             self.type_table.borrow().get(ty),
@@ -1656,29 +1667,45 @@ fn inline_sibling_lets(
     );
 }
 
-/// True when `expr` cannot reduce to a Wasm constant instruction: it contains
-/// a call, or a `PackedArray` past `eager_max_bytes` — the bound
-/// `translate_packed_array` applies before falling back to `array.new_data`,
-/// which is not a constant instruction. Either way
-/// `wir_optimize::const_global` cannot delete the assignment, so the candidate
-/// needs the lazy-init guard.
-fn needs_lazy_guard(body: &Body, expr: ExprId, eager_max_bytes: usize) -> bool {
+/// True when `expr` cannot end as a Wasm constant instruction, so
+/// `wir_optimize::const_global` cannot delete the assignment and the
+/// candidate needs the lazy-init guard. Three shapes qualify:
+///
+/// - a call, never const-expressible;
+/// - a `PackedArray` outside the eager `array.new_fixed` bound
+///   ([`crate::name::packed_array_is_eager`], the same choice
+///   `translate_packed_array` makes);
+/// - an `ArrayLiteral` of scalar constants at or past
+///   `ARRAY_NEW_DATA_THRESHOLD`, which `promote_constant_arrays_to_data`
+///   rewrites to `array.new_data` before the classifier runs. Scalar-ness is
+///   read off the operands — a pure scalar element is born as
+///   `Operand::Value` — since only packable primitives lose the fixed repr.
+fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bool) -> bool {
     let mut stack = vec![NodeRef::Expr(expr)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(id) = node {
-            if matches!(
-                body.exprs[id].kind,
+            match &body.exprs[id].kind {
                 ExprKind::Call { .. }
-                    | ExprKind::MethodCall { .. }
-                    | ExprKind::IndirectCall { .. }
-                    | ExprKind::CmRawCall { .. }
-            ) {
-                return true;
-            }
-            if let ExprKind::PackedArray(bytes) = &body.exprs[id].kind
-                && bytes.len() > eager_max_bytes
-            {
-                return true;
+                | ExprKind::MethodCall { .. }
+                | ExprKind::IndirectCall { .. }
+                | ExprKind::CmRawCall { .. } => return true,
+                ExprKind::PackedArray(bytes) => {
+                    if !crate::name::packed_array_is_eager(
+                        bytes.len(),
+                        gate.string_inline_max_bytes,
+                        prefer_fixed,
+                    ) {
+                        return true;
+                    }
+                }
+                ExprKind::ArrayLiteral { elements } => {
+                    if elements.len() >= crate::wir_optimize::array::ARRAY_NEW_DATA_THRESHOLD
+                        && elements.iter().all(|op| matches!(op, Operand::Value(_)))
+                    {
+                        return true;
+                    }
+                }
+                _ => {}
             }
         }
         body.for_each_child(node, |c| stack.push(c));
@@ -1686,13 +1713,13 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, eager_max_bytes: usize) -> bool {
     false
 }
 
-fn stmt_needs_lazy_guard(body: &Body, stmt: StmtId, eager_max_bytes: usize) -> bool {
+fn stmt_needs_lazy_guard(body: &Body, stmt: StmtId, gate: &Gate<'_>, prefer_fixed: bool) -> bool {
     let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
         return false;
     };
     value
         .as_expr()
-        .is_some_and(|e| needs_lazy_guard(body, e, eager_max_bytes))
+        .is_some_and(|e| needs_lazy_guard(body, e, gate, prefer_fixed))
 }
 
 /// Wrap a hoisted `GlobalVarSet` in `if builtin::is_uninitialized(<global>)`.

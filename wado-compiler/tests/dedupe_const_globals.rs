@@ -16,10 +16,10 @@ use std::path::Path;
 
 use wado_compiler::{CompilerOptions, OptLevel};
 
-// `black_box` keeps the loop bound opaque, so the calls — and the template
-// region around them — stay unfolded and the hoists actually form; with a
-// constant bound the whole program folds to one string and there is nothing
-// left to dedup.
+/// `black_box` keeps the loop bound opaque, so the calls — and the template
+/// region around them — stay unfolded and the hoists actually form; with a
+/// constant bound the whole program folds to one string and there is nothing
+/// left to dedup.
 const DEDUP_SOURCE: &str = r#"
 use { println, Stdout } from "core:cli";
 

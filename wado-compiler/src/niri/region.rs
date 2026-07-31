@@ -13,6 +13,7 @@
 //! — by abandoning the evaluation, which forfeits the fold rather than
 //! dropping a write.
 
+use crate::name::RefKind;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatKind, StmtKind,
@@ -61,13 +62,16 @@ pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&s
 /// The outer locals `block` only reads — the seeds a region frame needs —
 /// provided every call in it is one a frame could run and nothing writes a
 /// global. `None` disqualifies the region outright: an unrunnable call, a
-/// global write, or an outer local in a write position, where folding the
-/// region would drop the write the program performs.
+/// global write, an outer local in a write position — where folding the
+/// region would drop the write the program performs — or an outer local of
+/// reference type, since reading a `&mut T` value hands a callee the same
+/// write capability.
 ///
-/// A write position is an `Assign` target or a `&mut` borrow rooting at the
-/// local; a plain read of an outer reference-typed local hands out the same
-/// write capability, which is why the caller also type-checks each returned
-/// mention before seeding.
+/// A write position is an `Assign` target, a `&mut` borrow, a receiver the
+/// callee's `self` is `&mut` for, or a `mut` call argument. A write whose
+/// place no local roots also disqualifies: the executor resolves stores
+/// through the same chains, so an unrooted one is a write this scan cannot
+/// account for, not a write that will not happen.
 ///
 /// Only the reachable nodes are scanned, so a mention an earlier rewrite
 /// orphaned neither disqualifies the region nor keeps it from folding. What
@@ -79,11 +83,16 @@ pub(super) fn region_free_reads(
     block: BlockId,
     callees: Option<&CalleeMap>,
     ctfe_builtins: Option<&CtfeBuiltinMap>,
-) -> Option<Vec<(u32, TypeId)>> {
-    let runnable = |func_id| {
-        callees.is_some_and(|m| m.contains_key(&func_id))
-            || ctfe_builtins.is_some_and(|m| m.contains_key(&func_id))
-    };
+    type_table: &TypeTable,
+) -> Option<Vec<u32>> {
+    const RECEIVER: usize = 0;
+    fn record_write(body: &Body, op: Operand, written: &mut LocalSet) -> Option<()> {
+        let root = place_of(body, op)
+            .map(|(root, _)| root)
+            .or_else(|| lvalue_root_local(body, op))?;
+        written.insert(root);
+        Some(())
+    }
     let mut declared = LocalSet::default();
     let mut mentioned: Vec<(u32, TypeId)> = Vec::new();
     let mut written = LocalSet::default();
@@ -104,20 +113,36 @@ pub(super) fn region_free_reads(
                 ExprKind::GlobalVarSet { .. }
                 | ExprKind::IndirectCall { .. }
                 | ExprKind::CmRawCall { .. } => return None,
-                ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => {
-                    if !runnable(*func_id) {
+                ExprKind::Call { func_id, args, .. } => {
+                    let builtin = ctfe_builtins.and_then(|m| m.get(func_id));
+                    if callees.is_none_or(|m| !m.contains_key(func_id)) && builtin.is_none() {
                         return None;
+                    }
+                    for arg in args.iter().filter(|a| a.is_mut) {
+                        record_write(body, arg.expr, &mut written)?;
+                    }
+                }
+                ExprKind::MethodCall {
+                    func_id,
+                    receiver,
+                    args,
+                    ..
+                } => {
+                    // A builtin never reaches NIR as a method call, so only
+                    // the callee map answers what the receiver undergoes.
+                    let callee = callees.and_then(|m| m.get(func_id))?;
+                    if callee.writes_param(RECEIVER) {
+                        record_write(body, *receiver, &mut written)?;
+                    }
+                    for arg in args.iter().filter(|a| a.is_mut) {
+                        record_write(body, arg.expr, &mut written)?;
                     }
                 }
                 ExprKind::Local { index, .. } => {
-                    if !mentioned.iter().any(|(i, _)| i == index) {
-                        mentioned.push((*index, body.exprs[e].type_id));
-                    }
+                    mentioned.push((*index, body.exprs[e].type_id));
                 }
                 ExprKind::Assign { target, .. } => {
-                    if let Some(root) = lvalue_root_local(body, Operand::Expr(*target)) {
-                        written.insert(root);
-                    }
+                    record_write(body, Operand::Expr(*target), &mut written)?;
                 }
                 ExprKind::Unary {
                     op: NirUnaryOp::MutRef,
@@ -133,12 +158,18 @@ pub(super) fn region_free_reads(
         }
         body.for_each_child(node, |c| stack.push(c));
     }
-    let free: Vec<(u32, TypeId)> = mentioned
-        .into_iter()
-        .filter(|(index, _)| !declared.contains(*index))
-        .collect();
-    if free.iter().any(|(index, _)| written.contains(*index)) {
-        return None;
+    let mut free = LocalSet::default();
+    let mut out = Vec::new();
+    for (index, ty) in mentioned {
+        if declared.contains(index) {
+            continue;
+        }
+        if written.contains(index) || RefKind::from_resolved(type_table.get(ty)).is_some() {
+            return None;
+        }
+        if free.insert(index) {
+            out.push(index);
+        }
     }
-    Some(free)
+    Some(out)
 }

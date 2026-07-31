@@ -298,6 +298,15 @@ pub const CONST_OBJ_GLOBAL_PREFIX: &str = "__const_obj_";
 /// falls back to compact `array.new_data` instead of bloating `-Os` builds.
 pub const INLINE_REF_EAGER_MAX_BYTES: usize = 64;
 
+/// Whether a `PackedArray` of `len` bytes gets the constant
+/// `array.new_fixed<u8>` repr — the choice `translate_packed_array` makes,
+/// shared so `const_object_globalization` predicts the same verdict when it
+/// decides whether a hoist needs the lazy-init guard.
+#[must_use]
+pub fn packed_array_is_eager(len: usize, string_inline_max_bytes: usize, prefer_fixed: bool) -> bool {
+    len == 0 || len <= string_inline_max_bytes || (prefer_fixed && len <= INLINE_REF_EAGER_MAX_BYTES)
+}
+
 /// A free function name (not a method on a struct).
 ///
 /// Format: `{module_source}/{name}`
