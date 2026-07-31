@@ -1466,22 +1466,22 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == '(' {
+        } else if first_char matches { '(' } {
             end = try_LP(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LP; }
-        } else if first_char == ')' {
+        } else if first_char matches { ')' } {
             end = try_RP(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_RP; }
-        } else if first_char == 'a' {
+        } else if first_char matches { 'a' } {
             end = try_A(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_A; }
-        } else if first_char == 'b' {
+        } else if first_char matches { 'b' } {
             end = try_B(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_B; }
-        } else if first_char == 'c' {
+        } else if first_char matches { 'c' } {
             end = try_C(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_C; }
         }

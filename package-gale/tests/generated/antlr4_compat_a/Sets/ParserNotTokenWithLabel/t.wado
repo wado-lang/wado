@@ -1414,10 +1414,10 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == 'x' {
+        if first_char matches { 'x' } {
             end = try_lit_x(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_X; }
-        } else if first_char == 'z' {
+        } else if first_char matches { 'z' } {
             end = try_lit_z(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_Z; }
         }

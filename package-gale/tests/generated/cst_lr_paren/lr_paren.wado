@@ -1463,19 +1463,19 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == '(' {
+        } else if first_char matches { '(' } {
             end = try_lit_lparen(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
-        } else if first_char == ')' {
+        } else if first_char matches { ')' } {
             end = try_lit_rparen(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
-        } else if first_char == '*' {
+        } else if first_char matches { '*' } {
             end = try_lit_star(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
-        } else if 'a' <= first_char <= 'z' {
+        } else if first_char matches { 'a'..='z' } {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else {

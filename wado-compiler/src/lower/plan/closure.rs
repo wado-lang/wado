@@ -1896,12 +1896,11 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
 /// - `Let { local_index }` → `Let { local_index + 1 }`
 /// - `Binding { local_index }` (in patterns) → shifted by +1
 ///
-/// Nested `Closure` nodes are NOT recursed into: their body lives in a
-/// separate local-index namespace and gets its own `__call` method
-/// generated at the same level. Their `captures[*].outer_index` references
-/// locals in the outer pre-shift scope and are not rewritten here — the
-/// nested-closure construction site is rewritten by Phase 3 and reads
-/// capture values through the shifted local map at that point.
+/// A nested `Closure` node's body is NOT recursed into: it lives in a
+/// separate local-index namespace and gets its own `__call` method generated
+/// at the same level. Its `captures[*].outer_index` does name locals in *this*
+/// scope, though — the enclosing closure's — so those shift by +1 with
+/// everything else, or the nested functor reads the local one slot too early.
 struct ClosureBodyTransformer<'a> {
     captures: &'a [TirCapture],
     self_ref_type: TypeId,
@@ -1937,8 +1936,12 @@ impl TirMutVisitor for ClosureBodyTransformer<'_> {
             TirExprKind::Local { index, .. } => {
                 *index += 1;
             }
-            TirExprKind::Closure { .. } => {
-                // Don't recurse — see struct doc.
+            TirExprKind::Closure { captures, .. } => {
+                // The body is a separate namespace, but the captures read
+                // this one — see struct doc.
+                for capture in captures.iter_mut() {
+                    capture.outer_index += 1;
+                }
             }
             _ => self.walk_expr(expr),
         }

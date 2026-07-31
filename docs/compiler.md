@@ -291,6 +291,12 @@ Three allocators live in `lib/core/allocator.wado`, each tagged `#[allocator("na
 
 - Implicit struct literals do not work with generic structs: `let b: Box<i32> = { value };` fails. Use `let b: Box<i32> = Box { value };`.
 - GC arrays cannot be passed directly to `stream<u8>` — they must be copied to linear memory first ([component-model#525](https://github.com/WebAssembly/component-model/issues/525)).
+- A very long `||` / `&&` chain aborts the compiler with a stack overflow. It
+  parses as a left-nested binary expression, so every recursive expression walk
+  descends once per operand; 2400 operands need ~256 MiB of stack (measured
+  with `ulimit -s` — the 64 MiB `wado-cli` asks tokio for is not enough). Repro:
+  a `fn` returning `c == 0 || c == 1 || …` with 2400 terms. The pattern path
+  takes the same width, so Gale emits `c matches { … }` for its lexer dispatch.
 
 ## Not Yet Implemented
 

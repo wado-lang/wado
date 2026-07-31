@@ -1546,25 +1546,25 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == 'K' {
+        } else if first_char matches { 'K' } {
             end = try_K(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_K; }
-        } else if first_char == 'N' {
+        } else if first_char matches { 'N' } {
             end = try_N(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_N; }
-        } else if first_char == 'W' {
+        } else if first_char matches { 'W' } {
             end = try_W(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_W; }
-        } else if first_char == 'X' {
+        } else if first_char matches { 'X' } {
             end = try_X(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_X; }
-        } else if first_char == 'Y' {
+        } else if first_char matches { 'Y' } {
             end = try_Y(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Y; }
-        } else if first_char == 'Z' {
+        } else if first_char matches { 'Z' } {
             end = try_Z(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Z; }
         }

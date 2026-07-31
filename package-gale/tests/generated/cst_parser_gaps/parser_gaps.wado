@@ -1535,42 +1535,42 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == ',' {
+        } else if first_char matches { ',' } {
             end = try_COMMA(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_COMMA; }
-        } else if first_char == ';' {
+        } else if first_char matches { ';' } {
             end = try_SEMI(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SEMI; }
-        } else if first_char == '_' {
+        } else if first_char matches { '_' } {
             end = try_ITEM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ITEM; }
-        } else if first_char == 'a' {
+        } else if first_char matches { 'a' } {
             end = try_ANY(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ANY; }
             end = try_ITEM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ITEM; }
-        } else if first_char == 'l' {
+        } else if first_char matches { 'l' } {
             end = try_LIST(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIST; }
             end = try_ITEM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ITEM; }
-        } else if first_char == 'n' {
+        } else if first_char matches { 'n' } {
             end = try_NOT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NOT; }
             end = try_ITEM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ITEM; }
-        } else if first_char == 's' {
+        } else if first_char matches { 's' } {
             end = try_SET(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SET; }
             end = try_ITEM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ITEM; }
-        } else if 'a' <= first_char <= 'z' {
+        } else if first_char matches { 'a'..='z' } {
             end = try_ITEM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ITEM; }
-        } else if '0' <= first_char <= '9' {
+        } else if first_char matches { '0'..='9' } {
             end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else {

@@ -102,22 +102,10 @@ impl G4Lexer {
     }
 
     fn read_string_escape(&mut self, text: &mut List<char>) {
-        let ec = self.chars[self.pos];
-        self.pos += 1;
-        match ec {
-            'u' => {
-                let mut p = self.pos;
-                let ch = resolve_unicode_escape(self.chars, &mut p);
-                self.pos = p;
-                text.push(ch);
-            },
-            'n' => text.push('\n'),
-            'r' => text.push('\r'),
-            't' => text.push('\t'),
-            'b' => text.push('\u0008'),
-            'f' => text.push('\u000C'),
-            _ => text.push(ec),
-        }
+        let mut p = self.pos;
+        let cp = decode_string_escape(self.chars, &mut p);
+        self.pos = p;
+        text.push(scalar_or_replacement(cp));
     }
 
     fn read_char_class(&mut self) -> Token {
@@ -289,7 +277,54 @@ fn is_ident_char(c: char) -> bool {
     return is_ident_start(c) || '0' <= c <= '9';
 }
 
-pub fn resolve_unicode_escape(chars: &List<char>, pos: &mut i32) -> char {
+/// Decode one escape body — the chars *after* the `\` — into a code point.
+/// `pos` enters at the escape character and leaves past the escape.
+pub fn decode_string_escape(chars: &List<char>, pos: &mut i32) -> i32 {
+    let ec = chars[*pos];
+    *pos += 1;
+    return match ec {
+        'u' => resolve_unicode_escape_code(chars, pos),
+        'n' => '\n' as i32,
+        'r' => '\r' as i32,
+        't' => '\t' as i32,
+        'b' => '\u0008' as i32,
+        'f' => '\u000C' as i32,
+        _ => ec as i32,
+    };
+}
+
+/// Code points a string-literal token denotes, decoded from its source span
+/// (`'…'`, quotes included). Unlike the token text, an unpaired surrogate
+/// escape survives as its own code point rather than collapsing to U+FFFD —
+/// a char-range endpoint must not silently become a different, matchable char.
+pub fn string_literal_code_points(chars: &List<char>, span: Span) -> List<i32> {
+    let mut out: List<i32> = [];
+    let mut pos = span.start + 1;
+    let last = span.end - 1;
+    while pos < last {
+        let c = chars[pos];
+        pos += 1;
+        if c == '\\' && pos < last {
+            out.push(decode_string_escape(chars, &mut pos));
+        } else {
+            out.push(c as i32);
+        }
+    }
+    return out;
+}
+
+/// The `char` for a code point, or U+FFFD when it is not a Unicode scalar
+/// (an unpaired surrogate). Only for text that must stay a `String`.
+pub fn scalar_or_replacement(code: i32) -> char {
+    return match char::from_i32(code) {
+        Some(ch) => ch,
+        None => '\u{FFFD}',
+    };
+}
+
+/// Raw code point of a `\uXXXX` / `\u{…}` escape body (`pos` enters past the
+/// `u`). Surrogates come back verbatim; the caller decides what they mean.
+pub fn resolve_unicode_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
     let mut val = 0;
     if *pos < chars.len() && chars[*pos] == '{' {
         *pos += 1;
@@ -311,8 +346,5 @@ pub fn resolve_unicode_escape(chars: &List<char>, pos: &mut i32) -> char {
             n += 1;
         }
     }
-    return match char::from_i32(val) {
-        Some(ch) => ch,
-        None => '\u{FFFD}',
-    };
+    return val;
 }
