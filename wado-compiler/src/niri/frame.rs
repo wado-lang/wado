@@ -398,7 +398,8 @@ impl Interpreter<'_> {
             CtfeBuiltin::ArrayGet
             | CtfeBuiltin::ArrayLen
             | CtfeBuiltin::ArrayNew
-            | CtfeBuiltin::Select => None,
+            | CtfeBuiltin::Select
+            | CtfeBuiltin::I32AsChar => None,
         }
     }
 
@@ -467,9 +468,39 @@ impl Interpreter<'_> {
         match op.as_expr() {
             Some(e) => {
                 self.reduce_in_place(body, e);
-                self.reduce_to_lattice(body, e)
+                match self.reduce_to_lattice(body, e) {
+                    Lattice::Unevaluated => self.exec_value_block(body, e),
+                    lattice => lattice,
+                }
             }
             None => self.operand_to_lattice(body, op),
+        }
+    }
+
+    /// Evaluate a multi-statement block in expression position by executing its
+    /// statements — the shape inlining leaves (`{ let v = …; tail }` and the
+    /// labeled block a spliced `return` breaks out of), which the pure
+    /// projection cannot value. Only a frame may run one: its `let`s bind into
+    /// the frame env and its writes land in frame-owned places, and an
+    /// abandoned run discards the whole call, so a partial execution is never
+    /// observed. Control leaving the block — a `return`, a `continue`, or a
+    /// `break` past its own label — is not a value; the evaluation stays
+    /// `Unevaluated` and the caller abandons.
+    fn exec_value_block(&mut self, body: &mut Body, e: ExprId) -> Lattice {
+        let (block, label) = match &body.exprs[e].kind {
+            ExprKind::Block(b) => (*b, None),
+            ExprKind::LabeledBlock { block, label, .. } => (*block, Some(label.clone())),
+            _ => return Lattice::Unevaluated,
+        };
+        match self.exec_block(body, block) {
+            Flow::Fallthrough(value) => value,
+            Flow::Break {
+                label: Some(broke),
+                value,
+            } if label.as_deref() == Some(broke.as_str()) => value,
+            Flow::Break { .. } | Flow::Return(_) | Flow::Continue | Flow::Bail => {
+                Lattice::Unevaluated
+            }
         }
     }
 

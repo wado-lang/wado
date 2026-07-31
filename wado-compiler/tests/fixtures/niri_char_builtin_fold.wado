@@ -1,0 +1,38 @@
+// CTFE evaluates `builtin::i32_as_char`, the bodyless char-conversion builtin
+// `char::from_u32_unchecked` wraps. Without it, any constant call whose body
+// reaches a char conversion — `to_ascii_lowercase` and every keyword-matching
+// helper built on it — bails at the builtin and never folds.
+//
+// `#[inline(never)]` keeps the inliner away, so the fold is attributable to
+// niri.
+//
+// The `eq_ignore_ascii_case` call pins the real-world shape: inlining its body
+// splices `to_ascii_lowercase('Q')` into the caller, and that constant side
+// must fold even though `to_ascii_lowercase` itself stays out-of-line.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn lower_k() -> char {
+    return 'K'.to_ascii_lowercase();
+}
+
+export fn run() with Stdout {
+    let a = lower_k();
+    let c = (builtin::black_box(81) & 127) as u8 as char;
+    let eq = c.eq_ignore_ascii_case(&'Q');
+    if a != 'k' {
+        panic("dead_lower_k_83125");
+    }
+    println(`${a} ${eq as i32}`);
+}
+
+__DATA__
+{
+    "stdout": "k 1\n",
+    "wir_not_expect:O2": [
+        "dead_lower_k_83125",
+        "lower_k",
+        "char::to_ascii_lowercase\"(81)"
+    ]
+}

@@ -152,6 +152,7 @@ pub enum CtfeBuiltin {
     ArrayCopy,
     ColdPath,
     Select,
+    I32AsChar,
 }
 
 impl CtfeBuiltin {
@@ -161,9 +162,12 @@ impl CtfeBuiltin {
     fn is_write(self) -> bool {
         match self {
             Self::ArraySet | Self::ArrayCopy => true,
-            Self::ArrayGet | Self::ArrayLen | Self::ArrayNew | Self::ColdPath | Self::Select => {
-                false
-            }
+            Self::ArrayGet
+            | Self::ArrayLen
+            | Self::ArrayNew
+            | Self::ColdPath
+            | Self::Select
+            | Self::I32AsChar => false,
         }
     }
 }
