@@ -23,8 +23,7 @@ fn classify(tag: i32) -> i32 {
     return winner;
 }
 
-// `black_box` keeps the arguments runtime-opaque so CTFE does not run
-// `classify` at compile time and erase the shape under test.
+// `black_box` keeps CTFE from running `classify` and erasing the shape under test.
 export fn run() {
     assert classify(builtin::black_box(0)) == 0;
     assert classify(builtin::black_box(1)) == 1;

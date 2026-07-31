@@ -263,10 +263,8 @@ impl Interpreter<'_> {
                         label,
                         value: Lattice::Unevaluated,
                     },
-                    // A carried value the frame cannot produce abandons the
-                    // run: evaluating it may have executed a block whose
-                    // writes already landed, and this is the one statement
-                    // whose consumers would step past an unevaluated result.
+                    // Break consumers step past an unevaluated value, and
+                    // evaluating it may already have landed a block's writes.
                     Some(op) => match self.eval_operand(body, op) {
                         value @ Lattice::Const(_) => Flow::Break { label, value },
                         Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
@@ -468,9 +466,8 @@ impl Interpreter<'_> {
     }
 
     /// Reducing in place first is what lets a nested call fold before the
-    /// operand is projected. A block-shaped operand is not pre-reduced: it
-    /// executes instead, so its reads reduce as each statement runs rather
-    /// than against the environment as it stood before the block.
+    /// operand is projected. A block-shaped operand executes instead, so its
+    /// reads reduce as each statement runs, not against the pre-block env.
     fn eval_operand(&mut self, body: &mut Body, op: Operand) -> Lattice {
         match op.as_expr() {
             Some(e) => match &body.exprs[e].kind {
@@ -487,14 +484,11 @@ impl Interpreter<'_> {
     }
 
     /// Evaluate a block in expression position by executing its statements —
-    /// the shape inlining leaves (`{ let v = …; tail }` and the labeled block
-    /// a spliced `return` breaks out of), which the pure projection cannot
-    /// value. Only a frame may run one: its `let`s bind into the frame env and
-    /// its writes land in frame-owned places, and every consumer of the value
-    /// abandons the frame on a non-constant, so a partial execution is never
-    /// observed. A unit-typed block yields nothing whatever its last statement
-    /// computed, and control leaving the block — a `return`, a `continue`, or
-    /// a `break` past its own label — is not a value; both stay `Unevaluated`.
+    /// the shape inlining leaves, which the pure projection cannot value. A
+    /// unit-typed block yields nothing, and control leaving the block —
+    /// `return`, `continue`, or a `break` past its own label — is not a
+    /// value; both stay `Unevaluated`, and every consumer abandons the frame
+    /// on a non-constant, so a partial execution is never observed.
     fn exec_value_block(&mut self, body: &mut Body, e: ExprId) -> Lattice {
         if body.exprs[e].type_id == TypeTable::UNIT {
             return Lattice::Unevaluated;

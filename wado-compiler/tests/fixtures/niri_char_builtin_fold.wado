@@ -1,14 +1,10 @@
-// CTFE evaluates `builtin::i32_as_char`, the bodyless char-conversion builtin
-// `char::from_u32_unchecked` wraps. Without it, any constant call whose body
-// reaches a char conversion — `to_ascii_lowercase` and every keyword-matching
-// helper built on it — bails at the builtin and never folds.
-//
-// `#[inline(never)]` keeps the inliner away, so the fold is attributable to
-// niri.
-//
-// The `eq_ignore_ascii_case` call pins the real-world shape: inlining its body
-// splices `to_ascii_lowercase('Q')` into the caller, and that constant side
-// must fold even though `to_ascii_lowercase` itself stays out-of-line.
+// CTFE evaluates `builtin::i32_as_char`, the bodyless builtin
+// `char::from_u32_unchecked` wraps; without it any constant call reaching a
+// char conversion bails and never folds. `#[inline(never)]` keeps the inliner
+// away, so the fold is attributable to niri. The `eq_ignore_ascii_case` call
+// pins the real-world shape: its inlined body splices `to_ascii_lowercase('Q')`
+// into the caller, and that constant side must fold even though
+// `to_ascii_lowercase` itself stays out-of-line.
 
 use { println, Stdout } from "core:cli";
 

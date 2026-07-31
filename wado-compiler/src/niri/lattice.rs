@@ -486,10 +486,9 @@ impl Interpreter<'_> {
         }
     }
 
-    /// The char `i32_as_char(value)` denotes: an unchecked reinterpretation,
-    /// so a codepoint outside the scalar-value range is not a constant here —
-    /// the call stays as written rather than folding a value `char` cannot
-    /// hold.
+    /// `i32_as_char` reinterprets unchecked, so a codepoint outside the
+    /// scalar-value range stays as written rather than folding a value
+    /// `char` cannot hold.
     fn i32_as_char_lattice(&self, body: &Body, value: Operand) -> Lattice {
         let Lattice::Const(value) = self.operand_lattice_folded(body, value) else {
             return Lattice::Unevaluated;

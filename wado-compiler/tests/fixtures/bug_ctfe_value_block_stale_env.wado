@@ -1,12 +1,9 @@
-// Regression: a compile-time frame evaluating a block in expression position
-// must not pre-reduce the block's statements against the environment as it
-// stands *before* the block runs. The pure reducer folded `w` reads (and
-// collapsed the `if`) from the pre-block env, so the write the block performs
-// first was never observed: `stale_sum` folded to 1 (runtime 2) and
-// `stale_pick` took the wrong branch, folding to 10 (runtime 20).
-//
-// Both functions must still fold — to the value the program computes — so
-// their names must not survive to WIR.
+// Regression: a compile-time frame must not pre-reduce a value block's
+// statements against the pre-block environment. Reads (and a constant `if`)
+// folded before the block's own writes ran: `stale_sum` folded to 1 (runtime
+// 2) and `stale_pick` took the dead branch, folding to 10 (runtime 20). Both
+// must still fold — to the computed value — so their names must not survive
+// to WIR.
 
 use { println, Stdout } from "core:cli";
 

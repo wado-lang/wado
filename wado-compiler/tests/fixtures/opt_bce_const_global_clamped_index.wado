@@ -18,8 +18,7 @@ fn lookup(x: i32) -> u64 {
     return TABLE[n];
 }
 
-// `black_box` keeps the arguments runtime-opaque so CTFE does not run
-// `lookup` at compile time and erase the bounds-check shape under test.
+// `black_box` keeps CTFE from running `lookup` and erasing the shape under test.
 export fn run() {
     assert lookup(builtin::black_box(0)) == 1;
     assert lookup(builtin::black_box(5)) == 100000;
