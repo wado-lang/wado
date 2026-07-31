@@ -2771,8 +2771,13 @@ fn ranges_meet_unclaimed(ranges: &List<[char, char]>, probe: [char, char], claim
         if lo > hi {
             return false;
         }
-        let claimed_here = claimed.into_iter().filter(|c: &char| lo <= *c <= hi).count();
-        return claimed_here < hi as i32 - lo as i32 + 1;
+        // A `\p{...}` set runs to hundreds of ranges each wider than the whole
+        // single-char branch set, so answer those by width alone.
+        let width = hi as i32 - lo as i32 + 1;
+        if width > claimed.len() {
+            return true;
+        }
+        return claimed.into_iter().filter(|c: &char| lo <= *c <= hi).count() < width;
     });
 }
 
@@ -2785,10 +2790,6 @@ global FALLBACK_PATTERN: String = "_";
 struct DispatchGroup {
     pattern: String,
     calls: List<i32>,
-}
-
-fn has_pattern(groups: &List<DispatchGroup>, pattern: &String) -> bool {
-    return groups.into_iter().any(|g: &DispatchGroup| g.pattern == *pattern);
 }
 
 /// Fold each branch into its immediate predecessor when the two have the same
@@ -2866,27 +2867,31 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     // two rules' overlapping ranges only reaches the first group covering it —
     // that group therefore carries every rule the range meets, not just the one
     // the range came from. A rule that cannot match simply fails its `try_`.
+    let mut distinct_ranges: List<[char, char]> = [];
     for let mut i = 0; i < calls.len(); i += 1 {
         if calls[i].is_wildcard {
             continue;
         }
         for let r of &calls[i].first_chars {
-            if r[0] != r[1] {
-                let pattern = `${char_lit(r[0])}..=${char_lit(r[1])}`;
-                if !has_pattern(&groups, &pattern) {
-                    let mut cs: List<i32> = [];
-                    for let mut j = 0; j < calls.len(); j += 1 {
-                        if calls[j].is_catch_all {
-                            continue;
-                        }
-                        if calls[j].is_wildcard || ranges_meet_unclaimed(&calls[j].first_chars, *r, &all_chars) {
-                            cs.push(j);
-                        }
-                    }
-                    groups.push(DispatchGroup { pattern, calls: cs });
-                }
+            if r[0] != r[1] && !distinct_ranges.contains(r) {
+                distinct_ranges.push(*r);
             }
         }
+    }
+    for let r of &distinct_ranges {
+        let mut cs: List<i32> = [];
+        for let mut j = 0; j < calls.len(); j += 1 {
+            if calls[j].is_catch_all {
+                continue;
+            }
+            if calls[j].is_wildcard || ranges_meet_unclaimed(&calls[j].first_chars, *r, &all_chars) {
+                cs.push(j);
+            }
+        }
+        groups.push(DispatchGroup {
+            pattern: `${char_lit(r[0])}..=${char_lit(r[1])}`,
+            calls: cs,
+        });
     }
 
     coalesce_equal_groups(&mut groups);
