@@ -893,12 +893,13 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "ambiguous method '{method}': declared by {}",
+                    "ambiguous method '{method}': declared by {}; name the trait, e.g. '{}::{method}(&value)'",
                     traits
                         .iter()
                         .map(|t| format!("'{t}'"))
                         .collect::<Vec<_>>()
-                        .join(" and ")
+                        .join(" and "),
+                    traits.first().map_or("Trait", String::as_str)
                 ),
                 *span,
             ),

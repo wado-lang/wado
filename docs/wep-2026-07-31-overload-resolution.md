@@ -87,11 +87,22 @@ available to every generic trait.
 
 Distinct traits never form an overload set. A method name reachable through two
 different trait declarations is an ambiguity error at the call site — in every
-shape, including the concrete-receiver case that today resolves silently. The
+shape, including the concrete-receiver case that used to resolve silently. The
 rationale is twofold: impls of different traits share no contract, so a
 type-directed pick is a semantic guess; and allowing it would reintroduce ad-hoc
 overloading through one-method traits, which the design philosophy rules out.
 The escape is the qualified call syntax below, not renaming.
+
+One exception: a blanket candidate does not count toward the collision. Wado
+does not scope method candidates by which traits are imported, so a foreign
+`impl<T: Bound> Foreign for T` reaches every receiver in the program — counting
+it would make adding a blanket impl to a library a breaking change for every
+downstream method of that name, which is the cost Rust pays with trait-import
+scoping instead. A blanket is the general case and loses to any impl written
+for the receiver: the same specific-impls-win ordering the language already
+applies within one trait, read across traits. Two blankets colliding with each
+other still resolve by the existing order rather than erroring; if that turns
+out to bite, the answer is candidate scoping, not counting blankets here.
 
 ### Resolution algorithm
 
@@ -303,14 +314,19 @@ Landing order — each phase keeps the suite green and is useful alone:
    `method_dispatch` would have been the wrong drawer, since reify reads it
    only for a `MethodCallExpr` node.
 
-2. Cross-trait ambiguity on concrete receivers: `select_trait_match`
-   (`method_lookup.rs:2515`) stops taking the first of two trait groups and
-   reports the error, extending `report_trait_argument_ambiguity` beyond
-   same-base-name survivors. The local-impls-first sort survives only as the
-   tie-break among identical instantiations. Requires an audit of stdlib and
-   fixtures for calls that today resolve through the silent preference — the
-   blanket `Inspect` / `ReflectStruct` impls put same-named methods on every
-   struct, so user traits reusing stdlib method names will surface here.
+2. Cross-trait ambiguity on concrete receivers: `report_cross_trait_ambiguity`
+   fires when the non-blanket survivors span more than one trait, reusing the
+   bounds path's `AmbiguousTraitMethod` so the shape a collision arrives in
+   does not change the answer. Selection itself is untouched — the check
+   decides only what is reported, which keeps the change's blast radius to the
+   set of programs that error.
+
+   The audit found two shapes. `x.fmt(&mut f)` on a primitive is a real
+   collision (`Display`, `Binary`, `Octal`, `LowerHex`, `UpperHex` all declare
+   `fmt`), and the fixtures migrated to `Display::fmt(&x, &mut f)` — the
+   migration this phase exists to enable. A foreign blanket beside a local
+   impl is not a collision, which is what the blanket exception above records.
+
 3. Argument-directed selection: probe typing, then the filter in
    `select_trait_match` (which becomes `&mut self` — it runs before arguments
    are resolved today). Only calls whose candidate set has several argument
