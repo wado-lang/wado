@@ -67,8 +67,8 @@ pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&s
 /// reference type, since reading a `&mut T` value hands a callee the same
 /// write capability.
 ///
-/// A write position is an `Assign` target, a `&mut` borrow, a receiver the
-/// callee's `self` is `&mut` for, or a `mut` call argument. A write whose
+/// A write position is an `Assign` target, a `&mut` borrow, or an argument —
+/// receiver included — the callee's signature takes by `&mut`. A write whose
 /// place no local roots also disqualifies: the executor resolves stores
 /// through the same chains, so an unrooted one is a write this scan cannot
 /// account for, not a write that will not happen.
@@ -112,12 +112,26 @@ pub(super) fn region_free_reads(
                 | ExprKind::IndirectCall { .. }
                 | ExprKind::CmRawCall { .. } => return None,
                 ExprKind::Call { func_id, args, .. } => {
-                    let builtin = ctfe_builtins.and_then(|m| m.get(func_id));
-                    if callees.is_none_or(|m| !m.contains_key(func_id)) && builtin.is_none() {
-                        return None;
-                    }
-                    for arg in args.iter().filter(|a| a.is_mut) {
-                        record_write(body, arg.expr, &mut written)?;
+                    // `ArenaCallArg::is_mut` marks a by-value `mut` parameter
+                    // — the callee's own copy — so a caller-visible write is
+                    // read off the callee's `&mut` signature instead. Boxing
+                    // can erase the borrow node at the call site, so the
+                    // signature is the only reliable witness.
+                    if let Some(callee) = callees.and_then(|m| m.get(func_id)) {
+                        if args.len() != callee.arity() {
+                            return None;
+                        }
+                        for (i, arg) in args.iter().enumerate() {
+                            if callee.writes_param(i) {
+                                record_write(body, arg.expr, &mut written)?;
+                            }
+                        }
+                    } else {
+                        let builtin = ctfe_builtins.and_then(|m| m.get(func_id))?;
+                        if builtin.is_write() {
+                            let target = args.first()?;
+                            record_write(body, target.expr, &mut written)?;
+                        }
                     }
                 }
                 ExprKind::MethodCall {
@@ -127,13 +141,18 @@ pub(super) fn region_free_reads(
                     ..
                 } => {
                     // A builtin never reaches NIR as a method call, so only
-                    // the callee map answers what the receiver undergoes.
+                    // the callee map answers what each argument undergoes.
                     let callee = callees.and_then(|m| m.get(func_id))?;
+                    if 1 + args.len() != callee.arity() {
+                        return None;
+                    }
                     if callee.writes_param(RECEIVER) {
                         record_write(body, *receiver, &mut written)?;
                     }
-                    for arg in args.iter().filter(|a| a.is_mut) {
-                        record_write(body, arg.expr, &mut written)?;
+                    for (i, arg) in args.iter().enumerate() {
+                        if callee.writes_param(1 + i) {
+                            record_write(body, arg.expr, &mut written)?;
+                        }
                     }
                 }
                 ExprKind::Local { index, .. } => {
