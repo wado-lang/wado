@@ -48,12 +48,12 @@ fn test_custom() with Stdout {
     let p = DisplayPoint { x: 10, y: 20 };
     let mut buf = String::with_capacity(64);
     let mut f = Formatter::new(&mut buf);
-    Display::fmt(&p, &mut f);
+    p.fmt(&mut f);
     println(buf);
     let o = DisplayPoint { x: 0, y: 0 };
     buf = String::with_capacity(64);
     f = Formatter::new(&mut buf);
-    Display::fmt(&o, &mut f);
+    o.fmt(&mut f);
     println(buf);
 }
 
@@ -61,25 +61,25 @@ fn test_primitives() with Stdout {
     let mut buf = String::with_capacity(64);
     let mut f = Formatter::new(&mut buf);
     let x: i32 = 42;
-    Display::fmt(&x, &mut f);
+    x.fmt(&mut f);
     println(buf);
     buf = String::with_capacity(64);
     f = Formatter::new(&mut buf);
-    Display::fmt(&true, &mut f);
+    true.fmt(&mut f);
     println(buf);
     buf = String::with_capacity(64);
     f = Formatter::new(&mut buf);
-    Display::fmt(&false, &mut f);
+    false.fmt(&mut f);
     println(buf);
     buf = String::with_capacity(64);
     f = Formatter::new(&mut buf);
     let c = 'A';
-    Display::fmt(&c, &mut f);
+    c.fmt(&mut f);
     println(buf);
     buf = String::with_capacity(64);
     f = Formatter::new(&mut buf);
     let neg: i32 = -123;
-    Display::fmt(&neg, &mut f);
+    neg.fmt(&mut f);
     println(buf);
 }
 
@@ -87,12 +87,12 @@ fn test_string() with Stdout {
     let mut buf = String::with_capacity(64);
     let mut f = Formatter::new(&mut buf);
     let s = "Hello, World!";
-    Display::fmt(&s, &mut f);
+    s.fmt(&mut f);
     println(buf);
     buf = String::with_capacity(64);
     f = Formatter::new(&mut buf);
     let empty = "";
-    Display::fmt(&empty, &mut f);
+    empty.fmt(&mut f);
     println(`[${buf}]`);
 }
 

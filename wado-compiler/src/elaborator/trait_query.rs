@@ -1545,7 +1545,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The name a trait was declared under, undoing a `use ... as` alias — a
     /// declaration only ever carries its own name.
-    fn declared_trait_name(&self, trait_name: &str) -> String {
+    pub(super) fn declared_trait_name(&self, trait_name: &str) -> String {
         self.canonical_decl_key(trait_name).1
     }
 

@@ -2584,8 +2584,8 @@ fn dedup_sorted<T: Ord>(items: List<T>) -> List<T> { ... }
 
 A trait that reaches itself through supertraits is an error. A method name
 reachable through more than one of a receiver's bounds is ambiguous at the call
-site and must be renamed — Wado has no qualified call form to disambiguate one
-yet (designed in [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)).
+site; name the trait to resolve it (`Left::name(&x)` — see
+[WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)).
 
 #### Multiple Traits
 
@@ -2767,12 +2767,12 @@ impl<T: Eq> Eq for Pair<T> {
 #### Not Yet Implemented
 
 - Trait objects (`dyn Trait`)
-- Qualified calls for disambiguation. Designed as UFCS
-  (`Trait::method(recv, …)`) in
-  [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md). Rust's
-  `<Type as Trait>::method()` spelling is permanently out — a leading `<` in
-  expression position is JSX's — so an associated function with no `self`
-  stays unspellable
+- Fully qualified `<Type as Trait>::method()`. Permanently out — a leading `<`
+  in expression position is JSX's. The trait-qualified (UFCS) form
+  `Trait::method(recv, …)` is implemented instead (see
+  [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)); an
+  associated function with no `self` has no receiver argument to bind `Self`
+  from and stays unspellable
 - Using bounds for method resolution on type parameters (calling `T.method()` where `T: Trait`)
 - Choosing between one trait's argument lists at a call site, from the argument
   types (`impl Take<A> for bool` alongside `impl Take<B> for bool`); such a
@@ -2917,16 +2917,18 @@ impl Take<B> for bool { … }
 f.take(B { v: 1 })   // ERROR: ambiguous call to 'take'
 ```
 
-Wado has no qualified call form to pick one, and
-selection does not consider the argument or expected types. Operators are not
+Selection does not consider the argument or expected types, and a trait's
+argument lists are not distinguishable by the qualified call form either.
+Operators are not
 affected: indexing and arithmetic resolve their impl by operand type, which is
 why `List<T>` implements `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>`,
 and `IndexValue<RangeInclusive<i32>>` at once.
 
-[WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md) designs the
-lifting of this restriction (not yet implemented): argument-directed selection
-among one trait's argument lists, and a UFCS call form
-(`Trait::method(recv, …)`) for everything else.
+Two _different_ traits declaring one method name for one receiver is a separate
+case, and is reported: name the trait
+(`Alpha::describe(&x)`). Argument-directed selection among one trait's argument
+lists is designed but not implemented — see
+[WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md).
 
 ### Iterator Traits
 

@@ -83,6 +83,21 @@ pub(super) struct MethodCallInput<'a> {
 pub(super) struct MethodCallOutcome {
     pub expr: TirExpr,
     pub dispatch: Option<(ast::SelfKind, bool, FunctionRef)>,
+    /// The resolved signature, for a caller that suppressed
+    /// `record_method_dispatch` with `call_id: None` and files its own record.
+    /// The qualified-call path files a *static* dispatch, which needs the same
+    /// facts: without them its arguments lose their defaults, their `is_mut`
+    /// shape, and the expected types an unannotated closure argument infers
+    /// from.
+    pub signature: Option<MethodSignatureFacts>,
+}
+
+pub(super) struct MethodSignatureFacts {
+    pub param_is_mut: Vec<bool>,
+    pub param_names: Vec<String>,
+    pub param_defaults: Vec<Option<ast::Expr>>,
+    pub param_types: Vec<TypeId>,
+    pub self_kind: ast::SelfKind,
 }
 
 impl MethodCallOutcome {
@@ -90,6 +105,7 @@ impl MethodCallOutcome {
         Self {
             expr,
             dispatch: None,
+            signature: None,
         }
     }
 }
@@ -378,7 +394,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(&name)
                     .cloned()
                 && let Some((found_trait, info)) = {
-                    let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
+                    // A qualified call names one bound, so the others are not
+                    // competitors — without this filter the collision it exists
+                    // to resolve is still reported inside a generic body, and
+                    // the first bound answers regardless of which was named.
+                    let bound_names: Vec<String> = bounds
+                        .iter()
+                        .map(|b| b.name.clone())
+                        .filter(|n| required_trait.is_none_or(|w| n == w))
+                        .collect();
                     self.find_method_in_trait_bounds(&bound_names, method_name, base_type_id, span)
                 }
             {
@@ -403,8 +427,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             };
             if let Some(bounds) = assoc_bounds
-                && let Some((found_trait, info)) =
+                && let Some((found_trait, info)) = {
+                    let bounds: Vec<String> = bounds
+                        .into_iter()
+                        .filter(|n| required_trait.is_none_or(|w| n == w))
+                        .collect();
                     self.find_method_in_trait_bounds(&bounds, method_name, base_type_id, span)
+                }
             {
                 trait_name = Some(found_trait);
                 method_info = Some(info);
@@ -1111,6 +1140,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         //    reaching here, or
         //  - Method lookup failed and we are in the error-recovery
         //    placeholder path (`method_found == false`).
+        let signature = method_found.then(|| MethodSignatureFacts {
+            param_is_mut: param_is_mut.clone(),
+            param_names: param_names.clone(),
+            param_defaults: param_defaults.clone(),
+            param_types: expected_param_types.clone(),
+            self_kind,
+        });
         let dispatch = if method_found {
             self.record_method_dispatch(
                 call_id,
@@ -1137,6 +1173,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         MethodCallOutcome {
             expr: placeholder(return_type, span),
             dispatch,
+            signature,
         }
     }
 
@@ -1145,12 +1182,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (WEP 2026-07-31). A trait's *static* method is not included: it has no
     /// receiver argument to bind `Self` from.
     pub(super) fn is_trait_instance_method(&self, trait_name: &str, method_name: &str) -> bool {
+        let declared = self.declared_trait_name(trait_name);
         self.tysys
             .trait_env
-            .find_trait_decl_key(trait_name)
+            .find_trait_decl_key(&declared)
             .is_some()
             && self
-                .trait_sig_by_name(trait_name)
+                .trait_sig_by_name(&declared)
                 .and_then(|sig| sig.method(method_name))
                 .is_some_and(|m| m.sig.self_kind != ast::SelfKind::None)
     }
@@ -1174,6 +1212,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return TypeTable::ERROR;
         };
+        let declared_trait = self.declared_trait_name(trait_name);
         let receiver_type = self.resolve_expr(receiver_ast, ctx, None);
         let type_args: Vec<TypeId> = call
             .type_args
@@ -1199,19 +1238,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args: rest,
                 expected_type,
                 span: call.span,
-                required_trait: Some(trait_name.to_string()),
+                required_trait: Some(declared_trait),
             },
             ctx,
         );
-        if let Some((_, _, function_ref)) = outcome.dispatch {
-            let param_is_mut = vec![false; call.args.len()];
+        if let (Some((_, _, function_ref)), Some(sig)) = (outcome.dispatch, outcome.signature) {
+            // The receiver occupies slot 0 of the static shape, so every
+            // per-parameter list gains a leading entry for it. It is spelled at
+            // the call site and never omitted, hence no default; it is `mut`
+            // exactly when the method takes `&mut self`.
+            let mut param_is_mut = vec![sig.self_kind == ast::SelfKind::MutRef];
+            param_is_mut.extend(sig.param_is_mut);
+            let mut param_defaults: Vec<(String, Option<ast::Expr>)> =
+                vec![("self".to_string(), None)];
+            param_defaults.extend(sig.param_names.into_iter().zip(sig.param_defaults));
+            let mut param_types = vec![receiver_type];
+            param_types.extend(sig.param_types);
+            // An unannotated closure argument infers its parameter types from
+            // this; without it the closure's functor is generated with
+            // `unknown` params and dropped before codegen.
+            self.record_call_param_types(call.id, param_types);
             self.sem.types.static_method_dispatch.insert(
                 call.id,
                 super::sem::types::StaticMethodDispatch {
                     function_ref,
                     param_is_mut,
                     type_args,
-                    param_defaults: vec![],
+                    param_defaults,
                 },
             );
         }

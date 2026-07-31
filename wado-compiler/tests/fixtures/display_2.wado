@@ -13,7 +13,7 @@ fn fmt_with(value: &i32, sign_plus: bool, zero_pad: bool, width: i32, align: Ali
         indent: 0,
         buf: &mut buf,
     };
-    Display::fmt(&value, &mut f);
+    value.fmt(&mut f);
     return buf;
 }
 
@@ -29,7 +29,7 @@ fn fmt_int(value: &i32, fill: char, align: Alignment, sign_plus: bool, zero_pad:
         indent: 0,
         buf: &mut buf,
     };
-    Display::fmt(&value, &mut f);
+    value.fmt(&mut f);
     return buf;
 }
 
@@ -67,7 +67,7 @@ fn test_format_padding() with Stdout {
         indent: 0,
         buf: &mut buf,
     };
-    Display::fmt(&true, &mut f);
+    true.fmt(&mut f);
     assert buf == "true    ";
     assert fmt_int(&big, ' ', Alignment::Right, false, false, 2) == "12345";
     println("ok");

@@ -2570,42 +2570,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Operators do not come through here — [`Self::find_indexing_trait_impl`]
     /// and friends pick by operand type, which is why `List<T>` can carry
     /// `IndexValue<i32>` alongside `IndexValue<RangeExclusive<i32>>`.
-    /// Two *different* traits declaring one method name for one receiver. The
-    /// candidates share no contract, so there is nothing to select on; the
-    /// call must name the trait (`Alpha::describe(&x)`). Reported where it is
-    /// called, matching the bounds path's `AmbiguousTraitMethod` — the same
-    /// rule, so the shape a collision arrives in does not change the answer
-    /// (WEP 2026-07-31).
-    fn report_cross_trait_ambiguity(
-        &self,
-        found_traits: &[super::types::TraitMethodMatch],
-        method_name: &str,
-        span: Span,
-    ) {
-        // Blanket candidates are excluded from the count. Wado does not scope
-        // method candidates by which traits are imported, so a foreign
-        // `impl<T: Bound> Foreign for T` reaches every receiver: counting it
-        // would make adding a blanket impl to a library a breaking change for
-        // every downstream method of that name. A blanket is the general case
-        // and loses to any impl written for the receiver, which is the
-        // specific-impls-win ordering the language already applies within one
-        // trait. Selection is untouched — this decides only what is reported.
-        let mut bases: Vec<String> = found_traits
-            .iter()
-            .filter(|m| m.blanket_type_param.is_none())
-            .map(|m| m.trait_base_name.clone())
-            .collect();
-        bases.dedup();
-        if bases.len() < 2 {
-            return;
-        }
-        let _ = self.emit(TypeError::AmbiguousTraitMethod {
-            method: method_name.to_string(),
-            traits: bases,
-            span,
-        });
-    }
-
     fn report_trait_argument_ambiguity(
         &self,
         found_traits: &[super::types::TraitMethodMatch],
@@ -2632,6 +2596,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _ = self.emit(TypeError::AmbiguousTraitArguments {
             method: method_name.to_string(),
             traits,
+            span,
+        });
+    }
+
+    /// Two *different* traits declaring one method name for one receiver. The
+    /// candidates share no contract, so there is nothing to select on; the
+    /// call must name the trait (`Alpha::describe(&x)`). Reported where it is
+    /// called, matching the bounds path's `AmbiguousTraitMethod` — the same
+    /// rule, so the shape a collision arrives in does not change the answer
+    /// (WEP 2026-07-31).
+    fn report_cross_trait_ambiguity(
+        &self,
+        found_traits: &[super::types::TraitMethodMatch],
+        method_name: &str,
+        span: Span,
+    ) {
+        // Blanket candidates are excluded from the count. Wado does not scope
+        // method candidates by which traits are imported, so a foreign
+        // `impl<T: Bound> Foreign for T` reaches every receiver: counting it
+        // would make adding a blanket impl to a library a breaking change for
+        // every downstream method of that name. A blanket is the general case
+        // and loses to any impl written for the receiver, which is the
+        // specific-impls-win ordering the language already applies within one
+        // trait. Selection is untouched — this decides only what is reported.
+        let mut bases: Vec<String> = found_traits
+            .iter()
+            .filter(|m| m.blanket_type_param.is_none())
+            .map(|m| m.trait_base_name.clone())
+            .collect();
+        // `found_traits` is ordered by impl locality, not by name, so equal
+        // names need not be adjacent — sort before dedup or one trait can be
+        // listed twice in the message.
+        bases.sort();
+        bases.dedup();
+        if bases.len() < 2 {
+            return;
+        }
+        let _ = self.emit(TypeError::AmbiguousTraitMethod {
+            method: method_name.to_string(),
+            traits: bases,
             span,
         });
     }
