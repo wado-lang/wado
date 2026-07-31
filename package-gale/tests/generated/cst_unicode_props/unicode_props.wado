@@ -1482,9 +1482,13 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if '؀' <= first_char <= 'ۿ' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
+            end = try_NUM(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_NUM; }
         } else if 'ऀ' <= first_char <= 'ॿ' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
+            end = try_NUM(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_NUM; }
         } else if '一' <= first_char <= '鿿' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
@@ -1501,12 +1505,18 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_NUM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUM; }
         } else if '٠' <= first_char <= '٩' {
+            end = try_WORD(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
             end = try_NUM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUM; }
         } else if '۰' <= first_char <= '۹' {
+            end = try_WORD(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
             end = try_NUM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUM; }
         } else if '०' <= first_char <= '९' {
+            end = try_WORD(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
             end = try_NUM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUM; }
         } else if ' ' <= first_char <= ' ' {

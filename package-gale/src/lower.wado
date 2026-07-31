@@ -1651,6 +1651,15 @@ fn build_direct_dispatch(first_sets: &List<List<String>>) -> MultiAltDispatch {
     return MultiAltDispatch::Direct(DirectDispatch { branches });
 }
 
+fn any_wildcard_alt(alts: &List<Alternative>, indices: &List<i32>) -> bool {
+    for let idx of indices {
+        if alt_is_wildcard_led(&alts[*idx]) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// Choose a dispatch for a set of alternatives. When the per-alt
 /// first sets are pairwise disjoint, falls through to a token-led
 /// `Direct` dispatch. Otherwise (any two alts share a first token),
@@ -1670,7 +1679,13 @@ fn build_overlap_dispatch(
     first_sets: &List<List<String>>,
     ctx: &mut GenContext,
 ) -> MultiAltDispatch {
-    if !any_overlap(first_sets) {
+    // A wildcard alt's static first set is empty — `first_of_element` cannot
+    // enumerate "every token kind" — so `any_overlap` reads it as disjoint and
+    // the Direct chain would give it an unreachable empty-token branch. Its
+    // real first set is universal, so it overlaps everything: route the whole
+    // decision through the scan tournament, the same invariant the surface-IR
+    // `compute_overlap_groups_with_wildcard` applies.
+    if !any_overlap(first_sets) && !any_wildcard_alt(alts, indices) {
         let mut branches: List<DispatchBranch> = [];
         for let mut k = 0; k < indices.len(); k += 1 {
             branches.push(DispatchBranch {
@@ -3972,6 +3987,26 @@ fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String
     }
 }
 
+/// Strip the purely syntactic `( … )` wrappers off a labelled element:
+/// `x=(ID)` binds exactly what `x=ID` binds. A Transparent `GroupOp`
+/// carries no field slot, so `rebind_op_field` would have nowhere to
+/// put the label and the binding would be dropped.
+///
+/// Only the wrapper shapes that carry nothing of their own unwrap — a
+/// group with `options`, or a single alt bearing a label or actions,
+/// keeps its structure.
+fn unwrap_transparent_group(elem: &Element) -> Element {
+    if let Group(g) = elem {
+        if g.options.is_empty() && g.alternatives.len() == 1 {
+            let alt = &g.alternatives[0];
+            if alt.elements.len() == 1 && alt.options.is_empty() && alt.actions.is_empty() && alt.label matches { None } {
+                return unwrap_transparent_group(&alt.elements[0]);
+            }
+        }
+    }
+    return *elem;
+}
+
 /// Lower a `Label` element by recursively lowering its inner
 /// element, then overriding the inner op's field name with the
 /// label's name (deduped against the surrounding alt's name table).
@@ -3996,13 +4031,14 @@ fn lower_label_op(
 ) -> Op {
     let label_field = dedup_name(&lab.field_name, name_counts);
     let mut inner_counts: List<[String, i32]> = [];
+    let labelled = unwrap_transparent_group(&lab.element);
     // A label `name=elem` is positionally identical to `elem` at the
     // surrounding alt, so the FollowArg / tail-gate propagate verbatim —
     // the RuleRef inside the label still sees the same caller
     // continuation, and a Repeat inside still gates at the same tail
     // position.
     let inner_op = lower_op(
-        &lab.element,
+        &labelled,
         &mut inner_counts,
         rule_name,
         ctx,

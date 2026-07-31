@@ -3001,9 +3001,13 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if 'a' <= first_char <= 'z' {
             end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
+            end = try_BLOB_LITERAL(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_BLOB_LITERAL; best_channel = 0; }
         } else if 'A' <= first_char <= 'Z' {
             end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
+            end = try_BLOB_LITERAL(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_BLOB_LITERAL; best_channel = 0; }
         } else if '0' <= first_char <= '9' {
             end = try_NUMERIC_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }

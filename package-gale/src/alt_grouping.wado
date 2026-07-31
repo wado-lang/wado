@@ -15,7 +15,7 @@
 //! CLAUDE.md "Failed Approaches" section for why the bands are split
 //! the way they are.
 
-use { Alternative } from "./ir.wado";
+use { Alternative, Element } from "./ir.wado";
 use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 
 /// True when `alt` can match any single token at its first input position
@@ -30,12 +30,24 @@ use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 /// commits to the first alt whose FIRST set covers the lookahead.
 pub fn alt_is_wildcard_led(alt: &Alternative) -> bool {
     for let elem of &alt.elements {
-        if let Wildcard(_) = elem {
+        if element_is_wildcard(elem) {
             return true;
         }
         if !is_nullable(elem) {
             return false;
         }
+    }
+    return false;
+}
+
+/// A label binds a name to its element and changes nothing about what the
+/// element matches, so `w=.` is as much a wildcard as `.` is.
+fn element_is_wildcard(elem: &Element) -> bool {
+    if let Wildcard(_) = elem {
+        return true;
+    }
+    if let Label(lab) = elem {
+        return element_is_wildcard(&lab.element);
     }
     return false;
 }

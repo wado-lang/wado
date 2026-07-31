@@ -1487,11 +1487,17 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_IDENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENT; }
         } else if 'a' <= first_char <= 'z' {
+            end = try_KEYWORD(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KEYWORD; }
             end = try_IDENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENT; }
         } else if 'A' <= first_char <= 'Z' {
+            end = try_KEYWORD(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KEYWORD; }
             end = try_IDENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENT; }
+            end = try_EXACT(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_EXACT; }
         } else {
             end = try_IDENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENT; }

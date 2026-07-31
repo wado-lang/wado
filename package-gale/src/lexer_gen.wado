@@ -2761,10 +2761,29 @@ fn char_matches_ranges(c: char, ranges: &List<[char, char]>) -> bool {
     return false;
 }
 
+/// True when any of `ranges` shares a char with `probe`.
+fn ranges_meet(ranges: &List<[char, char]>, probe: [char, char]) -> bool {
+    for let r of ranges {
+        if r[0] <= probe[1] && probe[0] <= r[1] {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// Build dispatch groups: for each unique first char, which try calls apply?
 struct DispatchGroup {
     guard: String,
     calls: List<i32>,
+}
+
+fn has_group_guard(groups: &List<DispatchGroup>, guard: &String) -> bool {
+    for let g of groups {
+        if g.guard == *guard {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
@@ -2843,39 +2862,26 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         }
     }
 
-    // Merge range-based calls into groups or add them to wildcard fallback
-    // For simplicity, add range-based calls to a "range group" with their guard
+    // One group per distinct multi-char first-char range. The branches form an
+    // `if / else if` chain, so a char in two rules' overlapping ranges only
+    // ever reaches the first group covering it — that group therefore carries
+    // every rule whose first set meets the range, not just the rule the range
+    // came from. Taking the whole intersecting set is a superset of what the
+    // char itself can match; a rule that cannot match simply fails its `try_`.
     for let mut i = 0; i < calls.len(); i += 1 {
         if calls[i].is_wildcard {
             continue;
         }
         for let r of &calls[i].first_chars {
             if r[0] != r[1] {
-                // Build range guard
                 let guard = `${char_lit(r[0])} <= first_char <= ${char_lit(r[1])}`;
-                // Find or create group
-                let mut found_group = false;
-                for let mut gi = 0; gi < groups.len(); gi += 1 {
-                    if groups[gi].guard == guard {
-                        let mut already = false;
-                        for let call_idx of &groups[gi].calls {
-                            if *call_idx == i {
-                                already = true;
-                                break;
-                            }
-                        }
-                        if !already {
-                            groups[gi].calls.push(i);
-                        }
-                        found_group = true;
-                    }
-                }
-                if !found_group {
+                if !has_group_guard(&groups, &guard) {
                     let mut cs: List<i32> = [];
-                    cs.push(i);
-                    // Also add non-catch-all wildcards
                     for let mut j = 0; j < calls.len(); j += 1 {
-                        if calls[j].is_wildcard && !calls[j].is_catch_all {
+                        if calls[j].is_catch_all {
+                            continue;
+                        }
+                        if calls[j].is_wildcard || ranges_meet(&calls[j].first_chars, *r) {
                             cs.push(j);
                         }
                     }

@@ -1,0 +1,13 @@
+//! A label over a transparent group (`x=(ID)`) binds the inner leaf, so
+//! `$x.text` resolves the same way it does for `x=ID`.
+
+use lg from "./grammars/wado_label_group.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_label_group" },
+    };
+
+test "a label over a transparent group binds the inner leaf" {
+    let result = lg::parse(&"foo + bar");
+    assert result.ok(), "clean parse";
+    assert result.output == "foo-bar", `output: '${result.output}'`;
+}

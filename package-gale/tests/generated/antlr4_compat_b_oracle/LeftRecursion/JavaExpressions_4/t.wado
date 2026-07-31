@@ -3272,6 +3272,18 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_lit_tilde(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_TILDE; }
         } else if 'a' <= first_char <= 'z' {
+            end = try_lit_this(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_THIS; }
+            end = try_lit_super(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_SUPER; }
+            end = try_lit_class(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_CLASS; }
+            end = try_lit_new(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_NEW; }
+            end = try_lit_instanceof(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_INSTANCEOF; }
+            end = try_lit_int(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_INT; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if 'A' <= first_char <= 'Z' {

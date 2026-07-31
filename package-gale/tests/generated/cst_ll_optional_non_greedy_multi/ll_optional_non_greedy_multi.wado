@@ -2748,6 +2748,18 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; best_channel = 0; }
         } else if 'a' <= first_char <= 'z' {
+            end = try_lit_if(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_IF; best_channel = 0; }
+            end = try_lit_y(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_Y; best_channel = 0; }
+            end = try_lit_else(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_ELSE; best_channel = 0; }
+            end = try_lit_when(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_WHEN; best_channel = 0; }
+            end = try_lit_otherwise(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_OTHERWISE; best_channel = 0; }
+            end = try_lit_x(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_X; best_channel = 0; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; best_channel = 0; }
         } else {

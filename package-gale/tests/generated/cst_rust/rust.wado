@@ -6556,6 +6556,8 @@ pub fn tokenize(input: &String) -> TokenStream with RustLexerBase {
             end = try_FLOAT_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; best_channel = 0; }
         } else if 'A' <= first_char <= 'Z' {
+            end = try_KW_SELFTYPE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_SELFTYPE; best_channel = 0; }
             end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
             end = try_BLOCK_COMMENT_OR_DOC(&lexer.chars, start);
@@ -6565,10 +6567,124 @@ pub fn tokenize(input: &String) -> TokenStream with RustLexerBase {
             end = try_FLOAT_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; best_channel = 0; }
         } else if 'a' <= first_char <= 'z' {
+            end = try_KW_AS(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_AS; best_channel = 0; }
+            end = try_KW_BREAK(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_BREAK; best_channel = 0; }
+            end = try_KW_CONST(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_CONST; best_channel = 0; }
+            end = try_KW_CONTINUE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_CONTINUE; best_channel = 0; }
+            end = try_KW_CRATE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_CRATE; best_channel = 0; }
+            end = try_KW_ELSE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_ELSE; best_channel = 0; }
+            end = try_KW_ENUM(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_ENUM; best_channel = 0; }
+            end = try_KW_EXTERN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_EXTERN; best_channel = 0; }
+            end = try_KW_FALSE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_FALSE; best_channel = 0; }
+            end = try_KW_FN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_FN; best_channel = 0; }
+            end = try_KW_FOR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_FOR; best_channel = 0; }
+            end = try_KW_IF(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_IF; best_channel = 0; }
+            end = try_KW_IMPL(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_IMPL; best_channel = 0; }
+            end = try_KW_IN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_IN; best_channel = 0; }
+            end = try_KW_LET(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_LET; best_channel = 0; }
+            end = try_KW_LOOP(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_LOOP; best_channel = 0; }
+            end = try_KW_MATCH(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_MATCH; best_channel = 0; }
+            end = try_KW_MOD(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_MOD; best_channel = 0; }
+            end = try_KW_MOVE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_MOVE; best_channel = 0; }
+            end = try_KW_MUT(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_MUT; best_channel = 0; }
+            end = try_KW_PUB(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_PUB; best_channel = 0; }
+            end = try_KW_REF(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_REF; best_channel = 0; }
+            end = try_KW_RETURN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_RETURN; best_channel = 0; }
+            end = try_KW_SELFVALUE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_SELFVALUE; best_channel = 0; }
+            end = try_KW_STATIC(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_STATIC; best_channel = 0; }
+            end = try_KW_STRUCT(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_STRUCT; best_channel = 0; }
+            end = try_KW_SUPER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_SUPER; best_channel = 0; }
+            end = try_KW_TRAIT(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_TRAIT; best_channel = 0; }
+            end = try_KW_TRUE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_TRUE; best_channel = 0; }
+            end = try_KW_TYPE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_TYPE; best_channel = 0; }
+            end = try_KW_UNSAFE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_UNSAFE; best_channel = 0; }
+            end = try_KW_USE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_USE; best_channel = 0; }
+            end = try_KW_WHERE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_WHERE; best_channel = 0; }
+            end = try_KW_WHILE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_WHILE; best_channel = 0; }
+            end = try_KW_ASYNC(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_ASYNC; best_channel = 0; }
+            end = try_KW_AWAIT(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_AWAIT; best_channel = 0; }
+            end = try_KW_DYN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_DYN; best_channel = 0; }
+            end = try_KW_ABSTRACT(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_ABSTRACT; best_channel = 0; }
+            end = try_KW_BECOME(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_BECOME; best_channel = 0; }
+            end = try_KW_BOX(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_BOX; best_channel = 0; }
+            end = try_KW_DO(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_DO; best_channel = 0; }
+            end = try_KW_FINAL(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_FINAL; best_channel = 0; }
+            end = try_KW_MACRO(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_MACRO; best_channel = 0; }
+            end = try_KW_OVERRIDE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_OVERRIDE; best_channel = 0; }
+            end = try_KW_PRIV(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_PRIV; best_channel = 0; }
+            end = try_KW_TYPEOF(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_TYPEOF; best_channel = 0; }
+            end = try_KW_UNSIZED(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_UNSIZED; best_channel = 0; }
+            end = try_KW_VIRTUAL(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_VIRTUAL; best_channel = 0; }
+            end = try_KW_YIELD(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_YIELD; best_channel = 0; }
+            end = try_KW_TRY(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_TRY; best_channel = 0; }
+            end = try_KW_UNION(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_UNION; best_channel = 0; }
+            end = try_KW_MACRORULES(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_KW_MACRORULES; best_channel = 0; }
             end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
+            end = try_RAW_IDENTIFIER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_RAW_IDENTIFIER; best_channel = 0; }
             end = try_BLOCK_COMMENT_OR_DOC(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; best_channel = 1; }
+            end = try_RAW_STRING_LITERAL(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_RAW_STRING_LITERAL; best_channel = 0; }
+            end = try_BYTE_LITERAL(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_BYTE_LITERAL; best_channel = 0; }
+            end = try_BYTE_STRING_LITERAL(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_BYTE_STRING_LITERAL; best_channel = 0; }
+            end = try_RAW_BYTE_STRING_LITERAL(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_RAW_BYTE_STRING_LITERAL; best_channel = 0; }
             end = try_INTEGER_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; best_channel = 0; }
             end = try_FLOAT_LITERAL(&lexer.chars, start);
@@ -6733,6 +6849,12 @@ pub fn tokenize(input: &String) -> TokenStream with RustLexerBase {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; best_channel = 0; }
             end = try_DEC_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DEC_LITERAL; best_channel = 0; }
+            end = try_HEX_LITERAL(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_HEX_LITERAL; best_channel = 0; }
+            end = try_OCT_LITERAL(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OCT_LITERAL; best_channel = 0; }
+            end = try_BIN_LITERAL(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_BIN_LITERAL; best_channel = 0; }
             end = try_FLOAT_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; best_channel = 0; }
         } else {

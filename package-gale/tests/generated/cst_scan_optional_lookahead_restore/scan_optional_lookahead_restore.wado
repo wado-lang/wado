@@ -1610,6 +1610,14 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if 'a' <= first_char <= 'z' {
+            end = try_lit_z(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_Z; }
+            end = try_lit_as(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_AS; }
+            end = try_lit_idx(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_IDX; }
+            end = try_lit_no(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_NO; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if '0' <= first_char <= '9' {

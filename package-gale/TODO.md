@@ -28,14 +28,10 @@ The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that c
 
 Entries state the symptom, how to reproduce it, and anything already measured — not a diagnosis or a proposed fix. A diagnosis written here reads as an instruction later, and two have been wrong: one would have broken compatibility if implemented as written, the other described a difference that did not exist.
 
-- [ ] Valid input is rejected — the emitted dispatch has no else-fallback: `a : X+ Y | X Z` fails on `X X Y`. The opaque-rule expansion path separately drops at-end alternatives its template keeps.
-- [ ] A lexer alternation that is _not_ in tail position takes the first matching arm, not the one that lets the whole rule match: `I : ('a' | 'ab') 'bc'` rejects `abc`. Tail-position alternations are maximal-munch and unaffected.
-- [ ] Overlapping-but-unequal first-char ranges in the lexer dispatch shadow later rules: a char in the intersection only tries the first range group, and the wildcard fallback is unreachable for it.
-- [ ] A wildcard alternative gets an empty-token branch in a direct dispatch at the lowered-IR level, and `w=.` escapes the wildcard machinery entirely (the check does not unwrap labels). The surface-IR paths apply the wildcard soundness invariant; these do not.
+- [ ] Valid input is rejected — the emitted dispatch has no else-fallback: `a : X+ Y | X Z` fails on `X X Y`. Measured: the lowered dispatch is `Tournament`, but the emitted code is the prediction tree's token cascade, which `gale dump` reports as `Dispatch[d=0] [TK_X] → Dispatch[d=1]` with branches `[TK_Y]→alt 0` and `[TK_Z]→alt 1` only — no `TK_X` branch, and no `else`, so `X X` reaches `no_viable`. The opaque-rule expansion path separately drops at-end alternatives its template keeps.
+- [ ] A lexer alternation that is _not_ in tail position takes the first matching arm, not the one that lets the whole rule match: `I : ('a' | 'ab') 'bc'` rejects `abbc` — the emitted `try_I` commits to `'a'` and the `'bc'` suffix then fails. (`abc` does match, so it is not a repro.) Tail-position alternations are maximal-munch and unaffected.
 - [ ] Two operator alternatives of an ATN-class LR rule that open on the same token (`expr NOT? IN …` and `expr NOT? BETWEEN …`, both on `NOT`) are decided by alternative order rather than by lookahead. No committed grammar has the shape: `lr_between.g4` and `lr_atn_mid_operand.g4` run their loops on the simulator, but their operators open on distinct tokens, and SQLite — which does have the shared `NOT` — is not ATN-class at its loop. Reproducing it needs a new fixture with both properties.
-- [ ] A label on a transparent group (`x=(ID)`) silently drops the binding.
-- [ ] `\P{...}` (negated Unicode property) is parsed as literal chars — only lowercase `\p` is detected — and an unknown `\p{...}` property expands to an empty set with no diagnostic.
-- [ ] A surrogate code point in a char range (legal in ANTLR4 for matching UTF-16 code units) collapses to a single replacement char — range endpoints are Unicode scalars.
+- [ ] A lexer rule that cannot match at its first char never reaches a catch-all (`ANY : .`): the catch-all is excluded from every specific dispatch branch on the assumption that a rule reaching that branch matches at least one char, which is false for `A : [a-f] '1' ; C : . ;` on the input `e`. Found while fixing the overlapping-range shadowing; the same exclusion applies to single-char branches, so it is its own change.
 
 ### Pipeline and tooling correctness
 

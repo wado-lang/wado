@@ -43,7 +43,7 @@ use {
     merge_grammars,
 } from "../ir.wado";
 use { G4Token } from "./token.wado";
-use { tokenize_chars, resolve_unicode_escape } from "./lexer.wado";
+use { tokenize_chars, resolve_unicode_escape_code, string_literal_code_points } from "./lexer.wado";
 use { scan_balanced, is_id_continue_char } from "./scan.wado";
 
 pub struct G4Parser {
@@ -1195,6 +1195,7 @@ impl G4Parser {
         if self.is_kind(G4Token::StringLit) {
             let tok = self.advance();
             let text = tok.text.to_string();
+            let start_span = tok.span;
             let is_dot_dot = self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Dot as i32;
             if is_dot_dot && text.chars().count() == 1 {
                 self.advance();
@@ -1211,17 +1212,18 @@ impl G4Parser {
                         ),
                     );
                 }
-                let start_char = first_char(&text).unwrap();
-                let end_char = first_char(&end_text).unwrap();
-                return Result::<LexerElement, ParseError>::Ok(
-                    LexerElement::CharRange([start_char, end_char]),
-                );
+                // Decode the endpoints from source: the token text already
+                // collapsed an unpaired surrogate escape to U+FFFD, which
+                // would silently widen the range to a real character.
+                let lo = string_literal_code_points(&self.chars, start_span)[0];
+                let hi = string_literal_code_points(&self.chars, end_tok.span)[0];
+                return Result::<LexerElement, ParseError>::Ok(scalar_char_range(lo, hi));
             }
             return Result::<LexerElement, ParseError>::Ok(LexerElement::Literal(text));
         }
         if self.is_kind(G4Token::CharClass) {
             let tok = self.advance();
-            let cc = parse_char_class(&tok.text.to_string())?;
+            let cc = parse_char_class(&tok.text.to_string(), tok.span)?;
             return Result::<LexerElement, ParseError>::Ok(LexerElement::CharClass(cc));
         }
         if self.is_kind(G4Token::Dot) {
@@ -1294,27 +1296,27 @@ fn advance_char(chars: &List<char>, pos: &mut i32) -> char {
     return c;
 }
 
-fn resolve_char(chars: &List<char>, pos: &mut i32) -> char {
+/// Code point of the next char-set item, escapes resolved. Surrogates come
+/// back verbatim — `clip_to_scalars` decides what a range containing one
+/// actually admits.
+fn resolve_char_code(chars: &List<char>, pos: &mut i32) -> i32 {
     let c = advance_char(chars, pos);
     if c != '\\' {
-        return c;
+        return c as i32;
     }
     let ec = advance_char(chars, pos);
     return match ec {
-        'n' => '\n',
-        'r' => '\r',
-        't' => '\t',
-        'b' => '\u0008',
-        'f' => '\u000C',
-        '\\' => '\\',
-        ']' => ']',
-        '-' => '-',
-        'u' => resolve_unicode_escape(chars, pos),
-        _ => ec,
+        'n' => '\n' as i32,
+        'r' => '\r' as i32,
+        't' => '\t' as i32,
+        'b' => '\u0008' as i32,
+        'f' => '\u000C' as i32,
+        'u' => resolve_unicode_escape_code(chars, pos),
+        _ => ec as i32,
     };
 }
 
-fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
+fn parse_char_class(text: &String, span: Span) -> Result<CharClass, ParseError> {
     let chars = text.chars().collect();
     let end = chars.len() - 1;
     let mut pos = 1;
@@ -1327,7 +1329,11 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
     }
 
     while pos < end {
-        if pos + 2 < end && chars[pos] == '\\' && chars[pos + 1] == 'p' && chars[pos + 2] == '{' {
+        if pos + 2 < end
+            && chars[pos] == '\\'
+            && (chars[pos + 1] == 'p' || chars[pos + 1] == 'P')
+            && chars[pos + 2] == '{' {
+            let complement = chars[pos + 1] == 'P';
             pos += 3;
             let mut prop = String::with_capacity(16);
             while pos < end && chars[pos] != '}' {
@@ -1337,24 +1343,120 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
             if pos < end {
                 pos += 1;
             }
-            expand_unicode_property(&prop, &mut ranges);
+            let mut prop_ranges: List<CharRange> = [];
+            if !expand_unicode_property(&prop, &mut prop_ranges) {
+                let expected: List<String> = ["a supported Unicode property"];
+                return Result::<CharClass, ParseError>::Err(
+                    ParseError::new(
+                        `unsupported Unicode property "${prop}" in a character set`,
+                        span,
+                        expected,
+                    ),
+                );
+            }
+            let items = if complement { complement_char_ranges(&prop_ranges) } else { prop_ranges };
+            for let r of &items {
+                ranges.push(*r);
+            }
             continue;
         }
 
-        let c = resolve_char(&chars, &mut pos);
+        let c = resolve_char_code(&chars, &mut pos);
         if pos < end && chars[pos] == '-' && pos + 1 < end {
             advance_char(&chars, &mut pos);
-            let c2 = resolve_char(&chars, &mut pos);
-            ranges.push(CharRange::range(c, c2));
+            let c2 = resolve_char_code(&chars, &mut pos);
+            clip_to_scalars(&mut ranges, c, c2);
         } else {
-            ranges.push(CharRange::single(c));
+            clip_to_scalars(&mut ranges, c, c);
         }
     }
 
     return Result::<CharClass, ParseError>::Ok(CharClass { ranges, negated });
 }
 
-fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) {
+/// `'lo'..'hi'` as a lexer element, restricted to the Unicode scalars.
+/// The plain `CharRange` shape survives whenever the range holds no
+/// surrogates — every grammar that stays inside the scalars is unchanged.
+fn scalar_char_range(lo: i32, hi: i32) -> LexerElement {
+    let mut ranges: List<CharRange> = [];
+    clip_to_scalars(&mut ranges, lo, hi);
+    if ranges.len() == 1 && ranges[0].start as i32 == lo && ranges[0].end as i32 == hi {
+        return LexerElement::CharRange([ranges[0].start, ranges[0].end]);
+    }
+    return LexerElement::CharClass(CharClass { ranges, negated: false });
+}
+
+/// Highest Unicode scalar value.
+global CODE_POINT_MAX: i32 = 0x10FFFF;
+/// The surrogate block — code points that are not Unicode scalars.
+global SURROGATE_FIRST: i32 = 0xD800;
+global SURROGATE_LAST: i32 = 0xDFFF;
+
+/// Push `[lo, hi]` as `CharRange`s, keeping only its Unicode-scalar part.
+///
+/// ANTLR4 matches UTF-16 code units, so a surrogate endpoint is legal there;
+/// Gale matches decoded scalars, which no input character can ever equal.
+/// Dropping the surrogate part is what "matches nothing" looks like in a
+/// scalar range set — collapsing the endpoint to U+FFFD instead would make
+/// the class match a real, unrelated character.
+fn clip_to_scalars(ranges: &mut List<CharRange>, lo: i32, hi: i32) {
+    // Both endpoints scalar: the range is already a scalar range — a `char`
+    // cannot hold a surrogate, so splitting at the gap would only churn the
+    // emitted pattern without changing what it matches.
+    if is_scalar(lo) && is_scalar(hi) {
+        push_scalar_segment(ranges, lo, hi);
+        return;
+    }
+    push_scalar_segment(ranges, lo, i32::min(hi, SURROGATE_FIRST - 1));
+    push_scalar_segment(ranges, i32::max(lo, SURROGATE_LAST + 1), i32::min(hi, CODE_POINT_MAX));
+}
+
+fn is_scalar(code: i32) -> bool {
+    return 0 <= code <= CODE_POINT_MAX && !(SURROGATE_FIRST <= code <= SURROGATE_LAST);
+}
+
+fn push_scalar_segment(ranges: &mut List<CharRange>, lo: i32, hi: i32) {
+    if 0 <= lo <= hi {
+        ranges.push(CharRange::range(
+            char::from_u32_unchecked(lo as u32),
+            char::from_u32_unchecked(hi as u32),
+        ));
+    }
+}
+
+/// Complement of a range set over the Unicode scalars — what `\P{X}` admits.
+fn complement_char_ranges(ranges: &List<CharRange>) -> List<CharRange> {
+    let mut sorted: List<[i32, i32]> = [];
+    for let r of ranges {
+        sorted.push([r.start as i32, r.end as i32]);
+    }
+    for let mut i = 1; i < sorted.len(); i += 1 {
+        let cur = sorted[i];
+        let mut j = i - 1;
+        while j >= 0 && sorted[j].0 > cur.0 {
+            sorted[j + 1] = sorted[j];
+            j -= 1;
+        }
+        sorted[j + 1] = cur;
+    }
+    let mut out: List<CharRange> = [];
+    let mut next = 0;
+    for let r of &sorted {
+        if r.0 > next {
+            clip_to_scalars(&mut out, next, r.0 - 1);
+        }
+        if r.1 + 1 > next {
+            next = r.1 + 1;
+        }
+    }
+    clip_to_scalars(&mut out, next, CODE_POINT_MAX);
+    return out;
+}
+
+/// Expand a `\p{...}` property into its ranges. Returns false for a property
+/// Gale has no table for — the caller rejects rather than silently producing
+/// an empty set that matches nothing.
+fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool {
     match *name {
         "L" | "Letter" => {
             ranges.push(CharRange::range('A', 'Z'));
@@ -1413,8 +1515,10 @@ fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) {
             ranges.push(CharRange::single('\u3000'));
         },
         _ => {
+            return false;
         },
     }
+    return true;
 }
 
 fn intern_mode(mode_names: &mut List<String>, name: &String) -> i32 {

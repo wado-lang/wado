@@ -1478,6 +1478,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if 'a' <= first_char <= 'z' {
+            end = try_DISABLED(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_DISABLED; }
             end = try_KW(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW; }
             end = try_ID(&lexer.chars, start);

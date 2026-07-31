@@ -2028,6 +2028,26 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_VARIABLE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
         } else if 'a' <= first_char <= 'z' {
+            end = try_COS(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_COS; }
+            end = try_SIN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SIN; }
+            end = try_TAN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_TAN; }
+            end = try_ACOS(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ACOS; }
+            end = try_ASIN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ASIN; }
+            end = try_ATAN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ATAN; }
+            end = try_LN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LN; }
+            end = try_LOG(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LOG; }
+            end = try_SQRT(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SQRT; }
+            end = try_PI(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PI; }
             end = try_VARIABLE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
         } else if 'A' <= first_char <= 'Z' {
