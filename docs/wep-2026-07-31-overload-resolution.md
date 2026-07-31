@@ -266,8 +266,16 @@ Landing order — each phase keeps the suite green and is useful alone:
 1. Qualified calls: trait-head resolution in `resolve_static_method_call`
    (`method_call.rs:1116`) — where a trait head is today an `UnknownFunction`
    error (`method_call.rs:1168`) — binding the first argument as the receiver
-   and recording an ordinary `MethodDispatch`. No parser change. Pure addition;
-   provides the escape hatch before any tightening.
+   and recording an ordinary `MethodDispatch`. No parser change: both
+   `Greet::greet(&p)` and `Take::<A>::take(&f, x)` already parse, and the AST
+   retains the turbofish, so the trait's argument list is available to
+   resolution. Pure addition; provides the escape hatch before any tightening.
+
+   The `UnknownFunction` message renders `Take::<A>::take` as `Take::take`,
+   dropping the trait arguments. Reusing that renderer for the ambiguity errors
+   would print two identical candidate names for a `Take<A>` / `Take<B>` set —
+   diagnostics must use the symbol notation, which carries them.
+
 2. Cross-trait ambiguity on concrete receivers: `select_trait_match`
    (`method_lookup.rs:2515`) stops taking the first of two trait groups and
    reports the error, extending `report_trait_argument_ambiguity` beyond
