@@ -313,12 +313,7 @@ fn class_of(input: &String) -> CharClass {
 }
 
 fn class_admits(cc: &CharClass, c: char) -> bool {
-    for let r of &cc.ranges {
-        if r.start <= c <= r.end {
-            return true;
-        }
-    }
-    return false;
+    return cc.ranges.into_iter().any(|r: CharRange| r.start <= c <= r.end);
 }
 
 test "negated unicode property class \\P{L}" {

@@ -1652,12 +1652,7 @@ fn build_direct_dispatch(first_sets: &List<List<String>>) -> MultiAltDispatch {
 }
 
 fn any_wildcard_alt(alts: &List<Alternative>, indices: &List<i32>) -> bool {
-    for let idx of indices {
-        if alt_is_wildcard_led(&alts[*idx]) {
-            return true;
-        }
-    }
-    return false;
+    return indices.into_iter().any(|idx: &i32| alt_is_wildcard_led(&alts[*idx]));
 }
 
 /// Choose a dispatch for a set of alternatives. When the per-alt

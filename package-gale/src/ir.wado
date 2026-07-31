@@ -1303,14 +1303,21 @@ fn unwrap_label_element(elem: &Element) -> Element {
 
 fn strip_transparent_wrappers(elem: &Element) -> Element {
     if let Group(g) = elem {
-        if g.options.is_empty() && g.alternatives.len() == 1 {
-            let alt = &g.alternatives[0];
-            if alt.elements.len() == 1 && alt.options.is_empty() && alt.actions.is_empty() && alt.label matches { None } {
-                return strip_transparent_wrappers(&alt.elements[0]);
-            }
+        if is_bare_wrapper(g) {
+            return strip_transparent_wrappers(&g.alternatives[0].elements[0]);
         }
     }
     return *elem;
+}
+
+/// A `( … )` carrying nothing of its own: one alt of one element, no group
+/// `options`, no alt options, no alt label, no alt actions.
+fn is_bare_wrapper(g: &GroupElement) -> bool {
+    if !g.options.is_empty() || g.alternatives.len() != 1 {
+        return false;
+    }
+    let alt = &g.alternatives[0];
+    return alt.elements.len() == 1 && alt.options.is_empty() && alt.actions.is_empty() && alt.label matches { None };
 }
 
 /// Assign every parser-rule `RuleRefElement` a unique `atn_call_site` id, the

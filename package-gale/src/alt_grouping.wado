@@ -42,21 +42,14 @@ pub fn alt_is_wildcard_led(alt: &Alternative) -> bool {
 /// `( … )` wrapper changes what an element matches, so `w=.` and `x=(~X)` are
 /// as open-ended as the bare forms.
 fn element_is_wildcard(elem: &Element) -> bool {
-    if let Wildcard(_) = elem {
-        return true;
-    }
-    if let Not(_) = elem {
-        return true;
-    }
-    if let Label(lab) = elem {
-        return element_is_wildcard(&lab.element);
-    }
-    if let Group(g) = elem {
-        if g.alternatives.len() == 1 && g.alternatives[0].elements.len() == 1 {
-            return element_is_wildcard(&g.alternatives[0].elements[0]);
-        }
-    }
-    return false;
+    return match elem {
+        Wildcard(_) | Not(_) => true,
+        Label(lab) => element_is_wildcard(&lab.element),
+        Group(g) => g.alternatives.len() == 1
+            && g.alternatives[0].elements.len() == 1
+            && element_is_wildcard(&g.alternatives[0].elements[0]),
+        TokenRef(_) | Literal(_) | RuleRef(_) | Repeat(_) => false,
+    };
 }
 
 /// `compute_overlap_groups` augmented with wildcard awareness. A

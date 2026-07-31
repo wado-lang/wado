@@ -2765,23 +2765,15 @@ fn char_matches_ranges(c: char, ranges: &List<[char, char]>) -> bool {
 /// already claims. Those branches come first, so a rule whose first set inside
 /// `probe` is entirely `claimed` chars is unreachable from the range branch.
 fn ranges_meet_unclaimed(ranges: &List<[char, char]>, probe: [char, char], claimed: &List<char>) -> bool {
-    for let r of ranges {
+    return ranges.into_iter().any(|r: &[char, char]| {
         let lo = if r[0] > probe[0] { r[0] } else { probe[0] };
         let hi = if r[1] < probe[1] { r[1] } else { probe[1] };
         if lo > hi {
-            continue;
+            return false;
         }
-        let mut covered = 0;
-        for let c of claimed {
-            if lo <= *c && *c <= hi {
-                covered += 1;
-            }
-        }
-        if covered < hi as i32 - lo as i32 + 1 {
-            return true;
-        }
-    }
-    return false;
+        let claimed_here = claimed.into_iter().filter(|c: &char| lo <= *c <= hi).count();
+        return claimed_here < hi as i32 - lo as i32 + 1;
+    });
 }
 
 /// The pattern of the branch every other branch falls through to; emitted as
@@ -2796,12 +2788,7 @@ struct DispatchGroup {
 }
 
 fn has_pattern(groups: &List<DispatchGroup>, pattern: &String) -> bool {
-    for let g of groups {
-        if g.pattern == *pattern {
-            return true;
-        }
-    }
-    return false;
+    return groups.into_iter().any(|g: &DispatchGroup| g.pattern == *pattern);
 }
 
 /// Fold each branch into its immediate predecessor when the two have the same
@@ -2813,8 +2800,9 @@ fn has_pattern(groups: &List<DispatchGroup>, pattern: &String) -> bool {
 fn coalesce_equal_groups(groups: &mut List<DispatchGroup>) {
     let mut merged: List<DispatchGroup> = [];
     for let g of groups {
-        if !merged.is_empty() && merged[merged.len() - 1].calls == g.calls {
-            merged[merged.len() - 1].pattern.push_str(&` | ${g.pattern}`);
+        let last = merged.len() - 1;
+        if last >= 0 && merged[last].calls == g.calls {
+            merged[last].pattern.push_str(&` | ${g.pattern}`);
         } else {
             merged.push(*g);
         }
