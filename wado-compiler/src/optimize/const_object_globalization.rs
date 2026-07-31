@@ -614,6 +614,16 @@ fn let_stmt_qualifies(
     {
         return None;
     }
+    // A binding nothing reads any more — its uses all folded — is dead code
+    // on its way out, not a hoist target: hoisting it manufactures a live
+    // global (and, once guarded, one no WIR cleanup deletes) from a `let`
+    // the write-only elider would otherwise drop.
+    let mut this_local = IndexSet::default();
+    this_local.insert(local_index);
+    let reads = count_reads_of(body, NodeRef::Block(body.root), &this_local);
+    if reads.get(&local_index).copied().unwrap_or(0) == 0 {
+        return None;
+    }
     // A sibling-const read (the flattened builder-temp pair `let mut __b =
     // <literal>; let xs = *__b`) qualifies only when every read of the sibling
     // sits inside this initializer: the hoisted `GlobalVarSet` still evaluates
