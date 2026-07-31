@@ -8,7 +8,8 @@
 # (scripts, blocks and binary properties are rejected loudly; see TODO.md).
 #
 # Usage: scripts/regen-unicode-tables.sh [version]   (default: latest)
-# Needs network access to unicode.org.
+# Needs network access to unicode.org and a built `wado` (WADO env, default
+# ../target/debug/wado).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -32,5 +33,7 @@ if [ -z "$RESOLVED" ]; then
     exit 1
 fi
 
-python3 scripts/gen-unicode-tables.py "$WORK/UnicodeData.txt" "$RESOLVED" > src/g4/unicode_tables.wado
+WADO="${WADO:-../target/debug/wado}"
+"$WADO" run --dir "$WORK" -- scripts/gen_unicode_tables.wado UnicodeData.txt "$RESOLVED" \
+    > src/g4/unicode_tables.wado
 echo "regenerated src/g4/unicode_tables.wado from UCD $RESOLVED"
