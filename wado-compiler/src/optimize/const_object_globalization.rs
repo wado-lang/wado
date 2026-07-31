@@ -268,8 +268,13 @@ fn collect_candidates(
 ) {
     let single_decl_locals = locals_declared_once(body);
     let siblings = sibling_const_locals(body, gate, &single_decl_locals);
+    // Skeleton mentions plus value-pool reads: a local read only through a
+    // promoted `Operand::Value` has no `Local` node left, and the write-only
+    // elider keeps exactly those, so the dead-binding gate must count them
+    // as live too.
     let mut read_locals = IndexSet::default();
     collect_reads(body, &mut read_locals);
+    read_locals.extend(body.values.opaque_local_sources());
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
@@ -1704,11 +1709,23 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bo
                 }
                 ExprKind::ArrayLiteral { elements } => {
                     let packable = |op: &Operand| match op {
-                        Operand::Value(_) => true,
+                        // Numeric scalars only: a pooled `Null` is a ref the
+                        // data promotion cannot pack, and guarding it would be
+                        // guarding an initializer that stays const.
+                        Operand::Value(v) => matches!(
+                            body.values.kind(*v),
+                            crate::nir_value_graph::ValueKind::Int(..)
+                                | crate::nir_value_graph::ValueKind::Float(..)
+                                | crate::nir_value_graph::ValueKind::Bool(_)
+                                | crate::nir_value_graph::ValueKind::Char(_)
+                        ),
                         Operand::Expr(e) => {
                             matches!(body.exprs[*e].kind, ExprKind::EnumConstruct { .. })
                         }
                     };
+                    if elements.len() > crate::wir_optimize::array::ARRAY_NEW_FIXED_LIMIT {
+                        return true;
+                    }
                     if elements.len() >= crate::wir_optimize::array::ARRAY_NEW_DATA_THRESHOLD
                         && elements.iter().all(packable)
                     {

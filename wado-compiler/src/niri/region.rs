@@ -20,7 +20,7 @@ use crate::nir_arena::{
 };
 use crate::tir::{TypeId, TypeTable};
 
-use super::place::{place_of, write_root_local};
+use super::place::write_root_local;
 use super::{CalleeMap, CtfeBuiltinMap};
 
 /// The block behind a region-shaped expression: a `Block` or `LabeledBlock`
@@ -167,9 +167,7 @@ pub(super) fn region_free_reads(
                     op: NirUnaryOp::MutRef,
                     expr,
                 } => {
-                    if let Some((root, _)) = place_of(body, *expr) {
-                        written.insert(root);
-                    }
+                    record_write(body, *expr, &mut written)?;
                 }
                 _ => {}
             },

@@ -178,7 +178,7 @@ fn encode_constant_element(
 /// simultaneously, which causes pathological JIT compilation times in Cranelift's
 /// register allocator for large N (e.g. 8 000+ elements → minutes of JIT time).
 /// The `array.set` form consumes each value immediately, keeping stack depth low.
-const ARRAY_NEW_FIXED_LIMIT: usize = 256;
+pub(crate) const ARRAY_NEW_FIXED_LIMIT: usize = 256;
 
 /// Split large `ArrayNewFixed` instructions into `ArrayNewDefault` + `ArraySet` sequences.
 ///
