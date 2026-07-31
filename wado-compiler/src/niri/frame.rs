@@ -31,6 +31,14 @@ impl FrameState {
     /// another handle binds nothing, so a stale constant cannot outlive the
     /// write. Nothing keyed by the caller's local or expression ids carries
     /// over.
+    /// Whether `index` takes part in a live place alias, as the alias handle
+    /// or as the place it names. Either role makes a value snapshot of the
+    /// local unsound to hand out.
+    fn alias_involves(&self, index: u32) -> bool {
+        self.place_aliases.contains_key(&index)
+            || self.place_aliases.values().any(|(root, _)| *root == index)
+    }
+
     fn for_call(
         body: &Body,
         reached: &Reached,
@@ -728,9 +736,7 @@ impl Interpreter<'_> {
             region_free_reads(body, block, self.callees, self.ctfe_builtins, self.type_table)?;
         let mut seeds: Vec<(u32, Value)> = Vec::with_capacity(free.len());
         for index in free {
-            if self.frame.place_aliases.contains_key(&index)
-                || self.frame.place_aliases.values().any(|(root, _)| *root == index)
-            {
+            if self.frame.alias_involves(index) {
                 crate::compiler_trace!("region_seed", "region {e:?}: local {index} is aliased");
                 return None;
             }

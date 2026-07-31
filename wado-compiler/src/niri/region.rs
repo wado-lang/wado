@@ -20,7 +20,7 @@ use crate::nir_arena::{
 };
 use crate::tir::{TypeId, TypeTable};
 
-use super::place::{lvalue_root_local, place_of};
+use super::place::{place_of, write_root_local};
 use super::{CalleeMap, CtfeBuiltinMap};
 
 /// The block behind a region-shaped expression: a `Block` or `LabeledBlock`
@@ -87,13 +87,11 @@ pub(super) fn region_free_reads(
 ) -> Option<Vec<u32>> {
     const RECEIVER: usize = 0;
     fn record_write(body: &Body, op: Operand, written: &mut LocalSet) -> Option<()> {
-        let root = place_of(body, op)
-            .map(|(root, _)| root)
-            .or_else(|| lvalue_root_local(body, op))?;
-        written.insert(root);
+        written.insert(write_root_local(body, op)?);
         Some(())
     }
     let mut declared = LocalSet::default();
+    let mut seen = LocalSet::default();
     let mut mentioned: Vec<(u32, TypeId)> = Vec::new();
     let mut written = LocalSet::default();
     let mut stack = vec![NodeRef::Block(block)];
@@ -139,7 +137,9 @@ pub(super) fn region_free_reads(
                     }
                 }
                 ExprKind::Local { index, .. } => {
-                    mentioned.push((*index, body.exprs[e].type_id));
+                    if seen.insert(*index) {
+                        mentioned.push((*index, body.exprs[e].type_id));
+                    }
                 }
                 ExprKind::Assign { target, .. } => {
                     record_write(body, Operand::Expr(*target), &mut written)?;
@@ -158,7 +158,6 @@ pub(super) fn region_free_reads(
         }
         body.for_each_child(node, |c| stack.push(c));
     }
-    let mut free = LocalSet::default();
     let mut out = Vec::new();
     for (index, ty) in mentioned {
         if declared.contains(index) {
@@ -167,9 +166,7 @@ pub(super) fn region_free_reads(
         if written.contains(index) || RefKind::from_resolved(type_table.get(ty)).is_some() {
             return None;
         }
-        if free.insert(index) {
-            out.push(index);
-        }
+        out.push(index);
     }
     Some(out)
 }

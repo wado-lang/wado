@@ -59,7 +59,7 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-use super::arena_query::{expr_mentions_local, is_local, strip_refs};
+use super::arena_query::{collect_reads, expr_mentions_local, is_local, strip_refs};
 
 /// A hoisting candidate, identified by its owning function. Resolved in an
 /// immutable analysis phase, applied in a later mutation phase to avoid
@@ -116,9 +116,9 @@ impl CandidateKind {
     /// Whether the hoisted global gets `prefer_fixed_string_repr`: an in-place
     /// hoist keeps the value at its original call site, where a lazy
     /// `array.new_data` global would cost a guard branch per call, so WIR
-    /// raises its eager bound to `INLINE_REF_EAGER_MAX_BYTES`. Both the guard
-    /// decision at collection time and the global's marking at mutation time
-    /// derive from this one answer.
+    /// raises its eager bound to `INLINE_REF_EAGER_MAX_BYTES`. The in-place
+    /// guard decisions and the global's marking at mutation time derive from
+    /// this one answer.
     fn prefer_fixed_repr(&self) -> bool {
         match self {
             CandidateKind::InlineRef { .. } | CandidateKind::ValueArg { .. } => true,
@@ -268,6 +268,8 @@ fn collect_candidates(
 ) {
     let single_decl_locals = locals_declared_once(body);
     let siblings = sibling_const_locals(body, gate, &single_decl_locals);
+    let mut read_locals = IndexSet::default();
+    collect_reads(body, &mut read_locals);
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
@@ -277,23 +279,17 @@ fn collect_candidates(
                 ..
             } = &body.stmts[s].kind
             && single_decl_locals.contains(local_index)
-            && let Some(sibling_lets) = let_stmt_qualifies(body, s, gate, &siblings)
+            && let Some(sibling_lets) = let_stmt_qualifies(body, s, gate, &siblings, &read_locals)
         {
             // The sibling `let`s move into the initializer at mutation time,
             // so a non-promotable value among them needs the guard just as
             // much as one in the candidate's own value.
+            let guarded = std::iter::once(s)
+                .chain(sibling_lets.iter().copied())
+                .any(|st| stmt_needs_lazy_guard(body, st, gate, false));
             let kind = CandidateKind::LetBinding {
                 local_index: *local_index,
                 sibling_lets,
-            };
-            let guarded = {
-                let sibling_lets = match &kind {
-                    CandidateKind::LetBinding { sibling_lets, .. } => sibling_lets.as_slice(),
-                    CandidateKind::InlineRef { .. } | CandidateKind::ValueArg { .. } => &[],
-                };
-                std::iter::once(s)
-                    .chain(sibling_lets.iter().copied())
-                    .any(|st| stmt_needs_lazy_guard(body, st, gate, kind.prefer_fixed_repr()))
             };
             out.push(Candidate {
                 func_idx,
@@ -597,6 +593,7 @@ fn let_stmt_qualifies(
     stmt: StmtId,
     gate: &Gate<'_>,
     siblings: &SiblingConsts,
+    read_locals: &IndexSet<u32>,
 ) -> Option<Vec<StmtId>> {
     let StmtKind::Let {
         local_index,
@@ -618,10 +615,7 @@ fn let_stmt_qualifies(
     // on its way out, not a hoist target: hoisting it manufactures a live
     // global (and, once guarded, one no WIR cleanup deletes) from a `let`
     // the write-only elider would otherwise drop.
-    let mut this_local = IndexSet::default();
-    this_local.insert(local_index);
-    let reads = count_reads_of(body, NodeRef::Block(body.root), &this_local);
-    if reads.get(&local_index).copied().unwrap_or(0) == 0 {
+    if !read_locals.contains(&local_index) {
         return None;
     }
     // A sibling-const read (the flattened builder-temp pair `let mut __b =
@@ -1683,7 +1677,7 @@ fn inline_sibling_lets(
 ///
 /// - a call, never const-expressible;
 /// - a `PackedArray` outside the eager `array.new_fixed` bound
-///   ([`crate::name::packed_array_is_eager`], the same choice
+///   ([`crate::wir_build::packed_array_is_eager`], the same choice
 ///   `translate_packed_array` makes);
 /// - an `ArrayLiteral` of scalar constants at or past
 ///   `ARRAY_NEW_DATA_THRESHOLD`, which `promote_constant_arrays_to_data`
@@ -1700,7 +1694,7 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bo
                 | ExprKind::IndirectCall { .. }
                 | ExprKind::CmRawCall { .. } => return true,
                 ExprKind::PackedArray(bytes) => {
-                    if !crate::name::packed_array_is_eager(
+                    if !crate::wir_build::packed_array_is_eager(
                         bytes.len(),
                         gate.string_inline_max_bytes,
                         prefer_fixed,
@@ -1709,8 +1703,14 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bo
                     }
                 }
                 ExprKind::ArrayLiteral { elements } => {
+                    let packable = |op: &Operand| match op {
+                        Operand::Value(_) => true,
+                        Operand::Expr(e) => {
+                            matches!(body.exprs[*e].kind, ExprKind::EnumConstruct { .. })
+                        }
+                    };
                     if elements.len() >= crate::wir_optimize::array::ARRAY_NEW_DATA_THRESHOLD
-                        && elements.iter().all(|op| matches!(op, Operand::Value(_)))
+                        && elements.iter().all(packable)
                     {
                         return true;
                     }
@@ -1725,7 +1725,7 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bo
 
 fn stmt_needs_lazy_guard(body: &Body, stmt: StmtId, gate: &Gate<'_>, prefer_fixed: bool) -> bool {
     let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
-        return false;
+        unreachable!("[NIR] const_object_globalization: guard candidates are `let` bindings");
     };
     value
         .as_expr()

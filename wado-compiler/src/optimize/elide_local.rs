@@ -56,9 +56,9 @@ impl Rule for ElideRule<'_> {
         let promoted_reads: IndexSet<u32> = engine.body.values.opaque_local_sources().collect();
         let mut new_stmts = Vec::with_capacity(stmts.len());
         let mut changed = false;
-        let last = stmts.len().checked_sub(1);
+        let len = stmts.len();
         for (i, stmt) in stmts.into_iter().enumerate() {
-            let is_tail = Some(i) == last;
+            let is_tail = i + 1 == len;
             match classify(engine, stmt, is_tail, self.stores_aliased, &promoted_reads) {
                 Action::Keep => new_stmts.push(stmt),
                 Action::Drop => changed = true,

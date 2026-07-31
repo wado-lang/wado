@@ -50,6 +50,16 @@ pub(super) fn place_of(body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
     }
 }
 
+/// The local a write through `op` lands in: [`place_of`]'s root when the
+/// chain spells a borrow (which `lvalue_root_local` does not peel), else
+/// [`lvalue_root_local`]'s (which alone handles `Index`). `None` when no
+/// local roots the write.
+pub(super) fn write_root_local(body: &Body, op: Operand) -> Option<u32> {
+    place_of(body, op)
+        .map(|(root, _)| root)
+        .or_else(|| lvalue_root_local(body, op))
+}
+
 /// The borrow `op` spells over a place: whether it is mutable, and the
 /// borrowed operand. `None` unless the operand borrows something
 /// [`place_of`] can root at a local — `&GLOBAL` and a borrow of an rvalue

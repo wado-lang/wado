@@ -97,7 +97,7 @@ impl FunctionTranslator<'_, '_> {
                 type_id: array_type_id,
                 len: Box::new(WirInstr::I32Const(0)),
             }
-        } else if crate::name::packed_array_is_eager(
+        } else if crate::wir_build::packed_array_is_eager(
             byte_len,
             self.ctx.package.string_inline_max_bytes,
             self.force_fixed_string_repr,
