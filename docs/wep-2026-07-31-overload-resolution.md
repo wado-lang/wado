@@ -183,10 +183,14 @@ where the turbofish names the reflected type instead — they are compiler
 intrinsics whose traits declare no type parameters, so the two readings never
 meet.
 
-Rejected: `<Type as Trait<Args>>::method(args…)`. It pins the receiver type as
-well, which is redundant wherever a receiver argument exists, and it costs a
-whole angle-bracket path grammar. The one thing it would buy is named below,
-and does not pay for the syntax.
+Rejected: `<Type as Trait<Args>>::method(args…)`. Not a cost-benefit call — the
+syntactic position is taken. A leading `<` in expression position belongs to
+JSX, reserved by
+[Reactive Signals](./wep-2026-04-04-reactive-signals.md#jsx-integration)
+(`return <button onclick={…}>`), so Rust's spelling is unavailable to Wado at
+any price. It would also pin the receiver type, which is redundant wherever a
+receiver argument exists. Only the trailing turbofish position (`::<`, after
+`::`) stays free, which is what the form above uses.
 
 Rejected: `Type^Trait::method` in source. `^` is the xor operator, so
 `A ^ B::m(x)` already parses as an expression; the caret form stays what it is
@@ -212,11 +216,11 @@ Config::load(p);    // ERROR: ambiguous, and unspellable — rename one
 This is left open. The shape is narrow — `From` / `TryFrom` keep their own
 path, and the prelude's `Default::default` / `FromStr::from_str` do not collide
 with each other — so renaming is an acceptable answer for a case that has not
-arisen. If it does, the follow-up is a spelling that names `Self` without a
-receiver, not the angle-bracket path: either binding `Self` from the expected
-type (`let c: Config = Loadable::load(p)`, which contradicts this WEP's
-forward-inference non-goal and so needs its own decision), or a turbofish that
-names `Self` on the trait head.
+arisen. If it does, the follow-up must name `Self` without a receiver and
+without a leading `<` (JSX owns that position): either binding `Self` from the
+expected type (`let c: Config = Loadable::load(p)`, which contradicts this
+WEP's forward-inference non-goal and so needs its own decision), or a turbofish
+naming `Self` on the trait head.
 
 ### Diagnostics
 

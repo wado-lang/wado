@@ -2769,9 +2769,10 @@ impl<T: Eq> Eq for Pair<T> {
 - Trait objects (`dyn Trait`)
 - Qualified calls for disambiguation. Designed as UFCS
   (`Trait::method(recv, …)`) in
-  [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md), which
-  rejects Rust's `<Type as Trait>::method()` spelling; an associated function
-  with no `self` stays unspellable there
+  [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md). Rust's
+  `<Type as Trait>::method()` spelling is permanently out — a leading `<` in
+  expression position is JSX's — so an associated function with no `self`
+  stays unspellable
 - Using bounds for method resolution on type parameters (calling `T.method()` where `T: Trait`)
 - Choosing between one trait's argument lists at a call site, from the argument
   types (`impl Take<A> for bool` alongside `impl Take<B> for bool`); such a
@@ -2916,7 +2917,7 @@ impl Take<B> for bool { … }
 f.take(B { v: 1 })   // ERROR: ambiguous call to 'take'
 ```
 
-Wado has no qualified call form (`<Type as Trait>::method()`) to pick one, and
+Wado has no qualified call form to pick one, and
 selection does not consider the argument or expected types. Operators are not
 affected: indexing and arithmetic resolve their impl by operand type, which is
 why `List<T>` implements `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>`,
