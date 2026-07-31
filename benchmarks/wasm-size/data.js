@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785520694699,
+  "lastUpdate": 1785533211576,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45089,6 +45089,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 276827,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9bff903501fc8b1cc004b6b1755b5ccbf8370a02",
+          "message": "Merge pull request #1723 from wado-lang/claude/sqlite-parse-optimization-vjvq9q\n\nperf(optimizer): fold constant calls through char conversions and value blocks",
+          "timestamp": "2026-08-01T06:15:08+09:00",
+          "tree_id": "ecfe8bfca580dd124074e8c41f2ff403fe547234",
+          "url": "https://github.com/wado-lang/wado/commit/9bff903501fc8b1cc004b6b1755b5ccbf8370a02"
+        },
+        "date": 1785533211218,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16302,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 274463,
             "unit": "bytes"
           }
         ]
