@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785492003761,
+  "lastUpdate": 1785520694699,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45045,6 +45045,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 276421,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bc2dd3eedbaa783fe5a6a9c21abe30fd0ccd215f",
+          "message": "Merge pull request #1722 from wado-lang/claude/package-gale-todo-bugs-4xkpok\n\nfix(gale): soundness bugs in char sets, lexer dispatch, and label lowering",
+          "timestamp": "2026-08-01T02:46:44+09:00",
+          "tree_id": "1a91d57b5d532eadc6a81aa95db8f862eb4219be",
+          "url": "https://github.com/wado-lang/wado/commit/bc2dd3eedbaa783fe5a6a9c21abe30fd0ccd215f"
+        },
+        "date": 1785520693859,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16302,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276827,
             "unit": "bytes"
           }
         ]
