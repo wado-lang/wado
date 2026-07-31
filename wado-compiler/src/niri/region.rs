@@ -13,9 +13,13 @@
 //! — by abandoning the evaluation, which forfeits the fold rather than
 //! dropping a write.
 
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, LocalSet, NodeRef, PatKind, StmtKind};
-use crate::tir::TypeTable;
+use crate::nir::NirUnaryOp;
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatKind, StmtKind,
+};
+use crate::tir::{TypeId, TypeTable};
 
+use super::place::{lvalue_root_local, place_of};
 use super::{CalleeMap, CtfeBuiltinMap};
 
 /// The block behind a region-shaped expression: a `Block` or `LabeledBlock`
@@ -54,26 +58,35 @@ pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&s
     }
 }
 
-/// Whether every local `block` mentions is one `block` itself declares, every
-/// call in it is one a frame could run, and nothing writes a global.
+/// The outer locals `block` only reads — the seeds a region frame needs —
+/// provided every call in it is one a frame could run and nothing writes a
+/// global. `None` disqualifies the region outright: an unrunnable call, a
+/// global write, or an outer local in a write position, where folding the
+/// region would drop the write the program performs.
+///
+/// A write position is an `Assign` target or a `&mut` borrow rooting at the
+/// local; a plain read of an outer reference-typed local hands out the same
+/// write capability, which is why the caller also type-checks each returned
+/// mention before seeding.
 ///
 /// Only the reachable nodes are scanned, so a mention an earlier rewrite
 /// orphaned neither disqualifies the region nor keeps it from folding. What
 /// the scan cannot see is which reachable nodes actually execute: a free local
 /// read or an unrunnable call on a statically dead path costs the fold, which
 /// is the price of answering before the body is cloned rather than after.
-pub(super) fn region_is_self_contained(
+pub(super) fn region_free_reads(
     body: &Body,
     block: BlockId,
     callees: Option<&CalleeMap>,
     ctfe_builtins: Option<&CtfeBuiltinMap>,
-) -> bool {
+) -> Option<Vec<(u32, TypeId)>> {
     let runnable = |func_id| {
         callees.is_some_and(|m| m.contains_key(&func_id))
             || ctfe_builtins.is_some_and(|m| m.contains_key(&func_id))
     };
     let mut declared = LocalSet::default();
-    let mut mentioned = LocalSet::default();
+    let mut mentioned: Vec<(u32, TypeId)> = Vec::new();
+    let mut written = LocalSet::default();
     let mut stack = vec![NodeRef::Block(block)];
     while let Some(node) = stack.pop() {
         match node {
@@ -90,14 +103,29 @@ pub(super) fn region_is_self_contained(
             NodeRef::Expr(e) => match &body.exprs[e].kind {
                 ExprKind::GlobalVarSet { .. }
                 | ExprKind::IndirectCall { .. }
-                | ExprKind::CmRawCall { .. } => return false,
+                | ExprKind::CmRawCall { .. } => return None,
                 ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => {
                     if !runnable(*func_id) {
-                        return false;
+                        return None;
                     }
                 }
                 ExprKind::Local { index, .. } => {
-                    mentioned.insert(*index);
+                    if !mentioned.iter().any(|(i, _)| i == index) {
+                        mentioned.push((*index, body.exprs[e].type_id));
+                    }
+                }
+                ExprKind::Assign { target, .. } => {
+                    if let Some(root) = lvalue_root_local(body, Operand::Expr(*target)) {
+                        written.insert(root);
+                    }
+                }
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef,
+                    expr,
+                } => {
+                    if let Some((root, _)) = place_of(body, *expr) {
+                        written.insert(root);
+                    }
                 }
                 _ => {}
             },
@@ -105,5 +133,12 @@ pub(super) fn region_is_self_contained(
         }
         body.for_each_child(node, |c| stack.push(c));
     }
-    mentioned.iter().all(|index| declared.contains(index))
+    let free: Vec<(u32, TypeId)> = mentioned
+        .into_iter()
+        .filter(|(index, _)| !declared.contains(*index))
+        .collect();
+    if free.iter().any(|(index, _)| written.contains(*index)) {
+        return None;
+    }
+    Some(free)
 }

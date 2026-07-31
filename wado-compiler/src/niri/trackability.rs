@@ -336,6 +336,16 @@ pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet 
                     disqualify_root(body, *expr, &mut disqualified);
                 }
             }
+            // A shared borrow can only read its place — Wado has no interior
+            // mutability — and a cast names the same storage as its operand,
+            // so both pass the read on. Without these, `push_str(&b)` reads
+            // `b` through one wrapper node and the mention would read as
+            // unknown.
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr,
+            }
+            | ExprKind::Cast { expr, .. } => read_value(*expr, &mut value_reads),
             ExprKind::MethodCall { receiver, args, .. } => {
                 if !reached.covers(body, *receiver) {
                     disqualify_root(body, *receiver, &mut disqualified);
@@ -362,7 +372,9 @@ pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet 
     }
     for (_, stmt) in &body.stmts {
         match &stmt.kind {
-            StmtKind::Return { value: Some(op) } => read_value(*op, &mut value_reads),
+            StmtKind::Return { value: Some(op) } | StmtKind::Break { value: Some(op), .. } => {
+                read_value(*op, &mut value_reads);
+            }
             StmtKind::Let { value: op, .. } | StmtKind::Expr(op) => {
                 read_value(*op, &mut value_reads);
             }

@@ -1,0 +1,19 @@
+// A seeded region reads the outer local's value at the region's own flow
+// point (WEP: NIR Interpreter, regions). A later mutation of the local must
+// not reach the already-built template value — value semantics — and the
+// mutation itself must survive the fold.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut s = "ab";
+    let t = `x${s}`;
+    s.push_str(&"c");
+    println(t);
+    println(s);
+}
+
+__DATA__
+{
+    "stdout": "xab\nabc\n"
+}

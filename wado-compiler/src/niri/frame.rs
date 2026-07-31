@@ -15,10 +15,10 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_visitor::NirRefVisitor;
-use crate::tir::TypeTable;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::place::{borrowed_place_operand, overlapping_places, place_of};
-use super::region::{region_is_self_contained, region_shape};
+use super::region::{region_free_reads, region_shape};
 use super::trackability::{Reached, aggregate_safe_locals, clobbered_locals};
 use super::{
     COPY_CHARGE_DIVISOR, CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice,
@@ -692,9 +692,18 @@ impl Interpreter<'_> {
     /// The constant a self-contained region denotes: the block runs as a frame
     /// the engine starts from scratch, since a region that builds its value in
     /// locals of its own and touches only those is as self-contained as a call
-    /// body. `None` when the block is not such a region, or when running
+    /// body. An outer local the region only reads is seeded from the walker's
+    /// environment when it holds a constant there — a value snapshot at the
+    /// region's own flow point, sound because the region cannot write it back
+    /// ([`region_free_reads`] rejects write positions, and a reference-typed
+    /// mention, which would hand the same capability to a callee, is refused
+    /// here). `None` when the block is not such a region, or when running
     /// it does not finish on a constant — the block survives as written, so
     /// anything it would do at run time still happens there.
+    ///
+    /// A region of reference type is refused whatever it reads: its value
+    /// would materialize as a fresh literal where the program yields an alias,
+    /// and `ref.eq` can tell the two apart.
     ///
     /// Safe on the re-entrant projection path even though it executes writes:
     /// self-containment confines every write to locals of the scratch run, so
@@ -707,14 +716,33 @@ impl Interpreter<'_> {
         if let Some(value) = self.frame.scratch_folds.get(&e) {
             return Some(value.clone());
         }
-        if !region_is_self_contained(body, block, self.callees, self.ctfe_builtins) {
+        if self.is_reference_type(body.exprs[e].type_id) {
             return None;
+        }
+        let free = region_free_reads(body, block, self.callees, self.ctfe_builtins)?;
+        let mut seeds: Vec<(u32, Value)> = Vec::with_capacity(free.len());
+        for (index, ty) in free {
+            if self.is_reference_type(ty) || self.frame.place_aliases.contains_key(&index) {
+                crate::compiler_trace!(
+                    "region_seed",
+                    "region {e:?}: local {index} unseedable (reference-typed or aliased)"
+                );
+                return None;
+            }
+            let Some(Lattice::Const(value)) = self.frame.env.get(&index) else {
+                crate::compiler_trace!(
+                    "region_seed",
+                    "region {e:?}: local {index} not constant in the walker env"
+                );
+                return None;
+            };
+            seeds.push((index, value.clone()));
         }
         self.charge_body_copy(body)?;
         let mut scratch = body.nodes_only_clone();
         scratch.root = block;
         let reached = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
-        let region = FrameState::for_call(&scratch, &reached, std::iter::empty());
+        let region = FrameState::for_call(&scratch, &reached, seeds);
         let caller = self.swap_frame(region);
         let flow = self.exec_block(&mut scratch, block);
         self.swap_frame(caller);
@@ -724,9 +752,21 @@ impl Interpreter<'_> {
                 label: Some(broke),
                 value,
             } if label == Some(broke.as_str()) => value,
-            Flow::Break { .. } | Flow::Return(_) | Flow::Continue | Flow::Bail => return None,
+            Flow::Break { .. } | Flow::Return(_) | Flow::Continue | Flow::Bail => {
+                crate::compiler_trace!("region_seed", "region {e:?}: run abandoned");
+                return None;
+            }
         };
         lattice.as_const()
+    }
+
+    /// Whether `ty` is a `&T` / `&mut T`. A region yielding one, or seeding
+    /// one, would trade an alias for a fresh value.
+    fn is_reference_type(&self, ty: TypeId) -> bool {
+        matches!(
+            self.type_table.get(ty),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        )
     }
 
     /// Charge the step budget for the copy of `body` a region run makes before
