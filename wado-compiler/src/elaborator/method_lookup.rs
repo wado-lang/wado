@@ -1702,6 +1702,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
         span: Span,
+        // `required_trait`: set by a trait-qualified call
+        // (`Alpha::describe(&x)`), where only impls of that trait may answer.
+        // Accepts the bare head (`Take`) or a full spelling (`Take<A>`), so a
+        // qualified call can pin one argument list.
+        required_trait: Option<&str>,
     ) -> Option<super::types::TraitMethodMatch> {
         // Resolving a trait method's signature here walks (possibly foreign)
         // impl-block parameter / return type AST nodes. Those nodes are owned
@@ -1718,6 +1723,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_type_args,
                 receiver_type_id,
                 span,
+                required_trait,
             )
         })
     }
@@ -2053,6 +2059,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
         span: Span,
+        required_trait: Option<&str>,
     ) -> Option<super::types::TraitMethodMatch> {
         use super::types::TraitMethodMatch;
         let mut found_traits: Vec<TraitMethodMatch> = Vec::new();
@@ -2075,6 +2082,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_type_args,
                 receiver_type_id,
             ));
+        }
+
+        // A qualified call already said which trait it means, so the candidates
+        // from every other trait are not competitors — dropping them here is
+        // what keeps `select_trait_match` from reporting an ambiguity the call
+        // site has resolved by naming one.
+        if let Some(wanted) = required_trait {
+            found_traits.retain(|m| m.trait_base_name == wanted || m.trait_name == wanted);
         }
 
         if let Some(m) = self.select_trait_match(found_traits, method_name, span) {
@@ -3202,6 +3217,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 output_type_args.as_deref(),
                 Some(output_type),
                 method_call.span,
+                None,
             )
         {
             method_trait_name = Some(trait_match.trait_name);

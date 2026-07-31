@@ -288,6 +288,18 @@ Landing order — each phase keeps the suite green and is useful alone:
    distinct candidates rather than one repeated string. The ambiguity errors
    below build on that helper.
 
+   Landed so far: `MethodCallInput::required_trait` constrains which impls may
+   answer, filtered in `find_trait_method_for_type_inner` before
+   `select_trait_match` sees the candidates (so naming a trait resolves what
+   would otherwise be reported ambiguous), and `resolve_call` routes
+   `Trait::method(recv, …)` to the method dispatcher ahead of its argument
+   walk, matching how `T::method(...)` already branches. Annotate types such a
+   call correctly. Reify does not yet replay it: the fact lands in
+   `method_dispatch` under a `Call` node's `AstId`, and reify's `Call` arm
+   looks for `static_method_dispatch`, so the call reaches later phases
+   untyped. Closing that — a dispatch fact reify can replay for the UFCS shape
+   — is what remains of this phase.
+
 2. Cross-trait ambiguity on concrete receivers: `select_trait_match`
    (`method_lookup.rs:2515`) stops taking the first of two trait groups and
    reports the error, extending `report_trait_argument_ambiguity` beyond
@@ -296,12 +308,45 @@ Landing order — each phase keeps the suite green and is useful alone:
    fixtures for calls that today resolve through the silent preference — the
    blanket `Inspect` / `ReflectStruct` impls put same-named methods on every
    struct, so user traits reusing stdlib method names will surface here.
-3. Argument-directed selection: probe typing as a speculative `resolve_expr`
-   run against a scratch `TypeAnnotations` that is discarded, then the filter in
-   `select_trait_match`. Only calls whose candidate set has several argument
+3. Argument-directed selection: probe typing, then the filter in
+   `select_trait_match` (which becomes `&mut self` — it runs before arguments
+   are resolved today). Only calls whose candidate set has several argument
    lists pay the probe cost. `find_method_in_trait_bounds`
    (`trait_query.rs:1610`) gets the same grouping so `T: Take<A> + Take<B>`
    behaves like the concrete case.
+
+   A scratch `ModuleSemantics` is necessary but not sufficient — the swap
+   already exists (`elaborator.rs:2054`, trait default-method synthesis) and
+   the annotation maps are `AstId`-keyed, so re-resolving overwrites rather
+   than duplicates. Four things sit outside those maps and a discarded probe
+   corrupts each:
+
+   - Diagnostics have no seam. `emit` calls `host.emit_diagnostic` directly
+     (`elaborator.rs:263` → `logger.rs:121`) and bumps a counter that fails the
+     whole compilation. A probe needs a depth counter gating `emit` / `warn`
+     and leaving `error_count` untouched.
+   - `FunctionContext` carries the Gap 7 walk-order invariant: annotate and
+     reify must allocate the same synthetic locals in the same order. A probe
+     that allocates one (`__ref_*` for a mut-capturing closure, `__qm_*` for
+     `?`, `__b` for a coerced literal) and is discarded desyncs every later
+     local index — silently wrong code, not an error. `FunctionContext` is not
+     `Clone`, so this is explicit save/restore.
+   - An anonymous struct literal interns into the shared `TypeTable` while its
+     `pending_anonymous_structs` push lives on the scratch. Discarding the
+     scratch leaves the dedup guard (`expr.rs:3859`) satisfied, so the real
+     resolve registers nothing and no `TirStruct` is emitted. The existing swap
+     drains that list back (`elaborator.rs:2088`); a probe must too, or skip
+     anon-struct registration.
+   - `record_bound_driven_synth_request` writes the shared `TypeTable` with no
+     removal API, so a probe over-synthesizes.
+
+   `TypeId` interning itself is safe — structurally deduped, and `retain`
+   tolerates unreachable ids. Closures register nothing global at annotate
+   time.
+
+   This is the phase's real cost, and it argues for probing the narrowest
+   expression that answers the question rather than running a general
+   speculative resolve.
 4. Follow-ups: arithmetic RHS selection in `find_arithmetic_trait_impl`;
    folding the `from` / `try_from` hint path into the general mechanism. That
    fold is what turns `Wrapper::from(42)` from the diagnostic it now reports

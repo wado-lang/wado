@@ -397,6 +397,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let callee_kind = self.tysys.classify_call_callee(&self.annotate_ctx, ident);
 
+        // `Trait::method(recv, args…)` — the trait-qualified (UFCS) call form
+        // (WEP 2026-07-31). Routed before the argument walk below because the
+        // dispatcher elaborates the non-receiver arguments itself, against the
+        // signature it selects.
+        if let Some(pos) = ident.name.find("::")
+            && self.is_trait_instance_method(&ident.name[..pos], &ident.name[pos + 2..])
+        {
+            let (trait_name, method_name) = (
+                ident.name[..pos].to_string(),
+                ident.name[pos + 2..].to_string(),
+            );
+            return self.resolve_trait_qualified_call(
+                &trait_name,
+                &method_name,
+                call,
+                expected_type,
+                ctx,
+            );
+        }
+
         // Abstract `T::method(...)` takes its own dispatch path. Args
         // are resolved without coercion hints (the trait-bound dispatch
         // walks them on its own; threading hints through here is a

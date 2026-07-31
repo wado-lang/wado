@@ -310,6 +310,15 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `Trait::method()` with no arguments: the trait-qualified call form
+    /// takes the receiver as its first argument, so there is nothing to
+    /// dispatch on.
+    TraitQualifiedCallNeedsReceiver {
+        trait_name: String,
+        method: String,
+        span: Span,
+    },
+
     /// A static call whose receiver provides the method only through trait
     /// impls, none of which takes an argument of the call's type —
     /// `Wrapper::from(42)` against `From<String>` and `From<i64>`. Reported at
@@ -890,6 +899,17 @@ impl TypeError {
                         .map(|t| format!("'{t}'"))
                         .collect::<Vec<_>>()
                         .join(" and ")
+                ),
+                *span,
+            ),
+            TypeError::TraitQualifiedCallNeedsReceiver {
+                trait_name,
+                method,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "'{trait_name}::{method}' takes the receiver as its first argument, e.g. '{trait_name}::{method}(&value)'"
                 ),
                 *span,
             ),

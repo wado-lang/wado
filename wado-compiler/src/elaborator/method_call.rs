@@ -67,6 +67,11 @@ pub(super) struct MethodCallInput<'a> {
     pub args: &'a [ast::Expr],
     pub expected_type: Option<TypeId>,
     pub span: Span,
+    /// The trait a qualified call named (`Alpha::describe(&x)`), constraining
+    /// which impl may be picked — the escape hatch for a method name two
+    /// traits share (WEP 2026-07-31). `None` for an ordinary `x.m()`, whose
+    /// candidates span every trait implemented for the receiver.
+    pub required_trait: Option<String>,
 }
 
 /// Result of [`Elaborator::resolve_method_call_with`]: the typed
@@ -140,6 +145,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args: &method_call.args,
                 expected_type,
                 span: method_call.span,
+                required_trait: None,
             },
             ctx,
         )
@@ -165,7 +171,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             args: args_ast,
             expected_type,
             span,
+            required_trait,
         } = input;
+        // A qualified call names one trait, so the steps that reach outside it
+        // — the concrete-ref-impl shortcut and the inherent-method step — are
+        // skipped; only that trait's impls may answer.
+        let required_trait = required_trait.as_deref();
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
@@ -281,10 +292,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
         // Only specific ref impls are preferred (not blanket impls like impl Inspect for &T).
         {
-            let is_ref = matches!(
-                self.tysys.type_table.borrow().get(receiver.type_id),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            );
+            let is_ref = required_trait.is_none()
+                && matches!(
+                    self.tysys.type_table.borrow().get(receiver.type_id),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                );
             if is_ref {
                 let ref_kind = RefKind::from_resolved(
                     &self.tysys.type_table.borrow().get(receiver.type_id).clone(),
@@ -297,6 +309,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     receiver_type_args_for_trait.as_deref(),
                     Some(base_type_id),
                     span,
+                    None,
                 );
                 // Only use ref-type impls that target a concrete container type
                 // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
@@ -318,7 +331,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Look up method info based on receiver type (inherent + base type trait methods)
-        if method_info.is_none() {
+        if method_info.is_none() && required_trait.is_none() {
             method_info = self.lookup_method_info(receiver.type_id, method_name);
         }
 
@@ -331,6 +344,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_type_args_for_trait.as_deref(),
                 Some(base_type_id),
                 span,
+                required_trait,
             )
         {
             matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
@@ -1124,6 +1138,66 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             expr: placeholder(return_type, span),
             dispatch,
         }
+    }
+
+    /// Whether `Trait::method` names a trait's instance method, making a call
+    /// on it the trait-qualified (UFCS) form `Trait::method(recv, args…)`
+    /// (WEP 2026-07-31). A trait's *static* method is not included: it has no
+    /// receiver argument to bind `Self` from.
+    pub(super) fn is_trait_instance_method(&self, trait_name: &str, method_name: &str) -> bool {
+        self.tysys
+            .trait_env
+            .find_trait_decl_key(trait_name)
+            .is_some()
+            && self
+                .trait_sig_by_name(trait_name)
+                .and_then(|sig| sig.method(method_name))
+                .is_some_and(|m| m.sig.self_kind != ast::SelfKind::None)
+    }
+
+    /// `Trait::method(recv, args…)` — the receiver is the first argument, so
+    /// dispatch is the ordinary method-call path with the named trait as a
+    /// constraint on which impl may answer.
+    pub(super) fn resolve_trait_qualified_call(
+        &mut self,
+        trait_name: &str,
+        method_name: &str,
+        call: &ast::CallExpr,
+        expected_type: Option<TypeId>,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        let Some((receiver_ast, rest)) = call.args.split_first() else {
+            let _ = self.emit(TypeError::TraitQualifiedCallNeedsReceiver {
+                trait_name: trait_name.to_string(),
+                method: method_name.to_string(),
+                span: call.span,
+            });
+            return TypeTable::ERROR;
+        };
+        let receiver_type = self.resolve_expr(receiver_ast, ctx, None);
+        let type_args: Vec<TypeId> = call
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
+        self.resolve_method_call_with(
+            MethodCallInput {
+                receiver: placeholder(receiver_type, receiver_ast.span()),
+                receiver_ast: Some(receiver_ast),
+                method_name,
+                method_id: None,
+                call_id: Some(call.id),
+                type_args,
+                type_arg_holes: vec![],
+                args: rest,
+                expected_type,
+                span: call.span,
+                required_trait: Some(trait_name.to_string()),
+            },
+            ctx,
+        )
+        .expr
+        .type_id
     }
 
     /// Resolve a static method call: `List::<i32>::with_capacity(100)` or `Point::origin()`
