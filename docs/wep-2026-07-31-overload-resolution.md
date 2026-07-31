@@ -271,10 +271,10 @@ Landing order — each phase keeps the suite green and is useful alone:
    retains the turbofish, so the trait's argument list is available to
    resolution. Pure addition; provides the escape hatch before any tightening.
 
-   The `UnknownFunction` message renders `Take::<A>::take` as `Take::take`,
-   dropping the trait arguments. Reusing that renderer for the ambiguity errors
-   would print two identical candidate names for a `Take<A>` / `Take<B>` set —
-   diagnostics must use the symbol notation, which carries them.
+   Static-call diagnostics already name the receiver in symbol notation
+   (`static_call_symbol_name`), so a `Take<A>` / `Take<B>` pair renders as two
+   distinct candidates rather than one repeated string. The ambiguity errors
+   below build on that helper.
 
 2. Cross-trait ambiguity on concrete receivers: `select_trait_match`
    (`method_lookup.rs:2515`) stops taking the first of two trait groups and

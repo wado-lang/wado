@@ -17,6 +17,20 @@ use super::method_lookup::MethodInferenceInput;
 use super::reflect::ScalarReflectSpec;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 
+/// A static call named the way [symbol notation] writes it — the receiver's
+/// type arguments included (`List<i32>::with_capacity`). Rendering only the
+/// head collapsed `Take<A>::take` and `Take<B>::take` onto one string, so a
+/// diagnostic naming both could not tell them apart.
+///
+/// [symbol notation]: ../../../docs/wep-2026-06-14-symbol-notation.md
+fn static_call_symbol_name(static_call: &ast::StaticMethodCallExpr) -> String {
+    let mut name = String::new();
+    crate::unparse::unparse_type_into(&static_call.target_type, &mut name);
+    name.push_str("::");
+    name.push_str(&static_call.method);
+    name
+}
+
 /// Inputs to [`Elaborator::resolve_method_call_with`], the TIR-level method-call
 /// dispatcher. The AST-driven [`Elaborator::resolve_method_call`] is a thin
 /// wrapper that resolves the receiver / type args / args from the
@@ -1170,7 +1184,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && self.tysys.trait_env.find_trait_decl_key(&g.name).is_some()
         {
             let _ = self.emit(TypeError::UnknownFunction {
-                name: format!("{}::{}", g.name, static_call.method),
+                name: static_call_symbol_name(static_call),
                 span: static_call.span,
             });
             return TypeTable::ERROR;
@@ -1741,11 +1755,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // name, a turbofish on a non-generic.
             _ => {
                 let _ = self.emit(TypeError::UnknownFunction {
-                    name: format!(
-                        "{}::{}",
-                        super::trait_env::get_type_name_static(&static_call.target_type),
-                        static_call.method
-                    ),
+                    name: static_call_symbol_name(static_call),
                     span: static_call.span,
                 });
                 return TypeTable::ERROR;
@@ -1802,7 +1812,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Emit a compile error if the static method was not found anywhere
         if return_type == TypeTable::UNKNOWN {
             let _ = self.emit(TypeError::UnknownFunction {
-                name: format!("{}::{}", struct_name, static_call.method),
+                name: static_call_symbol_name(static_call),
                 span: static_call.span,
             });
             return TypeTable::ERROR;

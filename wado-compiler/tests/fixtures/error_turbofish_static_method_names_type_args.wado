@@ -1,0 +1,11 @@
+// A static call's diagnostic names the receiver with its type arguments, so
+// two instantiations of one generic head do not render identically. Rendering
+// only the head made `Take::<A>::take` and `Take::take` — and `Take<A>` beside
+// `Take<B>` — indistinguishable in the message.
+export fn run() {
+    let c = List::<i32>::nonexistent(10);
+    assert c == 0;
+}
+
+__DATA__
+{"compile_error": "unknown function 'List<i32>::nonexistent'"}
