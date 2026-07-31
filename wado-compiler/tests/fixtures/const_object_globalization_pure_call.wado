@@ -8,14 +8,15 @@
 // GC can build the value once and share it, exactly like a literal.
 //
 // `encode_key` is the shape that motivated the extension: a pure encoder
-// applied to a literal, whose result is passed on by `&`. Its result owns a
-// GC array, so CTFE cannot fold it to a constant and the hoist is what
-// removes the per-iteration rebuild.
+// applied to a literal, whose result is passed on by `&`. Its capacity
+// request sits past the engine's sequence cap, so CTFE cannot fold the call
+// to a constant — capacity is unobservable, so the result is unchanged — and
+// the hoist is what removes the per-iteration rebuild.
 
 use { println, Stdout } from "core:cli";
 
 fn encode_key(name: &String) -> String {
-    let mut s = String::with_capacity(name.len() + 3);
+    let mut s = String::with_capacity(name.len() + 2000);
     s.push('"');
     s.push_str(name);
     s.push_str(&"\":");

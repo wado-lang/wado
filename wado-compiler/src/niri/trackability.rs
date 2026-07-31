@@ -9,27 +9,53 @@
 use indexmap::IndexSet;
 
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, Operand, StmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtId, StmtKind};
 
-use super::place::{lvalue_root_local, place_of};
+use super::place::{borrowed_place_operand, lvalue_root_local, place_of};
 use super::{CalleeMap, CtfeBuiltinMap, reachable_exprs};
 
 /// A method's receiver is its first parameter.
 const RECEIVER: usize = 0;
 
-/// The expressions a walk carries out: the operand each statement performs.
+/// The expressions a walk carries out: the operand each reachable statement
+/// performs. Reachable from the body root, because an orphaned statement never
+/// runs — counting one as performed would credit the walk with a write it will
+/// never carry out.
 fn performed_exprs(body: &Body) -> IndexSet<ExprId> {
     let mut performed = IndexSet::default();
-    for (_, stmt) in &body.stmts {
-        let op = match &stmt.kind {
+    for s in reachable_stmts(body) {
+        let op = match &body.stmts[s].kind {
             StmtKind::Expr(op) | StmtKind::Let { value: op, .. } => *op,
-            _ => continue,
+            StmtKind::Return { .. }
+            | StmtKind::If { .. }
+            | StmtKind::Loop { .. }
+            | StmtKind::Break { .. }
+            | StmtKind::Continue
+            | StmtKind::LabeledBlock { .. }
+            | StmtKind::LetDestructure { .. } => continue,
         };
         if let Some(e) = op.as_expr() {
             performed.insert(e);
         }
     }
     performed
+}
+
+/// Every statement id reachable from the body root, in walk order — or every
+/// statement, for a bare-expression body with no block structure.
+fn reachable_stmts(body: &Body) -> Vec<StmtId> {
+    if body.blocks.is_empty() {
+        return body.stmts.iter().map(|(s, _)| s).collect();
+    }
+    let mut stmts = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node {
+            stmts.push(s);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    stmts
 }
 
 /// The places a walk reaches, and how. A mention it does not reach disqualifies
@@ -57,7 +83,31 @@ impl Reached {
                 reached.place_assigns.insert(*e);
             }
         }
+        reached.record_alias_borrows(body);
         reached
+    }
+
+    /// A `let` binding a borrow of a place records that place as reached: the
+    /// frame resolves the binding to an alias, so a write through it is either
+    /// performed against the place's current value or abandons the evaluation,
+    /// and a read projects that value rather than a copy. Frame-only, like the
+    /// write accounting — an ordinary walk resolves no aliases.
+    fn record_alias_borrows(&mut self, body: &Body) {
+        for s in reachable_stmts(body) {
+            let StmtKind::Let {
+                value,
+                is_mut: false,
+                ..
+            } = &body.stmts[s].kind
+            else {
+                continue;
+            };
+            let Some((is_mut, inner)) = borrowed_place_operand(body, *value) else {
+                continue;
+            };
+            let reach = if is_mut { Reach::Write } else { Reach::Read };
+            self.record(body, inner, reach);
+        }
     }
 
     /// An ordinary walk performs nothing, so nothing it reaches is a write it
@@ -177,6 +227,10 @@ impl Reached {
         }
     }
 
+    /// Both directions of the mention check peel casts as well as borrows:
+    /// an argument reaches a builtin as `&x.repr as &Array<u8>`, and a
+    /// mention recorded at the cast would never match the borrow the
+    /// disqualification walk asks about.
     fn covers(&self, body: &Body, op: Operand) -> bool {
         let mut op = op;
         loop {
@@ -187,13 +241,15 @@ impl Reached {
                 ExprKind::Unary {
                     op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
                     expr,
-                } => op = *expr,
+                }
+                | ExprKind::Cast { expr, .. } => op = *expr,
                 _ => return self.reads.contains(&e) || self.writes.contains(&e),
             }
         }
     }
 
-    /// Records the place `op` names, peeling the borrow it may be wrapped in.
+    /// Records the place `op` names, peeling the borrows and casts it may be
+    /// wrapped in.
     fn record(&mut self, body: &Body, op: Operand, reach: Reach) {
         let Some(e) = op.as_expr() else {
             return;
@@ -202,7 +258,8 @@ impl Reached {
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
                 expr,
-            } => self.record(body, *expr, reach),
+            }
+            | ExprKind::Cast { expr, .. } => self.record(body, *expr, reach),
             _ => {
                 match reach {
                     Reach::Read => self.reads.insert(e),

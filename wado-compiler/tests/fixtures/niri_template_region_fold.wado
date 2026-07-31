@@ -1,0 +1,30 @@
+// A template whose interpolations are all constant folds to the literal the
+// source could have written (WEP: NIR Interpreter, region recognition).
+//
+// `` `a${"b"}` `` desugars to a closed block: a buffer built in a local of its
+// own, appended to through `internal_reserve_uninit` / `array_set`, and yielded
+// as the block's value. The region is a frame the engine starts from scratch,
+// so at -O2 the whole block collapses to `String { repr: packed"ab", used: 2 }`
+// and the append helpers drop out of the binary.
+//
+// The second case interpolates a constant `String` local. Globalization hoists
+// it, the region reads it back as a constant global through `push_str`'s
+// cast-wrapped borrows, and the post-globalization cleanup folds the block the
+// same way.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let s = `a${"b"}`;
+    println(s);
+    let b = "b";
+    let t = `a${b}`;
+    println(t);
+}
+
+__DATA__
+{
+    "stdout": "ab\nab\n",
+    "wir_expect:O2": ["array.new_fixed<u8>(97, 98)"],
+    "wir_not_expect:O2": ["internal_reserve_uninit"]
+}

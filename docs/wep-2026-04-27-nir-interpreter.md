@@ -180,9 +180,58 @@ Sequences:
   literal the lower phase emits for a source string — a struct over a packed
   byte array and its length. The bytes are the container's first `used`, since
   a grown container's capacity outruns what it holds and capacity is not
-  observable. Only a call is rewritten this way: the literal denotes the value
-  it replaced, so materializing one again would report a change at every visit
-  and the worklist would never settle.
+  observable. A container the frame never filled stays as the source wrote it:
+  an empty one is a reservation rather than a result, and a literal cannot
+  carry the capacity it asked for. Only a call or a self-contained region is
+  rewritten
+  this way: the literal
+  denotes the value it replaced, so materializing one again would report a
+  change at every visit and the worklist would never settle — and both rewrites
+  replace the node with a kind neither matches again.
+
+Regions:
+
+- A self-contained block runs as a frame the engine starts from scratch: one
+  that builds its value in locals of its own, reads and writes only those, and
+  yields the result is as self-contained as a call body — the difference is
+  that the caller wrote it inline. This is what folds a fully-constant string
+  template to the literal the source could have written.
+- Self-containment is decided before the run rather than during it: every
+  local the block mentions must be one it declares, and every call one a frame
+  could run. A region's frame starts empty, so a read of an outer local yields
+  nothing and an unrunnable call has no body to execute — the run abandons on
+  either. Deciding first is what keeps the attempt cheap, since the run copies
+  the whole enclosing body while the checks only walk the block. What they give
+  up is a mention on a statically dead path, which no scan can tell from a live
+  one.
+- A block yielding nothing denotes nothing, whatever its last statement
+  computed. An inlined statement call leaves the callee's result there while
+  the block stands where the program expects no value, and a constant put in
+  that position is one the surrounding type cannot hold.
+- The copy a run makes is charged to the step budget, because it is the work.
+  Uncharged, a function full of templates pays a whole-body copy per template
+  per pass and const folding turns quadratic in function size. A very large
+  function may find the budget spent before its later regions, which is the
+  trade every budgeted evaluation makes.
+- A `let` binding a borrow of a local place resolves to an alias inside a
+  frame rather than to a value, and so does rebinding a local that already
+  carries one: copying a reference copies the reference, so both handles name
+  the same storage. That is what carries the desugared template's
+  `let self = &mut __r` through the appends that follow.
+- An alias is resolved by a projection — a field read, an element read, a
+  deref — and by nothing else. The engine has no reference values, so handing
+  the referent back where the reference itself is read would turn a capture
+  into a copy, and a later write through the reference would land in that copy
+  while the referent kept a value it no longer holds. `Formatter { buf: &mut
+  __r }` is refused on that ground rather than by accident. An ordinary walk
+  performs nothing, so outside a frame such a binding still clobbers its
+  referent.
+- A cast between the same reference shape denotes its operand;
+  monomorphization leaves one over every buffer the formatting path builds. A
+  converting cast still folds only through the primitive-cast evaluator. Place
+  naming and the trackability mentions read through casts alike, so a borrow
+  reaching a builtin wrapped in one still names — and keeps trackable — the
+  local it writes.
 
 ## TODO
 
@@ -191,6 +240,12 @@ Sequences:
 - Enum and variant values with their payloads. Today an enum or variant
   pattern cannot be decided, so an `Option` / `Result` accessor exposed by
   inlining leaves a residual match the engine walks past.
+- A place-valued field, so an aggregate can carry a `&mut`. Today such an
+  aggregate is simply not a constant, since a field holding the referent's
+  value would take a write meant for the referent. What the field needs to
+  hold is the place the frame already names elsewhere, which would make the
+  alias machinery reach through a struct as well as through a local.
+  `Formatter { buf: &mut __r }` is the shape waiting on this.
 - An aggregate that is not a byte sequence has no way back into the IR. A
   `List<T>` of scalars would want the `ArrayLiteral` shape, and a plain struct
   a `StructLiteral` over its materialized fields; both are exits to add beside
@@ -244,13 +299,12 @@ Sequences:
 
 ### Regions
 
-- A closed block is not evaluated, only a call is. A block that builds a value
-  in locals of its own, writes only to those locals, and yields one of them is
-  as self-contained as a call body and needs no more machinery to run — the
-  difference is that the caller wrote it inline. Recognizing that shape is what
-  turns the string-template case below from a call-level problem, which needs a
-  contract about the caller's buffer, into a frame the engine starts from
-  scratch.
+- A region's frame starts empty, so an outer binding reaches it only as a
+  promoted scalar operand or as a constant global. A constant `String` local
+  interpolated into a template folds because globalization hoists it first;
+  an outer aggregate nothing hoists stays out of reach. Seeding the region
+  frame from the walker's environment is the likely extension; it waits on
+  deciding which entries stay sound under the frame's own writes.
 
 ### Compile-time string formatting
 
@@ -264,11 +318,15 @@ Every `${}` over constants, every `to_string()` on a literal, every constant
 `assert` message, and every constant `${x:?}` pays this.
 
 Nothing here waits on trait dispatch: `Display::fmt` is monomorphized and
-devirtualized to a free call before the optimizer runs. What it waits on is the
-four entries above — the aggregate exit, the store, the frame-executable call,
-and region recognition. Together they fold the region to the literal the source
-could have written, after which constant-object globalization deduplicates it
-and DCE drops the formatting functions no live call reaches.
+devirtualized to a free call before the optimizer runs. The aggregate exit, the
+store, the frame-executable call, and region recognition together fold the
+region to the literal the source could have written, after which
+constant-object globalization deduplicates it and DCE drops the formatting
+functions no live call reaches. What the remaining coverage waits on is the
+value model: an interpolation that keeps its `Formatter` literal needs an enum
+value for the alignment field and a place-naming value for the `&mut` buffer
+field, so a callee's write through `f.buf` lands in the region's buffer rather
+than in a copy inside the `Formatter` aggregate.
 
 Fold the region, not the call. A region constructs its own buffer, so every
 value inside it is concrete and nothing is assumed about it.
@@ -311,43 +369,17 @@ test and `realloc_to`'s prefix copy are never interpreted. The reserved region a
 primitive hands back is the same place the frame store hands out, so the two
 capabilities want the same representation.
 
-Milestones, each red/green with the fixture first:
+What is left, each red/green with the fixture first:
 
-- [x] The aggregate exit. A compile-time call returning a constant `String`
-      folds. No cap of its own is needed: `MAX_SEQ_ELEMENTS` already bounds what
-      becomes a sequence value, and a payload past the inline threshold reaches
-      the binary as a data segment rather than as code. A container the frame
-      never filled stays as the source wrote it: an empty one is a reservation
-      rather than a result, and a literal cannot carry the capacity it asked
-      for.
-- [x] Places and the frame store. Element writes, field stores, allocations and
-      copies all land through a frame-owned place.
-- [x] Frame-executable calls. A call writing through a `&mut` parameter runs
-      and writes back into the caller frame's place, so a compile-time call that
-      fills and returns a `List<u8>` folds, growth included. The write-back is
-      not separable from running the call: what fills a container is `push`,
-      which returns nothing, so the caller's place is the only thing the run
-      produces.
-
-      It is confined to statement and `let` position, where the executor runs a
-      call exactly once. The lattice projection is re-entrant, so a mutating
-      call is refused there outright — a write applied twice is worse than a
-      fold missed.
-
-      Which places stay trackable divides on what reaches them, not on where
-      the question is asked. A shared receiver, a by-value argument and a
-      builtin's source cannot be written through, so they are exempt wherever
-      they appear; that is what carries a container through the `&self` reads
-      `push` makes of its own capacity. A `&mut` one is exempt only inside a
-      frame, which performs the write or abandons the evaluation. An ordinary
-      walk performs nothing, and a write it steps over leaves its target stale.
-- [ ] Region recognition. `` `ab` `` and `` `a${"b"}` `` fold to one literal.
 - [ ] Coverage, in order of engine cost: `bool` / `char` / `String`, then
       integers, then width / zero-pad / radix specs, then `Inspect`, then
-      floats. Each step measures what it spends against the step budget:
-      integer formatting is two short loops and fits, and `fpfmt` is the
-      candidate for overrunning it — if it does, floats are the wasm-CTFE
-      backend's case rather than a reason to raise the budget.
+      floats. A `String` literal interpolation folds already — its `fmt`
+      inlines down to reserve-and-write, so no `Formatter` value survives —
+      and every other type keeps a `Formatter` literal, which waits on the
+      enum and `&mut`-field values above. Each step measures what it spends
+      against the step budget: integer formatting is two short loops and fits,
+      and `fpfmt` is the candidate for overrunning it — if it does, floats are
+      the wasm-CTFE backend's case rather than a reason to raise the budget.
 - [ ] A remark for a region that nearly folded — one runtime interpolation, or
       an exhausted budget — so a missed fold is visible instead of silent, plus
       a `wasm-size` and `benchmark` run to record what the whole thing bought.

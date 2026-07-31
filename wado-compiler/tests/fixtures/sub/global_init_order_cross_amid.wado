@@ -1,3 +1,6 @@
 use { BASE } from "./global_init_order_cross_zbase.wado";
 
-pub global DERIVED: i32 = BASE.len() + 100;
+// `black_box` keeps the read off the constant path: folded to a literal,
+// `DERIVED`'s initializer would never run and the cross-module ordering this
+// pair checks would go untested.
+pub global DERIVED: i32 = builtin::black_box(BASE.len()) + 100;
