@@ -347,6 +347,7 @@ Landing order — each phase keeps the suite green and is useful alone:
    This is the phase's real cost, and it argues for probing the narrowest
    expression that answers the question rather than running a general
    speculative resolve.
+
 4. Follow-ups: arithmetic RHS selection in `find_arithmetic_trait_impl`;
    folding the `from` / `try_from` hint path into the general mechanism. That
    fold is what turns `Wrapper::from(42)` from the diagnostic it now reports
