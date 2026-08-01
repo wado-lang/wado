@@ -1856,6 +1856,10 @@ pub enum WirInstr {
         /// by matching each helper's `value_copy_mangle` metadata — no name
         /// lookup, and robust to the same type being interned more than once.
         element_copy_mangle: Option<String>,
+        /// Number of leading elements to copy — the destination's exact
+        /// length. `None` clones the whole array (`array.len(src)`). Must
+        /// evaluate to <= `array.len(src)`.
+        len: Option<Box<WirInstr>>,
     },
 
     // === GC: Reference ===
@@ -2718,8 +2722,11 @@ impl WirInstr {
                 f(src_offset);
                 f(len);
             }
-            Self::ArrayClone { src, .. } => {
+            Self::ArrayClone { src, len, .. } => {
                 f(src);
+                if let Some(len) = len {
+                    f(len);
+                }
             }
             Self::Select {
                 condition,
@@ -3297,8 +3304,11 @@ impl WirInstr {
                 f(src_offset);
                 f(len);
             }
-            Self::ArrayClone { src, .. } => {
+            Self::ArrayClone { src, len, .. } => {
                 f(src);
+                if let Some(len) = len {
+                    f(len);
+                }
             }
             Self::Select {
                 condition,

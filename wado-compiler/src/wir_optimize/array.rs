@@ -272,3 +272,87 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
 
     *instr = WirInstr::Seq(seq);
 }
+
+/// Drop an `ArrayFill` that re-writes `array.new_default`'s zeros: the inlined
+/// `List::filled(n, <zero scalar>)` shape leaves
+/// `a = array.new_default(n); array.fill(a, 0, 0, n)` — a second pass over
+/// memory the allocation already zero-initialized. Matched only when the fill
+/// provably cannot trap (offset 0, length equal to the construction length)
+/// and every operand is pure, so removal changes no observable behavior.
+pub(super) fn elide_zero_fill_of_fresh_arrays(module: &mut WirPackage) {
+    for func in &mut module.functions {
+        if let Some(body) = &mut func.body {
+            let mut elider = ZeroFillElider;
+            elider.visit_body(body);
+        }
+    }
+}
+
+struct ZeroFillElider;
+
+impl WirMutVisitor for ZeroFillElider {
+    fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
+        self.walk_body(body);
+        for p in 0..body.len().saturating_sub(1) {
+            let WirInstr::LocalSet { name, value } = &body[p] else {
+                continue;
+            };
+            let WirInstr::ArrayNewDefault { len: new_len, .. } = value.as_ref() else {
+                continue;
+            };
+            if fill_is_redundant(&body[p + 1], name, new_len) {
+                body[p + 1] = WirInstr::Nop;
+            }
+        }
+    }
+}
+
+/// `array.fill(<name>, 0, <zero scalar>, <new_len>)` — a fill whose target is
+/// the just-created array, whose range is exactly the construction length, and
+/// whose value the allocation already holds.
+fn fill_is_redundant(instr: &WirInstr, name: &str, new_len: &WirInstr) -> bool {
+    let WirInstr::ArrayFill {
+        array,
+        offset,
+        value,
+        len,
+        ..
+    } = instr
+    else {
+        return false;
+    };
+    matches!(peel_ref_as_non_null(array), WirInstr::LocalGet { name: n, .. } if n == name)
+        && matches!(offset.as_ref(), WirInstr::I32Const(0))
+        && is_zero_scalar_const(value)
+        && same_pure_operand(new_len, len)
+}
+
+fn peel_ref_as_non_null(instr: &WirInstr) -> &WirInstr {
+    match instr {
+        WirInstr::RefAsNonNull(inner) => inner.as_ref(),
+        other => other,
+    }
+}
+
+/// The zero every `array.new_default` element already holds. Float zeros must
+/// be `+0.0` bit-exact — filling with `-0.0` writes a different bit pattern.
+fn is_zero_scalar_const(instr: &WirInstr) -> bool {
+    match instr {
+        WirInstr::I32Const(v) => *v == 0,
+        WirInstr::I64Const(v) => *v == 0,
+        WirInstr::F32Const(v) => v.to_bits() == 0,
+        WirInstr::F64Const(v) => v.to_bits() == 0,
+        _ => false,
+    }
+}
+
+/// Both operands are the same constant or the same local read. The pair sits
+/// in adjacent statements whose first only writes the array local, so an equal
+/// local read yields the same value at both points.
+fn same_pure_operand(a: &WirInstr, b: &WirInstr) -> bool {
+    match (a, b) {
+        (WirInstr::I32Const(x), WirInstr::I32Const(y)) => x == y,
+        (WirInstr::LocalGet { name: x, .. }, WirInstr::LocalGet { name: y, .. }) => x == y,
+        _ => false,
+    }
+}

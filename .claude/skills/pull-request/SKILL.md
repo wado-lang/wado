@@ -11,8 +11,17 @@ diff, not from the session that produced it.
 Revise the branch while you are there: clean up comments and docs according to
 the project rules.
 
-Check mergeability with `git merge-tree $(git merge-base HEAD origin/main) HEAD origin/main`.
-If conflicting, resolve it with the `git-upstream-sync` skill.
+Check mergeability by exit status (after `git fetch origin main`):
+
+```sh
+git merge-tree --write-tree --no-messages --name-only HEAD origin/main
+```
+
+Exit 0 = mergeable; exit 1 = conflicts, printing the merged tree OID followed
+by one conflicted path per line. This runs the real (ort) merge in memory and
+touches neither the worktree nor the index.
+
+If conflicting, resolve with the `git-upstream-sync` skill.
 
 ## PR Title
 
