@@ -1781,6 +1781,62 @@ impl TypeTable {
     /// `"cli"`, etc. — not a fully-qualified source string. Callers
     /// synthesizing CM bindings normally retrieve it from
     /// [`crate::world_registry::WorldInfo::package`].
+    /// Find any decl-backed named type scoped to a single CM *interface*,
+    /// addressed by the module name that interface maps to (e.g.
+    /// `sockets/ip_name_lookup.wado`).
+    ///
+    /// [`Self::find_named_type_by_cm_package`] scopes to the package, and a
+    /// package holds several interfaces — two of them can declare the same name
+    /// (`wasi:sockets/types` and `wasi:sockets/ip-name-lookup` both declare
+    /// `ErrorCode`). The package scan then returns whichever registered first,
+    /// so an exact interface match has to come before it.
+    #[must_use]
+    pub fn find_named_type_by_module_name(&self, name: &str, module_name: &str) -> Option<TypeId> {
+        for (type_id, resolved) in self.all_types() {
+            let (n, ms) = match resolved {
+                ResolvedType::Resource {
+                    name: n,
+                    module_source,
+                }
+                | ResolvedType::Enum {
+                    name: n,
+                    module_source,
+                }
+                | ResolvedType::Variant {
+                    name: n,
+                    module_source,
+                }
+                | ResolvedType::Struct {
+                    decl_name: n,
+                    module_source,
+                    ..
+                }
+                | ResolvedType::Flags {
+                    name: n,
+                    module_source,
+                }
+                | ResolvedType::Newtype {
+                    name: n,
+                    module_source,
+                    ..
+                } => (n, module_source),
+                _ => continue,
+            };
+            if n != name {
+                continue;
+            }
+            let matches = match ms {
+                ModuleSource::Wasi { interface } => &**interface == module_name,
+                ModuleSource::Core { name: cm_name } => &**cm_name == module_name,
+                _ => false,
+            };
+            if matches {
+                return Some(type_id);
+            }
+        }
+        None
+    }
+
     pub fn find_named_type_by_cm_package(&self, name: &str, cm_package: &str) -> Option<TypeId> {
         let prefix = format!("{cm_package}/");
         for (type_id, resolved) in self.all_types() {
