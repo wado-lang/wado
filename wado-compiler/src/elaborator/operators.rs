@@ -1860,6 +1860,12 @@ pub(super) fn ord_bool_from_cmp(
         ordering_type_id,
         span,
     );
+    // The callee is `Ord::cmp` by construction, so it returns `Ordering`
+    // whatever the dispatch recorded — a trait-bounded receiver leaves that
+    // `return_type` unresolved, and the comparison below then has no type to
+    // pick an opcode from.
+    let mut cmp_call = cmp_call;
+    cmp_call.type_id = ordering_type_id;
     TirExpr::new(
         TirExprKind::Binary {
             op: compare_op,

@@ -7514,59 +7514,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Wrap `Ord::cmp` into a `bool`: `<` → `cmp == Less`, `>` →
     /// `cmp == Greater`, `<=` → `cmp != Greater`, `>=` → `cmp != Less`.
-    /// Mirrors [`super::Elaborator::ord_bool_from_cmp`] (operators.rs:1605+).
     fn wrap_ord_bool_from_cmp(
         &mut self,
         cmp_call: TirExpr,
         op: ast::BinaryOp,
         span: crate::token::Span,
     ) -> TirExpr {
-        use crate::compiler_item::CompilerItem;
-        use crate::tir::{TirBinaryOp, TirExprKind, TypeTable};
-
-        let ordering_type_id = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_compiler_enum(CompilerItem::Ordering);
-        let (less_name, less_index, greater_name, greater_index) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            let (_, _, less_name, less_index) = items.require_enum_case(CompilerItem::OrderingLess);
-            let (_, _, greater_name, greater_index) =
-                items.require_enum_case(CompilerItem::OrderingGreater);
-            (
-                less_name.to_string(),
-                less_index,
-                greater_name.to_string(),
-                greater_index,
-            )
-        };
-        let (compare_op, case_name, case_index): (TirBinaryOp, String, u32) = match op {
-            ast::BinaryOp::Lt => (TirBinaryOp::Eq, less_name, less_index),
-            ast::BinaryOp::Gt => (TirBinaryOp::Eq, greater_name, greater_index),
-            ast::BinaryOp::LtEq => (TirBinaryOp::NotEq, greater_name, greater_index),
-            ast::BinaryOp::GtEq => (TirBinaryOp::NotEq, less_name, less_index),
-            _ => unreachable!("wrap_ord_bool_from_cmp called with non-Ord op {:?}", op),
-        };
-        let ordering_variant = TirExpr::new(
-            TirExprKind::EnumConstruct {
-                enum_type: ordering_type_id,
-                case_name,
-                case_index,
-            },
-            ordering_type_id,
-            span,
-        );
-        TirExpr::new(
-            TirExprKind::Binary {
-                op: compare_op,
-                left: Box::new(cmp_call),
-                right: Box::new(ordering_variant),
-            },
-            TypeTable::BOOL,
-            span,
-        )
+        super::operators::ord_bool_from_cmp(cmp_call, op, span, &self.tysys.type_table)
     }
 
     /// A function-typed global's `GlobalVarGet` parts
