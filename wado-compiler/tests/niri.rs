@@ -4331,39 +4331,11 @@ fn add_through_mut_ref_and_second_arg(
 }
 
 #[test]
-fn a_by_value_argument_out_of_a_mut_ref_target_does_not_block_the_call() {
-    // Wado copies a by-value argument at the call, so naming storage the
-    // callee also writes through `&mut` cannot be observed across the
-    // boundary. Refusing the run costs a fold and buys nothing.
-    let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
-
-    let (add, caller) = add_through_mut_ref_and_second_arg(
-        list_ty,
-        TypeTable::I32,
-        used_of_local(list_ty),
-        local_expr(1, TypeTable::I32),
-    );
-    let callees = build_callee_map_test(&[add, caller.clone()]);
-
-    let mut interp = Interpreter::new(&table);
-    interp.with_callees(&callees);
-
-    assert_eq!(
-        flow_fold(&mut interp, &call_expr(&caller, vec![])),
-        Some(Value::Int {
-            value: 4,
-            prim: PrimitiveType::I32,
-        }),
-    );
-}
-
-#[test]
-fn a_shared_borrow_of_a_mut_ref_target_declines_the_call() {
-    // A `&T` parameter binds the snapshot the frame takes before the call
-    // runs, so a callee writing that same storage through `&mut` would read a
-    // value the program never had. Wado has no borrow checker, so this is
-    // ordinary source: decline rather than mis-run.
+fn a_second_argument_naming_a_mut_ref_target_declines_the_call() {
+    // A second argument binds its own snapshot of storage the callee writes
+    // through `&mut`, so running the call would read a value the program never
+    // had. Wado has no borrow checker, so this is ordinary source: decline
+    // rather than mis-run.
     let mut table = TypeTable::new();
     let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
     let list_ref_ty = table.make_ref(list_ty);

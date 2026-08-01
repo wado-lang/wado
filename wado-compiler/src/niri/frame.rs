@@ -12,7 +12,6 @@
 
 use crate::const_eval::Value;
 use crate::name::RefKind;
-use crate::nir::NirParam;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
@@ -168,22 +167,23 @@ fn named_local(body: &Body, op: Operand) -> Option<u32> {
     }
 }
 
-/// Whether a `&mut` argument's storage is also named by another argument the
-/// callee reaches by reference. Each parameter binds its own snapshot and each
-/// write-back replays whole, so a second handle on the same storage either
-/// reads a value the program never had or has its own write undone.
+/// Whether a `&mut` argument's storage is also named by another argument. Each
+/// parameter binds its own snapshot and each write-back replays whole, so a
+/// second handle on the same storage either reads a value the program never had
+/// or has its own write undone.
 ///
-/// `borrowed` holds the place of every by-reference argument, the `&mut` ones
-/// included, so a target overlapping only itself counts once. A by-value
-/// argument is absent by construction: Wado copies it at the call, and no
-/// aliasing survives that.
+/// `places` holds every argument's place, the target's own included, so a target
+/// overlapping only itself counts once. Whether the other argument could
+/// actually observe the write is not asked: after `prepare_types` a shared
+/// borrow of a primitive, plain enum, variant or fn type is the same `Box<T>` a
+/// by-value one is, so no signature test tells them apart here.
 ///
 /// Wado has no borrow checker, so this is ordinary source: the frame declines
 /// to run the call rather than mis-run it.
-fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], borrowed: &[(u32, Vec<u32>)]) -> bool {
+fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u32>)]) -> bool {
     targets
         .iter()
-        .any(|(_, root, path)| overlapping_places(borrowed, *root, path) > 1)
+        .any(|(_, root, path)| overlapping_places(places, *root, path) > 1)
 }
 
 impl Interpreter<'_> {
@@ -622,14 +622,6 @@ impl Interpreter<'_> {
         }
     }
 
-    /// Whether the parameter reaches the caller's storage rather than a copy
-    /// of it, which is what makes an argument's place worth tracking for
-    /// aliasing. `is_mut_ref` is consulted as well as the type: it is captured
-    /// pre-boxing, so it answers where the type no longer reads as a borrow.
-    fn is_by_reference(&self, param: &NirParam) -> bool {
-        param.is_mut_ref || RefKind::from_resolved(self.type_table.get(param.type_id)).is_some()
-    }
-
     /// The callee a call names, and the operands bound to its parameters, in
     /// parameter order.
     fn call_target(&self, body: &Body, e: ExprId) -> Option<(CalleeKey, Vec<Operand>)> {
@@ -669,7 +661,7 @@ impl Interpreter<'_> {
 
         let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());
         let mut targets: Vec<(u32, u32, Vec<u32>)> = Vec::new();
-        let mut borrowed: Vec<(u32, Vec<u32>)> = Vec::new();
+        let mut places: Vec<(u32, Vec<u32>)> = Vec::new();
         for (arg, param) in args.iter().zip(&callee.params) {
             let place = self.frame_place_of(body, *arg);
             let value = if param.is_mut_ref {
@@ -680,12 +672,10 @@ impl Interpreter<'_> {
             } else {
                 self.operand_lattice_folded(body, *arg).as_const()?
             };
-            if self.is_by_reference(param) {
-                borrowed.extend(place);
-            }
+            places.extend(place);
             bound.push((param.local_index, value));
         }
-        if aliased_write_targets(&targets, &borrowed) {
+        if aliased_write_targets(&targets, &places) {
             return None;
         }
 
