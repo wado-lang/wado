@@ -598,9 +598,8 @@ fn can_propagate_copy(
             // apply.
             if is_value_type
                 && !target_usage.has_field_mutation
-                && source_usage.is_none_or(|su| {
-                    !su.is_assigned && !su.has_field_mutation && !su.address_taken
-                })
+                && source_usage
+                    .is_none_or(|su| !su.is_assigned && !su.has_field_mutation && !su.address_taken)
             {
                 return true;
             }

@@ -106,10 +106,11 @@ global global:core:prelude/primitive.wado::__const_obj_1: ref null "core:prelude
 fn "wir_optimize_value_copy_chained_field.wado/run"() with Stdout {
     let c: ref null "wir_optimize_value_copy_chained_field.wado//Outer";
     let o: ref "wir_optimize_value_copy_chained_field.wado//Outer";
-    let v: i32;
+    let v_2: i32;
     let n: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
+    let v_6: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:wir_optimize_value_copy_chained_field.wado::__modules_initialized);
         cold_path;
@@ -119,9 +120,10 @@ fn "wir_optimize_value_copy_chained_field.wado/run"() with Stdout {
     c = struct.new "wir_optimize_value_copy_chained_field.wado//Outer" { inner: struct.new "wir_optimize_value_copy_chained_field.wado//Inner" { value: 42 }, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
     if ref.is_null(c) == 0 {
         o = ref.as_non_null(c);
-        v = o.inner.value;
-        n = o.name;
-        "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(v, __local_5); __local_4);
+        v_2 = o.inner.value;
+        v_6 = o.name;
+        n = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v_6.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: v_6.used };
+        "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(v_2, __local_5); __local_4);
         "core:cli/println"(n);
     } else {
     }

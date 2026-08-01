@@ -3,11 +3,9 @@
 //
 // `Future::<T>::new()` is lowered by CM-binding synthesis to
 // `core:rt::cm_future_pair(<future-new canonical>)`, which splits the packed
-// i64 into the two i32 handle halves and returns the pair. After inlining,
-// `wir_optimize::elide_multi_field_struct_locals` elides the tuple struct:
-// each field initializer (`i32_wrap_i64` of the low / high half) is pure, so
-// the unread `_rx` half is just dropped while `tx` is read directly — no heap
-// allocation.
+// i64 into the two i32 handle halves and returns the pair. Each field
+// initializer (`i32_wrap_i64` of the low / high half) is pure, so the unread
+// `_rx` half is just dropped while `tx` is read directly — no heap allocation.
 
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 

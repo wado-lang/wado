@@ -75,7 +75,6 @@ fn collect_stats(
     }
 }
 
-
 /// Walk `instr` to check whether any descendant `LocalGet(name)` has its name in
 /// `candidates` and not equal to `exclude`.
 fn inner_refs_any_candidate(
@@ -95,21 +94,11 @@ fn inner_refs_any_candidate(
     found
 }
 
-
-
-
-
-
-
-
-
-
-
 /// Flatten `LocalSet { name, value: Seq([preamble..., final]) }` into
 /// `[preamble..., LocalSet { name, value: final }]` at all levels of each function.
 ///
-/// This canonicalizes the pattern produced by the WIR builder for tuple destructuring,
-/// making it visible to downstream passes like multi-field struct local elision.
+/// This canonicalizes the pattern the WIR builder produces for tuple
+/// destructuring, exposing the trailing copy to `propagate_trivial_copies`.
 pub(super) fn flatten_seq_assignments(module: &mut WirPackage) {
     let mut visitor = FlattenSeqAssignments;
     for func in &mut module.functions {
@@ -158,8 +147,9 @@ enum BoxUseWalk {
 }
 
 /// Elide single-field (`Box<T>`) struct locals with a heap-reading initializer
-/// when the def and its single use are adjacent in straight-line code — the case
-/// [`elide_single_field_struct_locals`] refuses because `inner` is not pure.
+/// when the def and its single use are adjacent in straight-line code. A
+/// heap-reading `inner` is only safe to move into a single use whose preceding
+/// ops are all pure and unconditional, which is what the adjacency buys.
 /// Fix-point per function over the monotonic def/use `stats` oracle.
 pub(super) fn elide_adjacent_box_locals(module: &mut WirPackage) {
     for func in &mut module.functions {
@@ -373,7 +363,6 @@ fn substitute_box_use(instr: &mut WirInstr, name: &str, field: &str, inner: &Wir
     });
     done
 }
-
 
 #[cfg(test)]
 mod adjacent_box_tests {

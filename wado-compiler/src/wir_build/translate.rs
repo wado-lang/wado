@@ -2597,7 +2597,9 @@ impl FunctionTranslator<'_, '_> {
                 // this back into a `Seq` of field initialisers when the
                 // enclosing function has `ReturnAbi::MultiValue`; a
                 // call-site destructure binds the results directly
-                // (`try_emit_multi_value_let`).
+                // (`try_emit_multi_value_let`, and
+                // `pattern_match::try_bind_multivalue_builtin` for the
+                // wide-integer builtins).
                 let (type_id, fields) = self.tuple_constructor_args(expr.type_id, elements);
                 WirInstr::StructNew { type_id, fields }
             }

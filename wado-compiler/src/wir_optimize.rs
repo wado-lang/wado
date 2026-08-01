@@ -161,9 +161,9 @@ pub fn optimize_wir(
     });
     profiler.span_end("wir/phase4_lib_rewrites");
 
-    // Phase 5: peephole (const fold, copy elision, multi-value struct elision),
-    // then flatten seq assignments to expose multi-field struct locals. Leftover
-    // Nops/dead locals are cleaned in phase 7.
+    // Phase 5: peephole (instruction selection, const fold, copy elision), then
+    // flatten seq assignments so the copy propagation below sees the
+    // destructures they hide. Leftover Nops/dead locals are cleaned in phase 7.
     profiler.span_start("wir/phase5_peephole");
     wir_pass("wir/run_peephole", module, profiler, |m| {
         let types = &m.types;

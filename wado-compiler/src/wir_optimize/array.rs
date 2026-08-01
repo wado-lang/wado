@@ -403,21 +403,45 @@ mod tests {
     fn promotion_pays_only_when_packing_is_smaller() {
         let n = ARRAY_NEW_DATA_THRESHOLD;
         // `u8`: one packed byte against at least two inline.
-        assert!(data_promotion_pays(n, 1, operand_bytes(n, ConstOperand::I32(200))));
+        assert!(data_promotion_pays(
+            n,
+            1,
+            operand_bytes(n, ConstOperand::I32(200))
+        ));
         // `i32` of small values: four packed bytes against three inline.
-        assert!(!data_promotion_pays(n, 4, operand_bytes(n, ConstOperand::I32(182))));
+        assert!(!data_promotion_pays(
+            n,
+            4,
+            operand_bytes(n, ConstOperand::I32(182))
+        ));
         // `i32` of values needing a four-byte LEB: five inline.
-        assert!(data_promotion_pays(n, 4, operand_bytes(n, ConstOperand::I32(3_000_000))));
+        assert!(data_promotion_pays(
+            n,
+            4,
+            operand_bytes(n, ConstOperand::I32(3_000_000))
+        ));
         // `f64`: eight packed bytes against nine inline.
-        assert!(data_promotion_pays(n, 8, operand_bytes(n, ConstOperand::F64)));
+        assert!(data_promotion_pays(
+            n,
+            8,
+            operand_bytes(n, ConstOperand::F64)
+        ));
         // `i64` of small values: eight packed bytes against three inline.
-        assert!(!data_promotion_pays(n, 8, operand_bytes(n, ConstOperand::I64(7))));
+        assert!(!data_promotion_pays(
+            n,
+            8,
+            operand_bytes(n, ConstOperand::I64(7))
+        ));
     }
 
     #[test]
     fn below_the_threshold_never_promotes() {
         let n = ARRAY_NEW_DATA_THRESHOLD - 1;
-        assert!(!data_promotion_pays(n, 1, operand_bytes(n, ConstOperand::I32(200))));
+        assert!(!data_promotion_pays(
+            n,
+            1,
+            operand_bytes(n, ConstOperand::I32(200))
+        ));
     }
 
     /// Past the fixed limit the alternative is the `array.new_default` +
@@ -425,6 +449,10 @@ mod tests {
     #[test]
     fn past_the_fixed_limit_promotion_always_pays() {
         let n = ARRAY_NEW_FIXED_LIMIT + 1;
-        assert!(data_promotion_pays(n, 8, operand_bytes(n, ConstOperand::I64(7))));
+        assert!(data_promotion_pays(
+            n,
+            8,
+            operand_bytes(n, ConstOperand::I64(7))
+        ));
     }
 }

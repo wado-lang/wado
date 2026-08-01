@@ -20,9 +20,10 @@ pub(super) fn cleanup(module: &mut WirPackage) {
 }
 
 /// Elide the redundant `RefAsNonNull` wrappers `struct_new` adds for
-/// non-nullable fields from every global initializer. The emitter drops them
-/// from a const expression anyway; stripping keeps the IR canonical and lets
-/// `dedupe_const_globals` compare inits structurally.
+/// non-nullable fields from every global initializer, so a promoted initializer
+/// reads in the same normal form as a function body. Emitted output is
+/// unchanged: the wrapper is already transparent to `is_const_expressible`,
+/// to `dedupe_const_globals`, and to the emitter.
 pub(super) fn cleanup_global_inits(module: &mut WirPackage) {
     for global in &mut module.globals {
         CleanupVisitor.visit_instr(&mut global.init);

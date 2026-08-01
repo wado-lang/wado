@@ -10,7 +10,7 @@ use crate::nir::NirLiteralPattern;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
-use super::calls::MULTIVALUE_I64_BUILTINS;
+use super::calls::{MULTIVALUE_I64_BUILTINS, MULTIVALUE_I64_RESULTS};
 use super::translate::{FunctionTranslator, LabelEntry, declare_and_set_local};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprKind, Operand, PatId, PatKind};
 
@@ -207,10 +207,18 @@ impl FunctionTranslator<'_, '_> {
     /// tuple struct the expression-position lowering builds
     /// (`calls::wrap_multivalue_i64`) would otherwise have to be recovered
     /// by a WIR pass.
+    ///
+    /// The pattern must name every result: one `local.set` per pushed value,
+    /// or the operand stack is left unbalanced. A rest pattern (`[a, ..]`)
+    /// does not, and neither does a shorter tuple — both fall through to the
+    /// tuple-struct path.
     fn try_bind_multivalue_builtin(&mut self, pattern: PatId, value: Operand) -> Option<WirInstr> {
-        let PatKind::Tuple(patterns, _) = &self.body.pats[pattern].kind else {
+        let PatKind::Tuple(patterns, has_rest) = &self.body.pats[pattern].kind else {
             return None;
         };
+        if *has_rest || patterns.len() != MULTIVALUE_I64_RESULTS {
+            return None;
+        }
         let expr = value.as_expr()?;
         let ExprKind::Call { func_id, args, .. } = &self.body.exprs[expr].kind else {
             return None;

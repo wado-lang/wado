@@ -69,15 +69,19 @@ macro_rules! replace_lane {
 }
 
 /// The wide-integer builtins whose Wasm instruction pushes two i64s.
-/// A `let [lo, hi] = …` over one of these binds the pair straight into split
-/// locals (`translate::try_emit_multi_value_let`); only a use in expression
-/// position falls back to the tuple struct [`wrap_multivalue_i64`] builds.
+/// A `let [lo, hi] = …` over one of these binds the pair straight into the
+/// binding locals (`pattern_match::try_bind_multivalue_builtin`); only a use in
+/// expression position falls back to the tuple struct
+/// [`FunctionTranslator::wrap_multivalue_i64`] builds.
 pub(super) const MULTIVALUE_I64_BUILTINS: [&str; 4] = [
     "builtin::i64_add128",
     "builtin::i64_sub128",
     "builtin::i64_mul_wide_u",
     "builtin::i64_mul_wide_s",
 ];
+
+/// How many Wasm results each of [`MULTIVALUE_I64_BUILTINS`] pushes.
+pub(super) const MULTIVALUE_I64_RESULTS: usize = 2;
 
 impl FunctionTranslator<'_, '_> {
     /// Translate one of [`MULTIVALUE_I64_BUILTINS`] to its bare two-result
