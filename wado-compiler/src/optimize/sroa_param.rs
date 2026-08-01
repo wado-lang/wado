@@ -293,7 +293,13 @@ fn param_snapshot_unsound(
             return false;
         };
         let mut visited = IndexSet::default();
-        type_transitively_contains(writable, struct_key, type_table, struct_fields, &mut visited)
+        type_transitively_contains(
+            writable,
+            struct_key,
+            type_table,
+            struct_fields,
+            &mut visited,
+        )
     })
 }
 
