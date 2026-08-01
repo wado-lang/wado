@@ -86,9 +86,10 @@ tree-sitter and Lezer.
 The residual ~4.1 ms GC is highlight's own captures/HTML allocation (the profile
 below), not the CST — `sqlite_parse` (build-then-discard,
 no highlight) is ~4.4 ms/iter and did not regress. One known transient:
-`TreeBuilder::finish` copies the `tag`/`a`/`alt` columns into the store because
-Wado has no by-value `self` / move (methods are `&self`/`&mut self`); the copy
-is exact-sized, dies immediately, and is free under `copying`.
+`TreeBuilder::finish` copies the `tag`/`a`/`b`/`alt` columns into the store
+because Wado has no by-value `self` / move (methods are `&self`/`&mut self`);
+each copy is exact-sized (a `List` value copy right-sizes to `used`) and the
+builder's originals die with the parse.
 
 **Column pre-size (landed).** `TreeBuilder::with_capacity` sizes the event columns
 to `4 × tokens` (measured `rows ≈ 3.44 × tokens`) so they never grow from empty —
@@ -96,19 +97,6 @@ one right-sized `array.new_default` instead of `log2(rows)` doubling reallocs, a
 ~16% over-fill (comparable to `TokenStream`'s `chars/4`). Release `sqlite_parse`
 2.52 → 2.36 ms/iter (~6%, build-heavy), `syntax_highlight` ~2% (build is a smaller
 share); no over-fill regression.
-
-**One capacity check per row/token (landed, 2026-08).** The `List<i32>::push`
-top frame (17.6% dev self on `sqlite_parse`): every column append paid `push`'s
-grow check even though the columns advance in lockstep. `TreeBuilder::push_row`,
-`TokenStream::push_token_flagged` and `push_trivia` now do one
-`len >= capacity` check on the lead column (growing every column together on
-the cold path — same length + same capacity ⇒ lockstep is preserved by
-construction) and then `push_within_capacity` across the row: 4/6/4 checks → 1.
-`TreeBuilder::finish` also dropped its exact-sized fill loop (4 × n `push`es)
-for a value-copy of the `b` column plus `List::filled` for `end`/`flags`/`next`
-(one alloc + fill each). Dev A/B best-of-3: 3.975 → 3.473 ms/iter (**~13%**);
-profile after: push family 17.6% → 12.8% (of which 9.4% is the
-`push_within_capacity` store floor), `finish` self 10.3% → 4.1%.
 
 ### Standing rules (measured)
 
@@ -150,11 +138,13 @@ profile after: push family 17.6% → 12.8% (of which 9.4% is the
   carries over to release largely intact, since the dev host does not inflate
   pure compute.
 
-### Live profile (`syntax_highlight`, 1928 leaf samples @1 ms)
+### Live profile (`syntax_highlight`, 1928 leaf samples @1 ms, 2026-07)
 
-`List<i32>::push` is the top frame. The dev profile is noisy per-frame (see the
-measurement note); mid-size frames swing ±several points across runs, so read the
-buckets, not the individual rows.
+A dated snapshot — the `push` rows have shrunk since the runtime pushers went
+to one capacity check per row/token; re-profile before sizing a new lever off
+this table. The dev profile is noisy per-frame (see the measurement note);
+mid-size frames swing ±several points across runs, so read the buckets, not
+the individual rows.
 
 |   Pct | Symbol                             | bucket                                   |
 | ----: | ---------------------------------- | ---------------------------------------- |
@@ -184,10 +174,7 @@ CST column build is the largest bucket.
 
 Pick the current top frame off the live profile above rather than a fixed recipe
 here: the frames shift as levers land, and the mid-size ones are noisy, so
-re-measure before committing. Candidates read off the profile above (the
-`List<i32>::push` one-check-per-row lever has landed — see "Current state"; the
-keyword-classifier `match` rewrite was measured a no-go — see "Tried and didn't
-pan out"):
+re-measure before committing. Candidates read off the profile above:
 
 - **First-char dispatch is linear in the ranges, not the rules.** The dispatch is an
   `if / else if` chain over the first-char sets, so a rule opening on a large set costs
@@ -399,22 +386,14 @@ ATN literal is a measured problem.)
 
 - **Keyword classifier: fold-once + `match` first-char dispatch** (2026-08).
   Rewrote `classify_keyword`'s per-length first-char dispatch from the linear
-  `eq_ignore_ascii_case` else-if chain to `let c0 = chars[start].to_ascii_lowercase()`
-  - `match c0` (br_table), dropping each arm's now-redundant case-insensitive
-    `kc = 0` guard. Dev A/B best-of-3 measured a consistent slight **loss**
-    (3.309 → 3.357 ms/iter, `sqlite_parse`): the short compare chain predicts
-    well, while the jump table adds an indirect branch — same shape as the
-    kind-set finding above (Cranelift lowers compare cascades competitively;
-    the frame is call-frequency-bound). Reverted.
-
-- **`shrink_to_fit` on the `CstStore` columns in `finish`** (2026-08). Right-sizing
-  the four capacity-carrying columns (`tag`/`a`/`b`/`alt`, ~16% slack from the
-  `4 × tokens` pre-size) cost a consistent ~3% on `sqlite_parse` (dev A/B
-  best-of-3 3.105 → 3.206 ms/iter): each shrink is an extra alloc + bulk copy per
-  parse, and for a build-then-discard store the slack is free under `copying`
-  (the live-set standing rule). Reverted. Worth revisiting only for a measured
-  long-lived-store consumer (LSP), where the retained slack is what the collector
-  re-traces.
+  `eq_ignore_ascii_case` else-if chain to a fold-once
+  `chars[start].to_ascii_lowercase()` feeding a `match` (br_table), dropping
+  each arm's now-redundant case-insensitive `kc = 0` guard. Dev A/B best-of-3
+  measured a consistent slight **loss** (3.309 → 3.357 ms/iter,
+  `sqlite_parse`): the short compare chain predicts well, while the jump table
+  adds an indirect branch — same shape as the kind-set finding above (Cranelift
+  lowers compare cascades competitively; the frame is call-frequency-bound).
+  Reverted.
 
 - **Index loops instead of `for x of &List<i32>`** (2026-07). Iterating by reference
   boxes every element; rewriting `follow_yields`'s membership scan and `classify`'s

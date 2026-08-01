@@ -191,10 +191,13 @@ pub flags TokenFlags {
 /// end; the generated-parser runtime uses `TokenStream` instead.
 ///
 /// Layout invariant: the per-token arrays (`kinds` / `starts` / `ends` /
-/// `triv_lo` / `triv_hi` / `flags`) always share a length, because
-/// `push_token` is the only writer and advances all of them together. Hidden /
-/// skip tokens ("trivia") live in the flat `triv_*` arrays in source order;
-/// each parser token owns the half-open range `[triv_lo[i], triv_hi[i])`.
+/// `triv_lo` / `triv_hi` / `flags`) always share a length and capacity:
+/// `push_token_flagged` is the only writer, advancing and growing them
+/// together behind one capacity check. The trivia columns (`triv_kinds` /
+/// `triv_starts` / `triv_ends` / `triv_chans`) form a second such lockstep
+/// group under `push_trivia`. Hidden / skip tokens ("trivia") live in the
+/// flat `triv_*` arrays in source order; each parser token owns the half-open
+/// range `[triv_lo[i], triv_hi[i])`.
 pub struct TokenStream {
     pub kinds: List<i32>,
     pub starts: List<i32>,
@@ -246,9 +249,7 @@ impl TokenStream {
         return self.triv_kinds.len();
     }
 
-    /// Append one hidden / skip token to the flat trivia arrays. The sole
-    /// writer of the trivia columns, so their lengths and capacities stay in
-    /// lockstep and one capacity check covers all four.
+    /// Append one hidden / skip token to the flat trivia arrays.
     pub fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
         if self.triv_kinds.len() >= self.triv_kinds.capacity() {
             builtin::cold_path();
@@ -258,8 +259,7 @@ impl TokenStream {
             self.triv_chans.grow();
             assert self.triv_starts.capacity() == self.triv_kinds.capacity()
                 && self.triv_ends.capacity() == self.triv_kinds.capacity()
-                && self.triv_chans.capacity() == self.triv_kinds.capacity(),
-                "TokenStream trivia columns must grow in lockstep";
+                && self.triv_chans.capacity() == self.triv_kinds.capacity(), "TokenStream trivia columns must grow in lockstep";
         }
         self.triv_kinds.push_within_capacity(kind);
         self.triv_starts.push_within_capacity(start);
@@ -297,8 +297,7 @@ impl TokenStream {
                 && self.ends.capacity() == self.kinds.capacity()
                 && self.triv_lo.capacity() == self.kinds.capacity()
                 && self.triv_hi.capacity() == self.kinds.capacity()
-                && self.flags.capacity() == self.kinds.capacity(),
-                "TokenStream token columns must grow in lockstep";
+                && self.flags.capacity() == self.kinds.capacity(), "TokenStream token columns must grow in lockstep";
         }
         self.kinds.push_within_capacity(kind);
         self.starts.push_within_capacity(start);

@@ -6,7 +6,9 @@
 //!
 //! For struct types the body is a `StructLiteral` with field-by-field
 //! shallow projections, plus `builtin::array_clone::<T>` for raw
-//! `Array<T>` fields. For variant types it is a `match` re-constructing
+//! `Array<T>` fields (`array_clone_prefix` for the `List<T>` / `String`
+//! backing, right-sized to `used`). For variant types it is a `match`
+//! re-constructing
 //! the matched case with a copied payload. Fall-through types
 //! (references, resources) keep `return v;` (identity). Nested copies
 //! are calls to the nested type's own helper, so the helpers are
@@ -734,9 +736,8 @@ fn is_seq_container(resolved: &ResolvedType, type_table: &Rc<RefCell<TypeTable>>
 }
 
 /// Copy the `repr` field of a `List<T>` / `String` right-sized to `used`:
-/// `array_clone_prefix(&v.repr, v.used)`. Capacity is an allocation detail,
-/// so a value copy does not inherit the source's slack. Falls back to the
-/// plain field copy when the field shapes are not the expected ones.
+/// `array_clone_prefix(&v.repr, v.used)`. Falls back to the plain field copy
+/// when the field shapes are not the expected ones.
 fn make_seq_backing_copy(
     struct_def: &TirStruct,
     v_local: &TirExpr,
