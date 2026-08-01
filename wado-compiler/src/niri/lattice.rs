@@ -25,7 +25,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId};
 
 use super::CtfeBuiltin;
 use super::pattern::PatternMatch;
-use super::{BodyShape, GlobalKey, Interpreter, Lattice, PatBindings};
+use super::{GlobalKey, Interpreter, Lattice, PatBindings, let_ref_global};
 
 impl Interpreter<'_> {
     /// What an operand denotes: the promoted constant for `Operand::Value`,
@@ -80,14 +80,15 @@ impl Interpreter<'_> {
                 name,
             } => Some((module_source.clone(), name.clone())),
             ExprKind::Local { index, .. } => {
-                let key = self.frame.ref_global_aliases.get(index)?;
+                let (stmt, key) = self.frame.ref_global_aliases.get(index)?;
                 debug_assert_eq!(
-                    self.frame.alias_body,
-                    Some(BodyShape::of(body)),
+                    body.stmts
+                        .get(*stmt)
+                        .and_then(|st| let_ref_global(body, &st.kind)),
+                    Some((*index, key.clone())),
                     "ref_global_aliases holds {key:?} for local {index}, but the body being \
-                     folded is not the one they were recorded for — per-function alias state \
-                     leaked across a body boundary (e.g. a CTFE scratch reduction that did not \
-                     save/clear it)",
+                     folded does not bind it there — per-function alias state leaked across a \
+                     body boundary (e.g. a CTFE scratch reduction that did not save/clear it)",
                 );
                 Some(key.clone())
             }

@@ -27,6 +27,7 @@ use wado_compiler::nir_arena::{
 use wado_compiler::nir_value_graph::ValueKind;
 use wado_compiler::niri::{
     BodySink, Callee, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, DEFAULT_STEP_BUDGET, GlobalEnv,
+    GlobalFieldEnv,
     Interpreter, Lattice, is_ctfe_eligible,
 };
 use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
@@ -7915,5 +7916,60 @@ fn a_region_already_run_is_not_run_again() {
         interp.reduce_to_lattice_full(&mut body, e),
         expected,
         "the second visit must read the memo rather than pay for a re-run",
+    );
+}
+
+#[test]
+fn a_ref_global_alias_survives_the_body_growing_under_it() {
+    // The aliases are recorded once per function, and the walk that follows
+    // allocates nodes as it folds. A read through an alias is a read in the
+    // same body whatever the arena has grown to since.
+    let table = TypeTable::new();
+    let module = ModuleSource::default();
+    let mut fields = GlobalFieldEnv::default();
+    fields.insert(
+        (module.clone(), "CONFIG".to_string()),
+        [(
+            "width".to_string(),
+            Value::Int {
+                value: 7,
+                prim: PrimitiveType::I32,
+            },
+        )]
+        .into_iter()
+        .collect(),
+    );
+
+    let mut body = Body::empty();
+    let stmts = [let_stmt_b(
+        "cfg",
+        0,
+        TypeTable::I32,
+        unary(
+            NirUnaryOp::Ref,
+            global_get(module.clone(), "CONFIG", TypeTable::I32),
+            TypeTable::I32,
+        ),
+    )];
+    body.root = block_of(&mut body, &stmts);
+    let read = field_access(local_expr(0, TypeTable::I32), 0, "width", TypeTable::I32)(&mut body)
+        .as_expr()
+        .expect("a field access is a composite expression");
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_global_fields(&fields);
+    interp.record_ref_global_aliases(&body);
+
+    // What folding does to the body between recording an alias and reading
+    // through one: a rewrite interns a node the arena did not hold before.
+    local_expr(9, TypeTable::I32)(&mut body);
+
+    assert_eq!(
+        interp.reduce_to_lattice(&body, read),
+        Lattice::Const(Value::Int {
+            value: 7,
+            prim: PrimitiveType::I32,
+        }),
+        "the alias must still resolve to the global it was recorded for",
     );
 }
