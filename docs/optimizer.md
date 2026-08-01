@@ -108,7 +108,7 @@ NIR→WIR lowering avoids a few redundant shapes, firing once during the build a
 1. Type representation — nullable-ref lowering; small-variant returns to multi-value.
 2. Box-local elimination — substitute the field read for a `Box<T>` local lowering minted.
 3. Data flow — forward constant struct fields for constant-index bounds-check elimination.
-4. Library rewrites — short-string append expansion; constant-array data promotion; large-literal splitting.
+4. Library rewrites — short-string append expansion; constant-array data promotion (only where packing encodes smaller than the inline `T.const` operands, since a data segment stores each element at full width while an operand is LEB128-compressed); large-literal splitting.
 5. Peephole — Wasm instruction-selection rewrites with no NIR analogue.
 6. Write-only local elimination — for locals only the WIR builder synthesises.
 7. Global cleanup — constant-initializer promotion, identical-global dedup, and dead-data pruning.
