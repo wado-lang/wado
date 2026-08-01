@@ -1235,9 +1235,30 @@ pub(super) fn generic_instance_name(
 ) -> String {
     let type_arg_names: Vec<String> = type_args
         .iter()
-        .map(|t| type_table.mangle_type_arg_for_generic(*t))
+        .map(|t| type_table.mangle_type_arg_for_generic(normalize_assoc_projection(type_table, *t)))
         .collect();
     crate::name::mangle_generic_name(name, &type_arg_names)
+}
+
+/// Resolve an associated-type projection (`f64::Err`) to the type it names
+/// (`ParseFloatError`).
+///
+/// A projection can still sit in a generic instance's type arguments here even
+/// though the instance was registered under the resolved spelling, so both
+/// sides only agree once the projection is normalized.
+fn normalize_assoc_projection(type_table: &TypeTable, type_id: TypeId) -> TypeId {
+    let ResolvedType::AssocTypeProjection {
+        param_id,
+        assoc_name,
+        owning_trait,
+        ..
+    } = type_table.get(type_id)
+    else {
+        return type_id;
+    };
+    type_table
+        .resolve_assoc_type_qualified(*param_id, owning_trait, assoc_name)
+        .unwrap_or(type_id)
 }
 
 /// The `List<T>` wrapper struct's registration key, derived from the element

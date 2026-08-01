@@ -1075,6 +1075,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                         None,
                     );
+                    let param_types =
+                        self.lookup_static_method_param_types_keyed(type_name, method_name, None);
                     let key = call.id;
                     self.sem.types.static_method_dispatch.insert(
                         key,
@@ -1083,6 +1085,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             param_is_mut,
                             type_args: vec![],
                             param_defaults,
+                            param_types,
                         },
                     );
 
@@ -1386,6 +1389,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut,
                 type_args: type_args.clone(),
                 param_defaults: vec![],
+                param_types: check_param_types,
             },
         );
         // Stage 7-B: reify rebuilds the `Call` TIR from the recorded
@@ -2739,6 +2743,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],
                     param_defaults,
+                    param_types: method_info_result.param_types.clone(),
                 },
             );
 

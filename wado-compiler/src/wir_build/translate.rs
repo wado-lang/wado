@@ -1457,13 +1457,18 @@ impl FunctionTranslator<'_, '_> {
                 if i < param_count {
                     continue;
                 }
+                let idx = u32::try_from(i).unwrap();
+                let local_name = self.local_name(idx);
+                assert!(
+                    local.type_id != TypeTable::UNKNOWN,
+                    "[WIR] local `{local_name}` of `{}` has no resolved type",
+                    self.tir_func.name
+                );
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, local.type_id);
                 // Skip unit-type locals (unit has no Wasm representation)
                 if matches!(wir_type, WirType::Unit) {
                     continue;
                 }
-                let idx = u32::try_from(i).unwrap();
-                let local_name = self.local_name(idx);
                 instrs.push(WirInstr::DeclareLocal {
                     name: local_name,
                     ty: wir_type,

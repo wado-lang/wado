@@ -1107,6 +1107,13 @@ fn try_inline_call_expr(
 
     // Args are already in the caller arena (operands of the discarded call); bind
     // each to its param `Let` directly (WEP: The Live ValueGraph).
+    //
+    // The `Let` stands in for the parameter, so it takes the parameter's
+    // declared type, not the argument expression's. `TypeId`s are package-wide
+    // after link, so the callee's is meaningful here. Taking the argument's
+    // instead propagates whatever the caller happened to record — including an
+    // unresolved type from a synthesized default argument, which then has no
+    // Wasm type to declare the local with.
     let bindings: Vec<InlineBinding> = candidate
         .params
         .iter()
@@ -1115,7 +1122,7 @@ fn try_inline_call_expr(
             callee_local_index: param.local_index,
             name: param.name.clone(),
             is_mut: param.is_mut,
-            local_type: caller.operand_type(arg),
+            local_type: param.type_id,
             value: arg,
         })
         .collect();
@@ -1208,7 +1215,7 @@ fn try_inline_method_call_expr(
             callee_local_index: param.local_index,
             name: param.name.clone(),
             is_mut: param.is_mut,
-            local_type: caller.operand_type(arg),
+            local_type: param.type_id,
             value: arg,
         });
     }

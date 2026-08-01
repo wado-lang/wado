@@ -7255,6 +7255,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.reify_apply_param_defaults(
                 &mut args,
                 &dispatch.param_defaults,
+                &dispatch.param_types,
                 &callee_module,
                 static_call.span,
                 ctx,
@@ -7384,6 +7385,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         callee: &ast::Expr,
         args: &mut Vec<crate::tir::CallArg>,
+        param_types: &[crate::tir::TypeId],
         callee_module: &ModuleSource,
         callee_name: &str,
         ctx: &mut FunctionContext,
@@ -7397,7 +7399,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return;
         };
         let func_params = self.lookup_free_func_params(callee_module, callee_name);
-        self.reify_apply_param_defaults(args, &func_params, callee_module, callee.span(), ctx);
+        self.reify_apply_param_defaults(
+            args,
+            &func_params,
+            param_types,
+            callee_module,
+            callee.span(),
+            ctx,
+        );
     }
 
     /// Pad `args` with reified default values for the trailing `func_params`
@@ -7408,6 +7417,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         args: &mut Vec<crate::tir::CallArg>,
         func_params: &[(String, Option<ast::Expr>)],
+        param_types: &[crate::tir::TypeId],
         callee_module: &ModuleSource,
         call_span: crate::token::Span,
         ctx: &mut FunctionContext,
@@ -7480,7 +7490,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 Some((n, Some(d))) => (n.clone(), d.clone()),
                 _ => break,
             };
-            let resolved = self.reify_expr(&default_ast, ctx, None);
+            // Reify against the parameter's declared type. A default declared on
+            // a trait method has no body for annotate to walk, so nothing
+            // recorded a type for its expression; without the expectation here
+            // it reifies as `Unknown` and reaches codegen untyped.
+            let expected = param_types.get(i).copied();
+            let resolved = self.reify_expr(&default_ast, ctx, expected);
             // Later defaults may reference this one's parameter.
             self.default_arg_overrides.insert(name, resolved.clone());
             args.push(crate::tir::CallArg::new(resolved, false));
@@ -7724,6 +7739,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.reify_pad_args_with_defaults(
                 &call.callee,
                 &mut arg_exprs,
+                &dispatch.param_types,
                 &dispatch.function_ref.module_source,
                 &dispatch.function_ref.name,
                 ctx,
@@ -7734,6 +7750,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.reify_apply_param_defaults(
                 &mut arg_exprs,
                 &dispatch.param_defaults,
+                &dispatch.param_types,
                 &smc_module,
                 span,
                 ctx,
@@ -8094,9 +8111,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // this the type checker sees the padded arity but the TIR keeps
             // only the explicit args, so WIR lowers a call with a missing
             // trailing operand.
+            let param_types = self.ann_call_param_types(call.id).unwrap_or_default();
             self.reify_pad_args_with_defaults(
                 &call.callee,
                 &mut args,
+                &param_types,
                 &callee_module,
                 &callee_name,
                 ctx,
