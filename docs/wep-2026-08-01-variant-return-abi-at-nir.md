@@ -25,6 +25,23 @@ fold at NIR: the discriminant is inside a heap struct NIR never opens.
 This is the same blind spot [`NirExprKind::ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md)
 removed for constant arrays, and it is the largest one left.
 
+A smaller sibling gap is worth fixing on the way, since it needs none of the
+ABI work: a `match` whose scrutinee is a syntactically known
+`VariantConstruct` does not collapse at NIR even when the payload is opaque.
+
+```wado
+let s = Shape::Circle(black_box(3));
+let n = match s { Dot => 0, Circle(r) => r + 1 };   // survives -O2 today
+```
+
+The constant-scrutinee folding path runs through `const_eval::Value`, which is
+all-or-nothing constant and has no variant case, so "case known, payload
+unknown" is inexpressible there. The fix is a syntactic rewrite rule instead:
+resolve the scrutinee to its `VariantConstruct`, select the arm by case index,
+and bind each payload pattern to `VariantPayload(scrutinee, …)` rather than to
+the construct's argument expression — reading through the scrutinee keeps an
+effectful payload from being duplicated or reordered.
+
 Measured worth of the pass as an *output-size* optimization (skip-scan,
 `-O2`): 2535 bytes on `gale_gen`, 1344 on `json_canada`, 30 on `sqlite_parse`,
 0 on `count_prime` / `fts`. The size win is not the reason to move it — the
