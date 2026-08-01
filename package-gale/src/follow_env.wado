@@ -232,24 +232,14 @@ struct PlanFollow {
 /// local follow at the group's position; `Repeat` recurses with
 /// `first(inner) ∪ local_follow` so that the inner's siblings (after one
 /// iteration) see the start-of-inner contributions plus the loop exit follow.
-fn plan_elements(
-    elements: &List<Element>,
-    ctx: &mut GenContext,
-    outer: &PlanFollow,
-    plan: &mut List<Contribution>,
-) {
+fn plan_elements(elements: &List<Element>, ctx: &mut GenContext, outer: &PlanFollow, plan: &mut List<Contribution>) {
     for let mut i = 0; i < elements.len(); i += 1 {
         let local = plan_local_follow(elements, i, ctx, outer);
         plan_element(&elements[i], ctx, &local, plan);
     }
 }
 
-fn plan_element(
-    elem: &Element,
-    ctx: &mut GenContext,
-    local: &PlanFollow,
-    plan: &mut List<Contribution>,
-) {
+fn plan_element(elem: &Element, ctx: &mut GenContext, local: &PlanFollow, plan: &mut List<Contribution>) {
     match elem {
         RuleRef(r) => {
             let callee = ctx.rule_index_of(&r.name);
@@ -304,12 +294,7 @@ struct FollowBits {
 /// a bitset. This is the deep first-of-suffix (`deep_first_of_elements_from`)
 /// without its `List<String>` + `dedup_append_arr` O(n²) merge: a bitset
 /// dedups by construction.
-fn suffix_first_bits(
-    ctx: &mut GenContext,
-    elements: &List<Element>,
-    start: i32,
-    bits: &mut List<u64>,
-) {
+fn suffix_first_bits(ctx: &mut GenContext, elements: &List<Element>, start: i32, bits: &mut List<u64>) {
     for let mut i = start; i < elements.len(); i += 1 {
         accumulate_first_bits(ctx, &elements[i], bits);
         let mut nv: List<String> = [];

@@ -568,8 +568,7 @@ test "pipeline: duplicate parser rule across merged grammars is rejected" {
     let g2 = parse("grammar B;\nr : 'y' ;").unwrap();
     let merged = merge_grammars([g1, g2]);
     let result = check_references(&merged);
-    assert result matches { Err(e) && e.message.contains("duplicate parser rule") },
-        "cross-file duplicate parser rule should be rejected post-merge";
+    assert result matches { Err(e) && e.message.contains("duplicate parser rule") }, "cross-file duplicate parser rule should be rejected post-merge";
 }
 
 test "pipeline: split grammars merge and check_references rejects undefined parser rule ref" {
