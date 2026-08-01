@@ -638,7 +638,14 @@ pub(super) fn extract_const(
     let type_id = e.body.exprs[at].type_id;
     let prim = e
         .value_graph_type_table()
-        .and_then(|tt| crate::const_eval::prim_of(type_id, tt));
+        .and_then(|tt| crate::const_eval::prim_of(type_id, tt))
+        // An enum case is its discriminant, which lowers to `i32`; the type
+        // itself is not a primitive, so `prim_of` cannot name its width.
+        .or_else(|| {
+            let tt = e.value_graph_type_table()?;
+            matches!(tt.get(type_id), crate::tir::ResolvedType::Enum { .. })
+                .then_some(crate::tir::PrimitiveType::I32)
+        });
     crate::nir_value_graph::value_kind_to_const(&vk, prim)
 }
 
