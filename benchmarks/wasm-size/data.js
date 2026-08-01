@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785591786182,
+  "lastUpdate": 1785601633065,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45289,6 +45289,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/49b76301da1a4229e63cb3253c7b270950b72de7"
         },
         "date": 1785591785566,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16302,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273276,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2a556c019995acd4ad3daed2ec39c8087c80cd0d",
+          "message": "Merge pull request #1728 from wado-lang/claude/wado-compiler-niri-smell-xepo56\n\nrefactor(niri): tighten the interpreter's invariants, cost model, and module boundaries",
+          "timestamp": "2026-08-02T02:15:57+10:00",
+          "tree_id": "404b9b2e440c7e702f476e9f0e04fd55640914ee",
+          "url": "https://github.com/wado-lang/wado/commit/2a556c019995acd4ad3daed2ec39c8087c80cd0d"
+        },
+        "date": 1785601632500,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
