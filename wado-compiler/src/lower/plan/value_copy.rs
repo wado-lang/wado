@@ -27,9 +27,7 @@ use crate::tir::{ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
 
 /// The element type `T` of a `builtin::array_clone::<T>` /
-/// `array_clone_prefix::<T>` call, or `None` for any other expression. Shared
-/// by [`analyze`] (seeding element-copy helpers) and [`synthesize`] (closing
-/// the helper worklist), so the clone family is enumerated once.
+/// `array_clone_prefix::<T>` call, or `None` for any other expression.
 fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
     let TirExprKind::Call { func, .. } = &expr.kind else {
         return None;

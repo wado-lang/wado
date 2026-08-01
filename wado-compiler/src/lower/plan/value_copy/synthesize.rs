@@ -8,10 +8,9 @@
 //! shallow projections, plus `builtin::array_clone::<T>` for raw
 //! `Array<T>` fields (`array_clone_prefix` for the `List<T>` / `String`
 //! backing, right-sized to `used`). For variant types it is a `match`
-//! re-constructing
-//! the matched case with a copied payload. Fall-through types
-//! (references, resources) keep `return v;` (identity). Nested copies
-//! are calls to the nested type's own helper, so the helpers are
+//! re-constructing the matched case with a copied payload. Fall-through
+//! types (references, resources) keep `return v;` (identity). Nested
+//! copies are calls to the nested type's own helper, so the helpers are
 //! mutually recursive.
 //!
 //! Synthesized helper bodies contain `builtin::copy_value::<NestedT>(x)`
@@ -672,7 +671,7 @@ fn build_tuple_copy(
 /// Copy the `repr` field of a `List<T>` / `String` right-sized to `used`:
 /// `array_clone_prefix(&v.repr, v.used)`. The caller has already vetted the
 /// type as a seq container, so the `{ repr: Array<T>, used: i32 }` shape is a
-/// compiler invariant — a mismatch is a bug, not a fallback case.
+/// compiler invariant.
 fn make_seq_backing_copy(
     struct_def: &TirStruct,
     v_local: &TirExpr,
