@@ -1764,23 +1764,6 @@ impl TypeTable {
             .or_else(|| self.find_resource_type(name, module_source))
     }
 
-    /// Find any decl-backed named type (resource, enum, variant, struct,
-    /// flags, or newtype) scoped to a CM package.
-    ///
-    /// Matches types whose `module_source` prefix resolves to
-    /// `{cm_package}/` — both `Wasi { interface: "{pkg}/…" }` (e.g.
-    /// `wasi:http/types.wado`) and `Core { name: "{pkg}/…" }` (e.g.
-    /// `core:kiln/types.wado`) are considered. The key invariant: two
-    /// CM interfaces in distinct packages that happen to share a type
-    /// name (`wasi:cli/ErrorCode` vs `wasi:http/ErrorCode`, or
-    /// `wasi:http/types::Response` vs `core:kiln/types::Response`)
-    /// resolve to distinct `TypeId`s because `module_source` is part of
-    /// the intern key.
-    ///
-    /// `cm_package` is the bare package segment — `"http"`, `"kiln"`,
-    /// `"cli"`, etc. — not a fully-qualified source string. Callers
-    /// synthesizing CM bindings normally retrieve it from
-    /// [`crate::world_registry::WorldInfo::package`].
     /// Find any decl-backed named type scoped to a single CM *interface*,
     /// addressed by the module it maps to (e.g. `sockets/ip_name_lookup.wado`).
     ///
@@ -1834,6 +1817,23 @@ impl TypeTable {
         None
     }
 
+    /// Find any decl-backed named type (resource, enum, variant, struct,
+    /// flags, or newtype) scoped to a CM package.
+    ///
+    /// Matches types whose `module_source` prefix resolves to
+    /// `{cm_package}/` — both `Wasi { interface: "{pkg}/…" }` (e.g.
+    /// `wasi:http/types.wado`) and `Core { name: "{pkg}/…" }` (e.g.
+    /// `core:kiln/types.wado`) are considered. The key invariant: two
+    /// CM interfaces in distinct packages that happen to share a type
+    /// name (`wasi:cli/ErrorCode` vs `wasi:http/ErrorCode`, or
+    /// `wasi:http/types::Response` vs `core:kiln/types::Response`)
+    /// resolve to distinct `TypeId`s because `module_source` is part of
+    /// the intern key.
+    ///
+    /// `cm_package` is the bare package segment — `"http"`, `"kiln"`,
+    /// `"cli"`, etc. — not a fully-qualified source string. Callers
+    /// synthesizing CM bindings normally retrieve it from
+    /// [`crate::world_registry::WorldInfo::package`].
     pub fn find_named_type_by_cm_package(&self, name: &str, cm_package: &str) -> Option<TypeId> {
         let prefix = format!("{cm_package}/");
         for (type_id, resolved) in self.all_types() {
