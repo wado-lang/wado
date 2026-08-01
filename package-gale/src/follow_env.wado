@@ -3,15 +3,17 @@
 //! at-end multi-alt conflict must route through the ATN).
 //!
 //! The `rule_follow` fixed point represents each rule's FOLLOW set as a u64
-//! bitset over interned terminal ids: union is a word-wise OR and equality a
-//! word compare, so the worklist loop never touches a `TreeSet<String>`. The
-//! public `FollowSet` still exposes `kinds` as a `TreeSet<String>`; the
-//! bitsets are materialised to that form once per rule after the fixed point
-//! converges (outside the hot loop).
+//! bitset over token-kind ids (`Element::kind_id`): union is a word-wise OR
+//! and equality a word compare, so the worklist loop never touches a
+//! `TreeSet<String>`. Every FIRST-derived contribution is fixed-point
+//! invariant, so each `RuleRef` site is flattened once into a
+//! [`Contribution`] — static bits plus an inherits-caller-FOLLOW flag — and
+//! the loop itself is pure bitset propagation. The public `FollowSet` still
+//! exposes `kinds` as a `TreeSet<String>`; the bitsets are materialised to
+//! that form once per rule after the fixed point converges.
 
-use { ParserRule, Alternative, Element } from "./ir.wado";
+use { ParserRule, Element } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
-use { literal_const_name } from "./gen_util.wado";
 use { TreeMap, TreeSet } from "core:collections";
 
 /// FOLLOW set for a parser rule, in the classical ANTLR4 sense:
@@ -19,9 +21,6 @@ use { TreeMap, TreeSet } from "core:collections";
 /// successful parse of the rule, accumulated across every call site
 /// reachable from the start rule.
 ///
-/// `kinds` is a `TreeSet` so the fixed-point solver's repeated
-/// `follow_union` / `follow_eq` calls run at `O(|b| log |a|)` instead
-/// of the linear `List::contains` scan they would do on an `List`.
 /// `closed` tracks whether the set is "closed under EOF": i.e. whether
 /// the start rule (or any rule reachable from it through a strictly
 /// nullable suffix chain) is known to be terminated by EOF.
@@ -128,14 +127,17 @@ pub fn build(parser_rules: &List<ParserRule>, ctx: &mut GenContext, start_rule: 
 /// Compute the per-rule FOLLOW set as a worklist fixed point.
 ///
 /// Initialisation: `FOLLOW(start_rule) = {EOF, closed=true}`; every
-/// other rule starts with the empty/non-closed set. Each iteration
-/// walks every rule's body and contributes `local_follow` to
-/// `FOLLOW(callee)` at each `RuleRef(callee)` site, where
-/// `local_follow = first(suffix) ∪ (suffix deep-nullable →
-/// FOLLOW(enclosing context))`. The enclosing context is the rule's
-/// own FOLLOW for top-level alts, and the surrounding group's
-/// effective follow for inner alts (computed recursively via the same
-/// formula as the walker descends).
+/// other rule starts with the empty/non-closed set. Each `RuleRef`
+/// site contributes `local_follow = first(suffix) ∪ (suffix
+/// deep-nullable → FOLLOW(enclosing context))` to `FOLLOW(callee)`.
+/// The enclosing context is the rule's own FOLLOW for top-level alts,
+/// and the surrounding group's effective follow for inner alts.
+///
+/// The FIRST-derived half of every contribution never changes across
+/// iterations, so the element walk runs once up front ([`plan_element`])
+/// and its static bits are seeded before the loop; the loop then only
+/// propagates each caller's own FOLLOW through the sites whose suffix
+/// chain is deep-nullable (`inherits_outer`).
 ///
 /// Termination: every iteration that doesn't grow any rule's set is
 /// the last; the algorithm terminates because each set is monotonic
@@ -145,35 +147,58 @@ fn compute_rule_follow(
     ctx: &mut GenContext,
     start_rule: &String,
 ) -> TreeMap<String, FollowSet> {
-    // Token universe: a FOLLOW set only ever holds terminals (a FIRST set is
-    // built from `TokenRef` / `Literal` leaves) plus the `TK_EOF` seed, so
-    // interning every terminal once gives a dense id space for the bitsets.
-    let mut intern = TokenInterner { ids: TreeMap::<String, i32>::new(), names: [] };
-    intern_token(&mut intern, &"TK_EOF");
+    let mut index = TreeMap::<String, i32>::new();
+    for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
+        index[parser_rules[ri].name] = ri;
+    }
+
+    let mut plans: List<List<Contribution>> = [];
     for let rule of parser_rules {
+        let mut plan: List<Contribution> = [];
+        let outer = PlanFollow { bits: [], inherits: true };
         for let alt of &rule.alternatives {
-            collect_terminal_tokens(&alt.elements, &mut intern);
+            plan_elements(&alt.elements, ctx, &outer, &index, &mut plan);
+        }
+        plans.push(plan);
+    }
+
+    let mut env: List<FollowBits> = [];
+    for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
+        env.push(FollowBits { bits: [], closed: false });
+    }
+    if !start_rule.is_empty() {
+        if let Some(si) = index.get(*start_rule) {
+            let mut seed: List<u64> = [];
+            bits_set(&mut seed, ctx.token_ref_id(&"EOF", -1));
+            env[si] = FollowBits { bits: seed, closed: true };
         }
     }
 
-    let mut env = TreeMap::<String, FollowBits>::new();
-    for let rule of parser_rules {
-        env[rule.name] = FollowBits { bits: [], closed: false };
-    }
-    if !start_rule.is_empty() {
-        if env.contains_key(*start_rule) {
-            let mut seed: List<u64> = [];
-            bits_set(&mut seed, intern_token(&mut intern, &"TK_EOF"));
-            env[*start_rule] = FollowBits { bits: seed, closed: true };
+    for let mut ri = 0; ri < plans.len(); ri += 1 {
+        for let c of &plans[ri] {
+            let mut merged = env[c.callee];
+            if bits_union_into(&mut merged.bits, &c.bits) {
+                env[c.callee] = merged;
+            }
         }
     }
 
     loop {
         let mut changed = false;
-        for let caller of parser_rules {
-            let caller_follow = env[caller.name];
-            for let alt of &caller.alternatives {
-                walk_for_contributions(&alt.elements, ctx, &caller_follow, &mut intern, &mut env, &mut changed);
+        for let mut ri = 0; ri < plans.len(); ri += 1 {
+            let caller_follow = env[ri];
+            for let c of &plans[ri] {
+                if !c.inherits_outer {
+                    continue;
+                }
+                let mut merged = env[c.callee];
+                let new_closed = merged.closed || caller_follow.closed;
+                let bits_changed = bits_union_into(&mut merged.bits, &caller_follow.bits);
+                if bits_changed || new_closed != merged.closed {
+                    merged.closed = new_closed;
+                    env[c.callee] = merged;
+                    changed = true;
+                }
             }
         }
         if !changed {
@@ -184,59 +209,63 @@ fn compute_rule_follow(
     // Materialise the bitsets to the public `TreeSet<String>` form once per
     // rule — outside the fixed point, so the string cost is paid once.
     let mut result = TreeMap::<String, FollowSet>::new();
-    for let rule of parser_rules {
-        let fb = env[rule.name];
-        result[rule.name] = bits_to_follow_set(&fb, &intern);
+    for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
+        result[parser_rules[ri].name] = bits_to_follow_set(&env[ri], ctx);
     }
     return result;
 }
 
-/// Walk an element list, computing per-position effective follow and
-/// reporting `RuleRef` contributions into `env`. `outer_follow` is the
-/// FOLLOW set at the position immediately after this element list
-/// (i.e. either the enclosing rule's FOLLOW or the surrounding
-/// group's effective follow). `Group` recurses with the local follow
-/// at the group's position; `Repeat` recurses with `first(inner) ∪
-/// local_follow` so that the inner's siblings (after one iteration)
-/// see the start-of-inner contributions plus the loop exit follow.
-fn walk_for_contributions(
+/// One flattened `RuleRef` call site: the FIRST-derived (iteration-invariant)
+/// bits of its local FOLLOW, plus whether the enclosing rule's own FOLLOW
+/// reaches the site through a deep-nullable suffix chain.
+struct Contribution {
+    callee: i32,
+    bits: List<u64>,
+    inherits_outer: bool,
+}
+
+/// Static effective-follow during plan building: FIRST-derived bits plus the
+/// flag standing in for the dynamic "enclosing rule's FOLLOW" part.
+struct PlanFollow {
+    bits: List<u64>,
+    inherits: bool,
+}
+
+/// Walk an element list, computing the static per-position effective follow
+/// and flattening `RuleRef` sites into `plan`. `outer` is the follow at the
+/// position immediately after this element list. `Group` recurses with the
+/// local follow at the group's position; `Repeat` recurses with
+/// `first(inner) ∪ local_follow` so that the inner's siblings (after one
+/// iteration) see the start-of-inner contributions plus the loop exit follow.
+fn plan_elements(
     elements: &List<Element>,
     ctx: &mut GenContext,
-    outer_follow: &FollowBits,
-    intern: &mut TokenInterner,
-    env: &mut TreeMap<String, FollowBits>,
-    changed: &mut bool,
+    outer: &PlanFollow,
+    index: &TreeMap<String, i32>,
+    plan: &mut List<Contribution>,
 ) {
     for let mut i = 0; i < elements.len(); i += 1 {
-        let local = local_follow(elements, i, ctx, outer_follow, intern);
-        contribute_for_element(&elements[i], ctx, &local, intern, env, changed);
+        let local = plan_local_follow(elements, i, ctx, outer);
+        plan_element(&elements[i], ctx, &local, index, plan);
     }
 }
 
-fn contribute_for_element(
+fn plan_element(
     elem: &Element,
     ctx: &mut GenContext,
-    local: &FollowBits,
-    intern: &mut TokenInterner,
-    env: &mut TreeMap<String, FollowBits>,
-    changed: &mut bool,
+    local: &PlanFollow,
+    index: &TreeMap<String, i32>,
+    plan: &mut List<Contribution>,
 ) {
     match elem {
         RuleRef(r) => {
-            if env.contains_key(r.name) {
-                let mut merged = env[r.name];
-                let new_closed = merged.closed || local.closed;
-                let bits_changed = bits_union_into(&mut merged.bits, &local.bits);
-                if bits_changed || new_closed != merged.closed {
-                    merged.closed = new_closed;
-                    env[r.name] = merged;
-                    *changed = true;
-                }
+            if let Some(callee) = index.get(r.name) {
+                plan.push(Contribution { callee, bits: local.bits, inherits_outer: local.inherits });
             }
         },
         Group(g) => {
             for let inner_alt of &g.alternatives {
-                walk_for_contributions(&inner_alt.elements, ctx, local, intern, env, changed);
+                plan_elements(&inner_alt.elements, ctx, local, index, plan);
             }
         },
         Repeat(rep) => {
@@ -244,88 +273,37 @@ fn contribute_for_element(
             // A `*` / `+` iteration can be followed by another, so the
             // inner also sees its own FIRST. An `?` cannot iterate.
             if !rep.kind matches { Optional } {
-                accumulate_first_bits(ctx, &rep.element, intern, &mut inner_outer.bits);
+                accumulate_first_bits(ctx, &rep.element, &mut inner_outer.bits);
             }
-            contribute_for_element(&rep.element, ctx, &inner_outer, intern, env, changed);
+            plan_element(&rep.element, ctx, &inner_outer, index, plan);
         },
         Label(lab) => {
-            contribute_for_element(&lab.element, ctx, local, intern, env, changed);
+            plan_element(&lab.element, ctx, local, index, plan);
         },
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
         },
     }
 }
 
-/// Effective follow at position `i` in `elements`:
-/// `first(elements[i+1..]) ∪ (suffix deep-nullable → outer_follow)`.
-fn local_follow(
-    elements: &List<Element>,
-    i: i32,
-    ctx: &mut GenContext,
-    outer_follow: &FollowBits,
-    intern: &mut TokenInterner,
-) -> FollowBits {
+/// Static effective follow at position `i` in `elements`:
+/// `first(elements[i+1..]) ∪ (suffix deep-nullable → outer)`.
+fn plan_local_follow(elements: &List<Element>, i: i32, ctx: &mut GenContext, outer: &PlanFollow) -> PlanFollow {
     let mut bits: List<u64> = [];
-    suffix_first_bits(ctx, elements, i + 1, intern, &mut bits);
-    let mut closed = false;
+    suffix_first_bits(ctx, elements, i + 1, &mut bits);
+    let mut inherits = false;
     if ctx.tail_is_nullable_deep(elements, i + 1) {
-        bits_union_into(&mut bits, &outer_follow.bits);
-        closed = outer_follow.closed;
+        bits_union_into(&mut bits, &outer.bits);
+        inherits = outer.inherits;
     }
-    return FollowBits { bits, closed };
+    return PlanFollow { bits, inherits };
 }
 
-/// Internal FOLLOW set: a u64 bitset over interned terminal ids plus the
+/// Internal FOLLOW set: a u64 bitset over token-kind ids plus the
 /// EOF-reachability flag. Value semantics deep-copy the `bits` array, so a
-/// snapshot (`env[name]`) is independent of later in-place mutation — unlike
-/// the `TreeSet` this replaced, whose shallow field copy shared its nodes.
+/// snapshot (`env[ri]`) is independent of later in-place mutation.
 struct FollowBits {
     bits: List<u64>,
     closed: bool,
-}
-
-/// Maps a terminal name (`TK_*` / `TK_LIT_*`) to a dense id and back.
-struct TokenInterner {
-    ids: TreeMap<String, i32>,
-    names: List<String>,
-}
-
-fn intern_token(intern: &mut TokenInterner, name: &String) -> i32 {
-    if let Some(id) = intern.ids.get(*name) {
-        return id;
-    }
-    let id = intern.names.len();
-    intern.ids[*name] = id;
-    intern.names.push(*name);
-    return id;
-}
-
-/// Pre-intern every terminal reachable in an element list, so the fixed
-/// point's bitsets are pre-sized and `intern_token` only ever hits.
-fn collect_terminal_tokens(elements: &List<Element>, intern: &mut TokenInterner) {
-    for let e of elements {
-        collect_terminal_tokens_element(e, intern);
-    }
-}
-
-fn collect_terminal_tokens_element(elem: &Element, intern: &mut TokenInterner) {
-    match elem {
-        TokenRef(t) => {
-            intern_token(intern, &`TK_${t.name}`);
-        },
-        Literal(l) => {
-            intern_token(intern, &literal_const_name(&l.text));
-        },
-        Repeat(rep) => collect_terminal_tokens_element(&rep.element, intern),
-        Label(lab) => collect_terminal_tokens_element(&lab.element, intern),
-        Group(g) => {
-            for let alt of &g.alternatives {
-                collect_terminal_tokens(&alt.elements, intern);
-            }
-        },
-        RuleRef(_) | Wildcard(_) | Not(_) => {
-        },
-    }
 }
 
 /// Set into `bits` the FIRST set of `elements[start..]`, computed directly as
@@ -336,11 +314,10 @@ fn suffix_first_bits(
     ctx: &mut GenContext,
     elements: &List<Element>,
     start: i32,
-    intern: &mut TokenInterner,
     bits: &mut List<u64>,
 ) {
     for let mut i = start; i < elements.len(); i += 1 {
-        accumulate_first_bits(ctx, &elements[i], intern, bits);
+        accumulate_first_bits(ctx, &elements[i], bits);
         let mut nv: List<String> = [];
         if !ctx.element_is_nullable_deep(&elements[i], &mut nv) {
             break;
@@ -348,12 +325,12 @@ fn suffix_first_bits(
     }
 }
 
-/// OR the FIRST set of a single element into `bits`.
-fn accumulate_first_bits(ctx: &mut GenContext, elem: &Element, intern: &mut TokenInterner, bits: &mut List<u64>) {
+/// OR the FIRST set of a single element into `bits` (kind-id positions).
+fn accumulate_first_bits(ctx: &mut GenContext, elem: &Element, bits: &mut List<u64>) {
     let mut fv: List<String> = [];
-    let ef = ctx.first_of_element(elem, &mut fv);
-    for let k of &ef {
-        bits_set(bits, intern_token(intern, k));
+    let ids = ctx.first_ids_of_element(elem, &mut fv);
+    for let id of &ids {
+        bits_set(bits, *id);
     }
 }
 
@@ -390,7 +367,7 @@ fn bits_union_into(dst: &mut List<u64>, src: &List<u64>) -> bool {
 /// Materialise a bitset into the public `FollowSet` (a `TreeSet<String>`).
 /// Called once per rule after convergence, so its string cost is off the
 /// hot path.
-fn bits_to_follow_set(fb: &FollowBits, intern: &TokenInterner) -> FollowSet {
+fn bits_to_follow_set(fb: &FollowBits, ctx: &GenContext) -> FollowSet {
     let mut kinds = TreeSet::<String>::new();
     for let mut w = 0; w < fb.bits.len(); w += 1 {
         let word = fb.bits[w];
@@ -399,7 +376,7 @@ fn bits_to_follow_set(fb: &FollowBits, intern: &TokenInterner) -> FollowSet {
         }
         for let mut b = 0; b < 64; b += 1 {
             if word & 1 as u64 << b as u64 != 0 as u64 {
-                kinds.insert(intern.names[w * 64 + b]);
+                kinds.insert(ctx.token_name(w * 64 + b));
             }
         }
     }
