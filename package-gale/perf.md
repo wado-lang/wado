@@ -400,12 +400,12 @@ ATN literal is a measured problem.)
 - **Keyword classifier: fold-once + `match` first-char dispatch** (2026-08).
   Rewrote `classify_keyword`'s per-length first-char dispatch from the linear
   `eq_ignore_ascii_case` else-if chain to `let c0 = chars[start].to_ascii_lowercase()`
-  + `match c0` (br_table), dropping each arm's now-redundant case-insensitive
-  `kc = 0` guard. Dev A/B best-of-3 measured a consistent slight **loss**
-  (3.309 → 3.357 ms/iter, `sqlite_parse`): the short compare chain predicts
-  well, while the jump table adds an indirect branch — same shape as the
-  kind-set finding above (Cranelift lowers compare cascades competitively;
-  the frame is call-frequency-bound). Reverted.
+  - `match c0` (br_table), dropping each arm's now-redundant case-insensitive
+    `kc = 0` guard. Dev A/B best-of-3 measured a consistent slight **loss**
+    (3.309 → 3.357 ms/iter, `sqlite_parse`): the short compare chain predicts
+    well, while the jump table adds an indirect branch — same shape as the
+    kind-set finding above (Cranelift lowers compare cascades competitively;
+    the frame is call-frequency-bound). Reverted.
 
 - **Index loops instead of `for x of &List<i32>`** (2026-07). Iterating by reference
   boxes every element; rewriting `follow_yields`'s membership scan and `classify`'s
