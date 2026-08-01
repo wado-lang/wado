@@ -1,0 +1,59 @@
+// Soundness (P0) for `sroa_param`: a *boxed* reference parameter is not a copy.
+//
+// `boxing::prepare_types` collapses `&i32` and `&mut i32` onto the same
+// by-value `Box<i32>` wrapper, so `sroa_param` sees a single-field struct
+// passed by value and used to assume "a by-value struct candidate is already a
+// copy". It is not: the box IS the caller's storage, and `&x` of an
+// address-taken local lowers to a read of that one box. Scalarizing the
+// read-only handle turns it into a call-time snapshot, so a write through the
+// aliasing `&mut` handle is lost and `touch` returns the stale 0.
+//
+// `sibling` covers `&mut` + `&` naming the same local, `both_mut` covers two
+// `&mut` handles, and `distinct` is the precision guard: separate locals never
+// alias, so scalarization must still be free to fire there.
+use { println, Stdout } from "core:cli";
+
+#[inline("never")]
+fn touch(a: &mut i32, b: &i32) -> i32 {
+    *a = 1;
+    return *b;
+}
+
+#[inline("never")]
+fn bump_both(a: &mut i32, b: &mut i32) -> i32 {
+    *a = *a + 10;
+    return *b;
+}
+
+#[inline("never")]
+fn distinct(a: &i32, b: &i32) -> i32 {
+    return *a * 100 + *b;
+}
+
+export fn run() with Stdout {
+    let mut x = 0;
+    let sibling = touch(&mut x, &x);
+    if sibling != 1 {
+        panic(`sibling: expected 1, got ${sibling}`);
+    }
+
+    let mut y = 5;
+    let both_mut = bump_both(&mut y, &mut y);
+    if both_mut != 15 {
+        panic(`both_mut: expected 15, got ${both_mut}`);
+    }
+
+    let p = 3;
+    let q = 4;
+    let apart = distinct(&p, &q);
+    if apart != 304 {
+        panic(`distinct: expected 304, got ${apart}`);
+    }
+
+    println(`ok ${x}`);
+}
+
+__DATA__
+{
+    "stdout": "ok 1\n"
+}

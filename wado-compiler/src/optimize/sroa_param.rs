@@ -253,13 +253,17 @@ fn reference_param_struct_key(
 /// the callee holds can mutate the pointee `*p`:
 ///
 /// - a mutable-global write (the pointee may live in a global), or
-/// - a `&mut` sibling param whose pointee type *transitively contains* the
+/// - a `&mut` sibling param whose writable location *transitively contains* the
 ///   wrapper struct (a write through it can reach a wrapper-typed location that
 ///   the same call site may have aliased with `p`, e.g. `f(&s.m, &mut s)` where
 ///   `S { m: M }`). This subsumes the same-type sibling case (`X == W` contains
 ///   `W` trivially).
 ///
-/// A by-value struct candidate is already a copy, so it is never affected.
+/// A genuine by-value struct candidate is already a copy, so it is never
+/// affected. A *boxed* reference is not one: `boxing::prepare_types` collapses
+/// `&T` / `&mut T` onto a by-value `Box<T>`, and `&x` of an address-taken local
+/// lowers to a read of that one box, so `f(&mut x, &x)` hands the same box to
+/// both params and the snapshot must be refused.
 fn param_snapshot_unsound(
     func: &NirFunction,
     pi: usize,
@@ -268,27 +272,40 @@ fn param_snapshot_unsound(
     struct_fields: &StructFieldsIndex,
     writes_global: bool,
 ) -> bool {
-    let candidate_is_ref = func
-        .params
-        .get(pi)
-        .map(|p| reference_param_struct_key(p.type_id, type_table))
-        == Some(Some(struct_key.clone()));
-    if !candidate_is_ref {
+    let param_type = func.params[pi].type_id;
+    let candidate_is_ref =
+        reference_param_struct_key(param_type, type_table).as_ref() == Some(struct_key);
+    let candidate_is_boxed_ref = type_table.box_payload_of(param_type).is_some();
+    if !candidate_is_ref && !candidate_is_boxed_ref {
         return false;
     }
-    if writes_global {
+    // A box never aliases a global: `&G` of a boxable global builds a fresh
+    // `Box { value: G }` (see `translate::try_boxing_ref`), which no later write
+    // to `G` can reach. Only a real `&G` reference can be staled that way.
+    if candidate_is_ref && writes_global {
         return true;
     }
     func.params.iter().enumerate().any(|(pj, other)| {
         if pj == pi {
             return false;
         }
-        let ResolvedType::MutRef(inner) = type_table.get(other.type_id) else {
+        let Some(writable) = mut_param_writable_type(other.type_id, type_table) else {
             return false;
         };
         let mut visited = IndexSet::default();
-        type_transitively_contains(*inner, struct_key, type_table, struct_fields, &mut visited)
+        type_transitively_contains(writable, struct_key, type_table, struct_fields, &mut visited)
     })
+}
+
+/// The location a `&mut` parameter can write through: the pointee of a plain
+/// `MutRef`, or — for a `&mut T` boxing collapsed onto `Box<T>` — the box object
+/// itself, since `*q = v` writes the box's own field. `None` for anything that
+/// cannot be written through.
+fn mut_param_writable_type(param_type: TypeId, type_table: &TypeTable) -> Option<TypeId> {
+    match type_table.get(param_type) {
+        ResolvedType::MutRef(inner) => Some(*inner),
+        _ => type_table.is_mut_box(param_type).then_some(param_type),
+    }
 }
 
 /// Map a struct's identity → its field types, for transitive-containment queries.
