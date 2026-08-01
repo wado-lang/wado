@@ -189,9 +189,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
             required_trait,
         } = input;
-        // A qualified call names one trait, so the steps that reach outside it
-        // — the concrete-ref-impl shortcut and the inherent-method step — are
-        // skipped; only that trait's impls may answer.
+        // A qualified call names one trait, so the inherent-method step — a
+        // different namespace — is skipped; only that trait's impls may
+        // answer. The ref-impl priority step still runs (with the filter):
+        // it is trait-impl lookup too, and skipping it would send
+        // `IntoIterator::into_iter(&list)` to the base type's impl where
+        // `(&list).into_iter()` selects `impl IntoIterator for &List<T>`.
         let required_trait = required_trait.as_deref();
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
@@ -308,11 +311,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
         // Only specific ref impls are preferred (not blanket impls like impl Inspect for &T).
         {
-            let is_ref = required_trait.is_none()
-                && matches!(
-                    self.tysys.type_table.borrow().get(receiver.type_id),
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                );
+            let is_ref = matches!(
+                self.tysys.type_table.borrow().get(receiver.type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            );
             if is_ref {
                 let ref_kind = RefKind::from_resolved(
                     &self.tysys.type_table.borrow().get(receiver.type_id).clone(),
@@ -325,7 +327,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     receiver_type_args_for_trait.as_deref(),
                     Some(base_type_id),
                     span,
-                    None,
+                    required_trait,
                 );
                 // Only use ref-type impls that target a concrete container type
                 // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
@@ -1931,8 +1933,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // disagreement is reported here instead of ICE-ing there.
         if trait_name_opt.is_none()
             && let Some(arg_type) = arg_type_hint.as_deref()
+            && !self.has_inherent_static_method(&struct_name, &static_call.method)
         {
-            let candidates = self.conversion_impl_arg_types(&struct_name, &static_call.method);
+            let (candidates, has_blanket) =
+                self.conversion_impl_survey(&struct_name, &static_call.method);
+            if has_blanket {
+                let _ = self.emit(TypeError::UnsupportedBlanketConversion {
+                    trait_name: self.conversion_trait_name(&static_call.method),
+                    receiver: struct_name,
+                    method: static_call.method.clone(),
+                    arg_type: arg_type.to_string(),
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
+            }
             if !candidates.is_empty() {
                 let _ = self.emit(TypeError::NoMatchingTraitArgument {
                     trait_name: self.conversion_trait_name(&static_call.method),
@@ -2825,17 +2839,56 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Whether an inherent impl (`impl Type { … }`) declares a no-self method
+    /// of this name. A conversion-call guard needs the distinction: a trait
+    /// lookup returning `None` is a failure only when no inherent static can
+    /// answer instead.
+    fn has_inherent_static_method(&self, struct_name: &str, method_name: &str) -> bool {
+        let declares = |impl_block: &ast::ImplBlock| -> bool {
+            impl_block.trait_type.is_none()
+                && Self::get_type_name_static(&impl_block.ty) == struct_name
+                && impl_block.methods.iter().any(|m| {
+                    m.name == method_name
+                        && !m.params.iter().any(|p| p.self_kind != ast::SelfKind::None)
+                })
+        };
+        if self
+            .current_module_items
+            .iter()
+            .any(|item| matches!(item, Item::Impl(b) if declares(b)))
+        {
+            return true;
+        }
+        if let Some(entries) = self
+            .tysys
+            .trait_env
+            .impl_index
+            .get(&self.impl_target(struct_name))
+        {
+            for (module_source, item_id) in entries {
+                if let Some(module) = self.loaded_modules.get(module_source)
+                    && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
+                    && declares(impl_block)
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// The source types the receiver's conversion impls accept
     /// (`From<String>` beside `From<i64>` → `["String", "i64"]`), in candidate
     /// order. Diagnostic-only: it names the alternatives in
     /// [`TypeError::NoMatchingTraitArgument`] and never decides a call, so it
     /// walks the impls directly rather than sharing
     /// [`Self::locate_static_method_impl`]'s early-return traversal.
-    pub(super) fn conversion_impl_arg_types(
+    /// Returns `(accepted_source_types, has_blanket_impl)`.
+    pub(super) fn conversion_impl_survey(
         &self,
         struct_name: &str,
         method_name: &str,
-    ) -> Vec<String> {
+    ) -> (Vec<String>, bool) {
         let from_trait_name = self
             .tysys
             .type_table
@@ -2843,6 +2896,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .compiler_trait_name(crate::compiler_item::CompilerItem::From)
             .to_string();
         let mut found = Vec::new();
+        let mut has_blanket = false;
         let mut collect = |impl_block: &ast::ImplBlock, module: &ModuleSource| {
             let Some(trait_type) = impl_block.trait_type.as_ref() else {
                 return;
@@ -2857,12 +2911,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let ast::Type::Generic(g) = trait_type
                 && let Some(arg) = g.args.first()
             {
-                let arg_name = Self::get_type_name_static(arg);
+                // A blanket source accepts everything: its presence means the
+                // trait-less path can resolve the call through the blanket
+                // resolver, so no error fires — and it is never an unmatched
+                // alternative worth listing.
+                if let ast::Type::Named(n) = arg
+                    && impl_block.type_params.iter().any(|p| p.name == n.name)
+                {
+                    has_blanket = true;
+                    return;
+                }
+                // Full spelling with the head un-aliased, so the alternatives
+                // read `List<i32>`, not a bare `List`.
+                let head = Self::get_type_name_static(arg);
+                let head = self.import_original_name(&head, module);
+                let mut rendered = String::new();
+                crate::unparse::unparse_type_into(arg, &mut rendered);
+                let resolved = match rendered.split_once('<') {
+                    Some((_, args)) => format!("{head}<{args}"),
+                    None => head,
+                };
                 // The current module's impls are in the impl index too, so the
                 // two passes below see each of them twice. Coherence forbids
                 // two impls of one conversion, so a repeat is always the same
                 // impl seen again.
-                let resolved = self.import_original_name(&arg_name, module);
                 if !found.contains(&resolved) {
                     found.push(resolved);
                 }
@@ -2888,7 +2960,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         }
-        found
+        (found, has_blanket)
     }
 
     /// Locate a static trait method impl, returning the resolved identity
@@ -2960,7 +3032,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        let matches_arg_type = |trait_type: &ast::Type, impl_module: &ModuleSource| -> bool {
+        let matches_arg_type = |trait_type: &ast::Type,
+                                impl_module: &ModuleSource,
+                                type_params: &[ast::GenericParam]|
+         -> bool {
             let Some(expected) = arg_type_name else {
                 return true;
             };
@@ -2969,14 +3044,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let ast::Type::Generic(g) = trait_type
                 && let Some(arg) = g.args.first()
             {
-                // Un-alias the impl's source-type name *in the impl's module*
+                // A blanket source (`impl<T: Display> From<T> for Wrapper`)
+                // is deliberately NOT matched here: baking its unsubstituted
+                // `From<T>` spelling into the mangled name defeats the
+                // instantiation `resolve_blanket_static_method` performs.
+                // Rejecting it sends the call down the trait-less path, where
+                // the blanket resolver picks it up.
+                if let ast::Type::Named(n) = arg
+                    && type_params.iter().any(|p| p.name == n.name)
+                {
+                    return false;
+                }
+                // Un-alias the impl's source-type head *in the impl's module*
                 // before comparing: `impl From<ClockInstant>` (where
                 // `ClockInstant` is `use { Instant as ClockInstant }`) must match
                 // a call whose argument's real name is `Instant`, regardless of
                 // the alias the caller used. The verbatim name would miss the
                 // impl and fall back to a (non-existent) inherent `Type::from`.
-                let arg_name = Self::get_type_name_static(arg);
-                return self.import_original_name(&arg_name, impl_module) == expected;
+                //
+                // Compare the full spelling (`List<i32>`, whitespace ignored),
+                // falling back to the head alone — the head fallback keeps an
+                // impl reachable when nested aliasing makes the spellings
+                // disagree, at the cost of not separating two impls that share
+                // a head. This is the name-based hint mechanism's ceiling;
+                // TypeId matching replaces it (WEP 2026-07-31 phase 4).
+                let head = Self::get_type_name_static(arg);
+                let head = self.import_original_name(&head, impl_module);
+                let expected_head = expected.split('<').next().unwrap_or(expected);
+                if head != expected_head {
+                    return false;
+                }
+                let mut rendered = String::new();
+                crate::unparse::unparse_type_into(arg, &mut rendered);
+                let full: String = match rendered.split_once('<') {
+                    Some((_, args)) => format!("{head}<{args}"),
+                    None => head.clone(),
+                };
+                let strip = |t: &str| t.replace(' ', "");
+                return strip(&full) == strip(expected) || head == expected_head;
             }
             !is_from_or_try_from(&base)
         };
@@ -2985,7 +3090,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             |impl_block: &ast::ImplBlock, impl_module: &ModuleSource| -> Option<String> {
                 let trait_type = impl_block.trait_type.as_ref()?;
                 if Self::get_type_name_static(&impl_block.ty) != struct_name
-                    || !matches_arg_type(trait_type, impl_module)
+                    || !matches_arg_type(trait_type, impl_module, &impl_block.type_params)
                 {
                     return None;
                 }
@@ -3304,8 +3409,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // disagreement is reported here instead of ICE-ing there.
         if resolved.is_none()
             && let Some(arg_type) = arg_type_hint.as_deref()
+            && !self.has_inherent_static_method(&actual_struct_name, method_name)
         {
-            let candidates = self.conversion_impl_arg_types(&actual_struct_name, method_name);
+            let (candidates, has_blanket) =
+                self.conversion_impl_survey(&actual_struct_name, method_name);
+            if has_blanket {
+                let _ = self.emit(TypeError::UnsupportedBlanketConversion {
+                    trait_name: self.conversion_trait_name(method_name),
+                    receiver: actual_struct_name.clone(),
+                    method: method_name.to_string(),
+                    arg_type: arg_type.to_string(),
+                    span,
+                });
+                return placeholder(TypeTable::ERROR, span);
+            }
             if !candidates.is_empty() {
                 let _ = self.emit(TypeError::NoMatchingTraitArgument {
                     trait_name: self.conversion_trait_name(method_name),

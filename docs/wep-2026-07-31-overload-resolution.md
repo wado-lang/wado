@@ -388,6 +388,16 @@ Landing order — each phase keeps the suite green and is useful alone:
    `From<String>`, so exactly one candidate survives. Until then the circular
    ordering stands and the error asks for `42 as i64`.
 
+   The hint path's matcher compares full spellings (whitespace ignored, the
+   head un-aliased in the impl's module) with a head-only fallback — the
+   name-based mechanism's ceiling; the fold replaces it with `TypeId`
+   matching. Two shapes are carved out at the gate rather than guessed at: an
+   inherent static `from` beside `From` impls answers on the trait-less path,
+   and a conversion reachable only through a blanket generic in its source
+   type (`impl<T: Display> From<T> for Wrapper`) is rejected with its own
+   diagnostic — it has never compiled (it reached WIR build unresolved), and
+   selecting its instantiation from the argument is exactly the fold's job.
+
 Test surface: extend `trait_ambiguous_argument_lists.wado` (resolvable variants
 with a discriminating concrete argument), a cross-trait concrete-receiver
 ambiguity fixture, qualified-call fixtures for each collision shape,

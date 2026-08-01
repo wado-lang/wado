@@ -319,6 +319,19 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A conversion reachable only through a blanket impl generic in its
+    /// source type (`impl<T: Display> From<T> for Wrapper`). Selecting the
+    /// instantiation from the argument's type is phase-4 work
+    /// (WEP 2026-07-31); until then the call is rejected rather than reaching
+    /// WIR build unresolved.
+    UnsupportedBlanketConversion {
+        trait_name: String,
+        receiver: String,
+        method: String,
+        arg_type: String,
+        span: Span,
+    },
+
     /// A static call whose receiver provides the method only through trait
     /// impls, none of which takes an argument of the call's type —
     /// `Wrapper::from(42)` against `From<String>` and `From<i64>`. Reported at
@@ -911,6 +924,19 @@ impl TypeError {
                 Code::TypeMismatch,
                 format!(
                     "'{trait_name}::{method}' takes the receiver as its first argument, e.g. '{trait_name}::{method}(&value)'"
+                ),
+                *span,
+            ),
+            TypeError::UnsupportedBlanketConversion {
+                trait_name,
+                receiver,
+                method,
+                arg_type,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "'{receiver}::{method}' resolves to a blanket '{trait_name}' impl, and selecting its instantiation from the argument is not supported yet; write a concrete 'impl {trait_name}<{arg_type}> for {receiver}'"
                 ),
                 *span,
             ),
