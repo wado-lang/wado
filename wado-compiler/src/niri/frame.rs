@@ -19,13 +19,7 @@ use crate::nir_visitor::NirRefVisitor;
 use crate::tir::TypeTable;
 
 use super::place::{borrowed_place_operand, overlapping_places, place_of};
-<<<<<<< HEAD
-use super::region::{region_free_reads, region_shape};
-||||||| 80528ac2c
-use super::region::{region_is_self_contained, region_shape};
-=======
-use super::region::{region_is_self_contained, region_shape, value_block_shape};
->>>>>>> origin/main
+use super::region::{region_free_reads, region_shape, value_block_shape};
 use super::trackability::{Reached, aggregate_safe_locals, clobbered_locals};
 use super::{
     COPY_CHARGE_DIVISOR, CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice,
@@ -811,37 +805,14 @@ impl Interpreter<'_> {
         let caller = self.swap_frame(region);
         let flow = self.exec_block(&mut scratch, block);
         self.swap_frame(caller);
-<<<<<<< HEAD
-        let lattice = match flow {
-            Flow::Fallthrough(lattice) => lattice,
-            Flow::Break {
-                label: Some(broke),
-                value,
-            } if label == Some(broke.as_str()) => value,
-            Flow::Break { .. } | Flow::Return(_) | Flow::Continue | Flow::Bail => {
-                crate::compiler_trace!("region_seed", "region {e:?}: run abandoned");
-                self.frame.region_misses.insert(e);
-                return None;
-            }
-        };
-        let value = lattice.as_const();
+        let value = value_of_block_flow(flow, label)
+            .ok()
+            .and_then(|lattice| lattice.as_const());
         if value.is_none() {
+            crate::compiler_trace!("region_seed", "region {e:?}: run abandoned");
             self.frame.region_misses.insert(e);
         }
         value
-||||||| 80528ac2c
-        let lattice = match flow {
-            Flow::Fallthrough(lattice) => lattice,
-            Flow::Break {
-                label: Some(broke),
-                value,
-            } if label == Some(broke.as_str()) => value,
-            Flow::Break { .. } | Flow::Return(_) | Flow::Continue | Flow::Bail => return None,
-        };
-        lattice.as_const()
-=======
-        value_of_block_flow(flow, label).ok()?.as_const()
->>>>>>> origin/main
     }
 
     /// Charge the step budget for the copy of `body` a region run makes before
