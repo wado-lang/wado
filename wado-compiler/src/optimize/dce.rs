@@ -451,11 +451,15 @@ fn collect_array_clone_element_types(
             // descriptor's `monomorph_info` is generic — only the node knows `T`).
             let func = callee_descriptor(descriptors, *func_id);
             if func.module_source.is_core_builtin()
-                && crate::nir::matches_builtin(
+                && (crate::nir::matches_builtin(
                     &func.name,
                     func.monomorph_info.as_ref(),
                     "array_clone",
-                )
+                ) || crate::nir::matches_builtin(
+                    &func.name,
+                    func.monomorph_info.as_ref(),
+                    "array_clone_prefix",
+                ))
                 && let Some(elem) = type_args.first().copied()
             {
                 out.insert(elem);

@@ -192,6 +192,7 @@ fn "deref_assign_rhs_copy.wado/__test_0_deref_assign_deep_copies_the_rhs_list"()
     let __local_6_45: ref "core:prelude/format.wado//Formatter";
     a = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(0, 0), used: 2 };
     b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(5, 6), used: 2 };
+<<<<<<< HEAD
     let __array_clone_src_11: ref Array<i32>;
     __array_clone_src_11 = b.repr;
     let __array_clone_len_11: i32;
@@ -200,6 +201,23 @@ fn "deref_assign_rhs_copy.wado/__test_0_deref_assign_deep_copies_the_rhs_list"()
     __array_clone_dst_11 = builtin::array_new<i32>(__array_clone_len_11);
     builtin::array_copy<i32>(__array_clone_dst_11, 0, __array_clone_src_11, 0, __array_clone_len_11);
     a.repr = __array_clone_dst_11;
+||||||| 2a556c019
+    let __array_clone_src_9: ref Array<i32>;
+    __array_clone_src_9 = b.repr;
+    let __array_clone_len_9: i32;
+    __array_clone_len_9 = builtin::array_len(__array_clone_src_9);
+    let __array_clone_dst_9: ref Array<i32>;
+    __array_clone_dst_9 = builtin::array_new<i32>(__array_clone_len_9);
+    builtin::array_copy<i32>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9);
+    a.repr = __array_clone_dst_9;
+=======
+    let __array_clone_src_9: ref Array<i32>;
+    __array_clone_src_9 = b.repr;
+    let __array_clone_dst_9: ref Array<i32>;
+    __array_clone_dst_9 = builtin::array_new<i32>(2);
+    builtin::array_copy<i32>(__array_clone_dst_9, 0, __array_clone_src_9, 0, 2);
+    a.repr = __array_clone_dst_9;
+>>>>>>> origin/main
     a.used = 2;
     block {
     };
@@ -249,7 +267,7 @@ fn "deref_assign_rhs_copy.wado/__test_1_deref_assign_deep_copies_a_reference_ele
     __sroa_a_repr = builtin::array_new<ref "core:prelude/string.wado//String">(0);
     __sroa_a_used = 0;
     b = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }), used: 2 };
-    __sroa___deref_val_14_repr = builtin::array_clone_deep<ref "core:prelude/string.wado//String">(b.repr);
+    __sroa___deref_val_14_repr = builtin::array_clone_deep_prefix<ref "core:prelude/string.wado//String">(b.repr, 2);
     __sroa_a_repr = __sroa___deref_val_14_repr;
     __sroa_a_used = 2;
     value_39 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mutated"), used: 7 };
@@ -268,7 +286,13 @@ fn "deref_assign_rhs_copy.wado/__test_1_deref_assign_deep_copies_a_reference_ele
         unreachable;
     }
     v_27 = builtin::array_get<ref "core:prelude/string.wado//String">(__sroa_a_repr, 0);
+<<<<<<< HEAD
     __v0_7 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = v_27.repr; let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: v_27.used };
+||||||| 2a556c019
+    __v0_7 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_27.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_27.used };
+=======
+    __v0_7 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_27.repr; let __array_clone_len_3: i32; __array_clone_len_3 = v_27.used; let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_27.used };
+>>>>>>> origin/main
     __cond_8 = "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(__v0_7, global:deref_assign_rhs_copy.wado::__const_obj_31);
     if @unlikely(__cond_8 == 0) {
         cold_path;
@@ -300,7 +324,13 @@ fn "deref_assign_rhs_copy.wado/__cm_export____test_1_deref_assign_deep_copies_a_
 }
 
 fn "deref_assign_rhs_copy.wado/$value_copy$core:prelude/string.wado/String"(v) {
+<<<<<<< HEAD
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = v.repr; let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: v.used };
+||||||| 2a556c019
+    return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v.used };
+=======
+    return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v.repr; let __array_clone_len_3: i32; __array_clone_len_3 = v.used; let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v.used };
+>>>>>>> origin/main
 }
 
 fn "core:prelude/primitive.wado/count_digits_i64"(val) {
