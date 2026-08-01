@@ -18471,7 +18471,7 @@ fn __initialize_modules() {
 }
 
 fn "$value_copy$core:prelude/list.wado/List<u64>"(v: List<u64>) -> List<u64> {
-    return List<u64> { repr: core::builtin::array_clone::<u64>(&v.repr), used: v.used };
+    return List<u64> { repr: core::builtin::array_clone_prefix::<u64>(&v.repr, v.used), used: v.used };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/slice.wado/ArraySlice<u8>,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/slice.wado/ArraySlice<u8>,i32>,core:prelude/traits.wado/StructField<core:prelude/slice.wado/ArraySlice<u8>,i32>]"(v: [StructField<core:prelude/slice.wado/ArraySlice<u8>,&Array<u8>>, StructField<core:prelude/slice.wado/ArraySlice<u8>,i32>, StructField<core:prelude/slice.wado/ArraySlice<u8>,i32>]) -> [StructField<core:prelude/slice.wado/ArraySlice<u8>,&Array<u8>>, StructField<core:prelude/slice.wado/ArraySlice<u8>,i32>, StructField<core:prelude/slice.wado/ArraySlice<u8>,i32>] {
@@ -18574,7 +18574,7 @@ fn "$value_copy$core:prelude/string.wado/Utf8Scalar"(v: Utf8Scalar) -> Utf8Scala
 }
 
 fn "$value_copy$core:prelude/list.wado/List<char>"(v: List<char>) -> List<char> {
-    return List<char> { repr: core::builtin::array_clone::<char>(&v.repr), used: v.used };
+    return List<char> { repr: core::builtin::array_clone_prefix::<char>(&v.repr, v.used), used: v.used };
 }
 
 fn "$value_copy$core:prelude/string.wado/StrLinesIter"(v: StrLinesIter) -> StrLinesIter {
@@ -18622,7 +18622,7 @@ fn "$value_copy$core:prelude/string.wado/StrCharIter"(v: StrCharIter) -> StrChar
 }
 
 fn "$value_copy$core:prelude/list.wado/List<u8>"(v: List<u8>) -> List<u8> {
-    return List<u8> { repr: core::builtin::array_clone::<u8>(&v.repr), used: v.used };
+    return List<u8> { repr: core::builtin::array_clone_prefix::<u8>(&v.repr, v.used), used: v.used };
 }
 
 fn "$value_copy$core:prelude/intparse.wado/ParseFloatError"(v: ParseFloatError) -> ParseFloatError {
@@ -18689,7 +18689,7 @@ fn "$value_copy$core:prelude/types.wado/Result<core:prelude/string.wado/String,c
 }
 
 fn "$value_copy$core:prelude/list.wado/List<i32>"(v: List<i32>) -> List<i32> {
-    return List<i32> { repr: core::builtin::array_clone::<i32>(&v.repr), used: v.used };
+    return List<i32> { repr: core::builtin::array_clone_prefix::<i32>(&v.repr, v.used), used: v.used };
 }
 
 fn "$value_copy$core:prelude/format.wado/Formatter"(v: Formatter) -> Formatter {
@@ -18697,7 +18697,7 @@ fn "$value_copy$core:prelude/format.wado/Formatter"(v: Formatter) -> Formatter {
 }
 
 fn "$value_copy$core:prelude/string.wado/String"(v: String) -> String {
-    return String { repr: core::builtin::array_clone::<u8>(&v.repr), used: v.used };
+    return String { repr: core::builtin::array_clone_prefix::<u8>(&v.repr, v.used), used: v.used };
 }
 
 fn array_new();
@@ -18707,6 +18707,8 @@ fn array_get();
 fn array_set();
 
 fn array_copy();
+
+fn array_clone_prefix();
 
 fn array_clone();
 

@@ -1298,7 +1298,7 @@ fn "inspect_2.wado/__test_12_nested_array_struct"() {
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/format.wado//Formatter";
     data = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 }), used: 2 };
-    m = struct.new "inspect_2.wado//InspMatrix" { data: struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude//List<i32>">(data.repr)), used: 2 }, rows: 2 };
+    m = struct.new "inspect_2.wado//InspMatrix" { data: struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:prelude//List<i32>">(data.repr, 2)), used: 2 }, rows: 2 };
     __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
     "core:prelude/traits.wado/inspect_2.wado/InspMatrix^Inspect::inspect$spec0"(m, __local_8);
@@ -1536,7 +1536,7 @@ fn "inspect_2.wado/__cm_export____test_14_option_of_struct"() {
 }
 
 fn "inspect_2.wado/$value_copy$core:prelude/list.wado/List<i32>"(v) {
-    return struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_54: ref Array<i32>; __array_clone_src_54 = v.repr; let __array_clone_len_54: i32; __array_clone_len_54 = builtin::array_len(__array_clone_src_54); let __array_clone_dst_54: ref Array<i32>; __array_clone_dst_54 = builtin::array_new<i32>(__array_clone_len_54); builtin::array_copy<i32>(__array_clone_dst_54, 0, __array_clone_src_54, 0, __array_clone_len_54); __array_clone_dst_54), used: v.used };
+    return struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_54: ref Array<i32>; __array_clone_src_54 = v.repr; let __array_clone_len_54: i32; __array_clone_len_54 = v.used; let __array_clone_dst_54: ref Array<i32>; __array_clone_dst_54 = builtin::array_new<i32>(__array_clone_len_54); builtin::array_copy<i32>(__array_clone_dst_54, 0, __array_clone_src_54, 0, __array_clone_len_54); __array_clone_dst_54), used: v.used };
 }
 
 fn "core:prelude/primitive.wado/count_digits_i64"(val) {
@@ -2834,7 +2834,7 @@ fn "core:prelude/tuple.wado/[i32,core:prelude/string.wado/String]^Inspect::inspe
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_8);
     __sroa___tuple_3_0 = self.0;
     v_10 = self.1;
-    __sroa___tuple_3_1 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = v_10.repr; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: v_10.used };
+    __sroa___tuple_3_1 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = v_10.repr; let __array_clone_len_9: i32; __array_clone_len_9 = v_10.used; let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: v_10.used };
     "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa___tuple_3_0, f);
     s_18 = global:core:prelude/traits.wado::__const_obj_331;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_18);
