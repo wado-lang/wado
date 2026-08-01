@@ -591,7 +591,7 @@ fn synthesized_packed_payloads(
     threshold: usize,
 ) -> Vec<Vec<u8>> {
     fn collect(body: &crate::nir_arena::Body, threshold: usize, out: &mut Vec<Vec<u8>>) {
-        for e in crate::niri::reachable_exprs(body) {
+        for e in crate::nir_visitor::reachable_exprs(body) {
             if let crate::nir_arena::ExprKind::PackedArray(bytes) = &body.exprs[e].kind
                 && bytes.len() > threshold
             {

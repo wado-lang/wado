@@ -397,6 +397,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let callee_kind = self.tysys.classify_call_callee(&self.annotate_ctx, ident);
 
+        // `Trait::method(recv, args…)` — the trait-qualified (UFCS) call form
+        // (WEP 2026-07-31). Routed before the argument walk below because the
+        // dispatcher elaborates the non-receiver arguments itself, against the
+        // signature it selects.
+        if let Some(pos) = ident.name.find("::")
+            && self.is_trait_instance_method(&ident.name[..pos], &ident.name[pos + 2..])
+        {
+            let (trait_name, method_name) = (
+                ident.name[..pos].to_string(),
+                ident.name[pos + 2..].to_string(),
+            );
+            return self.resolve_trait_qualified_call(
+                &trait_name,
+                &method_name,
+                call,
+                expected_type,
+                ctx,
+            );
+        }
+
         // Abstract `T::method(...)` takes its own dispatch path. Args
         // are resolved without coercion hints (the trait-bound dispatch
         // walks them on its own; threading hints through here is a
@@ -427,6 +447,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // First, determine expected parameter types to handle coercion.
         let mut param_types = self.lookup_function_param_types(effective_name);
+
+        // Literal preselect for a conversion call (WEP 2026-07-31 phase 4):
+        // see `resolve_static_method_call` — same rule, for the
+        // `Wrapper::from(42)` spelling that arrives as a plain call.
+        if let Some(pos) = effective_name.find("::")
+            && call.args.len() == 1
+        {
+            let (recv_name, method_name) = (
+                effective_name[..pos].to_string(),
+                effective_name[pos + 2..].to_string(),
+            );
+            if self.try_conversion_preselect(
+                &recv_name,
+                &method_name,
+                &call.args[0],
+                call.span,
+                ctx,
+                &mut param_types,
+            ) {
+                return TypeTable::ERROR;
+            }
+        }
 
         // Whether `param_types` holds a variant payload rather than declared
         // function params (see the hole-pin loop below).
@@ -1085,7 +1127,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             param_is_mut,
                             type_args: vec![],
                             param_defaults,
+<<<<<<< HEAD
                             param_types,
+||||||| 50cf17a00
+=======
+                            self_in_args: false,
+>>>>>>> origin/main
                         },
                     );
 
@@ -1389,7 +1436,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut,
                 type_args: type_args.clone(),
                 param_defaults: vec![],
+<<<<<<< HEAD
                 param_types: check_param_types,
+||||||| 50cf17a00
+=======
+                self_in_args: false,
+>>>>>>> origin/main
             },
         );
         // Stage 7-B: reify rebuilds the `Call` TIR from the recorded
@@ -2743,7 +2795,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],
                     param_defaults,
+<<<<<<< HEAD
                     param_types: method_info_result.param_types.clone(),
+||||||| 50cf17a00
+=======
+                    self_in_args: false,
+>>>>>>> origin/main
                 },
             );
 

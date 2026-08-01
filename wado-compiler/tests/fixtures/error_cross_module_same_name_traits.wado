@@ -1,0 +1,15 @@
+// Two modules each declare a trait named `Kind` with a `kind` method and each
+// implement their own for `Thing`, spelling it under the same name in their
+// own frame. They are different traits — identity is the declaration, not the
+// spelling — so the plain call is ambiguous. WEP 2026-07-31.
+use { Thing } from "./sub/ufcs_kind_struct.wado";
+use { Kind } from "./sub/ufcs_kind_a.wado";
+use { Kind as BKind } from "./sub/ufcs_kind_b.wado";
+
+test "same-named traits from two modules still collide" {
+    let t = Thing { id: 1 };
+    assert t.kind() == "a";
+}
+
+__DATA__
+{"test": {}, "compile_error": "ambiguous method 'kind'"}

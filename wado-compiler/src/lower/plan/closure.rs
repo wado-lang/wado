@@ -359,6 +359,16 @@ impl ClosureLowerer {
             .cloned()
             .chain(self.generated_functions.iter().cloned())
             .collect();
+        let self_offsets: IndexMap<(ModuleSource, String), u32> = lowered_funcs
+            .iter()
+            .map(|f| {
+                let f = f.borrow();
+                (
+                    (f.module_source.clone(), f.name.clone()),
+                    self_param_offset(&f),
+                )
+            })
+            .collect();
         for func_rc in &lowered_funcs {
             let mut func = func_rc.borrow_mut();
             // Snapshot param `(local_index, type_id)` so the seed pass
@@ -379,6 +389,7 @@ impl ClosureLowerer {
                     fn_param_specializations: &self.fn_param_specializations,
                     module_source: &self.module_source,
                     type_table: &mut tt,
+                    self_offsets: &self_offsets,
                 }
                 .visit_block(body);
             }
@@ -1589,20 +1600,40 @@ struct ClosureCallSiteLowerer<'a> {
     fn_param_specializations: &'a IndexMap<FnParamSpecKey, String>,
     module_source: &'a ModuleSource,
     type_table: &'a mut TypeTable,
+    /// 1 for each callee whose first param is `self`, so the `Call` arm can
+    /// tell a trait-qualified call's receiver arg apart from its value args
+    /// without borrowing the callee mid-walk (a recursive call would be a
+    /// `RefCell` double-borrow).
+    self_offsets: &'a IndexMap<(ModuleSource, String), u32>,
 }
 
 impl ClosureCallSiteLowerer<'_> {
-    fn try_redirect_to_specialized_callee(&mut self, func: &mut FunctionRef, args: &mut [CallArg]) {
+    /// `arg_offset` is the count of leading `args` that are not value
+    /// arguments — 1 for a trait-qualified `Call` carrying its receiver in
+    /// `args[0]`, 0 for a `MethodCall` (receiver held separately) and for
+    /// free / static callees. Key indices are value-argument indices, so the
+    /// scan skips the receiver and records positions relative to it.
+    fn try_redirect_to_specialized_callee(
+        &mut self,
+        func: &mut FunctionRef,
+        args: &mut [CallArg],
+        arg_offset: usize,
+    ) {
         // Closure args with `functor_id` that map to a known functor.
+        // `functor_types` carries value-argument indices (the key / suffix
+        // convention); `raw_indices` remembers the actual arg slots to
+        // rewrite.
         let mut functor_types = Vec::new();
-        for (i, arg) in args.iter().enumerate() {
+        let mut raw_indices = Vec::new();
+        for (i, arg) in args.iter().enumerate().skip(arg_offset) {
             if let TirExprKind::Closure {
                 functor_id: Some(id),
                 ..
             } = &arg.expr.kind
                 && let Some(functor) = self.functor_infos.get(*id as usize)
             {
-                functor_types.push((i as u32, functor.struct_type_id));
+                functor_types.push(((i - arg_offset) as u32, functor.struct_type_id));
+                raw_indices.push(i);
             }
         }
         if functor_types.is_empty() {
@@ -1619,8 +1650,8 @@ impl ClosureCallSiteLowerer<'_> {
         };
 
         // Closure args → struct literals.
-        for (arg_idx, _) in &functor_types {
-            let arg = &mut args[*arg_idx as usize];
+        for arg_idx in &raw_indices {
+            let arg = &mut args[*arg_idx];
             if let TirExprKind::Closure {
                 captures,
                 functor_id: Some(closure_id),
@@ -1869,7 +1900,15 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
                 for arg in &mut *args {
                     self.visit_expr(&mut arg.expr);
                 }
-                self.try_redirect_to_specialized_callee(func, args);
+                // A callee absent from `self_offsets` was not lowered in this
+                // package (an external import or a builtin); such a callee
+                // cannot take `self`, so its args start at parameter 0.
+                let arg_offset = self
+                    .self_offsets
+                    .get(&(func.module_source.clone(), func.name.clone()))
+                    .copied()
+                    .unwrap_or(0) as usize;
+                self.try_redirect_to_specialized_callee(func, args, arg_offset);
             }
             TirExprKind::MethodCall {
                 receiver,
@@ -1881,7 +1920,7 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
                 for arg in &mut *args {
                     self.visit_expr(&mut arg.expr);
                 }
-                self.try_redirect_to_specialized_callee(func, args);
+                self.try_redirect_to_specialized_callee(func, args, 0);
                 self.try_redirect_inspect_to_functor(receiver, func);
             }
             _ => self.walk_expr(expr),
@@ -2013,8 +2052,22 @@ impl TirRefVisitor for FnParamSpecCollector<'_> {
                     .get(&(func.module_source.clone(), func.name.clone()))
                 {
                     let callee = callee_rc.borrow();
-                    if let Some(key) = self.create_key(&callee, &callee.params, args) {
-                        self.requests.push((key, Rc::clone(callee_rc)));
+                    // A trait-qualified call (`Apply::apply(&b, f)`) is a
+                    // `Call` whose args lead with the receiver while the
+                    // callee's params lead with `self`. Skip both so the
+                    // recorded indices are value-argument indices — the
+                    // convention the MethodCall arm records and the
+                    // `+ param_offset` shift in the generate step assumes —
+                    // and both call spellings share one key, hence one
+                    // specialized clone per callee.
+                    let offset = self_param_offset(&callee) as usize;
+                    if args.len() >= offset {
+                        let value_params: Vec<TirParam> =
+                            callee.params.iter().skip(offset).cloned().collect();
+                        if let Some(key) = self.create_key(&callee, &value_params, &args[offset..])
+                        {
+                            self.requests.push((key, Rc::clone(callee_rc)));
+                        }
                     }
                 }
                 for arg in args {

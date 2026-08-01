@@ -1,0 +1,37 @@
+// The receiver of a qualified call spells its own mode: `&mut x` for
+// `&mut self`, `&x` for `&self`. A `&mut` receiver also answers a `&self`
+// method (the one reference coercion). WEP 2026-07-31.
+struct Cell {
+    n: i32,
+}
+
+trait Bump {
+    fn bump(&mut self);
+}
+
+trait Peek {
+    fn peek(&self) -> i32;
+}
+
+impl Bump for Cell {
+    fn bump(&mut self) {
+        self.n = self.n + 1;
+    }
+}
+
+impl Peek for Cell {
+    fn peek(&self) -> i32 {
+        return self.n;
+    }
+}
+
+test "each self mode is spelled at the call site" {
+    let mut c = Cell { n: 1 };
+    Bump::bump(&mut c);
+    assert c.n == 2;
+    assert Peek::peek(&c) == 2;
+    assert Peek::peek(&mut c) == 2;
+}
+
+__DATA__
+{"test": {}}

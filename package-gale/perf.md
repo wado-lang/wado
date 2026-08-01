@@ -285,6 +285,37 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
     is smaller and coupled on SQLite; the keyword-dense TS/Rust grammars (GC-bound)
     are where the accumulated cut should matter most.
 
+- **Compute-side gen levers (2026-08, landed).** `benchmark/gale_gen` (Rust
+  grammar, dev host) profiled four compute hot spots; fixing them (plus the
+  review round: in-place FOLLOW propagation instead of per-contribution
+  FollowBits copies, and the left-corner reachability walks precomputed in id
+  space) took best-of-three from 728.8 to ~336 ms/iter (~2.2×), generated
+  output byte-identical for the Rust and SQLite grammars:
+  - `build_dispatch_groups` + first-char accumulation (~25% self): `add_range`
+    and the distinct-range collection deduped by linear scan, each (char, call)
+    probe walked the whole range list, and `ranges_meet_unclaimed` counted
+    claimed chars by filtering the full list per range. Now packed-i64 set
+    probes (insertion order kept), a sorted-starts/prefix-max-end index per
+    call, and binary-search claimed counts.
+  - `follow_env` fixed point (~11%): re-derived FIRST names and re-interned
+    them through a String TreeMap every iteration. FIRST contributions are
+    iteration-invariant, so each RuleRef site flattens once to (callee, static
+    kind-id bits, inherits-caller-FOLLOW) and the loop is pure bitset
+    propagation in the kind-id space.
+  - Kind-set canonicalisation (~6%): the per-call String sort + name-joined
+    registry key became an id sort by a lazily-rebuilt name-rank table with an
+    id-joined key. Rank order == name order, so canonical order and helper ids
+    are unchanged.
+  - `check_left_recursion` (~4%): per-element visiting-set nullable recursion
+    with a linear rule-name scan → one worklist nullable table + name→index
+    map per grammar (same least fixed point).
+
+  Remaining top self frames after these: `String^Eq::eq` + `String^Ord::cmp` +
+  `TreeMap<String, i32>` probes (~14%, the `visiting` lists and rule-name maps
+  of the SCC-memoized analyses), `$value_copy$` IR deep copies (~12%, diffuse
+  across lower / prediction / parse), and prediction (`build_sll_node` ~14%
+  inclusive).
+
   (A `type TokenId = i32` newtype for the id — so a `Display` can format token
   names later — currently trips a `$value_copy` codegen ICE when a
   newtype-valued `TreeMap` coexists with its `i32` base in a value-copied struct

@@ -1,0 +1,28 @@
+// Two conversion impls sharing a generic head (`From<List<i32>>` beside
+// `From<List<String>>`) are distinguished by the full argument type, not the
+// head alone. WEP 2026-07-31.
+struct Wrapper {
+    tag: String,
+}
+
+impl From<List<i32>> for Wrapper {
+    fn from(v: List<i32>) -> Wrapper {
+        return Wrapper { tag: "ints" };
+    }
+}
+
+impl From<List<String>> for Wrapper {
+    fn from(v: List<String>) -> Wrapper {
+        return Wrapper { tag: "strs" };
+    }
+}
+
+test "the full argument type selects between same-head impls" {
+    let ints: List<i32> = [1, 2];
+    let strs: List<String> = ["a"];
+    assert Wrapper::from(ints).tag == "ints";
+    assert Wrapper::from(strs).tag == "strs";
+}
+
+__DATA__
+{"test": {}}
