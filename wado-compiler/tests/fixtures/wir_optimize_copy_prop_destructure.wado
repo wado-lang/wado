@@ -4,6 +4,11 @@
 // pattern variable (`LocalSet q = LocalGet __mv_lo`). `propagate_trivial_copies`
 // must eliminate those copies so the pattern variables do not survive as
 // redundant WIR locals.
+//
+// The dividend is a mutable global so CTFE cannot run the call: a folded
+// call leaves no `__mv_*` temps and nothing for this fixture to test.
+
+global mut dividend: i32 = 17;
 
 #[inline("never")]
 fn divmod(a: i32, b: i32) -> [i32, i32] {
@@ -11,7 +16,7 @@ fn divmod(a: i32, b: i32) -> [i32, i32] {
 }
 
 export fn run() {
-    let [q, r] = divmod(17, 5);
+    let [q, r] = divmod(dividend, 5);
     assert q == 3;
     assert r == 2;
 }
