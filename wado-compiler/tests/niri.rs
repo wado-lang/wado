@@ -26,10 +26,38 @@ use wado_compiler::nir_arena::{
 };
 use wado_compiler::nir_value_graph::ValueKind;
 use wado_compiler::niri::{
-    Callee, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, GlobalEnv, Interpreter, Lattice,
-    is_ctfe_eligible,
+    BodySink, Callee, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, DEFAULT_STEP_BUDGET, GlobalEnv,
+    GlobalFieldEnv, Interpreter, Lattice, is_ctfe_eligible,
 };
 use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
+
+/// The conveniences these tests want on top of the engine's own API: a
+/// reduction that drives both halves, and the two rewrites bound to the scratch
+/// [`BodySink`].
+///
+/// Here rather than in the engine, whose own callers drive the halves
+/// separately and supply their own sink — the const-fold visitor commits
+/// through the optimizer's engine so the real body's maps stay coherent.
+trait ScratchReduce {
+    fn reduce_to_lattice_full(&mut self, body: &mut Body, e: ExprId) -> Lattice;
+    fn reduce_local_in_body(&mut self, body: &mut Body, e: ExprId) -> bool;
+    fn reduce_local_block_in_body(&mut self, body: &mut Body, block: BlockId) -> bool;
+}
+
+impl ScratchReduce for Interpreter<'_> {
+    fn reduce_to_lattice_full(&mut self, body: &mut Body, e: ExprId) -> Lattice {
+        self.reduce_in_place(body, e);
+        self.reduce_to_lattice(body, e)
+    }
+
+    fn reduce_local_in_body(&mut self, body: &mut Body, e: ExprId) -> bool {
+        self.reduce_local(&mut BodySink { body }, e)
+    }
+
+    fn reduce_local_block_in_body(&mut self, body: &mut Body, block: BlockId) -> bool {
+        self.reduce_local_block(&mut BodySink { body }, block)
+    }
+}
 
 /// A deferred operand builder: appends any needed subtree to the arena `Body`
 /// and returns the operand it produces — a pooled `Operand::Value` for a pure
@@ -3693,6 +3721,71 @@ fn a_constant_string_call_result_becomes_a_literal() {
 }
 
 #[test]
+fn a_write_does_not_reach_a_value_copied_out_before_it() {
+    // `let d = c` is a copy under Wado's value semantics, and the engine
+    // shares one backing between the two until something writes. That write
+    // has to fork the backing: writing where it lies would reach through every
+    // copy taken of it.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let backing_of = move |local: u32| {
+        field_access(
+            local_expr(local, list_ty),
+            SeqField::Backing.index(),
+            "repr",
+            list_ty,
+        )
+    };
+    // fn f() { let mut c = [1, 2]; let d = c; c.repr[0] = 9; return d.repr[0]; }
+    let copy_then_write = make_multi_stmt_fn(
+        "copy_then_write",
+        vec![],
+        TypeTable::U8,
+        &[("c", list_ty, true), ("d", list_ty, false)],
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![1, 2])),
+            let_stmt_b("d", 1, list_ty, local_expr(0, list_ty)),
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    mut_ref(backing_of(0), list_ty),
+                    int_lit(0, TypeTable::I32, "0"),
+                    int_lit(9, TypeTable::U8, "9"),
+                ],
+                TypeTable::UNIT,
+            )),
+            return_stmt(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(backing_of(1), list_ty),
+                    int_lit(0, TypeTable::I32, "0"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&copy_then_write));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_ctfe_builtins(&builtins);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&copy_then_write, vec![])),
+        Some(Value::Int {
+            value: 1,
+            prim: PrimitiveType::U8,
+        }),
+        "the copy must still hold what it was given",
+    );
+}
+
+#[test]
 fn a_write_through_a_frame_owned_place_is_read_back() {
     // `array_set` through a `&mut` place the frame built updates the container,
     // so a later read of that element sees the written value rather than
@@ -4190,6 +4283,80 @@ fn a_call_writing_through_a_mut_ref_updates_the_caller_place() {
             prim: PrimitiveType::I32,
         }),
     );
+}
+
+/// `fn add(c: &mut List<u8>, n: <second_param_ty>) { c.used = c.used + <n as i32>; }`
+/// paired with a caller passing `&mut c` and a second argument built over the
+/// same local, returning `c.used`.
+fn add_through_mut_ref_and_second_arg(
+    list_ty: TypeId,
+    second_param_ty: TypeId,
+    second_arg: Build,
+    addend_in_callee: Build,
+) -> (NirFunction, NirFunction) {
+    let add = with_mut_ref_params(
+        make_pure_fn_stmts(
+            "add",
+            vec![("c", list_ty), ("n", second_param_ty)],
+            TypeTable::UNIT,
+            vec![assign_stmt_b(
+                used_of_local(list_ty),
+                binary(
+                    NirBinaryOp::Add,
+                    used_of_local(list_ty),
+                    addend_in_callee,
+                    TypeTable::I32,
+                ),
+            )],
+        ),
+        &[0],
+    );
+    let caller = make_pure_fn_stmts(
+        "caller",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            expr_stmt_b(call_expr_args(
+                &add,
+                vec![
+                    (mut_ref(local_expr(0, list_ty), list_ty), true),
+                    (second_arg, false),
+                ],
+            )),
+            return_stmt(used_of_local(list_ty)),
+        ],
+    );
+    (add, caller)
+}
+
+#[test]
+fn a_second_argument_naming_a_mut_ref_target_declines_the_call() {
+    // A second argument binds its own snapshot of storage the callee writes
+    // through `&mut`, so running the call would read a value the program never
+    // had. Wado has no borrow checker, so this is ordinary source: decline
+    // rather than mis-run.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ref_ty = table.make_ref(list_ty);
+
+    let (add, caller) = add_through_mut_ref_and_second_arg(
+        list_ty,
+        list_ref_ty,
+        shared_ref(local_expr(0, list_ty), list_ref_ty),
+        field_access(
+            local_expr(1, list_ref_ty),
+            SeqField::Len.index(),
+            "used",
+            TypeTable::I32,
+        ),
+    );
+    let callees = build_callee_map_test(&[add, caller.clone()]);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(flow_fold(&mut interp, &call_expr(&caller, vec![])), None);
 }
 
 #[test]
@@ -5290,6 +5457,134 @@ fn assert_call_intact(f: &NirFunction, args: Vec<Build>) {
     let (changed, body, e) = reduce_local_into(&mut interp, &call_expr(f, args));
     assert!(!changed);
     assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+}
+
+/// `base + 0 + 0 + …`, `depth` additions deep. The value is `base`'s; what it
+/// buys is nodes — many of them under a single statement, which is what
+/// separates a per-statement charge from a per-node one.
+fn deep_add_chain(base: Build, depth: usize) -> Build {
+    let mut chain = base;
+    for _ in 0..depth {
+        chain = binary(
+            NirBinaryOp::Add,
+            chain,
+            int_lit(0, TypeTable::I32, "0"),
+            TypeTable::I32,
+        );
+    }
+    chain
+}
+
+/// How deep a chain has to be before the copy it makes dominates the handful
+/// of statements around it.
+const HEAVY_CHAIN: usize = 480;
+
+/// Fold `f()` under `budget`, with `f` the only callee.
+fn fold_call_within_budget(f: &NirFunction, budget: u32) -> Option<Value> {
+    let callees = build_callee_map_test(std::slice::from_ref(f));
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.set_step_budget(budget);
+    flow_fold(&mut interp, &call_expr(f, vec![]))
+}
+
+/// `fn f() { let mut i = 0; let mut acc = 0;
+///           loop { if i >= 8 { break } acc = acc + (i + 0 + …); i = i + 1 }
+///           return acc }` → 0+1+…+7 = 28
+fn heavy_bodied_loop_fn() -> NirFunction {
+    make_multi_stmt_fn(
+        "heavy_loop",
+        vec![],
+        TypeTable::I32,
+        &[("i", TypeTable::I32, true), ("acc", TypeTable::I32, true)],
+        vec![
+            let_mut_stmt_b("i", 0, TypeTable::I32, int_lit(0, TypeTable::I32, "0")),
+            let_mut_stmt_b("acc", 1, TypeTable::I32, int_lit(0, TypeTable::I32, "0")),
+            loop_stmt_b(vec![
+                if_stmt_b(
+                    binary(
+                        NirBinaryOp::GtEq,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(8, TypeTable::I32, "8"),
+                        TypeTable::BOOL,
+                    ),
+                    vec![break_stmt_b(None, None)],
+                    vec![],
+                ),
+                assign_local_stmt_b(
+                    1,
+                    TypeTable::I32,
+                    binary(
+                        NirBinaryOp::Add,
+                        local_expr(1, TypeTable::I32),
+                        deep_add_chain(local_expr(0, TypeTable::I32), HEAVY_CHAIN),
+                        TypeTable::I32,
+                    ),
+                ),
+                assign_local_stmt_b(
+                    0,
+                    TypeTable::I32,
+                    binary(
+                        NirBinaryOp::Add,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(1, TypeTable::I32, "1"),
+                        TypeTable::I32,
+                    ),
+                ),
+            ]),
+            return_stmt(local_expr(1, TypeTable::I32)),
+        ],
+    )
+}
+
+#[test]
+fn a_heavy_loop_still_folds_within_the_default_budget() {
+    // A loop over a big body is bounded by the budget, not refused by it.
+    assert_eq!(
+        fold_call_within_budget(&heavy_bodied_loop_fn(), DEFAULT_STEP_BUDGET),
+        i32_of(28),
+    );
+}
+
+/// `fn big() { return 1 + 0 + … }` — one statement, a whole body of nodes.
+fn heavy_bodied_fn() -> NirFunction {
+    make_pure_fn(
+        "big",
+        vec![],
+        TypeTable::I32,
+        return_stmt(deep_add_chain(int_lit(1, TypeTable::I32, "1"), HEAVY_CHAIN)),
+    )
+}
+
+/// `fn caller() { return big() + big() + … }`, `calls` calls deep.
+fn repeated_caller_fn(big: &NirFunction, calls: usize) -> NirFunction {
+    let mut sum = call_expr(big, vec![]);
+    for _ in 1..calls {
+        sum = binary(
+            NirBinaryOp::Add,
+            sum,
+            call_expr(big, vec![]),
+            TypeTable::I32,
+        );
+    }
+    make_pure_fn("caller", vec![], TypeTable::I32, return_stmt(sum))
+}
+
+#[test]
+fn repeated_heavy_calls_still_fold_within_the_default_budget() {
+    let big = heavy_bodied_fn();
+    let caller = repeated_caller_fn(&big, 8);
+    let callees = build_callee_map_test(&[big, caller.clone()]);
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.set_step_budget(DEFAULT_STEP_BUDGET);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&caller, vec![])),
+        i32_of(8)
+    );
 }
 
 #[test]
@@ -7560,5 +7855,60 @@ fn a_region_already_run_is_not_run_again() {
         interp.reduce_to_lattice_full(&mut body, e),
         expected,
         "the second visit must read the memo rather than pay for a re-run",
+    );
+}
+
+#[test]
+fn a_ref_global_alias_survives_the_body_growing_under_it() {
+    // The aliases are recorded once per function, and the walk that follows
+    // allocates nodes as it folds. A read through an alias is a read in the
+    // same body whatever the arena has grown to since.
+    let table = TypeTable::new();
+    let module = ModuleSource::default();
+    let mut fields = GlobalFieldEnv::default();
+    fields.insert(
+        (module.clone(), "CONFIG".to_string()),
+        [(
+            "width".to_string(),
+            Value::Int {
+                value: 7,
+                prim: PrimitiveType::I32,
+            },
+        )]
+        .into_iter()
+        .collect(),
+    );
+
+    let mut body = Body::empty();
+    let stmts = [let_stmt_b(
+        "cfg",
+        0,
+        TypeTable::I32,
+        unary(
+            NirUnaryOp::Ref,
+            global_get(module, "CONFIG", TypeTable::I32),
+            TypeTable::I32,
+        ),
+    )];
+    body.root = block_of(&mut body, &stmts);
+    let read = field_access(local_expr(0, TypeTable::I32), 0, "width", TypeTable::I32)(&mut body)
+        .as_expr()
+        .expect("a field access is a composite expression");
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_global_fields(&fields);
+    interp.record_ref_global_aliases(&body);
+
+    // What folding does to the body between recording an alias and reading
+    // through one: a rewrite interns a node the arena did not hold before.
+    local_expr(9, TypeTable::I32)(&mut body);
+
+    assert_eq!(
+        interp.reduce_to_lattice(&body, read),
+        Lattice::Const(Value::Int {
+            value: 7,
+            prim: PrimitiveType::I32,
+        }),
+        "the alias must still resolve to the global it was recorded for",
     );
 }
