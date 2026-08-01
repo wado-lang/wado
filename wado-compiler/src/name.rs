@@ -1990,6 +1990,57 @@ pub fn mangle_builtin_array_type(elem_type: &str) -> String {
     format!("Array<{elem_type}>")
 }
 
+/// Key of a declared type in the WIR type table.
+///
+/// Registration (`wir_build::types`) and lookup (`wir_build::context`) must both
+/// derive their key here, so the two sides cannot drift into needing a retry
+/// chain to find each other.
+///
+/// Examples:
+/// - `wir_type_key(core:prelude, "List<i32>")` → `"core:prelude//List<i32>"`
+#[must_use]
+pub fn wir_type_key(module_source: &ModuleSource, name: &str) -> String {
+    format!("{module_source}//{name}")
+}
+
+/// Key of a plain `enum` in the WIR type table. Enums carry their own prefix
+/// because a variant of the same name occupies [`wir_type_key`].
+///
+/// Examples:
+/// - `wir_enum_type_key(app, "Color")` → `"app//enum:Color"`
+#[must_use]
+pub fn wir_enum_type_key(module_source: &ModuleSource, name: &str) -> String {
+    format!("{module_source}//enum:{name}")
+}
+
+/// Key of a variant's per-case payload struct, derived from the variant's own
+/// [`wir_type_key`].
+///
+/// Examples:
+/// - `wir_variant_case_key("app//Shape", "Circle")` → `"app//Shape::Circle"`
+#[must_use]
+pub fn wir_variant_case_key(variant_key: &str, case_name: &str) -> String {
+    format!("{variant_key}::{case_name}")
+}
+
+/// Key of a function type in the WIR type table.
+///
+/// Examples:
+/// - `wir_func_type_key("app//run")` → `"functype//app//run"`
+#[must_use]
+pub fn wir_func_type_key(func_key: &str) -> String {
+    format!("functype//{func_key}")
+}
+
+/// Key of an anonymous tuple struct in the WIR type table.
+///
+/// Examples:
+/// - `wir_tuple_type_key("[i32, i32]")` → `"tuple//[i32, i32]"`
+#[must_use]
+pub fn wir_tuple_type_key(display: &str) -> String {
+    format!("tuple//{display}")
+}
+
 /// Build a local method name from struct name and method name.
 ///
 /// Examples:

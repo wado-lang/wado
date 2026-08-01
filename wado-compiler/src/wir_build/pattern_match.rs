@@ -8,7 +8,7 @@
 use crate::module_source::ModuleSource;
 use crate::nir::NirLiteralPattern;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
-use crate::wir::{WirInstr, WirType};
+use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::translate::{FunctionTranslator, LabelEntry, declare_and_set_local};
 use crate::nir_arena::{ArmData, BlockId, Body, Operand, PatId, PatKind};
@@ -211,76 +211,60 @@ impl FunctionTranslator<'_, '_> {
     /// * `Tuple` — multivalue-builtin call returning a tuple; destructure
     ///   each element into its `Binding` slot or skip `Wildcard` slots.
     ///
-    /// Other variants are unreachable; we still match the obvious
-    /// `Binding` case (single multivalue result) defensively and leave a
-    /// catch-all `None` arm rather than `unreachable!` so a future
-    /// lower-pass change cannot turn into a hard ICE.
-    pub(super) fn translate_let_pattern(
-        &mut self,
-        pattern: PatId,
-        value: Operand,
-    ) -> Option<WirInstr> {
+    /// `Binding` (a single multivalue result) is also accepted. Any other shape
+    /// means pattern lowering stopped rewriting one it used to rewrite; emitting
+    /// nothing would drop the destructure and leave its bindings unassigned, so
+    /// it panics instead.
+    pub(super) fn translate_let_pattern(&mut self, pattern: PatId, value: Operand) -> WirInstr {
         let value_instr = self.translate_operand(value);
         let value_ty = self.operand_type_id(value);
         let arena = self.body;
 
         match &arena.pats[pattern].kind {
             PatKind::Tuple(patterns, _) => {
-                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, value_ty);
-                if let WirType::Ref { ref type_id, .. } = wir_type {
-                    let mut instrs = Vec::new();
+                let wir_type = self.wir_type(value_ty);
+                let type_id = self.ref_type_id(value_ty);
+                let mut instrs = Vec::new();
 
-                    // Declare and assign a temp local for the tuple
-                    let temp_name = format!("__let_pattern_{}", self.match_counter);
-                    self.match_counter += 1;
-                    instrs.push(WirInstr::DeclareLocal {
-                        name: temp_name.clone(),
-                        ty: wir_type.clone(),
-                    });
-                    instrs.push(WirInstr::LocalSet {
-                        name: temp_name.clone(),
-                        value: Box::new(value_instr),
-                    });
+                // Declare and assign a temp local for the tuple
+                let temp_name = format!("__let_pattern_{}", self.match_counter);
+                self.match_counter += 1;
+                instrs.extend(declare_and_set_local(
+                    temp_name.clone(),
+                    wir_type.clone(),
+                    value_instr,
+                ));
 
-                    // Bind each element
-                    for (i, sub_pattern) in patterns.iter().enumerate() {
-                        if let PatKind::Binding { local_index, .. } = &arena.pats[*sub_pattern].kind
-                        {
-                            let local_name = self.local_name(*local_index);
-                            let field_name_str = format!("{i}");
-                            let field_result_ty =
-                                self.struct_field_wir_type(type_id, &field_name_str);
-                            instrs.push(WirInstr::LocalSet {
-                                name: local_name,
-                                value: Box::new(WirInstr::StructGet {
-                                    type_id: type_id.clone(),
-                                    field_name: field_name_str,
-                                    expr: Box::new(WirInstr::LocalGet {
-                                        name: temp_name.clone(),
-                                        result_ty: wir_type.clone(),
-                                    }),
-                                    result_ty: field_result_ty,
+                // Bind each element; wildcard slots have no binding to fill.
+                for (i, sub_pattern) in patterns.iter().enumerate() {
+                    if let PatKind::Binding { local_index, .. } = &arena.pats[*sub_pattern].kind {
+                        let local_name = self.local_name(*local_index);
+                        let field_name_str = format!("{i}");
+                        let field_result_ty = self.struct_field_wir_type(&type_id, &field_name_str);
+                        instrs.push(WirInstr::LocalSet {
+                            name: local_name,
+                            value: Box::new(WirInstr::StructGet {
+                                type_id: type_id.clone(),
+                                field_name: field_name_str,
+                                expr: Box::new(WirInstr::LocalGet {
+                                    name: temp_name.clone(),
+                                    result_ty: wir_type.clone(),
                                 }),
-                            });
-                        }
-                        // Wildcard patterns: skip (no binding)
+                                result_ty: field_result_ty,
+                            }),
+                        });
                     }
-
-                    Some(WirInstr::Seq(instrs))
-                } else {
-                    // Non-ref tuple type — shouldn't happen for real tuples
-                    None
                 }
+
+                WirInstr::Seq(instrs)
             }
-            PatKind::Binding { local_index, .. } => {
-                // Simple binding (not a tuple destructure)
-                let local_name = self.local_name(*local_index);
-                Some(WirInstr::LocalSet {
-                    name: local_name,
-                    value: Box::new(value_instr),
-                })
-            }
-            _ => None,
+            PatKind::Binding { local_index, .. } => WirInstr::LocalSet {
+                name: self.local_name(*local_index),
+                value: Box::new(value_instr),
+            },
+            other => panic!(
+                "[WIR] pattern lowering left a `LetDestructure` this translator cannot bind: {other:?}"
+            ),
         }
     }
 
@@ -603,11 +587,8 @@ impl FunctionTranslator<'_, '_> {
                 type_args,
                 ..
             } => {
-                let type_arg_names: Vec<String> = type_args
-                    .iter()
-                    .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
-                    .collect();
-                let mangled = crate::name::mangle_generic_name(name, &type_arg_names);
+                let mangled =
+                    super::types::generic_instance_name(self.type_table, name, type_args);
                 self.variant_case_indexer(&mangled, module_source)
             }
             ResolvedType::Enum {
@@ -632,7 +613,7 @@ impl FunctionTranslator<'_, '_> {
         variant_name: &str,
         module_source: &ModuleSource,
     ) -> Option<CaseIndexer> {
-        let fq = format!("{module_source}//{variant_name}");
+        let fq = crate::name::wir_type_key(module_source, variant_name);
         let variant_type_id = self.ctx.type_map.get(&fq)?;
         let crate::wir::WirTypeDef::Variant(vt) = &self.ctx.types[variant_type_id.index() as usize]
         else {
@@ -644,6 +625,73 @@ impl FunctionTranslator<'_, '_> {
             names: Some(names),
             total,
         })
+    }
+
+    /// Key of the WIR variant type a scrutinee lowers to.
+    ///
+    /// A variant reaches WIR either as `ResolvedType::Variant` or — once
+    /// monomorphized — as the `GenericInstance` spelling of its instantiation
+    /// (`Option<i32>`); `register_variant` and `register_mono_variants` register
+    /// both under this key.
+    #[track_caller]
+    fn variant_type_key(&self, type_id: TypeId) -> String {
+        match self.type_table.get(type_id) {
+            ResolvedType::Variant {
+                name,
+                module_source,
+                ..
+            } => crate::name::wir_type_key(module_source, name),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                let mangled =
+                    super::types::generic_instance_name(self.type_table, name, type_args);
+                crate::name::wir_type_key(module_source, &mangled)
+            }
+            other => panic!("[WIR] expected a variant type, got {other:?}"),
+        }
+    }
+
+    /// The registered WIR variant a scrutinee lowers to, with its type key.
+    ///
+    /// Type checking already proved the scrutinee is this variant, so a miss is
+    /// a registration bug. Degrading instead — testing a discriminant that was
+    /// never written, or projecting a payload out of the base type — is a
+    /// miscompile the Wasm validator only catches when the shapes happen to
+    /// differ.
+    #[track_caller]
+    fn variant_def(&self, type_id: TypeId) -> (String, &crate::wir::WirVariantType) {
+        let key = self.variant_type_key(type_id);
+        let Some(wir_type_id) = self.ctx.type_map.get(&key) else {
+            panic!("[WIR] variant `{key}` is not registered");
+        };
+        let crate::wir::WirTypeDef::Variant(vt) = &self.ctx.types[wir_type_id.index() as usize]
+        else {
+            panic!("[WIR] `{key}` is registered as a non-variant WIR type");
+        };
+        (key, vt)
+    }
+
+    /// The WIR struct type of a variant's payload-carrying case.
+    #[track_caller]
+    fn variant_case_type_id(&self, variant_key: &str, case_name: &str) -> WirTypeId {
+        let case_key = crate::name::wir_variant_case_key(variant_key, case_name);
+        let Some(case_type_id) = self.ctx.type_map.get(&case_key) else {
+            panic!("[WIR] payload case `{case_key}` is not registered");
+        };
+        case_type_id.clone()
+    }
+
+    /// Read a variant's `discriminant` field off `expr`.
+    fn variant_discriminant(&self, variant_type_id: TypeId, expr: WirInstr) -> WirInstr {
+        WirInstr::StructGet {
+            type_id: self.ref_type_id(variant_type_id),
+            field_name: crate::name::VARIANT_DISCRIMINANT_FIELD.to_string(),
+            expr: Box::new(expr),
+            result_ty: WirType::I32,
+        }
     }
 
     /// Generate a condition expression for a pattern.
@@ -676,104 +724,31 @@ impl FunctionTranslator<'_, '_> {
                     Box::new(WirInstr::I32Const(*case_index as i32)),
                 )
             }
-            PatKind::Variant {
-                variant_name,
-                bindings,
-                ..
-            } => {
-                // For variant patterns, use ref.test on the case type
-                // or discriminant comparison for unit cases
+            PatKind::Variant { variant_name, .. } => {
                 let scrut_get = WirInstr::LocalGet {
                     name: scrut_local.to_string(),
                     result_ty: self.wir_type(scrut_type),
                 };
 
-                // Look up variant type info to find the case WirTypeId
-                let (var_name, var_module) = match self.type_table.get(scrut_type) {
-                    ResolvedType::Variant {
-                        name,
-                        module_source,
-                        ..
-                    } => (name.clone(), module_source.clone()),
-                    ResolvedType::GenericInstance {
-                        name,
-                        module_source,
-                        type_args,
-                        ..
-                    } => {
-                        let type_arg_names: Vec<String> = type_args
-                            .iter()
-                            .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
-                            .collect();
-                        (
-                            crate::name::mangle_generic_name(name, &type_arg_names),
-                            module_source.clone(),
-                        )
-                    }
-                    _ => return WirInstr::I32Const(0),
+                let (variant_key, vt) = self.variant_def(scrut_type);
+                let Some(case) = vt.cases.iter().find(|c| c.name == *variant_name) else {
+                    panic!("[WIR] variant `{variant_key}` has no case `{variant_name}`");
                 };
-                let fq = format!("{var_module}//{var_name}");
-
-                // Look up variant case info
-                if let Some(variant_type_id) = self.ctx.type_map.get(&fq) {
-                    // Find the case by name
-                    if let crate::wir::WirTypeDef::Variant(vt) =
-                        &self.ctx.types[variant_type_id.index() as usize]
-                    {
-                        if let Some(case) = vt.cases.iter().find(|c| c.name == *variant_name) {
-                            if case.payload.is_empty() && bindings.is_empty() {
-                                // Unit variant: check discriminant
-                                let wir_type =
-                                    self.ctx.type_id_to_wir_type(self.type_table, scrut_type);
-                                if let WirType::Ref { type_id, .. } = wir_type {
-                                    WirInstr::I32Eq(
-                                        Box::new(WirInstr::StructGet {
-                                            type_id,
-                                            field_name: "discriminant".to_string(),
-                                            expr: Box::new(scrut_get),
-                                            result_ty: WirType::I32,
-                                        }),
-                                        Box::new(WirInstr::I32Const(case.index as i32)),
-                                    )
-                                } else {
-                                    WirInstr::I32Const(0)
-                                }
-                            } else {
-                                // Payload variant: use ref.test on case subtype
-                                let case_fq = format!("{fq}::{variant_name}");
-                                if let Some(case_type_id) = self.ctx.type_map.get(&case_fq) {
-                                    WirInstr::RefTest {
-                                        type_id: case_type_id.clone(),
-                                        nullable: false,
-                                        expr: Box::new(scrut_get),
-                                    }
-                                } else {
-                                    // Case type not found (unit payload): fall back to discriminant check
-                                    let wir_type =
-                                        self.ctx.type_id_to_wir_type(self.type_table, scrut_type);
-                                    if let WirType::Ref { type_id, .. } = wir_type {
-                                        WirInstr::I32Eq(
-                                            Box::new(WirInstr::StructGet {
-                                                type_id,
-                                                field_name: "discriminant".to_string(),
-                                                expr: Box::new(scrut_get),
-                                                result_ty: WirType::I32,
-                                            }),
-                                            Box::new(WirInstr::I32Const(case.index as i32)),
-                                        )
-                                    } else {
-                                        WirInstr::I32Const(0)
-                                    }
-                                }
-                            }
-                        } else {
-                            WirInstr::I32Const(0)
-                        }
-                    } else {
-                        WirInstr::I32Const(0)
-                    }
+                let case_index = case.index as i32;
+                // A payload case has its own struct subtype, so membership is a
+                // `ref.test`. A unit case shares the base struct — only the
+                // discriminant distinguishes it.
+                if case.payload.is_empty() {
+                    WirInstr::I32Eq(
+                        Box::new(self.variant_discriminant(scrut_type, scrut_get)),
+                        Box::new(WirInstr::I32Const(case_index)),
+                    )
                 } else {
-                    WirInstr::I32Const(0)
+                    WirInstr::RefTest {
+                        type_id: self.variant_case_type_id(&variant_key, variant_name),
+                        nullable: false,
+                        expr: Box::new(scrut_get),
+                    }
                 }
             }
             PatKind::Range {
@@ -942,36 +917,15 @@ impl FunctionTranslator<'_, '_> {
                     return;
                 }
 
-                // Look up the variant type to find the case WirTypeId
-                let (var_name, var_module) = match self.type_table.get(*enum_type) {
-                    ResolvedType::Variant {
-                        name,
-                        module_source,
-                        ..
-                    } => (name.clone(), module_source.clone()),
-                    ResolvedType::GenericInstance {
-                        name,
-                        module_source,
-                        type_args,
-                        ..
-                    } => {
-                        let type_arg_names: Vec<String> = type_args
-                            .iter()
-                            .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
-                            .collect();
-                        (
-                            crate::name::mangle_generic_name(name, &type_arg_names),
-                            module_source.clone(),
-                        )
-                    }
-                    _ => return,
+                let (variant_key, vt) = self.variant_def(*enum_type);
+                let Some(case) = vt.cases.iter().find(|c| c.name == *variant_name) else {
+                    panic!("[WIR] variant `{variant_key}` has no case `{variant_name}`");
                 };
-                let fq = format!("{var_module}//{var_name}");
-
-                let case_fq = format!("{fq}::{variant_name}");
-
-                // Try to get the case type for ref.cast + struct.get
-                if let Some(case_type_id) = self.ctx.type_map.get(&case_fq).cloned() {
+                // A unit case carries no payload struct, so its bindings can only
+                // be unit-typed — and unit has no Wasm local to bind.
+                let case_has_payload = !case.payload.is_empty();
+                if case_has_payload {
+                    let case_type_id = self.variant_case_type_id(&variant_key, variant_name);
                     // Count bindings that actually need the cast result. A
                     // `Wildcard` or literal-shaped sub-pattern doesn't read
                     // any payload field, so it doesn't consume the cast.
@@ -1105,26 +1059,15 @@ impl FunctionTranslator<'_, '_> {
                         }
                     }
                 } else {
-                    // Fallback: just copy the scrutinee (won't be type-correct for payload)
                     for binding in bindings {
-                        if let PatKind::Binding {
-                            local_index,
-                            type_id,
-                            ..
-                        } = &arena.pats[*binding].kind
-                        {
-                            let wir = self.ctx.type_id_to_wir_type(self.type_table, *type_id);
-                            // Skip unit-typed bindings (no Wasm local exists for unit)
-                            if !matches!(wir, WirType::Unit) {
-                                instrs.push(WirInstr::LocalSet {
-                                    name: self.local_name(*local_index),
-                                    value: Box::new(WirInstr::LocalGet {
-                                        name: scrut_local.to_string(),
-                                        result_ty: self.wir_type(scrut_type),
-                                    }),
-                                });
-                            }
-                        }
+                        let PatKind::Binding { type_id, .. } = &arena.pats[*binding].kind else {
+                            continue;
+                        };
+                        assert!(
+                            matches!(self.wir_type(*type_id), WirType::Unit),
+                            "[WIR] case `{variant_key}::{variant_name}` carries no payload, \
+                             so binding it to a non-unit local has nothing to read"
+                        );
                     }
                 }
             }
@@ -1136,108 +1079,108 @@ impl FunctionTranslator<'_, '_> {
                 // No bindings needed
             }
             PatKind::Tuple(sub_patterns, _) => {
-                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, scrut_type);
-                if let WirType::Ref { ref type_id, .. } = wir_type {
-                    let element_types = self.type_table.as_tuple(scrut_type).unwrap_or_default();
-                    for (i, sub_pattern) in sub_patterns.iter().enumerate() {
-                        let field_name_str = format!("{i}");
-                        let field_result_ty = self.struct_field_wir_type(type_id, &field_name_str);
-                        let field_get = WirInstr::StructGet {
-                            type_id: type_id.clone(),
-                            field_name: field_name_str,
-                            expr: Box::new(WirInstr::LocalGet {
-                                name: scrut_local.to_string(),
-                                result_ty: wir_type.clone(),
-                            }),
-                            result_ty: field_result_ty.clone(),
-                        };
-                        match &arena.pats[*sub_pattern].kind {
-                            PatKind::Binding { local_index, .. } => {
-                                let local_type_id =
-                                    if (*local_index as usize) < self.tir_func.locals.len() {
-                                        self.tir_func.locals[*local_index as usize].type_id
-                                    } else {
-                                        element_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN)
-                                    };
-                                let binding_wir =
-                                    self.ctx.type_id_to_wir_type(self.type_table, local_type_id);
-                                self.emit_pattern_binding_set(
-                                    *local_index,
-                                    &binding_wir,
-                                    Some(&field_result_ty),
-                                    field_get,
-                                    instrs,
-                                );
-                            }
-                            PatKind::Wildcard => {}
-                            _ => {
-                                // Nested pattern: store in temp and recurse
-                                self.local_counter += 1;
-                                let temp_name = format!("__tuple_elem_{}", self.local_counter);
-                                let elem_type =
-                                    element_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                                let elem_wir_type =
-                                    self.ctx.type_id_to_wir_type(self.type_table, elem_type);
-                                instrs.extend(declare_and_set_local(
-                                    temp_name.clone(),
-                                    elem_wir_type,
-                                    field_get,
-                                ));
-                                self.emit_pattern_bindings(
-                                    *sub_pattern,
-                                    &temp_name,
-                                    elem_type,
-                                    instrs,
-                                );
-                            }
+                let wir_type = self.wir_type(scrut_type);
+                let type_id = &self.ref_type_id(scrut_type);
+                let element_types = self
+                    .type_table
+                    .as_tuple(scrut_type)
+                    .unwrap_or_else(|| panic!("[WIR] tuple pattern on non-tuple {scrut_type:?}"));
+                for (i, sub_pattern) in sub_patterns.iter().enumerate() {
+                    let field_name_str = format!("{i}");
+                    let field_result_ty = self.struct_field_wir_type(type_id, &field_name_str);
+                    let field_get = WirInstr::StructGet {
+                        type_id: type_id.clone(),
+                        field_name: field_name_str,
+                        expr: Box::new(WirInstr::LocalGet {
+                            name: scrut_local.to_string(),
+                            result_ty: wir_type.clone(),
+                        }),
+                        result_ty: field_result_ty.clone(),
+                    };
+                    match &arena.pats[*sub_pattern].kind {
+                        PatKind::Binding { local_index, .. } => {
+                            let local_type_id =
+                                if (*local_index as usize) < self.tir_func.locals.len() {
+                                    self.tir_func.locals[*local_index as usize].type_id
+                                } else {
+                                    tuple_element_type(&element_types, i)
+                                };
+                            let binding_wir =
+                                self.ctx.type_id_to_wir_type(self.type_table, local_type_id);
+                            self.emit_pattern_binding_set(
+                                *local_index,
+                                &binding_wir,
+                                Some(&field_result_ty),
+                                field_get,
+                                instrs,
+                            );
+                        }
+                        PatKind::Wildcard => {}
+                        _ => {
+                            // Nested pattern: store in temp and recurse
+                            self.local_counter += 1;
+                            let temp_name = format!("__tuple_elem_{}", self.local_counter);
+                            let elem_type = tuple_element_type(&element_types, i);
+                            let elem_wir_type =
+                                self.ctx.type_id_to_wir_type(self.type_table, elem_type);
+                            instrs.extend(declare_and_set_local(
+                                temp_name.clone(),
+                                elem_wir_type,
+                                field_get,
+                            ));
+                            self.emit_pattern_bindings(
+                                *sub_pattern,
+                                &temp_name,
+                                elem_type,
+                                instrs,
+                            );
                         }
                     }
                 }
             }
             PatKind::Struct { fields, .. } => {
                 // Emit field bindings for struct patterns in match arms
-                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, scrut_type);
-                if let WirType::Ref { ref type_id, .. } = wir_type {
-                    for field in fields {
-                        let field_result_ty =
-                            self.struct_field_wir_type(type_id, &field.field_name);
-                        let field_get = WirInstr::StructGet {
-                            type_id: type_id.clone(),
-                            field_name: field.field_name.clone(),
-                            expr: Box::new(WirInstr::LocalGet {
-                                name: scrut_local.to_string(),
-                                result_ty: wir_type.clone(),
-                            }),
-                            result_ty: field_result_ty,
-                        };
-                        match &arena.pats[field.pattern].kind {
-                            PatKind::Binding { local_index, .. } => {
-                                instrs.push(WirInstr::LocalSet {
-                                    name: self.local_name(*local_index),
-                                    value: Box::new(field_get),
-                                });
-                            }
-                            PatKind::Wildcard => {}
-                            _ => {
-                                // For nested patterns, store in a temp and recurse
-                                self.local_counter += 1;
-                                let temp_name = format!("__struct_field_{}", self.local_counter);
-                                let field_type =
-                                    self.resolve_struct_field_type(scrut_type, &field.field_name);
-                                let field_wir_type =
-                                    self.ctx.type_id_to_wir_type(self.type_table, field_type);
-                                instrs.extend(declare_and_set_local(
-                                    temp_name.clone(),
-                                    field_wir_type,
-                                    field_get,
-                                ));
-                                self.emit_pattern_bindings(
-                                    field.pattern,
-                                    &temp_name,
-                                    field_type,
-                                    instrs,
-                                );
-                            }
+                let wir_type = self.wir_type(scrut_type);
+                let type_id = &self.ref_type_id(scrut_type);
+                for field in fields {
+                    let field_result_ty =
+                        self.struct_field_wir_type(type_id, &field.field_name);
+                    let field_get = WirInstr::StructGet {
+                        type_id: type_id.clone(),
+                        field_name: field.field_name.clone(),
+                        expr: Box::new(WirInstr::LocalGet {
+                            name: scrut_local.to_string(),
+                            result_ty: wir_type.clone(),
+                        }),
+                        result_ty: field_result_ty,
+                    };
+                    match &arena.pats[field.pattern].kind {
+                        PatKind::Binding { local_index, .. } => {
+                            instrs.push(WirInstr::LocalSet {
+                                name: self.local_name(*local_index),
+                                value: Box::new(field_get),
+                            });
+                        }
+                        PatKind::Wildcard => {}
+                        _ => {
+                            // For nested patterns, store in a temp and recurse
+                            self.local_counter += 1;
+                            let temp_name = format!("__struct_field_{}", self.local_counter);
+                            let field_type =
+                                self.resolve_struct_field_type(scrut_type, &field.field_name);
+                            let field_wir_type =
+                                self.ctx.type_id_to_wir_type(self.type_table, field_type);
+                            instrs.extend(declare_and_set_local(
+                                temp_name.clone(),
+                                field_wir_type,
+                                field_get,
+                            ));
+                            self.emit_pattern_bindings(
+                                field.pattern,
+                                &temp_name,
+                                field_type,
+                                instrs,
+                            );
                         }
                     }
                 }
@@ -1311,16 +1254,15 @@ impl FunctionTranslator<'_, '_> {
     ) {
         let needs_boxing = super::translate::ref_binding_needs_boxing(binding_wir, source_wir);
         let value = if needs_boxing {
-            if let WirType::Ref {
+            let WirType::Ref {
                 type_id: box_tid, ..
             } = binding_wir
-            {
-                WirInstr::StructNew {
-                    type_id: box_tid.clone(),
-                    fields: vec![source],
-                }
-            } else {
-                source
+            else {
+                unreachable!("ref_binding_needs_boxing only reports boxing for a Ref binding")
+            };
+            WirInstr::StructNew {
+                type_id: box_tid.clone(),
+                fields: vec![source],
             }
         } else if matches!(
             binding_wir,
@@ -1389,59 +1331,24 @@ impl FunctionTranslator<'_, '_> {
         payload: Option<Operand>,
         result_type: TypeId,
     ) -> WirInstr {
-        // Get the variant name and module source
-        let (variant_name, variant_module_source) = match self.type_table.get(variant_type) {
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), module_source.clone()),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => {
-                let type_arg_names: Vec<String> = type_args
-                    .iter()
-                    .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
-                    .collect();
-                (
-                    crate::name::mangle_generic_name(name, &type_arg_names),
-                    module_source.clone(),
-                )
-            }
-            other => panic!(
-                "[WIR] translate_variant_construct: expected Variant/GenericInstance, got {other:?} (variant_type={variant_type:?})"
-            ),
+        // A payload case is built as its own struct subtype; a unit case has no
+        // subtype of its own and is built as the base variant struct, carrying
+        // only the discriminant.
+        let (variant_key, vt) = self.variant_def(variant_type);
+        let Some(case) = vt.cases.get(case_index as usize) else {
+            panic!("[WIR] variant `{variant_key}` has no case at index {case_index}");
+        };
+        let struct_type_id = if case.payload.is_empty() {
+            self.ref_type_id(result_type)
+        } else {
+            self.variant_case_type_id(&variant_key, case_name)
         };
 
-        let fq = format!("{variant_module_source}//{variant_name}");
-
-        // Look up case-specific struct type
-        let case_fq = format!("{fq}::{case_name}");
-
-        if let Some(case_type_id) = self.ctx.type_map.get(&case_fq).cloned() {
-            // Build struct.new for the case type: (tag, payload?)
-            let mut fields = vec![WirInstr::I32Const(case_index as i32)];
-            if let Some(payload_expr) = payload {
-                fields.push(self.translate_operand(payload_expr));
-            }
-            self.struct_new(case_type_id, fields)
-        } else {
-            // Fallback: try the base variant type
-            let wir_type = self.ctx.type_id_to_wir_type(self.type_table, result_type);
-            let WirType::Ref { type_id, .. } = wir_type else {
-                panic!(
-                    "[WIR] translate_variant_construct: case type {case_fq} not registered, and result type {result_type:?} is not a Ref ({wir_type:?})"
-                );
-            };
-            let mut fields = vec![WirInstr::I32Const(case_index as i32)];
-            if let Some(payload_expr) = payload {
-                fields.push(self.translate_operand(payload_expr));
-            }
-            self.struct_new(type_id, fields)
+        let mut fields = vec![WirInstr::I32Const(case_index as i32)];
+        if let Some(payload_expr) = payload {
+            fields.push(self.translate_operand(payload_expr));
         }
+        self.struct_new(struct_type_id, fields)
     }
 
     /// Translate variant test: check if variant is of a specific case.
@@ -1449,95 +1356,25 @@ impl FunctionTranslator<'_, '_> {
         let val = self.translate_operand(inner);
         let inner_ty = self.operand_type_id(inner);
 
-        // Look up variant type info
-        let (var_name, var_module) = match self.type_table.get(inner_ty) {
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), module_source.clone()),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => {
-                let type_arg_names: Vec<String> = type_args
-                    .iter()
-                    .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
-                    .collect();
-                (
-                    crate::name::mangle_generic_name(name, &type_arg_names),
-                    module_source.clone(),
-                )
-            }
-            _ => {
-                // Non-variant: compare discriminant directly
-                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, inner_ty);
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    return WirInstr::I32Eq(
-                        Box::new(WirInstr::StructGet {
-                            type_id,
-                            field_name: "discriminant".to_string(),
-                            expr: Box::new(val),
-                            result_ty: WirType::I32,
-                        }),
-                        Box::new(WirInstr::I32Const(case_index as i32)),
-                    );
-                }
-                return WirInstr::I32Const(0);
-            }
+        let (variant_key, vt) = self.variant_def(inner_ty);
+        let Some(case) = vt.cases.get(case_index as usize) else {
+            panic!("[WIR] variant `{variant_key}` has no case at index {case_index}");
         };
-
-        let fq = format!("{var_module}//{var_name}");
-
-        // Check if this case has a payload
-        if let Some(variant_type_id) = self.ctx.type_map.get(&fq)
-            && let crate::wir::WirTypeDef::Variant(vt) =
-                &self.ctx.types[variant_type_id.index() as usize]
-            && let Some(case) = vt.cases.get(case_index as usize)
-        {
-            if case.payload.is_empty() {
-                // Unit variant: check discriminant
-                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, inner_ty);
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    return WirInstr::I32Eq(
-                        Box::new(WirInstr::StructGet {
-                            type_id,
-                            field_name: "discriminant".to_string(),
-                            expr: Box::new(val),
-                            result_ty: WirType::I32,
-                        }),
-                        Box::new(WirInstr::I32Const(case_index as i32)),
-                    );
-                }
-            } else {
-                // Payload variant: use ref.test
-                let case_fq = format!("{fq}::{}", case.name);
-                if let Some(case_type_id) = self.ctx.type_map.get(&case_fq) {
-                    return WirInstr::RefTest {
-                        type_id: case_type_id.clone(),
-                        nullable: false,
-                        expr: Box::new(val),
-                    };
-                }
-            }
-        }
-
-        // Fallback: compare discriminant
-        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, inner_ty);
-        if let WirType::Ref { type_id, .. } = wir_type {
+        // A payload case has its own struct subtype, so membership is a
+        // `ref.test`. A unit case shares the base struct — only the
+        // discriminant distinguishes it.
+        if case.payload.is_empty() {
             WirInstr::I32Eq(
-                Box::new(WirInstr::StructGet {
-                    type_id,
-                    field_name: "discriminant".to_string(),
-                    expr: Box::new(val),
-                    result_ty: WirType::I32,
-                }),
+                Box::new(self.variant_discriminant(inner_ty, val)),
                 Box::new(WirInstr::I32Const(case_index as i32)),
             )
         } else {
-            WirInstr::I32Const(0)
+            let case_name = case.name.clone();
+            WirInstr::RefTest {
+                type_id: self.variant_case_type_id(&variant_key, &case_name),
+                nullable: false,
+                expr: Box::new(val),
+            }
         }
     }
 
@@ -1550,59 +1387,16 @@ impl FunctionTranslator<'_, '_> {
         let val = self.translate_operand(inner);
         let inner_ty = self.operand_type_id(inner);
 
-        // Look up variant type info
-        let (var_name, var_module) = match self.type_table.get(inner_ty) {
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), module_source.clone()),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => {
-                let type_arg_names: Vec<String> = type_args
-                    .iter()
-                    .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
-                    .collect();
-                (
-                    crate::name::mangle_generic_name(name, &type_arg_names),
-                    module_source.clone(),
-                )
-            }
-            _ => return val,
-        };
-
-        let fq = format!("{var_module}//{var_name}");
-
         // Every step below must resolve. Falling back to the scrutinee would
         // extract the variant where its payload belongs — a miscompile the Wasm
         // validator only catches when the two happen to differ in shape, and
         // silently wrong output when they do not.
-        let variant_type_id = self.ctx.type_map.get(&fq).cloned().unwrap_or_else(|| {
-            panic!("no WIR variant registered for `{fq}`, so its payload has nothing to project")
-        });
-        let case_name = {
-            let crate::wir::WirTypeDef::Variant(vt) =
-                &self.ctx.types[variant_type_id.index() as usize]
-            else {
-                panic!("`{fq}` is registered as a non-variant WIR type")
-            };
-            vt.cases
-                .get(case_index as usize)
-                .unwrap_or_else(|| panic!("variant `{fq}` has no case at index {case_index}"))
-                .name
-                .clone()
+        let (variant_key, vt) = self.variant_def(inner_ty);
+        let Some(case) = vt.cases.get(case_index as usize) else {
+            panic!("[WIR] variant `{variant_key}` has no case at index {case_index}");
         };
-        let case_fq = format!("{fq}::{case_name}");
-        let case_type_id = self
-            .ctx
-            .type_map
-            .get(&case_fq)
-            .cloned()
-            .unwrap_or_else(|| panic!("no WIR case struct registered for `{case_fq}`"));
+        let case_name = case.name.clone();
+        let case_type_id = self.variant_case_type_id(&variant_key, &case_name);
 
         // ref.cast to the case struct, then struct.get the payload field.
         let cast = WirInstr::RefCast {
@@ -1610,10 +1404,10 @@ impl FunctionTranslator<'_, '_> {
             nullable: false,
             expr: Box::new(val),
         };
-        let payload_result_ty = self.struct_field_wir_type(&case_type_id, "payload_0");
+        let payload_result_ty = self.struct_field_wir_type(&case_type_id, &crate::name::variant_payload_field(0));
         let get = WirInstr::StructGet {
             type_id: case_type_id,
-            field_name: "payload_0".to_string(),
+            field_name: crate::name::variant_payload_field(0),
             expr: Box::new(cast),
             result_ty: payload_result_ty.clone(),
         };
@@ -1646,4 +1440,16 @@ fn pattern_has_bindings(body: &Body, pattern: PatId) -> bool {
         }
         PatKind::Or(alts) => alts.iter().any(|p| pattern_has_bindings(body, *p)),
     }
+}
+
+/// The declared type of a tuple's `i`-th element. Arity is fixed by type
+/// checking, so an out-of-range index is a lowering bug.
+#[track_caller]
+fn tuple_element_type(element_types: &[TypeId], index: usize) -> TypeId {
+    *element_types.get(index).unwrap_or_else(|| {
+        panic!(
+            "[WIR] tuple pattern binds element {index} of a {}-element tuple",
+            element_types.len()
+        )
+    })
 }
