@@ -1222,21 +1222,22 @@ impl FunctionTranslator<'_, '_> {
     ) -> (WirTypeId, Vec<WirInstr>) {
         let elem_type_ids: Vec<crate::tir::TypeId> =
             elements.iter().map(|e| self.operand_type_id(*e)).collect();
-        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, tuple_type_id);
+        // A tuple interned by CM binding synthesis can carry `TypeId`s the
+        // registrar never saw, so the miss is recoverable here — search for a
+        // structurally equal registered tuple, then define one. Every other
+        // caller treats a miss as a bug, hence the fallible accessor.
+        let wir_type = self
+            .ctx
+            .try_type_id_to_wir_type(self.type_table, tuple_type_id);
         let wir_type_id = match &wir_type {
-            WirType::Ref { type_id, .. } => Some(type_id.clone()),
-            _ if elements.len() >= 2 => {
-                // Tuple types created in CM binding synthesis may have TypeIds
-                // from a different module's type_table, causing
-                // `type_id_to_wir_type` to return I32 or AbstractRef instead
-                // of Ref. Fall back to matching by element WIR types.
-                self.ctx
-                    .find_tuple_type_for_elements(self.type_table, &elem_type_ids)
-                    .or_else(|| {
-                        self.ctx
-                            .define_tuple_struct_for_elements(self.type_table, &elem_type_ids)
-                    })
-            }
+            Some(WirType::Ref { type_id, .. }) => Some(type_id.clone()),
+            _ if elements.len() >= 2 => self
+                .ctx
+                .find_tuple_type_for_elements(self.type_table, &elem_type_ids)
+                .or_else(|| {
+                    self.ctx
+                        .define_tuple_struct_for_elements(self.type_table, &elem_type_ids)
+                }),
             _ => None,
         };
         let Some(type_id) = wir_type_id else {

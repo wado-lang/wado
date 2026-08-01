@@ -924,8 +924,8 @@ struct InlineBinding {
     /// Parameter name (kept for the synthesized binding `Let`).
     name: String,
     is_mut: bool,
-    /// The binding's declared type (the arg's type — handles monomorphization
-    /// variance and `&mut self` ref wrapping).
+    /// The `Let`'s declared type: the callee parameter's own type, since the
+    /// binding stands in for that parameter.
     local_type: TypeId,
     /// The argument operand, already in the caller arena. The call node is
     /// discarded after inlining, so its argument subtrees / pool values are

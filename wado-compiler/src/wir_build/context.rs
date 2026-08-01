@@ -47,6 +47,16 @@ impl UnregisteredType {
         Self::new(description, crate::wir::WirAbstractHeapType::Array)
     }
 
+    /// An enum is an i32 discriminant, so the placeholder is the right
+    /// representation already — it only loses the enum's WIR identity. Nothing
+    /// for `fixup_abstract_struct_fields` to repair, hence no abstract ref.
+    fn enum_i32(description: String) -> Self {
+        Self {
+            description,
+            placeholder: WirType::I32,
+        }
+    }
+
     fn new(description: String, heap_type: crate::wir::WirAbstractHeapType) -> Self {
         Self {
             description,
@@ -716,18 +726,23 @@ impl<'a> WirContext<'a> {
         type_table: &TypeTable,
         elements: &[TypeId],
     ) -> Option<WirTypeId> {
+        // An unresolved element would compare as the placeholder abstract ref,
+        // which every other unresolved element also compares as — so it would
+        // match any tuple with an unresolved element in that position and hand
+        // back an unrelated type. A comparison that cannot be made is not a
+        // match.
         let elem_wir_types: Vec<WirType> = elements
             .iter()
-            .map(|e| self.type_id_to_wir_type_pending(type_table, *e))
-            .collect();
+            .map(|e| self.lookup_wir_type(type_table, *e))
+            .collect::<Result<_, _>>()
+            .ok()?;
         self.tuple_type_map
             .iter()
             .find(|(key_elems, _)| {
                 key_elems.len() == elem_wir_types.len()
-                    && key_elems
-                        .iter()
-                        .zip(elem_wir_types.iter())
-                        .all(|(k, w)| self.type_id_to_wir_type_pending(type_table, *k) == *w)
+                    && key_elems.iter().zip(elem_wir_types.iter()).all(|(k, w)| {
+                        self.lookup_wir_type(type_table, *k).is_ok_and(|kw| kw == *w)
+                    })
             })
             .map(|(_, type_id)| type_id.clone())
     }
@@ -760,6 +775,21 @@ impl<'a> WirContext<'a> {
     pub fn type_id_to_wir_type_pending(&self, type_table: &TypeTable, type_id: TypeId) -> WirType {
         self.lookup_wir_type(type_table, type_id)
             .unwrap_or_else(|pending| pending.placeholder)
+    }
+
+    /// The `WirType` of `type_id`, or `None` when it has no WIR registration.
+    ///
+    /// Translation normally uses [`Self::type_id_to_wir_type`], which treats a
+    /// miss as a bug. This is for the caller that has a genuine recovery: a
+    /// tuple interned by CM binding synthesis can carry `TypeId`s the registrar
+    /// never saw, and `tuple_constructor_args` then searches for a structurally
+    /// equal tuple or defines one.
+    pub fn try_type_id_to_wir_type(
+        &self,
+        type_table: &TypeTable,
+        type_id: TypeId,
+    ) -> Option<WirType> {
+        self.lookup_wir_type(type_table, type_id).ok()
     }
 
     fn lookup_wir_type(
@@ -895,7 +925,7 @@ impl<'a> WirContext<'a> {
             } => {
                 let key = crate::name::wir_enum_type_key(module_source, name);
                 let Some(type_id) = self.type_map.get(&key) else {
-                    panic!("[WIR] enum `{key}` is not registered");
+                    return Err(UnregisteredType::enum_i32(format!("enum `{key}`")));
                 };
                 WirType::Enum {
                     type_id: type_id.clone(),

@@ -51,6 +51,12 @@ impl PrimitiveKind {
             // range and keep the emitted code identical to the untyped
             // predecessor of this classification.
             ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => Some(Self::I32Signed),
+            // A `Never` operand diverges before the operation runs, so the
+            // result is never observed and the surrounding lowering discards the
+            // node. It still needs *an* opcode to keep its shape, and i32 is the
+            // narrowest. (`Unit` is not here: it has no value to feed an opcode
+            // at all, and `binop_operand_requires_trait` rejects it.)
+            ResolvedType::Never => Some(Self::I32Signed),
             _ => None,
         }
     }
@@ -70,11 +76,6 @@ impl PrimitiveKind {
             PrimitiveType::F64 => Self::F64,
             PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128 => return None,
         })
-    }
-
-    /// True for `I64Signed` / `I64Unsigned`.
-    fn is_i64(self) -> bool {
-        matches!(self, Self::I64Signed | Self::I64Unsigned)
     }
 }
 
@@ -268,31 +269,47 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I32Unsigned => WirInstr::I32GeU(left, right),
                 PrimitiveKind::I32Signed => WirInstr::I32GeS(left, right),
             },
-            NirBinaryOp::And | NirBinaryOp::BitAnd => {
-                if kind.is_i64() {
+            NirBinaryOp::And | NirBinaryOp::BitAnd => match kind {
+                PrimitiveKind::F32 | PrimitiveKind::F64 => {
+                    panic!("[WIR] `&` has no float lowering")
+                }
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
                     WirInstr::I64And(left, right)
-                } else {
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32And(left, right)
                 }
             }
-            NirBinaryOp::Or | NirBinaryOp::BitOr => {
-                if kind.is_i64() {
+            NirBinaryOp::Or | NirBinaryOp::BitOr => match kind {
+                PrimitiveKind::F32 | PrimitiveKind::F64 => {
+                    panic!("[WIR] `|` has no float lowering")
+                }
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
                     WirInstr::I64Or(left, right)
-                } else {
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32Or(left, right)
                 }
             }
-            NirBinaryOp::BitXor => {
-                if kind.is_i64() {
+            NirBinaryOp::BitXor => match kind {
+                PrimitiveKind::F32 | PrimitiveKind::F64 => {
+                    panic!("[WIR] `^` has no float lowering")
+                }
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
                     WirInstr::I64Xor(left, right)
-                } else {
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32Xor(left, right)
                 }
             }
-            NirBinaryOp::Shl => {
-                if kind.is_i64() {
+            NirBinaryOp::Shl => match kind {
+                PrimitiveKind::F32 | PrimitiveKind::F64 => {
+                    panic!("[WIR] `<<` has no float lowering")
+                }
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
                     WirInstr::I64Shl(left, right)
-                } else {
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32Shl(left, right)
                 }
             }
@@ -330,13 +347,17 @@ impl FunctionTranslator<'_, '_> {
             },
             // `!` is logical negation on `bool`, which is already i32-shaped.
             NirUnaryOp::Not => WirInstr::I32Eqz(operand),
-            NirUnaryOp::BitNot => {
-                if self.scalar_kind(operand_type_id, op).is_i64() {
+            NirUnaryOp::BitNot => match self.scalar_kind(operand_type_id, op) {
+                PrimitiveKind::F32 | PrimitiveKind::F64 => {
+                    panic!("[WIR] `~` has no float lowering")
+                }
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
                     WirInstr::I64Xor(operand, Box::new(WirInstr::I64Const(-1)))
-                } else {
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32Xor(operand, Box::new(WirInstr::I32Const(-1)))
                 }
-            }
+            },
             // Ref/MutRef/Deref handled above in translate_expr
             NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref => {
                 WirInstr::Seq(vec![*operand])

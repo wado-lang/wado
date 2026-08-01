@@ -234,6 +234,12 @@ impl TypeSystem {
             // scalar operator and route to the requires-trait diagnostic
             // (there is no `Eq`/`Ord`/`Add`/… impl for `v128`).
             ResolvedType::Primitive(PrimitiveType::V128) => true,
+            // `()` has no Wasm representation, so an operand of it pushes
+            // nothing and the `i32.eq` below it underflows the stack. There is
+            // no `Eq` impl for `()` either, so route it to the same diagnostic.
+            // `Never` is deliberately absent: `panic("boom") + 1` is legal, and
+            // the diverging operand traps before the operation runs.
+            ResolvedType::Unit => true,
             _ => false,
         }
     }
@@ -293,25 +299,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else if both_refs {
                 // All operators other than == and != are invalid on reference types
                 let type_name = self.tysys.type_table.borrow().type_name(left.type_id);
-                let op_str = match op {
-                    BinaryOp::Lt => "<",
-                    BinaryOp::LtEq => "<=",
-                    BinaryOp::Gt => ">",
-                    BinaryOp::GtEq => ">=",
-                    BinaryOp::Add => "+",
-                    BinaryOp::Sub => "-",
-                    BinaryOp::Mul => "*",
-                    BinaryOp::Div => "/",
-                    BinaryOp::Mod => "%",
-                    BinaryOp::BitAnd => "&",
-                    BinaryOp::BitOr => "|",
-                    BinaryOp::BitXor => "^",
-                    BinaryOp::Shl => "<<",
-                    BinaryOp::Shr => ">>",
-                    BinaryOp::And => "&&",
-                    BinaryOp::Or => "||",
-                    _ => unreachable!(),
-                };
+                let op_str = binary_op_symbol(op);
                 let _ = self.emit(TypeError::OperatorNotApplicable {
                     op: op_str.to_string(),
                     operands: vec![type_name],
@@ -778,14 +766,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod
             ) && matches!(left_resolved, ResolvedType::Flags { .. });
             if is_flags_arith {
-                let op_char = match op {
-                    BinaryOp::Add => "+",
-                    BinaryOp::Sub => "-",
-                    BinaryOp::Mul => "*",
-                    BinaryOp::Div => "/",
-                    BinaryOp::Mod => "%",
-                    _ => unreachable!(),
-                };
+                let op_char = binary_op_symbol(op);
                 let type_name = self.tysys.type_table.borrow().type_name(left.type_id);
                 let _ = self.emit(TypeError::OperatorNotApplicable {
                     op: op_char.to_string(),
@@ -799,27 +780,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Check for modulo on float types: Wasm has no float remainder instruction.
-        // Users should use f64::fmod() or f32::fmod() instead.
+        // Integer-only operators on a float: Wasm has no float remainder and no
+        // float bitwise or shift instructions. Reject them here — lowering them
+        // anyway emits the i32 opcode over an f64 operand, which the Wasm
+        // validator only catches as an opaque type mismatch. Newtypes resolve to
+        // their base first, so `type Meters = f64` is rejected like `f64`.
         {
-            let left_resolved = self.tysys.type_table.borrow().get(left.type_id).clone();
-            if matches!(op, BinaryOp::Mod)
-                && matches!(
-                    left_resolved,
-                    ResolvedType::Primitive(PrimitiveType::F32 | PrimitiveType::F64)
-                )
-            {
-                let type_name = match left_resolved {
-                    ResolvedType::Primitive(PrimitiveType::F32) => "f32",
-                    _ => "f64",
+            let float_name = {
+                let table = self.tysys.type_table.borrow();
+                match table.get(table.resolve_newtype_base(left.type_id)) {
+                    ResolvedType::Primitive(PrimitiveType::F32) => Some("f32"),
+                    ResolvedType::Primitive(PrimitiveType::F64) => Some("f64"),
+                    _ => None,
+                }
+            };
+            if let Some(type_name) = float_name {
+                let rejected = match op {
+                    BinaryOp::Mod => Some(("%", format!("use `{type_name}::fmod(a, b)` instead"))),
+                    BinaryOp::Shl
+                    | BinaryOp::Shr
+                    | BinaryOp::BitAnd
+                    | BinaryOp::BitOr
+                    | BinaryOp::BitXor => Some((
+                        binary_op_symbol(op),
+                        "bitwise and shift operators are integer-only".to_string(),
+                    )),
+                    _ => None,
                 };
-                let _ = self.emit(TypeError::OperatorNotApplicable {
-                    op: "%".to_string(),
-                    operands: vec![type_name.to_string()],
-                    note: Some(format!("use `{type_name}::fmod(a, b)` instead")),
-                    span,
-                });
-                return TypeTable::ERROR;
+                if let Some((op_char, note)) = rejected {
+                    let _ = self.emit(TypeError::OperatorNotApplicable {
+                        op: op_char.to_string(),
+                        operands: vec![type_name.to_string()],
+                        note: Some(note),
+                        span,
+                    });
+                    return TypeTable::ERROR;
+                }
             }
         }
 
@@ -843,25 +839,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_table = self.tysys.type_table.borrow();
                 let left_name = type_table.type_name(left.type_id);
                 let right_name = type_table.type_name(right.type_id);
-                let op_char = match op {
-                    BinaryOp::Add => "+",
-                    BinaryOp::Sub => "-",
-                    BinaryOp::Mul => "*",
-                    BinaryOp::Div => "/",
-                    BinaryOp::Mod => "%",
-                    BinaryOp::BitAnd => "&",
-                    BinaryOp::BitOr => "|",
-                    BinaryOp::BitXor => "^",
-                    BinaryOp::Shl => "<<",
-                    BinaryOp::Shr => ">>",
-                    BinaryOp::Eq => "==",
-                    BinaryOp::NotEq => "!=",
-                    BinaryOp::Lt => "<",
-                    BinaryOp::LtEq => "<=",
-                    BinaryOp::Gt => ">",
-                    BinaryOp::GtEq => ">=",
-                    _ => "?",
-                };
+                let op_char = binary_op_symbol(op);
                 drop(type_table);
                 if left_name == right_name {
                     // Both operands share a type that lacks the operator's
@@ -1819,6 +1797,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 /// pass produces an identical `Ordering`-comparison wrapper without an
 /// `Elaborator`. `<` → `cmp == Less`, `>` → `cmp == Greater`,
 /// `<=` → `cmp != Greater`, `>=` → `cmp != Less`.
+/// The source spelling of a binary operator, for diagnostics.
+pub(super) fn binary_op_symbol(op: BinaryOp) -> &'static str {
+    match op {
+        BinaryOp::Add => "+",
+        BinaryOp::Sub => "-",
+        BinaryOp::Mul => "*",
+        BinaryOp::Div => "/",
+        BinaryOp::Mod => "%",
+        BinaryOp::BitAnd => "&",
+        BinaryOp::BitOr => "|",
+        BinaryOp::BitXor => "^",
+        BinaryOp::Shl => "<<",
+        BinaryOp::Shr => ">>",
+        BinaryOp::And => "&&",
+        BinaryOp::Or => "||",
+        BinaryOp::Eq => "==",
+        BinaryOp::NotEq => "!=",
+        BinaryOp::Lt => "<",
+        BinaryOp::LtEq => "<=",
+        BinaryOp::Gt => ">",
+        BinaryOp::GtEq => ">=",
+    }
+}
+
 pub(super) fn ord_bool_from_cmp(
     cmp_call: TirExpr,
     op: BinaryOp,

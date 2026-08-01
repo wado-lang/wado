@@ -1,0 +1,10 @@
+// `()` has no Wasm representation, so an operand of it pushes nothing and the
+// comparison below it underflows the operand stack.
+fn nothing() {}
+
+export fn run() {
+    let _ = nothing() == nothing();
+}
+
+__DATA__
+{"compile_error": "cannot be applied to type `()`"}
