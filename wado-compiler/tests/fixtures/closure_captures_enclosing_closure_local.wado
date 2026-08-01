@@ -1,0 +1,49 @@
+// A closure nested inside another closure, capturing a binding declared in the
+// enclosing closure's own body. The inner capture reads the outer closure's
+// local, not a function-level local or a parameter.
+
+fn any_matching(rows: &List<i32>, probe: &List<i32>) -> bool {
+    return rows.into_iter().any(|r: &i32| {
+        let want = *r;
+        return probe.into_iter().any(|c: &i32| *c == want);
+    });
+}
+
+fn count_matching(rows: &List<i32>, probe: &List<i32>) -> i32 {
+    let mut total = 0;
+    for let r of rows {
+        let want = *r;
+        total += probe.into_iter().filter(|c: &i32| *c == want).count();
+    }
+    return total;
+}
+
+test "inner closure captures the enclosing closure's local" {
+    let rows: List<i32> = [3, 7];
+    let probe: List<i32> = [7, 9];
+    assert any_matching(&rows, &probe);
+}
+
+test "inner closure sees no match" {
+    let rows: List<i32> = [3, 7];
+    let probe: List<i32> = [1, 2];
+    assert !any_matching(&rows, &probe);
+}
+
+test "the same capture from a loop body rather than a closure" {
+    let rows: List<i32> = [3, 7];
+    let probe: List<i32> = [7, 7, 9];
+    assert count_matching(&rows, &probe) == 2;
+}
+
+test "nested closure over a mutated enclosing local" {
+    let rows: List<i32> = [1, 2, 3];
+    let hits = rows.into_iter().filter(|r: i32| {
+        let doubled = r * 2;
+        return rows.into_iter().any(|c: i32| c == doubled);
+    }).count();
+    assert hits == 1;
+}
+
+__DATA__
+{"test": {}}

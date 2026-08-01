@@ -1,0 +1,26 @@
+// A region that writes through an outer local must not fold: the fold would
+// replace the block with its value and drop the write (WEP: NIR Interpreter,
+// regions).
+//
+// The interpolations mutate `c` through `&mut`, and the count is read again
+// after the template, so a fold that ran the region against a seeded copy
+// would leave `c` at 10 and print the wrong sums.
+
+use { println, Stdout } from "core:cli";
+
+fn bump(n: &mut i32) -> i32 {
+    *n += 1;
+    return *n;
+}
+
+export fn run() with Stdout {
+    let mut c = 10;
+    let t = `${bump(&mut c)}+${bump(&mut c)}`;
+    println(t);
+    println(`${c}`);
+}
+
+__DATA__
+{
+    "stdout": "11+12\n12\n"
+}

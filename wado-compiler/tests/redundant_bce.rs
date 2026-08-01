@@ -80,9 +80,12 @@ fn top(stack: &List<i32>) -> i32 {
 }
 
 export fn run() {
-    let s: List<i32> = [3, 7, 4];
+    // `black_box` keeps CTFE from running `top` and erasing the shape under test.
+    let s0: List<i32> = [3, 7, 4];
+    let s = builtin::black_box(s0);
     assert top(&s) == 4;
-    let e: List<i32> = [];
+    let e0: List<i32> = [];
+    let e = builtin::black_box(e0);
     assert top(&e) == -1;
 }
 "#;

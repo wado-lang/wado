@@ -1,0 +1,27 @@
+//! `w=.` is still a wildcard alternative: the label binds a name, it does not
+//! narrow what the element matches. The wildcard-aware dispatch has to unwrap
+//! the label or the concrete alt shadows it for its own first set.
+
+use g from "./grammars/ll_wildcard_label_alt.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_wildcard_label_alt" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "labelled wildcard alt: bare ID falls through to the wildcard" {
+    assert_tree(&"x=10; abc;", &"(a (assign x = 10 ;) abc ;)");
+}
+
+test "labelled wildcard alt: assign wins when its full pattern is present" {
+    assert_tree(&"y=99;", &"(a (assign y = 99 ;))");
+}
+
+test "labelled wildcard alt: a single bare ID" {
+    assert_tree(&"foo", &"(a foo)");
+}

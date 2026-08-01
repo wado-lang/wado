@@ -87,17 +87,9 @@ It can contain any text, including JSON, YAML, or test expectations.
 
 #### Accessing Data
 
-The data section is accessible via the compiler API through `Module::data_section()`, which returns `Option<&str>`. This enables tooling like test frameworks to embed expected results directly in source files.
+The data section is accessible via the compiler API on the parsed module, which enables tooling like test frameworks to embed expected results directly in source files.
 
-```rust
-// Compiler API example
-let result = wado_compiler::compile_file(path)?;
-if let Some(data) = result.module.data_section() {
-    // Process the data section content
-}
-```
-
-The data section content can be accessed at runtime using the `#data` compile-time location literal. See [Compile-Time Location Literals](#compile-time-location-literals).
+Within Wado code, the content is available through the `#data` compile-time location literal. See [Compile-Time Location Literals](#compile-time-location-literals).
 
 ### Identifiers
 

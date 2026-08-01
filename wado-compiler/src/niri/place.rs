@@ -7,14 +7,15 @@
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprKind, Operand};
 
-/// The local an lvalue or borrow chain roots at: `x`, `x.f`, `x[i]`, `*x`, and
-/// any nesting of those.
+/// The local an lvalue or borrow chain roots at: `x`, `x.f`, `x[i]`, `*x`, a
+/// cast over any of those (a cast names the same storage as its operand), and
+/// any nesting.
 pub(super) fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
     match &body.exprs[op.as_expr()?].kind {
         ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
-            lvalue_root_local(body, *inner)
-        }
+        ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. } => lvalue_root_local(body, *inner),
         ExprKind::Unary {
             op: NirUnaryOp::Deref,
             expr: inner,
@@ -26,13 +27,18 @@ pub(super) fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
 /// The local a borrow or lvalue chain roots at, and the field path reaching
 /// into its value. [`lvalue_root_local`] answers only which local is touched;
 /// a write also needs to know where inside it lands.
+///
+/// A cast names the same storage as its operand — `&mut x.repr as
+/// &mut Array<u8>` is how a borrow reaches a builtin after monomorphization —
+/// so the chain is followed through it.
 pub(super) fn place_of(body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
     match &body.exprs[op.as_expr()?].kind {
         ExprKind::Local { index, .. } => Some((*index, Vec::new())),
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
             expr,
-        } => place_of(body, *expr),
+        }
+        | ExprKind::Cast { expr, .. } => place_of(body, *expr),
         ExprKind::FieldAccess {
             expr, field_index, ..
         } => {
@@ -42,6 +48,33 @@ pub(super) fn place_of(body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
         }
         _ => None,
     }
+}
+
+/// The local a write through `op` lands in: [`place_of`]'s root when the
+/// chain spells a borrow (which `lvalue_root_local` does not peel), else
+/// [`lvalue_root_local`]'s (which alone handles `Index`). `None` when no
+/// local roots the write.
+pub(super) fn write_root_local(body: &Body, op: Operand) -> Option<u32> {
+    place_of(body, op)
+        .map(|(root, _)| root)
+        .or_else(|| lvalue_root_local(body, op))
+}
+
+/// The borrow `op` spells over a place: whether it is mutable, and the
+/// borrowed operand. `None` unless the operand borrows something
+/// [`place_of`] can root at a local — `&GLOBAL` and a borrow of an rvalue
+/// name no local place.
+pub(super) fn borrowed_place_operand(body: &Body, op: Operand) -> Option<(bool, Operand)> {
+    let ExprKind::Unary { op: unary, expr } = &body.exprs[op.as_expr()?].kind else {
+        return None;
+    };
+    let is_mut = match unary {
+        NirUnaryOp::MutRef => true,
+        NirUnaryOp::Ref => false,
+        _ => return None,
+    };
+    place_of(body, *expr)?;
+    Some((is_mut, *expr))
 }
 
 /// How many of `places` reach storage `(root, path)` reaches. One place covers

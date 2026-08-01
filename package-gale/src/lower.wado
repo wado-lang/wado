@@ -1651,6 +1651,10 @@ fn build_direct_dispatch(first_sets: &List<List<String>>) -> MultiAltDispatch {
     return MultiAltDispatch::Direct(DirectDispatch { branches });
 }
 
+fn any_wildcard_alt(alts: &List<Alternative>, indices: &List<i32>) -> bool {
+    return indices.into_iter().any(|idx: &i32| alt_is_wildcard_led(&alts[*idx]));
+}
+
 /// Choose a dispatch for a set of alternatives. When the per-alt
 /// first sets are pairwise disjoint, falls through to a token-led
 /// `Direct` dispatch. Otherwise (any two alts share a first token),
@@ -1670,7 +1674,11 @@ fn build_overlap_dispatch(
     first_sets: &List<List<String>>,
     ctx: &mut GenContext,
 ) -> MultiAltDispatch {
-    if !any_overlap(first_sets) {
+    // An open-ended alt's static first set is empty, so `any_overlap` reads it
+    // as disjoint and the Direct chain would give it an unreachable
+    // empty-token branch. Its real first set is universal — the same invariant
+    // `compute_overlap_groups_with_wildcard` applies on the surface IR.
+    if !any_overlap(first_sets) && !any_wildcard_alt(alts, indices) {
         let mut branches: List<DispatchBranch> = [];
         for let mut k = 0; k < indices.len(); k += 1 {
             branches.push(DispatchBranch {
@@ -1694,10 +1702,16 @@ fn build_overlap_dispatch(
     // that carries the rule-facing label.
     if !ends_with_scan(owner_label) {
         let shared = shared_overlap_tokens(first_sets);
+        // Reporting the shared set for an open-ended alt would read as `{}`.
+        let cause = if shared.is_empty() {
+            "an open-ended alternative (`.` / `~X`) overlaps every lookahead";
+        } else {
+            `share lookahead ${join_kind_set(&shared)}`;
+        };
         ctx.warn(
             owner_label,
             DiagnosticKind::OverlapTournament,
-            `alts ${join_kind_list(indices)} share lookahead ${join_kind_set(&shared)}; resolved by longest-match scan tournament, not a token-led branch`,
+            `alts ${join_kind_list(indices)} ${cause}; resolved by longest-match scan tournament, not a token-led branch`,
         );
     }
 

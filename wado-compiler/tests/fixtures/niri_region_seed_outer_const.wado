@@ -1,0 +1,33 @@
+// A template region reading a constant outer local folds by seeding the
+// region frame from the walker's environment (WEP: NIR Interpreter, regions).
+//
+// `b` is bound once to a constant, so the walker knows its value at the
+// region; the region itself only reads it through `push_str`'s borrow. Seeded,
+// the whole block folds during the optimizer loop — before globalization —
+// to the literal the source could have written.
+//
+// The second interpolation is a literal past `string_inline_max_bytes`, so it
+// survives the loop as an in-region `String` literal. Without seeding this
+// template waits for globalization to turn `b` into a constant global, and
+// globalization simultaneously hoists that literal as a `GlobalVarSet` inside
+// the region, which disqualifies the post-globalization fold — so this exact
+// mix stayed unfoldable.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let b = "b";
+    let t = `${b}${"twenty-eight-byte-payload!!"}`;
+    println(t);
+}
+
+__DATA__
+{
+    "stdout": "btwenty-eight-byte-payload!!\n",
+    "wir_expect:O2": [
+        "array.new_data<u8>(\"btwenty-eight-byte-payload!!\")"
+    ],
+    "wir_not_expect:O2": [
+        "internal_reserve_uninit"
+    ]
+}

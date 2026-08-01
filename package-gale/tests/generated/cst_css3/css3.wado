@@ -27298,7 +27298,7 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         let mut best_channel: i32 = 0;
-        if first_char == '\t' || first_char == '\n' || first_char == '\u{c}' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\u{c}' | '\r' | ' ' } {
             end = try_Space(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Space; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27311,7 +27311,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '!' {
+        } else if first_char matches { '!' } {
             end = try_Important(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Important; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27324,7 +27324,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '"' || first_char == '\'' {
+        } else if first_char matches { '"' | '\'' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27337,7 +27337,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '#' {
+        } else if first_char matches { '#' } {
             end = try_Hash(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Hash; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27350,7 +27350,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '$' {
+        } else if first_char matches { '$' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27363,7 +27363,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '(' {
+        } else if first_char matches { '(' } {
             end = try_lit_lparen(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27376,7 +27376,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == ')' {
+        } else if first_char matches { ')' } {
             end = try_lit_rparen(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27389,7 +27389,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '*' {
+        } else if first_char matches { '*' } {
             end = try_lit_star(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_STAR; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27404,7 +27404,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '+' {
+        } else if first_char matches { '+' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27417,7 +27417,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == ',' {
+        } else if first_char matches { ',' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27430,7 +27430,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '-' {
+        } else if first_char matches { '-' } {
             end = try_Cdc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Cdc; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27447,7 +27447,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '.' {
+        } else if first_char matches { '.' } {
             end = try_lit_dot(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_DOT; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27462,7 +27462,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '/' {
+        } else if first_char matches { '/' } {
             end = try_lit_slash(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; best_channel = 0; }
             end = try_Comment(&lexer.chars, start);
@@ -27477,7 +27477,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == ':' {
+        } else if first_char matches { ':' } {
             end = try_lit_colon(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_COLON; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27492,7 +27492,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == ';' {
+        } else if first_char matches { ';' } {
             end = try_lit_semi(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27505,7 +27505,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '<' {
+        } else if first_char matches { '<' } {
             end = try_Cdo(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Cdo; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27518,7 +27518,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '=' {
+        } else if first_char matches { '=' } {
             end = try_lit_eq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_EQ; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27531,7 +27531,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '>' {
+        } else if first_char matches { '>' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27544,7 +27544,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '@' {
+        } else if first_char matches { '@' } {
             end = try_Import(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Import; best_channel = 0; }
             end = try_Page(&lexer.chars, start);
@@ -27579,7 +27579,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == 'A' || first_char == 'a' {
+        } else if first_char matches { 'A' | 'a' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_And(&lexer.chars, start);
@@ -27592,7 +27592,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == 'F' || first_char == 'f' {
+        } else if first_char matches { 'F' | 'f' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27605,7 +27605,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == 'N' || first_char == 'n' {
+        } else if first_char matches { 'N' | 'n' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Not(&lexer.chars, start);
@@ -27618,7 +27618,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == 'O' || first_char == 'o' {
+        } else if first_char matches { 'O' | 'o' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_MediaOnly(&lexer.chars, start);
@@ -27633,7 +27633,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == 'T' || first_char == 't' {
+        } else if first_char matches { 'T' | 't' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27646,7 +27646,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == 'U' {
+        } else if first_char matches { 'U' } {
             end = try_Url(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27661,7 +27661,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '[' {
+        } else if first_char matches { '[' } {
             end = try_lit_lbracket(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27674,7 +27674,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '\\' {
+        } else if first_char matches { '\\' } {
             end = try_Url(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27699,7 +27699,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == ']' {
+        } else if first_char matches { ']' } {
             end = try_lit_rbracket(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27712,7 +27712,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '^' {
+        } else if first_char matches { '^' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27725,7 +27725,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '_' {
+        } else if first_char matches { '_' } {
             end = try_lit_u5f(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_U5f; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27738,7 +27738,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == 'c' {
+        } else if first_char matches { 'c' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27751,7 +27751,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == 'p' {
+        } else if first_char matches { 'p' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27764,7 +27764,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == 'u' {
+        } else if first_char matches { 'u' } {
             end = try_Url(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27781,7 +27781,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == 'v' {
+        } else if first_char matches { 'v' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27794,7 +27794,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '{' {
+        } else if first_char matches { '{' } {
             end = try_lit_lbrace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27807,7 +27807,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '|' {
+        } else if first_char matches { '|' } {
             end = try_lit_pipe(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; best_channel = 0; }
             end = try_DashMatch(&lexer.chars, start);
@@ -27824,7 +27824,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '}' {
+        } else if first_char matches { '}' } {
             end = try_lit_rbrace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27837,7 +27837,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if first_char == '~' {
+        } else if first_char matches { '~' } {
             end = try_Includes(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Includes; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27852,7 +27852,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-        } else if '0' <= first_char <= '9' {
+        } else if first_char matches { '0'..='9' } {
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);

@@ -88,7 +88,6 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:newtype_string_coercion.wado::__modules_initialized: bool = 0;
-global mut global:newtype_string_coercion.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "newtype_string_coercion.wado/greet"(name) {
     let __local_1: ref "core:prelude/string.wado//String";
@@ -107,13 +106,7 @@ fn "newtype_string_coercion.wado/greet"(name) {
 fn "newtype_string_coercion.wado/run"() with Stdout {
     let label: ref "core:prelude/string.wado//String";
     let greeting: ref "core:prelude/string.wado//String";
-    let __local_4: ref "core:prelude/string.wado//String";
-    let start_8: i32;
-    let start_17: i32;
-    let start_26: i32;
-    let start_35: i32;
-    let start_44: i32;
-    let start_53: i32;
+    let label2: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:newtype_string_coercion.wado::__modules_initialized);
         cold_path;
@@ -122,24 +115,10 @@ fn "newtype_string_coercion.wado/run"() with Stdout {
     };
     label = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     greeting = "newtype_string_coercion.wado/greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 });
-    global:newtype_string_coercion.wado::__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
-    __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
-    start_8 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1);
-    builtin::array_set_u8(__local_4.repr, start_8, 104);
-    start_17 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1);
-    builtin::array_set_u8(__local_4.repr, start_17, 101);
-    start_26 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1);
-    builtin::array_set_u8(__local_4.repr, start_26, 108);
-    start_35 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1);
-    builtin::array_set_u8(__local_4.repr, start_35, 108);
-    start_44 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1);
-    builtin::array_set_u8(__local_4.repr, start_44, 111);
-    start_53 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1);
-    builtin::array_set_u8(__local_4.repr, start_53, 32);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:newtype_string_coercion.wado::__const_obj_0);
+    label2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello world"), used: 11 };
     "core:cli/println"(label);
     "core:cli/println"(greeting);
-    "core:cli/println"(__local_4);
+    "core:cli/println"(label2);
 }
 
 fn "newtype_string_coercion.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

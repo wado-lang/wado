@@ -43,8 +43,9 @@ use {
     merge_grammars,
 } from "../ir.wado";
 use { G4Token } from "./token.wado";
-use { tokenize_chars, resolve_unicode_escape } from "./lexer.wado";
+use { tokenize_chars, resolve_unicode_escape_code, string_literal_code_points } from "./lexer.wado";
 use { scan_balanced, is_id_continue_char } from "./scan.wado";
+use { general_category_ranges, general_category_group } from "./unicode_tables.wado";
 
 pub struct G4Parser {
     tokens: List<Token>,
@@ -1195,6 +1196,7 @@ impl G4Parser {
         if self.is_kind(G4Token::StringLit) {
             let tok = self.advance();
             let text = tok.text.to_string();
+            let start_span = tok.span;
             let is_dot_dot = self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Dot as i32;
             if is_dot_dot && text.chars().count() == 1 {
                 self.advance();
@@ -1211,17 +1213,17 @@ impl G4Parser {
                         ),
                     );
                 }
-                let start_char = first_char(&text).unwrap();
-                let end_char = first_char(&end_text).unwrap();
-                return Result::<LexerElement, ParseError>::Ok(
-                    LexerElement::CharRange([start_char, end_char]),
-                );
+                // From source, not the token text: that already collapsed an
+                // unpaired surrogate escape to U+FFFD.
+                let lo = string_literal_code_points(&self.chars, start_span)[0];
+                let hi = string_literal_code_points(&self.chars, end_tok.span)[0];
+                return Result::<LexerElement, ParseError>::Ok(scalar_char_range(lo, hi));
             }
             return Result::<LexerElement, ParseError>::Ok(LexerElement::Literal(text));
         }
         if self.is_kind(G4Token::CharClass) {
             let tok = self.advance();
-            let cc = parse_char_class(&tok.text.to_string())?;
+            let cc = parse_char_class(&tok.text.to_string(), tok.span)?;
             return Result::<LexerElement, ParseError>::Ok(LexerElement::CharClass(cc));
         }
         if self.is_kind(G4Token::Dot) {
@@ -1294,27 +1296,27 @@ fn advance_char(chars: &List<char>, pos: &mut i32) -> char {
     return c;
 }
 
-fn resolve_char(chars: &List<char>, pos: &mut i32) -> char {
+/// Code point of the next char-set item, escapes resolved. Surrogates come
+/// back verbatim — `clip_to_scalars` decides what a range containing one
+/// actually admits.
+fn resolve_char_code(chars: &List<char>, pos: &mut i32) -> i32 {
     let c = advance_char(chars, pos);
     if c != '\\' {
-        return c;
+        return c as i32;
     }
     let ec = advance_char(chars, pos);
     return match ec {
-        'n' => '\n',
-        'r' => '\r',
-        't' => '\t',
-        'b' => '\u0008',
-        'f' => '\u000C',
-        '\\' => '\\',
-        ']' => ']',
-        '-' => '-',
-        'u' => resolve_unicode_escape(chars, pos),
-        _ => ec,
+        'n' => '\n' as i32,
+        'r' => '\r' as i32,
+        't' => '\t' as i32,
+        'b' => '\u0008' as i32,
+        'f' => '\u000C' as i32,
+        'u' => resolve_unicode_escape_code(chars, pos),
+        _ => ec as i32,
     };
 }
 
-fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
+fn parse_char_class(text: &String, span: Span) -> Result<CharClass, ParseError> {
     let chars = text.chars().collect();
     let end = chars.len() - 1;
     let mut pos = 1;
@@ -1327,7 +1329,11 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
     }
 
     while pos < end {
-        if pos + 2 < end && chars[pos] == '\\' && chars[pos + 1] == 'p' && chars[pos + 2] == '{' {
+        if pos + 2 < end
+            && chars[pos] == '\\'
+            && (chars[pos + 1] == 'p' || chars[pos + 1] == 'P')
+            && chars[pos + 2] == '{' {
+            let complement = chars[pos + 1] == 'P';
             pos += 3;
             let mut prop = String::with_capacity(16);
             while pos < end && chars[pos] != '}' {
@@ -1337,84 +1343,140 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
             if pos < end {
                 pos += 1;
             }
-            expand_unicode_property(&prop, &mut ranges);
+            let mut prop_ranges: List<CharRange> = [];
+            if !expand_unicode_property(&prop, &mut prop_ranges) {
+                let expected: List<String> = ["a supported Unicode property"];
+                return Result::<CharClass, ParseError>::Err(
+                    ParseError::new(
+                        `unsupported Unicode property "${prop}" in a character set`,
+                        span,
+                        expected,
+                    ),
+                );
+            }
+            let items = if complement { complement_char_ranges(&prop_ranges) } else { prop_ranges };
+            for let r of &items {
+                ranges.push(*r);
+            }
             continue;
         }
 
-        let c = resolve_char(&chars, &mut pos);
+        let c = resolve_char_code(&chars, &mut pos);
         if pos < end && chars[pos] == '-' && pos + 1 < end {
             advance_char(&chars, &mut pos);
-            let c2 = resolve_char(&chars, &mut pos);
-            ranges.push(CharRange::range(c, c2));
+            let c2 = resolve_char_code(&chars, &mut pos);
+            clip_to_scalars(&mut ranges, c, c2);
         } else {
-            ranges.push(CharRange::single(c));
+            clip_to_scalars(&mut ranges, c, c);
         }
     }
 
     return Result::<CharClass, ParseError>::Ok(CharClass { ranges, negated });
 }
 
-fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) {
-    match *name {
-        "L" | "Letter" => {
-            ranges.push(CharRange::range('A', 'Z'));
-            ranges.push(CharRange::range('a', 'z'));
-            ranges.push(CharRange::range('\u00C0', '\u00D6'));
-            ranges.push(CharRange::range('\u00D8', '\u00F6'));
-            ranges.push(CharRange::range('\u00F8', '\u00FF'));
-            ranges.push(CharRange::range('\u0100', '\u024F'));
-            ranges.push(CharRange::range('\u0370', '\u03FF'));
-            ranges.push(CharRange::range('\u0400', '\u04FF'));
-            ranges.push(CharRange::range('\u0600', '\u06FF'));
-            ranges.push(CharRange::range('\u0900', '\u097F'));
-            ranges.push(CharRange::range('\u4E00', '\u9FFF'));
-            ranges.push(CharRange::range('\u3040', '\u309F'));
-            ranges.push(CharRange::range('\u30A0', '\u30FF'));
-            ranges.push(CharRange::range('\uAC00', '\uD7AF'));
-        },
-        "Nl" | "Letter_Number" => {
-            ranges.push(CharRange::range('\u2160', '\u2188'));
-            ranges.push(CharRange::range('\u16EE', '\u16F0'));
-        },
-        "Mn" | "Nonspacing_Mark" => {
-            ranges.push(CharRange::range('\u0300', '\u036F'));
-            ranges.push(CharRange::range('\u1AB0', '\u1AFF'));
-            ranges.push(CharRange::range('\u0901', '\u0902'));
-            ranges.push(CharRange::single('\u093C'));
-            ranges.push(CharRange::range('\u0941', '\u0948'));
-            ranges.push(CharRange::single('\u094D'));
-        },
-        "Mc" | "Spacing_Mark" => {
-            ranges.push(CharRange::single('\u0903'));
-            ranges.push(CharRange::range('\u093E', '\u0940'));
-            ranges.push(CharRange::range('\u0949', '\u094C'));
-        },
-        "Nd" | "Decimal_Number" => {
-            ranges.push(CharRange::range('0', '9'));
-            ranges.push(CharRange::range('\u0660', '\u0669'));
-            ranges.push(CharRange::range('\u06F0', '\u06F9'));
-            ranges.push(CharRange::range('\u0966', '\u096F'));
-        },
-        "Pc" | "Connector_Punctuation" => {
-            ranges.push(CharRange::single('_'));
-            ranges.push(CharRange::range('\u203F', '\u2040'));
-            ranges.push(CharRange::single('\u2054'));
-            ranges.push(CharRange::range('\uFE33', '\uFE34'));
-            ranges.push(CharRange::range('\uFE4D', '\uFE4F'));
-            ranges.push(CharRange::single('\uFF3F'));
-        },
-        "Zs" | "Space_Separator" => {
-            ranges.push(CharRange::single(' '));
-            ranges.push(CharRange::single('\u00A0'));
-            ranges.push(CharRange::single('\u1680'));
-            ranges.push(CharRange::range('\u2000', '\u200A'));
-            ranges.push(CharRange::single('\u202F'));
-            ranges.push(CharRange::single('\u205F'));
-            ranges.push(CharRange::single('\u3000'));
-        },
-        _ => {
-        },
+/// `'lo'..'hi'` restricted to the Unicode scalars. A range holding no
+/// surrogates keeps the plain `CharRange` shape, so grammars that stay inside
+/// the scalars are unchanged.
+fn scalar_char_range(lo: i32, hi: i32) -> LexerElement {
+    let mut ranges: List<CharRange> = [];
+    clip_to_scalars(&mut ranges, lo, hi);
+    if ranges.len() == 1 && ranges[0].start as i32 == lo && ranges[0].end as i32 == hi {
+        return LexerElement::CharRange([ranges[0].start, ranges[0].end]);
     }
+    return LexerElement::CharClass(CharClass { ranges, negated: false });
+}
+
+/// Highest Unicode scalar value.
+global CODE_POINT_MAX: i32 = 0x10FFFF;
+/// The surrogate block — code points that are not Unicode scalars.
+global SURROGATE_FIRST: i32 = 0xD800;
+global SURROGATE_LAST: i32 = 0xDFFF;
+
+/// Push `[lo, hi]` as `CharRange`s, keeping only its Unicode-scalar part.
+///
+/// ANTLR4 matches UTF-16 code units, so a surrogate endpoint is legal there;
+/// Gale matches decoded scalars, which no input character equals. Dropping the
+/// surrogate part is what "matches nothing" looks like in a scalar range set —
+/// collapsing it to U+FFFD would match a real, unrelated character instead.
+fn clip_to_scalars(ranges: &mut List<CharRange>, lo: i32, hi: i32) {
+    // Already a scalar range: a `char` cannot hold a surrogate, so splitting
+    // at the gap would churn the emitted pattern and match the same set.
+    if is_scalar(lo) && is_scalar(hi) {
+        push_scalar_segment(ranges, lo, hi);
+        return;
+    }
+    push_scalar_segment(ranges, lo, i32::min(hi, SURROGATE_FIRST - 1));
+    push_scalar_segment(ranges, i32::max(lo, SURROGATE_LAST + 1), i32::min(hi, CODE_POINT_MAX));
+}
+
+fn is_scalar(code: i32) -> bool {
+    return 0 <= code <= CODE_POINT_MAX && !(SURROGATE_FIRST <= code <= SURROGATE_LAST);
+}
+
+fn push_scalar_segment(ranges: &mut List<CharRange>, lo: i32, hi: i32) {
+    if 0 <= lo <= hi {
+        ranges.push(CharRange::range(
+            char::from_u32_unchecked(lo as u32),
+            char::from_u32_unchecked(hi as u32),
+        ));
+    }
+}
+
+/// Complement of a range set over the Unicode scalars — what `\P{X}` admits.
+/// A group letter unions several categories, so the input needs sorting before
+/// the gap walk.
+fn complement_char_ranges(ranges: &List<CharRange>) -> List<CharRange> {
+    let mut sorted: List<[i32, i32]> = ranges.into_iter().map(|r: &CharRange| [r.start as i32, r.end as i32]).collect();
+    sorted.sort_by(|a: &[i32, i32], b: &[i32, i32]| a.0.cmp(&b.0));
+    let mut out: List<CharRange> = [];
+    let mut next = 0;
+    for let r of &sorted {
+        if r.0 > next {
+            clip_to_scalars(&mut out, next, r.0 - 1);
+        }
+        if r.1 + 1 > next {
+            next = r.1 + 1;
+        }
+    }
+    clip_to_scalars(&mut out, next, CODE_POINT_MAX);
+    return out;
+}
+
+/// Expand a `\p{...}` property into its ranges. False for a property with no
+/// table, so the caller can reject rather than yield a set matching nothing.
+/// General categories only; scripts, blocks and binary properties are the loud
+/// gap (`TODO.md`).
+fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool {
+    let group = general_category_group(name);
+    if !group.is_empty() {
+        for let sub of &group {
+            push_encoded_ranges(&general_category_ranges(sub), ranges);
+        }
+        return true;
+    }
+    let encoded = general_category_ranges(name);
+    if encoded.is_empty() {
+        return false;
+    }
+    push_encoded_ranges(&encoded, ranges);
+    return true;
+}
+
+/// Decode a `START[-END],…` hex range list from the generated tables.
+fn push_encoded_ranges(encoded: &String, ranges: &mut List<CharRange>) {
+    for let item of encoded.split(",") {
+        let mut bounds = item.split("-");
+        let lo = hex_bound(&bounds.next().unwrap());
+        let hi = match bounds.next() {
+            Some(end) => hex_bound(&end),
+            None => lo,
+        };
+        clip_to_scalars(ranges, lo, hi);
+    }
+}
+
+fn hex_bound(text: &String) -> i32 {
+    return i32::from_str_hex(text).unwrap();
 }
 
 fn intern_mode(mode_names: &mut List<String>, name: &String) -> i32 {

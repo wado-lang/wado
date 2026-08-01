@@ -118,8 +118,10 @@ fn "location_merged.wado/test_data_template"() with Stdout {
     builtin::array_set_u8(__local_1.repr, start_41, 58);
     start_50 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1);
     builtin::array_set_u8(__local_1.repr, start_50, 32);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_1, global:location_merged.wado::__const_obj_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"stdout_contains\": [\"LOCATION_DATA_MARKER\", \"data: \", \"LOCATION_DATA_MARKER\", \"location_merged.wado\"]}
-"), used: 104 }; global:location_merged.wado::__const_obj_1);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_1, if ref.is_null(global:location_merged.wado::__const_obj_1) {
+        global:location_merged.wado::__const_obj_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"stdout_contains\": [\"LOCATION_DATA_MARKER\", \"data: \", \"LOCATION_DATA_MARKER\", \"location_merged.wado\"]}
+"), used: 104 };
+    }; global:location_merged.wado::__const_obj_1);
     "core:cli/println"(__local_1);
 }
 
@@ -214,12 +216,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b2: block {
-        l3: loop {
-            break_if b2 t <= 0_i64;
+    b3: block {
+        l4: loop {
+            break_if b3 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l3;
+            continue l4;
         };
     };
     return n;
@@ -233,13 +235,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b5: block {
-            l6: loop {
-                break_if b5 temp <= 0_i64;
+        b6: block {
+            l7: loop {
+                break_if b6 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l6;
+                continue l7;
             };
         };
     }
@@ -248,12 +250,12 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b7: block {
-        l8: loop {
-            break_if b7 i >= len;
+    b8: block {
+        l9: loop {
+            break_if b8 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l8;
+            continue l9;
         };
     };
 }
@@ -284,20 +286,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b9: block {
-        l10: loop {
-            break_if b9 offset >= count;
+    b10: block {
+        l11: loop {
+            break_if b10 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b9 (if (result >> 4) == 0 -> i32 {
+            break_if b10 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l10;
+            continue l11;
         };
     };
 }

@@ -28,7 +28,7 @@ use {
 use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
 use { GenContext } from "./gen_context.wado";
-use { assign_atn_call_sites } from "./ir.wado";
+use { assign_atn_call_sites, unwrap_labeled_transparent_groups } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
 use {
     Rule,
@@ -1604,6 +1604,46 @@ test "lower scalar Label rebinds inner field name" {
     }
 }
 
+test "lower scalar Label over a transparent Group binds the inner leaf" {
+    // `labelled : x=(ID) ;` — `(e)` is a purely syntactic wrapper, so
+    // `x=(ID)` must bind exactly what `x=ID` binds. A Transparent
+    // GroupOp has no field slot of its own, so the wrapper is stripped
+    // before lowering or the binding is dropped.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "labelled",
+            Visibility::Default,
+            [],
+            [
+                alt_of([
+                    Element::Label(LabelElement::new(
+                        "x",
+                        false,
+                        Element::Group(GroupElement::new([alt_of([Element::TokenRef(TokenRefElement::new("ID"))])])),
+                    )),
+                ]),
+            ],
+        ),
+    ];
+    unwrap_labeled_transparent_groups(&mut g);
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 1;
+        if let Token(t) = &s.body.ops[0] {
+            assert t.kind == "TK_ID";
+            assert t.field == "x", t.field;
+        } else {
+            panic("expected Op::Token bound by the label");
+        }
+        assert s.body.fields.len() == 2, `expected span + x, got ${s.body.fields.len()}`;
+        assert s.body.fields[1].name == "x", s.body.fields[1].name;
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower Label dedupes against surrounding alt names" {
     let mut g = empty_grammar(&"T");
     // `lhs=ID lhs=ID` — two scalar labels with the same name.
@@ -2975,6 +3015,31 @@ test "atn_call_site threads from surface RuleRef to lowered RuleCallOp" {
         assert s.body.ops.len() == 2, `rule a should have 2 ops, got ${s.body.ops.len()}`;
         assert rule_call_site(&s.body.ops[0]) == 0, "a's call to b is call site 0";
         assert rule_call_site(&s.body.ops[1]) == 1, "a's call to c is call site 1";
+    } else {
+        panic("rule a should lower to Simple");
+    }
+}
+
+test "a wildcard alt keeps the group off the Direct dispatch" {
+    // `(assign | .)`: the wildcard alt's static first set is empty, so the
+    // disjointness test reads it as its own token-led branch and the Direct
+    // chain gives it an unreachable empty-token branch. Its real first set is
+    // universal, so the decision belongs to the scan tournament.
+    let mut g = parse("grammar S;\na : (assign | .) EOF ;\nassign : ID '=' ID ;\nID : [a-z]+ ;\n").unwrap();
+    assign_atn_call_sites(&mut g);
+    let lit = collect_literal_tokens(&g.parser_rules);
+    let lowered = lower(&g, &lit);
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Group(go) = &s.body.ops[0] {
+            if let Direct(dd) = &go.dispatch {
+                for let b of &dd.branches {
+                    assert !b.tokens.is_empty(), `alt ${b.alt_index} got an empty-token branch`;
+                }
+                panic("expected a scan Tournament for a group holding a wildcard alt");
+            }
+        } else {
+            panic("expected the group op first");
+        }
     } else {
         panic("rule a should lower to Simple");
     }

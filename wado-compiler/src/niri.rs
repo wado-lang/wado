@@ -14,6 +14,7 @@
 //! - `trackability` — which locals a walk may hold a value for.
 //! - `pattern` — whether a pattern matches a value.
 //! - `place` — what a borrow or lvalue chain names.
+//! - `region` — which blocks are self-contained enough to run as a frame.
 //!
 //! What the engine can evaluate is stated in
 //! `docs/wep-2026-04-27-nir-interpreter.md`, not here.
@@ -151,6 +152,7 @@ pub enum CtfeBuiltin {
     ArrayCopy,
     ColdPath,
     Select,
+    I32AsChar,
 }
 
 impl CtfeBuiltin {
@@ -160,9 +162,12 @@ impl CtfeBuiltin {
     fn is_write(self) -> bool {
         match self {
             Self::ArraySet | Self::ArrayCopy => true,
-            Self::ArrayGet | Self::ArrayLen | Self::ArrayNew | Self::ColdPath | Self::Select => {
-                false
-            }
+            Self::ArrayGet
+            | Self::ArrayLen
+            | Self::ArrayNew
+            | Self::ColdPath
+            | Self::Select
+            | Self::I32AsChar => false,
         }
     }
 }
@@ -189,10 +194,17 @@ pub type GlobalFieldEnv = IndexMap<GlobalKey, IndexMap<String, Value>>;
 /// whether the next one folds.
 pub const DEFAULT_STEP_BUDGET: u32 = 10_000;
 
+/// How many body nodes a region run's copy charges as one step. The copy is
+/// real work the budget must see, but it is bulk memory rather than
+/// interpretation, so it costs a fraction of what executing that many
+/// statements would.
+pub const COPY_CHARGE_DIVISOR: usize = 16;
+
 mod frame;
 mod lattice;
 mod pattern;
 mod place;
+mod region;
 mod rewrite;
 mod trackability;
 
@@ -312,6 +324,12 @@ struct FrameState {
     /// absent local reads as [`Lattice::Unevaluated`].
     env: IndexMap<u32, Lattice>,
     ref_global_aliases: IndexMap<u32, GlobalKey>,
+    /// Locals a frame's `let` bound to a borrow of a local place, resolved to
+    /// the place borrowed — flattened at record time, so a chain never needs
+    /// chasing. Reads through one project the place's current value and writes
+    /// land in it, which is what keeps a borrow from copying its referent.
+    /// Populated only during frame execution; empty everywhere else.
+    place_aliases: IndexMap<u32, (u32, Vec<u32>)>,
     /// The body's [`aggregate_safe_locals`] — the only locals that may bind an
     /// aggregate constant. An unpopulated set refuses every aggregate binding.
     aggregate_locals: LocalSet,
@@ -323,6 +341,12 @@ struct FrameState {
     /// nothing, so a fold has nowhere else to be recorded. Empty during
     /// real-body folding, where rewrites promote through the engine.
     scratch_folds: IndexMap<ExprId, Value>,
+    /// Regions whose run this frame already attempted and abandoned. A seed's
+    /// value is fixed for the frame's flow (a reassigned local is never
+    /// `Const` here), so a failed run stays failed and re-running it would
+    /// re-pay the body copy at every visit. Cleared with [`Self::scratch_folds`]
+    /// wherever the environment restarts.
+    region_misses: IndexSet<ExprId>,
 }
 
 /// Partial evaluator over the arena `Body`.
@@ -523,7 +547,13 @@ impl<'a> Interpreter<'a> {
     /// An aggregate constant is only recorded for a local
     /// [`Self::record_aggregate_locals`] proved unreachable through any other
     /// handle; otherwise it degrades to [`Lattice::NonConst`].
+    ///
+    /// A binding displaces a place alias the index may have held: reads must
+    /// see the binding, not project through the stale alias. The alias is not
+    /// restored when a scope ends — a read that then finds nothing abandons a
+    /// fold, which is the sound direction.
     pub fn bind_local(&mut self, index: u32, lattice: Lattice) {
+        self.frame.place_aliases.swap_remove(&index);
         let unbacked_aggregate = matches!(&lattice, Lattice::Const(v) if !v.is_scalar())
             && !self.frame.aggregate_locals.contains(index);
         let lattice = if unbacked_aggregate {

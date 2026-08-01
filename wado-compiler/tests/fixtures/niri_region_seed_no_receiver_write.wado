@@ -1,0 +1,34 @@
+// A region that writes an outer local through a `&mut self` receiver must not
+// fold (WEP: NIR Interpreter, regions). NIR spells such a receiver as a bare
+// local — no `&mut` node — so `region_free_reads` must read the write off the
+// callee's signature, not off the borrow syntax.
+//
+// `drain` empties `c` as a side effect of producing the interpolated value,
+// and `c.s` is read again after the template, so a fold that ran the region
+// against a seeded copy would print "hi" twice.
+
+use { println, Stdout } from "core:cli";
+
+struct C {
+    s: String,
+}
+
+impl C {
+    fn drain(&mut self) -> String {
+        let r = self.s;
+        self.s = "";
+        return r;
+    }
+}
+
+export fn run() with Stdout {
+    let mut c = C { s: "hi" };
+    let t = `[${c.drain()}]`;
+    println(t);
+    println(`<${c.s}>`);
+}
+
+__DATA__
+{
+    "stdout": "[hi]\n<>\n"
+}

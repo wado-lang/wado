@@ -4,7 +4,9 @@
 // initializer took the placeholder still in B's slot.
 //
 // `#[inline(never)]` keeps the indirection: inlining `apply` would turn the
-// call back into a direct one the scan already follows.
+// call back into a direct one the scan already follows. `black_box` keeps the
+// read itself off the constant path: folded to a literal, `A`'s initializer
+// would never run and the ordering it is here to check would go untested.
 
 use { println, Stdout } from "core:cli";
 
@@ -13,7 +15,7 @@ global B: List<i32> = [1, 2, 3];
 
 #[inline(never)]
 fn reader() -> i32 {
-    return B.len();
+    return builtin::black_box(B.len());
 }
 
 #[inline(never)]

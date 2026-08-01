@@ -1947,49 +1947,49 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == '(' {
+        } else if first_char matches { '(' } {
             end = try_LPAREN(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LPAREN; }
-        } else if first_char == ')' {
+        } else if first_char matches { ')' } {
             end = try_RPAREN(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_RPAREN; }
-        } else if first_char == '*' {
+        } else if first_char matches { '*' } {
             end = try_TIMES(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_TIMES; }
-        } else if first_char == '+' {
+        } else if first_char matches { '+' } {
             end = try_PLUS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PLUS; }
-        } else if first_char == ',' {
+        } else if first_char matches { ',' } {
             end = try_COMMA(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_COMMA; }
-        } else if first_char == '-' {
+        } else if first_char matches { '-' } {
             end = try_MINUS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_MINUS; }
-        } else if first_char == '.' {
+        } else if first_char matches { '.' } {
             end = try_POINT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_POINT; }
-        } else if first_char == '/' {
+        } else if first_char matches { '/' } {
             end = try_DIV(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DIV; }
-        } else if first_char == '<' {
+        } else if first_char matches { '<' } {
             end = try_LT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LT; }
-        } else if first_char == '=' {
+        } else if first_char matches { '=' } {
             end = try_EQ(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_EQ; }
-        } else if first_char == '>' {
+        } else if first_char matches { '>' } {
             end = try_GT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_GT; }
-        } else if first_char == '^' {
+        } else if first_char matches { '^' } {
             end = try_POW(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_POW; }
-        } else if first_char == '_' {
+        } else if first_char matches { '_' } {
             end = try_VARIABLE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-        } else if first_char == 'a' {
+        } else if first_char matches { 'a' } {
             end = try_ACOS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ACOS; }
             end = try_ASIN(&lexer.chars, start);
@@ -1998,42 +1998,39 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_ATAN; }
             end = try_VARIABLE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-        } else if first_char == 'c' {
+        } else if first_char matches { 'c' } {
             end = try_COS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_COS; }
             end = try_VARIABLE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-        } else if first_char == 'l' {
+        } else if first_char matches { 'l' } {
             end = try_LN(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LN; }
             end = try_LOG(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LOG; }
             end = try_VARIABLE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-        } else if first_char == 'p' {
+        } else if first_char matches { 'p' } {
             end = try_PI(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PI; }
             end = try_VARIABLE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-        } else if first_char == 's' {
+        } else if first_char matches { 's' } {
             end = try_SIN(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SIN; }
             end = try_SQRT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SQRT; }
             end = try_VARIABLE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-        } else if first_char == 't' {
+        } else if first_char matches { 't' } {
             end = try_TAN(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_TAN; }
             end = try_VARIABLE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-        } else if 'a' <= first_char <= 'z' {
+        } else if first_char matches { 'a'..='z' | 'A'..='Z' } {
             end = try_VARIABLE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-        } else if 'A' <= first_char <= 'Z' {
-            end = try_VARIABLE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-        } else if '0' <= first_char <= '9' {
+        } else if first_char matches { '0'..='9' } {
             end = try_SCIENTIFIC_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SCIENTIFIC_NUMBER; }
         } else {

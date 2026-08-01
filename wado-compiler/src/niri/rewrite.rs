@@ -78,9 +78,11 @@ impl Interpreter<'_> {
     ///
     /// A scalar the scratch backend declines to promote is memoized instead, so
     /// its later lattice reads still see the constant. An aggregate is
-    /// materialized only over a `Call`: the literal a materialization writes
-    /// denotes the same value, so re-materializing one would report a change at
-    /// every visit and the worklist would never settle.
+    /// materialized only over a `Call` or a self-contained region: the literal a
+    /// materialization writes denotes the same value, so re-materializing one
+    /// would report a change at every visit and the worklist would never
+    /// settle — and both rewrites replace the node with a kind neither ever
+    /// matches again.
     pub(crate) fn reduce_local<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
         if let Some(value) = self.flow_fold_candidate(sink.body(), e) {
             if value.is_scalar() {
@@ -93,6 +95,19 @@ impl Interpreter<'_> {
             {
                 return true;
             }
+        }
+        if let Some(value) = self.try_region_fold(sink.body(), e) {
+            let committed = if value.is_scalar() {
+                sink.replace_with_value(e, value.clone())
+            } else {
+                self.materialize_seq_via(sink, e, &value)
+            };
+            if committed {
+                return true;
+            }
+            // Nothing took the value, so record it: a later visit reads it
+            // back instead of running the region again.
+            self.frame.scratch_folds.insert(e, value);
         }
         if rewrite_short_circuit_via(sink, e) {
             return true;
@@ -120,6 +135,11 @@ impl Interpreter<'_> {
             return false;
         };
         if !self.type_table.is_seq_container(*type_id) {
+            return false;
+        }
+        // The literal is written over `e` but typed from the value, and a node
+        // yielding nothing can hold neither.
+        if sink.body().exprs[e].type_id == TypeTable::UNIT {
             return false;
         }
         let Some(Value::Seq { elements, .. }) = value.field(SeqField::Backing.index()) else {

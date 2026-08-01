@@ -7010,3 +7010,555 @@ fn if_with_identical_zero_arms_collapses() {
         })
     );
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Regions: a closed block runs as a frame started from scratch
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn block_expr_of(stmts: Vec<StmtBuild>, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let block = block_of(b, &stmts);
+        Operand::Expr(pe(b, ExprKind::Block(block), type_id))
+    })
+}
+
+fn labeled_block_expr_of(label: &'static str, stmts: Vec<StmtBuild>, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let block = block_of(b, &stmts);
+        Operand::Expr(pe(
+            b,
+            ExprKind::LabeledBlock {
+                label: label.to_string(),
+                block,
+                result_type: type_id,
+            },
+            type_id,
+        ))
+    })
+}
+
+#[test]
+fn a_closed_region_folds_to_the_value_it_builds() {
+    // `{ let a = 5; let b = a + 1; b }` — a block that builds its value in
+    // locals of its own and yields one is as self-contained as a call body.
+    let table = TypeTable::new();
+    let region = block_expr_of(
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(5, TypeTable::I32, "5")),
+            let_stmt_b(
+                "b",
+                1,
+                TypeTable::I32,
+                binary(
+                    NirBinaryOp::Add,
+                    local_expr(0, TypeTable::I32),
+                    int_lit(1, TypeTable::I32, "1"),
+                    TypeTable::I32,
+                ),
+            ),
+            expr_stmt_b(local_expr(1, TypeTable::I32)),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&region);
+    let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
+    assert_eq!(
+        lat,
+        Lattice::Const(Value::Int {
+            value: 6,
+            prim: PrimitiveType::I32,
+        })
+    );
+}
+
+#[test]
+fn a_region_write_through_an_alias_lands_in_the_borrowed_local() {
+    // The template shape: the buffer is written through a `let p = &mut c`
+    // binding, so the write must reach `c`'s value rather than a copy bound at
+    // borrow time.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let alias_backing = || {
+        field_access(
+            local_expr(1, list_ty),
+            SeqField::Backing.index(),
+            "repr",
+            list_ty,
+        )
+    };
+    let region = block_expr_of(
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    mut_ref(alias_backing(), list_ty),
+                    int_lit(1, TypeTable::I32, "1"),
+                    int_lit(7, TypeTable::U8, "7"),
+                ],
+                TypeTable::UNIT,
+            )),
+            expr_stmt_b(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(alias_backing(), list_ty),
+                    int_lit(1, TypeTable::I32, "1"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+        TypeTable::U8,
+    );
+    let mut interp = Interpreter::new(&table);
+    interp.with_ctfe_builtins(&builtins);
+    let (mut body, e) = into_body_expr(&region);
+    let lat = interp.reduce_to_lattice_full(&mut body, e);
+    assert_eq!(
+        lat,
+        Lattice::Const(Value::Int {
+            value: 7,
+            prim: PrimitiveType::U8,
+        })
+    );
+}
+
+#[test]
+fn a_region_writing_an_outer_local_is_refused() {
+    // The assignment targets a local the block does not declare, so replacing
+    // the block with its value would drop that write. The block survives as
+    // written.
+    let table = TypeTable::new();
+    let region = block_expr_of(
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(5, TypeTable::I32, "5")),
+            assign_local_stmt_b(9, TypeTable::I32, int_lit(1, TypeTable::I32, "1")),
+            expr_stmt_b(local_expr(0, TypeTable::I32)),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&region);
+    let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
+    assert_eq!(lat, Lattice::Unevaluated);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Block(_)));
+}
+
+#[test]
+fn a_labeled_region_folds_through_its_own_break() {
+    let table = TypeTable::new();
+    let region = labeled_block_expr_of(
+        "__tmpl",
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            break_stmt_b(Some("__tmpl"), Some(local_expr(0, TypeTable::I32))),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&region);
+    let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
+    assert_eq!(
+        lat,
+        Lattice::Const(Value::Int {
+            value: 2,
+            prim: PrimitiveType::I32,
+        })
+    );
+}
+
+#[test]
+fn a_region_breaking_to_an_outer_label_is_refused() {
+    // Control flow leaves the block, so its value cannot stand for it.
+    let table = TypeTable::new();
+    let region = labeled_block_expr_of(
+        "__tmpl",
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            break_stmt_b(Some("outer"), Some(local_expr(0, TypeTable::I32))),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&region);
+    let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
+    assert_eq!(lat, Lattice::Unevaluated);
+    assert!(matches!(body.exprs[e].kind, ExprKind::LabeledBlock { .. }));
+}
+
+#[test]
+fn a_region_writing_a_global_is_refused() {
+    // A global write can never land in a region-declared local, so the scan
+    // refuses before anything runs.
+    let table = TypeTable::new();
+    let region = block_expr_of(
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(5, TypeTable::I32, "5")),
+            expr_stmt_b(global_set(
+                "G",
+                TypeTable::I32,
+                int_lit(1, TypeTable::I32, "1"),
+            )),
+            expr_stmt_b(local_expr(0, TypeTable::I32)),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&region);
+    let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
+    assert_eq!(lat, Lattice::Unevaluated);
+}
+
+#[test]
+fn a_region_write_behind_a_cast_still_lands() {
+    // Monomorphization wraps builtin borrows in reference-shaped casts
+    // (`&mut c.repr as &mut Array<u8>`). Place naming reads through them, so
+    // the region still folds — refusing it would cost exactly the shape the
+    // inlined stdlib append path has.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let backing = || {
+        field_access(
+            local_expr(0, list_ty),
+            SeqField::Backing.index(),
+            "repr",
+            list_ty,
+        )
+    };
+    let region = block_expr_of(
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    cast_expr(mut_ref(backing(), list_ty), list_ty),
+                    int_lit(1, TypeTable::I32, "1"),
+                    int_lit(9, TypeTable::U8, "9"),
+                ],
+                TypeTable::UNIT,
+            )),
+            expr_stmt_b(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(backing(), list_ty),
+                    int_lit(1, TypeTable::I32, "1"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+        TypeTable::U8,
+    );
+    let mut interp = Interpreter::new(&table);
+    interp.with_ctfe_builtins(&builtins);
+    let (mut body, e) = into_body_expr(&region);
+    let lat = interp.reduce_to_lattice_full(&mut body, e);
+    assert_eq!(
+        lat,
+        Lattice::Const(Value::Int {
+            value: 9,
+            prim: PrimitiveType::U8,
+        })
+    );
+}
+
+#[test]
+fn an_alias_read_as_a_value_does_not_become_a_copy() {
+    // A `&mut` is a reference: rebinding it (`let s = p`) makes `s` name the
+    // same storage, so a write through `s` must reach `c`. Reading the alias
+    // as a value instead would bind a copy, and the write would land in it
+    // while `c` kept the constant it no longer holds.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let region = block_expr_of(
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
+            let_stmt_b("s", 2, list_ty, local_expr(1, list_ty)),
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    mut_ref(
+                        field_access(
+                            local_expr(2, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            list_ty,
+                        ),
+                        list_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                    int_lit(9, TypeTable::U8, "9"),
+                ],
+                TypeTable::UNIT,
+            )),
+            expr_stmt_b(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(
+                        field_access(
+                            local_expr(0, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            list_ty,
+                        ),
+                        list_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+        TypeTable::U8,
+    );
+    let mut interp = Interpreter::new(&table);
+    interp.with_ctfe_builtins(&builtins);
+    let (mut body, e) = into_body_expr(&region);
+    let lat = interp.reduce_to_lattice_full(&mut body, e);
+    assert_eq!(
+        lat,
+        Lattice::Const(Value::Int {
+            value: 9,
+            prim: PrimitiveType::U8,
+        }),
+        "the rebound alias must name `c`, not a copy of it",
+    );
+}
+
+#[test]
+fn an_alias_captured_in_an_aggregate_is_not_a_constant() {
+    // A struct field holding a `&mut` — `Formatter { buf: &mut __r }` — would
+    // have to carry the place, not the referent's value. The engine has no
+    // such value, so capturing one is not a constant: a write through the
+    // field would otherwise land in the copy while `c` kept a value it no
+    // longer holds.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let holder_ty = table.make_struct("Holder".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let region = block_expr_of(
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
+            let_stmt_b(
+                "h",
+                2,
+                holder_ty,
+                struct_lit(holder_ty, vec![(0, "buf", local_expr(1, list_ty))]),
+            ),
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    mut_ref(
+                        field_access(
+                            field_access(local_expr(2, holder_ty), 0, "buf", list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            list_ty,
+                        ),
+                        list_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                    int_lit(9, TypeTable::U8, "9"),
+                ],
+                TypeTable::UNIT,
+            )),
+            expr_stmt_b(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(
+                        field_access(
+                            local_expr(0, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            list_ty,
+                        ),
+                        list_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+        TypeTable::U8,
+    );
+    let mut interp = Interpreter::new(&table);
+    interp.with_ctfe_builtins(&builtins);
+    let (mut body, e) = into_body_expr(&region);
+    assert_eq!(
+        interp.reduce_to_lattice_full(&mut body, e),
+        Lattice::Unevaluated,
+        "a captured reference must not fold to the referent it copied",
+    );
+}
+
+#[test]
+fn a_deref_read_binds_a_copy_not_the_place() {
+    // `let v = *p` reads *through* the reference, so `v` is a copy and a later
+    // write through `p` must not show up in it. Deciding by place shape would
+    // say otherwise: a write target wants the storage behind a deref, which is
+    // why place naming peels one and this does not.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let region = block_expr_of(
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
+            let_stmt_b(
+                "v",
+                2,
+                list_ty,
+                unary(NirUnaryOp::Deref, local_expr(1, list_ty), list_ty),
+            ),
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    mut_ref(
+                        field_access(
+                            local_expr(1, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            list_ty,
+                        ),
+                        list_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                    int_lit(9, TypeTable::U8, "9"),
+                ],
+                TypeTable::UNIT,
+            )),
+            expr_stmt_b(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(
+                        field_access(
+                            local_expr(2, list_ty),
+                            SeqField::Backing.index(),
+                            "repr",
+                            list_ty,
+                        ),
+                        list_ty,
+                    ),
+                    int_lit(1, TypeTable::I32, "1"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+        TypeTable::U8,
+    );
+    let mut interp = Interpreter::new(&table);
+    interp.with_ctfe_builtins(&builtins);
+    let (mut body, e) = into_body_expr(&region);
+    assert_eq!(
+        interp.reduce_to_lattice_full(&mut body, e),
+        Lattice::Const(Value::Int {
+            value: 0,
+            prim: PrimitiveType::U8,
+        }),
+        "the deref bound a copy, so the write through `p` must not reach it",
+    );
+}
+
+#[test]
+fn a_unit_typed_region_does_not_fold_to_its_last_value() {
+    // Inlining `g(b);` leaves a block whose trailing statement still carries
+    // the callee's result while the block itself stands where the program
+    // expects nothing. The value must not be substituted there.
+    let table = TypeTable::new();
+    let region = block_expr_of(
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            expr_stmt_b(binary(
+                NirBinaryOp::Add,
+                local_expr(0, TypeTable::I32),
+                int_lit(1, TypeTable::I32, "1"),
+                TypeTable::I32,
+            )),
+        ],
+        TypeTable::UNIT,
+    );
+    let (mut body, e) = into_body_expr(&region);
+    let mut interp = Interpreter::new(&table);
+    assert!(
+        !interp.reduce_local_in_body(&mut body, e),
+        "a block yielding nothing has no value to stand in for it",
+    );
+    assert!(matches!(body.exprs[e].kind, ExprKind::Block(_)));
+
+    // The same region typed as what it computes still folds, so the refusal
+    // above is about the unit position and not about the shape.
+    let valued = block_expr_of(
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            expr_stmt_b(binary(
+                NirBinaryOp::Add,
+                local_expr(0, TypeTable::I32),
+                int_lit(1, TypeTable::I32, "1"),
+                TypeTable::I32,
+            )),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&valued);
+    assert_eq!(
+        Interpreter::new(&table).reduce_to_lattice_full(&mut body, e),
+        Lattice::Const(Value::Int {
+            value: 3,
+            prim: PrimitiveType::I32,
+        })
+    );
+}
+
+#[test]
+fn a_region_already_run_is_not_run_again() {
+    // The scratch sink promotes nothing, so a scalar region records its value
+    // in the fold memo. Reading it back is what keeps a region inside a
+    // compile-time body from being re-run — and re-charged — at every visit:
+    // with a budget for one run only, the second visit still answers.
+    let table = TypeTable::new();
+    let region = block_expr_of(
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            expr_stmt_b(binary(
+                NirBinaryOp::Add,
+                local_expr(0, TypeTable::I32),
+                int_lit(1, TypeTable::I32, "1"),
+                TypeTable::I32,
+            )),
+        ],
+        TypeTable::I32,
+    );
+    let (mut body, e) = into_body_expr(&region);
+    let mut interp = Interpreter::new(&table);
+    let expected = Lattice::Const(Value::Int {
+        value: 3,
+        prim: PrimitiveType::I32,
+    });
+    interp.set_step_budget(8);
+    assert_eq!(interp.reduce_to_lattice_full(&mut body, e), expected);
+    interp.set_step_budget(0);
+    assert_eq!(
+        interp.reduce_to_lattice_full(&mut body, e),
+        expected,
+        "the second visit must read the memo rather than pay for a re-run",
+    );
+}

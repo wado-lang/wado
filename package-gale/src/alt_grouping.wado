@@ -15,22 +15,20 @@
 //! CLAUDE.md "Failed Approaches" section for why the bands are split
 //! the way they are.
 
-use { Alternative } from "./ir.wado";
+use { Alternative, Element } from "./ir.wado";
 use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 
-/// True when `alt` can match any single token at its first input position
-/// — i.e. its first non-nullable element is `Wildcard` (`.`). The static
-/// `first_of_element` returns an empty set for `Wildcard` because we
-/// cannot enumerate "every token kind", but a wildcard alt effectively
-/// overlaps with every other alt that consumes at least one token. We
-/// use this flag to merge wildcard alts into the surrounding overlap
-/// group so the parse-side dispatch routes through scan-based first-
-/// success-wins (which correctly falls back to the wildcard alt when
-/// the more specific alt's scan fails) instead of a kind-check that
+/// True when `alt` opens on an open-ended token set — `.` or `~X`, the two
+/// elements `first_of_element` returns an empty set for because we cannot
+/// enumerate "every token kind". Such an alt effectively overlaps with every
+/// other alt that consumes at least one token. We use this flag to merge it
+/// into the surrounding overlap group so the parse-side dispatch routes
+/// through scan-based first-success-wins (which correctly falls back to it
+/// when the more specific alt's scan fails) instead of a kind-check that
 /// commits to the first alt whose FIRST set covers the lookahead.
 pub fn alt_is_wildcard_led(alt: &Alternative) -> bool {
     for let elem of &alt.elements {
-        if let Wildcard(_) = elem {
+        if element_is_wildcard(elem) {
             return true;
         }
         if !is_nullable(elem) {
@@ -38,6 +36,20 @@ pub fn alt_is_wildcard_led(alt: &Alternative) -> bool {
         }
     }
     return false;
+}
+
+/// `.` and `~X` both carry the empty static FIRST set. Neither a label nor a
+/// `( … )` wrapper changes what an element matches, so `w=.` and `x=(~X)` are
+/// as open-ended as the bare forms.
+fn element_is_wildcard(elem: &Element) -> bool {
+    return match elem {
+        Wildcard(_) | Not(_) => true,
+        Label(lab) => element_is_wildcard(&lab.element),
+        Group(g) => g.alternatives.len() == 1
+            && g.alternatives[0].elements.len() == 1
+            && element_is_wildcard(&g.alternatives[0].elements[0]),
+        TokenRef(_) | Literal(_) | RuleRef(_) | Repeat(_) => false,
+    };
 }
 
 /// `compute_overlap_groups` augmented with wildcard awareness. A

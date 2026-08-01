@@ -8,6 +8,8 @@
 //!
 //! A reference denotes its referent's value: the engine has no reference
 //! values, so borrowing and dereferencing change nothing about what is denoted.
+//! Where a frame gave a local a place of its own, that holds only for reads
+//! made *through* it — see [`Interpreter::projected_lattice`].
 
 use crate::compiler_item::SeqField;
 use crate::const_eval::{
@@ -112,7 +114,7 @@ impl Interpreter<'_> {
                 return known;
             }
         }
-        match self.operand_to_lattice(body, inner) {
+        match self.projected_lattice(body, inner) {
             Lattice::Const(receiver) => receiver
                 .field(field_index)
                 .cloned()
@@ -122,11 +124,30 @@ impl Interpreter<'_> {
         }
     }
 
+    /// What a projection's receiver denotes, resolving a frame place alias.
+    ///
+    /// Reading *through* a reference is what a borrow is for, so a field read,
+    /// an element read and a deref all reach the place's current value. Reading
+    /// the reference *itself* is a different act — it names storage the engine
+    /// has no value for — and [`Self::expr_to_lattice`] leaves that
+    /// unevaluated, so a rebind or a capture never turns into a copy.
+    pub(super) fn projected_lattice(&self, body: &Body, op: Operand) -> Lattice {
+        if let Some(e) = op.as_expr()
+            && let ExprKind::Local { index, .. } = &body.exprs[e].kind
+            && let Some((root, path)) = self.frame.place_aliases.get(index)
+        {
+            return self
+                .place_value(*root, path)
+                .map_or(Lattice::Unevaluated, Lattice::Const);
+        }
+        self.operand_to_lattice(body, op)
+    }
+
     /// Read an element out of a constant sequence. An index past the end is
     /// `NonConst`, so the run-time trap survives.
     pub(super) fn index_lattice(&self, body: &Body, receiver: Operand, index: Operand) -> Lattice {
         let (Lattice::Const(receiver), Lattice::Const(index)) = (
-            self.operand_to_lattice(body, receiver),
+            self.projected_lattice(body, receiver),
             self.operand_to_lattice(body, index),
         ) else {
             return Lattice::Unevaluated;
@@ -205,6 +226,11 @@ impl Interpreter<'_> {
         }
         let node = &body.exprs[e];
         match &node.kind {
+            // Only a projection resolves an alias — see
+            // [`Self::projected_lattice`].
+            ExprKind::Local { index, .. } if self.frame.place_aliases.contains_key(index) => {
+                Lattice::Unevaluated
+            }
             ExprKind::Local { index, .. } => self
                 .frame
                 .env
@@ -247,7 +273,15 @@ impl Interpreter<'_> {
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::Deref,
                 expr: inner,
-            } => self.operand_to_lattice(body, *inner),
+            } => self.projected_lattice(body, *inner),
+            // A cast that converts nothing denotes its operand; a converting
+            // one is `try_fold`'s case.
+            ExprKind::Cast { expr: inner, .. }
+                if operand_type(body, *inner)
+                    .is_some_and(|t| self.same_ref_shape(node.type_id, t)) =>
+            {
+                self.operand_to_lattice(body, *inner)
+            }
             ExprKind::GlobalVarGet {
                 module_source,
                 name,
@@ -442,10 +476,30 @@ impl Interpreter<'_> {
                 }
                 _ => Lattice::Unevaluated,
             },
+            CtfeBuiltin::I32AsChar => match args {
+                [value] => self.i32_as_char_lattice(body, value.expr),
+                _ => Lattice::Unevaluated,
+            },
             CtfeBuiltin::ArraySet | CtfeBuiltin::ArrayCopy | CtfeBuiltin::ColdPath => {
                 Lattice::Unevaluated
             }
         }
+    }
+
+    /// `i32_as_char` reinterprets unchecked, so a codepoint outside the
+    /// scalar-value range stays as written rather than folding a value
+    /// `char` cannot hold.
+    fn i32_as_char_lattice(&self, body: &Body, value: Operand) -> Lattice {
+        let Lattice::Const(value) = self.operand_lattice_folded(body, value) else {
+            return Lattice::Unevaluated;
+        };
+        let Some((value, _)) = value.as_int() else {
+            return Lattice::Unevaluated;
+        };
+        u32::try_from(value)
+            .ok()
+            .and_then(char::from_u32)
+            .map_or(Lattice::Unevaluated, |c| Lattice::Const(Value::Char(c)))
     }
 
     /// The arm `select` picks. Both arms run at run time, so the one not taken
@@ -507,6 +561,28 @@ impl Interpreter<'_> {
         }
     }
 
+    /// Whether `a` and `b` are the same array or borrow structure, so a cast
+    /// between them cannot convert a value. Identical ids are trivially so;
+    /// otherwise both must be the same reference shape over element types that
+    /// are — which is what makes duplicate-interned `Array<u8>` ids compare
+    /// equal. A borrow denotes its referent either way, so `&mut` and `&`
+    /// over the same referent shape read alike.
+    fn same_ref_shape(&self, a: TypeId, b: TypeId) -> bool {
+        if a == b {
+            return true;
+        }
+        match (self.type_table.get(a), self.type_table.get(b)) {
+            (ResolvedType::BuiltinArray(x), ResolvedType::BuiltinArray(y)) => {
+                self.same_ref_shape(*x, *y)
+            }
+            (
+                ResolvedType::Ref(x) | ResolvedType::MutRef(x),
+                ResolvedType::Ref(y) | ResolvedType::MutRef(y),
+            ) => self.same_ref_shape(*x, *y),
+            _ => false,
+        }
+    }
+
     /// Look up a `(module_source, name)` global in the installed
     /// [`GlobalEnv`]. Absent keys default to [`Lattice::Unevaluated`]
     /// — the engine simply has no information, same convention as
@@ -519,6 +595,15 @@ impl Interpreter<'_> {
             .get(&(module_source.clone(), name.to_string()))
             .cloned()
             .unwrap_or(Lattice::Unevaluated)
+    }
+}
+
+/// The static type of an operand: the node's recorded type for a skeleton
+/// expression, the pool's for a promoted value.
+fn operand_type(body: &Body, op: Operand) -> Option<TypeId> {
+    match op {
+        Operand::Expr(e) => Some(body.exprs[e].type_id),
+        Operand::Value(v) => body.values.type_of(v),
     }
 }
 

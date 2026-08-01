@@ -2621,34 +2621,31 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == ';' {
+        } else if first_char matches { ';' } {
             end = try_lit_semi(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; }
-        } else if first_char == '_' {
+        } else if first_char matches { '_' } {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char == 'a' {
+        } else if first_char matches { 'a' } {
             end = try_lit_and(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_AND; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char == 'b' {
+        } else if first_char matches { 'b' } {
             end = try_lit_between(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_BETWEEN; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char == 'o' {
+        } else if first_char matches { 'o' } {
             end = try_lit_or(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_OR; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if 'a' <= first_char <= 'z' {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if 'A' <= first_char <= 'Z' {
+        } else if first_char matches { 'a'..='z' | 'A'..='Z' } {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else {

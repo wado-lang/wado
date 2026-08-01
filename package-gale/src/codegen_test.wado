@@ -1075,8 +1075,8 @@ WS : [ \\t\\n\\r]+ -> skip ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"fn try_A(");
     assert str_contains(&output, &"fn try_B(");
-    assert str_contains(&output, &"first_char == 'A'");
-    assert str_contains(&output, &"first_char == 'B'");
+    assert str_contains(&output, &"first_char matches { 'A' }");
+    assert str_contains(&output, &"first_char matches { 'B' }");
 }
 
 test "set list-label `name+=(A | B)*` emits List<Token> + expect_set" {
