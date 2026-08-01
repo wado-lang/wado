@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785619501424,
+  "lastUpdate": 1785627431639,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45377,6 +45377,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f64e32ff760361e9ed35b24ab50160873895757e"
         },
         "date": 1785619500755,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16247,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273867,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b6cc9ecb6f0aacebfdad4674b960665313bee5d0",
+          "message": "Merge pull request #1733 from wado-lang/claude/sroa-bug-fix-a129xm\n\nfix(optimizer): sroa_param must not snapshot a boxed reference parameter",
+          "timestamp": "2026-08-02T09:24:52+10:00",
+          "tree_id": "7e748d58da2c4ed8ee79a2c5ada7b09dfeda7829",
+          "url": "https://github.com/wado-lang/wado/commit/b6cc9ecb6f0aacebfdad4674b960665313bee5d0"
+        },
+        "date": 1785627430780,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
