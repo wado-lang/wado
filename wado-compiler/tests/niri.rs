@@ -7957,3 +7957,81 @@ fn a_ref_global_alias_survives_the_body_growing_under_it() {
         "the alias must still resolve to the global it was recorded for",
     );
 }
+
+#[test]
+fn a_ref_returning_callee_does_not_fold_through_the_lost_alias() {
+    // fn pick(p: &Pair) -> &Inner { return &p.inner; }
+    // fn scenario() -> i32 {
+    //     let mut p = Pair { inner: Inner { x: 7 } };
+    //     let a = pick(&p);
+    //     p.inner.x = 9;
+    //     return a.x;
+    // }
+    // At run time `a` aliases `p.inner`, so scenario() == 9. A frame that
+    // bound the returned reference as a value snapshot would answer 7 and
+    // bake the wrong constant into every caller.
+    let mut table = TypeTable::new();
+    let inner_ty = table.make_struct("Inner".to_string(), ModuleSource::default());
+    let pair_ty = table.make_struct("Pair".to_string(), ModuleSource::default());
+    let ref_inner = table.make_ref(inner_ty);
+    let ref_pair = table.make_ref(pair_ty);
+
+    let pick = make_pure_fn(
+        "pick",
+        vec![("p", ref_pair)],
+        ref_inner,
+        return_stmt(unary(
+            NirUnaryOp::Ref,
+            field_access(local_expr(0, ref_pair), 0, "inner", inner_ty),
+            ref_inner,
+        )),
+    );
+    let inner_lit = struct_lit(inner_ty, vec![(0, "x", int_lit(7, TypeTable::I32, "7"))]);
+    let pair_lit = struct_lit(pair_ty, vec![(0, "inner", inner_lit)]);
+    let scenario = make_pure_fn_stmts(
+        "scenario",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b("p", 0, pair_ty, pair_lit),
+            let_stmt_b(
+                "a",
+                1,
+                ref_inner,
+                call_expr(
+                    &pick,
+                    vec![unary(NirUnaryOp::Ref, local_expr(0, pair_ty), ref_pair)],
+                ),
+            ),
+            assign_stmt_b(
+                field_access(
+                    field_access(local_expr(0, pair_ty), 0, "inner", inner_ty),
+                    0,
+                    "x",
+                    TypeTable::I32,
+                ),
+                int_lit(9, TypeTable::I32, "9"),
+            ),
+            return_stmt(field_access(
+                local_expr(1, ref_inner),
+                0,
+                "x",
+                TypeTable::I32,
+            )),
+        ],
+    );
+
+    let funcs = [pick, scenario];
+    let callees = build_callee_map_test(&funcs);
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.enter_function();
+    let call = call_expr(&funcs[1], vec![]);
+    let lat = reduce_lat(&mut interp, &call);
+    assert_ne!(
+        lat,
+        Lattice::Const(int(7)),
+        "the frame bound pick's returned reference as a value snapshot and \
+         folded through the alias",
+    );
+}
