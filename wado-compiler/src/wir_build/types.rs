@@ -182,9 +182,8 @@ fn sort_types_topologically<'a>(
 /// This follows a multi-phase registration order to ensure type dependencies
 /// are satisfied.
 pub fn register_types(ctx: &mut WirContext<'_>) {
-    // Phase 0: Enums. A plain enum is a bare discriminant with no dependency on
-    // any other type, and struct fields typed by one resolve during the phases
-    // below — so it has to be registered before them, not after.
+    // Phase 0: Enums. A bare discriminant with no dependencies, and the phases
+    // below resolve struct fields typed by one.
     register_enums(ctx);
 
     // Phase 0.5: Internal Box<T> structs
@@ -477,9 +476,8 @@ fn register_raw_array_type(
         ctx.array_type_map.insert(element_type_id, existing);
         return;
     }
-    // Newtype dedup: `List<FieldName>` and `List<String>` share one array when
-    // `FieldName` is a newtype over `String`. Registration owns this aliasing —
-    // both spellings are entered below, so lookup derives one key and finds it.
+    // Newtype dedup: both spellings are entered below, so lookup derives one
+    // key and finds it.
     let resolved_name = type_table.mangle_type_arg_for_generic_resolving_newtypes(element_type_id);
     if resolved_name != elem_name && ctx.array_type_by_name.contains_key(&resolved_name) {
         let existing = ctx.array_type_by_name.get(&resolved_name).unwrap().clone();
@@ -1223,11 +1221,8 @@ fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
 }
 
 /// The name a monomorphized generic instance is registered under: the base name
-/// with module-qualified type arguments.
-///
-/// Qualifying the arguments keeps two same-named types apart (`wasi:filesystem`
-/// `variant ErrorCode` vs `wasi:cli` `enum ErrorCode`), so they get distinct WIR
-/// registrations. Registration and lookup both derive the name here.
+/// with module-qualified type arguments, which keeps two same-named arguments
+/// apart. Registration and lookup both derive it here.
 pub(super) fn generic_instance_name(
     type_table: &TypeTable,
     name: &str,
@@ -1240,12 +1235,9 @@ pub(super) fn generic_instance_name(
     crate::name::mangle_generic_name(name, &type_arg_names)
 }
 
-/// Resolve an associated-type projection (`f64::Err`) to the type it names
-/// (`ParseFloatError`).
-///
-/// A projection can still sit in a generic instance's type arguments here even
-/// though the instance was registered under the resolved spelling, so both
-/// sides only agree once the projection is normalized.
+/// Resolve an associated-type projection (`f64::Err`) to the type it names.
+/// A projection can still sit in a generic instance's arguments while the
+/// instance was registered under the resolved spelling.
 fn normalize_assoc_projection(type_table: &TypeTable, type_id: TypeId) -> TypeId {
     let ResolvedType::AssocTypeProjection {
         param_id,
@@ -1261,9 +1253,8 @@ fn normalize_assoc_projection(type_table: &TypeTable, type_id: TypeId) -> TypeId
         .unwrap_or(type_id)
 }
 
-/// The `List<T>` wrapper struct's registration key, derived from the element
-/// type. `T` is spelled with newtypes resolved, so `List<FieldName>` and
-/// `List<String>` share one wrapper.
+/// The `List<T>` wrapper struct's registration key. `T` is spelled with
+/// newtypes resolved, so `List<FieldName>` and `List<String>` share a wrapper.
 pub(super) fn list_wrapper_struct_name(
     type_table: &TypeTable,
     element_type_id: TypeId,
@@ -1285,9 +1276,8 @@ fn register_list_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
     let struct_name = list_wrapper_struct_name_for_elem(elem_name);
     let mangled = struct_name.name.clone();
 
-    // `register_raw_array_type` ran for this element first and registers the
-    // array under both its plain and its newtype-resolved spelling, so the
-    // wrapper's backing array is always present by now.
+    // `register_raw_array_type` ran for this element first, under both
+    // spellings, so the backing array is present.
     let Some(raw_type) = ctx.array_type_by_name.get(elem_name).cloned() else {
         panic!("[WIR] raw array type for `{elem_name}` is missing, so `{mangled}` has no backing");
     };

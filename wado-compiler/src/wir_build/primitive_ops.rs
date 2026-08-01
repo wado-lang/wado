@@ -35,27 +35,18 @@ enum PrimitiveKind {
 }
 
 impl PrimitiveKind {
-    /// The scalar kind a `TypeId` is represented by, or `None` when it has no
-    /// scalar representation at all.
-    ///
-    /// Newtypes classify as their base — the wrapper is erased by then, so
-    /// `type Meters = f64` must still reach the `f64` opcodes. An enum is its
-    /// i32 discriminant and a flags set its i32 bitmask, so both are scalars.
-    /// `None` covers reference types and the widths WIR carries no scalar for
-    /// (`i128` / `u128` / `v128`).
+    /// The scalar kind a `TypeId` is represented by, or `None` for one with no
+    /// scalar representation: a reference type, or a width WIR carries no
+    /// scalar for (`i128` / `u128` / `v128`).
     fn from_type_id(type_table: &TypeTable, type_id: TypeId) -> Option<Self> {
         match type_table.get(type_table.resolve_newtype_base(type_id)) {
             ResolvedType::Primitive(p) => Self::from_primitive(*p),
-            // Discriminants and bitmasks are non-negative but lower through the
-            // signed opcodes, which agree with the unsigned ones over their
-            // range and keep the emitted code identical to the untyped
-            // predecessor of this classification.
+            // A discriminant and a bitmask are both i32. Signed opcodes agree
+            // with unsigned ones over their non-negative range.
             ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => Some(Self::I32Signed),
-            // A `Never` operand diverges before the operation runs, so the
-            // result is never observed and the surrounding lowering discards the
-            // node. It still needs *an* opcode to keep its shape, and i32 is the
-            // narrowest. (`Unit` is not here: it has no value to feed an opcode
-            // at all, and `binop_operand_requires_trait` rejects it.)
+            // A `Never` operand traps before the operation runs, so the node is
+            // never observed — but it still needs an opcode to keep its shape.
+            // (`Unit` has no value to feed one; the elaborator rejects it.)
             ResolvedType::Never => Some(Self::I32Signed),
             _ => None,
         }
@@ -134,11 +125,9 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// The scalar kind `type_id` lowers to, for an operator that only has
-    /// scalar opcodes. Type checking rejects the operator on anything else, so
-    /// a non-scalar operand here means an earlier phase let one through — and
-    /// the i32 opcodes this used to fall back to would silently misread an
-    /// `f64` or a reference.
+    /// The scalar kind `type_id` lowers to, for an operator with only scalar
+    /// opcodes. Type checking rejects the rest, and falling back to i32 would
+    /// silently misread an `f64` or a reference.
     #[track_caller]
     fn scalar_kind(&self, type_id: TypeId, op: &impl std::fmt::Debug) -> PrimitiveKind {
         PrimitiveKind::from_type_id(self.type_table, type_id).unwrap_or_else(|| {
@@ -157,9 +146,7 @@ impl FunctionTranslator<'_, '_> {
         right: Box<WirInstr>,
         left_type_id: TypeId,
     ) -> WirInstr {
-        // `RefEq` / `RefNotEq` are the reference-identity operators; they take
-        // operands with no scalar kind, so the classification stays inside the
-        // scalar arms below.
+        // The reference-identity operators take operands with no scalar kind.
         if let NirBinaryOp::RefEq = op {
             return WirInstr::RefEq(left, right);
         }
@@ -377,8 +364,7 @@ impl FunctionTranslator<'_, '_> {
             PrimitiveType::U16 => {
                 WirInstr::I32And(Box::new(instr), Box::new(WirInstr::I32Const(0xFFFF)))
             }
-            // Already at or above i32 width: the value occupies the whole
-            // register, so there is nothing to mask off.
+            // At or above i32 width: nothing to mask off.
             PrimitiveType::I32
             | PrimitiveType::U32
             | PrimitiveType::I64

@@ -26,11 +26,9 @@ pub const DEFINED_FUNC_BASE: u32 = 0x8000_0000;
 
 /// A declared type that has no WIR registration yet.
 ///
-/// During `register_types` this is expected rather than an error, so the field
-/// or element being resolved takes `placeholder` and
-/// [`super::types::fixup_abstract_struct_fields`] repairs it once every type is
-/// registered. Afterwards it is a bug, and
-/// [`WirContext::type_id_to_wir_type`] panics with `description`.
+/// Expected during `register_types`, where the caller takes `placeholder` and
+/// [`super::types::fixup_abstract_struct_fields`] repairs it later. A bug
+/// anywhere after that.
 pub struct UnregisteredType {
     /// What was looked for, for the panic message.
     description: String,
@@ -47,9 +45,9 @@ impl UnregisteredType {
         Self::new(description, crate::wir::WirAbstractHeapType::Array)
     }
 
-    /// An enum is an i32 discriminant, so the placeholder is the right
-    /// representation already — it only loses the enum's WIR identity. Nothing
-    /// for `fixup_abstract_struct_fields` to repair, hence no abstract ref.
+    /// An enum is an i32 discriminant, so the placeholder is already the right
+    /// representation and only loses the enum's WIR identity — nothing for the
+    /// fixup pass to repair, hence no abstract ref.
     fn enum_i32(description: String) -> Self {
         Self {
             description,
@@ -726,11 +724,8 @@ impl<'a> WirContext<'a> {
         type_table: &TypeTable,
         elements: &[TypeId],
     ) -> Option<WirTypeId> {
-        // An unresolved element would compare as the placeholder abstract ref,
-        // which every other unresolved element also compares as — so it would
-        // match any tuple with an unresolved element in that position and hand
-        // back an unrelated type. A comparison that cannot be made is not a
-        // match.
+        // Every unresolved element compares as the same placeholder, so
+        // admitting one would match any tuple unresolved in that position.
         let elem_wir_types: Vec<WirType> = elements
             .iter()
             .map(|e| self.lookup_wir_type(type_table, *e))
@@ -749,29 +744,22 @@ impl<'a> WirContext<'a> {
 
     /// Convert a TIR `TypeId` to a `WirType`.
     ///
-    /// By the time function bodies are translated every declared type has been
-    /// registered, so a miss here is a registration bug — the key the registrar
-    /// wrote and the key derived here disagree. Both sides derive their key
-    /// through `name::wir_*_key` / [`StructName`] for exactly that reason, so a
-    /// miss panics rather than degrading to `AbstractRef`: an abstract ref is
-    /// indistinguishable from the deliberate one `ResolvedType::Function`
-    /// produces, and every downstream `WirType::Ref` destructure would then fail
-    /// far from the cause.
+    /// A miss means the registrar's key and the key derived here disagree —
+    /// both sides go through `name::wir_*_key` / [`StructName`] so they cannot.
+    /// Degrading to `AbstractRef` instead would be indistinguishable from the
+    /// deliberate one `ResolvedType::Function` produces.
     ///
-    /// Use [`Self::type_id_to_wir_type_pending`] inside `register_types`, where
-    /// a not-yet-registered type is expected.
+    /// Use [`Self::type_id_to_wir_type_pending`] inside `register_types`.
     #[track_caller]
     pub fn type_id_to_wir_type(&self, type_table: &TypeTable, type_id: TypeId) -> WirType {
         self.lookup_wir_type(type_table, type_id)
             .unwrap_or_else(|pending| panic!("[WIR] {} is not registered", pending.description))
     }
 
-    /// [`Self::type_id_to_wir_type`] for use during type registration.
-    ///
-    /// A struct field can name a type a later registration phase defines, or the
-    /// struct itself — Wasm GC rec groups permit the cycle. Such a field takes an
-    /// abstract-ref placeholder, and [`super::types::fixup_abstract_struct_fields`]
-    /// re-resolves it once every type is in.
+    /// [`Self::type_id_to_wir_type`] for use during type registration, where a
+    /// field can name a type a later phase defines — or the struct itself, since
+    /// Wasm GC rec groups permit the cycle. It takes the placeholder, which
+    /// [`super::types::fixup_abstract_struct_fields`] re-resolves.
     pub fn type_id_to_wir_type_pending(&self, type_table: &TypeTable, type_id: TypeId) -> WirType {
         self.lookup_wir_type(type_table, type_id)
             .unwrap_or_else(|pending| pending.placeholder)
@@ -779,11 +767,9 @@ impl<'a> WirContext<'a> {
 
     /// The `WirType` of `type_id`, or `None` when it has no WIR registration.
     ///
-    /// Translation normally uses [`Self::type_id_to_wir_type`], which treats a
-    /// miss as a bug. This is for the caller that has a genuine recovery: a
-    /// tuple interned by CM binding synthesis can carry `TypeId`s the registrar
-    /// never saw, and `tuple_constructor_args` then searches for a structurally
-    /// equal tuple or defines one.
+    /// For the one caller with a real recovery: a tuple interned by CM binding
+    /// synthesis can carry `TypeId`s the registrar never saw, and
+    /// `tuple_constructor_args` then searches for or defines a matching struct.
     pub fn try_type_id_to_wir_type(
         &self,
         type_table: &TypeTable,
@@ -857,9 +843,8 @@ impl<'a> WirContext<'a> {
                 type_args: elements,
                 module_source,
             } if TypeTable::is_tuple_type(name) => {
-                // A tuple is keyed by its element `TypeId`s. CM binding synthesis
-                // interns its own `TypeId`s for the same element types, so a miss
-                // falls back to structural matching on the elements' WIR types.
+                // CM binding synthesis interns its own `TypeId`s for the same
+                // elements, so a miss falls back to structural matching.
                 let found = self
                     .tuple_type_map
                     .get(elements)
@@ -878,15 +863,9 @@ impl<'a> WirContext<'a> {
                 module_source,
                 type_args,
             } => {
-                // GenericInstance.name is the base name (e.g., "Box"); after
-                // monomorphization the type is registered under the instantiated
-                // name (e.g., "Box<i32>").
-                //
-                // A generic instance is either a struct or a variant; the two
-                // live in different maps, so both are consulted before the miss
-                // is fatal. `register_struct` / `register_mono_variants` alias
-                // the newtype-resolved spelling onto the same WIR type, so no
-                // newtype retry is needed here.
+                // A generic instance is either a struct or a variant, and the
+                // two live in different maps. Registration aliases the
+                // newtype-resolved spelling onto the same type, so one key each.
                 let mangled = super::types::generic_instance_name(type_table, name, type_args);
                 let struct_name = StructName::new(module_source.clone(), mangled.clone());
                 let type_id = self.struct_type_map.get(&struct_name).or_else(|| {
@@ -901,10 +880,8 @@ impl<'a> WirContext<'a> {
                 Self::ref_to(type_id)
             }
             ResolvedType::BuiltinArray(elem_type_id) => {
-                // Keyed by element `TypeId`; cross-module `TypeId`s for the same
-                // element resolve through the element's mangled name, which
-                // `register_raw_array_type` registers under both its plain and
-                // its newtype-resolved spelling.
+                // Cross-module `TypeId`s for one element resolve by the
+                // element's name, which registration aliases both spellings of.
                 let type_id = self.array_type_map.get(elem_type_id).or_else(|| {
                     let elem_name = type_table.mangle_type_arg_for_generic(*elem_type_id);
                     self.array_type_by_name.get(&elem_name)
@@ -943,14 +920,10 @@ impl<'a> WirContext<'a> {
                 Self::ref_to(type_id)
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                // A reference to a GC type is that type: `&T` = `T` at the Wasm
-                // level. A reference to a value type needs a `Box<T>` cell so
-                // `&mut T` has a mutable location — but `lower::plan::boxing`
-                // already rewrote those `Ref` / `MutRef` `TypeId`s to the
-                // `Box<T>` struct itself, so they arrive here as `Struct`, not
-                // as `Ref`. What is left is the kinds that pass is documented
-                // not to box: opaque handles (resources, flags), whose
-                // reference is the handle.
+                // `&T` = `T` for a GC type. A value type would need a `Box<T>`
+                // cell, but `lower::plan::boxing` already rewrote those ids to
+                // the struct — what reaches here is the kinds it leaves alone:
+                // opaque handles, whose reference is the handle.
                 let inner_wir = self.lookup_wir_type(type_table, *inner)?;
                 if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
                     panic!(

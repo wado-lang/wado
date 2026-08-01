@@ -647,12 +647,9 @@ impl ClosureLowerer {
             body_locals.sort_by_key(|(idx, _)| *idx);
             for (idx, type_id) in &body_locals {
                 if *idx >= param_count {
-                    // Pad sparse indices with placeholders so the slot the
-                    // body actually uses lands at the right index. A padding
-                    // slot is never read or written, so it is typed `Unit` —
-                    // the type for "no Wasm representation", which `wir_build`
-                    // skips when declaring locals. `Unknown` would instead say
-                    // type inference failed, which is a hard error there.
+                    // Pad sparse indices so the slot the body uses lands at the
+                    // right index. Padding is never read or written, hence
+                    // `Unit` — `Unknown` would say inference failed.
                     while locals.len() <= *idx as usize {
                         let placeholder_idx = locals.len() as u32;
                         locals.push(TirLocal::synth(placeholder_idx, TypeTable::UNIT, false));

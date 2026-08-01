@@ -7490,10 +7490,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 Some((n, Some(d))) => (n.clone(), d.clone()),
                 _ => break,
             };
-            // Reify against the parameter's declared type. A default declared on
-            // a trait method has no body for annotate to walk, so nothing
-            // recorded a type for its expression; without the expectation here
-            // it reifies as `Unknown` and reaches codegen untyped.
+            // A default declared on a trait method has no body for annotate to
+            // walk, so without the parameter's type here it reifies untyped.
             let expected = param_types.get(i).copied();
             let resolved = self.reify_expr(&default_ast, ctx, expected);
             // Later defaults may reference this one's parameter.

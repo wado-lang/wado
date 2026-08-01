@@ -226,7 +226,6 @@ impl FunctionTranslator<'_, '_> {
                 let type_id = self.ref_type_id(value_ty);
                 let mut instrs = Vec::new();
 
-                // Declare and assign a temp local for the tuple
                 let temp_name = format!("__let_pattern_{}", self.match_counter);
                 self.match_counter += 1;
                 instrs.extend(declare_and_set_local(
@@ -235,7 +234,6 @@ impl FunctionTranslator<'_, '_> {
                     value_instr,
                 ));
 
-                // Bind each element; wildcard slots have no binding to fill.
                 for (i, sub_pattern) in patterns.iter().enumerate() {
                     if let PatKind::Binding { local_index, .. } = &arena.pats[*sub_pattern].kind {
                         let local_name = self.local_name(*local_index);
@@ -627,12 +625,9 @@ impl FunctionTranslator<'_, '_> {
         })
     }
 
-    /// Key of the WIR variant type a scrutinee lowers to.
-    ///
-    /// A variant reaches WIR either as `ResolvedType::Variant` or — once
-    /// monomorphized — as the `GenericInstance` spelling of its instantiation
-    /// (`Option<i32>`); `register_variant` and `register_mono_variants` register
-    /// both under this key.
+    /// Key of the WIR variant type a scrutinee lowers to. A variant arrives
+    /// either as `ResolvedType::Variant` or, once monomorphized, as the
+    /// `GenericInstance` spelling; registration covers both.
     #[track_caller]
     fn variant_type_key(&self, type_id: TypeId) -> String {
         match self.type_table.get(type_id) {
@@ -656,11 +651,9 @@ impl FunctionTranslator<'_, '_> {
 
     /// The registered WIR variant a scrutinee lowers to, with its type key.
     ///
-    /// Type checking already proved the scrutinee is this variant, so a miss is
-    /// a registration bug. Degrading instead — testing a discriminant that was
-    /// never written, or projecting a payload out of the base type — is a
-    /// miscompile the Wasm validator only catches when the shapes happen to
-    /// differ.
+    /// Type checking already proved the scrutinee is this variant. Degrading on
+    /// a miss — testing a discriminant nothing wrote, or projecting a payload
+    /// out of the base type — is a miscompile the validator rarely catches.
     #[track_caller]
     fn variant_def(&self, type_id: TypeId) -> (String, &crate::wir::WirVariantType) {
         let key = self.variant_type_key(type_id);
@@ -675,6 +668,9 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// The WIR struct type of a variant's payload-carrying case.
+    ///
+    /// Only a payload case has a subtype of its own; a unit case shares the base
+    /// variant struct and is told apart by its discriminant.
     #[track_caller]
     fn variant_case_type_id(&self, variant_key: &str, case_name: &str) -> WirTypeId {
         let case_key = crate::name::wir_variant_case_key(variant_key, case_name);
@@ -735,9 +731,6 @@ impl FunctionTranslator<'_, '_> {
                     panic!("[WIR] variant `{variant_key}` has no case `{variant_name}`");
                 };
                 let case_index = case.index as i32;
-                // A payload case has its own struct subtype, so membership is a
-                // `ref.test`. A unit case shares the base struct — only the
-                // discriminant distinguishes it.
                 if case.payload.is_empty() {
                     WirInstr::I32Eq(
                         Box::new(self.variant_discriminant(scrut_type, scrut_get)),
@@ -1117,7 +1110,6 @@ impl FunctionTranslator<'_, '_> {
                         }
                         PatKind::Wildcard => {}
                         _ => {
-                            // Nested pattern: store in temp and recurse
                             self.local_counter += 1;
                             let temp_name = format!("__tuple_elem_{}", self.local_counter);
                             let elem_type = tuple_element_type(&element_types, i);
@@ -1163,7 +1155,6 @@ impl FunctionTranslator<'_, '_> {
                         }
                         PatKind::Wildcard => {}
                         _ => {
-                            // For nested patterns, store in a temp and recurse
                             self.local_counter += 1;
                             let temp_name = format!("__struct_field_{}", self.local_counter);
                             let field_type =
@@ -1288,10 +1279,8 @@ impl FunctionTranslator<'_, '_> {
     /// ref type ID. For `payload_i` of a tuple type, this returns the `WirTypeId`
     /// of the tuple struct.
     ///
-    /// Field 0 is the discriminant, so payload `i` sits at `i + 1`. The case
-    /// struct was registered from this very variant case, so both the struct
-    /// shape and the field are guaranteed; reporting "unknown" instead would
-    /// silently turn off the boxing decision in
+    /// Field 0 is the discriminant, so payload `i` sits at `i + 1`. Reporting
+    /// "unknown" instead would silently disable the boxing decision in
     /// [`Self::emit_pattern_binding_set`].
     #[track_caller]
     fn get_case_payload_wir_type(
@@ -1345,9 +1334,6 @@ impl FunctionTranslator<'_, '_> {
         payload: Option<Operand>,
         result_type: TypeId,
     ) -> WirInstr {
-        // A payload case is built as its own struct subtype; a unit case has no
-        // subtype of its own and is built as the base variant struct, carrying
-        // only the discriminant.
         let (variant_key, vt) = self.variant_def(variant_type);
         let Some(case) = vt.cases.get(case_index as usize) else {
             panic!("[WIR] variant `{variant_key}` has no case at index {case_index}");
@@ -1374,9 +1360,6 @@ impl FunctionTranslator<'_, '_> {
         let Some(case) = vt.cases.get(case_index as usize) else {
             panic!("[WIR] variant `{variant_key}` has no case at index {case_index}");
         };
-        // A payload case has its own struct subtype, so membership is a
-        // `ref.test`. A unit case shares the base struct — only the
-        // discriminant distinguishes it.
         if case.payload.is_empty() {
             WirInstr::I32Eq(
                 Box::new(self.variant_discriminant(inner_ty, val)),

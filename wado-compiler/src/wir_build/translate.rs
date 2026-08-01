@@ -1106,10 +1106,9 @@ impl FunctionTranslator<'_, '_> {
     /// — a struct, variant, array, or list.
     ///
     /// Callers reach for this where the TIR shape already guarantees a
-    /// reference (a struct literal's own type, a `&Array<T>` builtin argument,
-    /// a variant scrutinee). A non-reference here means the type never got
-    /// registered, so it panics at the point that made the assumption rather
-    /// than letting the caller emit something that only fails Wasm validation.
+    /// reference — a struct literal's own type, a `&Array<T>` builtin argument,
+    /// a variant scrutinee. It panics where the assumption was made rather than
+    /// letting the caller emit something that only fails Wasm validation.
     #[track_caller]
     pub(super) fn ref_type_id(&self, type_id: TypeId) -> WirTypeId {
         match self.wir_type(type_id) {
@@ -1223,9 +1222,8 @@ impl FunctionTranslator<'_, '_> {
         let elem_type_ids: Vec<crate::tir::TypeId> =
             elements.iter().map(|e| self.operand_type_id(*e)).collect();
         // A tuple interned by CM binding synthesis can carry `TypeId`s the
-        // registrar never saw, so the miss is recoverable here — search for a
-        // structurally equal registered tuple, then define one. Every other
-        // caller treats a miss as a bug, hence the fallible accessor.
+        // registrar never saw, so this miss is recoverable: search for a
+        // structurally equal tuple, then define one.
         let wir_type = self
             .ctx
             .try_type_id_to_wir_type(self.type_table, tuple_type_id);

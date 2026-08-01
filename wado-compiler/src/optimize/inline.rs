@@ -1109,11 +1109,9 @@ fn try_inline_call_expr(
     // each to its param `Let` directly (WEP: The Live ValueGraph).
     //
     // The `Let` stands in for the parameter, so it takes the parameter's
-    // declared type, not the argument expression's. `TypeId`s are package-wide
-    // after link, so the callee's is meaningful here. Taking the argument's
-    // instead propagates whatever the caller happened to record — including an
-    // unresolved type from a synthesized default argument, which then has no
-    // Wasm type to declare the local with.
+    // declared type (`TypeId`s are package-wide after link). The argument's
+    // would propagate whatever the caller recorded, including the unresolved
+    // type of a synthesized default.
     let bindings: Vec<InlineBinding> = candidate
         .params
         .iter()

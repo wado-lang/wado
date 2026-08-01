@@ -290,18 +290,12 @@ pub fn cm_type_to_type_id(
             "()" => TypeTable::UNIT,
             // Resource/enum/variant types - look up the already-resolved TypeId.
             //
-            // The type's own `source_interface` is the authoritative provenance,
-            // so it goes first: a package holds several interfaces, and two of
-            // them can declare the same name (`wasi:sockets/types` and
-            // `wasi:sockets/ip-name-lookup` both declare `ErrorCode`). Scoping
-            // by package alone picks whichever registered first and hands back
-            // the wrong variant, which only surfaces as a Wasm validation
-            // failure inside the synthesized lift.
-            //
-            // The package-scoped lookups behind it cover a type with no recorded
-            // interface. Neither is ever a bare-name scan, which would conflate
-            // same-named types across packages too (`wasi:filesystem/ErrorCode`
-            // vs. `wasi:http/ErrorCode`).
+            // The type's own `source_interface` leads: a package holds several
+            // interfaces and two can declare the same name (`wasi:sockets/types`
+            // and `wasi:sockets/ip-name-lookup` both declare `ErrorCode`), so
+            // scoping by package alone returns whichever registered first. The
+            // package lookups behind it cover a type with no recorded interface;
+            // neither is ever a bare-name scan.
             _ => named
                 .source_interface
                 .as_deref()
@@ -485,10 +479,6 @@ pub(super) fn module_source_for_cm_interface(
 
 /// The module name a CM interface FQ maps to (`wasi:sockets/ip-name-lookup@0.3.0`
 /// → `sockets/ip_name_lookup.wado`), or `None` for an FQ in neither namespace.
-///
-/// Addresses one interface rather than its whole package, which is what
-/// [`crate::tir::TypeTable::find_named_type_by_module_name`] needs to tell two
-/// same-named types in one package apart.
 pub(super) fn cm_interface_module_name(source_interface: &str) -> Option<String> {
     if source_interface.starts_with("wasi:") {
         return Some(wasi_interface_suffix(source_interface));

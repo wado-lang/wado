@@ -1782,14 +1782,11 @@ impl TypeTable {
     /// synthesizing CM bindings normally retrieve it from
     /// [`crate::world_registry::WorldInfo::package`].
     /// Find any decl-backed named type scoped to a single CM *interface*,
-    /// addressed by the module name that interface maps to (e.g.
-    /// `sockets/ip_name_lookup.wado`).
+    /// addressed by the module it maps to (e.g. `sockets/ip_name_lookup.wado`).
     ///
-    /// [`Self::find_named_type_by_cm_package`] scopes to the package, and a
-    /// package holds several interfaces — two of them can declare the same name
-    /// (`wasi:sockets/types` and `wasi:sockets/ip-name-lookup` both declare
-    /// `ErrorCode`). The package scan then returns whichever registered first,
-    /// so an exact interface match has to come before it.
+    /// [`Self::find_named_type_by_cm_package`] scopes to the package, which
+    /// holds several interfaces — two can declare the same name, and that scan
+    /// returns whichever registered first.
     #[must_use]
     pub fn find_named_type_by_module_name(&self, name: &str, module_name: &str) -> Option<TypeId> {
         for (type_id, resolved) in self.all_types() {

@@ -234,11 +234,9 @@ impl TypeSystem {
             // scalar operator and route to the requires-trait diagnostic
             // (there is no `Eq`/`Ord`/`Add`/… impl for `v128`).
             ResolvedType::Primitive(PrimitiveType::V128) => true,
-            // `()` has no Wasm representation, so an operand of it pushes
-            // nothing and the `i32.eq` below it underflows the stack. There is
-            // no `Eq` impl for `()` either, so route it to the same diagnostic.
-            // `Never` is deliberately absent: `panic("boom") + 1` is legal, and
-            // the diverging operand traps before the operation runs.
+            // `()` pushes nothing, so the `i32.eq` below it underflows the
+            // stack, and there is no `Eq` impl for it either. `Never` is
+            // deliberately absent: `panic("boom") + 1` is legal.
             ResolvedType::Unit => true,
             _ => false,
         }
@@ -780,11 +778,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Integer-only operators on a float: Wasm has no float remainder and no
-        // float bitwise or shift instructions. Reject them here — lowering them
-        // anyway emits the i32 opcode over an f64 operand, which the Wasm
-        // validator only catches as an opaque type mismatch. Newtypes resolve to
-        // their base first, so `type Meters = f64` is rejected like `f64`.
+        // Wasm has no float remainder and no float bitwise or shift
+        // instruction. Lowering one anyway emits the i32 opcode over an f64
+        // operand, which the validator reports as an opaque type mismatch.
+        // Newtypes resolve to their base, so `type Meters = f64` is rejected
+        // like `f64`.
         {
             let float_name = {
                 let table = self.tysys.type_table.borrow();
@@ -1864,8 +1862,7 @@ pub(super) fn ord_bool_from_cmp(
     );
     // The callee is `Ord::cmp` by construction, so it returns `Ordering`
     // whatever the dispatch recorded — a trait-bounded receiver leaves that
-    // `return_type` unresolved, and the comparison below then has no type to
-    // pick an opcode from.
+    // unresolved, and the comparison below would have no type to lower from.
     let mut cmp_call = cmp_call;
     cmp_call.type_id = ordering_type_id;
     TirExpr::new(
