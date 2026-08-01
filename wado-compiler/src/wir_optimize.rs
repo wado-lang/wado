@@ -10,16 +10,8 @@
 //! |-------------------|--------------------------------------------|
 //! | `nullable_ref`        | Null-niche variant representation (mandatory) |
 //! | `sroa_variant_return` | Multi-value return SROA (variants)          |
-<<<<<<< HEAD
 //! | `elide_struct`        | Box local elimination + seq-assign flattening |
-//! | `array`               | Push collapse / data promotion / splitting  |
-||||||| 50cf17a00
-//! | `elide_struct`        | Struct local elimination (single + multi)   |
-//! | `array`               | Push collapse / data promotion / splitting  |
-=======
-//! | `elide_struct`        | Struct local elimination (single + multi)   |
 //! | `array`               | Data promotion / splitting / zero-fill elision |
->>>>>>> origin/main
 //! | `const_forward`       | Struct field constant forwarding            |
 //! | `peephole`            | Constant folding, copy elision              |
 //! | `elide_local`     | Write-only local elim for WIR-only locals  |

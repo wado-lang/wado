@@ -374,89 +374,6 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
     *instr = WirInstr::Seq(seq);
 }
 
-<<<<<<< HEAD
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The operand sizes the profitability comparison rests on, against the
-    /// `T.const` encoding the emitter produces.
-    #[test]
-    fn const_operand_encoded_sizes() {
-        assert_eq!(ConstOperand::I32(0).encoded_bytes(), 2);
-        assert_eq!(ConstOperand::I32(63).encoded_bytes(), 2);
-        assert_eq!(ConstOperand::I32(64).encoded_bytes(), 3);
-        assert_eq!(ConstOperand::I32(-64).encoded_bytes(), 2);
-        assert_eq!(ConstOperand::I32(-65).encoded_bytes(), 3);
-        assert_eq!(ConstOperand::I32(8191).encoded_bytes(), 3);
-        assert_eq!(ConstOperand::I32(8192).encoded_bytes(), 4);
-        assert_eq!(ConstOperand::I32(i32::MAX).encoded_bytes(), 6);
-        assert_eq!(ConstOperand::I64(i64::MAX).encoded_bytes(), 11);
-        assert_eq!(ConstOperand::F32.encoded_bytes(), 5);
-        assert_eq!(ConstOperand::F64.encoded_bytes(), 9);
-    }
-
-    fn operand_bytes(count: usize, operand: ConstOperand) -> usize {
-        count * operand.encoded_bytes()
-    }
-
-    #[test]
-    fn promotion_pays_only_when_packing_is_smaller() {
-        let n = ARRAY_NEW_DATA_THRESHOLD;
-        // `u8`: one packed byte against at least two inline.
-        assert!(data_promotion_pays(
-            n,
-            1,
-            operand_bytes(n, ConstOperand::I32(200))
-        ));
-        // `i32` of small values: four packed bytes against three inline.
-        assert!(!data_promotion_pays(
-            n,
-            4,
-            operand_bytes(n, ConstOperand::I32(182))
-        ));
-        // `i32` of values needing a four-byte LEB: five inline.
-        assert!(data_promotion_pays(
-            n,
-            4,
-            operand_bytes(n, ConstOperand::I32(3_000_000))
-        ));
-        // `f64`: eight packed bytes against nine inline.
-        assert!(data_promotion_pays(
-            n,
-            8,
-            operand_bytes(n, ConstOperand::F64)
-        ));
-        // `i64` of small values: eight packed bytes against three inline.
-        assert!(!data_promotion_pays(
-            n,
-            8,
-            operand_bytes(n, ConstOperand::I64(7))
-        ));
-    }
-
-    #[test]
-    fn below_the_threshold_never_promotes() {
-        let n = ARRAY_NEW_DATA_THRESHOLD - 1;
-        assert!(!data_promotion_pays(
-            n,
-            1,
-            operand_bytes(n, ConstOperand::I32(200))
-        ));
-    }
-
-    /// Past the fixed limit the alternative is the `array.new_default` +
-    /// `array.set` build sequence, so packing wins even when it is larger.
-    #[test]
-    fn past_the_fixed_limit_promotion_always_pays() {
-        let n = ARRAY_NEW_FIXED_LIMIT + 1;
-        assert!(data_promotion_pays(
-            n,
-            8,
-            operand_bytes(n, ConstOperand::I64(7))
-        ));
-||||||| 50cf17a00
-=======
 /// Drop an `ArrayFill` that re-writes `array.new_default`'s zeros: the inlined
 /// `List::filled(n, <zero scalar>)` shape leaves
 /// `a = array.new_default(n); array.fill(a, 0, 0, n)` — a second pass over
@@ -538,6 +455,88 @@ fn same_pure_operand(a: &WirInstr, b: &WirInstr) -> bool {
         (WirInstr::I32Const(x), WirInstr::I32Const(y)) => x == y,
         (WirInstr::LocalGet { name: x, .. }, WirInstr::LocalGet { name: y, .. }) => x == y,
         _ => false,
->>>>>>> origin/main
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The operand sizes the profitability comparison rests on, against the
+    /// `T.const` encoding the emitter produces.
+    #[test]
+    fn const_operand_encoded_sizes() {
+        assert_eq!(ConstOperand::I32(0).encoded_bytes(), 2);
+        assert_eq!(ConstOperand::I32(63).encoded_bytes(), 2);
+        assert_eq!(ConstOperand::I32(64).encoded_bytes(), 3);
+        assert_eq!(ConstOperand::I32(-64).encoded_bytes(), 2);
+        assert_eq!(ConstOperand::I32(-65).encoded_bytes(), 3);
+        assert_eq!(ConstOperand::I32(8191).encoded_bytes(), 3);
+        assert_eq!(ConstOperand::I32(8192).encoded_bytes(), 4);
+        assert_eq!(ConstOperand::I32(i32::MAX).encoded_bytes(), 6);
+        assert_eq!(ConstOperand::I64(i64::MAX).encoded_bytes(), 11);
+        assert_eq!(ConstOperand::F32.encoded_bytes(), 5);
+        assert_eq!(ConstOperand::F64.encoded_bytes(), 9);
+    }
+
+    fn operand_bytes(count: usize, operand: ConstOperand) -> usize {
+        count * operand.encoded_bytes()
+    }
+
+    #[test]
+    fn promotion_pays_only_when_packing_is_smaller() {
+        let n = ARRAY_NEW_DATA_THRESHOLD;
+        // `u8`: one packed byte against at least two inline.
+        assert!(data_promotion_pays(
+            n,
+            1,
+            operand_bytes(n, ConstOperand::I32(200))
+        ));
+        // `i32` of small values: four packed bytes against three inline.
+        assert!(!data_promotion_pays(
+            n,
+            4,
+            operand_bytes(n, ConstOperand::I32(182))
+        ));
+        // `i32` of values needing a four-byte LEB: five inline.
+        assert!(data_promotion_pays(
+            n,
+            4,
+            operand_bytes(n, ConstOperand::I32(3_000_000))
+        ));
+        // `f64`: eight packed bytes against nine inline.
+        assert!(data_promotion_pays(
+            n,
+            8,
+            operand_bytes(n, ConstOperand::F64)
+        ));
+        // `i64` of small values: eight packed bytes against three inline.
+        assert!(!data_promotion_pays(
+            n,
+            8,
+            operand_bytes(n, ConstOperand::I64(7))
+        ));
+    }
+
+    #[test]
+    fn below_the_threshold_never_promotes() {
+        let n = ARRAY_NEW_DATA_THRESHOLD - 1;
+        assert!(!data_promotion_pays(
+            n,
+            1,
+            operand_bytes(n, ConstOperand::I32(200))
+        ));
+    }
+
+    /// Past the fixed limit the alternative is the `array.new_default` +
+    /// `array.set` build sequence, so packing wins even when it is larger.
+    #[test]
+    fn past_the_fixed_limit_promotion_always_pays() {
+        let n = ARRAY_NEW_FIXED_LIMIT + 1;
+        assert!(data_promotion_pays(
+            n,
+            8,
+            operand_bytes(n, ConstOperand::I64(7))
+        ));
     }
 }

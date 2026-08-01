@@ -54,7 +54,7 @@ fn "struct_field_rebind_in_export_run.wado/__cm_export__run"() {
     let outer_mv_a: ref "core:prelude//List<i32>";
     let outer_mv_b: ref "core:prelude//List<i32>";
     multivalue_bind [outer_mv_a, outer_mv_b] = "struct_field_rebind_in_export_run.wado/build"(1);
-    drop(struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<i32>; __array_clone_src_3 = outer_mv_a.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<i32>; __array_clone_dst_3 = builtin::array_new<i32>(__array_clone_len_3); builtin::array_copy<i32>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: outer_mv_a.used });
+    drop(struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<i32>; __array_clone_src_3 = outer_mv_a.repr; let __array_clone_len_3: i32; __array_clone_len_3 = outer_mv_a.used; let __array_clone_dst_3: ref Array<i32>; __array_clone_dst_3 = builtin::array_new<i32>(__array_clone_len_3); builtin::array_copy<i32>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: outer_mv_a.used });
     "wasi/task-return"(0);
 }
 
