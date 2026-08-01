@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785533211576,
+  "lastUpdate": 1785566722541,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45133,6 +45133,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 274463,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "50cf17a00054ee6962b73d051138fcfc4154a059",
+          "message": "Merge pull request #1724 from wado-lang/claude/niri-string-interpolation-ytzmzy\n\nfeat(niri): seed region frames, and guard every lazy hoist",
+          "timestamp": "2026-08-01T15:32:52+09:00",
+          "tree_id": "63eb48308b0cabbb278c9cd3cfdff4a0b4399c9e",
+          "url": "https://github.com/wado-lang/wado/commit/50cf17a00054ee6962b73d051138fcfc4154a059"
+        },
+        "date": 1785566722212,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16302,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273276,
             "unit": "bytes"
           }
         ]
