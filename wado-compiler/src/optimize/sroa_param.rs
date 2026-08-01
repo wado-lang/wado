@@ -117,7 +117,7 @@ fn collect_and_validate(
     let type_table = project.type_table.borrow();
     let single_field = build_single_field_index(project);
     let struct_fields = build_struct_fields_index(project);
-    let global_writes = transitive_reachable_writes(project);
+    let reachable_writes = transitive_reachable_writes(project);
     let global_types = global_type_index(project);
 
     let mut candidates: IndexMap<(FnKey, usize), SroaInfo> = IndexMap::default();
@@ -151,7 +151,7 @@ fn collect_and_validate(
                 continue;
             };
             let aliasing_write = may_write_aliasing_location(
-                &global_writes[key.index()],
+                &reachable_writes[key.index()],
                 &info.struct_key,
                 &global_types,
                 &type_table,
@@ -252,13 +252,12 @@ fn reference_param_struct_key(
 /// invalidated during the callee's execution — because some other access path
 /// the callee holds can mutate the pointee `*p`:
 ///
-/// - `aliasing_write` — the callee may write a location the walk cannot rule
-///   out: a global whose type reaches the wrapper, or anything at all behind an
-///   unresolved indirect call ([`ReachableWrites::Opaque`]), or
-/// - a sibling param from which a write can *reach* the wrapper struct — the
-///   sibling need not be the handle itself, only carry one, e.g.
-///   `f(&s.m, &mut s)` where `S { m: M }`, or `f(&x, Holder { r: &mut x })`
-///   where the `&mut` hides in a by-value struct field.
+/// - `aliasing_write` — a write the walk cannot rule out: an aliasing global, or
+///   anything behind an unresolved indirect call, or
+/// - a sibling param from which a write can *reach* the wrapper. The sibling
+///   need not be the handle itself, only carry one: `f(&s.m, &mut s)` where
+///   `S { m: M }`, or `f(&x, Holder { r: &mut x })` where the `&mut` hides in a
+///   by-value struct field.
 ///
 /// A genuine by-value struct candidate is already a copy, so it is never
 /// affected. A *boxed* reference is not one: `boxing::prepare_types` collapses
@@ -266,12 +265,9 @@ fn reference_param_struct_key(
 /// lowers to a read of that one box, so `f(&mut x, &x)` hands the same box to
 /// both params and the snapshot must be refused.
 ///
-/// The two clauses are not independent, and the split is load-bearing: a
-/// `fn mut()` sibling is covered *only* by the first. Its captures live in a
-/// functor struct its type does not mention, so the sibling walk is blind to
-/// them and `Opaque` is the whole guard — see [`ReachableWrites::Opaque`].
-/// (A closure that escapes without being called cannot stale anything; the
-/// snapshot lives only for the duration of the call.)
+/// The split is load-bearing: a `fn mut()` sibling is covered only by the first
+/// clause, because the walk cannot see its captures — see
+/// [`ReachableWrites::Opaque`].
 fn param_snapshot_unsound(
     func: &NirFunction,
     pi: usize,
@@ -329,18 +325,20 @@ fn build_struct_fields_index(project: &NirPackage) -> StructFieldsIndex {
     out
 }
 
+/// A shared `&T` collapsed onto `Box<T>`: the wrapper may be reachable, but
+/// `*p` cannot be written through it, so its payload is sealed.
+fn is_shared_box(ty: TypeId, type_table: &TypeTable) -> bool {
+    type_table.box_payload_of(ty).is_some() && !type_table.is_mut_box(ty)
+}
+
 /// Whether a write can land on a `target`-typed location reachable from `ty`.
 ///
-/// `writable` marks the location currently being visited as one the callee can
-/// write. It is a property of the location itself, not of how deep the walk is:
-/// a `&mut` pointee and a mutable box are writable wherever they appear, a
-/// shared `&T` pointee and a shared box's payload never are, and a component of
-/// a writable aggregate inherits it. So a by-value `Holder { r: &mut i32 }` is a
-/// copy whose `r` field still writes the caller's box, while a by-value `M`
-/// cannot write anything at all.
-///
-/// `visited` breaks cycles over recursive types; it is keyed on the writability
-/// too, since the same type can be reached both ways.
+/// `writable` says the location being visited is one the callee can write. That
+/// is a property of the location, not of the walk's depth: a `&mut` pointee and
+/// a mutable box are writable wherever they appear, a shared pointee never is,
+/// and a component of a writable aggregate inherits it. So a by-value
+/// `Holder { r: &mut i32 }` is a copy whose `r` still writes the caller's box,
+/// while a by-value `M` writes nothing.
 fn mut_reachable_contains(
     ty: TypeId,
     writable: bool,
@@ -362,24 +360,18 @@ fn mut_reachable_contains(
                 type_table.struct_rendered_name(decl_name, type_args),
                 module_source.clone(),
             );
-            // A boxed reference is writable exactly when it came from a `&mut`;
-            // a shared box additionally seals its payload, since `*p` of a `&T`
-            // cannot be written.
-            let is_mut_box = type_table.is_mut_box(ty);
-            let is_shared_box = !is_mut_box && type_table.box_payload_of(ty).is_some();
-            let here = writable || is_mut_box;
-            if here && &key == target {
+            let writable_here = writable || type_table.is_mut_box(ty);
+            if writable_here && &key == target {
                 return true;
             }
             let Some(fields) = struct_fields.get(&key) else {
                 return false;
             };
-            // Fields share the aggregate's storage, so they inherit its writability.
-            let field_writable = here && !is_shared_box;
+            let fields_writable = writable_here && !is_shared_box(ty, type_table);
             return fields.iter().any(|&ft| {
                 mut_reachable_contains(
                     ft,
-                    field_writable,
+                    fields_writable,
                     target,
                     type_table,
                     struct_fields,
@@ -416,16 +408,13 @@ fn mut_reachable_contains(
 /// What a function may write, as far as this pass can attribute it to a name.
 #[derive(Clone)]
 enum ReachableWrites {
-    /// An indirect call whose target cannot be resolved.
+    /// An unresolved indirect call: any global **and** any captured location.
     ///
-    /// This is the pass's only account of a closure's captured state: a
-    /// `fn mut()` value carries its captures in a functor struct that its
-    /// *type* does not mention, so no type-directed query can see them, and
-    /// invoking one is the sole way to reach them. `Opaque` therefore stands
-    /// for "any global **and** any captured location", and every query over it
-    /// MUST answer conservatively. Narrowing it — resolving a single-target
-    /// indirect call, filtering by global type — silently un-guards every
-    /// capture unless the captured locations are accounted for separately.
+    /// This is the pass's only account of closure captures. A `fn mut()` value
+    /// carries them in a functor struct its *type* does not mention, so no
+    /// type-directed query can see them, and invoking it is the only way to
+    /// reach them. Every query over `Opaque` MUST therefore answer
+    /// conservatively; narrowing it un-guards every capture.
     Opaque,
     Named(IndexSet<(ModuleSource, String)>),
 }
@@ -539,10 +528,7 @@ fn global_type_index(project: &NirPackage) -> IndexMap<(ModuleSource, String), T
 
 /// Whether `writes` can land on a location aliasing a `&target` pointee, and so
 /// stale a call-time snapshot of that reference param.
-///
-/// [`Opaque`](ReachableWrites::Opaque) answers `true` unconditionally: it covers
-/// closure captures, which have no type to test against. Keep it that way — a
-/// type-directed refinement here would drop that coverage on the floor.
+/// [`Opaque`](ReachableWrites::Opaque) answers `true` unconditionally.
 fn may_write_aliasing_location(
     writes: &ReachableWrites,
     target: &(String, ModuleSource),

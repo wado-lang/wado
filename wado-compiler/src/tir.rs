@@ -668,9 +668,9 @@ pub struct TypeTable {
     /// A sparse [`TypeMap`] keyed by the wrapper `TypeId`.
     box_payload_types: TypeMap<TypeId>,
     /// The wrapper `TypeId`s the boxing pass redefined from a *shared* `&T`.
-    /// The rewrite gives `&T` and `&mut T` the same `Box<T>` struct content, so
-    /// this set is the only surviving record of which boxed handles cannot be
-    /// written through — see [`Self::is_mut_box`].
+    /// `&T` and `&mut T` get the same `Box<T>` content, so this is the only
+    /// surviving record of which boxed handles cannot be written through — see
+    /// [`Self::is_mut_box`].
     shared_box_type_ids: TypeSet,
     /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
@@ -1972,10 +1972,10 @@ impl TypeTable {
         self.shared_box_type_ids.insert(wrapper);
     }
 
-    /// Whether `wrapper` is a boxed reference that can be written through — a
-    /// `&mut T` the boxing pass collapsed onto `Box<T>`, whose `*q = v` writes
-    /// the box the caller still holds. Only ids positively known to come from a
-    /// shared `&T` answer `false`, so an unclassified wrapper stays writable.
+    /// Whether `wrapper` is a boxed reference that can be written through: a
+    /// `&mut T` collapsed onto `Box<T>`, where `*q = v` writes the box the
+    /// caller still holds. Only ids known to come from a shared `&T` answer
+    /// `false`, so an unclassified wrapper stays writable.
     pub fn is_mut_box(&self, wrapper: TypeId) -> bool {
         self.box_payload_types.get(wrapper).is_some() && !self.shared_box_type_ids.contains(wrapper)
     }

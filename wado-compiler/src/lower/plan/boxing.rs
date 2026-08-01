@@ -336,11 +336,9 @@ impl TypeBuilder {
     /// pass transforms variant expressions (`VariantConstruct`) to wrap/unwrap Box structs,
     /// while codegen handles the type mapping from `Option(primitive)` to a nullable Box reference.
     fn rewrite_types(&mut self, type_table: &mut TypeTable) {
-        // Collect entries to rewrite (can't mutate while iterating). Every
-        // rewritten id is registered as a Box wrapper of its original `inner`
-        // payload — many `Ref(T)` TypeIds may collapse onto the same Box
-        // content, and downstream peeling needs the mapping for each of them,
-        // not just the canonical wrapper id stored in `box_struct_types`.
+        // Many `Ref(T)` TypeIds collapse onto the same Box content, so every
+        // rewritten id — not just the canonical wrapper in `box_struct_types` —
+        // is registered as a wrapper of its payload for downstream peeling.
         let mut replacements: Vec<BoxRewrite> = Vec::new();
 
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
@@ -368,9 +366,7 @@ impl TypeBuilder {
         // a `wrapper -> payload` entry on the type table so downstream
         // passes can call `TypeTable::peel_refs_and_box` to look through
         // the wrapper in one step (used by DCE inspect scanning and the
-        // canonical dispatch WIR builder). The shared/`&mut` origin is
-        // recorded alongside it, since the rewrite erases the distinction
-        // from the resolved type itself.
+        // canonical dispatch WIR builder).
         for r in &replacements {
             self.box_type_ids.insert(r.type_id);
             type_table.register_box_payload(r.type_id, r.payload);

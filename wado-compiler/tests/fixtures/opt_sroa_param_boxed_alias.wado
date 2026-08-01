@@ -1,29 +1,20 @@
 // Soundness (P0) for `sroa_param`: a *boxed* reference parameter is not a copy.
 //
-// `boxing::prepare_types` collapses `&i32` and `&mut i32` onto the same
-// by-value `Box<i32>` wrapper, so `sroa_param` sees a single-field struct
-// passed by value and used to assume "a by-value struct candidate is already a
-// copy". It is not: the box IS the caller's storage, and `&x` of an
-// address-taken local lowers to a read of that one box. Scalarizing a handle
-// some other access path can write turns it into a call-time snapshot, so the
-// write is lost and the read returns the stale value.
+// `boxing::prepare_types` collapses `&i32` and `&mut i32` onto one by-value
+// `Box<i32>`, so `sroa_param` sees a single-field struct passed by value and
+// used to assume "a by-value struct candidate is already a copy". It is not:
+// the box IS the caller's storage, and `&x` of an address-taken local lowers to
+// a read of that one box. Scalarizing a handle some other access path can write
+// turns it into a call-time snapshot, and the write is lost.
 //
-// The aliasing handle does not have to be the sibling itself — it only has to
-// be *reachable* from something the callee holds, so each case hides it one
-// level further:
+// Each case hides the aliasing handle one level further from the candidate; it
+// only has to be *reachable* from something the callee holds, not be the
+// sibling itself.
 //
-//   sibling       — a `&mut` sibling naming the same local
-//   both_mut      — two `&mut` handles on one local
-//   by_value      — a by-value struct whose field is the `&mut`
-//   shared_holder — a *shared* `&Holder`, which still hands out its `&mut` field
-//   via_global    — the `&mut` parked in a global
-//   via_closure   — the write hidden behind an indirect call to a `fn mut()`
-//
-// `shared_pair` is the precision guard: two read-only handles can never stale
-// each other, so scalarization must still fire there. Its arguments come from a
-// mutable global so the call survives folding, and `wir_expect` pins the
-// scalarized signature — without it an over-conservative guard would pass
-// unnoticed.
+// `shared_pair` is the precision guard: two read-only handles cannot stale each
+// other, so scalarization must still fire. Its arguments come from a mutable
+// global so the call survives folding, and `wir_expect` pins the scalarized
+// signature — otherwise an over-conservative guard would pass unnoticed.
 use { println, Stdout } from "core:cli";
 
 struct Holder { r: &mut i32 }
