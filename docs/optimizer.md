@@ -147,6 +147,14 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
       non-constant field still costs a GC load per read.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
+- [ ] Variant return ABI decided at NIR, the way `multi_value_return` already
+      decides the tuple and struct case. Until then every NIR pass sees a
+      `Result`-returning call as one opaque boxed value: the scalarization
+      happens in `wir_optimize::sroa_variant_return`, after they have all run.
+- [ ] Folding a `match` whose scrutinee is a syntactically known
+      `VariantConstruct`. The constant-scrutinee path runs through
+      `const_eval::Value`, which is all-or-nothing constant, so "case known,
+      payload opaque" is inexpressible there.
 
 ## Tried and found ineffective
 
