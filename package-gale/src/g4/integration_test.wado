@@ -560,6 +560,19 @@ test "pipeline: split grammars merge and check_references rejects undefined toke
     assert result matches { Err(_) }, "undefined cross-file token ref should be rejected post-merge";
 }
 
+test "pipeline: duplicate parser rule across merged grammars is rejected" {
+    // Each file parses cleanly (per-file duplicates are a parse error), so
+    // the cross-file duplicate must be caught by check_references after
+    // merge_grammars — otherwise every downstream name->index map silently
+    // resolves `r` to whichever duplicate it saw last.
+    let g1 = parse("grammar A;\nr : 'x' ;").unwrap();
+    let g2 = parse("grammar B;\nr : 'y' ;").unwrap();
+    let merged = merge_grammars([g1, g2]);
+    let result = check_references(&merged);
+    assert result matches { Err(e) && e.message.contains("duplicate parser rule") },
+        "cross-file duplicate parser rule should be rejected post-merge";
+}
+
 test "pipeline: split grammars merge and check_references rejects undefined parser rule ref" {
     let lexer_input = "lexer grammar SplitLexer;\nID : [a-z]+ ;";
     let parser_input = "parser grammar SplitParser;\nstmt : ID expr ;";

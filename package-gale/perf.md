@@ -286,9 +286,11 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
     are where the accumulated cut should matter most.
 
 - **Compute-side gen levers (2026-08, landed).** `benchmark/gale_gen` (Rust
-  grammar, dev host) profiled four compute hot spots; fixing them took
-  best-of-three from 728.8 to ~411 ms/iter (~1.8×), generated output
-  byte-identical for the Rust and SQLite grammars:
+  grammar, dev host) profiled four compute hot spots; fixing them (plus the
+  review round: in-place FOLLOW propagation instead of per-contribution
+  FollowBits copies, and the left-corner reachability walks precomputed in id
+  space) took best-of-three from 728.8 to ~336 ms/iter (~2.2×), generated
+  output byte-identical for the Rust and SQLite grammars:
   - `build_dispatch_groups` + first-char accumulation (~25% self): `add_range`
     and the distinct-range collection deduped by linear scan, each (char, call)
     probe walked the whole range list, and `ranges_meet_unclaimed` counted

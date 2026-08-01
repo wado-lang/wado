@@ -631,9 +631,20 @@ impl GenContext {
 
     /// Install the canonical token-kind table (production path). Ids then match
     /// the resolved `Element::kind_id`, and `name_of` reproduces the emitted
-    /// `TK_*` names.
+    /// `TK_*` names. Clears `kind_rank`: it was built against the replaced
+    /// table, and its length-based staleness check cannot see a same-length
+    /// swap.
     pub fn set_token_kinds(&mut self, kinds: TokenKinds) {
         self.token_kinds = kinds;
+        self.kind_rank = [];
+    }
+
+    /// Kind id of the EOF terminal (`TK_EOF`). Present in every production
+    /// table (`token_slot_order` always emits the Eof slot), so the intern is
+    /// a hit there; it lazily extends only a test-path table built without
+    /// `set_token_kinds`.
+    pub fn eof_kind_id(&mut self) -> i32 {
+        return self.token_kinds.intern(&"TK_EOF");
     }
 
     /// Kind id for a terminal element, using the resolved `kind_id` when

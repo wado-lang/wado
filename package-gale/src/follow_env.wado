@@ -14,6 +14,7 @@
 
 use { ParserRule, Element } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
+use { bits_set, bits_union_into } from "./token_kinds.wado";
 use { TreeMap, TreeSet } from "core:collections";
 
 /// FOLLOW set for a parser rule, in the classical ANTLR4 sense:
@@ -147,17 +148,12 @@ fn compute_rule_follow(
     ctx: &mut GenContext,
     start_rule: &String,
 ) -> TreeMap<String, FollowSet> {
-    let mut index = TreeMap::<String, i32>::new();
-    for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
-        index[parser_rules[ri].name] = ri;
-    }
-
     let mut plans: List<List<Contribution>> = [];
     for let rule of parser_rules {
         let mut plan: List<Contribution> = [];
         let outer = PlanFollow { bits: [], inherits: true };
         for let alt of &rule.alternatives {
-            plan_elements(&alt.elements, ctx, &outer, &index, &mut plan);
+            plan_elements(&alt.elements, ctx, &outer, &mut plan);
         }
         plans.push(plan);
     }
@@ -167,36 +163,36 @@ fn compute_rule_follow(
         env.push(FollowBits { bits: [], closed: false });
     }
     if !start_rule.is_empty() {
-        if let Some(si) = index.get(*start_rule) {
+        let si = ctx.rule_index_of(start_rule);
+        if si >= 0 {
             let mut seed: List<u64> = [];
-            bits_set(&mut seed, ctx.token_ref_id(&"EOF", -1));
+            bits_set(&mut seed, ctx.eof_kind_id());
             env[si] = FollowBits { bits: seed, closed: true };
         }
     }
 
     for let mut ri = 0; ri < plans.len(); ri += 1 {
         for let c of &plans[ri] {
-            let mut merged = env[c.callee];
-            if bits_union_into(&mut merged.bits, &c.bits) {
-                env[c.callee] = merged;
-            }
+            let callee = &mut env[c.callee];
+            let _ = bits_union_into(&mut callee.bits, &c.bits);
         }
     }
 
     loop {
         let mut changed = false;
         for let mut ri = 0; ri < plans.len(); ri += 1 {
+            // Snapshot, not a reference: a rule that calls itself must merge
+            // against the pass-entry value, and the copy is once per rule.
             let caller_follow = env[ri];
             for let c of &plans[ri] {
                 if !c.inherits_outer {
                     continue;
                 }
-                let mut merged = env[c.callee];
-                let new_closed = merged.closed || caller_follow.closed;
-                let bits_changed = bits_union_into(&mut merged.bits, &caller_follow.bits);
-                if bits_changed || new_closed != merged.closed {
-                    merged.closed = new_closed;
-                    env[c.callee] = merged;
+                let callee = &mut env[c.callee];
+                let new_closed = callee.closed || caller_follow.closed;
+                let bits_changed = bits_union_into(&mut callee.bits, &caller_follow.bits);
+                if bits_changed || new_closed != callee.closed {
+                    callee.closed = new_closed;
                     changed = true;
                 }
             }
@@ -241,12 +237,11 @@ fn plan_elements(
     elements: &List<Element>,
     ctx: &mut GenContext,
     outer: &PlanFollow,
-    index: &TreeMap<String, i32>,
     plan: &mut List<Contribution>,
 ) {
     for let mut i = 0; i < elements.len(); i += 1 {
         let local = plan_local_follow(elements, i, ctx, outer);
-        plan_element(&elements[i], ctx, &local, index, plan);
+        plan_element(&elements[i], ctx, &local, plan);
     }
 }
 
@@ -254,18 +249,18 @@ fn plan_element(
     elem: &Element,
     ctx: &mut GenContext,
     local: &PlanFollow,
-    index: &TreeMap<String, i32>,
     plan: &mut List<Contribution>,
 ) {
     match elem {
         RuleRef(r) => {
-            if let Some(callee) = index.get(r.name) {
+            let callee = ctx.rule_index_of(&r.name);
+            if callee >= 0 {
                 plan.push(Contribution { callee, bits: local.bits, inherits_outer: local.inherits });
             }
         },
         Group(g) => {
             for let inner_alt of &g.alternatives {
-                plan_elements(&inner_alt.elements, ctx, local, index, plan);
+                plan_elements(&inner_alt.elements, ctx, local, plan);
             }
         },
         Repeat(rep) => {
@@ -275,10 +270,10 @@ fn plan_element(
             if !rep.kind matches { Optional } {
                 accumulate_first_bits(ctx, &rep.element, &mut inner_outer.bits);
             }
-            plan_element(&rep.element, ctx, &inner_outer, index, plan);
+            plan_element(&rep.element, ctx, &inner_outer, plan);
         },
         Label(lab) => {
-            plan_element(&lab.element, ctx, local, index, plan);
+            plan_element(&lab.element, ctx, local, plan);
         },
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
         },
@@ -332,36 +327,6 @@ fn accumulate_first_bits(ctx: &mut GenContext, elem: &Element, bits: &mut List<u
     for let id of &ids {
         bits_set(bits, *id);
     }
-}
-
-fn bits_ensure(bits: &mut List<u64>, word: i32) {
-    while bits.len() <= word {
-        bits.push(0 as u64);
-    }
-}
-
-fn bits_set(bits: &mut List<u64>, id: i32) {
-    let word = id / 64;
-    bits_ensure(bits, word);
-    bits[word] = bits[word] | 1 as u64 << (id % 64) as u64;
-}
-
-/// OR `src` into `dst`, growing `dst` as needed. Returns whether `dst` grew.
-fn bits_union_into(dst: &mut List<u64>, src: &List<u64>) -> bool {
-    let mut changed = false;
-    for let mut i = 0; i < src.len(); i += 1 {
-        let sv = src[i];
-        if sv == 0 as u64 {
-            continue;
-        }
-        bits_ensure(dst, i);
-        let merged = dst[i] | sv;
-        if merged != dst[i] {
-            dst[i] = merged;
-            changed = true;
-        }
-    }
-    return changed;
 }
 
 /// Materialise a bitset into the public `FollowSet` (a `TreeSet<String>`).

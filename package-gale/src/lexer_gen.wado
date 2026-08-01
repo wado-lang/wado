@@ -2654,9 +2654,6 @@ pub fn compute_elem_first_chars(
     ci: bool,
 ) -> [bool, bool] {
     let mut seen = TreeSet::<i64>::new();
-    for let r of out {
-        seen.insert(range_key(r[0], r[1]));
-    }
     return elem_first_chars_dedup(body, all_rules, out, &mut seen, ci);
 }
 
@@ -2803,20 +2800,21 @@ fn build_range_index(ranges: &List<[char, char]>) -> RangeIndex {
 }
 
 fn range_index_matches(idx: &RangeIndex, c: char) -> bool {
-    let i = upper_bound_char(&idx.starts, c) - 1;
+    let i = bound_char(&idx.starts, c, true) - 1;
     if i < 0 {
         return false;
     }
     return idx.max_end[i] >= c;
 }
 
-/// First index whose element is >= `c` in a sorted list.
-fn lower_bound_char(chars: &List<char>, c: char) -> i32 {
+/// First index whose element is > `c` (`after` true) or >= `c` (`after`
+/// false) in a sorted list — upper and lower bound sharing one search.
+fn bound_char(chars: &List<char>, c: char, after: bool) -> i32 {
     let mut lo = 0;
     let mut hi = chars.len();
     while lo < hi {
         let mid = (lo + hi) / 2;
-        if chars[mid] < c {
+        if chars[mid] < c || after && chars[mid] == c {
             lo = mid + 1;
         } else {
             hi = mid;
@@ -2825,19 +2823,9 @@ fn lower_bound_char(chars: &List<char>, c: char) -> i32 {
     return lo;
 }
 
-/// First index whose element is > `c` in a sorted list.
-fn upper_bound_char(chars: &List<char>, c: char) -> i32 {
-    let mut lo = 0;
-    let mut hi = chars.len();
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        if chars[mid] <= c {
-            lo = mid + 1;
-        } else {
-            hi = mid;
-        }
-    }
-    return lo;
+/// Count of sorted `chars` inside `[lo, hi]`.
+fn count_in_sorted(chars: &List<char>, lo: char, hi: char) -> i32 {
+    return bound_char(chars, hi, true) - bound_char(chars, lo, false);
 }
 
 /// True when `ranges` shares a char with `probe` that no single-char branch
@@ -2858,7 +2846,7 @@ fn ranges_meet_unclaimed(ranges: &List<[char, char]>, probe: [char, char], claim
         if width > claimed.len() {
             return true;
         }
-        if upper_bound_char(claimed, hi) - lower_bound_char(claimed, lo) < width {
+        if count_in_sorted(claimed, lo, hi) < width {
             return true;
         }
     }
@@ -2896,27 +2884,24 @@ fn coalesce_equal_groups(groups: &mut List<DispatchGroup>) {
 }
 
 fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
-    let mut all_chars: List<char> = [];
+    let mut single_chars: List<char> = [];
     for let call of calls {
         if call.is_wildcard {
             continue;
         }
         for let r of &call.first_chars {
             if r[0] == r[1] {
-                let mut found = false;
-                for let existing of &all_chars {
-                    if *existing == r[0] {
-                        found = true;
-                        break;
-                    }
-                }
-                if !found {
-                    all_chars.push(r[0]);
-                }
+                single_chars.push(r[0]);
             }
         }
     }
-    all_chars.sort();
+    single_chars.sort();
+    let mut all_chars: List<char> = [];
+    for let mut i = 0; i < single_chars.len(); i += 1 {
+        if i == 0 || single_chars[i] != single_chars[i - 1] {
+            all_chars.push(single_chars[i]);
+        }
+    }
 
     let mut range_indexes: List<RangeIndex> = [];
     for let call of calls {
