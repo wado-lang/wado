@@ -11,11 +11,11 @@
 //! program never produced.
 
 use crate::const_eval::Value;
+use crate::name::RefKind;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_visitor::NirRefVisitor;
-use crate::name::RefKind;
 use crate::tir::TypeTable;
 
 use super::place::{borrowed_place_operand, overlapping_places, place_of};
@@ -732,8 +732,13 @@ impl Interpreter<'_> {
         if self.frame.region_misses.contains(&e) {
             return None;
         }
-        let free =
-            region_free_reads(body, block, self.callees, self.ctfe_builtins, self.type_table)?;
+        let free = region_free_reads(
+            body,
+            block,
+            self.callees,
+            self.ctfe_builtins,
+            self.type_table,
+        )?;
         let mut seeds: Vec<(u32, Value)> = Vec::with_capacity(free.len());
         for index in free {
             if self.frame.alias_involves(index) {

@@ -117,9 +117,7 @@ fn classify(
                 ExprKind::Assign { target, value } => Some((*target, *value)),
                 _ => None,
             };
-            // A demoted binding whose value later reduces to a pure literal is
-            // a bare allocation nothing observes. Not in tail position — a
-            // block's tail `Expr` is its value.
+            // Not in tail position — a block's tail `Expr` is its value.
             if assign.is_none()
                 && !is_tail
                 && arena_query::is_pure_nontrapping_operand_typed(

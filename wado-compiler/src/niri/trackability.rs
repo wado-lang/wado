@@ -370,7 +370,10 @@ pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet 
     }
     for (_, stmt) in &body.stmts {
         match &stmt.kind {
-            StmtKind::Return { value: Some(op) } | StmtKind::Break { value: Some(op), .. } => {
+            StmtKind::Return { value: Some(op) }
+            | StmtKind::Break {
+                value: Some(op), ..
+            } => {
                 read_value(*op, &mut value_reads);
             }
             StmtKind::Let { value: op, .. } | StmtKind::Expr(op) => {

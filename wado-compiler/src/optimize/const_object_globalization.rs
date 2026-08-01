@@ -69,12 +69,10 @@ struct Candidate {
     ty: TypeId,
     module_source: ModuleSource,
     kind: CandidateKind,
-    /// Initializer cannot become a Wasm constant — it contains a call, or a
-    /// `PackedArray` past the eager repr bound whose WIR lowering is
-    /// `array.new_data` — so `wir_optimize::const_global` cannot delete the
-    /// assignment. Such a candidate needs the lazy-init guard; an
-    /// eager-promotable one keeps the unguarded shape so its promotion is
-    /// unchanged.
+    /// Initializer cannot become a Wasm constant ([`needs_lazy_guard`]), so
+    /// `wir_optimize::const_global` cannot delete the assignment and the
+    /// candidate needs the lazy-init guard. An eager-promotable one keeps the
+    /// unguarded shape so its promotion is unchanged.
     guarded: bool,
 }
 
@@ -268,13 +266,9 @@ fn collect_candidates(
 ) {
     let single_decl_locals = locals_declared_once(body);
     let siblings = sibling_const_locals(body, gate, &single_decl_locals);
-    // Skeleton mentions only. The pool-wide `opaque_local_sources` is not a
-    // usable substitute for the missing pool reads: the pool is append-only,
-    // so it also names locals whose promoted reads have long folded away, and
-    // counting those as live resurrects exactly the dead hoists the gate
-    // exists to refuse. The cost is a skipped hoist for a binding whose every
-    // surviving read is a promoted operand — which the write-only elider then
-    // keeps as a local, unhoisted.
+    // Skeleton mentions only: the pool-wide `opaque_local_sources` cannot
+    // stand in for the missing pool reads, since the append-only pool also
+    // names locals whose promoted reads have long folded away.
     let mut read_locals = IndexSet::default();
     collect_reads(body, &mut read_locals);
     let mut stack = vec![NodeRef::Block(body.root)];
@@ -288,9 +282,8 @@ fn collect_candidates(
             && single_decl_locals.contains(local_index)
             && let Some(sibling_lets) = let_stmt_qualifies(body, s, gate, &siblings, &read_locals)
         {
-            // The sibling `let`s move into the initializer at mutation time,
-            // so a non-promotable value among them needs the guard just as
-            // much as one in the candidate's own value.
+            // A sibling `let` moves into the initializer at mutation time,
+            // so it decides the guard as much as the candidate's own value.
             let guarded = std::iter::once(s)
                 .chain(sibling_lets.iter().copied())
                 .any(|st| stmt_needs_lazy_guard(body, st, gate, false));
@@ -618,10 +611,8 @@ fn let_stmt_qualifies(
     {
         return None;
     }
-    // A binding nothing reads any more — its uses all folded — is dead code
-    // on its way out, not a hoist target: hoisting it manufactures a live
-    // global (and, once guarded, one no WIR cleanup deletes) from a `let`
-    // the write-only elider would otherwise drop.
+    // An unread binding is dead code on its way out, not a hoist target:
+    // hoisting it manufactures a live global no WIR cleanup deletes.
     if !read_locals.contains(&local_index) {
         return None;
     }
@@ -1680,17 +1671,18 @@ fn inline_sibling_lets(
 
 /// True when `expr` cannot end as a Wasm constant instruction, so
 /// `wir_optimize::const_global` cannot delete the assignment and the
-/// candidate needs the lazy-init guard. Three shapes qualify:
+/// candidate needs the lazy-init guard. Four shapes qualify:
 ///
 /// - a call, never const-expressible;
 /// - a `PackedArray` outside the eager `array.new_fixed` bound
 ///   ([`crate::wir_build::packed_array_is_eager`], the same choice
 ///   `translate_packed_array` makes);
-/// - an `ArrayLiteral` of scalar constants at or past
+/// - an `ArrayLiteral` past `ARRAY_NEW_FIXED_LIMIT`, whatever its elements,
+///   which `split_large_array_literals` rewrites into a build sequence;
+/// - an `ArrayLiteral` of packable scalars at or past
 ///   `ARRAY_NEW_DATA_THRESHOLD`, which `promote_constant_arrays_to_data`
-///   rewrites to `array.new_data` before the classifier runs. Scalar-ness is
-///   read off the operands — a pure scalar element is born as
-///   `Operand::Value` — since only packable primitives lose the fixed repr.
+///   rewrites to `array.new_data`. A pure scalar element is born as
+///   `Operand::Value`, so packability is read off the operands.
 fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bool) -> bool {
     let mut stack = vec![NodeRef::Expr(expr)];
     while let Some(node) = stack.pop() {
@@ -1711,9 +1703,7 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bo
                 }
                 ExprKind::ArrayLiteral { elements } => {
                     let packable = |op: &Operand| match op {
-                        // Numeric scalars only: a pooled `Null` is a ref the
-                        // data promotion cannot pack, and guarding it would be
-                        // guarding an initializer that stays const.
+                        // A pooled `Null` is a ref the data promotion cannot pack.
                         Operand::Value(v) => matches!(
                             body.values.kind(*v),
                             crate::nir_value_graph::ValueKind::Int(..)
@@ -1755,10 +1745,9 @@ fn stmt_needs_lazy_guard(body: &Body, stmt: StmtId, gate: &Gate<'_>, prefer_fixe
 ///
 /// The unguarded form is correct only because `wir_optimize::const_global`
 /// promotes a Wasm-const-expressible initializer into the global's eager
-/// `init` and deletes the assignment. A call is never const-expressible, and
-/// neither is a `PackedArray` past its eager bound (its repr is
-/// `array.new_data`), so such an assignment survives — and an unguarded one
-/// re-runs on every activation, which is the opposite of hoisting.
+/// `init` and deletes the assignment. An initializer [`needs_lazy_guard`]
+/// classes non-promotable survives — and an unguarded one re-runs on every
+/// activation, which is the opposite of hoisting.
 ///
 /// The guard also pins the semantics: initialization happens at the first
 /// execution of the expression it replaced, so a callee that traps or diverges

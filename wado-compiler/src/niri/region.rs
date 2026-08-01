@@ -68,10 +68,13 @@ pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&s
 /// write capability.
 ///
 /// A write position is an `Assign` target, a `&mut` borrow, or an argument —
-/// receiver included — the callee's signature takes by `&mut`. A write whose
-/// place no local roots also disqualifies: the executor resolves stores
-/// through the same chains, so an unrooted one is a write this scan cannot
-/// account for, not a write that will not happen.
+/// receiver included — the callee's signature takes by `&mut`. The signature
+/// is the only reliable witness: `ArenaCallArg::is_mut` marks a by-value
+/// `mut` parameter, the callee's own copy, and boxing can erase the borrow
+/// node at the call site. A write whose place no local roots also
+/// disqualifies: the executor resolves stores through the same chains, so an
+/// unrooted one is a write this scan cannot account for, not a write that
+/// will not happen.
 ///
 /// Only the reachable nodes are scanned, so a mention an earlier rewrite
 /// orphaned neither disqualifies the region nor keeps it from folding. What
@@ -112,11 +115,6 @@ pub(super) fn region_free_reads(
                 | ExprKind::IndirectCall { .. }
                 | ExprKind::CmRawCall { .. } => return None,
                 ExprKind::Call { func_id, args, .. } => {
-                    // `ArenaCallArg::is_mut` marks a by-value `mut` parameter
-                    // — the callee's own copy — so a caller-visible write is
-                    // read off the callee's `&mut` signature instead. Boxing
-                    // can erase the borrow node at the call site, so the
-                    // signature is the only reliable witness.
                     if let Some(callee) = callees.and_then(|m| m.get(func_id)) {
                         if args.len() != callee.arity() {
                             return None;
@@ -140,8 +138,7 @@ pub(super) fn region_free_reads(
                     args,
                     ..
                 } => {
-                    // A builtin never reaches NIR as a method call, so only
-                    // the callee map answers what each argument undergoes.
+                    // A builtin never reaches NIR as a method call.
                     let callee = callees.and_then(|m| m.get(func_id))?;
                     if 1 + args.len() != callee.arity() {
                         return None;
