@@ -2808,7 +2808,7 @@ fn range_index_matches(idx: &RangeIndex, c: char) -> bool {
 }
 
 /// First index whose element is > `c` (`after` true) or >= `c` (`after`
-/// false) in a sorted list — upper and lower bound sharing one search.
+/// false) in a sorted list.
 fn bound_char(chars: &List<char>, c: char, after: bool) -> i32 {
     let mut lo = 0;
     let mut hi = chars.len();
@@ -2831,7 +2831,7 @@ fn count_in_sorted(chars: &List<char>, lo: char, hi: char) -> i32 {
 /// True when `ranges` shares a char with `probe` that no single-char branch
 /// already claims. Those branches come first, so a rule whose first set inside
 /// `probe` is entirely `claimed` chars is unreachable from the range branch.
-/// `claimed` must be sorted; the claimed-count query is two binary searches.
+/// `claimed` must be sorted.
 fn ranges_meet_unclaimed(ranges: &List<[char, char]>, probe: [char, char], claimed: &List<char>) -> bool {
     for let mut i = 0; i < ranges.len(); i += 1 {
         let r = ranges[i];

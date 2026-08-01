@@ -78,8 +78,7 @@ pub struct GenContext {
     token_kinds: TokenKinds,
     /// `kind_rank[id]` is the lexicographic rank of `token_kinds.names[id]`,
     /// rebuilt lazily whenever the table has grown. Kind-set canonicalisation
-    /// sorts ids by rank — the same order as sorting the names — without
-    /// touching a `String`.
+    /// sorts ids by rank, i.e. by token name.
     kind_rank: List<i32>,
     /// Per-rule memo caches indexed by dense rule id (position in
     /// `parser_rules`, i.e. what `rule_index_of` returns). `null` means
@@ -631,18 +630,16 @@ impl GenContext {
 
     /// Install the canonical token-kind table (production path). Ids then match
     /// the resolved `Element::kind_id`, and `name_of` reproduces the emitted
-    /// `TK_*` names. Clears `kind_rank`: it was built against the replaced
-    /// table, and its length-based staleness check cannot see a same-length
-    /// swap.
+    /// `TK_*` names. Clears `kind_rank`: its length-based staleness check
+    /// cannot see a same-length table swap.
     pub fn set_token_kinds(&mut self, kinds: TokenKinds) {
         self.token_kinds = kinds;
         self.kind_rank = [];
     }
 
-    /// Kind id of the EOF terminal (`TK_EOF`). Present in every production
-    /// table (`token_slot_order` always emits the Eof slot), so the intern is
-    /// a hit there; it lazily extends only a test-path table built without
-    /// `set_token_kinds`.
+    /// Kind id of the EOF terminal (`TK_EOF`). Always present in a production
+    /// table (`token_slot_order` emits the Eof slot); the intern lazily
+    /// extends only a test-path table built without `set_token_kinds`.
     pub fn eof_kind_id(&mut self) -> i32 {
         return self.token_kinds.intern(&"TK_EOF");
     }
@@ -1502,8 +1499,7 @@ impl GenContext {
         return id;
     }
 
-    /// Map `TK_*` names to their kind ids (in the given order). Names come from
-    /// the canonicalised (name-sorted) set, so emit re-derives the same order.
+    /// Map `TK_*` names to their kind ids, in the given order.
     fn names_to_ids(&mut self, names: &List<String>) -> List<i32> {
         let mut out: List<i32> = [];
         for let n of names {
@@ -1512,11 +1508,10 @@ impl GenContext {
         return out;
     }
 
-    /// Canonical form of a kind set as ids: sorted by token name (via the
-    /// rank table — no `String` comparison per element) and deduplicated.
-    /// Two `matches { ... }` checks over equal sets (regardless of order or
-    /// repeated elements) collapse to the same canonical form and therefore
-    /// the same helper id.
+    /// Canonical form of a kind set as ids: sorted by token name (rank order)
+    /// and deduplicated. Two `matches { ... }` checks over equal sets
+    /// (regardless of order or repeated elements) collapse to the same
+    /// canonical form and therefore the same helper id.
     fn canonical_kind_ids(&mut self, tokens: &List<String>) -> List<i32> {
         let mut ids = self.names_to_ids(tokens);
         self.ensure_kind_rank();

@@ -134,11 +134,10 @@ pub fn build(parser_rules: &List<ParserRule>, ctx: &mut GenContext, start_rule: 
 /// The enclosing context is the rule's own FOLLOW for top-level alts,
 /// and the surrounding group's effective follow for inner alts.
 ///
-/// The FIRST-derived half of every contribution never changes across
-/// iterations, so the element walk runs once up front ([`plan_element`])
-/// and its static bits are seeded before the loop; the loop then only
-/// propagates each caller's own FOLLOW through the sites whose suffix
-/// chain is deep-nullable (`inherits_outer`).
+/// FIRST-derived bits are iteration-invariant: the element walk runs once
+/// ([`plan_element`]) and seeds them before the loop, which then only
+/// propagates caller FOLLOW through the deep-nullable sites
+/// (`inherits_outer`).
 ///
 /// Termination: every iteration that doesn't grow any rule's set is
 /// the last; the algorithm terminates because each set is monotonic
@@ -182,7 +181,7 @@ fn compute_rule_follow(
         let mut changed = false;
         for let mut ri = 0; ri < plans.len(); ri += 1 {
             // Snapshot, not a reference: a rule that calls itself must merge
-            // against the pass-entry value, and the copy is once per rule.
+            // against the pass-entry value.
             let caller_follow = env[ri];
             for let c of &plans[ri] {
                 if !c.inherits_outer {

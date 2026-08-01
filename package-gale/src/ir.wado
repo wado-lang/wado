@@ -232,9 +232,8 @@ pub fn synthesize_implicit_tokens(grammar: &mut Grammar) {
 ///     skipped because the sibling lexer grammar hasn't been merged yet.
 pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
     // Per-file duplicates are a parse error, so a duplicate here means two
-    // merged files define the same rule. Reject it: every downstream
-    // name->index map (GenContext, atn, the left-corner walks) would
-    // otherwise silently resolve the name to one arbitrary definition.
+    // merged files define the same rule; downstream name->index maps would
+    // silently resolve it to one arbitrary definition.
     let mut rule_names = TreeMap::<String, ()>::new();
     for let pr of &grammar.parser_rules {
         if rule_names.contains_key(pr.name) {
@@ -360,10 +359,8 @@ pub fn check_left_recursion(grammar: &Grammar) -> Result<(), ParseError> {
 /// Shared left-corner machinery for [`check_left_recursion`] (grammatical
 /// nullability, `scan` = false) and [`compute_scan_cyclic`] (scan
 /// nullability, `scan` = true: a `lenient` group also matches empty). Built
-/// once per grammar — rule name → dense index, the least-fixed-point
-/// nullable table (a cycle contributes false, matching the visiting-set
-/// recursion this replaces), and per-rule left-corner ids — so the
-/// reachability walks run in id space with no per-query recursion.
+/// once per grammar: rule name → dense index, the least-fixed-point
+/// nullable table (a cycle contributes false), and per-rule left-corner ids.
 struct LeftCornerCtx {
     index: TreeMap<String, i32>,
     nullable: List<bool>,
@@ -515,8 +512,7 @@ fn element_nullable(elem: &Element, index: &TreeMap<String, i32>, nullable: &Lis
         },
         Group(g) => {
             // A `lenient` scan group bails out at its entry position on no
-            // match, so under scan semantics it matches empty regardless of
-            // its alternatives' grammatical nullability.
+            // match, so under scan semantics it matches empty.
             let mut any_null = scan && group_is_lenient_scan(g);
             if !any_null {
                 for let alt of &g.alternatives {
