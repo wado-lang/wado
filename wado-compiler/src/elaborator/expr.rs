@@ -1159,12 +1159,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 module_source,
                 ..
             } => {
-                if let Some(struct_info) = self.lookup_struct_fields_in(&name, &module_source) {
-                    for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
-                        if fname == field_name {
-                            return (index as u32, *ftype);
-                        }
-                    }
+                let declared = self.lookup_struct_fields_in(&name, &module_source);
+                let hit = declared.map(|info| {
+                    info.fields
+                        .iter()
+                        .enumerate()
+                        .find(|(_, (fname, _, _))| fname == field_name)
+                        .map(|(index, (_, ftype, _))| (index as u32, *ftype))
+                });
+                match hit {
+                    Some(Some(found)) => return found,
+                    Some(None) => return self.field_not_found(&name, field_name, span),
+                    None => {}
                 }
             }
             // Reference types - look through to inner type
@@ -1210,10 +1216,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             return (index as u32, concrete_type);
                         }
                     }
+                    return self.field_not_found(&name, field_name, span);
                 }
             }
             _ => {}
         }
+        (0, TypeTable::UNKNOWN)
+    }
+
+    /// Report an access to a field the struct does not declare. Answering
+    /// `Unknown` instead lets the access reach codegen with no type to lower
+    /// from, and silently turns any pattern matched against it irrefutable.
+    fn field_not_found(&mut self, struct_name: &str, field_name: &str, span: Span) -> (u32, TypeId) {
+        let _ = self.emit(TypeError::ExtraField {
+            struct_name: struct_name.to_string(),
+            field_name: field_name.to_string(),
+            span,
+        });
         (0, TypeTable::UNKNOWN)
     }
 
