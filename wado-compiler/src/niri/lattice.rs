@@ -25,7 +25,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId};
 
 use super::CtfeBuiltin;
 use super::pattern::PatternMatch;
-use super::{GlobalKey, Interpreter, Lattice, PatBindings, local_binds_to_global_ref};
+use super::{BodyShape, GlobalKey, Interpreter, Lattice, PatBindings};
 
 impl Interpreter<'_> {
     /// What an operand denotes: the promoted constant for `Operand::Value`,
@@ -81,11 +81,12 @@ impl Interpreter<'_> {
             } => Some((module_source.clone(), name.clone())),
             ExprKind::Local { index, .. } => {
                 let key = self.frame.ref_global_aliases.get(index)?;
-                debug_assert!(
-                    local_binds_to_global_ref(body, *index, key),
-                    "ref_global_aliases[{index}] = {key:?} is stale: the body being folded does \
-                     not bind local {index} to that reference — per-function alias state leaked \
-                     across a body boundary (e.g. a CTFE scratch reduction that did not \
+                debug_assert_eq!(
+                    self.frame.alias_body,
+                    Some(BodyShape::of(body)),
+                    "ref_global_aliases holds {key:?} for local {index}, but the body being \
+                     folded is not the one they were recorded for — per-function alias state \
+                     leaked across a body boundary (e.g. a CTFE scratch reduction that did not \
                      save/clear it)",
                 );
                 Some(key.clone())
@@ -386,50 +387,64 @@ impl Interpreter<'_> {
     /// A guarded arm is undecided here. Deciding one means scoping the
     /// pattern's bindings, which only the rewrite path can do.
     fn match_lattice(&self, body: &Body, scrutinee: ExprId, arms: &[ArmData]) -> Lattice {
-        let scrut_const = self.expr_to_lattice(body, scrutinee).as_const();
         if arms.is_empty() {
             return Lattice::Unevaluated;
         }
-        if let Some(scrut_v) = scrut_const {
-            let mut candidates = Vec::<Lattice>::new();
-            let mut yes_found = false;
-            for arm in arms {
-                let pm = if arm.guard.is_some() {
-                    PatternMatch::Unknown
-                } else {
-                    self.pattern_matches(body, &scrut_v, arm.pattern, &mut PatBindings::new())
-                };
-                let body_lat =
-                    arm_lattice_for_feasible_join(self.operand_to_lattice(body, arm.body));
-                match pm {
-                    PatternMatch::No => {}
-                    PatternMatch::Yes => {
-                        if candidates.is_empty() {
-                            return self.operand_to_lattice(body, arm.body);
-                        }
-                        candidates.push(body_lat);
-                        yes_found = true;
-                        break;
-                    }
-                    PatternMatch::Unknown => candidates.push(body_lat),
+        match self.expr_to_lattice(body, scrutinee).as_const() {
+            Some(value) => self.chosen_arm_lattice(body, &value, arms),
+            None => self.every_arm_lattice(body, arms),
+        }
+    }
+
+    /// The join over the arms a constant scrutinee leaves feasible: the ones
+    /// still undecided, up to and including the first that definitely matches.
+    /// A later arm is unreachable once one matches, and an arm that cannot
+    /// match contributes nothing — so neither is valued at all.
+    ///
+    /// `NonConst` when no arm is found to match: the implicit no-match trap is
+    /// live, and folding to any arm's value would erase it.
+    fn chosen_arm_lattice(&self, body: &Body, value: &Value, arms: &[ArmData]) -> Lattice {
+        let mut acc = Lattice::Unevaluated;
+        let mut undecided = false;
+        for arm in arms {
+            let pm = if arm.guard.is_some() {
+                PatternMatch::Unknown
+            } else {
+                self.pattern_matches(body, value, arm.pattern, &mut PatBindings::new())
+            };
+            match pm {
+                PatternMatch::No => {}
+                PatternMatch::Yes if !undecided => {
+                    return self.operand_to_lattice(body, arm.body);
+                }
+                PatternMatch::Yes => return acc.join(self.feasible_arm(body, arm)),
+                PatternMatch::Unknown => {
+                    undecided = true;
+                    acc = acc.join(self.feasible_arm(body, arm));
                 }
             }
-            if !yes_found {
-                return Lattice::NonConst;
-            }
-            join_all(&candidates)
-        } else {
-            if !is_provably_exhaustive(body, arms) {
-                return Lattice::NonConst;
-            }
-            let mut acc = Lattice::Unevaluated;
-            for arm in arms {
-                acc = acc.join(arm_lattice_for_feasible_join(
-                    self.operand_to_lattice(body, arm.body),
-                ));
-            }
-            acc
         }
+        Lattice::NonConst
+    }
+
+    /// The join over every arm, for a scrutinee no arm can be decided against.
+    /// Only sound where the arms cover it: otherwise the no-match trap decides
+    /// the value instead.
+    fn every_arm_lattice(&self, body: &Body, arms: &[ArmData]) -> Lattice {
+        if !is_provably_exhaustive(body, arms.iter().map(|a| (a.guard, a.pattern))) {
+            return Lattice::NonConst;
+        }
+        let mut acc = Lattice::Unevaluated;
+        for arm in arms {
+            acc = acc.join(self.feasible_arm(body, arm));
+        }
+        acc
+    }
+
+    /// An arm's value as it reaches a join: reachable, so an unknown one is
+    /// SCCP-Top rather than an absorbed infeasible edge.
+    fn feasible_arm(&self, body: &Body, arm: &ArmData) -> Lattice {
+        arm_lattice_for_feasible_join(self.operand_to_lattice(body, arm.body))
     }
 
     /// Evaluate `array_get(seq, i)` / `array_len(seq)` over a constant
@@ -617,16 +632,6 @@ pub(super) fn option_to_lattice(opt: Option<Value>) -> Lattice {
     }
 }
 
-/// Join a slice of lattice values via [`Lattice::join`]. Empty input
-/// returns [`Lattice::Unevaluated`] (the join's identity).
-pub(super) fn join_all(lats: &[Lattice]) -> Lattice {
-    let mut acc = Lattice::Unevaluated;
-    for l in lats {
-        acc = acc.join(l.clone());
-    }
-    acc
-}
-
 /// Promote an arm's `Unevaluated` to `NonConst` before joining it.
 ///
 /// `join` absorbs an `Unevaluated` operand, which is the infeasible-edge rule
@@ -640,9 +645,15 @@ pub(super) fn arm_lattice_for_feasible_join(lat: Lattice) -> Lattice {
 }
 
 /// Whether the arms cover every scrutinee (a guardless catch-all exists).
-pub(super) fn is_provably_exhaustive(body: &Body, arms: &[ArmData]) -> bool {
-    arms.iter()
-        .any(|a| a.guard.is_none() && pattern_is_catch_all(body, a.pattern))
+///
+/// Takes what it asks of an arm rather than the arm, so the rewrite path can
+/// answer from the parts it already lifted out of the body.
+pub(super) fn is_provably_exhaustive(
+    body: &Body,
+    arms: impl IntoIterator<Item = (Option<Operand>, PatId)>,
+) -> bool {
+    arms.into_iter()
+        .any(|(guard, pattern)| guard.is_none() && pattern_is_catch_all(body, pattern))
 }
 
 pub(super) fn pattern_is_catch_all(body: &Body, pat: PatId) -> bool {

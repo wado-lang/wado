@@ -3693,6 +3693,71 @@ fn a_constant_string_call_result_becomes_a_literal() {
 }
 
 #[test]
+fn a_write_does_not_reach_a_value_copied_out_before_it() {
+    // `let d = c` is a copy under Wado's value semantics, and the engine
+    // shares one backing between the two until something writes. That write
+    // has to fork the backing: writing where it lies would reach through every
+    // copy taken of it.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let set_id = next_test_func_id();
+    let get_id = next_test_func_id();
+    let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
+    builtins.insert(get_id, CtfeBuiltin::ArrayGet);
+
+    let backing_of = move |local: u32| {
+        field_access(
+            local_expr(local, list_ty),
+            SeqField::Backing.index(),
+            "repr",
+            list_ty,
+        )
+    };
+    // fn f() { let mut c = [1, 2]; let d = c; c.repr[0] = 9; return d.repr[0]; }
+    let copy_then_write = make_multi_stmt_fn(
+        "copy_then_write",
+        vec![],
+        TypeTable::U8,
+        &[("c", list_ty, true), ("d", list_ty, false)],
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![1, 2])),
+            let_stmt_b("d", 1, list_ty, local_expr(0, list_ty)),
+            expr_stmt_b(seq_write_call(
+                set_id,
+                vec![
+                    mut_ref(backing_of(0), list_ty),
+                    int_lit(0, TypeTable::I32, "0"),
+                    int_lit(9, TypeTable::U8, "9"),
+                ],
+                TypeTable::UNIT,
+            )),
+            return_stmt(ctfe_builtin_call(
+                get_id,
+                vec![
+                    shared_ref(backing_of(1), list_ty),
+                    int_lit(0, TypeTable::I32, "0"),
+                ],
+                TypeTable::U8,
+            )),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&copy_then_write));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.with_ctfe_builtins(&builtins);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&copy_then_write, vec![])),
+        Some(Value::Int {
+            value: 1,
+            prim: PrimitiveType::U8,
+        }),
+        "the copy must still hold what it was given",
+    );
+}
+
+#[test]
 fn a_write_through_a_frame_owned_place_is_read_back() {
     // `array_set` through a `&mut` place the frame built updates the container,
     // so a later read of that element sees the written value rather than

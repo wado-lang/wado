@@ -440,23 +440,22 @@ impl Interpreter<'_> {
     /// A constant scrutinee decides the whole rewrite: the arm it picks is the
     /// only sound one, so failing to pick it rules out the other collapses too.
     fn rewrite_match_expr_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
-        let body = sink.body();
-        let scrutinee = match &body.exprs[e].kind {
-            ExprKind::Match { expr, arms } if !arms.is_empty() => *expr,
-            _ => return false,
+        let ExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } = &sink.body().exprs[e].kind
+        else {
+            return false;
         };
-        let arms_data: Vec<ArmParts> = match &body.exprs[e].kind {
-            ExprKind::Match { arms, .. } => arms
-                .iter()
-                .map(|a| (a.guard, a.pattern, a.body, a.span))
-                .collect(),
-            _ => unreachable!(),
-        };
-        if let Lattice::Const(scrutinee_value) = self.operand_to_lattice(sink.body(), scrutinee) {
-            return self.splice_chosen_match_arm(sink, e, &scrutinee_value, &arms_data);
+        if arms.is_empty() {
+            return false;
         }
-        rewrite_bool_discriminator(sink, e, scrutinee, &arms_data)
-            || self.collapse_equal_match_arms(sink, e, scrutinee, &arms_data)
+        let (scrutinee, arms) = (*scrutinee, ArmParts::of(arms));
+        if let Lattice::Const(scrutinee_value) = self.operand_to_lattice(sink.body(), scrutinee) {
+            return self.splice_chosen_match_arm(sink, e, &scrutinee_value, &arms);
+        }
+        rewrite_bool_discriminator(sink, e, scrutinee, &arms)
+            || self.collapse_equal_match_arms(sink, e, scrutinee, &arms)
     }
 
     /// Replace the `match` with the arm a constant scrutinee selects, wrapped in
@@ -473,35 +472,35 @@ impl Interpreter<'_> {
         scrutinee_value: &Value,
         arms_data: &[ArmParts],
     ) -> bool {
-        let mut chosen: Option<(usize, PatBindings)> = None;
-        for (i, (guard, pat, _, _)) in arms_data.iter().enumerate() {
+        let mut chosen: Option<(&ArmParts, PatBindings)> = None;
+        for arm in arms_data {
             let mut binds = PatBindings::new();
-            match self.pattern_matches(sink.body(), scrutinee_value, *pat, &mut binds) {
+            match self.pattern_matches(sink.body(), scrutinee_value, arm.pattern, &mut binds) {
                 PatternMatch::No => continue,
                 PatternMatch::Unknown => return false,
                 PatternMatch::Yes => {}
             }
-            match guard {
+            match arm.guard {
                 None => {}
-                Some(g) => match self.guard_under_bindings(sink.body(), *g, &binds) {
+                Some(g) => match self.guard_under_bindings(sink.body(), g, &binds) {
                     Some(true) => {}
                     Some(false) => continue,
                     None => return false,
                 },
             }
-            chosen = Some((i, binds));
+            chosen = Some((arm, binds));
             break;
         }
-        let Some((idx, binds)) = chosen else {
+        let Some((arm, binds)) = chosen else {
             return false;
         };
-        let (body_op, arm_span) = (arms_data[idx].2, arms_data[idx].3);
+        let body_op = arm.body;
         if operand_reads_any_local(sink.body(), body_op, &binds) {
             return false;
         }
         let span = match body_op {
             Operand::Expr(ex) => sink.body().exprs[ex].span,
-            Operand::Value(_) => arm_span,
+            Operand::Value(_) => arm.span,
         };
         let stmt = sink.alloc_stmt(StmtKind::Expr(body_op), span);
         let block = sink.alloc_block(vec![stmt], span);
@@ -522,19 +521,15 @@ impl Interpreter<'_> {
         if !is_discardable_operand(sink.body(), scrutinee) {
             return false;
         }
-        if arms_data.iter().any(|(g, _, _, _)| g.is_some()) {
+        if arms_data.iter().any(|a| a.guard.is_some()) {
             return false;
         }
-        let arms: Vec<ArmData> = match &sink.body().exprs[e].kind {
-            ExprKind::Match { arms, .. } => arms.clone(),
-            _ => unreachable!(),
-        };
-        if !is_provably_exhaustive(sink.body(), &arms) {
+        if !is_provably_exhaustive(sink.body(), ArmParts::coverage(arms_data)) {
             return false;
         }
         let mut common: Option<Value> = None;
-        for (_, _, arm_body, _) in arms_data {
-            let Lattice::Const(v) = self.operand_to_lattice(sink.body(), *arm_body) else {
+        for arm in arms_data {
+            let Lattice::Const(v) = self.operand_to_lattice(sink.body(), arm.body) else {
                 return false;
             };
             match common {
@@ -549,7 +544,30 @@ impl Interpreter<'_> {
 
 /// The parts of a match arm the rewrites read, lifted out of the body so the
 /// sink can be borrowed mutably while they are consulted.
-type ArmParts = (Option<Operand>, PatId, Operand, crate::token::Span);
+pub(super) struct ArmParts {
+    guard: Option<Operand>,
+    pattern: PatId,
+    body: Operand,
+    span: crate::token::Span,
+}
+
+impl ArmParts {
+    fn of(arms: &[ArmData]) -> Vec<Self> {
+        arms.iter()
+            .map(|a| Self {
+                guard: a.guard,
+                pattern: a.pattern,
+                body: a.body,
+                span: a.span,
+            })
+            .collect()
+    }
+
+    /// What [`is_provably_exhaustive`] asks of each arm.
+    fn coverage(arms: &[Self]) -> impl Iterator<Item = (Option<Operand>, PatId)> + '_ {
+        arms.iter().map(|a| (a.guard, a.pattern))
+    }
+}
 
 /// Rewrite `match X { Case => true, _ => false }` to the equality test it is.
 /// The scrutinee moves inside the synthesised `Binary`, and the `Match` node
@@ -781,23 +799,23 @@ pub(super) fn try_match_bool_discriminator(
     let [yes_arm, no_arm] = arms else {
         return None;
     };
-    if yes_arm.0.is_some() || no_arm.0.is_some() {
+    if yes_arm.guard.is_some() || no_arm.guard.is_some() {
         return None;
     }
-    if !matches!(body.pats[no_arm.1].kind, PatKind::Wildcard) {
+    if !matches!(body.pats[no_arm.pattern].kind, PatKind::Wildcard) {
         return None;
     }
-    if operand_bool(body, yes_arm.2) != Some(true) {
+    if operand_bool(body, yes_arm.body) != Some(true) {
         return None;
     }
-    if operand_bool(body, no_arm.2) != Some(false) {
+    if operand_bool(body, no_arm.body) != Some(false) {
         return None;
     }
     let PatKind::Enum {
         enum_type,
         case_name,
         case_index,
-    } = &body.pats[yes_arm.1].kind
+    } = &body.pats[yes_arm.pattern].kind
     else {
         return None;
     };
@@ -805,7 +823,7 @@ pub(super) fn try_match_bool_discriminator(
         enum_type: *enum_type,
         case_index: *case_index,
         case_name: case_name.clone(),
-        span: yes_arm.3,
+        span: yes_arm.span,
     })
 }
 

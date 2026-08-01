@@ -53,6 +53,11 @@ pub enum Lattice {
 impl Lattice {
     /// The value when `Const`, else `None`. Pattern-match the variant instead
     /// where the `Unevaluated` / `NonConst` distinction matters.
+    ///
+    /// Owned rather than borrowed, and that is not the copy it reads as: a
+    /// [`Value`] keeps its aggregate and sequence backings behind `Rc`, so the
+    /// clone is a refcount bump whatever the value's size. There is no
+    /// borrowing variant because there would be nothing to win by it.
     #[must_use]
     pub fn as_const(&self) -> Option<Value> {
         match self {
@@ -282,6 +287,9 @@ struct FrameState {
     /// absent local reads as [`Lattice::Unevaluated`].
     env: IndexMap<u32, Lattice>,
     ref_global_aliases: IndexMap<u32, GlobalKey>,
+    /// The body [`Self::ref_global_aliases`] was recorded for, so a read
+    /// through one can check it is still that body.
+    alias_body: Option<BodyShape>,
     /// Locals a frame's `let` bound to a borrow of a local place, resolved to
     /// the place borrowed — flattened at record time, so a chain never needs
     /// chasing. Reads through one project the place's current value and writes
@@ -338,6 +346,30 @@ pub struct Interpreter<'a> {
     /// terminate without consuming budget. The `RefCell` borrow guard cannot
     /// serve this role, since it permits concurrent immutable borrows.
     call_stack: Vec<CalleeKey>,
+}
+
+/// A cheap witness that a body is the one a per-function fact was recorded
+/// for. Not an identity — two bodies can agree — but the mix-up those facts
+/// have to survive is a scratch body belonging to another function, and that
+/// differs. Cheap because the check runs wherever such a fact is read, which
+/// is every projection through a `&GLOBAL` alias.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BodyShape {
+    exprs: usize,
+    stmts: usize,
+    blocks: usize,
+    root: BlockId,
+}
+
+impl BodyShape {
+    fn of(body: &Body) -> Self {
+        Self {
+            exprs: body.exprs.len(),
+            stmts: body.stmts.len(),
+            blocks: body.blocks.len(),
+            root: body.root,
+        }
+    }
 }
 
 fn let_ref_global(body: &Body, stmt: &StmtKind) -> Option<(u32, GlobalKey)> {
@@ -397,12 +429,6 @@ pub(crate) fn reachable_exprs(body: &Body) -> Vec<ExprId> {
     let mut collect = Collect(Vec::new());
     collect.visit_node(body, NodeRef::Block(body.root));
     collect.0
-}
-
-fn local_binds_to_global_ref(body: &Body, local: u32, key: &GlobalKey) -> bool {
-    body.stmts
-        .iter()
-        .any(|(_, st)| let_ref_global(body, &st.kind) == Some((local, key.clone())))
 }
 
 impl<'a> Interpreter<'a> {
@@ -483,6 +509,7 @@ impl<'a> Interpreter<'a> {
 
     pub fn record_ref_global_aliases(&mut self, body: &Body) {
         self.frame.ref_global_aliases.clear();
+        self.frame.alias_body = Some(BodyShape::of(body));
         let mut seen: IndexSet<u32> = IndexSet::default();
         for (_, st) in &body.stmts {
             if let Some((local, key)) = let_ref_global(body, &st.kind) {

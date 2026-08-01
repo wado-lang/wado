@@ -418,29 +418,35 @@ impl Interpreter<'_> {
             self.bind_ctfe_local(root, Lattice::Const(value));
             return Flow::Fallthrough(Lattice::Unevaluated);
         }
-        match self.update_place(root, &path, |_| Some(value)) {
+        match self.update_place(root, &path, |place| {
+            *place = value;
+            Some(())
+        }) {
             Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
             None => Flow::Bail,
         }
     }
 
-    /// Rebind the frame's value for `root` with the value at `path` replaced by
-    /// what `update` makes of it. `None` when the frame holds no constant for
-    /// the root — which is what confines a write to values the engine itself
-    /// built — or when the path does not reach a value the update applies to.
+    /// Update the frame's value for `root` in place, applying `update` to the
+    /// value at `path`. `None` when the frame holds no constant for the root —
+    /// which is what confines a write to values the engine itself built — or
+    /// when the path does not reach a value the update applies to.
+    ///
+    /// Written through rather than rebuilt: a rebuild copies the whole
+    /// container per write, which makes filling a sequence quadratic in its
+    /// length. A clobbered root never holds a constant here — `bind_ctfe_local`
+    /// is the only way one is recorded and it downgrades those — so writing
+    /// straight into the environment cannot revive a local a frame gave up on.
     fn update_place(
         &mut self,
         root: u32,
         path: &[u32],
-        update: impl FnOnce(&Value) -> Option<Value>,
+        update: impl FnOnce(&mut Value) -> Option<()>,
     ) -> Option<()> {
-        let Lattice::Const(container) = self.frame.env.get(&root)?.clone() else {
+        let Lattice::Const(container) = self.frame.env.get_mut(&root)? else {
             return None;
         };
-        let target = path.iter().try_fold(&container, |v, i| v.field(*i))?;
-        let updated = container.with_path(path, update(target)?)?;
-        self.bind_ctfe_local(root, Lattice::Const(updated));
-        Some(())
+        update(container.place_mut(path)?)
     }
 
     /// Perform a builtin at statement position, updating the frame's value for
@@ -480,7 +486,7 @@ impl Interpreter<'_> {
         let Some((index, _)) = index.as_int() else {
             return Flow::Bail;
         };
-        match self.update_place(root, &path, |seq| seq.with_element(index, element)) {
+        match self.update_place(root, &path, |seq| seq.set_element(index, element)) {
             Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
             None => Flow::Bail,
         }
@@ -509,7 +515,7 @@ impl Interpreter<'_> {
             return Flow::Bail;
         };
         match self.update_place(root, &path, |destination| {
-            destination.with_run(at, &source, from, len)
+            destination.set_run(at, &source, from, len)
         }) {
             Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
             None => Flow::Bail,
@@ -629,20 +635,19 @@ impl Interpreter<'_> {
     /// `Unevaluated` on any miss, so the original call — and any runtime trap
     /// inside it — survives.
     pub(super) fn try_call_fold(&mut self, body: &Body, e: ExprId) -> Lattice {
-        if let lattice @ (Lattice::Const(_) | Lattice::NonConst) =
-            self.try_ctfe_builtin_fold(body, e)
-        {
-            return match lattice {
-                Lattice::Const(v) => Lattice::Const(v),
-                Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
-            };
+        match self.try_ctfe_builtin_fold(body, e) {
+            // A builtin that answered is the answer; one that answered
+            // `NonConst` would trap, and the call has to stay to do it.
+            Lattice::Const(v) => return Lattice::Const(v),
+            Lattice::NonConst => return Lattice::Unevaluated,
+            Lattice::Unevaluated => {}
         }
-        match self.run_call(body, e, false) {
-            Some(run) => match run.result {
-                c @ Lattice::Const(_) => c,
-                Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
-            },
-            None => Lattice::Unevaluated,
+        let Some(run) = self.run_call(body, e, false) else {
+            return Lattice::Unevaluated;
+        };
+        match run.result {
+            Lattice::Const(v) => Lattice::Const(v),
+            Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
         }
     }
 
@@ -872,7 +877,10 @@ impl Interpreter<'_> {
             if path.is_empty() {
                 self.bind_ctfe_local(root, Lattice::Const(value));
             } else {
-                self.update_place(root, &path, |_| Some(value))?;
+                self.update_place(root, &path, |place| {
+                    *place = value;
+                    Some(())
+                })?;
             }
         }
         Some(())
