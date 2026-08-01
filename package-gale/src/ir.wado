@@ -1,5 +1,6 @@
 use { Span, ParseError } from "./runtime/lex.wado";
 use { escape_ident, to_snake_case, to_lower, to_pascal_case } from "./ident.wado";
+use { TreeMap } from "core:collections";
 
 /// OptionValue is the typed right-hand side of an ANTLR4 `key = value` option
 /// entry. ANTLR4 options can be a bare identifier, a dotted qualified name,
@@ -323,12 +324,13 @@ pub fn check_left_recursion(grammar: &Grammar) -> Result<(), ParseError> {
     if grammar.kind matches { Lexer } {
         return Result::Ok(());
     }
+    let ctx = build_left_corner_ctx(grammar);
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         let start = grammar.parser_rules[i].name;
         // A left-corner path back to `start` is a hidden / indirect cycle.
         let mut seen: List<String> = [];
         let mut stack: List<String> = [];
-        collect_left_corners(grammar, i, &mut stack);
+        collect_left_corners(grammar, i, &ctx, &mut stack);
         while let Some(name) = stack.pop() {
             if name == start {
                 return Result::Err(
@@ -343,61 +345,89 @@ pub fn check_left_recursion(grammar: &Grammar) -> Result<(), ParseError> {
                 continue;
             }
             seen.push(name);
-            let ridx = parser_rule_index(grammar, &name);
-            if ridx >= 0 {
-                collect_left_corners(grammar, ridx, &mut stack);
+            if let Some(ridx) = ctx.index.get(name) {
+                collect_left_corners(grammar, ridx, &ctx, &mut stack);
             }
         }
     }
     return Result::Ok(());
 }
 
-fn parser_rule_index(grammar: &Grammar, name: &String) -> i32 {
+/// Precomputed per-rule data for the left-corner walk: rule name → index and
+/// least-fixed-point nullability. The worklist converges to the same answer
+/// as the visiting-set recursion it replaces (a cycle contributes false), in
+/// O(rules × grammar size) instead of a fresh recursion per queried element.
+struct LeftCornerCtx {
+    index: TreeMap<String, i32>,
+    nullable: List<bool>,
+}
+
+fn build_left_corner_ctx(grammar: &Grammar) -> LeftCornerCtx {
+    let mut index = TreeMap::<String, i32>::new();
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
-        if grammar.parser_rules[i].name == *name {
-            return i;
+        index[grammar.parser_rules[i].name] = i;
+    }
+    let mut nullable: List<bool> = [];
+    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+        nullable.push(false);
+    }
+    loop {
+        let mut changed = false;
+        for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+            if nullable[i] {
+                continue;
+            }
+            for let alt of &grammar.parser_rules[i].alternatives {
+                if alt_all_nullable(&alt.elements, &index, &nullable) {
+                    nullable[i] = true;
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if !changed {
+            break;
         }
     }
-    return -1;
+    return LeftCornerCtx { index, nullable };
 }
 
 /// Rules whose parse/scan `ridx` can enter at the same input position. Direct-LR
 /// alternatives (leading self-ref) are handled by precedence climbing, so they
 /// are skipped — only the residual hidden / indirect paths are collected.
-fn collect_left_corners(grammar: &Grammar, ridx: i32, out: &mut List<String>) {
+fn collect_left_corners(grammar: &Grammar, ridx: i32, ctx: &LeftCornerCtx, out: &mut List<String>) {
     let rule = &grammar.parser_rules[ridx];
     for let alt of &rule.alternatives {
         if alt_leads_with_self_ref(&alt.elements, &rule.name) {
             continue;
         }
-        collect_alt_left_corners(grammar, &alt.elements, out);
+        collect_alt_left_corners(&alt.elements, ctx, out);
     }
 }
 
-fn collect_alt_left_corners(grammar: &Grammar, elements: &List<Element>, out: &mut List<String>) {
+fn collect_alt_left_corners(elements: &List<Element>, ctx: &LeftCornerCtx, out: &mut List<String>) {
     for let e of elements {
-        collect_element_left_corners(grammar, e, out);
-        let mut visiting: List<String> = [];
-        if !grammar_element_nullable(grammar, e, &mut visiting) {
+        collect_element_left_corners(e, ctx, out);
+        if !element_nullable(e, ctx) {
             break;
         }
     }
 }
 
-fn collect_element_left_corners(grammar: &Grammar, elem: &Element, out: &mut List<String>) {
+fn collect_element_left_corners(elem: &Element, ctx: &LeftCornerCtx, out: &mut List<String>) {
     match elem {
         RuleRef(r) => {
             if !out.contains(&r.name) {
                 out.push(r.name);
             }
         },
-        Label(l) => collect_element_left_corners(grammar, &l.element, out),
+        Label(l) => collect_element_left_corners(&l.element, ctx, out),
         Group(g) => {
             for let alt of &g.alternatives {
-                collect_alt_left_corners(grammar, &alt.elements, out);
+                collect_alt_left_corners(&alt.elements, ctx, out);
             }
         },
-        Repeat(rep) => collect_element_left_corners(grammar, &rep.element, out),
+        Repeat(rep) => collect_element_left_corners(&rep.element, ctx, out),
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
         },
     }
@@ -418,19 +448,29 @@ fn element_leads_self_ref(elem: &Element, name: &String) -> bool {
     };
 }
 
-fn grammar_element_nullable(grammar: &Grammar, elem: &Element, visiting: &mut List<String>) -> bool {
+fn element_nullable(elem: &Element, ctx: &LeftCornerCtx) -> bool {
+    return element_nullable_with(elem, &ctx.index, &ctx.nullable);
+}
+
+fn element_nullable_with(elem: &Element, index: &TreeMap<String, i32>, nullable: &List<bool>) -> bool {
     return match elem {
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => false,
-        RuleRef(r) => grammar_rule_nullable(grammar, &r.name, visiting),
-        Label(l) => grammar_element_nullable(grammar, &l.element, visiting),
+        RuleRef(r) => {
+            let mut v = false;
+            if let Some(idx) = index.get(r.name) {
+                v = nullable[idx];
+            }
+            v;
+        },
+        Label(l) => element_nullable_with(&l.element, index, nullable),
         Repeat(rep) => match rep.kind {
             Star | Optional => true,
-            Plus => grammar_element_nullable(grammar, &rep.element, visiting),
+            Plus => element_nullable_with(&rep.element, index, nullable),
         },
         Group(g) => {
             let mut any_null = false;
             for let alt of &g.alternatives {
-                if alt_all_nullable(grammar, &alt.elements, visiting) {
+                if alt_all_nullable(&alt.elements, index, nullable) {
                     any_null = true;
                     break;
                 }
@@ -440,34 +480,13 @@ fn grammar_element_nullable(grammar: &Grammar, elem: &Element, visiting: &mut Li
     };
 }
 
-fn alt_all_nullable(grammar: &Grammar, elements: &List<Element>, visiting: &mut List<String>) -> bool {
+fn alt_all_nullable(elements: &List<Element>, index: &TreeMap<String, i32>, nullable: &List<bool>) -> bool {
     for let e of elements {
-        if !grammar_element_nullable(grammar, e, visiting) {
+        if !element_nullable_with(e, index, nullable) {
             return false;
         }
     }
     return true;
-}
-
-fn grammar_rule_nullable(grammar: &Grammar, name: &String, visiting: &mut List<String>) -> bool {
-    let idx = parser_rule_index(grammar, name);
-    if idx < 0 {
-        return false;
-    }
-    if visiting.contains(name) {
-        return false;
-    }
-    visiting.push(*name);
-    let rule = &grammar.parser_rules[idx];
-    let mut result = false;
-    for let alt of &rule.alternatives {
-        if alt_all_nullable(grammar, &alt.elements, visiting) {
-            result = true;
-            break;
-        }
-    }
-    let _ = visiting.pop();
-    return result;
 }
 
 /// Rules whose scan can re-enter themselves at the same input position — a
