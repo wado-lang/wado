@@ -293,7 +293,7 @@ fn register_struct(
         .fields
         .iter()
         .filter_map(|f| {
-            let ty = ctx.type_id_to_wir_type(type_table, f.type_id);
+            let ty = ctx.type_id_to_wir_type_pending(type_table, f.type_id);
             // Unit-typed fields have no Wasm representation; omit them.
             if matches!(ty, WirType::Unit) {
                 return None;
@@ -381,7 +381,7 @@ fn register_variant(
             let payload = if type_table.get(case.payload) == &ResolvedType::Unit {
                 Vec::new()
             } else {
-                vec![ctx.type_id_to_wir_type(type_table, case.payload)]
+                vec![ctx.type_id_to_wir_type_pending(type_table, case.payload)]
             };
             (case.name.clone(), payload)
         })
@@ -477,7 +477,9 @@ fn register_raw_array_type(
         ctx.array_type_map.insert(element_type_id, existing);
         return;
     }
-    // Fallback: resolve newtypes in element type name for deduplication
+    // Newtype dedup: `List<FieldName>` and `List<String>` share one array when
+    // `FieldName` is a newtype over `String`. Registration owns this aliasing —
+    // both spellings are entered below, so lookup derives one key and finds it.
     let resolved_name = type_table.mangle_type_arg_for_generic_resolving_newtypes(element_type_id);
     if resolved_name != elem_name && ctx.array_type_by_name.contains_key(&resolved_name) {
         let existing = ctx.array_type_by_name.get(&resolved_name).unwrap().clone();
@@ -486,7 +488,7 @@ fn register_raw_array_type(
     }
 
     let fq = crate::name::mangle_builtin_array_type(&elem_name);
-    let elem_wir_type = ctx.type_id_to_wir_type(type_table, element_type_id);
+    let elem_wir_type = ctx.type_id_to_wir_type_pending(type_table, element_type_id);
 
     let type_id = ctx.register_type(
         fq.clone(),
@@ -658,7 +660,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                     .iter()
                     .enumerate()
                     .filter_map(|(i, &elem_type_id)| {
-                        let ty = ctx.type_id_to_wir_type(type_table, elem_type_id);
+                        let ty = ctx.type_id_to_wir_type_pending(type_table, elem_type_id);
                         // Unit-typed elements have no Wasm representation; omit them.
                         if matches!(ty, WirType::Unit) {
                             return None;
@@ -909,7 +911,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                     .map(|(name, payload)| {
                         let wir_payload = match type_table.get(payload) {
                             ResolvedType::Unit => Vec::new(),
-                            _ => vec![ctx.type_id_to_wir_type(type_table, payload)],
+                            _ => vec![ctx.type_id_to_wir_type_pending(type_table, payload)],
                         };
                         (name, wir_payload)
                     })
@@ -1112,7 +1114,7 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
                 // representation); every canonical-key site filters identically.
                 let param_wirs: Vec<WirType> = params
                     .iter()
-                    .map(|p| ctx.type_id_to_wir_type(type_table, *p))
+                    .map(|p| ctx.type_id_to_wir_type_pending(type_table, *p))
                     .filter(|t| !matches!(t, WirType::Unit))
                     .collect();
                 let result_wirs: Vec<WirType> = if *return_type == crate::tir::TypeTable::UNIT
@@ -1120,7 +1122,7 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
                 {
                     vec![]
                 } else {
-                    vec![ctx.type_id_to_wir_type(type_table, *return_type)]
+                    vec![ctx.type_id_to_wir_type_pending(type_table, *return_type)]
                 };
                 let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
                 if seen_keys.insert(key) {
@@ -1365,7 +1367,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                     }
                     if field_idx < tir_struct.fields.len() {
                         let field_type_id = tir_struct.fields[field_idx].type_id;
-                        let wir_type = ctx.type_id_to_wir_type(type_table, field_type_id);
+                        let wir_type = ctx.type_id_to_wir_type_pending(type_table, field_type_id);
                         if !is_abstract_ref(&wir_type) {
                             // Make struct fields non-nullable (same as register_struct).
                             resolved = Some(wir_type.as_nonnull());
@@ -1392,7 +1394,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                             && wir_tid.index() == u32::try_from(wir_idx).unwrap_or(u32::MAX)
                         {
                             let elem_type_id = elements[field_idx];
-                            let wir_type = ctx.type_id_to_wir_type(type_table, elem_type_id);
+                            let wir_type = ctx.type_id_to_wir_type_pending(type_table, elem_type_id);
                             if !is_abstract_ref(&wir_type) {
                                 // Make tuple fields non-nullable.
                                 resolved = Some(wir_type.as_nonnull());
@@ -1449,7 +1451,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                     continue;
                 };
                 let tir_payload_id = tir_case.payload;
-                let new_ty = ctx.type_id_to_wir_type(type_table, tir_payload_id);
+                let new_ty = ctx.type_id_to_wir_type_pending(type_table, tir_payload_id);
                 if !is_abstract_ref(&new_ty) {
                     variant_payload_fixups.push((
                         wir_idx,
@@ -1539,7 +1541,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         && let Some(arr_wir_id) = ctx.array_type_map.get(elem_tid)
                         && arr_wir_id.index() == u32::try_from(wir_idx).unwrap()
                     {
-                        let wir_type = ctx.type_id_to_wir_type(type_table, *elem_tid);
+                        let wir_type = ctx.type_id_to_wir_type_pending(type_table, *elem_tid);
                         if !is_abstract_ref(&wir_type) {
                             array_fixups.push((wir_idx, wir_type));
                             break;
@@ -1568,7 +1570,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         if tir_variant.name == v_base && case_idx < tir_variant.cases.len() {
                             let payload_type_id = tir_variant.cases[case_idx].payload;
                             if tt.get(payload_type_id) != &crate::tir::ResolvedType::Unit {
-                                let wir_type = ctx.type_id_to_wir_type(&tt, payload_type_id);
+                                let wir_type = ctx.type_id_to_wir_type_pending(&tt, payload_type_id);
                                 if !is_abstract_ref(&wir_type) {
                                     variant_fixups.push((wir_idx, case_idx, vec![wir_type]));
                                     break;

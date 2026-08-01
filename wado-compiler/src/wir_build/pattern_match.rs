@@ -1029,7 +1029,7 @@ impl FunctionTranslator<'_, '_> {
                             self.emit_pattern_binding_set(
                                 *local_index,
                                 &binding_wir,
-                                payload_field_wir.as_ref(),
+                                Some(&payload_field_wir),
                                 payload_get,
                                 instrs,
                             );
@@ -1287,39 +1287,53 @@ impl FunctionTranslator<'_, '_> {
     /// Look up a variant case struct's payload field type, extracting the inner
     /// ref type ID. For `payload_i` of a tuple type, this returns the `WirTypeId`
     /// of the tuple struct.
+    ///
+    /// Field 0 is the discriminant, so payload `i` sits at `i + 1`. The case
+    /// struct was registered from this very variant case, so both the struct
+    /// shape and the field are guaranteed; reporting "unknown" instead would
+    /// silently turn off the boxing decision in
+    /// [`Self::emit_pattern_binding_set`].
+    #[track_caller]
     fn get_case_payload_wir_type(
         &self,
         case_type_id: &crate::wir::WirTypeId,
         payload_index: usize,
-    ) -> Option<WirType> {
-        let type_def = self.ctx.types.get(case_type_id.index() as usize)?;
-        if let crate::wir::WirTypeDef::Struct(s) = type_def {
-            let field = s.fields.get(payload_index + 1)?;
-            return Some(field.ty.clone());
-        }
-        None
+    ) -> WirType {
+        let type_def = &self.ctx.types[case_type_id.index() as usize];
+        let crate::wir::WirTypeDef::Struct(s) = type_def else {
+            panic!("[WIR] variant case type {case_type_id:?} is not registered as a struct");
+        };
+        let Some(field) = s.fields.get(payload_index + 1) else {
+            panic!(
+                "[WIR] variant case `{}` has no payload field {payload_index}",
+                s.name.fq
+            );
+        };
+        field.ty.clone()
     }
 
-    /// Resolve the `TypeId` of a struct field by name.
+    /// Resolve the `TypeId` of a struct field by name. Type checking already
+    /// proved the pattern names a field this struct has.
+    #[track_caller]
     fn resolve_struct_field_type(&self, struct_type: TypeId, field_name: &str) -> TypeId {
-        if let ResolvedType::Struct {
+        let ResolvedType::Struct {
             decl_name,
             module_source,
             type_args,
         } = self.type_table.get(struct_type)
-        {
-            let name = self.type_table.struct_rendered_name(decl_name, type_args);
-            for s in &self.ctx.package.structs {
-                if s.module_source == *module_source && s.name == name {
-                    for f in &s.fields {
-                        if f.name == field_name {
-                            return f.type_id;
-                        }
-                    }
-                }
-            }
-        }
-        TypeTable::UNKNOWN
+        else {
+            panic!("[WIR] struct pattern on non-struct {struct_type:?}");
+        };
+        let name = self.type_table.struct_rendered_name(decl_name, type_args);
+        self.ctx
+            .package
+            .structs
+            .iter()
+            .filter(|s| s.module_source == *module_source && s.name == name)
+            .flat_map(|s| &s.fields)
+            .find(|f| f.name == field_name)
+            .unwrap_or_else(|| panic!("[WIR] struct `{name}` has no field `{field_name}`"))
+            .type_id
     }
 
     /// Translate variant construction: `Shape::Circle(5.0)`
