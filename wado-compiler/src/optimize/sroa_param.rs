@@ -117,7 +117,7 @@ fn collect_and_validate(
     let type_table = project.type_table.borrow();
     let single_field = build_single_field_index(project);
     let struct_fields = build_struct_fields_index(project);
-    let global_writes = transitive_global_writes(project);
+    let global_writes = transitive_reachable_writes(project);
     let global_types = global_type_index(project);
 
     let mut candidates: IndexMap<(FnKey, usize), SroaInfo> = IndexMap::default();
@@ -150,7 +150,7 @@ fn collect_and_validate(
             let Some(info) = candidate_info_for(param.type_id, &type_table, &single_field) else {
                 continue;
             };
-            let writes_global = writes_aliasing_global(
+            let aliasing_write = may_write_aliasing_location(
                 &global_writes[key.index()],
                 &info.struct_key,
                 &global_types,
@@ -163,7 +163,7 @@ fn collect_and_validate(
                 &info.struct_key,
                 &type_table,
                 &struct_fields,
-                writes_global,
+                aliasing_write,
             ) {
                 continue;
             }
@@ -252,8 +252,9 @@ fn reference_param_struct_key(
 /// invalidated during the callee's execution — because some other access path
 /// the callee holds can mutate the pointee `*p`:
 ///
-/// - a mutable-global write (an aliasing handle may live in a global, and an
-///   unresolved indirect call may write anything), or
+/// - `aliasing_write` — the callee may write a location the walk cannot rule
+///   out: a global whose type reaches the wrapper, or anything at all behind an
+///   unresolved indirect call ([`ReachableWrites::Opaque`]), or
 /// - a sibling param from which a write can *reach* the wrapper struct — the
 ///   sibling need not be the handle itself, only carry one, e.g.
 ///   `f(&s.m, &mut s)` where `S { m: M }`, or `f(&x, Holder { r: &mut x })`
@@ -265,18 +266,19 @@ fn reference_param_struct_key(
 /// lowers to a read of that one box, so `f(&mut x, &x)` hands the same box to
 /// both params and the snapshot must be refused.
 ///
-/// A `fn mut()` param needs no case of its own: its captures are not in its
-/// type, so the walk cannot see them, but invoking it is an `IndirectCall`,
-/// which [`transitive_global_writes`] reports as [`GlobalWrites::Any`]. A
-/// closure that only escapes without being called cannot stale anything — the
-/// snapshot lives only for the duration of the call.
+/// The two clauses are not independent, and the split is load-bearing: a
+/// `fn mut()` sibling is covered *only* by the first. Its captures live in a
+/// functor struct its type does not mention, so the sibling walk is blind to
+/// them and `Opaque` is the whole guard — see [`ReachableWrites::Opaque`].
+/// (A closure that escapes without being called cannot stale anything; the
+/// snapshot lives only for the duration of the call.)
 fn param_snapshot_unsound(
     func: &NirFunction,
     pi: usize,
     struct_key: &(String, ModuleSource),
     type_table: &TypeTable,
     struct_fields: &StructFieldsIndex,
-    writes_global: bool,
+    aliasing_write: bool,
 ) -> bool {
     let param_type = func.params[pi].type_id;
     let candidate_is_ref =
@@ -285,7 +287,7 @@ fn param_snapshot_unsound(
     if !candidate_is_ref && !candidate_is_boxed_ref {
         return false;
     }
-    if writes_global {
+    if aliasing_write {
         return true;
     }
     func.params.iter().enumerate().any(|(pj, other)| {
@@ -411,22 +413,32 @@ fn mut_reachable_contains(
     )
 }
 
+/// What a function may write, as far as this pass can attribute it to a name.
 #[derive(Clone)]
-enum GlobalWrites {
-    /// An indirect call whose target cannot be resolved: any global is possible.
-    Any,
-    Known(IndexSet<(ModuleSource, String)>),
+enum ReachableWrites {
+    /// An indirect call whose target cannot be resolved.
+    ///
+    /// This is the pass's only account of a closure's captured state: a
+    /// `fn mut()` value carries its captures in a functor struct that its
+    /// *type* does not mention, so no type-directed query can see them, and
+    /// invoking one is the sole way to reach them. `Opaque` therefore stands
+    /// for "any global **and** any captured location", and every query over it
+    /// MUST answer conservatively. Narrowing it — resolving a single-target
+    /// indirect call, filtering by global type — silently un-guards every
+    /// capture unless the captured locations are accounted for separately.
+    Opaque,
+    Named(IndexSet<(ModuleSource, String)>),
 }
 
-impl GlobalWrites {
-    fn absorb(&mut self, other: &GlobalWrites) -> bool {
+impl ReachableWrites {
+    fn absorb(&mut self, other: &ReachableWrites) -> bool {
         match (&mut *self, other) {
-            (GlobalWrites::Any, _) => false,
-            (slot, GlobalWrites::Any) => {
-                *slot = GlobalWrites::Any;
+            (ReachableWrites::Opaque, _) => false,
+            (slot, ReachableWrites::Opaque) => {
+                *slot = ReachableWrites::Opaque;
                 true
             }
-            (GlobalWrites::Known(acc), GlobalWrites::Known(more)) => {
+            (ReachableWrites::Named(acc), ReachableWrites::Named(more)) => {
                 let before = acc.len();
                 for g in more {
                     acc.insert(g.clone());
@@ -457,12 +469,13 @@ fn global_place_root(body: &Body, target: ExprId) -> Option<(ModuleSource, Strin
     }
 }
 
-/// Per-function global-write summary (indexed by function position): a caller
-/// inherits every global its callees may write. A monotone worklist over the
-/// reverse call graph.
-fn transitive_global_writes(project: &NirPackage) -> Vec<GlobalWrites> {
+/// Per-function write summary (indexed by function position): a caller inherits
+/// everything its callees may write, so an indirect call anywhere below it makes
+/// it [`Opaque`](ReachableWrites::Opaque). A monotone worklist over the reverse
+/// call graph.
+fn transitive_reachable_writes(project: &NirPackage) -> Vec<ReachableWrites> {
     let n = project.functions.len();
-    let mut writes: Vec<GlobalWrites> = Vec::with_capacity(n);
+    let mut writes: Vec<ReachableWrites> = Vec::with_capacity(n);
     let mut callers: Vec<Vec<usize>> = vec![Vec::new(); n];
     for i in 0..n {
         let func = project.functions[i].borrow();
@@ -495,9 +508,9 @@ fn transitive_global_writes(project: &NirPackage) -> Vec<GlobalWrites> {
             }
         }
         writes.push(if indirect {
-            GlobalWrites::Any
+            ReachableWrites::Opaque
         } else {
-            GlobalWrites::Known(direct)
+            ReachableWrites::Named(direct)
         });
     }
     let mut queued = vec![true; n];
@@ -524,18 +537,22 @@ fn global_type_index(project: &NirPackage) -> IndexMap<(ModuleSource, String), T
     out
 }
 
-/// Whether `writes` includes a global whose type can alias a `&target` pointee —
-/// the only writes that can stale a call-time snapshot of that reference param.
-fn writes_aliasing_global(
-    writes: &GlobalWrites,
+/// Whether `writes` can land on a location aliasing a `&target` pointee, and so
+/// stale a call-time snapshot of that reference param.
+///
+/// [`Opaque`](ReachableWrites::Opaque) answers `true` unconditionally: it covers
+/// closure captures, which have no type to test against. Keep it that way — a
+/// type-directed refinement here would drop that coverage on the floor.
+fn may_write_aliasing_location(
+    writes: &ReachableWrites,
     target: &(String, ModuleSource),
     global_types: &IndexMap<(ModuleSource, String), TypeId>,
     type_table: &TypeTable,
     struct_fields: &StructFieldsIndex,
 ) -> bool {
     match writes {
-        GlobalWrites::Any => true,
-        GlobalWrites::Known(set) => set.iter().any(|g| match global_types.get(g) {
+        ReachableWrites::Opaque => true,
+        ReachableWrites::Named(set) => set.iter().any(|g| match global_types.get(g) {
             Some(&ty) => {
                 let mut visited = IndexSet::default();
                 mut_reachable_contains(ty, true, target, type_table, struct_fields, &mut visited)
