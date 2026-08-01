@@ -543,7 +543,7 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             "builtin::array_clone_prefix" => {
-                let (type_id, src, src_type_id) = self.translate_array_ref_operand(args)?;
+                let (type_id, src, src_type_id) = self.translate_array_ref_operand(args);
                 let len = self.translate_operand(args[1].expr);
                 match self.array_element_copy_mangle(src_type_id) {
                     Some(element_copy_mangle) => Some(WirInstr::ArrayClone {
@@ -556,20 +556,12 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             "builtin::array_clone_shallow" => {
-<<<<<<< HEAD
-                let (type_id, src, _) = self.translate_array_ref_operand(args);
-                Some(self.build_bulk_array_clone(type_id, src))
-||||||| 2a556c019
-                let (type_id, src, _) = self.translate_array_ref_operand(args)?;
-                Some(self.build_bulk_array_clone(type_id, src))
-=======
                 // The demote pass retargets `array_clone` / `array_clone_prefix`
                 // calls here by id, keeping the call-site args — so a second
                 // arg, when present, is the prefix length to preserve.
-                let (type_id, src, _) = self.translate_array_ref_operand(args)?;
+                let (type_id, src, _) = self.translate_array_ref_operand(args);
                 let len = args.get(1).map(|arg| self.translate_operand(arg.expr));
                 Some(self.build_bulk_array_clone(type_id, src, len))
->>>>>>> origin/main
             }
             "builtin::array_fill" => {
                 let arr = self.translate_operand(args[0].expr);

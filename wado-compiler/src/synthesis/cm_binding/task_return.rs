@@ -114,7 +114,7 @@ impl TirOptVisitor for TaskReturnExpander<'_> {
         for mut stmt in stmts {
             if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
                 if let TirStmtKind::TaskReturn { value } =
-                    std::mem::replace(&mut stmt.kind, TirStmtKind::Continue)
+                    std::mem::replace(&mut stmt.kind, no_op_stmt(stmt.span))
                 {
                     new_stmts.extend(generate_inline_task_return(
                         value,
@@ -141,7 +141,14 @@ impl TirOptVisitor for TaskReturnExpander<'_> {
     }
 }
 
-/// Replaces every `task return` statement with `Continue`. Used for the test
+/// A statement that does nothing, for a rewrite that has to leave something
+/// behind. `Continue` is not one: it branches to the enclosing loop, and
+/// outside one it has no target at all.
+fn no_op_stmt(span: crate::token::Span) -> TirStmtKind {
+    TirStmtKind::Expr(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span))
+}
+
+/// Replaces every `task return` statement with a no-op. Used for the test
 /// world, where async-export bodies are dropped by DCE and only need to be
 /// kept free of `TaskReturn` so they never reach `monomorphize`.
 struct TaskReturnStripper;
@@ -149,7 +156,7 @@ struct TaskReturnStripper;
 impl TirOptVisitor for TaskReturnStripper {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
         if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
-            stmt.kind = TirStmtKind::Continue;
+            stmt.kind = no_op_stmt(stmt.span);
             return true;
         }
         opt_walk_stmt(self, stmt)

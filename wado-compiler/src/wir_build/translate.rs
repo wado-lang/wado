@@ -2827,7 +2827,10 @@ impl FunctionTranslator<'_, '_> {
         // Semantic analysis rejects a `break` with no enclosing loop or with an
         // unknown label, so the target is always on the stack. Depth 0 instead
         // would branch out of whatever block happens to be innermost.
-        panic!("[WIR] `break` has no target block on the label stack (label={label:?})")
+        panic!(
+            "[WIR] `break` in `{}` has no target block on the label stack (label={label:?})",
+            self.tir_func.name
+        )
     }
 
     /// Compute the `br` depth for a continue statement.
@@ -2840,7 +2843,10 @@ impl FunctionTranslator<'_, '_> {
             }
         }
         // See `compute_break_depth`: a `continue` outside a loop never gets here.
-        panic!("[WIR] `continue` has no enclosing loop on the label stack")
+        panic!(
+            "[WIR] `continue` in `{}` has no enclosing loop on the label stack",
+            self.tir_func.name
+        )
     }
 }
 
