@@ -84,7 +84,7 @@ impl Interpreter<'_> {
                 if sink.replace_with_value(e, value.clone()) {
                     return true;
                 }
-                self.memoize_declined(sink, e, value);
+                self.frame.scratch_folds.insert(e, value);
             } else if matches!(sink.body().exprs[e].kind, ExprKind::Call { .. })
                 && self.materialize_seq_via(sink, e, &value)
             {
@@ -97,10 +97,10 @@ impl Interpreter<'_> {
             } else {
                 self.materialize_seq_via(sink, e, &value)
             };
+            self.frame.scratch_folds.insert(e, value);
             if committed {
                 return true;
             }
-            self.memoize_declined(sink, e, value);
         }
         if rewrite_short_circuit_via(sink, e) {
             return true;
@@ -109,20 +109,6 @@ impl Interpreter<'_> {
             return true;
         }
         self.rewrite_match_expr_via(sink, e)
-    }
-
-    /// Remember a value the sink would not take, so a later lattice read finds
-    /// it instead of recomputing — or, for a region, instead of running it
-    /// again.
-    ///
-    /// Only where the sink asks for it. On a real body the node the value came
-    /// from is still standing, so a read recomputes the same constant, and a
-    /// value remembered against an `ExprId` outlives the content that
-    /// justified it.
-    fn memoize_declined<S: EditSink>(&mut self, sink: &S, e: ExprId, value: Value) {
-        if sink.memoizes_declined_folds() {
-            self.frame.scratch_folds.insert(e, value);
-        }
     }
 
     /// Write `value` back over `e` as the container literal the lower phase

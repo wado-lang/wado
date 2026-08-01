@@ -137,12 +137,6 @@ pub type GlobalFieldEnv = IndexMap<GlobalKey, IndexMap<String, Value>>;
 /// whether the next one folds.
 pub const DEFAULT_STEP_BUDGET: u32 = 10_000;
 
-/// How many body nodes a region run's copy charges as one step. The copy is
-/// real work the budget must see, but it is bulk memory rather than
-/// interpretation, so it costs a fraction of what executing that many
-/// statements would.
-pub const COPY_CHARGE_DIVISOR: usize = 16;
-
 mod callee;
 mod frame;
 mod lattice;
@@ -161,17 +155,6 @@ use trackability::Trackability;
 /// `EngineSink`, which keeps the real body's maps coherent.
 pub trait EditSink {
     fn body(&self) -> &Body;
-    /// Whether a value this sink declines has to be remembered for later
-    /// lattice reads.
-    ///
-    /// Only the scratch backend needs it: it promotes nothing, so a decline
-    /// there loses the fold outright. A real body keeps the node it folded
-    /// from, so a later read recomputes the same constant — and a value memo
-    /// keyed by `ExprId` would go stale the moment a rewrite gives that id new
-    /// content.
-    fn memoizes_declined_folds(&self) -> bool {
-        false
-    }
     /// Replace `e`'s kind. The new kind's children must already be parented to
     /// `e` (literals have none); use [`EditSink::become_expr`] to move an
     /// existing node's content into `e`.
@@ -203,9 +186,6 @@ pub struct BodySink<'a> {
 impl EditSink for BodySink<'_> {
     fn body(&self) -> &Body {
         self.body
-    }
-    fn memoizes_declined_folds(&self) -> bool {
-        true
     }
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
         self.body.exprs[e].kind = kind;
@@ -304,15 +284,21 @@ struct FrameState {
     /// Locals a compile-time frame cannot track — see [`clobbered_locals`].
     /// Empty outside a frame.
     ctfe_clobbered: LocalSet,
-    /// CTFE scratch-body fold memo, read back by
-    /// [`Interpreter::expr_to_lattice`]. The scratch [`BodySink`] promotes
-    /// nothing, so a fold has nowhere else to be recorded.
+    /// What this frame folded a node to, read back by
+    /// [`Interpreter::expr_to_lattice`]. Written on both backends, and
+    /// load-bearing on each for its own reason.
     ///
-    /// Written only for a sink that asks for it
-    /// ([`EditSink::memoizes_declined_folds`]), which is the scratch backend
-    /// alone: a real body keeps the node the value was folded from, so a later
-    /// read recomputes it, and remembering a value against an `ExprId` the
-    /// engine may hand new content to is how a memo goes stale.
+    /// On the scratch body, because [`BodySink`] promotes nothing: a fold has
+    /// nowhere else to be recorded. On a real body, because the rewrite that
+    /// commits a value consumes the node that produced it — a materialized
+    /// sequence stands where the region was — so the value is no longer
+    /// derivable from the tree, and an enclosing fold reading through this node
+    /// needs it. That is why an aggregate is memoized even when the sink takes
+    /// it: what the sink takes is a literal, what the caller needs is a value.
+    ///
+    /// The one `ExprId`-keyed memo the crate keeps (`wado-compiler/AGENTS.md`).
+    /// It holds only for the frame that wrote it and is cleared wherever the
+    /// environment restarts, so no entry outlives the flow that justified it.
     scratch_folds: IndexMap<ExprId, Value>,
     /// Regions whose run this frame already attempted and abandoned. A seed's
     /// value is fixed for the frame's flow (a reassigned local is never

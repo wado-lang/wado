@@ -27,11 +27,13 @@ Never reintroduce, regardless of perf:
 - an `ExprId`-keyed cache / side-table. A pass needing a value uses
   born-as-operands or a scratch walk (`Engine::scoped_const_reads`).
 
-The one `ExprId`-keyed memo that remains is niri's `scratch_folds`, and it is
-scoped to the throwaway CTFE body: that backend promotes nothing, so a fold has
-nowhere else to go. A sink declares whether it needs it
-(`EditSink::memoizes_declined_folds`); the real body's sink does not, because
-the node a value was folded from is still standing there to recompute from.
+The one `ExprId`-keyed memo that remains is niri's `scratch_folds`, holding what
+the current frame folded each node to. It is not a cache to be scoped away: the
+rewrite that commits an aggregate consumes the node that produced it, so the
+value is no longer derivable from the tree and an enclosing fold reading through
+that node needs the memo to continue. Folding a string-building region to a
+literal depends on it. It is confined to the frame that wrote it and cleared
+wherever the environment restarts.
 
 Details: `docs/wep-2026-06-15-live-value-graph.md`.
 

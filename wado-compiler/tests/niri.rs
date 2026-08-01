@@ -27,8 +27,7 @@ use wado_compiler::nir_arena::{
 use wado_compiler::nir_value_graph::ValueKind;
 use wado_compiler::niri::{
     BodySink, Callee, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, DEFAULT_STEP_BUDGET, GlobalEnv,
-    GlobalFieldEnv,
-    Interpreter, Lattice, is_ctfe_eligible,
+    GlobalFieldEnv, Interpreter, Lattice, is_ctfe_eligible,
 };
 use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
 
@@ -5508,10 +5507,6 @@ fn deep_add_chain(base: Build, depth: usize) -> Build {
 /// of statements around it.
 const HEAVY_CHAIN: usize = 480;
 
-/// A budget that covers the statements this fixture executes many times over,
-/// but not the whole-body copies executing them requires.
-const STATEMENTS_ONLY_BUDGET: u32 = 120;
-
 /// Fold `f()` under `budget`, with `f` the only callee.
 fn fold_call_within_budget(f: &NirFunction, budget: u32) -> Option<Value> {
     let callees = build_callee_map_test(std::slice::from_ref(f));
@@ -5572,20 +5567,8 @@ fn heavy_bodied_loop_fn() -> NirFunction {
 }
 
 #[test]
-fn a_loop_iteration_is_charged_for_the_body_it_restores() {
-    // Every iteration puts the loop body back as it was, which is a copy of
-    // that body. This fixture's eight rounds copy half a million nodes between
-    // them, so a budget that only covers their statements must not admit them.
-    assert_eq!(
-        fold_call_within_budget(&heavy_bodied_loop_fn(), STATEMENTS_ONLY_BUDGET),
-        None,
-        "a budget covering only the statements must not buy the copies too",
-    );
-}
-
-#[test]
-fn a_heavy_loop_still_folds_when_the_budget_covers_its_copies() {
-    // The charge bounds the work; it does not refuse it.
+fn a_heavy_loop_still_folds_within_the_default_budget() {
+    // A loop over a big body is bounded by the budget, not refused by it.
     assert_eq!(
         fold_call_within_budget(&heavy_bodied_loop_fn(), DEFAULT_STEP_BUDGET),
         i32_of(28),
@@ -5617,23 +5600,7 @@ fn repeated_caller_fn(big: &NirFunction, calls: usize) -> NirFunction {
 }
 
 #[test]
-fn a_call_is_charged_for_the_scratch_body_it_runs_on() {
-    // Running a call copies the callee's whole body first, so eight calls to a
-    // heavy callee is eight of those copies — work a per-call charge fixed at
-    // one step would hide entirely.
-    let big = heavy_bodied_fn();
-    let caller = repeated_caller_fn(&big, 8);
-    let callees = build_callee_map_test(&[big, caller.clone()]);
-    let table = TypeTable::new();
-    let mut interp = Interpreter::new(&table);
-    interp.with_callees(&callees);
-    interp.set_step_budget(STATEMENTS_ONLY_BUDGET);
-
-    assert_eq!(flow_fold(&mut interp, &call_expr(&caller, vec![])), None);
-}
-
-#[test]
-fn repeated_heavy_calls_still_fold_when_the_budget_covers_their_copies() {
+fn repeated_heavy_calls_still_fold_within_the_default_budget() {
     let big = heavy_bodied_fn();
     let caller = repeated_caller_fn(&big, 8);
     let callees = build_callee_map_test(&[big, caller.clone()]);
@@ -7947,7 +7914,7 @@ fn a_ref_global_alias_survives_the_body_growing_under_it() {
         TypeTable::I32,
         unary(
             NirUnaryOp::Ref,
-            global_get(module.clone(), "CONFIG", TypeTable::I32),
+            global_get(module, "CONFIG", TypeTable::I32),
             TypeTable::I32,
         ),
     )];

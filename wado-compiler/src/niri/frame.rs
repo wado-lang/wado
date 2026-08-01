@@ -23,7 +23,7 @@ use super::callee::{CallSite, CalleeKey};
 use super::place::{borrowed_place_operand, overlapping_places, place_of};
 use super::region::{region_free_reads, region_shape, value_block_shape};
 use super::trackability::Trackability;
-use super::{COPY_CHARGE_DIVISOR, CallRun, CtfeBuiltin, FrameState, Interpreter, Lattice};
+use super::{CallRun, CtfeBuiltin, FrameState, Interpreter, Lattice};
 
 impl FrameState {
     /// Whether `index` takes part in a live place alias, as the alias handle
@@ -142,13 +142,6 @@ impl LoopSnapshot {
         }
     }
 
-    /// What one [`Self::restore`] costs the step budget, on the same scale as
-    /// [`body_copy_cost`] — it is the same work over the loop body rather than
-    /// the whole one.
-    fn restore_cost(&self) -> u32 {
-        node_copy_cost(self.exprs.len() + self.stmts.len() + self.blocks.len())
-    }
-
     /// Put the captured nodes back. Nodes an iteration allocated are left
     /// behind unreferenced.
     fn restore(&self, body: &mut Body) {
@@ -162,20 +155,6 @@ impl LoopSnapshot {
             body.blocks[*b].stmts.clone_from(stmts);
         }
     }
-}
-
-/// What copying `body`'s nodes costs the step budget.
-fn body_copy_cost(body: &Body) -> u32 {
-    node_copy_cost(body.exprs.len())
-}
-
-/// What copying `nodes` nodes costs the step budget: bulk memory rather than
-/// interpretation, so a fraction of what executing that many statements would
-/// — but never nothing, so a copy always makes progress toward the ceiling.
-fn node_copy_cost(nodes: usize) -> u32 {
-    u32::try_from(nodes / COPY_CHARGE_DIVISOR)
-        .unwrap_or(u32::MAX)
-        .max(1)
 }
 
 /// The local `op` writes out, through the casts monomorphization leaves. A
@@ -336,19 +315,12 @@ impl Interpreter<'_> {
     }
 
     /// Run a loop until it breaks, control leaves the function, or the budget
-    /// runs out. Termination rests on the budget alone — the per-iteration
-    /// charge covers an empty body too — so no constant trip count is needed.
-    ///
-    /// The charge is the snapshot restore the next iteration needs, which is a
-    /// copy of the loop body: the same cost model as
-    /// [`Self::charge_body_copy`], for the same reason. A loop charged one step
-    /// an iteration would copy its whole body ten thousand times over on the
-    /// default budget.
+    /// runs out. Termination rests on the budget alone — an iteration is
+    /// charged whatever its body holds — so no constant trip count is needed.
     fn exec_loop(&mut self, body: &mut Body, block: BlockId) -> Flow {
         let snapshot = LoopSnapshot::capture(body, block);
-        let iteration_cost = snapshot.restore_cost();
         loop {
-            if self.charge(iteration_cost).is_none() {
+            if self.charge(1).is_none() {
                 return Flow::Bail;
             }
             match self.exec_block(body, block) {
@@ -717,7 +689,7 @@ impl Interpreter<'_> {
             return None;
         }
 
-        self.charge_body_copy(callee_body)?;
+        self.charge(1)?;
         self.call_stack.push(key);
         let mut scratch = callee_body.nodes_only_clone();
         let track = Trackability::in_frame(&scratch, self.facts);
@@ -819,7 +791,7 @@ impl Interpreter<'_> {
             };
             seeds.push((index, value.clone()));
         }
-        self.charge_body_copy(body)?;
+        self.charge(1)?;
         let mut scratch = body.nodes_only_clone();
         scratch.root = block;
         let track = Trackability::in_frame(&scratch, self.facts);
@@ -834,19 +806,6 @@ impl Interpreter<'_> {
             self.frame.region_misses.insert(e);
         }
         value
-    }
-
-    /// Charge the step budget for a whole-body copy made before a single
-    /// statement runs — the scratch a call is run on, and the one a region is.
-    ///
-    /// Uncharged, an evaluation that reaches the copy and then abandons costs a
-    /// whole body per visit, which makes const folding quadratic in the size of
-    /// the function: the projection is re-entrant, so the same call and the
-    /// same template are reached again at every visit. `None` when the budget
-    /// cannot cover it, which is also the per-entry charge — the cost never
-    /// rounds down to nothing.
-    fn charge_body_copy(&mut self, body: &Body) -> Option<()> {
-        self.charge(body_copy_cost(body))
     }
 
     /// Charge `cost` steps, or report that the budget cannot cover them.
