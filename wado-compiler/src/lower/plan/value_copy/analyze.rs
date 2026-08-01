@@ -507,7 +507,12 @@ pub fn is_source_immutable(expr: &TirExpr, immutable_locals: &IndexSet<u32>) -> 
 fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
     if let TirExprKind::Call { func, .. } = &expr.kind
         && func.module_source.is_core_builtin()
-        && crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "array_clone")
+        && (crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "array_clone")
+            || crate::tir::matches_builtin(
+                &func.name,
+                func.monomorph_info.as_ref(),
+                "array_clone_prefix",
+            ))
     {
         func.monomorph_info
             .as_ref()

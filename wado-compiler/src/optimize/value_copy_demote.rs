@@ -347,10 +347,14 @@ fn array_clone_element_type(body: &Body, call: ExprId) -> Option<TypeId> {
     }
 }
 
-/// Whether the call's stamped `func_id` resolves to `builtin::array_clone`.
+/// Whether the call's stamped `func_id` resolves to `builtin::array_clone`
+/// or its right-sized sibling `builtin::array_clone_prefix` (the `List<T>` /
+/// `String` wrapper copies use the latter; both demote the same way).
 fn is_array_clone(func_id: FuncId, descriptors: &[FunctionRef]) -> bool {
-    builtin_gname(super::dce::callee_descriptor(descriptors, func_id)).as_deref()
-        == Some("builtin::array_clone")
+    matches!(
+        builtin_gname(super::dce::callee_descriptor(descriptors, func_id)).as_deref(),
+        Some("builtin::array_clone" | "builtin::array_clone_prefix")
+    )
 }
 
 /// Rewrite every reachable `builtin::array_clone` call in `body` to its

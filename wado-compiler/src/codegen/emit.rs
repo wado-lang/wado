@@ -2266,6 +2266,7 @@ impl<'a> WirEmitter<'a> {
                 type_id,
                 src,
                 element_copy_mangle,
+                len,
             } => {
                 let arr_wasm_idx = self.resolve_type_index(type_id.index());
                 let src_name = format!("__copy_arr_src_{}", type_id.index());
@@ -2278,8 +2279,12 @@ impl<'a> WirEmitter<'a> {
                 let loop_idx_local = self.resolve_local(&loop_idx_name);
                 self.emit_instr(f, src);
                 f.instruction(&Instruction::LocalSet(src_local));
-                f.instruction(&Instruction::LocalGet(src_local));
-                f.instruction(&Instruction::ArrayLen);
+                if let Some(len) = len {
+                    self.emit_instr(f, len)
+                } else {
+                    f.instruction(&Instruction::LocalGet(src_local));
+                    f.instruction(&Instruction::ArrayLen);
+                }
                 f.instruction(&Instruction::LocalSet(len_local));
                 f.instruction(&Instruction::LocalGet(len_local));
                 f.instruction(&Instruction::ArrayNewDefault(arr_wasm_idx));

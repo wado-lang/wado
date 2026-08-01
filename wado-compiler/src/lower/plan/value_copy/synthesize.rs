@@ -139,7 +139,12 @@ fn copy_value_type_arg(expr: &TirExpr) -> Option<TypeId> {
 fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
     if let TirExprKind::Call { func, .. } = &expr.kind
         && func.module_source.is_core_builtin()
-        && crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "array_clone")
+        && (crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "array_clone")
+            || crate::tir::matches_builtin(
+                &func.name,
+                func.monomorph_info.as_ref(),
+                "array_clone_prefix",
+            ))
     {
         func.monomorph_info
             .as_ref()
@@ -425,8 +430,15 @@ fn build_copy_return_expr(
         .struct_list_name(type_id)
         .expect("struct-shaped type has a stored struct name");
     if let Some(struct_def) = lookup_struct(project, &mangled, module.as_ref()) {
+        let right_size_backing = is_seq_container(resolved, type_table);
         return Some(build_struct_copy(
-            type_id, &mangled, struct_def, v_local, type_table, span,
+            type_id,
+            &mangled,
+            struct_def,
+            v_local,
+            type_table,
+            span,
+            right_size_backing,
         ));
     }
     // `GenericInstance` whose monomorphized struct didn't get
@@ -601,10 +613,35 @@ fn build_list_wrapper_copy(
         serde_positional: false,
         default_expr: None,
     };
+    let repr_access = TirExpr::new(
+        TirExprKind::FieldAccess {
+            expr: Box::new(v_local.clone()),
+            field_index: repr_field.index,
+            field_name: repr_field.name.clone(),
+        },
+        repr_field.type_id,
+        span,
+    );
+    let used_access = TirExpr::new(
+        TirExprKind::FieldAccess {
+            expr: Box::new(v_local.clone()),
+            field_index: used_field.index,
+            field_name: used_field.name.clone(),
+        },
+        used_field.type_id,
+        span,
+    );
     let fields = vec![
         TirStructField {
             name: SeqField::Backing.field_name().to_string(),
-            value: make_field_copy(v_local.clone(), &repr_field, type_table, span),
+            value: build_array_clone_prefix(
+                repr_access,
+                raw_array_ty,
+                elem_type,
+                used_access,
+                type_table,
+                span,
+            ),
             field_index: 0,
         },
         TirStructField {
@@ -666,6 +703,86 @@ fn build_tuple_copy(
     )
 }
 
+/// True when `resolved` is the compiler's `List<T>` / `String` container
+/// struct, whose value copy right-sizes the backing array to `used`.
+fn is_seq_container(resolved: &ResolvedType, type_table: &Rc<RefCell<TypeTable>>) -> bool {
+    let (decl_name, module_source) = match resolved {
+        ResolvedType::Struct {
+            decl_name,
+            module_source,
+            ..
+        } => (decl_name, module_source),
+        ResolvedType::GenericInstance {
+            name,
+            module_source,
+            ..
+        } => (name, module_source),
+        _ => return false,
+    };
+    let tt = type_table.borrow();
+    let items = tt.compiler_items();
+    [
+        crate::compiler_item::CompilerItem::List,
+        crate::compiler_item::CompilerItem::String,
+    ]
+    .into_iter()
+    .any(|item| {
+        items
+            .struct_owned_opt(item)
+            .is_some_and(|(m, n)| decl_name == &n && module_source == &m)
+    })
+}
+
+/// Copy the `repr` field of a `List<T>` / `String` right-sized to `used`:
+/// `array_clone_prefix(&v.repr, v.used)`. Capacity is an allocation detail,
+/// so a value copy does not inherit the source's slack. Falls back to the
+/// plain field copy when the field shapes are not the expected ones.
+fn make_seq_backing_copy(
+    struct_def: &TirStruct,
+    v_local: &TirExpr,
+    field: &TirField,
+    type_table: &Rc<RefCell<TypeTable>>,
+    span: Span,
+) -> TirExpr {
+    let resolved = type_table.borrow().get(field.type_id).clone();
+    let ResolvedType::BuiltinArray(elem_type) = resolved else {
+        return make_field_copy(v_local.clone(), field, type_table, span);
+    };
+    let Some(used_field) = struct_def
+        .fields
+        .iter()
+        .find(|f| f.name == SeqField::Len.field_name())
+    else {
+        return make_field_copy(v_local.clone(), field, type_table, span);
+    };
+    let field_access = TirExpr::new(
+        TirExprKind::FieldAccess {
+            expr: Box::new(v_local.clone()),
+            field_index: field.index,
+            field_name: field.name.clone(),
+        },
+        field.type_id,
+        span,
+    );
+    let used_access = TirExpr::new(
+        TirExprKind::FieldAccess {
+            expr: Box::new(v_local.clone()),
+            field_index: used_field.index,
+            field_name: used_field.name.clone(),
+        },
+        used_field.type_id,
+        span,
+    );
+    build_array_clone_prefix(
+        field_access,
+        field.type_id,
+        elem_type,
+        used_access,
+        type_table,
+        span,
+    )
+}
+
 fn build_struct_copy(
     type_id: TypeId,
     struct_name: &str,
@@ -673,12 +790,17 @@ fn build_struct_copy(
     v_local: &TirExpr,
     type_table: &Rc<RefCell<TypeTable>>,
     span: Span,
+    right_size_backing: bool,
 ) -> TirExpr {
     let fields: Vec<TirStructField> = struct_def
         .fields
         .iter()
         .map(|field| {
-            let value = make_field_copy(v_local.clone(), field, type_table, span);
+            let value = if right_size_backing && field.name == SeqField::Backing.field_name() {
+                make_seq_backing_copy(struct_def, v_local, field, type_table, span)
+            } else {
+                make_field_copy(v_local.clone(), field, type_table, span)
+            };
             TirStructField {
                 name: field.name.clone(),
                 value,
@@ -760,6 +882,48 @@ fn build_array_clone(
             func: array_clone_ref,
             type_args: vec![elem_type],
             args: vec![CallArg::new(arr_ref, false)],
+        },
+        array_ty,
+        span,
+    )
+}
+
+/// Build `builtin::array_clone_prefix::<elem_type>(&arr, len)` — the
+/// right-sized sibling of `build_array_clone`: the fresh array has exactly
+/// `len` elements (the container's `used`), not the source's capacity.
+fn build_array_clone_prefix(
+    arr: TirExpr,
+    array_ty: TypeId,
+    elem_type: TypeId,
+    len: TirExpr,
+    type_table: &Rc<RefCell<TypeTable>>,
+    span: Span,
+) -> TirExpr {
+    let func = FunctionRef {
+        module_source: ModuleSource::builtin(),
+        name: "array_clone_prefix".to_string(),
+        monomorph_info: Some(MonomorphInfo {
+            generic_name: "array_clone_prefix".to_string(),
+            impl_type_args: vec![elem_type],
+            method_type_args: vec![],
+            is_blanket: false,
+        }),
+        method_info: None,
+    };
+    let ref_type = type_table.borrow_mut().make_ref(array_ty);
+    let arr_ref = TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref,
+            expr: Box::new(arr),
+        },
+        ref_type,
+        span,
+    );
+    TirExpr::new(
+        TirExprKind::Call {
+            func,
+            type_args: vec![elem_type],
+            args: vec![CallArg::new(arr_ref, false), CallArg::new(len, false)],
         },
         array_ty,
         span,
