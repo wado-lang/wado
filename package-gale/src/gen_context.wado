@@ -76,6 +76,11 @@ pub struct GenContext {
     /// the resolved `Element::kind_id`); an empty self-extending table on the
     /// test path, where `intern` assigns ids lazily.
     token_kinds: TokenKinds,
+    /// `kind_rank[id]` is the lexicographic rank of `token_kinds.names[id]`,
+    /// rebuilt lazily whenever the table has grown. Kind-set canonicalisation
+    /// sorts ids by rank — the same order as sorting the names — without
+    /// touching a `String`.
+    kind_rank: List<i32>,
     /// Per-rule memo caches indexed by dense rule id (position in
     /// `parser_rules`, i.e. what `rule_index_of` returns). `null` means
     /// "not yet computed"; `Some(v)` is the memoized value. Dense arrays
@@ -232,6 +237,7 @@ impl GenContext {
             lit_tokens: *lit_tokens,
             rule_index,
             token_kinds: TokenKinds::empty(),
+            kind_rank: [],
             first_cache: none_int_list_cache(rule_count),
             single_token_cache: none_bool_cache(rule_count),
             nullable_cache: none_bool_cache(rule_count),
@@ -1475,13 +1481,12 @@ impl GenContext {
     /// or duplicates) maps to a single `id`. Helper IDs are assigned in
     /// first-seen order across the codegen pass.
     pub fn intern_kind_set(&mut self, tokens: &List<String>) -> i32 {
-        let canonical = canonical_kind_set(tokens);
-        let key = join_pipe(&canonical);
+        let ids = self.canonical_kind_ids(tokens);
+        let key = join_ids(&ids);
         if let Some(entry) = self.kind_set_registry.get(key) {
             return entry.id;
         }
         let id = self.kind_set_registry.len();
-        let ids = self.names_to_ids(&canonical);
         self.kind_set_registry[key] = KindSetEntry { id, tokens: ids };
         return id;
     }
@@ -1496,6 +1501,48 @@ impl GenContext {
         return out;
     }
 
+    /// Canonical form of a kind set as ids: sorted by token name (via the
+    /// rank table — no `String` comparison per element) and deduplicated.
+    /// Two `matches { ... }` checks over equal sets (regardless of order or
+    /// repeated elements) collapse to the same canonical form and therefore
+    /// the same helper id.
+    fn canonical_kind_ids(&mut self, tokens: &List<String>) -> List<i32> {
+        let mut ids = self.names_to_ids(tokens);
+        self.ensure_kind_rank();
+        let rank = &self.kind_rank;
+        ids.sort_by(|a: &i32, b: &i32| rank[*a].cmp(&rank[*b]));
+        let mut out: List<i32> = [];
+        for let mut i = 0; i < ids.len(); i += 1 {
+            if i == 0 || ids[i] != ids[i - 1] {
+                out.push(ids[i]);
+            }
+        }
+        return out;
+    }
+
+    /// Rebuild `kind_rank` when the token table has grown (lazy interns on
+    /// the test path; a no-op after the one production `set_token_kinds`).
+    fn ensure_kind_rank(&mut self) {
+        let n = self.token_kinds.len();
+        if self.kind_rank.len() == n {
+            return;
+        }
+        let mut order: List<i32> = [];
+        for let mut id = 0; id < n; id += 1 {
+            order.push(id);
+        }
+        let names = &self.token_kinds.names;
+        order.sort_by(|a: &i32, b: &i32| names[*a].cmp(&names[*b]));
+        let mut rank: List<i32> = [];
+        for let mut id = 0; id < n; id += 1 {
+            rank.push(0);
+        }
+        for let mut pos = 0; pos < n; pos += 1 {
+            rank[order[pos]] = pos;
+        }
+        self.kind_rank = rank;
+    }
+
     /// All interned kind sets in helper-ID order (i.e. insertion order).
     /// Consumed by `gen_kind_set_helpers` to emit the helper functions.
     pub fn kind_sets(&self) -> List<KindSetEntry> {
@@ -1506,16 +1553,15 @@ impl GenContext {
     /// `SYNC_<id>` global's id, or `null` for an empty set (the caller passes
     /// `&EMPTY_SYNC`). IDs are insertion-order so names are stable across runs.
     pub fn intern_sync_set(&mut self, tokens: &List<String>) -> Option<i32> {
-        let canonical = canonical_kind_set(tokens);
-        if canonical.is_empty() {
+        let ids = self.canonical_kind_ids(tokens);
+        if ids.is_empty() {
             return null;
         }
-        let key = join_pipe(&canonical);
+        let key = join_ids(&ids);
         if let Some(entry) = self.sync_set_registry.get(key) {
             return Option::<i32>::Some(entry.id);
         }
         let id = self.sync_set_registry.len();
-        let ids = self.names_to_ids(&canonical);
         self.sync_set_registry[key] = KindSetEntry { id, tokens: ids };
         return Option::<i32>::Some(id);
     }
@@ -1537,7 +1583,10 @@ impl GenContext {
         // skips empty depths, so `[[X], []]` gates identically to `[[X]]`
         // and a mask whose depths are all empty never gates at all (→ null,
         // caller passes `&EMPTY_FOLLOW`).
-        let sorted = canonicalize_k_prefix(mask);
+        let mut sorted: List<List<i32>> = [];
+        for let depth of mask {
+            sorted.push(self.canonical_kind_ids(depth));
+        }
         let mut last_constrained: i32 = -1;
         for let mut d = 0; d < sorted.len(); d += 1 {
             if !sorted[d].is_empty() {
@@ -1547,20 +1596,16 @@ impl GenContext {
         if last_constrained < 0 {
             return null;
         }
-        let mut canonical: List<List<String>> = [];
+        let mut canonical: List<List<i32>> = [];
         for let mut d = 0; d <= last_constrained; d += 1 {
             canonical.push(sorted[d]);
         }
-        let key = canonical_k_prefix_key(&canonical);
+        let key = ids_prefix_key(&canonical);
         if let Some(entry) = self.follow_mask_registry.get(key) {
             return Option::<i32>::Some(entry.id);
         }
         let id = self.follow_mask_registry.len();
-        let mut mask_ids: List<List<i32>> = [];
-        for let depth of &canonical {
-            mask_ids.push(self.names_to_ids(depth));
-        }
-        self.follow_mask_registry[key] = FollowMaskEntry { id, mask: mask_ids };
+        self.follow_mask_registry[key] = FollowMaskEntry { id, mask: canonical };
         return Option::<i32>::Some(id);
     }
 
@@ -1747,32 +1792,30 @@ impl GenContext {
     }
 }
 
-/// Sort tokens lexicographically and remove duplicates, producing the
-/// canonical representative of the set. Two `matches { ... }` checks
-/// over equal sets (regardless of order or repeated elements) collapse
-/// to the same canonical form and therefore the same helper id.
-fn canonical_kind_set(tokens: &List<String>) -> List<String> {
-    let mut sorted = *tokens;
-    sorted.sort();
-    let mut out: List<String> = [];
-    for let mut i = 0; i < sorted.len(); i += 1 {
-        if i == 0 || sorted[i] != sorted[i - 1] {
-            out.push(sorted[i]);
-        }
-    }
-    return out;
-}
-
-/// Join an already-canonicalised token list with `|`. The resulting
-/// string is the registry key. `|` cannot appear in `TK_*` identifiers
-/// so this is unambiguous.
-fn join_pipe(tokens: &List<String>) -> String {
-    let mut s = String::with_capacity(64);
-    for let mut i = 0; i < tokens.len(); i += 1 {
+/// Join a canonical id list with `|` into a registry key. Ids are stable for
+/// the lifetime of the table (append-only), so the key is unambiguous.
+fn join_ids(ids: &List<i32>) -> String {
+    let mut s = String::with_capacity(32);
+    for let mut i = 0; i < ids.len(); i += 1 {
         if i > 0 {
             s.push('|');
         }
-        s.push_str(&tokens[i]);
+        s.push_display(&ids[i]);
+    }
+    return s;
+}
+
+/// Registry key of a canonical K-prefix mask: depths joined with `;`,
+/// ids within a depth joined with `|`.
+fn ids_prefix_key(prefix: &List<List<i32>>) -> String {
+    let mut s = String::with_capacity(64);
+    let mut first_depth = true;
+    for let depth of prefix {
+        if !first_depth {
+            s.push(';');
+        }
+        first_depth = false;
+        s.push_str(&join_ids(depth));
     }
     return s;
 }
@@ -1848,32 +1891,6 @@ pub fn sets_overlap(a: &List<String>, b: &List<String>) -> bool {
         }
     }
     return false;
-}
-
-/// Canonicalise a K-prefix mask: sort each depth's token list so two
-/// otherwise-identical masks share the same registry key regardless of
-/// the order in which the underlying analysis discovered the tokens.
-fn canonicalize_k_prefix(prefix: &List<List<String>>) -> List<List<String>> {
-    return prefix.iter().map(|depth_set: &List<String>| canonical_kind_set(depth_set)).collect();
-}
-
-/// String form of a K-prefix mask for use as a registry key.
-/// Depths joined with `;`; tokens within a depth joined with `|`.
-/// Empty mask → empty string (no key fragment).
-fn canonical_k_prefix_key(prefix: &List<List<String>>) -> String {
-    if prefix.is_empty() {
-        return "";
-    }
-    let mut s = String::with_capacity(64);
-    let mut first_depth = true;
-    for let depth_set of prefix {
-        if !first_depth {
-            s.push_str(&";");
-        }
-        first_depth = false;
-        s.push_str(&join_pipe(depth_set));
-    }
-    return s;
 }
 
 /// Append-and-dedup union of two token-kind arrays, preserving the
