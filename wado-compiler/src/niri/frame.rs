@@ -26,11 +26,6 @@ use super::{
 };
 
 impl FrameState {
-    /// The state a call's body runs under: what `body` lets a frame track, with
-    /// the parameters already bound. A parameter the body can reach through
-    /// another handle binds nothing, so a stale constant cannot outlive the
-    /// write. Nothing keyed by the caller's local or expression ids carries
-    /// over.
     /// Whether `index` takes part in a live place alias, as the alias handle
     /// or as the place it names. Either role makes a value snapshot of the
     /// local unsound to hand out.
@@ -39,6 +34,11 @@ impl FrameState {
             || self.place_aliases.values().any(|(root, _)| *root == index)
     }
 
+    /// The state a call's body runs under: what `body` lets a frame track, with
+    /// the parameters already bound. A parameter the body can reach through
+    /// another handle binds nothing, so a stale constant cannot outlive the
+    /// write. Nothing keyed by the caller's local or expression ids carries
+    /// over.
     fn for_call(
         body: &Body,
         reached: &Reached,
