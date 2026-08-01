@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785601633065,
+  "lastUpdate": 1785619501424,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45353,6 +45353,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 273276,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f64e32ff760361e9ed35b24ab50160873895757e",
+          "message": "Merge pull request #1731 from wado-lang/claude/benchmark-sqlite-parse-perf-4mwr41\n\nperf: batch CST column pushes, right-size List/String value copies, elide redundant zero fills",
+          "timestamp": "2026-08-02T07:15:25+10:00",
+          "tree_id": "d0f19c266b40ec012d5076ea33378a183e523c85",
+          "url": "https://github.com/wado-lang/wado/commit/f64e32ff760361e9ed35b24ab50160873895757e"
+        },
+        "date": 1785619500755,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16247,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273867,
             "unit": "bytes"
           }
         ]
