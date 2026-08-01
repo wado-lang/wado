@@ -1,0 +1,12 @@
+// A trait imported under an alias must still work as a qualified-call head:
+// candidates are matched by the declared name, so the alias is resolved before
+// the head is used. WEP 2026-07-31.
+use { Widget, Alpha as Ay } from "./sub/ufcs_alias_lib.wado";
+
+test "an aliased trait head resolves the qualified call" {
+    let it = Widget { id: 7 };
+    assert Ay::describe(&it) == "alpha 7";
+}
+
+__DATA__
+{"test": {}}

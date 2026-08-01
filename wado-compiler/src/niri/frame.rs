@@ -11,44 +11,47 @@
 //! program never produced.
 
 use crate::const_eval::Value;
+use crate::name::RefKind;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_visitor::NirRefVisitor;
 use crate::tir::TypeTable;
 
+use super::callee::{CallSite, CalleeKey};
 use super::place::{borrowed_place_operand, overlapping_places, place_of};
-use super::region::{region_is_self_contained, region_shape, value_block_shape};
-use super::trackability::{Reached, aggregate_safe_locals, clobbered_locals};
-use super::{
-    COPY_CHARGE_DIVISOR, CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice,
-};
+use super::region::{region_free_reads, region_shape, value_block_shape};
+use super::trackability::Trackability;
+use super::{CallRun, CtfeBuiltin, FrameState, Interpreter, Lattice};
 
 impl FrameState {
+    /// Whether `index` takes part in a live place alias, as the alias handle
+    /// or as the place it names. Either role makes a value snapshot of the
+    /// local unsound to hand out.
+    fn alias_involves(&self, index: u32) -> bool {
+        self.place_aliases.contains_key(&index)
+            || self.place_aliases.values().any(|(root, _)| *root == index)
+    }
+
     /// The state a call's body runs under: what `body` lets a frame track, with
     /// the parameters already bound. A parameter the body can reach through
     /// another handle binds nothing, so a stale constant cannot outlive the
     /// write. Nothing keyed by the caller's local or expression ids carries
     /// over.
-    fn for_call(
-        body: &Body,
-        reached: &Reached,
-        params: impl IntoIterator<Item = (u32, Value)>,
-    ) -> Self {
-        let ctfe_clobbered = clobbered_locals(body, reached);
+    fn for_call(track: Trackability, params: impl IntoIterator<Item = (u32, Value)>) -> Self {
         let mut state = Self {
-            aggregate_locals: aggregate_safe_locals(body, reached),
+            aggregate_locals: track.aggregate_locals,
             ..Self::default()
         };
         for (index, value) in params {
-            let lattice = if ctfe_clobbered.contains(index) {
+            let lattice = if track.clobbered.contains(index) {
                 Lattice::NonConst
             } else {
                 Lattice::Const(value)
             };
             state.env.insert(index, lattice);
         }
-        state.ctfe_clobbered = ctfe_clobbered;
+        state.ctfe_clobbered = track.clobbered;
         state
     }
 }
@@ -164,10 +167,19 @@ fn named_local(body: &Body, op: Operand) -> Option<u32> {
     }
 }
 
-/// Whether two `&mut` arguments name overlapping storage. Each parameter binds
-/// its own snapshot and each write-back replays whole, so the later write would
-/// undo the earlier. Wado has no borrow checker, so this is ordinary source: the
-/// frame declines to run the call rather than mis-run it.
+/// Whether a `&mut` argument's storage is also named by another argument. Each
+/// parameter binds its own snapshot and each write-back replays whole, so a
+/// second handle on the same storage either reads a value the program never had
+/// or has its own write undone.
+///
+/// `places` holds every argument's place, the target's own included, so a target
+/// overlapping only itself counts once. Whether the other argument could
+/// actually observe the write is not asked: after `prepare_types` a shared
+/// borrow of a primitive, plain enum, variant or fn type is the same `Box<T>` a
+/// by-value one is, so no signature test tells them apart here.
+///
+/// Wado has no borrow checker, so this is ordinary source: the frame declines
+/// to run the call rather than mis-run it.
 fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u32>)]) -> bool {
     targets
         .iter()
@@ -303,15 +315,14 @@ impl Interpreter<'_> {
     }
 
     /// Run a loop until it breaks, control leaves the function, or the budget
-    /// runs out. Termination rests on the budget alone — the per-iteration
-    /// charge covers an empty body too — so no constant trip count is needed.
+    /// runs out. Termination rests on the budget alone — an iteration is
+    /// charged whatever its body holds — so no constant trip count is needed.
     fn exec_loop(&mut self, body: &mut Body, block: BlockId) -> Flow {
         let snapshot = LoopSnapshot::capture(body, block);
         loop {
-            if self.step_budget == 0 {
+            if self.charge(1).is_none() {
                 return Flow::Bail;
             }
-            self.step_budget -= 1;
             match self.exec_block(body, block) {
                 Flow::Fallthrough(_) | Flow::Continue => {}
                 Flow::Break { label: None, .. } => {
@@ -321,6 +332,7 @@ impl Interpreter<'_> {
             }
             snapshot.restore(body);
             self.frame.scratch_folds.clear();
+            self.frame.region_misses.clear();
         }
     }
 
@@ -353,7 +365,7 @@ impl Interpreter<'_> {
     /// when the expression is not a call the frame knows.
     fn exec_call_stmt(&mut self, body: &Body, e: ExprId) -> Option<Flow> {
         let (key, _) = self.call_target(body, e)?;
-        if !self.callees.is_some_and(|c| c.contains_key(&key)) {
+        if !self.facts.callees.is_some_and(|c| c.contains_key(&key)) {
             return None;
         }
         let Some(run) = self.run_call(body, e, true) else {
@@ -379,29 +391,35 @@ impl Interpreter<'_> {
             self.bind_ctfe_local(root, Lattice::Const(value));
             return Flow::Fallthrough(Lattice::Unevaluated);
         }
-        match self.update_place(root, &path, |_| Some(value)) {
+        match self.update_place(root, &path, |place| {
+            *place = value;
+            Some(())
+        }) {
             Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
             None => Flow::Bail,
         }
     }
 
-    /// Rebind the frame's value for `root` with the value at `path` replaced by
-    /// what `update` makes of it. `None` when the frame holds no constant for
-    /// the root — which is what confines a write to values the engine itself
-    /// built — or when the path does not reach a value the update applies to.
+    /// Update the frame's value for `root` in place, applying `update` to the
+    /// value at `path`. `None` when the frame holds no constant for the root —
+    /// which is what confines a write to values the engine itself built — or
+    /// when the path does not reach a value the update applies to.
+    ///
+    /// Written through rather than rebuilt: a rebuild copies the whole
+    /// container per write, which makes filling a sequence quadratic in its
+    /// length. A clobbered root never holds a constant here — `bind_ctfe_local`
+    /// is the only way one is recorded and it downgrades those — so writing
+    /// straight into the environment cannot revive a local a frame gave up on.
     fn update_place(
         &mut self,
         root: u32,
         path: &[u32],
-        update: impl FnOnce(&Value) -> Option<Value>,
+        update: impl FnOnce(&mut Value) -> Option<()>,
     ) -> Option<()> {
-        let Lattice::Const(container) = self.frame.env.get(&root)?.clone() else {
+        let Lattice::Const(container) = self.frame.env.get_mut(&root)? else {
             return None;
         };
-        let target = path.iter().try_fold(&container, |v, i| v.field(*i))?;
-        let updated = container.with_path(path, update(target)?)?;
-        self.bind_ctfe_local(root, Lattice::Const(updated));
-        Some(())
+        update(container.place_mut(path)?)
     }
 
     /// Perform a builtin at statement position, updating the frame's value for
@@ -411,7 +429,7 @@ impl Interpreter<'_> {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return None;
         };
-        let builtin = *self.ctfe_builtins.and_then(|m| m.get(func_id))?;
+        let builtin = *self.facts.ctfe_builtins.and_then(|m| m.get(func_id))?;
         let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
         match builtin {
             CtfeBuiltin::ArraySet => Some(self.exec_element_write(body, &args)),
@@ -441,7 +459,7 @@ impl Interpreter<'_> {
         let Some((index, _)) = index.as_int() else {
             return Flow::Bail;
         };
-        match self.update_place(root, &path, |seq| seq.with_element(index, element)) {
+        match self.update_place(root, &path, |seq| seq.set_element(index, element)) {
             Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
             None => Flow::Bail,
         }
@@ -470,7 +488,7 @@ impl Interpreter<'_> {
             return Flow::Bail;
         };
         match self.update_place(root, &path, |destination| {
-            destination.with_run(at, &source, from, len)
+            destination.set_run(at, &source, from, len)
         }) {
             Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
             None => Flow::Bail,
@@ -590,43 +608,25 @@ impl Interpreter<'_> {
     /// `Unevaluated` on any miss, so the original call — and any runtime trap
     /// inside it — survives.
     pub(super) fn try_call_fold(&mut self, body: &Body, e: ExprId) -> Lattice {
-        if let lattice @ (Lattice::Const(_) | Lattice::NonConst) =
-            self.try_ctfe_builtin_fold(body, e)
-        {
-            return match lattice {
-                Lattice::Const(v) => Lattice::Const(v),
-                Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
-            };
+        match self.try_ctfe_builtin_fold(body, e) {
+            Lattice::Const(v) => return Lattice::Const(v),
+            Lattice::NonConst => return Lattice::Unevaluated,
+            Lattice::Unevaluated => {}
         }
-        match self.run_call(body, e, false) {
-            Some(run) => match run.result {
-                c @ Lattice::Const(_) => c,
-                Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
-            },
-            None => Lattice::Unevaluated,
+        let Some(run) = self.run_call(body, e, false) else {
+            return Lattice::Unevaluated;
+        };
+        match run.result {
+            Lattice::Const(v) => Lattice::Const(v),
+            Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
         }
     }
 
-    /// The callee a call names, and the operands bound to its parameters. A
-    /// method's receiver is its first.
+    /// The callee a call names, and the operands bound to its parameters, in
+    /// parameter order.
     fn call_target(&self, body: &Body, e: ExprId) -> Option<(CalleeKey, Vec<Operand>)> {
-        match &body.exprs[e].kind {
-            ExprKind::Call { func_id, args, .. } => {
-                Some((*func_id, args.iter().map(|a| a.expr).collect()))
-            }
-            ExprKind::MethodCall {
-                func_id,
-                receiver,
-                args,
-                ..
-            } => {
-                let mut ops = Vec::with_capacity(args.len() + 1);
-                ops.push(*receiver);
-                ops.extend(args.iter().map(|a| a.expr));
-                Some((*func_id, ops))
-            }
-            _ => None,
-        }
+        let site = CallSite::of(body, e)?;
+        Some((site.func_id, site.operands().map(|(_, op)| op).collect()))
     }
 
     /// Run a call in a compile-time frame: bind the parameters, execute the
@@ -640,7 +640,7 @@ impl Interpreter<'_> {
     /// The body runs on a scratch copy, so the callee's shared arena — held
     /// under an immutable borrow — is never mutated.
     fn run_call(&mut self, body: &Body, e: ExprId, may_write: bool) -> Option<CallRun> {
-        let callees = self.callees?;
+        let callees = self.facts.callees?;
         let (key, args) = self.call_target(body, e)?;
         let callee_rc = callees.get(&key)?;
         if self.call_stack.iter().any(|k| k == &key) {
@@ -679,11 +679,11 @@ impl Interpreter<'_> {
             return None;
         }
 
-        self.step_budget -= 1;
+        self.charge(1)?;
         self.call_stack.push(key);
         let mut scratch = callee_body.nodes_only_clone();
-        let reached = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
-        let caller = self.swap_frame(FrameState::for_call(&scratch, &reached, bound));
+        let track = Trackability::in_frame(&scratch, self.facts);
+        let caller = self.swap_frame(FrameState::for_call(track, bound));
         let run = self.exec_frame(&mut scratch, targets, returns_unit);
         self.swap_frame(caller);
         self.call_stack.pop();
@@ -735,9 +735,18 @@ impl Interpreter<'_> {
     /// The constant a self-contained region denotes: the block runs as a frame
     /// the engine starts from scratch, since a region that builds its value in
     /// locals of its own and touches only those is as self-contained as a call
-    /// body. `None` when the block is not such a region, or when running
+    /// body. An outer local the region only reads is seeded from the walker's
+    /// environment when it holds a constant there — a value snapshot at the
+    /// region's own flow point, sound because the region cannot write it back:
+    /// [`region_free_reads`] rejects write positions and reference-typed
+    /// mentions, and a local involved in a live place alias is refused here.
+    /// `None` when the block is not such a region, or when running
     /// it does not finish on a constant — the block survives as written, so
     /// anything it would do at run time still happens there.
+    ///
+    /// A region of reference type is refused whatever it reads: its value
+    /// would materialize as a fresh literal where the program yields an alias,
+    /// and `ref.eq` can tell the two apart.
     ///
     /// Safe on the re-entrant projection path even though it executes writes:
     /// self-containment confines every write to locals of the scratch run, so
@@ -750,29 +759,47 @@ impl Interpreter<'_> {
         if let Some(value) = self.frame.scratch_folds.get(&e) {
             return Some(value.clone());
         }
-        if !region_is_self_contained(body, block, self.callees, self.ctfe_builtins) {
+        if RefKind::from_resolved(self.type_table.get(body.exprs[e].type_id)).is_some() {
             return None;
         }
-        self.charge_body_copy(body)?;
+        if self.frame.region_misses.contains(&e) {
+            return None;
+        }
+        let free = region_free_reads(body, block, self.facts, self.type_table)?;
+        let mut seeds: Vec<(u32, Value)> = Vec::with_capacity(free.len());
+        for index in free {
+            if self.frame.alias_involves(index) {
+                crate::compiler_trace!("region_seed", "region {e:?}: local {index} is aliased");
+                return None;
+            }
+            let Some(Lattice::Const(value)) = self.frame.env.get(&index) else {
+                crate::compiler_trace!(
+                    "region_seed",
+                    "region {e:?}: local {index} not constant in the walker env"
+                );
+                return None;
+            };
+            seeds.push((index, value.clone()));
+        }
+        self.charge(1)?;
         let mut scratch = body.nodes_only_clone();
         scratch.root = block;
-        let reached = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
-        let region = FrameState::for_call(&scratch, &reached, std::iter::empty());
-        let caller = self.swap_frame(region);
+        let track = Trackability::in_frame(&scratch, self.facts);
+        let caller = self.swap_frame(FrameState::for_call(track, seeds));
         let flow = self.exec_block(&mut scratch, block);
         self.swap_frame(caller);
-        value_of_block_flow(flow, label).ok()?.as_const()
+        let value = value_of_block_flow(flow, label)
+            .ok()
+            .and_then(|lattice| lattice.as_const());
+        if value.is_none() {
+            crate::compiler_trace!("region_seed", "region {e:?}: run abandoned");
+            self.frame.region_misses.insert(e);
+        }
+        value
     }
 
-    /// Charge the step budget for the copy of `body` a region run makes before
-    /// it executes a statement. Uncharged, a region that reaches the run and
-    /// then abandons costs a whole-body copy per visit, which makes const
-    /// folding quadratic in the size of a function full of templates. `None`
-    /// when the budget cannot cover it.
-    fn charge_body_copy(&mut self, body: &Body) -> Option<()> {
-        let cost = u32::try_from(body.exprs.len() / COPY_CHARGE_DIVISOR)
-            .unwrap_or(u32::MAX)
-            .max(1);
+    /// Charge `cost` steps, or report that the budget cannot cover them.
+    fn charge(&mut self, cost: u32) -> Option<()> {
         self.step_budget = self.step_budget.checked_sub(cost)?;
         Some(())
     }
@@ -791,7 +818,10 @@ impl Interpreter<'_> {
             if path.is_empty() {
                 self.bind_ctfe_local(root, Lattice::Const(value));
             } else {
-                self.update_place(root, &path, |_| Some(value))?;
+                self.update_place(root, &path, |place| {
+                    *place = value;
+                    Some(())
+                })?;
             }
         }
         Some(())

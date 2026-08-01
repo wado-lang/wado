@@ -97,9 +97,11 @@ impl FunctionTranslator<'_, '_> {
                 type_id: array_type_id,
                 len: Box::new(WirInstr::I32Const(0)),
             }
-        } else if byte_len <= self.ctx.package.string_inline_max_bytes
-            || (self.force_fixed_string_repr && byte_len <= crate::name::INLINE_REF_EAGER_MAX_BYTES)
-        {
+        } else if crate::wir_build::packed_array_is_eager(
+            byte_len,
+            self.ctx.package.string_inline_max_bytes,
+            self.force_fixed_string_repr,
+        ) {
             let elements = b
                 .iter()
                 .map(|&x| WirInstr::I32Const(i32::from(x)))

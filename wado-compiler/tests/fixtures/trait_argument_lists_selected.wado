@@ -1,0 +1,75 @@
+// One trait implemented for one receiver at several argument lists is Wado's
+// only overload set, and the arguments choose (WEP 2026-07-31): a concrete
+// argument type — a local's declared type, a named struct literal, a cast —
+// admits exactly one candidate. A literal-only distinction stays ambiguous
+// (see trait_ambiguous_argument_lists.wado); the trait turbofish pins a list
+// explicitly.
+struct A {
+    v: i32,
+}
+
+struct B {
+    v: i32,
+}
+
+trait Take<S> {
+    fn take(&self, s: S) -> i32;
+}
+
+impl Take<A> for bool {
+    fn take(&self, s: A) -> i32 {
+        return s.v;
+    }
+}
+
+impl Take<B> for bool {
+    fn take(&self, s: B) -> i32 {
+        return s.v * 2;
+    }
+}
+
+trait Width<S> {
+    fn width(&self, s: S) -> i32;
+}
+
+impl Width<i32> for bool {
+    fn width(&self, s: i32) -> i32 {
+        return 1;
+    }
+}
+
+impl Width<i64> for bool {
+    fn width(&self, s: i64) -> i32 {
+        return 2;
+    }
+}
+
+test "a local's declared type selects the argument list" {
+    let f = true;
+    let a = A { v: 3 };
+    let b = B { v: 4 };
+    assert f.take(a) == 3;
+    assert f.take(b) == 8;
+}
+
+test "a named struct literal selects the argument list" {
+    let f = true;
+    assert f.take(B { v: 5 }) == 10;
+    assert f.take(A { v: 6 }) == 6;
+}
+
+test "a cast disambiguates a literal between numeric widths" {
+    let f = true;
+    assert f.width(42 as i64) == 2;
+    assert f.width(7 as i32) == 1;
+}
+
+test "the trait turbofish pins one argument list" {
+    let f = true;
+    assert Width::<i64>::width(&f, 42) == 2;
+    assert Width::<i32>::width(&f, 7) == 1;
+    assert Take::<B>::take(&f, B { v: 9 }) == 18;
+}
+
+__DATA__
+{"test": {}}

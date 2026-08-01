@@ -1,0 +1,26 @@
+// A hoisted array literal past the `array.new_fixed` operand limit must keep
+// the lazy-init guard (WEP: Constant Object Globalization).
+//
+// `split_large_array_literals` rewrites a 257+-element `array.new_fixed` —
+// whatever its element type — into a build sequence, which is not
+// Wasm-const-expressible, so the classifier cannot delete the hoist's
+// assignment. Unguarded, the 260-element list is rebuilt and the global
+// rewritten on every loop iteration. Elements are struct literals, so the
+// packable-scalar guard arm does not apply; the operand-limit arm must.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    for let mut i = 0; i < 2; i += 1 {
+        let table: List<String> = ["x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x"];
+        println(`${i}:${table[builtin::black_box(3)]}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "0:x\n1:x\n",
+    "wir_expect:O2": [
+        "if ref.is_null(global:const_object_globalization_large_ref_array.wado::__const_obj_"
+    ]
+}

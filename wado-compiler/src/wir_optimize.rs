@@ -28,7 +28,7 @@
 //! for TIR locals, `elide_local` here for `wir_build`-synthesised locals TIR
 //! can't see.
 
-mod array;
+pub(crate) mod array;
 mod branch_hint;
 mod cleanup;
 mod const_forward;

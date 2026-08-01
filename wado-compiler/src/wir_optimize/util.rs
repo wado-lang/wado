@@ -210,12 +210,15 @@ pub(super) fn may_trap_in(instr: &WirInstr, null: &Nullability) -> bool {
     if matches!(
         instr,
         // GC array reads trap on null / OOB.
+        //
+        // `array.new_data` is absent although Wasm traps when offset + len
+        // overruns the segment: its only two producers —
+        // `translate_packed_array` and `promote_constant_arrays_to_data` —
+        // emit offset 0 with the registered segment's exact length, so the
+        // shape cannot overrun.
         WirInstr::ArrayGet { .. }
         | WirInstr::ArrayGetS { .. }
         | WirInstr::ArrayGetU { .. }
-        // `array.new_data` traps when offset + len overruns the data
-        // segment.
-        | WirInstr::ArrayNewData { .. }
         // Ref cast / non-null assertion trap on failure. The
         // operand-dependent early returns above peel off the
         // statically-safe shapes; whatever's left here is the

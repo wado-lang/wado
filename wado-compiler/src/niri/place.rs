@@ -7,14 +7,15 @@
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprKind, Operand};
 
-/// The local an lvalue or borrow chain roots at: `x`, `x.f`, `x[i]`, `*x`, and
-/// any nesting of those.
+/// The local an lvalue or borrow chain roots at: `x`, `x.f`, `x[i]`, `*x`, a
+/// cast over any of those (a cast names the same storage as its operand), and
+/// any nesting.
 pub(super) fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
     match &body.exprs[op.as_expr()?].kind {
         ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
-            lvalue_root_local(body, *inner)
-        }
+        ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. } => lvalue_root_local(body, *inner),
         ExprKind::Unary {
             op: NirUnaryOp::Deref,
             expr: inner,
@@ -47,6 +48,16 @@ pub(super) fn place_of(body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
         }
         _ => None,
     }
+}
+
+/// The local a write through `op` lands in: [`place_of`]'s root when the
+/// chain spells a borrow (which `lvalue_root_local` does not peel), else
+/// [`lvalue_root_local`]'s (which alone handles `Index`). `None` when no
+/// local roots the write.
+pub(super) fn write_root_local(body: &Body, op: Operand) -> Option<u32> {
+    place_of(body, op)
+        .map(|(root, _)| root)
+        .or_else(|| lvalue_root_local(body, op))
 }
 
 /// The borrow `op` spells over a place: whether it is mutable, and the

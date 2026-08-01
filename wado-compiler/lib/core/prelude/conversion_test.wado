@@ -175,13 +175,13 @@ test "TryFrom<i64> for i32: out of range" {
 }
 
 test "TryFrom<i32> for u32: non-negative" {
-    assert u32::try_from(0) matches { Ok(n) && n == 0 as u32 };
-    assert u32::try_from(2147483647) matches { Ok(n) && n == 2147483647 as u32 };
+    assert u32::try_from(0 as i32) matches { Ok(n) && n == 0 as u32 };
+    assert u32::try_from(2147483647 as i32) matches { Ok(n) && n == 2147483647 as u32 };
 }
 
 test "TryFrom<i32> for u32: negative fails" {
-    assert u32::try_from(-1) matches { Err(_) };
-    assert u32::try_from(-100) matches { Err(_) };
+    assert u32::try_from(-1 as i32) matches { Err(_) };
+    assert u32::try_from(-100 as i32) matches { Err(_) };
 }
 
 struct NetworkError {
@@ -275,8 +275,8 @@ test "JsonLike: From<f64>" {
 }
 
 test "JsonLike: From<i32> widens to f64" {
-    assert JsonLike::from(42) matches { Number(n) && n == 42.0 };
-    assert JsonLike::from(-1) matches { Number(n) && n == -1.0 };
+    assert JsonLike::from(42 as i32) matches { Number(n) && n == 42.0 };
+    assert JsonLike::from(-1 as i32) matches { Number(n) && n == -1.0 };
 }
 
 test "JsonLike: From<String>" {
@@ -286,7 +286,7 @@ test "JsonLike: From<String>" {
 
 test "JsonLike: building a mixed array via From" {
     let mut items: List<JsonLike> = [];
-    items.push(JsonLike::from(1));
+    items.push(JsonLike::from(1 as i32));
     items.push(JsonLike::from(true));
     items.push(JsonLike::from("ok"));
     let arr = JsonLike::Arr(items);

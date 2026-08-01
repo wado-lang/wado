@@ -1140,15 +1140,18 @@ impl AstVisitor for SemEffectWalker<'_> {
                     let params = self.index.fn_params.get(&def).cloned().unwrap_or_default();
                     let resolved = self.resolve_effect_params(&effects, &params, false, &call.args);
                     self.report_missing(&resolved, &name, call.span);
-                } else if let Some(func_ref) = self
+                } else if let Some((func_ref, self_in_args)) = self
                     .annotations
                     .and_then(|ann| ann.static_method_dispatch.get(&call.id))
-                    .map(|dispatch| dispatch.function_ref.clone())
+                    .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
                 {
                     let mut effects = self.method_effects(&func_ref);
                     effects.extend(self.effect_op_requirement(&func_ref));
                     let params = self.method_param_types(&func_ref);
-                    let is_method = func_ref.method_info.is_some();
+                    // A qualified (UFCS) call spells the receiver as its
+                    // first argument, so the args already align with the
+                    // callee's full parameter list — no self skip.
+                    let is_method = func_ref.method_info.is_some() && !self_in_args;
                     let resolved =
                         self.resolve_effect_params(&effects, &params, is_method, &call.args);
                     self.report_missing(&resolved, callee_name(&call.callee), call.span);
@@ -1177,15 +1180,17 @@ impl AstVisitor for SemEffectWalker<'_> {
             }
             Expr::StaticMethodCall(static_call) => {
                 let call_key = static_call.id;
-                if let Some(func_ref) = self
+                if let Some((func_ref, self_in_args)) = self
                     .annotations
                     .and_then(|ann| ann.static_method_dispatch.get(&call_key))
-                    .map(|dispatch| dispatch.function_ref.clone())
+                    .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
                 {
                     let mut effects = self.method_effects(&func_ref);
                     effects.extend(self.effect_op_requirement(&func_ref));
                     let params = self.method_param_types(&func_ref);
-                    let is_method = func_ref.method_info.is_some();
+                    // See the `Call` arm: a trait-turbofish qualified call
+                    // carries its receiver in the argument list.
+                    let is_method = func_ref.method_info.is_some() && !self_in_args;
                     let resolved =
                         self.resolve_effect_params(&effects, &params, is_method, &static_call.args);
                     self.report_missing(&resolved, &static_call.method, static_call.span);

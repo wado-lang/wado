@@ -1,0 +1,19 @@
+// `Same::eq(&a, &b)` names the user trait `Same`, which `Point` does not
+// implement. The auto-derived prelude `Eq` shares the method name but is a
+// different declaration, so it must not answer for `Same`. WEP 2026-07-31.
+struct Point {
+    x: i32,
+}
+
+trait Same {
+    fn eq(&self, other: &Self) -> bool;
+}
+
+test "an unimplemented named trait is not answered by auto-derived Eq" {
+    let a = Point { x: 1 };
+    let b = Point { x: 1 };
+    assert Same::eq(&a, &b);
+}
+
+__DATA__
+{"test": {}, "compile_error": "eq"}

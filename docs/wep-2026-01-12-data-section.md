@@ -1,11 +1,10 @@
 # WEP: Data Section (`__DATA__`)
 
-**Date:** 2026-01-12
-**Status:** Proposed
+Status: Implemented
 
 ## Context
 
-For E2E testing of the Wado compiler, we need a way to embed test metadata (expected stdout, stderr, exit code) within test fixture files. Rather than maintaining separate files for test inputs and expected outputs, a self-contained format is preferable.
+A module often carries static text that belongs with it — configuration, fixtures, embedded documents, metadata a tool reads — and a companion file for it drifts from the source it describes.
 
 Several languages provide similar mechanisms:
 
@@ -14,28 +13,23 @@ Several languages provide similar mechanisms:
 | Perl     | `__DATA__` / `__END__` | `<DATA>` filehandle | Per-package             |
 | Ruby     | `__END__`              | `DATA` IO object    | Global (main file only) |
 
-Other testing approaches include:
+The requirements:
 
-- **Cram tests**: Shell session format with `$` prefixed commands
-- **LLVM lit/FileCheck**: `RUN:` and `CHECK:` directives in comments
-- **OCaml ppx_expect**: `[%expect {...}]` blocks with auto-promotion
-- **Snapshot testing**: External golden files in `testdata/` or `__snapshots__/`
-
-We want a solution that:
-
-1. Keeps test data co-located with test source
-2. Is module-scoped (not global like Ruby)
-3. Aligns with Wado's explicit design philosophy
-4. Supports structured data (JSON) for test metadata
+1. Keep data co-located with source
+2. Module-scoped, not global like Ruby
+3. Explicit access, matching Wado's design philosophy
+4. Readable by tooling without a full compilation
 
 ## Decision
 
-### The `__DATA__` Keyword
+### The `__DATA__` Marker
 
-The `__DATA__` keyword marks the end of Wado source code and the beginning of a data section:
+`__DATA__` ends the source code and starts the data section:
 
 ```wado
-fn main() {
+use { println } from "core:cli";
+
+fn run() with Stdout {
     println("Hello, World!");
 }
 
@@ -44,161 +38,77 @@ This is the data section.
 It can contain any text.
 ```
 
-- `__DATA__` must appear at the start of a line (no leading whitespace)
-- Everything after `__DATA__` until EOF is the data section content
-- The `__DATA__` line itself is not included in the content
-- Each module (file) can have its own data section
+- The marker must start at column 1 and be alone on its line — only a newline or EOF may follow it. Anywhere else, `__DATA__` is an ordinary identifier.
+- Everything after the marker line, verbatim to EOF, is the content. The marker line is excluded and the content is not trimmed.
+- The content is never tokenized, so it may hold text that is not valid Wado.
+- A module has at most one data section, and `wado format` re-emits it unchanged.
 
-### The `#[data]` Attribute
+### Accessing the Content
 
-To access the data section from within Wado code, use the `#[data]` attribute:
+The `#data` compile-time literal expands to the module's data section as a `String`. Using it in a module with no data section is a compile error.
 
 ```wado
-#[data]
-let content: String;
-
-fn main() {
-    println(content);  // Prints the data section
+export fn run() with Stdout {
+    println(#data);
 }
 
 __DATA__
 Hello from the data section!
 ```
 
-Rules:
+`#data` is one of the compile-time location literals; see [Compile-Time Location Literals](./wep-2026-01-23-compile-time-location-literals.md).
 
-- `#[data]` can only be applied to module-level `let` bindings
-- The binding must have type `String`
-- Compile error if `#[data]` is used without a `__DATA__` section
-- Compile error if multiple `#[data]` bindings exist in a module
+The literal yields raw text. There is no format-parsing form: a program that wants structured data parses the text itself (`core:json`, `core:cbor`, …), keeping the compiler free of format knowledge.
 
-### Future Extension: Structured Data
-
-In a future version, `#[data("format")]` will parse the data section:
-
-```wado
-#[data("json")]
-let config: TreeMap<String, Any>;
-
-#[data("jsonc")]  // JSON with comments
-let test_spec: TestSpec;
-
-__DATA__
-{
-  "exit": 0,
-  "stdout": "Hello\n"
-}
-```
-
-Supported formats (future):
-
-- `"json"` - Standard JSON
-- `"jsonc"` - JSON with `//` and `/* */` comments
-
-Parse errors become compile errors, ensuring invalid test data is caught early.
-
-### Compiler API for Tooling
-
-The compiler exposes an API for tools (test runners, IDEs) to access data sections without full compilation:
-
-```rust
-// In wado-compiler
-impl Module {
-    /// Returns the data section content, if present.
-    /// This is available after parsing, before type checking.
-    pub fn data_section(&self) -> Option<&str>;
-}
-```
-
-This allows test harnesses to:
-
-1. Parse only the data section (fast)
-2. Extract test expectations as JSON
-3. Run the compiled program
-4. Compare actual vs expected output
-
-### E2E Test Format
-
-For compiler E2E tests, the data section uses JSONC format:
-
-```wado
-// tests/fixtures/hello.wado
-fn main() {
-    println("Hello");
-    eprintln("Warning");
-}
-
-__DATA__
-{
-  // Expected behavior
-  "exit": 0,
-  "stdout": "Hello\n",
-  "stderr": "Warning\n"
-}
-```
-
-Test specification schema:
-
-```typescript
-interface TestSpec {
-  // Expected exit code (default: 0)
-  exit?: number;
-
-  // Expected stdout (exact match)
-  stdout?: string;
-
-  // Expected stderr (exact match)
-  stderr?: string;
-
-  // Alternative: pattern matching
-  stdout_contains?: string[];
-  stderr_contains?: string[];
-
-  // Compiler behavior
-  compile_error?: string; // Expected compilation failure
-}
-```
+For tooling, the compiler exposes the content on the parsed module, so a tool can read it without compiling the file.
 
 ## Consequences
 
 ### Positive
 
-- **Self-contained tests**: Test expectations live with test source
-- **Module-scoped**: Each file has independent data section (unlike Ruby)
-- **Explicit access**: `#[data]` attribute makes data usage visible
-- **Early error detection**: JSON parse errors are compile-time errors
-- **Tooling-friendly**: Compiler API enables fast test extraction
-- **No YAML**: Uses JSON/JSONC which is strict and unambiguous
+- Self-contained: the data travels with the module that owns it
+- Module-scoped: each file has an independent data section, unlike Ruby
+- Explicit access: `#data` makes the dependency visible at the use site
+- Tooling-friendly: readable as plain text, without compiling the file
 
 ### Negative
 
-- **Single data section per file**: Cannot have multiple named sections (could extend later with `__DATA__:name` if needed)
-- **Text only initially**: Binary data requires encoding (base64) until future extensions
-- **New syntax**: `__DATA__` is a new top-level construct to learn
+- One unnamed section per file; multiple sections would need an extension such as `__DATA__:name`
+- Text only — binary payloads need encoding (`#include_bytes` covers the binary case from a separate file)
+- `__DATA__` is a top-level construct with no analogue elsewhere in the syntax
 
 ### Neutral
 
-- Similar to Perl/Ruby, so familiar to developers from those ecosystems
-- The `#[data]` attribute pattern is consistent with other Wado attributes
-
-## Implementation Notes
-
-1. **Lexer**: Recognize `__DATA__` as end-of-source marker
-2. **Parser**: Store data section content in AST's Module node
-3. **Compiler API**: Expose `Module::data_section()` after parsing
-4. **Codegen**: For `#[data]`, emit the string as a constant
-5. **Test harness**: Parse data section as JSONC, run program, compare results
+- Familiar to developers coming from Perl and Ruby
+- `#data` shares its compile-time evaluation model with `#file`, `#line`, `#function`, and `#include_str`
 
 ## Alternatives Considered
 
 ### Magic Global Variable
 
 ```wado
-// Ruby-style
-println(DATA);  // Magic global
+println(DATA);  // Ruby-style
 ```
 
-Rejected: Implicit globals conflict with Wado's explicit philosophy.
+Rejected: implicit globals conflict with Wado's explicit philosophy.
+
+### `#[data]` Attribute on a Binding
+
+```wado
+#[data]
+let content: String;
+```
+
+Rejected: it introduces a declaration whose value comes from nowhere visible, and it needs its own rules for placement, type, and duplicates. `#data` is an expression that reads exactly where the data is used.
+
+### Compile-Time Format Parsing
+
+```wado
+#[data("json")]
+let config: TreeMap<String, Any>;
+```
+
+Rejected: it puts format parsers and their diagnostics in the compiler, and pins the parsed shape to types the compiler must know. Parsing the raw text in Wado keeps formats in the standard library.
 
 ### Built-in Function
 
@@ -206,23 +116,22 @@ Rejected: Implicit globals conflict with Wado's explicit philosophy.
 let content = builtin::data();
 ```
 
-Rejected: Less declarative; harder to optimize (compile-time evaluation less obvious).
+Rejected: less declarative, and its compile-time evaluation is less obvious than a `#`-prefixed literal.
 
 ### Comment-Based Directives
 
 ```wado
-// CHECK-STDOUT: Hello
-// CHECK-EXIT: 0
-fn main() { println("Hello"); }
+// key: value
+// other: value
 ```
 
-Rejected: Less structured; harder to parse complex expectations; LLVM-style is powerful but complex.
+Rejected: the payload is bound to the comment syntax, so it cannot hold arbitrary text, and multi-line data is awkward to write and to read back.
 
-### Separate Expectation Files
+### Separate Data Files
 
 ```
-tests/hello.wado
-tests/hello.expected.json
+hello.wado
+hello.data.json
 ```
 
-Rejected: File proliferation; harder to keep in sync; less self-contained.
+Rejected: file proliferation, and the pair drifts apart.

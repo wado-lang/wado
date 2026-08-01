@@ -1,0 +1,15 @@
+// The qualified call resolves its head to a trait *declaration*, so two
+// same-named traits from different modules are told apart by which import the
+// head names — including through an alias. WEP 2026-07-31.
+use { Thing } from "./sub/ufcs_kind_struct.wado";
+use { Kind } from "./sub/ufcs_kind_a.wado";
+use { Kind as BKind } from "./sub/ufcs_kind_b.wado";
+
+test "the qualified head selects between same-named traits" {
+    let t = Thing { id: 1 };
+    assert Kind::kind(&t) == "a";
+    assert BKind::kind(&t) == "b";
+}
+
+__DATA__
+{"test": {}}

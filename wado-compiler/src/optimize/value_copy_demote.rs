@@ -39,6 +39,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FunctionKind, FunctionRef, NirFunction, NirParam, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
+use crate::nir_visitor::reachable_exprs;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::storage_root;
@@ -222,23 +223,6 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
         gate.mark_changed(FuncId::new(fi));
     }
     changed
-}
-
-// ---------------------------------------------------------------------------
-// Reachable-node enumeration
-// ---------------------------------------------------------------------------
-
-/// Every `ExprId` reachable from the body root, in arbitrary order.
-fn reachable_exprs(body: &Body) -> Vec<ExprId> {
-    let mut out = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Expr(id) = node {
-            out.push(id);
-        }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    out
 }
 
 // ---------------------------------------------------------------------------

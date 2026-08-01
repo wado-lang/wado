@@ -208,6 +208,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut: Vec::new(),
                 type_args: Vec::new(),
                 param_defaults: Vec::new(),
+                self_in_args: false,
             },
         );
 
@@ -432,6 +433,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut: Vec::new(),
                 type_args: Vec::new(),
                 param_defaults: Vec::new(),
+                self_in_args: false,
             },
         );
     }
@@ -829,6 +831,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
                 type_args: Vec::new(),
                 param_defaults: Vec::new(),
+                self_in_args: false,
             },
         );
 
@@ -941,6 +944,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
                 type_args: Vec::new(),
                 param_defaults: Vec::new(),
+                self_in_args: false,
             },
         );
 
@@ -1126,6 +1130,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut,
                 type_args: Vec::new(),
                 param_defaults: Vec::new(),
+                self_in_args: false,
             },
         );
 
@@ -1186,6 +1191,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut,
                 type_args: Vec::new(),
                 param_defaults: Vec::new(),
+                self_in_args: false,
             },
         );
 

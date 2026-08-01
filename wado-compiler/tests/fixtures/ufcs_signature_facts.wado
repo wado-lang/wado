@@ -1,0 +1,82 @@
+// A trait-qualified call is recorded as a static dispatch, and the record must
+// carry the resolved signature's real facts (WEP 2026-07-31). Each test pins a
+// fact that was once fabricated:
+// - defaults: an empty param_defaults ICE'd a call omitting a defaulted param;
+// - closure params: missing call_param_types left an unannotated closure's
+//   functor with unknown params, trapping at runtime;
+// - fn-param specialization keys: a qualified Call carries its receiver in
+//   args[0], which mis-shifted the specialized clone's param rewrite — the
+//   clone kept its fn-typed param and its canonical cast trapped on the
+//   functor the rewritten call site passes.
+struct Item {
+    id: i32,
+}
+
+trait Greet {
+    fn greet(&self, sep: String = "-") -> String;
+}
+
+impl Greet for Item {
+    fn greet(&self, sep: String) -> String {
+        return `hi${sep}${self.id}`;
+    }
+}
+
+trait Apply {
+    fn apply(&self, f: fn(i32) -> i32) -> i32;
+}
+
+impl Apply for Item {
+    fn apply(&self, f: fn(i32) -> i32) -> i32 {
+        return f(self.id);
+    }
+}
+
+trait Marker {
+    fn tag(&self) -> i32;
+}
+
+trait Signal {
+    fn tag(&self) -> i32;
+}
+
+impl Marker for Item {
+    fn tag(&self) -> i32 {
+        return self.id;
+    }
+}
+
+impl Signal for Item {
+    fn tag(&self) -> i32 {
+        return self.id * 100;
+    }
+}
+
+fn pick<T: Marker + Signal>(x: &T) -> i32 {
+    return Signal::tag(x);
+}
+
+test "a qualified call applies the trait's declared default" {
+    let it = Item { id: 5 };
+    assert Greet::greet(&it) == "hi-5";
+    assert Greet::greet(&it, "+") == "hi+5";
+}
+
+test "an unannotated closure argument infers through a qualified call" {
+    let it = Item { id: 3 };
+    assert Apply::apply(&it, |x| x + 1) == 4;
+}
+
+test "both call spellings coexist against one impl" {
+    let it = Item { id: 3 };
+    assert it.apply(|x| x * 10) == 30;
+    assert Apply::apply(&it, |x| x * 100) == 300;
+}
+
+test "naming a bound resolves a collision inside a generic body" {
+    let it = Item { id: 7 };
+    assert pick(&it) == 700;
+}
+
+__DATA__
+{"test": {}}

@@ -56,8 +56,10 @@ impl Rule for ElideRule<'_> {
         let promoted_reads: IndexSet<u32> = engine.body.values.opaque_local_sources().collect();
         let mut new_stmts = Vec::with_capacity(stmts.len());
         let mut changed = false;
-        for stmt in stmts {
-            match classify(engine, stmt, self.stores_aliased, &promoted_reads) {
+        let len = stmts.len();
+        for (i, stmt) in stmts.into_iter().enumerate() {
+            let is_tail = i + 1 == len;
+            match classify(engine, stmt, is_tail, self.stores_aliased, &promoted_reads) {
                 Action::Keep => new_stmts.push(stmt),
                 Action::Drop => changed = true,
                 Action::Demote(value) => {
@@ -81,6 +83,7 @@ impl Rule for ElideRule<'_> {
 fn classify(
     engine: &Engine,
     stmt: StmtId,
+    is_tail: bool,
     stores_aliased: &IndexSet<u32>,
     promoted_reads: &IndexSet<u32>,
 ) -> Action {
@@ -114,6 +117,17 @@ fn classify(
                 ExprKind::Assign { target, value } => Some((*target, *value)),
                 _ => None,
             };
+            // Not in tail position — a block's tail `Expr` is its value.
+            if assign.is_none()
+                && !is_tail
+                && arena_query::is_pure_nontrapping_operand_typed(
+                    engine.body,
+                    Operand::Expr(*e),
+                    engine.value_graph_type_table(),
+                )
+            {
+                return Action::Drop;
+            }
             if let Some((target, value)) = assign
                 && let ExprKind::Local { index, .. } = &engine.body.exprs[target].kind
             {

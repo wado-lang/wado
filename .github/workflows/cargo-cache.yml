@@ -93,20 +93,20 @@ jobs:
           ls -lh out/registry/linux-x86_64.tar.gz out/sccache/linux-x86_64.tar.gz
 
       - id: auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_CACHE_WRITER_SA }}
 
       - name: Upload registry cache
-        uses: google-github-actions/upload-cloud-storage@v2
+        uses: google-github-actions/upload-cloud-storage@v3
         with:
           path: out/registry/linux-x86_64.tar.gz
           destination: ${{ vars.GCP_CACHE_BUCKET }}/cargo/registry
           parent: false
 
       - name: Upload sccache cache
-        uses: google-github-actions/upload-cloud-storage@v2
+        uses: google-github-actions/upload-cloud-storage@v3
         with:
           path: out/sccache/linux-x86_64.tar.gz
           destination: ${{ vars.GCP_CACHE_BUCKET }}/cargo/sccache

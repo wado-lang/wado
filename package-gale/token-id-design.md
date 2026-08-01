@@ -77,8 +77,8 @@ build time, so the hot recursion is pure integer work.
 
 - **FIRST sets**: `List<i32>` (kind ids), **insertion order preserved** (dedup
   via a `seen` bitset, O(1)). Cache `first_cache: List<Option<List<i32>>>`.
-- **FOLLOW**: already a bitset (`follow_env`); switch its interner to the
-  canonical ids (drop its private lazy interner).
+- **FOLLOW**: a bitset over the canonical kind ids (`follow_env`; landed
+  2026-08 — the private lazy interner is gone).
 - **kind / sync / follow-mask registries**: store `List<i32>`.
 
 ## Byte-identity strategy
@@ -88,12 +88,12 @@ Output must stay byte-identical for every grammar. Three ordering rules:
 1. **FIRST-set order = insertion order of ids** — identical to today's
    insertion order of names (ids ↔ names are 1:1), so emit through `names`
    reproduces the same sequence.
-2. **Kind-set canonical order**: today `canonical_kind_set` sorts token _names_
-   lexicographically. Kind ids sort in declaration order, _not_ name order, so
-   the canonicalisation must still sort **by name** — done at `intern_kind_set`
-   (map ids→names, sort, that is both the registry key and the emit order).
-   This is off the hot path (once per _distinct_ set), so its String cost is
-   negligible.
+2. **Kind-set canonical order**: canonicalisation must still order **by name**
+   (kind ids sort in declaration order, not name order). Landed 2026-08 as
+   `GenContext::canonical_kind_ids`: a lazily rebuilt `kind_rank` table
+   (`rank[id]` = lexicographic rank of the name) sorts the ids with integer
+   compares, and the joined id list is the registry key. Rank order equals
+   name order, so canonical order and helper ids match the former name sort.
 3. **Emit boundary**: `kind_check_str` / `first_check_str` /
    `intern_kind_set` / `dump` take `List<i32>` and stringify via
    `TokenKinds.names`. `p.peek_kind() == TK_FOO` is reproduced because `TK_FOO`'s
@@ -137,8 +137,8 @@ small grammar). Expect the biggest effect on TS/Rust (keyword-dense, GC-bound).
   resolution pass routes through them, and open-coded `` `TK_{t.name}` `` sites
   (enumerated: lower, parser_gen, prediction, gen_context, atn, dump) migrate to
   reading `elem.kind_id`.
-- **`follow_env`'s private `TokenInterner`** (follow_env.wado:284, insertion-order,
-  FOLLOW-local) is deleted in favour of the canonical table.
+- **`follow_env`'s private `TokenInterner`** — deleted (2026-08); the FOLLOW
+  bitsets index the canonical kind-id space directly.
 
 ## Risks / open points
 

@@ -118,6 +118,24 @@ pub fn bits_test(bits: &List<u64>, id: i32) -> bool {
     return bits[word] & 1 as u64 << (id % 64) as u64 != 0 as u64;
 }
 
+/// OR `src` into `dst`, growing `dst` as needed. Returns whether `dst` grew.
+pub fn bits_union_into(dst: &mut List<u64>, src: &List<u64>) -> bool {
+    let mut changed = false;
+    for let mut i = 0; i < src.len(); i += 1 {
+        let sv = src[i];
+        if sv == 0 as u64 {
+            continue;
+        }
+        bits_ensure(dst, i);
+        let merged = dst[i] | sv;
+        if merged != dst[i] {
+            dst[i] = merged;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 /// Append every id in `src` to `result`, skipping any already present (O(1)
 /// bitset probe on `seen`); insertion order is preserved.
 pub fn append_ids(result: &mut List<i32>, seen: &mut List<u64>, src: &List<i32>) {

@@ -1,0 +1,31 @@
+// A conversion call's literal argument selects the impl before elaboration
+// (WEP 2026-07-31 phase 4): an integer literal admits From<i64> and not
+// From<String>, so exactly one candidate survives and the expected type comes
+// from it — order-independently. This exact shape was an ICE (unresolved Call
+// at WIR build), then a diagnostic asking for `42 as i64`, before the fold.
+struct Wrapper {
+    tag: i32,
+}
+
+impl From<String> for Wrapper {
+    fn from(value: String) -> Wrapper {
+        return Wrapper { tag: 1 };
+    }
+}
+
+impl From<i64> for Wrapper {
+    fn from(value: i64) -> Wrapper {
+        return Wrapper { tag: 2 };
+    }
+}
+
+test "an integer literal selects the only numeric From impl" {
+    assert Wrapper::from(42).tag == 2;
+}
+
+test "a string literal selects the String impl" {
+    assert Wrapper::from("hi").tag == 1;
+}
+
+__DATA__
+{"test": {}}

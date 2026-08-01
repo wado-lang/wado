@@ -811,7 +811,7 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Inspect for L {
 #[compiler_item("binary")]
 internal trait Binary {
     /// Formats the value as binary and writes to the given formatter.
-    fn fmt(&self, f: &mut Formatter);
+    fn fmt_binary(&self, f: &mut Formatter);
 }
 
 /// Trait for formatting values as octal integers.
@@ -819,7 +819,7 @@ internal trait Binary {
 #[compiler_item("octal")]
 internal trait Octal {
     /// Formats the value as octal and writes to the given formatter.
-    fn fmt(&self, f: &mut Formatter);
+    fn fmt_octal(&self, f: &mut Formatter);
 }
 
 /// Trait for formatting values as lowercase hexadecimal.
@@ -827,7 +827,7 @@ internal trait Octal {
 #[compiler_item("lower_hex")]
 internal trait LowerHex {
     /// Formats the value as lowercase hex and writes to the given formatter.
-    fn fmt(&self, f: &mut Formatter);
+    fn fmt_lower_hex(&self, f: &mut Formatter);
 }
 
 /// Trait for formatting values as uppercase hexadecimal.
@@ -835,7 +835,7 @@ internal trait LowerHex {
 #[compiler_item("upper_hex")]
 internal trait UpperHex {
     /// Formats the value as uppercase hex and writes to the given formatter.
-    fn fmt(&self, f: &mut Formatter);
+    fn fmt_upper_hex(&self, f: &mut Formatter);
 }
 
 /// Trait for formatting values in lowercase exponential notation.
@@ -843,7 +843,7 @@ internal trait UpperHex {
 #[compiler_item("lower_exp")]
 internal trait LowerExp {
     /// Formats the value in lowercase exponential notation and writes to the given formatter.
-    fn fmt(&self, f: &mut Formatter);
+    fn fmt_lower_exp(&self, f: &mut Formatter);
 }
 
 /// Trait for formatting values in uppercase exponential notation.
@@ -851,7 +851,7 @@ internal trait LowerExp {
 #[compiler_item("upper_exp")]
 internal trait UpperExp {
     /// Formats the value in uppercase exponential notation and writes to the given formatter.
-    fn fmt(&self, f: &mut Formatter);
+    fn fmt_upper_exp(&self, f: &mut Formatter);
 }
 
 /// Trait for alternate (pretty-print) inspect formatting.
@@ -877,28 +877,28 @@ internal trait DisplayAlt {
 /// Used with the `${x:#b}` format specifier.
 #[compiler_item("binary_alt")]
 internal trait BinaryAlt {
-    fn fmt_alt(&self, f: &mut Formatter);
+    fn fmt_binary_alt(&self, f: &mut Formatter);
 }
 
 /// Trait for alternate octal formatting (with `0o` prefix).
 /// Used with the `${x:#o}` format specifier.
 #[compiler_item("octal_alt")]
 internal trait OctalAlt {
-    fn fmt_alt(&self, f: &mut Formatter);
+    fn fmt_octal_alt(&self, f: &mut Formatter);
 }
 
 /// Trait for alternate lowercase hex formatting (with `0x` prefix).
 /// Used with the `${x:#x}` format specifier.
 #[compiler_item("lower_hex_alt")]
 internal trait LowerHexAlt {
-    fn fmt_alt(&self, f: &mut Formatter);
+    fn fmt_lower_hex_alt(&self, f: &mut Formatter);
 }
 
 /// Trait for alternate uppercase hex formatting (with `0X` prefix).
 /// Used with the `${x:#X}` format specifier.
 #[compiler_item("upper_hex_alt")]
 internal trait UpperHexAlt {
-    fn fmt_alt(&self, f: &mut Formatter);
+    fn fmt_upper_hex_alt(&self, f: &mut Formatter);
 }
 /// The core iterator trait for sequences of values.
 /// Types implementing this trait can be iterated over using `for-of` loops.

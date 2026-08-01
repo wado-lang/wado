@@ -1,0 +1,43 @@
+// The no-matching-conversion diagnostic must not fire when the call has a
+// legitimate target the trait lookup does not see (WEP 2026-07-31):
+// - an inherent static `from` beside unrelated `From` impls;
+// - a generic-instantiated source (`From<List<i32>>`), whose head-only
+//   spelling used to miss the full argument type name (an ICE at WIR build
+//   before the full-spelling match).
+struct ByBool {
+    tag: i32,
+}
+
+impl ByBool {
+    fn from(b: bool) -> ByBool {
+        return ByBool { tag: 9 };
+    }
+}
+
+impl From<String> for ByBool {
+    fn from(value: String) -> ByBool {
+        return ByBool { tag: 1 };
+    }
+}
+
+struct ByList {
+    tag: i32,
+}
+
+impl From<List<i32>> for ByList {
+    fn from(value: List<i32>) -> ByList {
+        return ByList { tag: 3 };
+    }
+}
+
+test "an inherent static from answers beside unrelated From impls" {
+    assert ByBool::from(true).tag == 9;
+}
+
+test "a generic-instantiated From source matches its full spelling" {
+    let xs: List<i32> = [1, 2];
+    assert ByList::from(xs).tag == 3;
+}
+
+__DATA__
+{"test": {}}

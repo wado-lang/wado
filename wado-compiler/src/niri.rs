@@ -15,23 +15,20 @@
 //! - `pattern` — whether a pattern matches a value.
 //! - `place` — what a borrow or lvalue chain names.
 //! - `region` — which blocks are self-contained enough to run as a frame.
+//! - `callee` — who a call names, and what its operands bind to.
 //!
 //! What the engine can evaluate is stated in
 //! `docs/wep-2026-04-27-nir-interpreter.md`, not here.
-
-use std::cell::RefCell;
-use std::rc::Rc;
 
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
-    StmtId, StmtKind, StmtNode,
+    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, Operand, PatId, StmtId,
+    StmtKind, StmtNode,
 };
 use crate::nir_value_graph::ValueKind;
-use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{TypeId, TypeTable};
 
 /// Three-state lattice over compile-time evaluation results, ordered
@@ -56,6 +53,11 @@ pub enum Lattice {
 impl Lattice {
     /// The value when `Const`, else `None`. Pattern-match the variant instead
     /// where the `Unevaluated` / `NonConst` distinction matters.
+    ///
+    /// Owned rather than borrowed, and that is not the copy it reads as: a
+    /// [`Value`] keeps its aggregate and sequence backings behind `Rc`, so the
+    /// clone is a refcount bump whatever the value's size. There is no
+    /// borrowing variant because there would be nothing to win by it.
     #[must_use]
     pub fn as_const(&self) -> Option<Value> {
         match self {
@@ -79,65 +81,6 @@ impl Lattice {
             (Self::Const(a), Self::Const(b)) if a.denotes_same(&b) => Self::Const(a),
             (Self::Const(_), Self::Const(_)) => Self::NonConst,
         }
-    }
-}
-
-/// Identity of a callee in the [`CalleeMap`].
-pub type CalleeKey = crate::nir::FuncId;
-
-/// The callees a compile-time frame may run.
-///
-/// Membership answers whether a frame may *run* the callee at all
-/// ([`is_ctfe_runnable`]), decided once at construction. Whether a call's value
-/// may be substituted for it is a separate question, answered per call.
-pub type CalleeMap = IndexMap<CalleeKey, Callee>;
-
-/// A callee the engine may run, with the parameter facts the trackability
-/// analysis needs answered without a borrow. Asking the function later answers
-/// only when nobody holds `borrow_mut` on it, and a fold must not turn on
-/// which function the visitor happens to be walking.
-pub struct Callee {
-    pub func: Rc<RefCell<NirFunction>>,
-    pub mut_params: Vec<bool>,
-    pub stored_params: Vec<bool>,
-}
-
-impl Callee {
-    #[must_use]
-    pub fn new(func: Rc<RefCell<NirFunction>>) -> Self {
-        let (mut_params, stored_params) = {
-            let borrowed = func.borrow();
-            (
-                borrowed.params.iter().map(|p| p.is_mut_ref).collect(),
-                borrowed
-                    .params
-                    .iter()
-                    .map(|p| borrowed.stores.contains(&p.name))
-                    .collect(),
-            )
-        };
-        Self {
-            func,
-            mut_params,
-            stored_params,
-        }
-    }
-
-    fn arity(&self) -> usize {
-        self.mut_params.len()
-    }
-
-    /// A `&mut T` borrow is the only parameter kind that reaches the caller's
-    /// storage. An index the signature does not have answers as one that does,
-    /// so a call the map cannot account for is exempt from nothing.
-    fn writes_param(&self, index: usize) -> bool {
-        self.mut_params.get(index).copied().unwrap_or(true)
-    }
-
-    /// A stored parameter outlives the call, so naming its referent is not the
-    /// passing read the other arguments are.
-    fn reads_only(&self, index: usize) -> bool {
-        self.stored_params.get(index).is_some_and(|stored| !stored)
     }
 }
 
@@ -194,12 +137,7 @@ pub type GlobalFieldEnv = IndexMap<GlobalKey, IndexMap<String, Value>>;
 /// whether the next one folds.
 pub const DEFAULT_STEP_BUDGET: u32 = 10_000;
 
-/// How many body nodes a region run's copy charges as one step. The copy is
-/// real work the budget must see, but it is bulk memory rather than
-/// interpretation, so it costs a fraction of what executing that many
-/// statements would.
-pub const COPY_CHARGE_DIVISOR: usize = 16;
-
+mod callee;
 mod frame;
 mod lattice;
 mod pattern;
@@ -208,13 +146,14 @@ mod region;
 mod rewrite;
 mod trackability;
 
+pub use callee::{Callee, CalleeKey, CalleeMap};
 use pattern::PatternMatch;
-use trackability::{Reached, aggregate_safe_locals};
+use trackability::Trackability;
 
 /// Commit sink for niri's body rewrites, so one set of rewrites serves two
 /// backends: [`BodySink`] over a throwaway CTFE body, and the optimize layer's
 /// `EngineSink`, which keeps the real body's maps coherent.
-pub(crate) trait EditSink {
+pub trait EditSink {
     fn body(&self) -> &Body;
     /// Replace `e`'s kind. The new kind's children must already be parented to
     /// `e` (literals have none); use [`EditSink::become_expr`] to move an
@@ -240,7 +179,7 @@ pub(crate) trait EditSink {
 /// In-place [`EditSink`] over a raw `Body`. Used for CTFE scratch reduction,
 /// where the body is discarded after the value is read, so duplicated child
 /// references and stale parent links do not matter.
-pub(crate) struct BodySink<'a> {
+pub struct BodySink<'a> {
     pub body: &'a mut Body,
 }
 
@@ -313,17 +252,26 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
         && is_ctfe_runnable(func)
 }
 
-/// Everything the engine knows keyed by local index, which is per-function, so
-/// entering a body means replacing the whole group and leaving one means
-/// putting it back. Grouped rather than swapped field by field: a compile-time
-/// frame exchanges all of it at once, and a member restored out of step with
-/// its siblings would let one body read another's locals.
+/// Everything the engine knows about the body it is walking, which is
+/// per-function, so entering a body means replacing the whole group and leaving
+/// one means putting it back. Grouped rather than swapped field by field: a
+/// compile-time frame exchanges all of it at once, and a member restored out of
+/// step with its siblings would let one body read another's locals.
+///
+/// Most of it is keyed by local index; the two memos at the end are keyed by
+/// `ExprId`, and both belong to the body those ids index — which is what makes
+/// swapping the group wholesale the only sound way to enter a frame.
 #[derive(Default)]
 struct FrameState {
     /// Lattice values for the `let`-bound locals of the body being walked. An
     /// absent local reads as [`Lattice::Unevaluated`].
     env: IndexMap<u32, Lattice>,
-    ref_global_aliases: IndexMap<u32, GlobalKey>,
+    /// Locals a `let` bound to `&GLOBAL`, with the statement that bound each
+    /// one so a read through the alias can re-derive the fact rather than
+    /// trust it. Nothing about a body identifies it across an in-place fold —
+    /// the arena grows as nodes are interned — so the witness is the binding
+    /// itself, which a different body does not carry at that id.
+    ref_global_aliases: IndexMap<u32, (StmtId, GlobalKey)>,
     /// Locals a frame's `let` bound to a borrow of a local place, resolved to
     /// the place borrowed — flattened at record time, so a chain never needs
     /// chasing. Reads through one project the place's current value and writes
@@ -336,26 +284,59 @@ struct FrameState {
     /// Locals a compile-time frame cannot track — see [`clobbered_locals`].
     /// Empty outside a frame.
     ctfe_clobbered: LocalSet,
-    /// CTFE scratch-body fold memo, read back by
-    /// [`Interpreter::expr_to_lattice`]. The scratch [`BodySink`] promotes
-    /// nothing, so a fold has nowhere else to be recorded. Empty during
-    /// real-body folding, where rewrites promote through the engine.
+    /// What this frame folded a node to, read back by
+    /// [`Interpreter::expr_to_lattice`]. Written on both backends, and
+    /// load-bearing on each for its own reason.
+    ///
+    /// On the scratch body, because [`BodySink`] promotes nothing: a fold has
+    /// nowhere else to be recorded. On a real body, because the rewrite that
+    /// commits a value consumes the node that produced it — a materialized
+    /// sequence stands where the region was — so the value is no longer
+    /// derivable from the tree, and an enclosing fold reading through this node
+    /// needs it. That is why an aggregate is memoized even when the sink takes
+    /// it: what the sink takes is a literal, what the caller needs is a value.
+    ///
+    /// The one `ExprId`-keyed memo the crate keeps (`wado-compiler/AGENTS.md`).
+    /// It holds only for the frame that wrote it and is cleared wherever the
+    /// environment restarts, so no entry outlives the flow that justified it.
     scratch_folds: IndexMap<ExprId, Value>,
+    /// Regions whose run this frame already attempted and abandoned. A seed's
+    /// value is fixed for the frame's flow (a reassigned local is never
+    /// `Const` here), so a failed run stays failed and re-running it would
+    /// re-pay the body copy at every visit. Cleared with [`Self::scratch_folds`]
+    /// wherever the environment restarts.
+    ///
+    /// Unlike [`Self::scratch_folds`] this records no value, so it is kept on
+    /// the real body too: the worst an entry left over from a rewritten node
+    /// can cost is a fold nobody attempts.
+    region_misses: IndexSet<ExprId>,
+}
+
+/// What the engine knows beyond the body in front of it.
+///
+/// Every field is optional and every absence costs folds rather than
+/// correctness: without the callee map a `Call` stays [`Lattice::Unevaluated`],
+/// without the builtin map an `array_get` is an opaque call, without the global
+/// env a `GlobalVarGet` is unevaluated, and without the field env so is
+/// `GLOBAL.f`. The compiler runs the engine in two configurations — one with
+/// the program-wide view, one with only what running a call needs — so a
+/// partial one is by design, not an oversight.
+///
+/// Grouped rather than four independent knobs, so a walk that needs the
+/// program view asks for one thing and the rule above has one place to live.
+#[derive(Default, Clone, Copy)]
+pub(crate) struct ProgramFacts<'a> {
+    pub(crate) callees: Option<&'a CalleeMap>,
+    pub(crate) ctfe_builtins: Option<&'a CtfeBuiltinMap>,
+    globals: Option<&'a GlobalEnv>,
+    global_fields: Option<&'a GlobalFieldEnv>,
 }
 
 /// Partial evaluator over the arena `Body`.
 pub struct Interpreter<'a> {
     type_table: &'a TypeTable,
     frame: FrameState,
-    /// When `None`, a `Call` node stays [`Lattice::Unevaluated`].
-    callees: Option<&'a CalleeMap>,
-    /// When `None`, an `array_get` / `array_len` call is just an opaque call.
-    ctfe_builtins: Option<&'a CtfeBuiltinMap>,
-    /// When `None`, a `GlobalVarGet` stays [`Lattice::Unevaluated`].
-    globals: Option<&'a GlobalEnv>,
-    /// When `None`, `FieldAccess(GlobalVarGet(_), _)` stays
-    /// [`Lattice::Unevaluated`].
-    global_fields: Option<&'a GlobalFieldEnv>,
+    facts: ProgramFacts<'a>,
     /// Hard ceiling on CTFE work before bailing. On zero, further attempts
     /// return `Unevaluated`.
     step_budget: u32,
@@ -406,42 +387,13 @@ struct CallRun {
     writes: Vec<(u32, Vec<u32>, Value)>,
 }
 
-/// Every expression id reachable from the body root, in arena order — or every
-/// expression, for a bare-expression body with no block structure.
-pub(crate) fn reachable_exprs(body: &Body) -> Vec<ExprId> {
-    struct Collect(Vec<ExprId>);
-    impl NirRefVisitor for Collect {
-        fn visit_node(&mut self, body: &Body, node: NodeRef) {
-            if let NodeRef::Expr(e) = node {
-                self.0.push(e);
-            }
-            self.walk_node(body, node);
-        }
-    }
-    if body.blocks.is_empty() {
-        return body.exprs.iter().map(|(e, _)| e).collect();
-    }
-    let mut collect = Collect(Vec::new());
-    collect.visit_node(body, NodeRef::Block(body.root));
-    collect.0
-}
-
-fn local_binds_to_global_ref(body: &Body, local: u32, key: &GlobalKey) -> bool {
-    body.stmts
-        .iter()
-        .any(|(_, st)| let_ref_global(body, &st.kind) == Some((local, key.clone())))
-}
-
 impl<'a> Interpreter<'a> {
     #[must_use]
     pub fn new(type_table: &'a TypeTable) -> Self {
         Self {
             type_table,
             frame: FrameState::default(),
-            callees: None,
-            ctfe_builtins: None,
-            globals: None,
-            global_fields: None,
+            facts: ProgramFacts::default(),
             step_budget: DEFAULT_STEP_BUDGET,
             call_stack: Vec::new(),
         }
@@ -450,14 +402,14 @@ impl<'a> Interpreter<'a> {
     /// Install the [`CalleeMap`]. Without it, every `Call` node remains
     /// [`Lattice::Unevaluated`] — the engine has no body to look up.
     pub fn with_callees(&mut self, callees: &'a CalleeMap) -> &mut Self {
-        self.callees = Some(callees);
+        self.facts.callees = Some(callees);
         self
     }
 
     /// Install the sequence-builtin lookup. Without it, an element or length
     /// read stays opaque.
     pub fn with_ctfe_builtins(&mut self, ctfe_builtins: &'a CtfeBuiltinMap) -> &mut Self {
-        self.ctfe_builtins = Some(ctfe_builtins);
+        self.facts.ctfe_builtins = Some(ctfe_builtins);
         self
     }
 
@@ -465,7 +417,7 @@ impl<'a> Interpreter<'a> {
     /// [`Lattice::Unevaluated`] — the engine has no initializer lattice to look
     /// up.
     pub fn with_globals(&mut self, globals: &'a GlobalEnv) -> &mut Self {
-        self.globals = Some(globals);
+        self.facts.globals = Some(globals);
         self
     }
 
@@ -473,7 +425,7 @@ impl<'a> Interpreter<'a> {
     /// `FieldAccess(GlobalVarGet(_), _)` stays [`Lattice::Unevaluated`].
     /// Mirrors [`with_globals`](Self::with_globals).
     pub fn with_global_fields(&mut self, global_fields: &'a GlobalFieldEnv) -> &mut Self {
-        self.global_fields = Some(global_fields);
+        self.facts.global_fields = Some(global_fields);
         self
     }
 
@@ -493,27 +445,29 @@ impl<'a> Interpreter<'a> {
     }
 
     fn global_field(&self, key: &GlobalKey, field_name: &str) -> Lattice {
-        self.global_fields
+        self.facts
+            .global_fields
             .and_then(|m| m.get(key))
             .and_then(|m| m.get(field_name))
             .cloned()
             .map_or(Lattice::Unevaluated, Lattice::Const)
     }
 
-    /// Record `body`'s `aggregate_safe_locals`. The driving visitor calls
-    /// this once per function, next to [`Self::record_ref_global_aliases`].
+    /// Record which of `body`'s locals may bind an aggregate constant. The
+    /// driving visitor calls this once per function, next to
+    /// [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
-        let writes = Reached::outside_frame(body, self.ctfe_builtins, self.callees);
-        self.frame.aggregate_locals = aggregate_safe_locals(body, &writes);
+        self.frame.aggregate_locals =
+            Trackability::outside_frame(body, self.facts).aggregate_locals;
     }
 
     pub fn record_ref_global_aliases(&mut self, body: &Body) {
         self.frame.ref_global_aliases.clear();
         let mut seen: IndexSet<u32> = IndexSet::default();
-        for (_, st) in &body.stmts {
+        for (id, st) in &body.stmts {
             if let Some((local, key)) = let_ref_global(body, &st.kind) {
                 if seen.insert(local) {
-                    self.frame.ref_global_aliases.insert(local, key);
+                    self.frame.ref_global_aliases.insert(local, (id, key));
                 } else {
                     self.frame.ref_global_aliases.swap_remove(&local);
                 }
