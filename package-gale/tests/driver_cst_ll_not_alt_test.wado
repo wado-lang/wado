@@ -1,0 +1,36 @@
+//! `~X` and a wrapped/labelled `.` are as open-ended as a bare `.`: their
+//! static FIRST set is empty, so the concrete alt shadows them unless the
+//! dispatch treats them as overlapping everything.
+
+use g from "./grammars/ll_not_alt.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_not_alt" },
+    };
+
+fn assert_tree(actual: &String, input: &String, expected: &String) {
+    assert *actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${*actual}`;
+}
+
+fn tree_a(input: &String) -> String {
+    let result = g::parse_a(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    return g::to_string_tree(&result);
+}
+
+fn tree_b(input: &String) -> String {
+    let result = g::parse_b(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    return g::to_string_tree(&result);
+}
+
+test "a `~X` alt catches what the concrete alt cannot parse" {
+    assert_tree(&tree_a(&"x=10; abc"), &"x=10; abc", &"(a (assign x = 10 ;) abc)");
+}
+
+test "a `~X` alt still yields to the concrete alt" {
+    assert_tree(&tree_a(&"y=99;"), &"y=99;", &"(a (assign y = 99 ;))");
+}
+
+test "a labelled, wrapped wildcard alt catches what the concrete alt cannot" {
+    assert_tree(&tree_b(&"x=10; abc;"), &"x=10; abc;", &"(b (assign x = 10 ;) abc ;)");
+}

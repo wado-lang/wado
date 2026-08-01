@@ -304,6 +304,116 @@ ID : [\\p{L}0-9_] ;";
     }
 }
 
+fn class_of(input: &String) -> CharClass {
+    let g = parse(*input).unwrap();
+    if let CharClass(cc) = g.lexer_rules[0].body[0].elements[0] {
+        return cc;
+    }
+    panic("expected CharClass");
+}
+
+fn class_admits(cc: &CharClass, c: char) -> bool {
+    return cc.ranges.into_iter().any(|r: CharRange| r.start <= c <= r.end);
+}
+
+test "negated unicode property class \\P{L}" {
+    let cc = class_of(&"grammar Test;
+NOT_LETTER : [\\P{L}] ;");
+    assert !cc.negated, "\\P is expanded, not folded into the class-level negation";
+    assert !class_admits(&cc, 'A'), "\\P{L} must exclude letters";
+    assert !class_admits(&cc, 'z'), "\\P{L} must exclude letters";
+    // `P` and `L` are letters: only the literal-chars reading of `\P{L}`
+    // admits them.
+    assert !class_admits(&cc, 'P'), "\\P{L} must not be read as the literal chars P { L }";
+    assert !class_admits(&cc, 'L');
+    assert class_admits(&cc, '0'), "\\P{L} must include non-letters";
+    assert class_admits(&cc, ' ');
+}
+
+test "negated unicode property mixes with literal items" {
+    let cc = class_of(&"grammar Test;
+X : [\\P{Nd}a] ;");
+    assert !class_admits(&cc, '0'), "\\P{Nd} must exclude digits";
+    assert class_admits(&cc, 'a');
+    assert class_admits(&cc, 'Z');
+}
+
+test "unicode property ranges are the real general category" {
+    let cc = class_of(&"grammar Test;
+L : [\\p{L}] ;");
+    // Letters the hand-maintained approximation used to miss. `\P{L}` is the
+    // complement, so a gap here is not a miss but an admission.
+    assert class_admits(&cc, 'א'), "Hebrew alef is Lo";
+    assert class_admits(&cc, 'ก'), "Thai ko kai is Lo";
+    assert class_admits(&cc, '\u{10400}'), "Deseret capital long I is Lu";
+    assert !class_admits(&cc, '0');
+    assert !class_admits(&cc, ' ');
+}
+
+test "negated unicode property excludes every member of the category" {
+    let cc = class_of(&"grammar Test;
+X : [\\P{L}] ;");
+    assert !class_admits(&cc, 'א');
+    assert !class_admits(&cc, 'ก');
+    assert !class_admits(&cc, '\u{10400}');
+    assert class_admits(&cc, '0');
+    assert class_admits(&cc, ' ');
+}
+
+test "two-letter general categories resolve on their own" {
+    let upper = class_of(&"grammar Test;
+X : [\\p{Lu}] ;");
+    assert class_admits(&upper, 'A');
+    assert !class_admits(&upper, 'a');
+    let lower = class_of(&"grammar Test;
+X : [\\p{Ll}] ;");
+    assert class_admits(&lower, 'a');
+    assert !class_admits(&lower, 'A');
+}
+
+test "the surrogate category is empty in a scalar range set" {
+    let cc = class_of(&"grammar Test;
+X : [\\p{Cs}] ;");
+    assert cc.ranges.is_empty(), "no input character can be a surrogate";
+}
+
+test "unsupported unicode property is rejected, not silently empty" {
+    assert parse("grammar Test;\nX : [\\p{Bogus}] ;") matches { Err(_) }, "an unknown \\p{...} must not expand to a set that matches nothing";
+    assert parse("grammar Test;\nX : [\\P{Bogus}] ;") matches { Err(_) };
+}
+
+test "surrogate char range matches nothing instead of U+FFFD" {
+    let cc = class_of(&"grammar Test;
+X : [\\uD800-\\uDFFF] ;");
+    assert cc.ranges.is_empty(), `expected no scalar ranges, got ${cc.ranges.len()}`;
+}
+
+test "a char range with a surrogate endpoint keeps only its scalar part" {
+    let cc = class_of(&"grammar Test;
+X : [\\uD700-\\uDFFF] ;");
+    assert cc.ranges.len() == 1, `expected 1 range, got ${cc.ranges.len()}`;
+    assert cc.ranges[0].start == '\uD700' && cc.ranges[0].end == '\uD7FF';
+    assert !class_admits(&cc, '\u{FFFD}'), "a surrogate endpoint must not become U+FFFD";
+}
+
+test "a scalar-endpoint range spanning the surrogate block stays one range" {
+    // `char` cannot hold a surrogate, so the split would be cosmetic.
+    let cc = class_of(&"grammar Test;
+X : [\\u0100-\\uFFFC] ;");
+    assert cc.ranges.len() == 1, `expected 1 range, got ${cc.ranges.len()}`;
+    assert cc.ranges[0].start == '\u0100' && cc.ranges[0].end == '\uFFFC';
+}
+
+test "surrogate range endpoints in the '..' form match nothing" {
+    let g = parse("grammar Test;
+X : '\\uD800' .. '\\uDBFF' ;").unwrap();
+    if let CharClass(cc) = g.lexer_rules[0].body[0].elements[0] {
+        assert cc.ranges.is_empty(), `expected no scalar ranges, got ${cc.ranges.len()}`;
+    } else {
+        panic("expected a surrogate-only range to collapse to an empty CharClass");
+    }
+}
+
 test "negated char class" {
     let input = "grammar Test;
 SAFE : [^\"\\\\] ;";

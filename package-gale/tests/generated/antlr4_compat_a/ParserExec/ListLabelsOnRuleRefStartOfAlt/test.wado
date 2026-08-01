@@ -1550,31 +1550,28 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == '_' {
+        } else if first_char matches { '_' } {
             end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; }
-        } else if first_char == 'a' {
+        } else if first_char matches { 'a' } {
             end = try_AND(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_AND; }
             end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; }
-        } else if first_char == 'n' {
+        } else if first_char matches { 'n' } {
             end = try_NOT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NOT; }
             end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; }
-        } else if first_char == 'o' {
+        } else if first_char matches { 'o' } {
             end = try_OR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_OR; }
             end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; }
-        } else if 'a' <= first_char <= 'z' {
-            end = try_IDENTIFIER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; }
-        } else if 'A' <= first_char <= 'Z' {
+        } else if first_char matches { 'a'..='z' | 'A'..='Z' } {
             end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; }
         } else {

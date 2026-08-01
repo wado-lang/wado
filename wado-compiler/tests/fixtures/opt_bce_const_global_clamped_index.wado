@@ -18,6 +18,7 @@ fn lookup(x: i32) -> u64 {
     return TABLE[n];
 }
 
+// `black_box` keeps CTFE from running `lookup` and erasing the shape under test.
 export fn run() {
     assert lookup(builtin::black_box(0)) == 1;
     assert lookup(builtin::black_box(5)) == 100000;

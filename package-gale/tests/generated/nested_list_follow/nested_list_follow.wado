@@ -1548,25 +1548,25 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == ',' {
+        } else if first_char matches { ',' } {
             end = try_lit_comma(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
-        } else if first_char == '<' {
+        } else if first_char matches { '<' } {
             end = try_lit_lt(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
-        } else if first_char == '>' {
+        } else if first_char matches { '>' } {
             end = try_lit_gt(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
-        } else if first_char == '[' {
+        } else if first_char matches { '[' } {
             end = try_lit_lbracket(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
-        } else if first_char == ']' {
+        } else if first_char matches { ']' } {
             end = try_lit_rbracket(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
-        } else if 'a' <= first_char <= 'z' {
+        } else if first_char matches { 'a'..='z' } {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else {

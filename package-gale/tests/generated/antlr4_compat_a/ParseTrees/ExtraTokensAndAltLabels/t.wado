@@ -1461,13 +1461,13 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         let mut best_channel: i32 = 0;
-        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WHITESPACE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WHITESPACE; best_channel = 1; }
-        } else if first_char == '$' {
+        } else if first_char matches { '$' } {
             end = try_lit_dollarlbrace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_DOLLARLBRACE; best_channel = 0; }
-        } else if first_char == '}' {
+        } else if first_char matches { '}' } {
             end = try_lit_rbrace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; best_channel = 0; }
         } else {

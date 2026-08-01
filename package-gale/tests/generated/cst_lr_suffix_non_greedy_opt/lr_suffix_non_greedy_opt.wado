@@ -2602,20 +2602,20 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == 'e' {
+        } else if first_char matches { 'e' } {
             end = try_lit_else(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_ELSE; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char == 'i' {
+        } else if first_char matches { 'i' } {
             end = try_lit_if(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_IF; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if 'a' <= first_char <= 'z' {
+        } else if first_char matches { 'a'..='z' } {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else {

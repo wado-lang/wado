@@ -1549,16 +1549,16 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == ';' {
+        } else if first_char matches { ';' } {
             end = try_SEMICOLON(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SEMICOLON; }
-        } else if first_char == 'A' || first_char == 'a' {
+        } else if first_char matches { 'A' | 'a' } {
             end = try_A(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_A; }
-        } else if first_char == 'B' || first_char == 'b' {
+        } else if first_char matches { 'B' | 'b' } {
             end = try_B(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_B; }
         }

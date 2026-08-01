@@ -1445,19 +1445,19 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == ' ' {
+        if first_char matches { ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == 'a' {
+        } else if first_char matches { 'a' } {
             end = try_A(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_A; }
-        } else if first_char == 'i' {
+        } else if first_char matches { 'i' } {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char == 'x' {
+        } else if first_char matches { 'x' } {
             end = try_X(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_X; }
-        } else if first_char == 'y' {
+        } else if first_char matches { 'y' } {
             end = try_Y(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Y; }
         }

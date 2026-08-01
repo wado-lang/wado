@@ -1440,7 +1440,7 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '1' || first_char == '2' || first_char == '3' {
+        if first_char matches { '1' | '2' | '3' } {
             end = try_C(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_C; }
         }

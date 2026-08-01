@@ -1514,15 +1514,15 @@ pub fn tokenize(input: &String) -> TokenStream {
         let first_char = lexer.chars[start];
         let mut best_more = false;
         let mut best_channel: i32 = 0;
-        if first_char == '\t' || first_char == ' ' {
+        if first_char matches { '\t' | ' ' } {
             end = try_INDENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_INDENT; best_more = false; best_channel = 0; best_act = 0; }
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; best_more = false; best_channel = 0; best_act = -1; }
-        } else if first_char == '\n' {
+        } else if first_char matches { '\n' } {
             end = try_NL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NL; best_more = false; best_channel = 0; best_act = -1; }
-        } else if 'a' <= first_char <= 'z' {
+        } else if first_char matches { 'a'..='z' } {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; best_more = false; best_channel = 0; best_act = -1; }
         } else {
