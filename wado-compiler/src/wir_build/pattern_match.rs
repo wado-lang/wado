@@ -263,36 +263,14 @@ impl FunctionTranslator<'_, '_> {
     /// * `Tuple` — multivalue-builtin call returning a tuple; destructure
     ///   each element into its `Binding` slot or skip `Wildcard` slots.
     ///
-<<<<<<< HEAD
     /// `Binding` (a single multivalue result) is also accepted. Any other shape
     /// means pattern lowering stopped rewriting one it used to rewrite; emitting
     /// nothing would drop the destructure and leave its bindings unassigned, so
     /// it panics instead.
     pub(super) fn translate_let_pattern(&mut self, pattern: PatId, value: Operand) -> WirInstr {
-||||||| f64e32ff7
-    /// Other variants are unreachable; we still match the obvious
-    /// `Binding` case (single multivalue result) defensively and leave a
-    /// catch-all `None` arm rather than `unreachable!` so a future
-    /// lower-pass change cannot turn into a hard ICE.
-    pub(super) fn translate_let_pattern(
-        &mut self,
-        pattern: PatId,
-        value: Operand,
-    ) -> Option<WirInstr> {
-=======
-    /// Other variants are unreachable; we still match the obvious
-    /// `Binding` case (single multivalue result) defensively and leave a
-    /// catch-all `None` arm rather than `unreachable!` so a future
-    /// lower-pass change cannot turn into a hard ICE.
-    pub(super) fn translate_let_pattern(
-        &mut self,
-        pattern: PatId,
-        value: Operand,
-    ) -> Option<WirInstr> {
         if let Some(instr) = self.try_bind_multivalue_builtin(pattern, value) {
-            return Some(instr);
+            return instr;
         }
->>>>>>> origin/main
         let value_instr = self.translate_operand(value);
         let value_ty = self.operand_type_id(value);
         let arena = self.body;
