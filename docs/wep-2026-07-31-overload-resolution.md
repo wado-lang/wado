@@ -314,6 +314,20 @@ Landing order — each phase keeps the suite green and is useful alone:
    `method_dispatch` would have been the wrong drawer, since reify reads it
    only for a `MethodCallExpr` node.
 
+   Two record-keeping consequences of that shape, both load-bearing: the
+   static record must carry the resolved signature's real facts (defaults,
+   `is_mut`, parameter types — the receiver prepended as slot 0), not
+   fabricated ones; and every downstream pass that positions a `Call`'s
+   arguments against its callee's parameters must account for the receiver in
+   `args[0]`. Fn-param closure specialization was the pass caught by the
+   latter: its keys are value-argument indices, and the `Call` collector's
+   full-list zip recorded parameter slots instead, so the specialized clone's
+   rewrite shifted past the last parameter and silently no-op'd — the clone
+   kept its `fn`-typed param and its canonical cast trapped on the functor the
+   rewritten call site passes. Both call spellings now produce the same key,
+   which is also what keeps one specialized clone per callee instead of two
+   same-named ones.
+
 2. Cross-trait ambiguity on concrete receivers: `report_cross_trait_ambiguity`
    fires when the non-blanket survivors span more than one trait, reusing the
    bounds path's `AmbiguousTraitMethod` so the shape a collision arrives in
