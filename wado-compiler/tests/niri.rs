@@ -26,8 +26,8 @@ use wado_compiler::nir_arena::{
 };
 use wado_compiler::nir_value_graph::ValueKind;
 use wado_compiler::niri::{
-    Callee, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, GlobalEnv, Interpreter, Lattice,
-    is_ctfe_eligible,
+    Callee, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, DEFAULT_STEP_BUDGET, GlobalEnv, Interpreter,
+    Lattice, is_ctfe_eligible,
 };
 use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
 
@@ -4192,6 +4192,108 @@ fn a_call_writing_through_a_mut_ref_updates_the_caller_place() {
     );
 }
 
+/// `fn add(c: &mut List<u8>, n: <second_param_ty>) { c.used = c.used + <n as i32>; }`
+/// paired with a caller passing `&mut c` and a second argument built over the
+/// same local, returning `c.used`.
+fn add_through_mut_ref_and_second_arg(
+    list_ty: TypeId,
+    second_param_ty: TypeId,
+    second_arg: Build,
+    addend_in_callee: Build,
+) -> (NirFunction, NirFunction) {
+    let add = with_mut_ref_params(
+        make_pure_fn_stmts(
+            "add",
+            vec![("c", list_ty), ("n", second_param_ty)],
+            TypeTable::UNIT,
+            vec![assign_stmt_b(
+                used_of_local(list_ty),
+                binary(
+                    NirBinaryOp::Add,
+                    used_of_local(list_ty),
+                    addend_in_callee,
+                    TypeTable::I32,
+                ),
+            )],
+        ),
+        &[0],
+    );
+    let caller = make_pure_fn_stmts(
+        "caller",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            expr_stmt_b(call_expr_args(
+                &add,
+                vec![
+                    (mut_ref(local_expr(0, list_ty), list_ty), true),
+                    (second_arg, false),
+                ],
+            )),
+            return_stmt(used_of_local(list_ty)),
+        ],
+    );
+    (add, caller)
+}
+
+#[test]
+fn a_by_value_argument_out_of_a_mut_ref_target_does_not_block_the_call() {
+    // Wado copies a by-value argument at the call, so naming storage the
+    // callee also writes through `&mut` cannot be observed across the
+    // boundary. Refusing the run costs a fold and buys nothing.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+
+    let (add, caller) = add_through_mut_ref_and_second_arg(
+        list_ty,
+        TypeTable::I32,
+        used_of_local(list_ty),
+        local_expr(1, TypeTable::I32),
+    );
+    let callees = build_callee_map_test(&[add, caller.clone()]);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&caller, vec![])),
+        Some(Value::Int {
+            value: 4,
+            prim: PrimitiveType::I32,
+        }),
+    );
+}
+
+#[test]
+fn a_shared_borrow_of_a_mut_ref_target_declines_the_call() {
+    // A `&T` parameter binds the snapshot the frame takes before the call
+    // runs, so a callee writing that same storage through `&mut` would read a
+    // value the program never had. Wado has no borrow checker, so this is
+    // ordinary source: decline rather than mis-run.
+    let mut table = TypeTable::new();
+    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ref_ty = table.make_ref(list_ty);
+
+    let (add, caller) = add_through_mut_ref_and_second_arg(
+        list_ty,
+        list_ref_ty,
+        shared_ref(local_expr(0, list_ty), list_ref_ty),
+        field_access(
+            local_expr(1, list_ref_ty),
+            SeqField::Len.index(),
+            "used",
+            TypeTable::I32,
+        ),
+    );
+    let callees = build_callee_map_test(&[add, caller.clone()]);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+
+    assert_eq!(flow_fold(&mut interp, &call_expr(&caller, vec![])), None);
+}
+
 #[test]
 fn a_method_call_writes_back_through_its_receiver() {
     // A method names its receiver directly rather than through `&mut`, and
@@ -5290,6 +5392,163 @@ fn assert_call_intact(f: &NirFunction, args: Vec<Build>) {
     let (changed, body, e) = reduce_local_into(&mut interp, &call_expr(f, args));
     assert!(!changed);
     assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
+}
+
+/// `base + 0 + 0 + …`, `depth` additions deep. The value is `base`'s; what it
+/// buys is nodes — many of them under a single statement, which is what
+/// separates a per-statement charge from a per-node one.
+fn deep_add_chain(base: Build, depth: usize) -> Build {
+    let mut chain = base;
+    for _ in 0..depth {
+        chain = binary(
+            NirBinaryOp::Add,
+            chain,
+            int_lit(0, TypeTable::I32, "0"),
+            TypeTable::I32,
+        );
+    }
+    chain
+}
+
+/// How deep a chain has to be before the copy it makes dominates the handful
+/// of statements around it.
+const HEAVY_CHAIN: usize = 480;
+
+/// A budget that covers the statements this fixture executes many times over,
+/// but not the whole-body copies executing them requires.
+const STATEMENTS_ONLY_BUDGET: u32 = 120;
+
+/// Fold `f()` under `budget`, with `f` the only callee.
+fn fold_call_within_budget(f: &NirFunction, budget: u32) -> Option<Value> {
+    let callees = build_callee_map_test(std::slice::from_ref(f));
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.set_step_budget(budget);
+    flow_fold(&mut interp, &call_expr(f, vec![]))
+}
+
+/// `fn f() { let mut i = 0; let mut acc = 0;
+///           loop { if i >= 8 { break } acc = acc + (i + 0 + …); i = i + 1 }
+///           return acc }` → 0+1+…+7 = 28
+fn heavy_bodied_loop_fn() -> NirFunction {
+    make_multi_stmt_fn(
+        "heavy_loop",
+        vec![],
+        TypeTable::I32,
+        &[("i", TypeTable::I32, true), ("acc", TypeTable::I32, true)],
+        vec![
+            let_mut_stmt_b("i", 0, TypeTable::I32, int_lit(0, TypeTable::I32, "0")),
+            let_mut_stmt_b("acc", 1, TypeTable::I32, int_lit(0, TypeTable::I32, "0")),
+            loop_stmt_b(vec![
+                if_stmt_b(
+                    binary(
+                        NirBinaryOp::GtEq,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(8, TypeTable::I32, "8"),
+                        TypeTable::BOOL,
+                    ),
+                    vec![break_stmt_b(None, None)],
+                    vec![],
+                ),
+                assign_local_stmt_b(
+                    1,
+                    TypeTable::I32,
+                    binary(
+                        NirBinaryOp::Add,
+                        local_expr(1, TypeTable::I32),
+                        deep_add_chain(local_expr(0, TypeTable::I32), HEAVY_CHAIN),
+                        TypeTable::I32,
+                    ),
+                ),
+                assign_local_stmt_b(
+                    0,
+                    TypeTable::I32,
+                    binary(
+                        NirBinaryOp::Add,
+                        local_expr(0, TypeTable::I32),
+                        int_lit(1, TypeTable::I32, "1"),
+                        TypeTable::I32,
+                    ),
+                ),
+            ]),
+            return_stmt(local_expr(1, TypeTable::I32)),
+        ],
+    )
+}
+
+#[test]
+fn a_loop_iteration_is_charged_for_the_body_it_restores() {
+    // Every iteration puts the loop body back as it was, which is a copy of
+    // that body. Charged one step an iteration, this fixture's eight rounds
+    // cost about thirty — and would copy half a million nodes for it.
+    assert_eq!(
+        fold_call_within_budget(&heavy_bodied_loop_fn(), STATEMENTS_ONLY_BUDGET),
+        None,
+        "a budget covering only the statements must not buy the copies too",
+    );
+}
+
+#[test]
+fn a_heavy_loop_still_folds_when_the_budget_covers_its_copies() {
+    // The charge bounds the work; it does not refuse it.
+    assert_eq!(
+        fold_call_within_budget(&heavy_bodied_loop_fn(), DEFAULT_STEP_BUDGET),
+        i32_of(28),
+    );
+}
+
+/// `fn big() { return 1 + 0 + … }` — one statement, a whole body of nodes.
+fn heavy_bodied_fn() -> NirFunction {
+    make_pure_fn(
+        "big",
+        vec![],
+        TypeTable::I32,
+        return_stmt(deep_add_chain(int_lit(1, TypeTable::I32, "1"), HEAVY_CHAIN)),
+    )
+}
+
+/// `fn caller() { return big() + big() + … }`, `calls` calls deep.
+fn repeated_caller_fn(big: &NirFunction, calls: usize) -> NirFunction {
+    let mut sum = call_expr(big, vec![]);
+    for _ in 1..calls {
+        sum = binary(
+            NirBinaryOp::Add,
+            sum,
+            call_expr(big, vec![]),
+            TypeTable::I32,
+        );
+    }
+    make_pure_fn("caller", vec![], TypeTable::I32, return_stmt(sum))
+}
+
+#[test]
+fn a_call_is_charged_for_the_scratch_body_it_runs_on() {
+    // Running a call copies the callee's whole body first. Eight calls to a
+    // heavy callee is eight of those copies, and a per-call charge of one step
+    // hides every one of them.
+    let big = heavy_bodied_fn();
+    let caller = repeated_caller_fn(&big, 8);
+    let callees = build_callee_map_test(&[big, caller.clone()]);
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.set_step_budget(STATEMENTS_ONLY_BUDGET);
+
+    assert_eq!(flow_fold(&mut interp, &call_expr(&caller, vec![])), None);
+}
+
+#[test]
+fn repeated_heavy_calls_still_fold_when_the_budget_covers_their_copies() {
+    let big = heavy_bodied_fn();
+    let caller = repeated_caller_fn(&big, 8);
+    let callees = build_callee_map_test(&[big, caller.clone()]);
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.set_step_budget(DEFAULT_STEP_BUDGET);
+
+    assert_eq!(flow_fold(&mut interp, &call_expr(&caller, vec![])), i32_of(8));
 }
 
 #[test]

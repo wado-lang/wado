@@ -20,8 +20,25 @@ use crate::nir_arena::{
 };
 use crate::tir::{TypeId, TypeTable};
 
+use super::callee::{Callee, CallSite, CalleeMap};
 use super::place::write_root_local;
-use super::{CalleeMap, CtfeBuiltinMap};
+use super::CtfeBuiltinMap;
+
+/// Record the local each `&mut` parameter of `site` writes. `None` when the
+/// site does not match the signature, or when a write's place no local roots.
+fn write_targets(
+    body: &Body,
+    site: &CallSite<'_>,
+    callee: &Callee,
+    written: &mut LocalSet,
+) -> Option<()> {
+    for (index, op) in site.matching_operands(callee)? {
+        if callee.writes_param(index) {
+            written.insert(write_root_local(body, op)?);
+        }
+    }
+    Some(())
+}
 
 /// The block behind a `Block` / `LabeledBlock` expression that can yield a
 /// value. A unit-typed block has no value to fold to, whatever its last
@@ -92,7 +109,6 @@ pub(super) fn region_free_reads(
     ctfe_builtins: Option<&CtfeBuiltinMap>,
     type_table: &TypeTable,
 ) -> Option<Vec<u32>> {
-    const RECEIVER: usize = 0;
     fn record_write(body: &Body, op: Operand, written: &mut LocalSet) -> Option<()> {
         written.insert(write_root_local(body, op)?);
         Some(())
@@ -119,42 +135,26 @@ pub(super) fn region_free_reads(
                 | ExprKind::IndirectCall { .. }
                 | ExprKind::CmRawCall { .. } => return None,
                 ExprKind::Call { func_id, args, .. } => {
-                    if let Some(callee) = callees.and_then(|m| m.get(func_id)) {
-                        if args.len() != callee.arity() {
-                            return None;
+                    // A builtin never reaches NIR as a method call, so this is
+                    // the only shape that may be one instead of a callee.
+                    match callees.and_then(|m| m.get(func_id)) {
+                        Some(callee) => {
+                            let site = CallSite::of(body, e)?;
+                            write_targets(body, &site, callee, &mut written)?;
                         }
-                        for (i, arg) in args.iter().enumerate() {
-                            if callee.writes_param(i) {
-                                record_write(body, arg.expr, &mut written)?;
+                        None => {
+                            let builtin = ctfe_builtins.and_then(|m| m.get(func_id))?;
+                            if builtin.is_write() {
+                                let target = args.first()?;
+                                record_write(body, target.expr, &mut written)?;
                             }
-                        }
-                    } else {
-                        let builtin = ctfe_builtins.and_then(|m| m.get(func_id))?;
-                        if builtin.is_write() {
-                            let target = args.first()?;
-                            record_write(body, target.expr, &mut written)?;
                         }
                     }
                 }
-                ExprKind::MethodCall {
-                    func_id,
-                    receiver,
-                    args,
-                    ..
-                } => {
-                    // A builtin never reaches NIR as a method call.
+                ExprKind::MethodCall { func_id, .. } => {
                     let callee = callees.and_then(|m| m.get(func_id))?;
-                    if 1 + args.len() != callee.arity() {
-                        return None;
-                    }
-                    if callee.writes_param(RECEIVER) {
-                        record_write(body, *receiver, &mut written)?;
-                    }
-                    for (i, arg) in args.iter().enumerate() {
-                        if callee.writes_param(1 + i) {
-                            record_write(body, arg.expr, &mut written)?;
-                        }
-                    }
+                    let site = CallSite::of(body, e)?;
+                    write_targets(body, &site, callee, &mut written)?;
                 }
                 ExprKind::Local { index, .. } => {
                     if seen.insert(*index) {

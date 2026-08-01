@@ -89,7 +89,7 @@ impl Interpreter<'_> {
                 if sink.replace_with_value(e, value.clone()) {
                     return true;
                 }
-                self.frame.scratch_folds.insert(e, value);
+                self.memoize_declined(sink, e, value);
             } else if matches!(sink.body().exprs[e].kind, ExprKind::Call { .. })
                 && self.materialize_seq_via(sink, e, &value)
             {
@@ -105,9 +105,7 @@ impl Interpreter<'_> {
             if committed {
                 return true;
             }
-            // Nothing took the value, so record it: a later visit reads it
-            // back instead of running the region again.
-            self.frame.scratch_folds.insert(e, value);
+            self.memoize_declined(sink, e, value);
         }
         if rewrite_short_circuit_via(sink, e) {
             return true;
@@ -116,6 +114,20 @@ impl Interpreter<'_> {
             return true;
         }
         self.rewrite_match_expr_via(sink, e)
+    }
+
+    /// Remember a value the sink would not take, so a later lattice read finds
+    /// it instead of recomputing — or, for a region, instead of running it
+    /// again.
+    ///
+    /// Only where the sink asks for it. On a real body the node the value came
+    /// from is still standing, so a read recomputes the same constant, and a
+    /// value remembered against an `ExprId` outlives the content that
+    /// justified it.
+    fn memoize_declined<S: EditSink>(&mut self, sink: &S, e: ExprId, value: Value) {
+        if sink.memoizes_declined_folds() {
+            self.frame.scratch_folds.insert(e, value);
+        }
     }
 
     /// Write `value` back over `e` as the container literal the lower phase
@@ -807,4 +819,112 @@ pub(super) struct EnumEqReplacement {
     case_index: u32,
     case_name: String,
     span: crate::token::Span,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
+    use crate::niri::BodySink;
+    use crate::token::Span;
+
+    /// A real-body sink: it declines every promotion — as `EngineSink` does
+    /// for a node with no operand parent slot — without asking for a memo.
+    struct DecliningSink<'a>(BodySink<'a>);
+
+    impl EditSink for DecliningSink<'_> {
+        fn body(&self) -> &Body {
+            self.0.body()
+        }
+        fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
+            self.0.replace_kind(e, kind);
+        }
+        fn replace_with_value(&mut self, _e: ExprId, _value: Value) -> bool {
+            false
+        }
+        fn const_operand(&mut self, kind: ValueKind, type_id: TypeId) -> Operand {
+            self.0.const_operand(kind, type_id)
+        }
+        fn become_expr(&mut self, dst: ExprId, src: ExprId) {
+            self.0.become_expr(dst, src);
+        }
+        fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: Span) -> ExprId {
+            self.0.alloc_expr(kind, type_id, span)
+        }
+        fn alloc_stmt(&mut self, kind: StmtKind, span: Span) -> StmtId {
+            self.0.alloc_stmt(kind, span)
+        }
+        fn alloc_block(&mut self, stmts: Vec<StmtId>, span: Span) -> BlockId {
+            self.0.alloc_block(stmts, span)
+        }
+        fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>) {
+            self.0.set_block_stmts(block, stmts);
+        }
+    }
+
+    /// `20 + 22`, as the two pooled operands the skeleton carries.
+    fn add_body(left: u64, right: u64) -> (Body, ExprId) {
+        let mut body = Body::empty();
+        let l = body
+            .values
+            .alloc_unshared(ValueKind::Int(left, TypeTable::I32), TypeTable::I32);
+        let r = body
+            .values
+            .alloc_unshared(ValueKind::Int(right, TypeTable::I32), TypeTable::I32);
+        let e = body.exprs.push(ExprNode {
+            kind: ExprKind::Binary {
+                left: Operand::Value(l),
+                op: NirBinaryOp::Add,
+                right: Operand::Value(r),
+            },
+            type_id: TypeTable::I32,
+            span: Span::default(),
+        });
+        let stmt = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Expr(e)),
+            span: Span::default(),
+        });
+        body.root = body.blocks.push(BlockNode {
+            stmts: vec![stmt],
+            span: Span::default(),
+        });
+        (body, e)
+    }
+
+    fn int(value: u64) -> Value {
+        Value::Int {
+            value,
+            prim: crate::tir::PrimitiveType::I32,
+        }
+    }
+
+    /// The scratch backend promotes nothing, so a decline there has to be
+    /// remembered — a bare projection does not fold arithmetic, and CTFE would
+    /// otherwise lose the value it just computed.
+    #[test]
+    fn scratch_sink_memoizes_a_declined_fold() {
+        let table = TypeTable::new();
+        let mut interp = Interpreter::new(&table);
+        let (mut body, e) = add_body(20, 22);
+
+        interp.reduce_local(&mut BodySink { body: &mut body }, e);
+
+        assert_eq!(interp.expr_to_lattice(&body, e), Lattice::Const(int(42)));
+    }
+
+    /// A real body keeps the node the value was folded from, so a declined
+    /// fold leaves nothing remembered against its id — that memo would outlive
+    /// the content justifying it. The value itself is not lost: a read that
+    /// reduces recomputes it.
+    #[test]
+    fn real_body_sink_leaves_no_fold_memo_behind() {
+        let table = TypeTable::new();
+        let mut interp = Interpreter::new(&table);
+        let (mut body, e) = add_body(20, 22);
+
+        interp.reduce_local(&mut DecliningSink(BodySink { body: &mut body }), e);
+
+        assert_eq!(interp.expr_to_lattice(&body, e), Lattice::Unevaluated);
+        assert_eq!(interp.reduce_to_lattice(&body, e), Lattice::Const(int(42)));
+    }
 }

@@ -19,9 +19,6 @@
 //! What the engine can evaluate is stated in
 //! `docs/wep-2026-04-27-nir-interpreter.md`, not here.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -79,65 +76,6 @@ impl Lattice {
             (Self::Const(a), Self::Const(b)) if a.denotes_same(&b) => Self::Const(a),
             (Self::Const(_), Self::Const(_)) => Self::NonConst,
         }
-    }
-}
-
-/// Identity of a callee in the [`CalleeMap`].
-pub type CalleeKey = crate::nir::FuncId;
-
-/// The callees a compile-time frame may run.
-///
-/// Membership answers whether a frame may *run* the callee at all
-/// ([`is_ctfe_runnable`]), decided once at construction. Whether a call's value
-/// may be substituted for it is a separate question, answered per call.
-pub type CalleeMap = IndexMap<CalleeKey, Callee>;
-
-/// A callee the engine may run, with the parameter facts the trackability
-/// analysis needs answered without a borrow. Asking the function later answers
-/// only when nobody holds `borrow_mut` on it, and a fold must not turn on
-/// which function the visitor happens to be walking.
-pub struct Callee {
-    pub func: Rc<RefCell<NirFunction>>,
-    pub mut_params: Vec<bool>,
-    pub stored_params: Vec<bool>,
-}
-
-impl Callee {
-    #[must_use]
-    pub fn new(func: Rc<RefCell<NirFunction>>) -> Self {
-        let (mut_params, stored_params) = {
-            let borrowed = func.borrow();
-            (
-                borrowed.params.iter().map(|p| p.is_mut_ref).collect(),
-                borrowed
-                    .params
-                    .iter()
-                    .map(|p| borrowed.stores.contains(&p.name))
-                    .collect(),
-            )
-        };
-        Self {
-            func,
-            mut_params,
-            stored_params,
-        }
-    }
-
-    fn arity(&self) -> usize {
-        self.mut_params.len()
-    }
-
-    /// A `&mut T` borrow is the only parameter kind that reaches the caller's
-    /// storage. An index the signature does not have answers as one that does,
-    /// so a call the map cannot account for is exempt from nothing.
-    fn writes_param(&self, index: usize) -> bool {
-        self.mut_params.get(index).copied().unwrap_or(true)
-    }
-
-    /// A stored parameter outlives the call, so naming its referent is not the
-    /// passing read the other arguments are.
-    fn reads_only(&self, index: usize) -> bool {
-        self.stored_params.get(index).is_some_and(|stored| !stored)
     }
 }
 
@@ -200,6 +138,7 @@ pub const DEFAULT_STEP_BUDGET: u32 = 10_000;
 /// statements would.
 pub const COPY_CHARGE_DIVISOR: usize = 16;
 
+mod callee;
 mod frame;
 mod lattice;
 mod pattern;
@@ -208,14 +147,26 @@ mod region;
 mod rewrite;
 mod trackability;
 
+pub use callee::{Callee, CalleeKey, CalleeMap};
 use pattern::PatternMatch;
-use trackability::{Reached, aggregate_safe_locals};
+use trackability::Trackability;
 
 /// Commit sink for niri's body rewrites, so one set of rewrites serves two
 /// backends: [`BodySink`] over a throwaway CTFE body, and the optimize layer's
 /// `EngineSink`, which keeps the real body's maps coherent.
 pub(crate) trait EditSink {
     fn body(&self) -> &Body;
+    /// Whether a value this sink declines has to be remembered for later
+    /// lattice reads.
+    ///
+    /// Only the scratch backend needs it: it promotes nothing, so a decline
+    /// there loses the fold outright. A real body keeps the node it folded
+    /// from, so a later read recomputes the same constant — and a value memo
+    /// keyed by `ExprId` would go stale the moment a rewrite gives that id new
+    /// content.
+    fn memoizes_declined_folds(&self) -> bool {
+        false
+    }
     /// Replace `e`'s kind. The new kind's children must already be parented to
     /// `e` (literals have none); use [`EditSink::become_expr`] to move an
     /// existing node's content into `e`.
@@ -247,6 +198,9 @@ pub(crate) struct BodySink<'a> {
 impl EditSink for BodySink<'_> {
     fn body(&self) -> &Body {
         self.body
+    }
+    fn memoizes_declined_folds(&self) -> bool {
+        true
     }
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
         self.body.exprs[e].kind = kind;
@@ -313,11 +267,15 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
         && is_ctfe_runnable(func)
 }
 
-/// Everything the engine knows keyed by local index, which is per-function, so
-/// entering a body means replacing the whole group and leaving one means
-/// putting it back. Grouped rather than swapped field by field: a compile-time
-/// frame exchanges all of it at once, and a member restored out of step with
-/// its siblings would let one body read another's locals.
+/// Everything the engine knows about the body it is walking, which is
+/// per-function, so entering a body means replacing the whole group and leaving
+/// one means putting it back. Grouped rather than swapped field by field: a
+/// compile-time frame exchanges all of it at once, and a member restored out of
+/// step with its siblings would let one body read another's locals.
+///
+/// Most of it is keyed by local index; the two memos at the end are keyed by
+/// `ExprId`, and both belong to the body those ids index — which is what makes
+/// swapping the group wholesale the only sound way to enter a frame.
 #[derive(Default)]
 struct FrameState {
     /// Lattice values for the `let`-bound locals of the body being walked. An
@@ -338,14 +296,23 @@ struct FrameState {
     ctfe_clobbered: LocalSet,
     /// CTFE scratch-body fold memo, read back by
     /// [`Interpreter::expr_to_lattice`]. The scratch [`BodySink`] promotes
-    /// nothing, so a fold has nowhere else to be recorded. Empty during
-    /// real-body folding, where rewrites promote through the engine.
+    /// nothing, so a fold has nowhere else to be recorded.
+    ///
+    /// Written only for a sink that asks for it
+    /// ([`EditSink::memoizes_declined_folds`]), which is the scratch backend
+    /// alone: a real body keeps the node the value was folded from, so a later
+    /// read recomputes it, and remembering a value against an `ExprId` the
+    /// engine may hand new content to is how a memo goes stale.
     scratch_folds: IndexMap<ExprId, Value>,
     /// Regions whose run this frame already attempted and abandoned. A seed's
     /// value is fixed for the frame's flow (a reassigned local is never
     /// `Const` here), so a failed run stays failed and re-running it would
     /// re-pay the body copy at every visit. Cleared with [`Self::scratch_folds`]
     /// wherever the environment restarts.
+    ///
+    /// Unlike [`Self::scratch_folds`] this records no value, so it is kept on
+    /// the real body too: the worst an entry left over from a rewritten node
+    /// can cost is a fold nobody attempts.
     region_misses: IndexSet<ExprId>,
 }
 
@@ -506,11 +473,12 @@ impl<'a> Interpreter<'a> {
             .map_or(Lattice::Unevaluated, Lattice::Const)
     }
 
-    /// Record `body`'s `aggregate_safe_locals`. The driving visitor calls
-    /// this once per function, next to [`Self::record_ref_global_aliases`].
+    /// Record which of `body`'s locals may bind an aggregate constant. The
+    /// driving visitor calls this once per function, next to
+    /// [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
-        let writes = Reached::outside_frame(body, self.ctfe_builtins, self.callees);
-        self.frame.aggregate_locals = aggregate_safe_locals(body, &writes);
+        self.frame.aggregate_locals =
+            Trackability::outside_frame(body, self.ctfe_builtins, self.callees).aggregate_locals;
     }
 
     pub fn record_ref_global_aliases(&mut self, body: &Body) {

@@ -18,12 +18,11 @@ use crate::nir_arena::{
 use crate::nir_visitor::NirRefVisitor;
 use crate::tir::TypeTable;
 
+use super::callee::{CalleeKey, CallSite};
 use super::place::{borrowed_place_operand, overlapping_places, place_of};
 use super::region::{region_free_reads, region_shape, value_block_shape};
-use super::trackability::{Reached, aggregate_safe_locals, clobbered_locals};
-use super::{
-    COPY_CHARGE_DIVISOR, CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice,
-};
+use super::trackability::Trackability;
+use super::{COPY_CHARGE_DIVISOR, CallRun, CtfeBuiltin, FrameState, Interpreter, Lattice};
 
 impl FrameState {
     /// Whether `index` takes part in a live place alias, as the alias handle
@@ -39,25 +38,20 @@ impl FrameState {
     /// another handle binds nothing, so a stale constant cannot outlive the
     /// write. Nothing keyed by the caller's local or expression ids carries
     /// over.
-    fn for_call(
-        body: &Body,
-        reached: &Reached,
-        params: impl IntoIterator<Item = (u32, Value)>,
-    ) -> Self {
-        let ctfe_clobbered = clobbered_locals(body, reached);
+    fn for_call(track: Trackability, params: impl IntoIterator<Item = (u32, Value)>) -> Self {
         let mut state = Self {
-            aggregate_locals: aggregate_safe_locals(body, reached),
+            aggregate_locals: track.aggregate_locals,
             ..Self::default()
         };
         for (index, value) in params {
-            let lattice = if ctfe_clobbered.contains(index) {
+            let lattice = if track.clobbered.contains(index) {
                 Lattice::NonConst
             } else {
                 Lattice::Const(value)
             };
             state.env.insert(index, lattice);
         }
-        state.ctfe_clobbered = ctfe_clobbered;
+        state.ctfe_clobbered = track.clobbered;
         state
     }
 }
@@ -147,6 +141,13 @@ impl LoopSnapshot {
         }
     }
 
+    /// What one [`Self::restore`] costs the step budget, on the same scale as
+    /// [`body_copy_cost`] — it is the same work over the loop body rather than
+    /// the whole one.
+    fn restore_cost(&self) -> u32 {
+        node_copy_cost(self.exprs.len() + self.stmts.len() + self.blocks.len())
+    }
+
     /// Put the captured nodes back. Nodes an iteration allocated are left
     /// behind unreferenced.
     fn restore(&self, body: &mut Body) {
@@ -162,6 +163,20 @@ impl LoopSnapshot {
     }
 }
 
+/// What copying `body`'s nodes costs the step budget.
+fn body_copy_cost(body: &Body) -> u32 {
+    node_copy_cost(body.exprs.len())
+}
+
+/// What copying `nodes` nodes costs the step budget: bulk memory rather than
+/// interpretation, so a fraction of what executing that many statements would
+/// — but never nothing, so a copy always makes progress toward the ceiling.
+fn node_copy_cost(nodes: usize) -> u32 {
+    u32::try_from(nodes / COPY_CHARGE_DIVISOR)
+        .unwrap_or(u32::MAX)
+        .max(1)
+}
+
 /// The local `op` writes out, through the casts monomorphization leaves. A
 /// deref or a projection is not one: those name storage reached *through* a
 /// value rather than the value itself.
@@ -173,14 +188,22 @@ fn named_local(body: &Body, op: Operand) -> Option<u32> {
     }
 }
 
-/// Whether two `&mut` arguments name overlapping storage. Each parameter binds
-/// its own snapshot and each write-back replays whole, so the later write would
-/// undo the earlier. Wado has no borrow checker, so this is ordinary source: the
-/// frame declines to run the call rather than mis-run it.
-fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u32>)]) -> bool {
+/// Whether a `&mut` argument's storage is also named by another argument the
+/// callee reaches by reference. Each parameter binds its own snapshot and each
+/// write-back replays whole, so a second handle on the same storage either
+/// reads a value the program never had or has its own write undone.
+///
+/// `borrowed` holds the place of every by-reference argument, the `&mut` ones
+/// included, so a target overlapping only itself counts once. A by-value
+/// argument is absent by construction: Wado copies it at the call, and no
+/// aliasing survives that.
+///
+/// Wado has no borrow checker, so this is ordinary source: the frame declines
+/// to run the call rather than mis-run it.
+fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], borrowed: &[(u32, Vec<u32>)]) -> bool {
     targets
         .iter()
-        .any(|(_, root, path)| overlapping_places(places, *root, path) > 1)
+        .any(|(_, root, path)| overlapping_places(borrowed, *root, path) > 1)
 }
 
 impl Interpreter<'_> {
@@ -314,13 +337,19 @@ impl Interpreter<'_> {
     /// Run a loop until it breaks, control leaves the function, or the budget
     /// runs out. Termination rests on the budget alone — the per-iteration
     /// charge covers an empty body too — so no constant trip count is needed.
+    ///
+    /// The charge is the snapshot restore the next iteration needs, which is a
+    /// copy of the loop body: the same cost model as
+    /// [`Self::charge_body_copy`], for the same reason. A loop charged one step
+    /// an iteration would copy its whole body ten thousand times over on the
+    /// default budget.
     fn exec_loop(&mut self, body: &mut Body, block: BlockId) -> Flow {
         let snapshot = LoopSnapshot::capture(body, block);
+        let iteration_cost = snapshot.restore_cost();
         loop {
-            if self.step_budget == 0 {
+            if self.charge(iteration_cost).is_none() {
                 return Flow::Bail;
             }
-            self.step_budget -= 1;
             match self.exec_block(body, block) {
                 Flow::Fallthrough(_) | Flow::Continue => {}
                 Flow::Break { label: None, .. } => {
@@ -617,26 +646,20 @@ impl Interpreter<'_> {
         }
     }
 
-    /// The callee a call names, and the operands bound to its parameters. A
-    /// method's receiver is its first.
+    /// Whether the parameter reaches the caller's storage rather than a copy
+    /// of it, which is what makes an argument's place worth tracking for
+    /// aliasing. `is_mut_ref` is consulted as well as the type: it is captured
+    /// pre-boxing, so it answers where the type no longer reads as a borrow.
+    fn is_by_reference(&self, param: &crate::nir::NirParam) -> bool {
+        param.is_mut_ref
+            || RefKind::from_resolved(self.type_table.get(param.type_id)).is_some()
+    }
+
+    /// The callee a call names, and the operands bound to its parameters, in
+    /// parameter order.
     fn call_target(&self, body: &Body, e: ExprId) -> Option<(CalleeKey, Vec<Operand>)> {
-        match &body.exprs[e].kind {
-            ExprKind::Call { func_id, args, .. } => {
-                Some((*func_id, args.iter().map(|a| a.expr).collect()))
-            }
-            ExprKind::MethodCall {
-                func_id,
-                receiver,
-                args,
-                ..
-            } => {
-                let mut ops = Vec::with_capacity(args.len() + 1);
-                ops.push(*receiver);
-                ops.extend(args.iter().map(|a| a.expr));
-                Some((*func_id, ops))
-            }
-            _ => None,
-        }
+        let site = CallSite::of(body, e)?;
+        Some((site.func_id, site.operands().map(|(_, op)| op).collect()))
     }
 
     /// Run a call in a compile-time frame: bind the parameters, execute the
@@ -671,7 +694,7 @@ impl Interpreter<'_> {
 
         let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());
         let mut targets: Vec<(u32, u32, Vec<u32>)> = Vec::new();
-        let mut places: Vec<(u32, Vec<u32>)> = Vec::new();
+        let mut borrowed: Vec<(u32, Vec<u32>)> = Vec::new();
         for (arg, param) in args.iter().zip(&callee.params) {
             let place = self.frame_place_of(body, *arg);
             let value = if param.is_mut_ref {
@@ -682,18 +705,20 @@ impl Interpreter<'_> {
             } else {
                 self.operand_lattice_folded(body, *arg).as_const()?
             };
-            places.extend(place);
+            if self.is_by_reference(param) {
+                borrowed.extend(place);
+            }
             bound.push((param.local_index, value));
         }
-        if aliased_write_targets(&targets, &places) {
+        if aliased_write_targets(&targets, &borrowed) {
             return None;
         }
 
-        self.step_budget -= 1;
+        self.charge_body_copy(callee_body)?;
         self.call_stack.push(key);
         let mut scratch = callee_body.nodes_only_clone();
-        let reached = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
-        let caller = self.swap_frame(FrameState::for_call(&scratch, &reached, bound));
+        let track = Trackability::in_frame(&scratch, self.ctfe_builtins, self.callees);
+        let caller = self.swap_frame(FrameState::for_call(track, bound));
         let run = self.exec_frame(&mut scratch, targets, returns_unit);
         self.swap_frame(caller);
         self.call_stack.pop();
@@ -800,9 +825,8 @@ impl Interpreter<'_> {
         self.charge_body_copy(body)?;
         let mut scratch = body.nodes_only_clone();
         scratch.root = block;
-        let reached = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
-        let region = FrameState::for_call(&scratch, &reached, seeds);
-        let caller = self.swap_frame(region);
+        let track = Trackability::in_frame(&scratch, self.ctfe_builtins, self.callees);
+        let caller = self.swap_frame(FrameState::for_call(track, seeds));
         let flow = self.exec_block(&mut scratch, block);
         self.swap_frame(caller);
         let value = value_of_block_flow(flow, label)
@@ -815,15 +839,21 @@ impl Interpreter<'_> {
         value
     }
 
-    /// Charge the step budget for the copy of `body` a region run makes before
-    /// it executes a statement. Uncharged, a region that reaches the run and
-    /// then abandons costs a whole-body copy per visit, which makes const
-    /// folding quadratic in the size of a function full of templates. `None`
-    /// when the budget cannot cover it.
+    /// Charge the step budget for a whole-body copy made before a single
+    /// statement runs — the scratch a call is run on, and the one a region is.
+    ///
+    /// Uncharged, an evaluation that reaches the copy and then abandons costs a
+    /// whole body per visit, which makes const folding quadratic in the size of
+    /// the function: the projection is re-entrant, so the same call and the
+    /// same template are reached again at every visit. `None` when the budget
+    /// cannot cover it, which is also the per-entry charge — the cost never
+    /// rounds down to nothing.
     fn charge_body_copy(&mut self, body: &Body) -> Option<()> {
-        let cost = u32::try_from(body.exprs.len() / COPY_CHARGE_DIVISOR)
-            .unwrap_or(u32::MAX)
-            .max(1);
+        self.charge(body_copy_cost(body))
+    }
+
+    /// Charge `cost` steps, or report that the budget cannot cover them.
+    fn charge(&mut self, cost: u32) -> Option<()> {
         self.step_budget = self.step_budget.checked_sub(cost)?;
         Some(())
     }

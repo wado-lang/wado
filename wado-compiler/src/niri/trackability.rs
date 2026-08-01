@@ -5,26 +5,118 @@
 //! so it counts wherever it appears, while a write counts only where the walk
 //! performs it — inside a compile-time frame, which either carries the write
 //! out or abandons the evaluation. An ordinary walk performs nothing at all.
+//!
+//! Two questions come out of that, and [`Trackability`] answers both from a
+//! single walk: which locals may bind an aggregate constant, and which ones a
+//! frame cannot track at all. They differ in one place only — a shared borrow
+//! is a read for the first and an escape for the second — so they are scanned
+//! together and separated at the end.
 
 use indexmap::IndexSet;
 
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtId, StmtKind};
+use crate::nir_visitor::NirRefVisitor;
 
+use super::callee::{CallSite, CalleeMap};
 use super::place::{borrowed_place_operand, lvalue_root_local, place_of};
-use super::{CalleeMap, CtfeBuiltinMap, reachable_exprs};
+use super::{CtfeBuiltinMap, reachable_exprs};
 
-/// A method's receiver is its first parameter.
-const RECEIVER: usize = 0;
+/// Every node id reachable from the body root, walked once and shared by every
+/// question below — each of which is another scan over these same two lists.
+///
+/// Reachable only, because an orphaned node never runs: counting one as
+/// performed would credit the walk with a write it will never carry out, and
+/// counting one as a read would grant a local a value nothing keeps current.
+/// A bare-expression body has no block structure, so everything it holds is
+/// reachable by construction.
+struct Reachable {
+    exprs: Vec<ExprId>,
+    stmts: Vec<StmtId>,
+}
+
+impl Reachable {
+    fn of(body: &Body) -> Self {
+        #[derive(Default)]
+        struct Collect {
+            exprs: Vec<ExprId>,
+            stmts: Vec<StmtId>,
+        }
+        impl NirRefVisitor for Collect {
+            fn visit_node(&mut self, body: &Body, node: NodeRef) {
+                match node {
+                    NodeRef::Expr(e) => self.exprs.push(e),
+                    NodeRef::Stmt(s) => self.stmts.push(s),
+                    NodeRef::Block(_) | NodeRef::Pat(_) => {}
+                }
+                self.walk_node(body, node);
+            }
+        }
+        if body.blocks.is_empty() {
+            return Self {
+                exprs: reachable_exprs(body),
+                stmts: body.stmts.iter().map(|(s, _)| s).collect(),
+            };
+        }
+        let mut collect = Collect::default();
+        collect.visit_node(body, NodeRef::Block(body.root));
+        Self {
+            exprs: collect.exprs,
+            stmts: collect.stmts,
+        }
+    }
+}
+
+/// What a walk of a body may hold values for.
+pub(super) struct Trackability {
+    /// Locals that may bind an aggregate constant: ones every mention only
+    /// reads.
+    pub(super) aggregate_locals: LocalSet,
+    /// Locals a compile-time frame cannot track: something other than a write
+    /// it performs itself can reach them. Empty outside a frame, which
+    /// performs nothing and so tracks nothing to begin with.
+    pub(super) clobbered: LocalSet,
+}
+
+impl Trackability {
+    /// For a compile-time frame, which performs the writes it walks.
+    pub(super) fn in_frame(
+        body: &Body,
+        ctfe_builtins: Option<&CtfeBuiltinMap>,
+        callees: Option<&CalleeMap>,
+    ) -> Self {
+        let reachable = Reachable::of(body);
+        let reached = Reached::in_frame(body, &reachable, ctfe_builtins, callees);
+        let scan = MentionScan::of(body, &reachable, &reached);
+        Self {
+            aggregate_locals: scan.aggregate_safe_locals(&reached),
+            clobbered: scan.clobbered_locals(),
+        }
+    }
+
+    /// For an ordinary walk, which performs nothing, so no write it reaches is
+    /// one it carries out.
+    pub(super) fn outside_frame(
+        body: &Body,
+        ctfe_builtins: Option<&CtfeBuiltinMap>,
+        callees: Option<&CalleeMap>,
+    ) -> Self {
+        let reachable = Reachable::of(body);
+        let reached = Reached::outside_frame(body, &reachable, ctfe_builtins, callees);
+        let scan = MentionScan::of(body, &reachable, &reached);
+        Self {
+            aggregate_locals: scan.aggregate_safe_locals(&reached),
+            clobbered: LocalSet::default(),
+        }
+    }
+}
 
 /// The expressions a walk carries out: the operand each reachable statement
-/// performs. Reachable from the body root, because an orphaned statement never
-/// runs — counting one as performed would credit the walk with a write it will
-/// never carry out.
-fn performed_exprs(body: &Body) -> IndexSet<ExprId> {
+/// performs.
+fn performed_exprs(body: &Body, reachable: &Reachable) -> IndexSet<ExprId> {
     let mut performed = IndexSet::default();
-    for s in reachable_stmts(body) {
-        let op = match &body.stmts[s].kind {
+    for s in &reachable.stmts {
+        let op = match &body.stmts[*s].kind {
             StmtKind::Expr(op) | StmtKind::Let { value: op, .. } => *op,
             StmtKind::Return { .. }
             | StmtKind::If { .. }
@@ -41,27 +133,10 @@ fn performed_exprs(body: &Body) -> IndexSet<ExprId> {
     performed
 }
 
-/// Every statement id reachable from the body root, in walk order — or every
-/// statement, for a bare-expression body with no block structure.
-fn reachable_stmts(body: &Body) -> Vec<StmtId> {
-    if body.blocks.is_empty() {
-        return body.stmts.iter().map(|(s, _)| s).collect();
-    }
-    let mut stmts = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Stmt(s) = node {
-            stmts.push(s);
-        }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    stmts
-}
-
 /// The places a walk reaches, and how. A mention it does not reach disqualifies
 /// the local that mention roots at.
 #[derive(Default)]
-pub(super) struct Reached {
+struct Reached {
     reads: IndexSet<ExprId>,
     writes: IndexSet<ExprId>,
     /// Reached through an `Assign`'s target rather than through an operand.
@@ -69,13 +144,14 @@ pub(super) struct Reached {
 }
 
 impl Reached {
-    pub(super) fn in_frame(
+    fn in_frame(
         body: &Body,
+        reachable: &Reachable,
         ctfe_builtins: Option<&CtfeBuiltinMap>,
         callees: Option<&CalleeMap>,
     ) -> Self {
-        let performed = performed_exprs(body);
-        let mut reached = Self::collect(body, ctfe_builtins, callees, &performed);
+        let performed = performed_exprs(body, reachable);
+        let mut reached = Self::collect(body, reachable, ctfe_builtins, callees, &performed);
         for e in &performed {
             if let ExprKind::Assign { target, .. } = &body.exprs[*e].kind
                 && place_of(body, (*target).into()).is_some()
@@ -83,7 +159,7 @@ impl Reached {
                 reached.place_assigns.insert(*e);
             }
         }
-        reached.record_alias_borrows(body);
+        reached.record_alias_borrows(body, reachable);
         reached
     }
 
@@ -92,13 +168,13 @@ impl Reached {
     /// performed against the place's current value or abandons the evaluation,
     /// and a read projects that value rather than a copy. Frame-only, like the
     /// write accounting — an ordinary walk resolves no aliases.
-    fn record_alias_borrows(&mut self, body: &Body) {
-        for s in reachable_stmts(body) {
+    fn record_alias_borrows(&mut self, body: &Body, reachable: &Reachable) {
+        for s in &reachable.stmts {
             let StmtKind::Let {
                 value,
                 is_mut: false,
                 ..
-            } = &body.stmts[s].kind
+            } = &body.stmts[*s].kind
             else {
                 continue;
             };
@@ -111,16 +187,18 @@ impl Reached {
     }
 
     /// An ordinary walk performs nothing, so nothing it reaches is a write it
-    /// carries out. The reads are collected as [`Self::in_frame`] collects them:
-    /// what a statement-position write builtin reads is read wherever that
-    /// mention appears, whoever performs the write.
-    pub(super) fn outside_frame(
+    /// carries out. The reads are collected as [`Self::in_frame`] collects
+    /// them: what a statement-position write builtin reads is read wherever
+    /// that mention appears, whoever performs the write.
+    fn outside_frame(
         body: &Body,
+        reachable: &Reachable,
         ctfe_builtins: Option<&CtfeBuiltinMap>,
         callees: Option<&CalleeMap>,
     ) -> Self {
+        let performed = performed_exprs(body, reachable);
         Self {
-            reads: Self::collect(body, ctfe_builtins, callees, &performed_exprs(body)).reads,
+            reads: Self::collect(body, reachable, ctfe_builtins, callees, &performed).reads,
             ..Self::default()
         }
     }
@@ -128,13 +206,16 @@ impl Reached {
     /// What the walk reaches, given the expressions it performs.
     fn collect(
         body: &Body,
+        reachable: &Reachable,
         ctfe_builtins: Option<&CtfeBuiltinMap>,
         callees: Option<&CalleeMap>,
         performed: &IndexSet<ExprId>,
     ) -> Self {
         let mut reached = Self::default();
-        reached.collect_builtin_borrows(body, ctfe_builtins, performed);
-        reached.collect_call_borrows(body, callees, performed);
+        for e in &reachable.exprs {
+            reached.collect_builtin_borrows(body, *e, ctfe_builtins, performed);
+            reached.collect_call_borrows(body, *e, callees, performed);
+        }
         reached
     }
 
@@ -143,32 +224,28 @@ impl Reached {
     fn collect_builtin_borrows(
         &mut self,
         body: &Body,
+        e: ExprId,
         ctfe_builtins: Option<&CtfeBuiltinMap>,
         performed: &IndexSet<ExprId>,
     ) {
-        let Some(map) = ctfe_builtins else {
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return;
         };
-        for (e, node) in &body.exprs {
-            let ExprKind::Call { func_id, args, .. } = &node.kind else {
-                continue;
-            };
-            let Some(builtin) = map.get(func_id) else {
-                continue;
-            };
-            if !builtin.is_write() {
-                for arg in args {
-                    self.record(body, arg.expr, Reach::Read);
-                }
-                continue;
+        let Some(builtin) = ctfe_builtins.and_then(|m| m.get(func_id)) else {
+            return;
+        };
+        if !builtin.is_write() {
+            for arg in args {
+                self.record(body, arg.expr, Reach::Read);
             }
-            if !performed.contains(&e) {
-                continue;
-            }
-            for (i, arg) in args.iter().enumerate() {
-                let reach = if i == 0 { Reach::Write } else { Reach::Read };
-                self.record(body, arg.expr, reach);
-            }
+            return;
+        }
+        if !performed.contains(&e) {
+            return;
+        }
+        for (i, arg) in args.iter().enumerate() {
+            let reach = if i == 0 { Reach::Write } else { Reach::Read };
+            self.record(body, arg.expr, reach);
         }
     }
 
@@ -180,50 +257,30 @@ impl Reached {
     fn collect_call_borrows(
         &mut self,
         body: &Body,
+        e: ExprId,
         callees: Option<&CalleeMap>,
         performed: &IndexSet<ExprId>,
     ) {
-        let Some(callees) = callees else {
+        let Some(site) = CallSite::of(body, e) else {
             return;
         };
-        for (e, node) in &body.exprs {
-            let (func_id, receiver, args) = match &node.kind {
-                ExprKind::Call { func_id, args, .. } => (func_id, None, args),
-                ExprKind::MethodCall {
-                    func_id,
-                    receiver,
-                    args,
-                    ..
-                } => (func_id, Some(*receiver), args),
-                _ => continue,
-            };
-            let Some(callee) = callees.get(func_id) else {
-                continue;
-            };
-            let first_arg = usize::from(receiver.is_some());
-            if first_arg + args.len() != callee.arity() {
-                continue;
+        let Some(callee) = callees.and_then(|m| m.get(&site.func_id)) else {
+            return;
+        };
+        let Some(operands) = site.matching_operands(callee) else {
+            return;
+        };
+        let at_statement = performed.contains(&e);
+        let mut records: Vec<(Operand, Reach)> = Vec::new();
+        for (index, op) in operands {
+            match (callee.writes_param(index), at_statement) {
+                (false, _) if callee.reads_only(index) => records.push((op, Reach::Read)),
+                (true, true) => records.push((op, Reach::Write)),
+                (false, _) | (true, false) => {}
             }
-            let at_statement = performed.contains(&e);
-            if let Some(receiver) = receiver {
-                match (callee.writes_param(RECEIVER), at_statement) {
-                    (false, _) if callee.reads_only(RECEIVER) => {
-                        self.record(body, receiver, Reach::Read);
-                    }
-                    (true, true) => self.record(body, receiver, Reach::Write),
-                    (false, _) | (true, false) => {}
-                }
-            }
-            for (i, arg) in args.iter().enumerate() {
-                let index = first_arg + i;
-                match (callee.writes_param(index), at_statement) {
-                    (false, _) if callee.reads_only(index) => {
-                        self.record(body, arg.expr, Reach::Read);
-                    }
-                    (true, true) => self.record(body, arg.expr, Reach::Write),
-                    (false, _) | (true, false) => {}
-                }
-            }
+        }
+        for (op, reach) in records {
+            self.record(body, op, reach);
         }
     }
 
@@ -276,59 +333,81 @@ enum Reach {
     Write,
 }
 
-/// Locals of `body` that may bind an aggregate constant: ones every mention
-/// only reads.
+/// One walk of the reachable nodes, answering what every mention of a local
+/// does with it.
 ///
 /// The read positions are listed rather than inferred from the absence of the
 /// others, so a node kind nobody taught this walk about costs a fold and never
 /// a wrong one. A shared borrow and a cast are read positions that pass the
-/// read on to their operand — Wado has no interior mutability, and a cast
-/// names the same storage — which is what lets `push_str(&b)` count as a read
-/// of `b` rather than an unknown mention.
-///
-/// Only the reachable body is scanned: a mention an earlier rewrite orphaned
-/// cannot run, so it must not disqualify anything.
-pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet {
-    fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
-        if let Some(index) = lvalue_root_local(body, op) {
-            set.insert(index);
+/// read on to their operand — Wado has no interior mutability, and a cast names
+/// the same storage — which is what lets `push_str(&b)` count as a read of `b`
+/// rather than an unknown mention.
+#[derive(Default)]
+struct MentionScan {
+    /// Locals something other than a write the walk performs can reach.
+    escaped: LocalSet,
+    /// Locals reached by a shared borrow the walk does not account for. An
+    /// escape for a frame, which tracks a local's value; a plain read for the
+    /// aggregate question, which only asks whether anything writes it.
+    shared_borrow_escaped: LocalSet,
+    /// Operands read for their value.
+    value_reads: IndexSet<ExprId>,
+    /// Every `Local` node, with the local it names.
+    local_mentions: Vec<(ExprId, u32)>,
+}
+
+impl MentionScan {
+    fn of(body: &Body, reachable: &Reachable, reached: &Reached) -> Self {
+        let mut scan = Self::default();
+        for e in &reachable.exprs {
+            scan.visit_expr(body, *e, reached);
         }
-    }
-    fn read_value(op: Operand, reads: &mut IndexSet<ExprId>) {
-        if let Some(e) = op.as_expr() {
-            reads.insert(e);
+        for s in &reachable.stmts {
+            match &body.stmts[*s].kind {
+                StmtKind::Return { value: Some(op) }
+                | StmtKind::Break {
+                    value: Some(op), ..
+                }
+                | StmtKind::Let { value: op, .. }
+                | StmtKind::Expr(op) => scan.read_value(*op),
+                StmtKind::Return { value: None }
+                | StmtKind::Break { value: None, .. }
+                | StmtKind::If { .. }
+                | StmtKind::Loop { .. }
+                | StmtKind::Continue
+                | StmtKind::LabeledBlock { .. }
+                | StmtKind::LetDestructure { .. } => {}
+            }
         }
+        scan
     }
-    let mut value_reads: IndexSet<ExprId> = IndexSet::default();
-    let mut local_mentions: Vec<(ExprId, u32)> = Vec::new();
-    let mut disqualified = LocalSet::default();
-    for e in reachable_exprs(body) {
-        let node = &body.exprs[e];
-        match &node.kind {
-            ExprKind::Local { index, .. } => local_mentions.push((e, *index)),
+
+    fn visit_expr(&mut self, body: &Body, e: ExprId, reached: &Reached) {
+        match &body.exprs[e].kind {
+            ExprKind::Local { index, .. } => self.local_mentions.push((e, *index)),
             ExprKind::FieldAccess { expr, .. }
             | ExprKind::Match { expr, .. }
             | ExprKind::Switch {
                 scrutinee: expr, ..
-            } => read_value(*expr, &mut value_reads),
+            } => self.read_value(*expr),
             ExprKind::Index { expr, index } => {
-                read_value(*expr, &mut value_reads);
-                read_value(*index, &mut value_reads);
+                self.read_value(*expr);
+                self.read_value(*index);
             }
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 for element in elements {
-                    read_value(*element, &mut value_reads);
+                    self.read_value(*element);
                 }
             }
             ExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
-                    read_value(field.value, &mut value_reads);
+                    self.read_value(field.value);
                 }
             }
             ExprKind::Assign { target, value } => {
-                read_value(*value, &mut value_reads);
+                self.read_value(*value);
                 if !reached.place_assigns.contains(&e) {
-                    disqualify_root(body, (*target).into(), &mut disqualified);
+                    escape(body, (*target).into(), &mut self.escaped);
                 }
             }
             ExprKind::Unary {
@@ -336,115 +415,87 @@ pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet 
                 expr,
             } => {
                 if !reached.covers(body, *expr) {
-                    disqualify_root(body, *expr, &mut disqualified);
+                    escape(body, *expr, &mut self.escaped);
                 }
             }
             ExprKind::Unary {
                 op: NirUnaryOp::Ref,
                 expr,
+            } => {
+                self.read_value(*expr);
+                if !reached.covers(body, *expr) {
+                    escape(body, *expr, &mut self.shared_borrow_escaped);
+                }
             }
-            | ExprKind::Cast { expr, .. } => read_value(*expr, &mut value_reads),
+            ExprKind::Cast { expr, .. } => self.read_value(*expr),
             ExprKind::MethodCall { receiver, args, .. } => {
                 if !reached.covers(body, *receiver) {
-                    disqualify_root(body, *receiver, &mut disqualified);
+                    escape(body, *receiver, &mut self.escaped);
                 }
-                for arg in args {
-                    if !arg.is_mut {
-                        read_value(arg.expr, &mut value_reads);
-                    } else if !reached.covers(body, arg.expr) {
-                        disqualify_root(body, arg.expr, &mut disqualified);
-                    }
-                }
+                self.visit_args(body, args, reached);
             }
-            ExprKind::Call { args, .. } => {
-                for arg in args {
-                    if !arg.is_mut {
-                        read_value(arg.expr, &mut value_reads);
-                    } else if !reached.covers(body, arg.expr) {
-                        disqualify_root(body, arg.expr, &mut disqualified);
-                    }
-                }
-            }
+            ExprKind::Call { args, .. } => self.visit_args(body, args, reached),
             _ => {}
         }
     }
-    for (_, stmt) in &body.stmts {
-        match &stmt.kind {
-            StmtKind::Return { value: Some(op) }
-            | StmtKind::Break {
-                value: Some(op), ..
-            } => {
-                read_value(*op, &mut value_reads);
-            }
-            StmtKind::Let { value: op, .. } | StmtKind::Expr(op) => {
-                read_value(*op, &mut value_reads);
-            }
-            _ => {}
-        }
-    }
-    value_reads.extend(reached.reads.iter().chain(&reached.writes).copied());
-    for (e, index) in &local_mentions {
-        if !value_reads.contains(e) {
-            disqualified.insert(*index);
-        }
-    }
-    let mut safe = LocalSet::default();
-    for (_, index) in local_mentions {
-        if !disqualified.contains(index) {
-            safe.insert(index);
-        }
-    }
-    safe
-}
 
-/// Locals of `body` a compile-time frame cannot track: something other than a
-/// write it performs itself can reach them — a borrow, a mutable argument, a
-/// method receiver, or an assignment buried inside a larger expression.
-///
-/// Reachable body only, as in [`aggregate_safe_locals`]. The arena keeps every
-/// node an in-place rewrite displaced, and one nothing refers to cannot run.
-pub(super) fn clobbered_locals(body: &Body, reached: &Reached) -> LocalSet {
-    fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
-        if let Some(index) = lvalue_root_local(body, op) {
+    fn visit_args(
+        &mut self,
+        body: &Body,
+        args: &[crate::nir_arena::ArenaCallArg],
+        reached: &Reached,
+    ) {
+        for arg in args {
+            if !arg.is_mut {
+                self.read_value(arg.expr);
+            } else if !reached.covers(body, arg.expr) {
+                escape(body, arg.expr, &mut self.escaped);
+            }
+        }
+    }
+
+    fn read_value(&mut self, op: Operand) {
+        if let Some(e) = op.as_expr() {
+            self.value_reads.insert(e);
+        }
+    }
+
+    /// Locals that may bind an aggregate constant: ones every mention only
+    /// reads. A shared borrow is one of those reads.
+    fn aggregate_safe_locals(&self, reached: &Reached) -> LocalSet {
+        let mut disqualified = self.escaped.clone();
+        for (e, index) in &self.local_mentions {
+            let read = self.value_reads.contains(e)
+                || reached.reads.contains(e)
+                || reached.writes.contains(e);
+            if !read {
+                disqualified.insert(*index);
+            }
+        }
+        let mut safe = LocalSet::default();
+        for (_, index) in &self.local_mentions {
+            if !disqualified.contains(*index) {
+                safe.insert(*index);
+            }
+        }
+        safe
+    }
+
+    /// Locals a compile-time frame cannot track: a borrow — shared or mutable
+    /// — a mutable argument, a method receiver, or an assignment buried inside
+    /// a larger expression can reach them.
+    fn clobbered_locals(&self) -> LocalSet {
+        let mut set = self.escaped.clone();
+        for index in self.shared_borrow_escaped.iter() {
             set.insert(index);
         }
+        set
     }
-    let mut set = LocalSet::default();
-    for e in reachable_exprs(body) {
-        let node = &body.exprs[e];
-        match &node.kind {
-            ExprKind::Assign { target, .. } => {
-                if !reached.place_assigns.contains(&e) {
-                    disqualify(body, (*target).into(), &mut set);
-                }
-            }
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-                expr,
-            } => {
-                if !reached.covers(body, *expr) {
-                    disqualify(body, *expr, &mut set);
-                }
-            }
-            ExprKind::MethodCall { receiver, args, .. } => {
-                if !reached.covers(body, *receiver) {
-                    disqualify(body, *receiver, &mut set);
-                }
-                for arg in args.iter().filter(|a| a.is_mut) {
-                    if !reached.covers(body, arg.expr) {
-                        disqualify(body, arg.expr, &mut set);
-                    }
-                }
-            }
-            ExprKind::Call { args, .. } => {
-                for arg in args.iter().filter(|a| a.is_mut) {
-                    if !reached.covers(body, arg.expr) {
-                        disqualify(body, arg.expr, &mut set);
-                    }
-                }
-            }
-            _ => {}
-        }
+}
+
+/// Record the local an unaccounted-for mention roots at.
+fn escape(body: &Body, op: Operand, set: &mut LocalSet) {
+    if let Some(index) = lvalue_root_local(body, op) {
+        set.insert(index);
     }
-    set
 }
