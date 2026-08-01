@@ -43,9 +43,13 @@ instances (`InstantiationKey` keys on the mangled name plus type-argument
 vectors). The backend is already argument-sensitive; only named method calls
 lack the mechanism.
 
-Arithmetic operators are a third, inconsistent case: `find_arithmetic_trait_impl`
-matches `Add` by base name and takes the first impl, so `Add<X>` beside `Add<Y>`
-resolves by declaration order rather than by RHS type.
+Arithmetic operators cannot exhibit the collision at all today: the prelude's
+operator traits take no type parameters (`trait Add { type Output; fn add(&self,
+rhs: &Self) … }`), so `impl Add<X>` is not writable and an operator trait has
+exactly one argument list. RHS-directed selection there is gated on
+parameterizing the operator traits (`trait Add<Rhs = Self>`), a stdlib redesign
+outside this WEP; `find_arithmetic_trait_impl`'s first-impl scan is safe until
+then because coherence permits only one impl.
 
 The static path is not merely name-only, it is circular. `Type::m(args)`
 elaborates its arguments against parameter types that
@@ -267,16 +271,16 @@ rejected it instead of a bare "method not found".
 
 ### Interactions
 
-| Feature           | Interaction                                                                                                                                                                                                                                                                                                                    |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Operators         | Indexing already conforms to this rule. Arithmetic is brought under it: `Add<X>` beside `Add<Y>` selects by RHS probe type instead of declaration order. `Eq` / `Ord` take no trait arguments — unaffected.                                                                                                                    |
-| `From` / `?`      | Unchanged. `?`'s conversion is target-type-directed by design; `Type::from(x)`'s hint path resolves the argument fully (a literal's default type selects), which the general rule deliberately refuses. Unifying `from` onto the general rule is follow-up, gated on accepting that `i64::from(42)`-style calls become errors. |
-| Default arguments | Owned by the trait declaration, identical across an overload set — no interaction with selection.                                                                                                                                                                                                                              |
-| Effects           | Never considered by selection; the chosen method's `with` clause is checked as today.                                                                                                                                                                                                                                          |
-| Coherence         | Untouched. Selection picks an argument list among impls coherence already accepts; overlapping impls of one instantiation remain errors.                                                                                                                                                                                       |
-| Newtypes          | Inherited impls are candidates on the newtype receiver as today; the same grouping and selection apply.                                                                                                                                                                                                                        |
-| Monomorphization  | Unaffected. The chosen trait's spelling lands in the mangled name, which `InstantiationKey` already discriminates on — the same shape the indexing and `From` paths produce today.                                                                                                                                             |
-| LSP / tooling     | Hover and go-to-definition read the recorded dispatch fact; probe typing leaves no persistent state.                                                                                                                                                                                                                           |
+| Feature           | Interaction                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Operators         | Indexing already conforms to this rule. Arithmetic cannot collide yet — the prelude's operator traits take no type parameters, so RHS selection is gated on parameterizing them (`trait Add<Rhs = Self>`). `Eq` / `Ord` take no trait arguments — unaffected.                                                                                                                                                 |
+| `From` / `?`      | `?`'s conversion stays target-type-directed by design. `Type::from(x)` now preselects by the literal's class before the argument is elaborated: one admitted impl supplies the expected type (order-independently — the name-keyed guess used to depend on declaration order), several admitted impls are an error asking for a cast, and a non-literal argument selects through its resolved type as before. |
+| Default arguments | Owned by the trait declaration, identical across an overload set — no interaction with selection.                                                                                                                                                                                                                                                                                                             |
+| Effects           | Never considered by selection; the chosen method's `with` clause is checked as today.                                                                                                                                                                                                                                                                                                                         |
+| Coherence         | Untouched. Selection picks an argument list among impls coherence already accepts; overlapping impls of one instantiation remain errors.                                                                                                                                                                                                                                                                      |
+| Newtypes          | Inherited impls are candidates on the newtype receiver as today; the same grouping and selection apply.                                                                                                                                                                                                                                                                                                       |
+| Monomorphization  | Unaffected. The chosen trait's spelling lands in the mangled name, which `InstantiationKey` already discriminates on — the same shape the indexing and `From` paths produce today.                                                                                                                                                                                                                            |
+| LSP / tooling     | Hover and go-to-definition read the recorded dispatch fact; probe typing leaves no persistent state.                                                                                                                                                                                                                                                                                                          |
 
 ### Non-goals
 
@@ -372,22 +376,28 @@ Landing order — each phase keeps the suite green and is useful alone:
    API). Any future sharpening of the probe must stay inside the
    side-effect-free scan; upgrading it to a real resolve re-opens all four.
 
-4. Follow-ups: arithmetic RHS selection in `find_arithmetic_trait_impl`;
-   folding the `from` / `try_from` hint path into the general mechanism. That
-   fold is what turns `Wrapper::from(42)` from the diagnostic it now reports
-   into a resolved call — an integer literal admits `From<i64>` and not
-   `From<String>`, so exactly one candidate survives. Until then the circular
-   ordering stands and the error asks for `42 as i64`.
+4. Conversion fold: `conversion_preselect` runs the literal's probe class
+   over the receiver's conversion impls _before_ the argument is elaborated —
+   removing the circular ordering at its root. One admitted impl supplies the
+   argument's expected type (`Wrapper::from(42)` against `From<String>` /
+   `From<i64>` resolves to `From<i64>`, whichever is declared first); several
+   admitted impls report `AmbiguousConversionArgument`, whose fix is the cast
+   — `from` has no `self`, so the trait-turbofish escape cannot apply. A
+   non-literal argument passes through: its resolved type selects
+   deterministically via the existing name hint, whose matcher compares full
+   spellings (whitespace ignored, head un-aliased in the impl's module) with a
+   head-only fallback — the name-based mechanism's ceiling; full `TypeId`
+   matching remains the eventual replacement. Two shapes stay carved out at
+   the gate rather than guessed at: an inherent static `from` beside `From`
+   impls answers on the trait-less path, and a conversion reachable only
+   through a blanket generic in its source type
+   (`impl<T: Display> From<T> for Wrapper`) is rejected with its own
+   diagnostic — it has never compiled, and selecting its instantiation needs
+   generic-impl monomorphization, not name matching.
 
-   The hint path's matcher compares full spellings (whitespace ignored, the
-   head un-aliased in the impl's module) with a head-only fallback — the
-   name-based mechanism's ceiling; the fold replaces it with `TypeId`
-   matching. Two shapes are carved out at the gate rather than guessed at: an
-   inherent static `from` beside `From` impls answers on the trait-less path,
-   and a conversion reachable only through a blanket generic in its source
-   type (`impl<T: Display> From<T> for Wrapper`) is rejected with its own
-   diagnostic — it has never compiled (it reached WIR build unresolved), and
-   selecting its instantiation from the argument is exactly the fold's job.
+   Remaining follow-up: operator-trait parameterization
+   (`trait Add<Rhs = Self>`), which is what would make RHS-directed operator
+   selection expressible in the first place.
 
 Test surface: extend `trait_ambiguous_argument_lists.wado` (resolvable variants
 with a discriminating concrete argument), a cross-trait concrete-receiver

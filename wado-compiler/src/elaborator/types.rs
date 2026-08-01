@@ -332,6 +332,19 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A conversion call whose literal argument admits several impls
+    /// (`Wrapper::from(42)` against `From<i32>` beside `From<i64>`). A literal
+    /// never selects between the widths it could coerce to (WEP 2026-07-31),
+    /// and `from` has no `self`, so the trait turbofish escape does not apply
+    /// — the fix is annotating the argument.
+    AmbiguousConversionArgument {
+        receiver: String,
+        method: String,
+        /// The admitted source types, in candidate order.
+        candidates: Vec<String>,
+        span: Span,
+    },
+
     /// A static call whose receiver provides the method only through trait
     /// impls, none of which takes an argument of the call's type —
     /// `Wrapper::from(42)` against `From<String>` and `From<i64>`. Reported at
@@ -927,6 +940,23 @@ impl TypeError {
                 Code::TypeMismatch,
                 format!(
                     "'{trait_name}::{method}' takes the receiver as its first argument, e.g. '{trait_name}::{method}(&value)'"
+                ),
+                *span,
+            ),
+            TypeError::AmbiguousConversionArgument {
+                receiver,
+                method,
+                candidates,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "ambiguous call to '{receiver}::{method}': a literal argument admits {}; annotate the argument (e.g. '42 as i64')",
+                    candidates
+                        .iter()
+                        .map(|c| format!("'{c}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and ")
                 ),
                 *span,
             ),

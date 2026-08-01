@@ -1,8 +1,8 @@
-// Two `From` impls for one type: the expected type for the argument is looked
-// up by (receiver, method) name alone, so it can come from a different impl
-// than the one the argument's type then selects. When they disagree no trait
-// matches, and a trait-less `Wrapper::from` used to reach WIR build and ICE
-// ("unresolved Call"). An unresolvable call must be a compile error.
+// A conversion call whose argument matches none of the receiver's impls.
+// The literal preselect passes (an integer literal admits neither String nor
+// bool), the argument elaborates to its default type, and the name hint
+// matches no impl — reported with the alternatives, where a trait-less
+// `Wrapper::from` used to reach WIR build and ICE ("unresolved Call").
 struct Wrapper {
     tag: i32,
 }
@@ -13,8 +13,8 @@ impl From<String> for Wrapper {
     }
 }
 
-impl From<i64> for Wrapper {
-    fn from(value: i64) -> Wrapper {
+impl From<bool> for Wrapper {
+    fn from(value: bool) -> Wrapper {
         return Wrapper { tag: 2 };
     }
 }

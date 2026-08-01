@@ -2646,7 +2646,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// then non-generic structs through the canonical decl key. Anything else
     /// (generics, enums, aliases the table has not interned) is `None`, which
     /// the probe treats as admit-everything.
-    fn probe_named_type(&self, name: &str) -> Option<TypeId> {
+    pub(super) fn probe_named_type(&self, name: &str) -> Option<TypeId> {
         let primitive = match name {
             "i8" => Some(TypeTable::I8),
             "i16" => Some(TypeTable::I16),

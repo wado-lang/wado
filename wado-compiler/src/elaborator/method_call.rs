@@ -1430,6 +1430,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .unwrap_or_default();
 
+        // Literal preselect for a conversion call (WEP 2026-07-31 phase 4):
+        // choose the impl before the argument is elaborated, so the expected
+        // type comes from the selected impl instead of whichever the
+        // name-keyed index returns first — the circular ordering this WEP
+        // diagnoses. The name hint below then finds the same impl.
+        if (static_call.method == "from" || static_call.method == "try_from")
+            && static_call.args.len() == 1
+            && let Some(recv_name) = struct_name_for_lookup.as_deref()
+        {
+            let probe = self.probe_arg_class(&static_call.args[0], ctx);
+            match self.conversion_preselect(recv_name, &static_call.method, &probe) {
+                super::method_call::ConversionPreselect::Selected(source) => {
+                    param_types = vec![source];
+                }
+                super::method_call::ConversionPreselect::Ambiguous(candidates) => {
+                    let _ = self.emit(TypeError::AmbiguousConversionArgument {
+                        receiver: recv_name.to_string(),
+                        method: static_call.method.clone(),
+                        candidates,
+                        span: static_call.span,
+                    });
+                    return TypeTable::ERROR;
+                }
+                super::method_call::ConversionPreselect::Pass => {}
+            }
+        }
+
         // Looked up once, reused for arg padding and the recorded dispatch fact.
         let static_method_defaults: Vec<(String, Option<ast::Expr>)> = struct_name_for_lookup
             .as_ref()
@@ -2955,6 +2982,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`TypeError::NoMatchingTraitArgument`] and never decides a call, so it
     /// walks the impls directly rather than sharing
     /// [`Self::locate_static_method_impl`]'s early-return traversal.
+    /// The outcome of the literal preselect over a receiver's conversion
+    /// impls (WEP 2026-07-31 phase 4).
+    ///
+    /// Selection must run before the argument is elaborated: the expected
+    /// type that shapes a literal comes from the selected impl, and picking
+    /// it afterwards is the circular ordering the WEP diagnoses. Only the
+    /// literal classes participate — a concrete argument's resolved type
+    /// already selects deterministically through the name hint, and `Admit`
+    /// arguments carry their own type.
+    pub(super) fn conversion_preselect(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+        probe: &super::method_lookup::ProbeClass,
+    ) -> ConversionPreselect {
+        use super::method_lookup::ProbeClass;
+        let admits = |spelling: &str| -> bool {
+            match probe {
+                ProbeClass::IntLit => matches!(
+                    spelling,
+                    "i8" | "i16"
+                        | "i32"
+                        | "i64"
+                        | "i128"
+                        | "u8"
+                        | "u16"
+                        | "u32"
+                        | "u64"
+                        | "u128"
+                        | "f32"
+                        | "f64"
+                ),
+                ProbeClass::FloatLit => matches!(spelling, "f32" | "f64"),
+                ProbeClass::StrLit => spelling == "String",
+                ProbeClass::Type(_) | ProbeClass::NullLit | ProbeClass::Admit => false,
+            }
+        };
+        if !matches!(
+            probe,
+            ProbeClass::IntLit | ProbeClass::FloatLit | ProbeClass::StrLit
+        ) {
+            return ConversionPreselect::Pass;
+        }
+        let (candidates, _has_blanket) = self.conversion_impl_survey(struct_name, method_name);
+        let admitted: Vec<String> = candidates.into_iter().filter(|c| admits(c)).collect();
+        match admitted.as_slice() {
+            [] => ConversionPreselect::Pass,
+            [only] => self
+                .probe_named_type(only)
+                .map_or(ConversionPreselect::Pass, ConversionPreselect::Selected),
+            _ => ConversionPreselect::Ambiguous(admitted),
+        }
+    }
+
     /// Returns `(accepted_source_types, has_blanket_impl)`.
     pub(super) fn conversion_impl_survey(
         &self,
@@ -3606,4 +3687,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         placeholder(return_type, span)
     }
+}
+
+/// See [`Elaborator::conversion_preselect`].
+pub(super) enum ConversionPreselect {
+    /// Exactly one conversion impl admits the literal: elaborate the argument
+    /// against this source type, and the name hint then finds the same impl.
+    Selected(TypeId),
+    /// Several impls admit the literal — a literal never selects, so the call
+    /// is reported with the admitted alternatives.
+    Ambiguous(Vec<String>),
+    /// The preselect does not apply (non-literal argument, no admitted
+    /// candidate, or an unresolvable source type): the existing path decides.
+    Pass,
 }

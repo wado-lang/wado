@@ -448,6 +448,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // First, determine expected parameter types to handle coercion.
         let mut param_types = self.lookup_function_param_types(effective_name);
 
+        // Literal preselect for a conversion call (WEP 2026-07-31 phase 4):
+        // see `resolve_static_method_call` — same rule, for the
+        // `Wrapper::from(42)` spelling that arrives as a plain call.
+        if let Some(pos) = effective_name.find("::") {
+            let (recv_name, method_name) = (&effective_name[..pos], &effective_name[pos + 2..]);
+            if (method_name == "from" || method_name == "try_from") && call.args.len() == 1 {
+                let probe = self.probe_arg_class(&call.args[0], ctx);
+                match self.conversion_preselect(recv_name, method_name, &probe) {
+                    super::method_call::ConversionPreselect::Selected(source) => {
+                        param_types = vec![source];
+                    }
+                    super::method_call::ConversionPreselect::Ambiguous(candidates) => {
+                        let _ = self.emit(TypeError::AmbiguousConversionArgument {
+                            receiver: recv_name.to_string(),
+                            method: method_name.to_string(),
+                            candidates,
+                            span: call.span,
+                        });
+                        return TypeTable::ERROR;
+                    }
+                    super::method_call::ConversionPreselect::Pass => {}
+                }
+            }
+        }
+
         // Whether `param_types` holds a variant payload rather than declared
         // function params (see the hole-pin loop below).
         let mut is_variant_payload = false;
