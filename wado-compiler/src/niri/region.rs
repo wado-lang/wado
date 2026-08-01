@@ -20,9 +20,9 @@ use crate::nir_arena::{
 };
 use crate::tir::{TypeId, TypeTable};
 
-use super::callee::{Callee, CallSite, CalleeMap};
+use super::callee::{Callee, CallSite};
 use super::place::write_root_local;
-use super::CtfeBuiltinMap;
+use super::ProgramFacts;
 
 /// Record the local each `&mut` parameter of `site` writes. `None` when the
 /// site does not match the signature, or when a write's place no local roots.
@@ -105,8 +105,7 @@ pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&s
 pub(super) fn region_free_reads(
     body: &Body,
     block: BlockId,
-    callees: Option<&CalleeMap>,
-    ctfe_builtins: Option<&CtfeBuiltinMap>,
+    facts: ProgramFacts<'_>,
     type_table: &TypeTable,
 ) -> Option<Vec<u32>> {
     fn record_write(body: &Body, op: Operand, written: &mut LocalSet) -> Option<()> {
@@ -137,22 +136,16 @@ pub(super) fn region_free_reads(
                 ExprKind::Call { func_id, args, .. } => {
                     // A builtin never reaches NIR as a method call, so this is
                     // the only shape that may be one instead of a callee.
-                    match callees.and_then(|m| m.get(func_id)) {
-                        Some(callee) => {
-                            let site = CallSite::of(body, e)?;
-                            write_targets(body, &site, callee, &mut written)?;
-                        }
-                        None => {
-                            let builtin = ctfe_builtins.and_then(|m| m.get(func_id))?;
-                            if builtin.is_write() {
-                                let target = args.first()?;
-                                record_write(body, target.expr, &mut written)?;
-                            }
-                        }
+                    if let Some(callee) = facts.callees.and_then(|m| m.get(func_id)) {
+                        let site = CallSite::of(body, e)?;
+                        write_targets(body, &site, callee, &mut written)?;
+                    } else if facts.ctfe_builtins.and_then(|m| m.get(func_id))?.is_write() {
+                        let target = args.first()?;
+                        record_write(body, target.expr, &mut written)?;
                     }
                 }
                 ExprKind::MethodCall { func_id, .. } => {
-                    let callee = callees.and_then(|m| m.get(func_id))?;
+                    let callee = facts.callees.and_then(|m| m.get(func_id))?;
                     let site = CallSite::of(body, e)?;
                     write_targets(body, &site, callee, &mut written)?;
                 }

@@ -26,10 +26,38 @@ use wado_compiler::nir_arena::{
 };
 use wado_compiler::nir_value_graph::ValueKind;
 use wado_compiler::niri::{
-    Callee, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, DEFAULT_STEP_BUDGET, GlobalEnv, Interpreter,
-    Lattice, is_ctfe_eligible,
+    BodySink, Callee, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, DEFAULT_STEP_BUDGET, GlobalEnv,
+    Interpreter, Lattice, is_ctfe_eligible,
 };
 use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
+
+/// The conveniences these tests want on top of the engine's own API: a
+/// reduction that drives both halves, and the two rewrites bound to the scratch
+/// [`BodySink`].
+///
+/// Here rather than in the engine, whose own callers drive the halves
+/// separately and supply their own sink — the const-fold visitor commits
+/// through the optimizer's engine so the real body's maps stay coherent.
+trait ScratchReduce {
+    fn reduce_to_lattice_full(&mut self, body: &mut Body, e: ExprId) -> Lattice;
+    fn reduce_local_in_body(&mut self, body: &mut Body, e: ExprId) -> bool;
+    fn reduce_local_block_in_body(&mut self, body: &mut Body, block: BlockId) -> bool;
+}
+
+impl ScratchReduce for Interpreter<'_> {
+    fn reduce_to_lattice_full(&mut self, body: &mut Body, e: ExprId) -> Lattice {
+        self.reduce_in_place(body, e);
+        self.reduce_to_lattice(body, e)
+    }
+
+    fn reduce_local_in_body(&mut self, body: &mut Body, e: ExprId) -> bool {
+        self.reduce_local(&mut BodySink { body }, e)
+    }
+
+    fn reduce_local_block_in_body(&mut self, body: &mut Body, block: BlockId) -> bool {
+        self.reduce_local_block(&mut BodySink { body }, block)
+    }
+}
 
 /// A deferred operand builder: appends any needed subtree to the arena `Body`
 /// and returns the operand it produces — a pooled `Operand::Value` for a pure

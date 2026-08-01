@@ -458,7 +458,7 @@ impl Interpreter<'_> {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return Lattice::Unevaluated;
         };
-        let Some(builtin) = self.ctfe_builtins.and_then(|m| m.get(func_id)) else {
+        let Some(builtin) = self.facts.ctfe_builtins.and_then(|m| m.get(func_id)) else {
             return Lattice::Unevaluated;
         };
         let args = args.as_slice();
@@ -603,7 +603,7 @@ impl Interpreter<'_> {
     /// — the engine simply has no information, same convention as
     /// un-bound locals.
     pub(super) fn global_lattice(&self, module_source: &ModuleSource, name: &str) -> Lattice {
-        let Some(globals) = self.globals else {
+        let Some(globals) = self.facts.globals else {
             return Lattice::Unevaluated;
         };
         globals

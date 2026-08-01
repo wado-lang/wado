@@ -213,6 +213,17 @@ Regions:
   per pass and const folding turns quadratic in function size. A very large
   function may find the budget spent before its later regions, which is the
   trade every budgeted evaluation makes.
+- The same charge covers every whole-body copy the engine makes before a single
+  statement runs: the scratch a call body runs on, and the loop body one
+  iteration restores for the next. All three are the same work for the same
+  reason, so all three are priced alike — a fraction of what interpreting that
+  many statements costs, but never nothing.
+- A write inside a frame goes into the value where it lies rather than
+  rebuilding the container around it. Rebuilding copies the whole backing per
+  write, which makes filling a sequence quadratic in its length. The backing is
+  shared until something writes it, so a value copied out beforehand — Wado's
+  value semantics say `let d = c` is a copy — forks at that first write and
+  keeps what it was given.
 - A `let` binding a borrow of a local place resolves to an alias inside a
   frame rather than to a value, and so does rebinding a local that already
   carries one: copying a reference copies the reference, so both handles name

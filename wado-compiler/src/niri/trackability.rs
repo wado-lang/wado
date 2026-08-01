@@ -18,9 +18,9 @@ use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_visitor::NirRefVisitor;
 
-use super::callee::{CallSite, CalleeMap};
+use super::callee::CallSite;
 use super::place::{borrowed_place_operand, lvalue_root_local, place_of};
-use super::{CtfeBuiltinMap, reachable_exprs};
+use super::{ProgramFacts, reachable_exprs};
 
 /// Every node id reachable from the body root, walked once and shared by every
 /// question below — each of which is another scan over these same two lists.
@@ -80,13 +80,9 @@ pub(super) struct Trackability {
 
 impl Trackability {
     /// For a compile-time frame, which performs the writes it walks.
-    pub(super) fn in_frame(
-        body: &Body,
-        ctfe_builtins: Option<&CtfeBuiltinMap>,
-        callees: Option<&CalleeMap>,
-    ) -> Self {
+    pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>) -> Self {
         let reachable = Reachable::of(body);
-        let reached = Reached::in_frame(body, &reachable, ctfe_builtins, callees);
+        let reached = Reached::in_frame(body, &reachable, facts);
         let scan = MentionScan::of(body, &reachable, &reached);
         Self {
             aggregate_locals: scan.aggregate_safe_locals(&reached),
@@ -96,13 +92,9 @@ impl Trackability {
 
     /// For an ordinary walk, which performs nothing, so no write it reaches is
     /// one it carries out.
-    pub(super) fn outside_frame(
-        body: &Body,
-        ctfe_builtins: Option<&CtfeBuiltinMap>,
-        callees: Option<&CalleeMap>,
-    ) -> Self {
+    pub(super) fn outside_frame(body: &Body, facts: ProgramFacts<'_>) -> Self {
         let reachable = Reachable::of(body);
-        let reached = Reached::outside_frame(body, &reachable, ctfe_builtins, callees);
+        let reached = Reached::outside_frame(body, &reachable, facts);
         let scan = MentionScan::of(body, &reachable, &reached);
         Self {
             aggregate_locals: scan.aggregate_safe_locals(&reached),
@@ -144,14 +136,9 @@ struct Reached {
 }
 
 impl Reached {
-    fn in_frame(
-        body: &Body,
-        reachable: &Reachable,
-        ctfe_builtins: Option<&CtfeBuiltinMap>,
-        callees: Option<&CalleeMap>,
-    ) -> Self {
+    fn in_frame(body: &Body, reachable: &Reachable, facts: ProgramFacts<'_>) -> Self {
         let performed = performed_exprs(body, reachable);
-        let mut reached = Self::collect(body, reachable, ctfe_builtins, callees, &performed);
+        let mut reached = Self::collect(body, reachable, facts, &performed);
         for e in &performed {
             if let ExprKind::Assign { target, .. } = &body.exprs[*e].kind
                 && place_of(body, (*target).into()).is_some()
@@ -190,15 +177,10 @@ impl Reached {
     /// carries out. The reads are collected as [`Self::in_frame`] collects
     /// them: what a statement-position write builtin reads is read wherever
     /// that mention appears, whoever performs the write.
-    fn outside_frame(
-        body: &Body,
-        reachable: &Reachable,
-        ctfe_builtins: Option<&CtfeBuiltinMap>,
-        callees: Option<&CalleeMap>,
-    ) -> Self {
+    fn outside_frame(body: &Body, reachable: &Reachable, facts: ProgramFacts<'_>) -> Self {
         let performed = performed_exprs(body, reachable);
         Self {
-            reads: Self::collect(body, reachable, ctfe_builtins, callees, &performed).reads,
+            reads: Self::collect(body, reachable, facts, &performed).reads,
             ..Self::default()
         }
     }
@@ -207,14 +189,13 @@ impl Reached {
     fn collect(
         body: &Body,
         reachable: &Reachable,
-        ctfe_builtins: Option<&CtfeBuiltinMap>,
-        callees: Option<&CalleeMap>,
+        facts: ProgramFacts<'_>,
         performed: &IndexSet<ExprId>,
     ) -> Self {
         let mut reached = Self::default();
         for e in &reachable.exprs {
-            reached.collect_builtin_borrows(body, *e, ctfe_builtins, performed);
-            reached.collect_call_borrows(body, *e, callees, performed);
+            reached.collect_builtin_borrows(body, *e, facts, performed);
+            reached.collect_call_borrows(body, *e, facts, performed);
         }
         reached
     }
@@ -225,13 +206,13 @@ impl Reached {
         &mut self,
         body: &Body,
         e: ExprId,
-        ctfe_builtins: Option<&CtfeBuiltinMap>,
+        facts: ProgramFacts<'_>,
         performed: &IndexSet<ExprId>,
     ) {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return;
         };
-        let Some(builtin) = ctfe_builtins.and_then(|m| m.get(func_id)) else {
+        let Some(builtin) = facts.ctfe_builtins.and_then(|m| m.get(func_id)) else {
             return;
         };
         if !builtin.is_write() {
@@ -258,29 +239,25 @@ impl Reached {
         &mut self,
         body: &Body,
         e: ExprId,
-        callees: Option<&CalleeMap>,
+        facts: ProgramFacts<'_>,
         performed: &IndexSet<ExprId>,
     ) {
         let Some(site) = CallSite::of(body, e) else {
             return;
         };
-        let Some(callee) = callees.and_then(|m| m.get(&site.func_id)) else {
+        let Some(callee) = facts.callees.and_then(|m| m.get(&site.func_id)) else {
             return;
         };
         let Some(operands) = site.matching_operands(callee) else {
             return;
         };
         let at_statement = performed.contains(&e);
-        let mut records: Vec<(Operand, Reach)> = Vec::new();
         for (index, op) in operands {
             match (callee.writes_param(index), at_statement) {
-                (false, _) if callee.reads_only(index) => records.push((op, Reach::Read)),
-                (true, true) => records.push((op, Reach::Write)),
+                (false, _) if callee.reads_only(index) => self.record(body, op, Reach::Read),
+                (true, true) => self.record(body, op, Reach::Write),
                 (false, _) | (true, false) => {}
             }
-        }
-        for (op, reach) in records {
-            self.record(body, op, reach);
         }
     }
 

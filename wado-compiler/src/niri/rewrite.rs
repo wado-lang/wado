@@ -28,7 +28,7 @@ use super::{BodySink, EditSink, Interpreter, Lattice, PatBindings};
 impl Interpreter<'_> {
     /// Splice each constant-condition `if` statement of `block` into `block`
     /// itself, leaving the arm the condition chooses.
-    pub(crate) fn reduce_local_block<S: EditSink>(&mut self, sink: &mut S, block: BlockId) -> bool {
+    pub fn reduce_local_block<S: EditSink>(&mut self, sink: &mut S, block: BlockId) -> bool {
         let body = sink.body();
         let has_constant_if = body.blocks[block].stmts.iter().any(|s| {
             matches!(
@@ -68,11 +68,6 @@ impl Interpreter<'_> {
         true
     }
 
-    pub fn reduce_local_in_body(&mut self, body: &mut Body, e: ExprId) -> bool {
-        let mut sink = BodySink { body };
-        self.reduce_local(&mut sink, e)
-    }
-
     /// Reduce `e` to its flow-sensitive constant value or collapse a constant
     /// branch, committing every edit through `sink`.
     ///
@@ -83,7 +78,7 @@ impl Interpreter<'_> {
     /// would report a change at every visit and the worklist would never
     /// settle — and both rewrites replace the node with a kind neither ever
     /// matches again.
-    pub(crate) fn reduce_local<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
+    pub fn reduce_local<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
         if let Some(value) = self.flow_fold_candidate(sink.body(), e) {
             if value.is_scalar() {
                 if sink.replace_with_value(e, value.clone()) {
@@ -293,12 +288,6 @@ impl Interpreter<'_> {
         }
     }
 
-    /// In-place `reduce_local_block` for the CTFE scratch-body path.
-    pub fn reduce_local_block_in_body(&mut self, body: &mut Body, block: BlockId) -> bool {
-        let mut sink = BodySink { body };
-        self.reduce_local_block(&mut sink, block)
-    }
-
     /// Bottom-up reduce the subtree rooted at `e`, so a child fold is
     /// observable at its parent. Used by CTFE to evaluate a callee body whose
     /// children no outer walk has pre-reduced.
@@ -320,8 +309,8 @@ impl Interpreter<'_> {
             }
         };
         changed |= match node {
-            NodeRef::Expr(e) => self.reduce_local_in_body(body, e),
-            NodeRef::Block(b) => self.reduce_local_block_in_body(body, b),
+            NodeRef::Expr(e) => self.reduce_local(&mut BodySink { body }, e),
+            NodeRef::Block(b) => self.reduce_local_block(&mut BodySink { body }, b),
             NodeRef::Stmt(_) | NodeRef::Pat(_) => false,
         };
         changed
@@ -396,14 +385,6 @@ impl Interpreter<'_> {
             Lattice::Unevaluated => self.expr_to_lattice(body, e),
             other => other,
         }
-    }
-
-    /// Reduce the subtree bottom-up in place (so multi-level constant operands
-    /// fold), then project to a lattice. The standalone entry point for callers
-    /// with an unreduced expression — the `niri` unit tests.
-    pub fn reduce_to_lattice_full(&mut self, body: &mut Body, e: ExprId) -> Lattice {
-        self.reduce_in_place(body, e);
-        self.reduce_to_lattice(body, e)
     }
 
     /// Collapse an `if` with a constant condition or equal arms.

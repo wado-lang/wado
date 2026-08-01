@@ -15,6 +15,7 @@
 //! - `pattern` — whether a pattern matches a value.
 //! - `place` — what a borrow or lvalue chain names.
 //! - `region` — which blocks are self-contained enough to run as a frame.
+//! - `callee` — who a call names, and what its operands bind to.
 //!
 //! What the engine can evaluate is stated in
 //! `docs/wep-2026-04-27-nir-interpreter.md`, not here.
@@ -159,7 +160,7 @@ use trackability::Trackability;
 /// Commit sink for niri's body rewrites, so one set of rewrites serves two
 /// backends: [`BodySink`] over a throwaway CTFE body, and the optimize layer's
 /// `EngineSink`, which keeps the real body's maps coherent.
-pub(crate) trait EditSink {
+pub trait EditSink {
     fn body(&self) -> &Body;
     /// Whether a value this sink declines has to be remembered for later
     /// lattice reads.
@@ -196,7 +197,7 @@ pub(crate) trait EditSink {
 /// In-place [`EditSink`] over a raw `Body`. Used for CTFE scratch reduction,
 /// where the body is discarded after the value is read, so duplicated child
 /// references and stale parent links do not matter.
-pub(crate) struct BodySink<'a> {
+pub struct BodySink<'a> {
     pub body: &'a mut Body,
 }
 
@@ -324,19 +325,31 @@ struct FrameState {
     region_misses: IndexSet<ExprId>,
 }
 
+/// What the engine knows beyond the body in front of it.
+///
+/// Every field is optional and every absence costs folds rather than
+/// correctness: without the callee map a `Call` stays [`Lattice::Unevaluated`],
+/// without the builtin map an `array_get` is an opaque call, without the global
+/// env a `GlobalVarGet` is unevaluated, and without the field env so is
+/// `GLOBAL.f`. The compiler runs the engine in two configurations — one with
+/// the program-wide view, one with only what running a call needs — so a
+/// partial one is by design, not an oversight.
+///
+/// Grouped rather than four independent knobs, so a walk that needs the
+/// program view asks for one thing and the rule above has one place to live.
+#[derive(Default, Clone, Copy)]
+pub(crate) struct ProgramFacts<'a> {
+    pub(crate) callees: Option<&'a CalleeMap>,
+    pub(crate) ctfe_builtins: Option<&'a CtfeBuiltinMap>,
+    globals: Option<&'a GlobalEnv>,
+    global_fields: Option<&'a GlobalFieldEnv>,
+}
+
 /// Partial evaluator over the arena `Body`.
 pub struct Interpreter<'a> {
     type_table: &'a TypeTable,
     frame: FrameState,
-    /// When `None`, a `Call` node stays [`Lattice::Unevaluated`].
-    callees: Option<&'a CalleeMap>,
-    /// When `None`, an `array_get` / `array_len` call is just an opaque call.
-    ctfe_builtins: Option<&'a CtfeBuiltinMap>,
-    /// When `None`, a `GlobalVarGet` stays [`Lattice::Unevaluated`].
-    globals: Option<&'a GlobalEnv>,
-    /// When `None`, `FieldAccess(GlobalVarGet(_), _)` stays
-    /// [`Lattice::Unevaluated`].
-    global_fields: Option<&'a GlobalFieldEnv>,
+    facts: ProgramFacts<'a>,
     /// Hard ceiling on CTFE work before bailing. On zero, further attempts
     /// return `Unevaluated`.
     step_budget: u32,
@@ -437,10 +450,7 @@ impl<'a> Interpreter<'a> {
         Self {
             type_table,
             frame: FrameState::default(),
-            callees: None,
-            ctfe_builtins: None,
-            globals: None,
-            global_fields: None,
+            facts: ProgramFacts::default(),
             step_budget: DEFAULT_STEP_BUDGET,
             call_stack: Vec::new(),
         }
@@ -449,14 +459,14 @@ impl<'a> Interpreter<'a> {
     /// Install the [`CalleeMap`]. Without it, every `Call` node remains
     /// [`Lattice::Unevaluated`] — the engine has no body to look up.
     pub fn with_callees(&mut self, callees: &'a CalleeMap) -> &mut Self {
-        self.callees = Some(callees);
+        self.facts.callees = Some(callees);
         self
     }
 
     /// Install the sequence-builtin lookup. Without it, an element or length
     /// read stays opaque.
     pub fn with_ctfe_builtins(&mut self, ctfe_builtins: &'a CtfeBuiltinMap) -> &mut Self {
-        self.ctfe_builtins = Some(ctfe_builtins);
+        self.facts.ctfe_builtins = Some(ctfe_builtins);
         self
     }
 
@@ -464,7 +474,7 @@ impl<'a> Interpreter<'a> {
     /// [`Lattice::Unevaluated`] — the engine has no initializer lattice to look
     /// up.
     pub fn with_globals(&mut self, globals: &'a GlobalEnv) -> &mut Self {
-        self.globals = Some(globals);
+        self.facts.globals = Some(globals);
         self
     }
 
@@ -472,7 +482,7 @@ impl<'a> Interpreter<'a> {
     /// `FieldAccess(GlobalVarGet(_), _)` stays [`Lattice::Unevaluated`].
     /// Mirrors [`with_globals`](Self::with_globals).
     pub fn with_global_fields(&mut self, global_fields: &'a GlobalFieldEnv) -> &mut Self {
-        self.global_fields = Some(global_fields);
+        self.facts.global_fields = Some(global_fields);
         self
     }
 
@@ -492,7 +502,8 @@ impl<'a> Interpreter<'a> {
     }
 
     fn global_field(&self, key: &GlobalKey, field_name: &str) -> Lattice {
-        self.global_fields
+        self.facts
+            .global_fields
             .and_then(|m| m.get(key))
             .and_then(|m| m.get(field_name))
             .cloned()
@@ -504,7 +515,7 @@ impl<'a> Interpreter<'a> {
     /// [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
         self.frame.aggregate_locals =
-            Trackability::outside_frame(body, self.ctfe_builtins, self.callees).aggregate_locals;
+            Trackability::outside_frame(body, self.facts).aggregate_locals;
     }
 
     pub fn record_ref_global_aliases(&mut self, body: &Body) {

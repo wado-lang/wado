@@ -12,6 +12,7 @@
 
 use crate::const_eval::Value;
 use crate::name::RefKind;
+use crate::nir::NirParam;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
@@ -392,7 +393,7 @@ impl Interpreter<'_> {
     /// when the expression is not a call the frame knows.
     fn exec_call_stmt(&mut self, body: &Body, e: ExprId) -> Option<Flow> {
         let (key, _) = self.call_target(body, e)?;
-        if !self.callees.is_some_and(|c| c.contains_key(&key)) {
+        if !self.facts.callees.is_some_and(|c| c.contains_key(&key)) {
             return None;
         }
         let Some(run) = self.run_call(body, e, true) else {
@@ -456,7 +457,7 @@ impl Interpreter<'_> {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return None;
         };
-        let builtin = *self.ctfe_builtins.and_then(|m| m.get(func_id))?;
+        let builtin = *self.facts.ctfe_builtins.and_then(|m| m.get(func_id))?;
         let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
         match builtin {
             CtfeBuiltin::ArraySet => Some(self.exec_element_write(body, &args)),
@@ -655,7 +656,7 @@ impl Interpreter<'_> {
     /// of it, which is what makes an argument's place worth tracking for
     /// aliasing. `is_mut_ref` is consulted as well as the type: it is captured
     /// pre-boxing, so it answers where the type no longer reads as a borrow.
-    fn is_by_reference(&self, param: &crate::nir::NirParam) -> bool {
+    fn is_by_reference(&self, param: &NirParam) -> bool {
         param.is_mut_ref
             || RefKind::from_resolved(self.type_table.get(param.type_id)).is_some()
     }
@@ -678,7 +679,7 @@ impl Interpreter<'_> {
     /// The body runs on a scratch copy, so the callee's shared arena — held
     /// under an immutable borrow — is never mutated.
     fn run_call(&mut self, body: &Body, e: ExprId, may_write: bool) -> Option<CallRun> {
-        let callees = self.callees?;
+        let callees = self.facts.callees?;
         let (key, args) = self.call_target(body, e)?;
         let callee_rc = callees.get(&key)?;
         if self.call_stack.iter().any(|k| k == &key) {
@@ -722,7 +723,7 @@ impl Interpreter<'_> {
         self.charge_body_copy(callee_body)?;
         self.call_stack.push(key);
         let mut scratch = callee_body.nodes_only_clone();
-        let track = Trackability::in_frame(&scratch, self.ctfe_builtins, self.callees);
+        let track = Trackability::in_frame(&scratch, self.facts);
         let caller = self.swap_frame(FrameState::for_call(track, bound));
         let run = self.exec_frame(&mut scratch, targets, returns_unit);
         self.swap_frame(caller);
@@ -805,13 +806,7 @@ impl Interpreter<'_> {
         if self.frame.region_misses.contains(&e) {
             return None;
         }
-        let free = region_free_reads(
-            body,
-            block,
-            self.callees,
-            self.ctfe_builtins,
-            self.type_table,
-        )?;
+        let free = region_free_reads(body, block, self.facts, self.type_table)?;
         let mut seeds: Vec<(u32, Value)> = Vec::with_capacity(free.len());
         for index in free {
             if self.frame.alias_involves(index) {
@@ -830,7 +825,7 @@ impl Interpreter<'_> {
         self.charge_body_copy(body)?;
         let mut scratch = body.nodes_only_clone();
         scratch.root = block;
-        let track = Trackability::in_frame(&scratch, self.ctfe_builtins, self.callees);
+        let track = Trackability::in_frame(&scratch, self.facts);
         let caller = self.swap_frame(FrameState::for_call(track, seeds));
         let flow = self.exec_block(&mut scratch, block);
         self.swap_frame(caller);

@@ -27,6 +27,12 @@ Never reintroduce, regardless of perf:
 - an `ExprId`-keyed cache / side-table. A pass needing a value uses
   born-as-operands or a scratch walk (`Engine::scoped_const_reads`).
 
+The one `ExprId`-keyed memo that remains is niri's `scratch_folds`, and it is
+scoped to the throwaway CTFE body: that backend promotes nothing, so a fold has
+nowhere else to go. A sink declares whether it needs it
+(`EditSink::memoizes_declined_folds`); the real body's sink does not, because
+the node a value was folded from is still standing there to recompute from.
+
 Details: `docs/wep-2026-06-15-live-value-graph.md`.
 
 ## Development Cycle
