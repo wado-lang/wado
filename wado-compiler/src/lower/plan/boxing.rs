@@ -180,6 +180,14 @@ fn shadow_one_function(func: &mut crate::tir::TirFunction, plan: &BoxPlan, type_
     func.address_taken_locals = effective_address_taken;
 }
 
+/// One `Ref` / `MutRef` `TypeId` about to be redefined onto its `Box<T>` struct.
+struct BoxRewrite {
+    type_id: TypeId,
+    box_type: ResolvedType,
+    payload: TypeId,
+    is_shared: bool,
+}
+
 struct TypeBuilder {
     box_struct_types: IndexMap<TypeId, TypeId>,
     box_type_ids: IndexSet<TypeId>,
@@ -328,29 +336,29 @@ impl TypeBuilder {
     /// pass transforms variant expressions (`VariantConstruct`) to wrap/unwrap Box structs,
     /// while codegen handles the type mapping from `Option(primitive)` to a nullable Box reference.
     fn rewrite_types(&mut self, type_table: &mut TypeTable) {
-        // Collect entries to rewrite (can't mutate while iterating).
-        // The tuple holds (rewritten_type_id, new_resolved_type, payload_inner_type_id)
-        // so that we can register every rewritten id as a Box wrapper of
-        // its original `inner` payload — many `Ref(T)` TypeIds may
-        // collapse onto the same Box content, and downstream peeling
-        // needs the mapping for each of them, not just the canonical
-        // wrapper id stored in `box_struct_types`.
-        let mut replacements: Vec<(TypeId, ResolvedType, TypeId)> = Vec::new();
+        // Many `Ref(T)` TypeIds collapse onto the same Box content, so every
+        // rewritten id — not just the canonical wrapper in `box_struct_types` —
+        // is registered as a wrapper of its payload for downstream peeling.
+        let mut replacements: Vec<BoxRewrite> = Vec::new();
 
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
-            match type_table.get(type_id).clone() {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    if let Some(&box_type_id) = self.box_struct_types.get(&inner) {
-                        // Replace Ref(primitive) with the Box struct type
-                        replacements.push((type_id, type_table.get(box_type_id).clone(), inner));
-                    }
-                }
-                _ => {}
+            let (inner, is_shared) = match type_table.get(type_id).clone() {
+                ResolvedType::Ref(inner) => (inner, true),
+                ResolvedType::MutRef(inner) => (inner, false),
+                _ => continue,
+            };
+            if let Some(&box_type_id) = self.box_struct_types.get(&inner) {
+                replacements.push(BoxRewrite {
+                    type_id,
+                    box_type: type_table.get(box_type_id).clone(),
+                    payload: inner,
+                    is_shared,
+                });
             }
         }
 
-        for (type_id, new_type, _) in &replacements {
-            type_table.replace_type(*type_id, new_type.clone());
+        for r in &replacements {
+            type_table.replace_type(r.type_id, r.box_type.clone());
         }
 
         // Add all rewritten TypeIds to box_type_ids so that Deref/Assign
@@ -359,9 +367,12 @@ impl TypeBuilder {
         // passes can call `TypeTable::peel_refs_and_box` to look through
         // the wrapper in one step (used by DCE inspect scanning and the
         // canonical dispatch WIR builder).
-        for (type_id, _, inner) in &replacements {
-            self.box_type_ids.insert(*type_id);
-            type_table.register_box_payload(*type_id, *inner);
+        for r in &replacements {
+            self.box_type_ids.insert(r.type_id);
+            type_table.register_box_payload(r.type_id, r.payload);
+            if r.is_shared {
+                type_table.register_shared_box(r.type_id);
+            }
         }
         // Also register the canonical `Box<T>` wrapper ids that
         // `create_needed_box_types` minted, so callers can ask for the

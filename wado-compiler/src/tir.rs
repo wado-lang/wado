@@ -617,6 +617,11 @@ impl TypeSet {
         self.words[word] |= mask;
         newly
     }
+
+    pub(crate) fn contains(&self, id: TypeId) -> bool {
+        let (word, mask) = Self::slot(id);
+        self.words.get(word).is_some_and(|w| w & mask != 0)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -662,6 +667,11 @@ pub struct TypeTable {
     ///
     /// A sparse [`TypeMap`] keyed by the wrapper `TypeId`.
     box_payload_types: TypeMap<TypeId>,
+    /// The wrapper `TypeId`s the boxing pass redefined from a *shared* `&T`.
+    /// `&T` and `&mut T` get the same `Box<T>` content, so this is the only
+    /// surviving record of which boxed handles cannot be written through — see
+    /// [`Self::is_mut_box`].
+    shared_box_type_ids: TypeSet,
     /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
     struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
@@ -809,6 +819,7 @@ impl TypeTable {
             generic_assoc_type_defs: IndexMap::default(),
             redirects: TypeMap::default(),
             box_payload_types: TypeMap::default(),
+            shared_box_type_ids: TypeSet::default(),
             struct_name_index: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
             symbol_by_type: TypeMap::default(),
@@ -1953,6 +1964,20 @@ impl TypeTable {
     /// `None` if the given `TypeId` is not a registered wrapper.
     pub fn box_payload_of(&self, wrapper: TypeId) -> Option<TypeId> {
         self.box_payload_types.get(wrapper).copied()
+    }
+
+    /// Record that `wrapper` was redefined from a shared `&T`, so it cannot be
+    /// written through. Called by the boxing pass; see [`Self::is_mut_box`].
+    pub fn register_shared_box(&mut self, wrapper: TypeId) {
+        self.shared_box_type_ids.insert(wrapper);
+    }
+
+    /// Whether `wrapper` is a boxed reference that can be written through: a
+    /// `&mut T` collapsed onto `Box<T>`, where `*q = v` writes the box the
+    /// caller still holds. Only ids known to come from a shared `&T` answer
+    /// `false`, so an unclassified wrapper stays writable.
+    pub fn is_mut_box(&self, wrapper: TypeId) -> bool {
+        self.box_payload_types.get(wrapper).is_some() && !self.shared_box_type_ids.contains(wrapper)
     }
 
     pub fn make_ref(&mut self, inner: TypeId) -> TypeId {
