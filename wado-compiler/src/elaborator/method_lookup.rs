@@ -2948,14 +2948,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         span: Span,
     ) {
-        // Blanket candidates are excluded from the count. Wado does not scope
-        // method candidates by which traits are imported, so a foreign
-        // `impl<T: Bound> Foreign for T` reaches every receiver: counting it
-        // would make adding a blanket impl to a library a breaking change for
-        // every downstream method of that name. A blanket is the general case
-        // and loses to any impl written for the receiver, which is the
-        // specific-impls-win ordering the language already applies within one
-        // trait. Selection is untouched — this decides only what is reported.
+        // Blanket candidates are excluded from the count: a blanket loses to
+        // any impl written for the receiver, and counting it would make a
+        // library adding one a breaking change for every downstream method of
+        // that name (WEP 2026-07-31, blanket exception). Selection is
+        // untouched — this decides only what is reported.
         // The collision is counted on declarations, so two same-named traits
         // from different modules still collide even though their spellings
         // agree — identity is the declaration, not the name.

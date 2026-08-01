@@ -51,17 +51,16 @@ parameterizing the operator traits (`trait Add<Rhs = Self>`), a stdlib redesign
 outside this WEP; `find_arithmetic_trait_impl`'s first-impl scan is safe until
 then because coherence permits only one impl.
 
-The static path is not merely name-only, it is circular. `Type::m(args)`
-elaborates its arguments against parameter types that
+The static path was not merely name-only, it was circular. `Type::m(args)`
+elaborated its arguments against parameter types that
 `lookup_static_method_param_types_keyed` finds by (receiver, method) name —
 `static_method_index` is searched with `find`, so with two conversion impls it
-returns whichever comes first — and _then_ selects the impl from the resulting
-argument type. Selection shapes the argument, and the argument drives selection.
-Where the two disagree, no impl matches: `Wrapper::from(42)` against
-`From<String>` beside `From<i64>` typed the literal `i32` and matched neither,
-which is now reported rather than reaching WIR build as a trait-less
-`Wrapper::from` (an ICE until this WEP's groundwork landed). Argument-directed
-selection is what removes the circularity, not an extra feature layered on it.
+returns whichever comes first — and _then_ selected the impl from the
+resulting argument type. Selection shaped the argument, and the argument drove
+selection; where the two disagreed, no impl matched (`Wrapper::from(42)`
+against `From<String>` beside `From<i64>` typed the literal `i32` and matched
+neither — an ICE at WIR build). Argument-directed selection is what removes
+the circularity, not an extra feature layered on it.
 
 The design constraint is the
 [design philosophy](./design-philosophy.md): no function overloading. This WEP
@@ -227,10 +226,10 @@ trait still has several argument lists for the receiver and no turbofish is
 written, argument-directed selection applies within it.
 
 No new grammar: `Take::<A>::take(f, x)` is the static-path shape
-`List::<i32>::with_capacity(10)` already uses. What is new is only resolution —
-for a static path `Head::name(args)`, `Head` resolves in the type namespace as
-today (type → associated function; `interface` → effect operation), and a trait
-head, today an `UnknownFunction` error, now makes it a UFCS call. The reflect
+`List::<i32>::with_capacity(10)` already uses. Only resolution differs — for a
+static path `Head::name(args)`, `Head` resolves in the type namespace (type →
+associated function; `interface` → effect operation), and a trait head makes
+it a UFCS call. The reflect
 intrinsics (`ReflectStruct::<T>::members()`) keep their existing spelling,
 where the turbofish names the reflected type instead — they are compiler
 intrinsics whose traits declare no type parameters, so the two readings never
@@ -289,16 +288,16 @@ rejected it instead of a bare "method not found".
 
 ### Interactions
 
-| Feature           | Interaction                                                                                                                                                                                                                                                                                                                                                                                                   |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Operators         | Indexing already conforms to this rule. Arithmetic cannot collide yet — the prelude's operator traits take no type parameters, so RHS selection is gated on parameterizing them (`trait Add<Rhs = Self>`). `Eq` / `Ord` take no trait arguments — unaffected.                                                                                                                                                 |
-| `From` / `?`      | `?`'s conversion stays target-type-directed by design. `Type::from(x)` now preselects by the literal's class before the argument is elaborated: one admitted impl supplies the expected type (order-independently — the name-keyed guess used to depend on declaration order), several admitted impls are an error asking for a cast, and a non-literal argument selects through its resolved type as before. |
-| Default arguments | Owned by the trait declaration, identical across an overload set — no interaction with selection.                                                                                                                                                                                                                                                                                                             |
-| Effects           | Never considered by selection; the chosen method's `with` clause is checked as today.                                                                                                                                                                                                                                                                                                                         |
-| Coherence         | Untouched. Selection picks an argument list among impls coherence already accepts; overlapping impls of one instantiation remain errors.                                                                                                                                                                                                                                                                      |
-| Newtypes          | Inherited impls are candidates on the newtype receiver as today; the same grouping and selection apply.                                                                                                                                                                                                                                                                                                       |
-| Monomorphization  | Unaffected. The chosen trait's spelling lands in the mangled name, which `InstantiationKey` already discriminates on — the same shape the indexing and `From` paths produce today.                                                                                                                                                                                                                            |
-| LSP / tooling     | Hover and go-to-definition read the recorded dispatch fact; probe typing leaves no persistent state.                                                                                                                                                                                                                                                                                                          |
+| Feature           | Interaction                                                                                                                                                                                                                                                                                                                                           |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Operators         | Indexing already conforms to this rule. Arithmetic cannot collide yet — the prelude's operator traits take no type parameters, so RHS selection is gated on parameterizing them (`trait Add<Rhs = Self>`). `Eq` / `Ord` take no trait arguments — unaffected.                                                                                         |
+| `From` / `?`      | `?`'s conversion stays target-type-directed by design. `Type::from(x)` preselects by the literal's class before the argument is elaborated, independent of impl declaration order: one admitted impl supplies the expected type, several admitted impls are an error asking for a cast, and a non-literal argument selects through its resolved type. |
+| Default arguments | Owned by the trait declaration, identical across an overload set — no interaction with selection.                                                                                                                                                                                                                                                     |
+| Effects           | Never considered by selection; the chosen method's `with` clause is checked as today.                                                                                                                                                                                                                                                                 |
+| Coherence         | Untouched. Selection picks an argument list among impls coherence already accepts; overlapping impls of one instantiation remain errors.                                                                                                                                                                                                              |
+| Newtypes          | Inherited impls are candidates on the newtype receiver as today; the same grouping and selection apply.                                                                                                                                                                                                                                               |
+| Monomorphization  | Unaffected. The chosen trait's spelling lands in the mangled name, which `InstantiationKey` already discriminates on — the same shape the indexing and `From` paths produce today.                                                                                                                                                                    |
+| LSP / tooling     | Hover and go-to-definition read the recorded dispatch fact; probe typing leaves no persistent state.                                                                                                                                                                                                                                                  |
 
 ### Non-goals
 
@@ -314,15 +313,15 @@ rejected it instead of a bare "method not found".
 
 ## Implementation
 
-Landing order — each phase keeps the suite green and is useful alone:
+Four phases, each independently useful — the escape hatch landed before any
+tightening:
 
-1. Qualified calls: trait-head resolution in `resolve_static_method_call`
-   (`method_call.rs:1116`) — where a trait head is today an `UnknownFunction`
-   error (`method_call.rs:1168`) — binding the first argument as the receiver
-   and recording an ordinary `MethodDispatch`. No parser change: both
-   `Greet::greet(&p)` and `Take::<A>::take(&f, x)` already parse, and the AST
-   retains the turbofish, so the trait's argument list is available to
-   resolution. Pure addition; provides the escape hatch before any tightening.
+1. Qualified calls: trait-head resolution in `resolve_static_method_call` —
+   the branch where a head resolving to no type is otherwise an
+   `UnknownFunction` error — binding the first argument as the receiver. No
+   parser change: both `Greet::greet(&p)` and `Take::<A>::take(&f, x)`
+   already parse, and the AST retains the turbofish, so the trait's argument
+   list is available to resolution.
 
    Static-call diagnostics already name the receiver in symbol notation
    (`static_call_symbol_name`), so a `Take<A>` / `Take<B>` pair renders as two
@@ -354,7 +353,7 @@ Landing order — each phase keeps the suite green and is useful alone:
    full-list zip recorded parameter slots instead, so the specialized clone's
    rewrite shifted past the last parameter and silently no-op'd — the clone
    kept its `fn`-typed param and its canonical cast trapped on the functor the
-   rewritten call site passes. Both call spellings now produce the same key,
+   rewritten call site passes. Both call spellings produce the same key,
    which is also what keeps one specialized clone per callee instead of two
    same-named ones.
 
@@ -365,11 +364,11 @@ Landing order — each phase keeps the suite green and is useful alone:
    decides only what is reported, which keeps the change's blast radius to the
    set of programs that error.
 
-   The audit found two shapes. `x.fmt(&mut f)` on a primitive is a real
+   Two shapes fall under it. `x.fmt(&mut f)` on a primitive is a real
    collision (`Display`, `Binary`, `Octal`, `LowerHex`, `UpperHex` all declare
-   `fmt`), and the fixtures migrated to `Display::fmt(&x, &mut f)` — the
-   migration this phase exists to enable. A foreign blanket beside a local
-   impl is not a collision, which is what the blanket exception above records.
+   `fmt`) — spelled `Display::fmt(&x, &mut f)`, the migration this phase
+   exists to enable. A foreign blanket beside a local impl is not a
+   collision, which is what the blanket exception above records.
 
 3. Argument-directed selection: `probe_arg_class` runs per argument before
    lookup (cheap, side-effect-free), and `select_trait_match` filters a
@@ -422,12 +421,11 @@ Landing order — each phase keeps the suite green and is useful alone:
    (`trait Add<Rhs = Self>`), which is what would make RHS-directed operator
    selection expressible in the first place.
 
-Test surface: extend `trait_ambiguous_argument_lists.wado` (resolvable variants
-with a discriminating concrete argument), a cross-trait concrete-receiver
-ambiguity fixture, qualified-call fixtures for each collision shape,
-`trait_query.rs` cases proving `Base::name(&x)` resolves a diamond, and a guard
-that `trait_argument_lists_operators_unaffected.wado` behavior is now the
-general rule rather than an exception.
+Test surface: the `ufcs_*`, `trait_argument_*`, `from_overload_*`, and
+`cross_module_same_name_*` fixture families in `wado-compiler/tests/fixtures/`
+— one fixture per rule above (selection, each ambiguity shape, each escape,
+the scope tie-break, the receiver-mode errors), plus `error_*` fixtures
+pinning every diagnostic's message.
 
 ## Consequences
 

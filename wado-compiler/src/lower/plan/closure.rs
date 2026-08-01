@@ -2053,13 +2053,9 @@ impl TirRefVisitor for FnParamSpecCollector<'_> {
                     // callee's params lead with `self`. Skip both so the
                     // recorded indices are value-argument indices — the
                     // convention the MethodCall arm records and the
-                    // `+ param_offset` shift in the generate step assumes.
-                    // Zipping the full lists aligns positionally but records
-                    // param-slot indices, which the shift then moves past the
-                    // last parameter: the clone's rewrite silently no-ops and
-                    // its untyped fn param traps at the call's functor arg.
-                    // One convention also means one key — and one specialized
-                    // clone — per callee, however the call is spelled.
+                    // `+ param_offset` shift in the generate step assumes —
+                    // and both call spellings share one key, hence one
+                    // specialized clone per callee.
                     let offset = self_param_offset(&callee) as usize;
                     if args.len() >= offset {
                         let value_params: Vec<TirParam> =
