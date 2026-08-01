@@ -1322,7 +1322,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // An unannotated closure argument infers its parameter types from
             // this; without it the closure's functor is generated with
             // `unknown` params and dropped before codegen.
-            self.record_call_param_types(call_id, param_types);
+            self.record_call_param_types(call_id, param_types.clone());
             self.sem.types.static_method_dispatch.insert(
                 call_id,
                 super::sem::types::StaticMethodDispatch {
@@ -1330,6 +1330,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_is_mut,
                     type_args,
                     param_defaults,
+                    param_types,
                     self_in_args: true,
                 },
             );
@@ -2229,12 +2230,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut,
                 type_args: method_type_args,
                 param_defaults: static_method_defaults,
-<<<<<<< HEAD
                 param_types: param_types.clone(),
-||||||| 50cf17a00
-=======
                 self_in_args: false,
->>>>>>> origin/main
             },
         );
 
@@ -2317,12 +2314,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut: Vec::new(),
                 type_args: method_type_args.to_vec(),
                 param_defaults: static_method_defaults.to_vec(),
-<<<<<<< HEAD
                 param_types: Vec::new(),
-||||||| 50cf17a00
-=======
                 self_in_args: false,
->>>>>>> origin/main
             },
         );
 
@@ -3803,12 +3796,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut,
                 type_args: vec![],
                 param_defaults,
-<<<<<<< HEAD
                 param_types,
-||||||| 50cf17a00
-=======
                 self_in_args: false,
->>>>>>> origin/main
             },
         );
 

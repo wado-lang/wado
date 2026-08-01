@@ -1127,12 +1127,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             param_is_mut,
                             type_args: vec![],
                             param_defaults,
-<<<<<<< HEAD
                             param_types,
-||||||| 50cf17a00
-=======
                             self_in_args: false,
->>>>>>> origin/main
                         },
                     );
 
@@ -1436,12 +1432,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut,
                 type_args: type_args.clone(),
                 param_defaults: vec![],
-<<<<<<< HEAD
                 param_types: check_param_types,
-||||||| 50cf17a00
-=======
                 self_in_args: false,
->>>>>>> origin/main
             },
         );
         // Stage 7-B: reify rebuilds the `Call` TIR from the recorded
@@ -2795,12 +2787,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],
                     param_defaults,
-<<<<<<< HEAD
                     param_types: method_info_result.param_types.clone(),
-||||||| 50cf17a00
-=======
                     self_in_args: false,
->>>>>>> origin/main
                 },
             );
 
