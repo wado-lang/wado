@@ -19,7 +19,7 @@ use crate::nir_visitor::NirRefVisitor;
 use crate::tir::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
-use super::place::{borrowed_place_operand, overlapping_places, place_of};
+use super::place::{borrowed_place_operand, place_aliased_by_another, place_of};
 use super::region::{region_free_reads, region_shape, value_block_shape};
 use super::trackability::Trackability;
 use super::{CallRun, CtfeBuiltin, FrameState, Interpreter, Lattice};
@@ -172,18 +172,18 @@ fn named_local(body: &Body, op: Operand) -> Option<u32> {
 /// second handle on the same storage either reads a value the program never had
 /// or has its own write undone.
 ///
-/// `places` holds every argument's place, the target's own included, so a target
-/// overlapping only itself counts once. Whether the other argument could
-/// actually observe the write is not asked: after `prepare_types` a shared
-/// borrow of a primitive, plain enum, variant or fn type is the same `Box<T>` a
-/// by-value one is, so no signature test tells them apart here.
+/// `places` holds every argument's place, the target's own included. Whether
+/// the other argument could actually observe the write is not asked: after
+/// `prepare_types` a shared borrow of a primitive, plain enum, variant or fn
+/// type is the same `Box<T>` a by-value one is, so no signature test tells them
+/// apart here.
 ///
 /// Wado has no borrow checker, so this is ordinary source: the frame declines
 /// to run the call rather than mis-run it.
 fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u32>)]) -> bool {
     targets
         .iter()
-        .any(|(_, root, path)| overlapping_places(places, *root, path) > 1)
+        .any(|(_, root, path)| place_aliased_by_another(places, *root, path))
 }
 
 impl Interpreter<'_> {

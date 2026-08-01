@@ -5,7 +5,33 @@
 //! decide which locals stay trackable, the other to find where a write lands.
 
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{Body, ExprKind, Operand};
+use crate::nir_arena::{Body, ExprId, ExprKind, Operand};
+
+/// The operand a borrow or a cast wraps. Both name the same storage as their
+/// operand — `&mut x.repr as &mut Array<u8>` is how a borrow reaches a builtin
+/// after monomorphization — so every walk asking what storage is named looks
+/// through them, and the set of node kinds that qualify is stated here alone.
+fn wrapped_operand(body: &Body, e: ExprId) -> Option<Operand> {
+    match &body.exprs[e].kind {
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+            expr,
+        }
+        | ExprKind::Cast { expr, .. } => Some(*expr),
+        _ => None,
+    }
+}
+
+/// The expression `op` names once every [`wrapped_operand`] layer is peeled.
+/// `None` where a layer is a promoted value rather than a skeleton node, which
+/// names no storage a walk can record or look up.
+pub(super) fn peel_wrappers(body: &Body, op: Operand) -> Option<ExprId> {
+    let mut e = op.as_expr()?;
+    while let Some(inner) = wrapped_operand(body, e) {
+        e = inner.as_expr()?;
+    }
+    Some(e)
+}
 
 /// The local an lvalue or borrow chain roots at: `x`, `x.f`, `x[i]`, `*x`, a
 /// cast over any of those (a cast names the same storage as its operand), and
@@ -27,18 +53,13 @@ pub(super) fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
 /// The local a borrow or lvalue chain roots at, and the field path reaching
 /// into its value. [`lvalue_root_local`] answers only which local is touched;
 /// a write also needs to know where inside it lands.
-///
-/// A cast names the same storage as its operand — `&mut x.repr as
-/// &mut Array<u8>` is how a borrow reaches a builtin after monomorphization —
-/// so the chain is followed through it.
 pub(super) fn place_of(body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
-    match &body.exprs[op.as_expr()?].kind {
+    let e = op.as_expr()?;
+    if let Some(inner) = wrapped_operand(body, e) {
+        return place_of(body, inner);
+    }
+    match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => Some((*index, Vec::new())),
-        ExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
-            expr,
-        }
-        | ExprKind::Cast { expr, .. } => place_of(body, *expr),
         ExprKind::FieldAccess {
             expr, field_index, ..
         } => {
@@ -77,14 +98,22 @@ pub(super) fn borrowed_place_operand(body: &Body, op: Operand) -> Option<(bool, 
     Some((is_mut, *expr))
 }
 
-/// How many of `places` reach storage `(root, path)` reaches. One place covers
-/// another when its path is a prefix: `c` covers `c.repr`, and `c.repr` and
-/// `c.used` cover nothing of each other.
-pub(super) fn overlapping_places(places: &[(u32, Vec<u32>)], root: u32, path: &[u32]) -> usize {
+/// Whether some place in `places` besides `(root, path)` itself reaches the
+/// storage it names. One place covers another when its path is a prefix: `c`
+/// covers `c.repr`, and `c.repr` and `c.used` cover nothing of each other.
+///
+/// `places` holds the target's own place too, so a second match is what a
+/// second handle looks like.
+pub(super) fn place_aliased_by_another(
+    places: &[(u32, Vec<u32>)],
+    root: u32,
+    path: &[u32],
+) -> bool {
     places
         .iter()
         .filter(|(other_root, other_path)| {
             *other_root == root && (other_path.starts_with(path) || path.starts_with(other_path))
         })
-        .count()
+        .nth(1)
+        .is_some()
 }

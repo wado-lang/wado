@@ -71,13 +71,17 @@ impl Interpreter<'_> {
     /// Reduce `e` to its flow-sensitive constant value or collapse a constant
     /// branch, committing every edit through `sink`.
     ///
-    /// A scalar the scratch backend declines to promote is memoized instead, so
-    /// its later lattice reads still see the constant. An aggregate is
-    /// materialized only over a `Call` or a self-contained region: the literal a
-    /// materialization writes denotes the same value, so re-materializing one
-    /// would report a change at every visit and the worklist would never
-    /// settle — and both rewrites replace the node with a kind neither ever
-    /// matches again.
+    /// A value no rewrite took is memoized, so the next visit reads it back
+    /// instead of computing it again — which for a `Call` means running the
+    /// callee's body a second time.
+    ///
+    /// An aggregate is materialized only over a `Call` or a self-contained
+    /// region: the literal a materialization writes denotes the same value, so
+    /// re-materializing one would report a change at every visit and the
+    /// worklist would never settle — and both rewrites replace the node with a
+    /// kind neither ever matches again. A node outside those two shapes is left
+    /// alone entirely, memo included: nothing computed it, so there is nothing
+    /// a later visit would repeat.
     pub fn reduce_local<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
         if let Some(value) = self.flow_fold_candidate(sink.body(), e) {
             if value.is_scalar() {
@@ -85,10 +89,11 @@ impl Interpreter<'_> {
                     return true;
                 }
                 self.frame.scratch_folds.insert(e, value);
-            } else if matches!(sink.body().exprs[e].kind, ExprKind::Call { .. })
-                && self.materialize_seq_via(sink, e, &value)
-            {
-                return true;
+            } else if matches!(sink.body().exprs[e].kind, ExprKind::Call { .. }) {
+                if self.materialize_seq_via(sink, e, &value) {
+                    return true;
+                }
+                self.frame.scratch_folds.insert(e, value);
             }
         }
         if let Some(value) = self.try_region_fold(sink.body(), e) {

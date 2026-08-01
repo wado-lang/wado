@@ -6,18 +6,15 @@
 //! performs it — inside a compile-time frame, which either carries the write
 //! out or abandons the evaluation. An ordinary walk performs nothing at all.
 
-use indexmap::IndexSet;
-
+use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtId, StmtKind};
 
-use super::place::{borrowed_place_operand, lvalue_root_local, place_of};
+use super::callee::RECEIVER;
+use super::place::{borrowed_place_operand, lvalue_root_local, peel_wrappers, place_of};
 use crate::nir_visitor::reachable_exprs;
 
 use super::{CalleeMap, CtfeBuiltinMap, ProgramFacts};
-
-/// A method's receiver is its first parameter.
-const RECEIVER: usize = 0;
 
 /// The expressions a walk carries out: the operand each reachable statement
 /// performs. Reachable from the body root, because an orphaned statement never
@@ -216,46 +213,25 @@ impl Reached {
         }
     }
 
-    /// Both directions of the mention check peel casts as well as borrows:
-    /// an argument reaches a builtin as `&x.repr as &Array<u8>`, and a
-    /// mention recorded at the cast would never match the borrow the
-    /// disqualification walk asks about.
+    /// Both directions of the mention check go through [`peel_wrappers`], so a
+    /// mention recorded at a cast still matches the borrow the disqualification
+    /// walk asks about.
     fn covers(&self, body: &Body, op: Operand) -> bool {
-        let mut op = op;
-        loop {
-            let Some(e) = op.as_expr() else {
-                return false;
-            };
-            match &body.exprs[e].kind {
-                ExprKind::Unary {
-                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
-                    expr,
-                }
-                | ExprKind::Cast { expr, .. } => op = *expr,
-                _ => return self.reads.contains(&e) || self.writes.contains(&e),
-            }
-        }
+        let Some(e) = peel_wrappers(body, op) else {
+            return false;
+        };
+        self.reads.contains(&e) || self.writes.contains(&e)
     }
 
-    /// Records the place `op` names, peeling the borrows and casts it may be
-    /// wrapped in.
+    /// Records the place `op` names.
     fn record(&mut self, body: &Body, op: Operand, reach: Reach) {
-        let Some(e) = op.as_expr() else {
+        let Some(e) = peel_wrappers(body, op) else {
             return;
         };
-        match &body.exprs[e].kind {
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
-                expr,
-            }
-            | ExprKind::Cast { expr, .. } => self.record(body, *expr, reach),
-            _ => {
-                match reach {
-                    Reach::Read => self.reads.insert(e),
-                    Reach::Write => self.writes.insert(e),
-                };
-            }
-        }
+        match reach {
+            Reach::Read => self.reads.insert(e),
+            Reach::Write => self.writes.insert(e),
+        };
     }
 }
 
