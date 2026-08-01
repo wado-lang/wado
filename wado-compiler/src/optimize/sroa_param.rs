@@ -252,18 +252,24 @@ fn reference_param_struct_key(
 /// invalidated during the callee's execution — because some other access path
 /// the callee holds can mutate the pointee `*p`:
 ///
-/// - a mutable-global write (the pointee may live in a global), or
-/// - a `&mut` sibling param whose writable location *transitively contains* the
-///   wrapper struct (a write through it can reach a wrapper-typed location that
-///   the same call site may have aliased with `p`, e.g. `f(&s.m, &mut s)` where
-///   `S { m: M }`). This subsumes the same-type sibling case (`X == W` contains
-///   `W` trivially).
+/// - a mutable-global write (an aliasing handle may live in a global, and an
+///   unresolved indirect call may write anything), or
+/// - a sibling param from which a write can *reach* the wrapper struct — the
+///   sibling need not be the handle itself, only carry one, e.g.
+///   `f(&s.m, &mut s)` where `S { m: M }`, or `f(&x, Holder { r: &mut x })`
+///   where the `&mut` hides in a by-value struct field.
 ///
 /// A genuine by-value struct candidate is already a copy, so it is never
 /// affected. A *boxed* reference is not one: `boxing::prepare_types` collapses
 /// `&T` / `&mut T` onto a by-value `Box<T>`, and `&x` of an address-taken local
 /// lowers to a read of that one box, so `f(&mut x, &x)` hands the same box to
 /// both params and the snapshot must be refused.
+///
+/// A `fn mut()` param needs no case of its own: its captures are not in its
+/// type, so the walk cannot see them, but invoking it is an `IndirectCall`,
+/// which [`transitive_global_writes`] reports as [`GlobalWrites::Any`]. A
+/// closure that only escapes without being called cannot stale anything — the
+/// snapshot lives only for the duration of the call.
 fn param_snapshot_unsound(
     func: &NirFunction,
     pi: usize,
@@ -279,22 +285,17 @@ fn param_snapshot_unsound(
     if !candidate_is_ref && !candidate_is_boxed_ref {
         return false;
     }
-    // A box never aliases a global: `&G` of a boxable global builds a fresh
-    // `Box { value: G }` (see `translate::try_boxing_ref`), which no later write
-    // to `G` can reach. Only a real `&G` reference can be staled that way.
-    if candidate_is_ref && writes_global {
+    if writes_global {
         return true;
     }
     func.params.iter().enumerate().any(|(pj, other)| {
         if pj == pi {
             return false;
         }
-        let Some(writable) = mut_param_writable_type(other.type_id, type_table) else {
-            return false;
-        };
         let mut visited = IndexSet::default();
-        type_transitively_contains(
-            writable,
+        mut_reachable_contains(
+            other.type_id,
+            param_root_writable(other.type_id, type_table),
             struct_key,
             type_table,
             struct_fields,
@@ -303,15 +304,13 @@ fn param_snapshot_unsound(
     })
 }
 
-/// The location a `&mut` parameter can write through: the pointee of a plain
-/// `MutRef`, or — for a `&mut T` boxing collapsed onto `Box<T>` — the box object
-/// itself, since `*q = v` writes the box's own field. `None` for anything that
-/// cannot be written through.
-fn mut_param_writable_type(param_type: TypeId, type_table: &TypeTable) -> Option<TypeId> {
-    match type_table.get(param_type) {
-        ResolvedType::MutRef(inner) => Some(*inner),
-        _ => type_table.is_mut_box(param_type).then_some(param_type),
-    }
+/// Whether a parameter's *own* storage can be written through: the pointee of a
+/// plain `MutRef`, or a `&mut T` boxing collapsed onto `Box<T>`. Everything else
+/// arrives as a copy or a read-only handle — but its interior may still hand out
+/// a mutable reference, which [`mut_reachable_contains`] picks up.
+fn param_root_writable(param_type: TypeId, type_table: &TypeTable) -> bool {
+    matches!(type_table.get(param_type), ResolvedType::MutRef(_))
+        || type_table.is_mut_box(param_type)
 }
 
 /// Map a struct's identity → its field types, for transitive-containment queries.
@@ -328,20 +327,30 @@ fn build_struct_fields_index(project: &NirPackage) -> StructFieldsIndex {
     out
 }
 
-/// Whether `ty` can reach a location of the `target` struct type — directly, or
-/// transitively through fields, references, newtypes, arrays, or generic type
-/// arguments. `visited` breaks cycles over recursive types.
-fn type_transitively_contains(
+/// Whether a write can land on a `target`-typed location reachable from `ty`.
+///
+/// `writable` marks the location currently being visited as one the callee can
+/// write. It is a property of the location itself, not of how deep the walk is:
+/// a `&mut` pointee and a mutable box are writable wherever they appear, a
+/// shared `&T` pointee and a shared box's payload never are, and a component of
+/// a writable aggregate inherits it. So a by-value `Holder { r: &mut i32 }` is a
+/// copy whose `r` field still writes the caller's box, while a by-value `M`
+/// cannot write anything at all.
+///
+/// `visited` breaks cycles over recursive types; it is keyed on the writability
+/// too, since the same type can be reached both ways.
+fn mut_reachable_contains(
     ty: TypeId,
+    writable: bool,
     target: &(String, ModuleSource),
     type_table: &TypeTable,
     struct_fields: &StructFieldsIndex,
-    visited: &mut IndexSet<TypeId>,
+    visited: &mut IndexSet<(TypeId, bool)>,
 ) -> bool {
-    if !visited.insert(ty) {
+    if !visited.insert((ty, writable)) {
         return false;
     }
-    match type_table.get(ty) {
+    let (inner, inner_writable) = match type_table.get(ty) {
         ResolvedType::Struct {
             decl_name,
             module_source,
@@ -351,29 +360,55 @@ fn type_transitively_contains(
                 type_table.struct_rendered_name(decl_name, type_args),
                 module_source.clone(),
             );
-            if &key == target {
+            // A boxed reference is writable exactly when it came from a `&mut`;
+            // a shared box additionally seals its payload, since `*p` of a `&T`
+            // cannot be written.
+            let is_mut_box = type_table.is_mut_box(ty);
+            let is_shared_box = !is_mut_box && type_table.box_payload_of(ty).is_some();
+            let here = writable || is_mut_box;
+            if here && &key == target {
                 return true;
             }
             let Some(fields) = struct_fields.get(&key) else {
                 return false;
             };
-            fields.iter().any(|&ft| {
-                type_transitively_contains(ft, target, type_table, struct_fields, visited)
-            })
+            // Fields share the aggregate's storage, so they inherit its writability.
+            let field_writable = here && !is_shared_box;
+            return fields.iter().any(|&ft| {
+                mut_reachable_contains(
+                    ft,
+                    field_writable,
+                    target,
+                    type_table,
+                    struct_fields,
+                    visited,
+                )
+            });
         }
-        ResolvedType::Ref(inner)
-        | ResolvedType::MutRef(inner)
-        | ResolvedType::Reactive(inner)
+        ResolvedType::MutRef(inner) => (*inner, true),
+        ResolvedType::Ref(inner) => (*inner, false),
+        ResolvedType::Reactive(inner)
         | ResolvedType::BuiltinArray(inner)
         | ResolvedType::Newtype {
             base_type: inner, ..
-        } => type_transitively_contains(*inner, target, type_table, struct_fields, visited),
+        } => (*inner, writable),
         ResolvedType::GenericInstance { type_args, .. }
-        | ResolvedType::GenericResource { type_args, .. } => type_args
-            .iter()
-            .any(|&t| type_transitively_contains(t, target, type_table, struct_fields, visited)),
-        _ => false,
-    }
+        | ResolvedType::GenericResource { type_args, .. } => {
+            let args = type_args.clone();
+            return args.iter().any(|&t| {
+                mut_reachable_contains(t, writable, target, type_table, struct_fields, visited)
+            });
+        }
+        _ => return false,
+    };
+    mut_reachable_contains(
+        inner,
+        inner_writable,
+        target,
+        type_table,
+        struct_fields,
+        visited,
+    )
 }
 
 #[derive(Clone)]
@@ -503,7 +538,7 @@ fn writes_aliasing_global(
         GlobalWrites::Known(set) => set.iter().any(|g| match global_types.get(g) {
             Some(&ty) => {
                 let mut visited = IndexSet::default();
-                type_transitively_contains(ty, target, type_table, struct_fields, &mut visited)
+                mut_reachable_contains(ty, true, target, type_table, struct_fields, &mut visited)
             }
             None => true,
         }),

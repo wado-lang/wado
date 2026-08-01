@@ -4,14 +4,33 @@
 // by-value `Box<i32>` wrapper, so `sroa_param` sees a single-field struct
 // passed by value and used to assume "a by-value struct candidate is already a
 // copy". It is not: the box IS the caller's storage, and `&x` of an
-// address-taken local lowers to a read of that one box. Scalarizing the
-// read-only handle turns it into a call-time snapshot, so a write through the
-// aliasing `&mut` handle is lost and `touch` returns the stale 0.
+// address-taken local lowers to a read of that one box. Scalarizing a handle
+// some other access path can write turns it into a call-time snapshot, so the
+// write is lost and the read returns the stale value.
 //
-// `sibling` covers `&mut` + `&` naming the same local, `both_mut` covers two
-// `&mut` handles, and `distinct` is the precision guard: separate locals never
-// alias, so scalarization must still be free to fire there.
+// The aliasing handle does not have to be the sibling itself — it only has to
+// be *reachable* from something the callee holds, so each case hides it one
+// level further:
+//
+//   sibling       — a `&mut` sibling naming the same local
+//   both_mut      — two `&mut` handles on one local
+//   by_value      — a by-value struct whose field is the `&mut`
+//   shared_holder — a *shared* `&Holder`, which still hands out its `&mut` field
+//   via_global    — the `&mut` parked in a global
+//   via_closure   — the write hidden behind an indirect call to a `fn mut()`
+//
+// `shared_pair` is the precision guard: two read-only handles can never stale
+// each other, so scalarization must still fire there. Its arguments come from a
+// mutable global so the call survives folding, and `wir_expect` pins the
+// scalarized signature — without it an over-conservative guard would pass
+// unnoticed.
 use { println, Stdout } from "core:cli";
+
+struct Holder { r: &mut i32 }
+
+global mut SEED: i32 = 0;
+global mut ZERO: i32 = 0;
+global mut G: Holder = Holder { r: &mut ZERO };
 
 #[inline("never")]
 fn touch(a: &mut i32, b: &i32) -> i32 {
@@ -26,7 +45,37 @@ fn bump_both(a: &mut i32, b: &mut i32) -> i32 {
 }
 
 #[inline("never")]
-fn distinct(a: &i32, b: &i32) -> i32 {
+fn by_value(p: &i32, h: Holder) -> i32 {
+    *h.r = 7;
+    return *p;
+}
+
+#[inline("never")]
+fn shared_holder(p: &i32, h: &Holder) -> i32 {
+    *h.r = 8;
+    return *p;
+}
+
+#[inline("never")]
+fn via_global(p: &i32) -> i32 {
+    *G.r = 9;
+    return *p;
+}
+
+#[inline("never")]
+fn via_closure(p: &i32, mut g: fn mut()) -> i32 {
+    g();
+    return *p;
+}
+
+#[inline("never")]
+fn next() -> i32 {
+    SEED = SEED + 7;
+    return SEED;
+}
+
+#[inline("never")]
+fn shared_pair(a: &i32, b: &i32) -> i32 {
     return *a * 100 + *b;
 }
 
@@ -43,11 +92,40 @@ export fn run() with Stdout {
         panic(`both_mut: expected 15, got ${both_mut}`);
     }
 
-    let p = 3;
-    let q = 4;
-    let apart = distinct(&p, &q);
-    if apart != 304 {
-        panic(`distinct: expected 304, got ${apart}`);
+    let mut a = 0;
+    let held = by_value(&a, Holder { r: &mut a });
+    if held != 7 {
+        panic(`by_value: expected 7, got ${held}`);
+    }
+
+    let mut b = 0;
+    let hb = Holder { r: &mut b };
+    let shared = shared_holder(&b, &hb);
+    if shared != 8 {
+        panic(`shared_holder: expected 8, got ${shared}`);
+    }
+
+    let mut c = 0;
+    G = Holder { r: &mut c };
+    let global_held = via_global(&c);
+    if global_held != 9 {
+        panic(`via_global: expected 9, got ${global_held}`);
+    }
+
+    let mut d = 0;
+    let set_d = || {
+        d = 11;
+    };
+    let closed = via_closure(&d, set_d);
+    if closed != 11 {
+        panic(`via_closure: expected 11, got ${closed}`);
+    }
+
+    let p = next();
+    let q = next();
+    let apart = shared_pair(&p, &q);
+    if apart != 714 {
+        panic(`shared_pair: expected 714, got ${apart}`);
     }
 
     println(`ok ${x}`);
@@ -55,5 +133,12 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "ok 1\n"
+    "stdout": "ok 1\n",
+    "wir_expect:O2": [
+        "/shared_pair\" = fn(i32, i32) -> i32"
+    ],
+    "wir_not_expect:O2": [
+        "/touch\" = fn(i32, i32) -> i32",
+        "/bump_both\" = fn(i32, i32) -> i32"
+    ]
 }
