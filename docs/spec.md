@@ -91,8 +91,8 @@ The data section is accessible via the compiler API through `Module::data_sectio
 
 ```rust
 // Compiler API example
-let result = wado_compiler::compile_file(path)?;
-if let Some(data) = result.module.data_section() {
+let parsed = wado_compiler::parse(source);
+if let Some(data) = parsed.ast.data_section() {
     // Process the data section content
 }
 ```
