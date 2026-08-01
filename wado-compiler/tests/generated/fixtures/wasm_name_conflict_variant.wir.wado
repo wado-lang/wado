@@ -14,8 +14,24 @@ struct ./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok {  // TypeId(2)
     payload_0: i32,
 }
 
+<<<<<<< HEAD
+array Array<u8> (mut u8);  // TypeId(3)
+||||||| f64e32ff7
+array Array<u8> (mut u8);  // TypeId(2)
+=======
+variant ./sub/wasm_name_conflict_variant_mod_a.wado//Status {  // TypeId(2)
+    Active,
+    Inactive,
+}
+>>>>>>> origin/main
+
+<<<<<<< HEAD
+||||||| f64e32ff7
+struct core:prelude/string.wado//String {  // TypeId(3)
+=======
 array Array<u8> (mut u8);  // TypeId(3)
 
+>>>>>>> origin/main
 struct core:prelude/string.wado//String {  // TypeId(4)
     mut repr: ref Array<u8>,
     mut used: i32,
@@ -107,6 +123,7 @@ global mut global:wasm_name_conflict_variant.wado::__modules_initialized: bool =
 global global:core:prelude/primitive.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "wasm_name_conflict_variant.wado/run"() with Stdout {
+    let a: ref "./sub/wasm_name_conflict_variant_mod_a.wado//Status";
     let b: ref "./sub/wasm_name_conflict_variant_mod_b.wado//Status";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
@@ -127,7 +144,8 @@ fn "wasm_name_conflict_variant.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:wasm_name_conflict_variant.wado::__modules_initialized = 1;
     };
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }; start_9 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_9, 97); start_18 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_18, 58); start_27 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_27, 32); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_38(1), __local_3); __local_2);
+    a = struct.new "./sub/wasm_name_conflict_variant_mod_a.wado//Status" { 0 };
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }; start_9 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_9, 97); start_18 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_18, 58); start_27 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_27, 32); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_38(a.discriminant == 0), __local_3); __local_2);
     b = struct.new "./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok" { discriminant: 0, payload_0: 99 };
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }; start_44 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_44, 98); start_53 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_53, 58); start_62 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_62, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_74((if ref.test "./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok"(b) -> i32 {
         local.tee v_73(ref.cast "./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok"(b).payload_0);

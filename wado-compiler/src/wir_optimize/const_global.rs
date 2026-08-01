@@ -16,7 +16,7 @@
 //! into the global's eager `init`, marks the global immutable, and drops the
 //! now-redundant `GlobalSet`(s). The dead init temps, emptied
 //! `__initialize_module` body, and `__modules_initialized` guard are
-//! reclaimed by `init_guard` / `dce` / `cleanup` in the same phase.
+//! reclaimed by `dce` / `cleanup` in the same phase.
 //!
 //! The init assignment is reached wherever it ends up: a standalone
 //! `__initialize_module` body, or — when that module-init is inlined into

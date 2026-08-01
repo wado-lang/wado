@@ -1704,3 +1704,57 @@ fn union(a: &IndexSet<u32>, b: &IndexSet<u32>) -> IndexSet<u32> {
     }
     out
 }
+
+/// Locals whose storage a last-use move can hand to a new owner: every `Local`
+/// read the fold will treat as a move, plus the root of every place-level move.
+///
+/// `is_source_immutable` lets an immutable binding alias an immutable-rooted
+/// source without a defensive copy, on the premise that an immutable root is
+/// never written through. A move retires the *binding*, not the alias, so once
+/// the storage belongs to a new — possibly mutable — owner, a write through
+/// that owner is a write the alias observes. A source in this set therefore
+/// keeps its copy.
+pub fn compute_moved_roots(
+    func: &TirFunction,
+    move_eligible: &MoveEligible,
+    func_moved_spans: Option<&IndexSet<crate::token::Span>>,
+) -> IndexSet<u32> {
+    let Some(body) = &func.body else {
+        return IndexSet::default();
+    };
+    let mut walker = MovedRoots {
+        move_eligible,
+        func_moved_spans,
+        roots: IndexSet::default(),
+    };
+    walker.visit_block(body);
+    walker.roots
+}
+
+struct MovedRoots<'a> {
+    move_eligible: &'a MoveEligible,
+    func_moved_spans: Option<&'a IndexSet<crate::token::Span>>,
+    roots: IndexSet<u32>,
+}
+
+impl TirRefVisitor for MovedRoots<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        let stripped = strip_casts(expr);
+        let moved_place = self.move_eligible.place_spans.contains(&stripped.span);
+        let moved_local = match &stripped.kind {
+            TirExprKind::Local { index, .. } => {
+                self.move_eligible.locals.contains(index)
+                    || self
+                        .func_moved_spans
+                        .is_some_and(|spans| spans.contains(&stripped.span))
+            }
+            _ => false,
+        };
+        if (moved_place || moved_local)
+            && let Some(path) = place_path(stripped)
+        {
+            self.roots.insert(path.root);
+        }
+        self.walk_expr(expr);
+    }
+}

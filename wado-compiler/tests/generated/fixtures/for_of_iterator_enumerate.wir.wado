@@ -175,6 +175,7 @@ fn "for_of_iterator_enumerate.wado/run"() with Stdout {
     let start_50: i32;
     let f_59: ref "core:prelude/format.wado//Formatter";
     let __sroa_v_repr: ref Array<i32>;
+    let __sroa_v_inner: ref "core:prelude/slice.wado//ArrayIter<i32>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:for_of_iterator_enumerate.wado::__modules_initialized);
         cold_path;
@@ -185,7 +186,8 @@ fn "for_of_iterator_enumerate.wado/run"() with Stdout {
     sum = 0;
     count = 0;
     __sroa_v_repr = arr.repr;
-    __iter_4 = struct.new "core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/ArrayIter<i32>>" { inner: struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: __sroa_v_repr, index: 0, end: 3 }, count: 0 };
+    __sroa_v_inner = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: __sroa_v_repr, index: 0, end: 3 };
+    __iter_4 = struct.new "core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/ArrayIter<i32>>" { inner: struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: __sroa_v_inner.repr, index: 0, end: 3 }, count: 0 };
     b0: block {
         l1: loop {
             __match_17 = "core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude/slice.wado/ArrayIter<i32>>^Iterator::next"(__iter_4);

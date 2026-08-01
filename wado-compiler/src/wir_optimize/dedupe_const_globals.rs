@@ -29,7 +29,7 @@
 //! ## Removal
 //!
 //! Globals are removed by recording their indices in `dead_global_indices` —
-//! the same channel `init_guard` and the `#![wasm_module]` extractor use — so
+//! the same channel the `#![wasm_module]` extractor uses — so
 //! phase-8 `compact_globals` drops them in one pass. Removing them here with
 //! `Vec::retain` would shift indices out from under that position-keyed set and
 //! corrupt it; deferring keeps every index in one space. All references to a

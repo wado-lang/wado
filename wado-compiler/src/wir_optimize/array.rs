@@ -1,6 +1,7 @@
 //! List optimization passes for WIR.
 //!
-//! - **Constant array data promotion**: `ArrayNewFixed` of constants → `ArrayNewData`.
+//! - **Constant array data promotion**: `ArrayNewFixed` of constants → `ArrayNewData`,
+//!   when packing encodes smaller than the inline operands.
 //! - **Large array literal splitting**: `array.new_fixed` (>= threshold) → `array.new_default` + sets.
 //!
 //! List literals reach WIR already as `ArrayNewFixed`: the NIR
@@ -14,17 +15,77 @@ use crate::wir::{WirData, WirInstr, WirPackage, WirType, WirTypeDef};
 use crate::wir_visitor::WirMutVisitor;
 
 /// Minimum element count to trigger `array.new_data` promotion. Arrays with
-/// fewer constant elements keep using `array.new_fixed`. Read by
-/// `const_object_globalization` to predict which hoisted array literals lose
-/// const-expressibility here and therefore need the lazy-init guard.
+/// fewer constant elements keep using `array.new_fixed` whatever their
+/// elements encode to — below this the fixed form's per-array overhead is what
+/// dominates, not the operands.
 pub(crate) const ARRAY_NEW_DATA_THRESHOLD: usize = 128;
+
+/// One `array.new_fixed` operand as the emitter will encode it.
+#[derive(Clone, Copy)]
+pub(crate) enum ConstOperand {
+    I32(i32),
+    I64(i64),
+    F32,
+    F64,
+}
+
+impl ConstOperand {
+    /// Encoded size: the `T.const` opcode byte plus its immediate — signed
+    /// LEB128 for the integer forms, a fixed 4 / 8 bytes for the float ones.
+    pub(crate) fn encoded_bytes(self) -> usize {
+        let immediate = match self {
+            Self::I32(v) => signed_leb128_len(i64::from(v)),
+            Self::I64(v) => signed_leb128_len(v),
+            Self::F32 => 4,
+            Self::F64 => 8,
+        };
+        1 + immediate
+    }
+}
+
+fn signed_leb128_len(mut value: i64) -> usize {
+    let mut len = 0;
+    loop {
+        let byte = (value & 0x7f) as u8;
+        value >>= 7;
+        len += 1;
+        let sign_bit_set = byte & 0x40 != 0;
+        if (value == 0 && !sign_bit_set) || (value == -1 && sign_bit_set) {
+            return len;
+        }
+    }
+}
+
+/// Whether packing `count` elements of `elem_width` bytes into a passive data
+/// segment is worth it, given what the same elements cost as inline
+/// `array.new_fixed` operands.
+///
+/// A data segment stores every element at its full width, while an operand is
+/// LEB128-compressed: a `List<i32>` of small values costs 3 bytes per element
+/// inline but 4 packed, so promoting it *grows* the module — and, because
+/// `array.new_data` is not a Wasm constant instruction, also demotes a global
+/// that would otherwise have become an eager constant to a runtime-initialized
+/// one.
+///
+/// Past [`ARRAY_NEW_FIXED_LIMIT`] the comparison is moot: the alternative is
+/// not `array.new_fixed` at all but the `array.new_default` + N × `array.set`
+/// build sequence `split_large_array_literals` produces, which is larger than
+/// either and is what the limit exists to avoid.
+pub(crate) fn data_promotion_pays(
+    count: usize,
+    elem_width: usize,
+    fixed_operand_bytes: usize,
+) -> bool {
+    count >= ARRAY_NEW_DATA_THRESHOLD
+        && (count > ARRAY_NEW_FIXED_LIMIT || count * elem_width < fixed_operand_bytes)
+}
 
 /// Promote constant primitive `ArrayNewFixed` to `ArrayNewData`.
 ///
 /// When all elements of an `ArrayNewFixed` are compile-time constants of a
-/// primitive type, packs the values into a passive data segment and replaces
-/// the instruction with `ArrayNewData`. This reduces Wasm binary size and
-/// initialization overhead compared to pushing N constants + `array.new_fixed`.
+/// primitive type, and packing them encodes smaller than the inline operands
+/// ([`data_promotion_pays`]), packs the values into a passive data segment and
+/// replaces the instruction with `ArrayNewData`.
 pub(super) fn promote_constant_arrays_to_data(module: &mut WirPackage) {
     // Collect element types for array type defs so we can look them up without
     // borrowing `module.types` while mutating other fields.
@@ -75,6 +136,11 @@ impl WirMutVisitor for PromoteConstantArrays<'_> {
             let arr_type_idx = type_id.index() as usize;
             if let Some(Some(elem_type)) = self.array_elem_types.get(arr_type_idx)
                 && let Some(bytes) = try_pack_constant_elements(elem_type, elements)
+                && data_promotion_pays(
+                    elements.len(),
+                    element_byte_width(elem_type).expect("packed elements have a width"),
+                    fixed_operand_bytes(elements),
+                )
             {
                 let data_index = u32::try_from(self.data.len()).expect("too many data segments");
                 let len = i32::try_from(elements.len()).expect("array length fits i32");
@@ -93,6 +159,25 @@ impl WirMutVisitor for PromoteConstantArrays<'_> {
     }
 }
 
+/// What `elements` cost as inline `array.new_fixed` operands. Only reached for
+/// an element list `try_pack_constant_elements` already accepted, so every
+/// element is one of the constant forms.
+fn fixed_operand_bytes(elements: &[WirInstr]) -> usize {
+    elements
+        .iter()
+        .map(|e| {
+            let operand = match e {
+                WirInstr::I32Const(v) => ConstOperand::I32(*v),
+                WirInstr::I64Const(v) => ConstOperand::I64(*v),
+                WirInstr::F32Const(_) => ConstOperand::F32,
+                WirInstr::F64Const(_) => ConstOperand::F64,
+                other => panic!("[WIR] packed array element is not a constant: {other:?}"),
+            };
+            operand.encoded_bytes()
+        })
+        .sum()
+}
+
 /// Try to pack all elements into a byte buffer for `array.new_data`.
 ///
 /// Returns `Some(bytes)` if every element is a compile-time constant matching
@@ -107,6 +192,22 @@ fn try_pack_constant_elements(element_type: &WirType, elements: &[WirInstr]) -> 
     }
 
     Some(bytes)
+}
+
+/// Storage byte width of a packable element, keyed on the NIR primitive rather
+/// than the WIR type — the same question [`element_byte_width`] answers after
+/// lowering, asked by `const_object_globalization` before it. `bool` is not a
+/// `PrimitiveType`; an enum or flags element is four bytes, like the `u32` it
+/// lowers to.
+pub(crate) fn primitive_byte_width(prim: crate::tir::PrimitiveType) -> Option<usize> {
+    use crate::tir::PrimitiveType as P;
+    Some(match prim {
+        P::I8 | P::U8 => 1,
+        P::I16 | P::U16 => 2,
+        P::I32 | P::U32 | P::F32 => 4,
+        P::I64 | P::U64 | P::F64 => 8,
+        _ => return None,
+    })
 }
 
 /// Returns the storage byte width for a primitive element type in a data segment,
@@ -354,5 +455,88 @@ fn same_pure_operand(a: &WirInstr, b: &WirInstr) -> bool {
         (WirInstr::I32Const(x), WirInstr::I32Const(y)) => x == y,
         (WirInstr::LocalGet { name: x, .. }, WirInstr::LocalGet { name: y, .. }) => x == y,
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The operand sizes the profitability comparison rests on, against the
+    /// `T.const` encoding the emitter produces.
+    #[test]
+    fn const_operand_encoded_sizes() {
+        assert_eq!(ConstOperand::I32(0).encoded_bytes(), 2);
+        assert_eq!(ConstOperand::I32(63).encoded_bytes(), 2);
+        assert_eq!(ConstOperand::I32(64).encoded_bytes(), 3);
+        assert_eq!(ConstOperand::I32(-64).encoded_bytes(), 2);
+        assert_eq!(ConstOperand::I32(-65).encoded_bytes(), 3);
+        assert_eq!(ConstOperand::I32(8191).encoded_bytes(), 3);
+        assert_eq!(ConstOperand::I32(8192).encoded_bytes(), 4);
+        assert_eq!(ConstOperand::I32(i32::MAX).encoded_bytes(), 6);
+        assert_eq!(ConstOperand::I64(i64::MAX).encoded_bytes(), 11);
+        assert_eq!(ConstOperand::F32.encoded_bytes(), 5);
+        assert_eq!(ConstOperand::F64.encoded_bytes(), 9);
+    }
+
+    fn operand_bytes(count: usize, operand: ConstOperand) -> usize {
+        count * operand.encoded_bytes()
+    }
+
+    #[test]
+    fn promotion_pays_only_when_packing_is_smaller() {
+        let n = ARRAY_NEW_DATA_THRESHOLD;
+        // `u8`: one packed byte against at least two inline.
+        assert!(data_promotion_pays(
+            n,
+            1,
+            operand_bytes(n, ConstOperand::I32(200))
+        ));
+        // `i32` of small values: four packed bytes against three inline.
+        assert!(!data_promotion_pays(
+            n,
+            4,
+            operand_bytes(n, ConstOperand::I32(182))
+        ));
+        // `i32` of values needing a four-byte LEB: five inline.
+        assert!(data_promotion_pays(
+            n,
+            4,
+            operand_bytes(n, ConstOperand::I32(3_000_000))
+        ));
+        // `f64`: eight packed bytes against nine inline.
+        assert!(data_promotion_pays(
+            n,
+            8,
+            operand_bytes(n, ConstOperand::F64)
+        ));
+        // `i64` of small values: eight packed bytes against three inline.
+        assert!(!data_promotion_pays(
+            n,
+            8,
+            operand_bytes(n, ConstOperand::I64(7))
+        ));
+    }
+
+    #[test]
+    fn below_the_threshold_never_promotes() {
+        let n = ARRAY_NEW_DATA_THRESHOLD - 1;
+        assert!(!data_promotion_pays(
+            n,
+            1,
+            operand_bytes(n, ConstOperand::I32(200))
+        ));
+    }
+
+    /// Past the fixed limit the alternative is the `array.new_default` +
+    /// `array.set` build sequence, so packing wins even when it is larger.
+    #[test]
+    fn past_the_fixed_limit_promotion_always_pays() {
+        let n = ARRAY_NEW_FIXED_LIMIT + 1;
+        assert!(data_promotion_pays(
+            n,
+            8,
+            operand_bytes(n, ConstOperand::I64(7))
+        ));
     }
 }

@@ -10,8 +10,9 @@ use crate::nir::NirLiteralPattern;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType, WirTypeId};
 
+use super::calls::{MULTIVALUE_I64_BUILTINS, MULTIVALUE_I64_RESULTS};
 use super::translate::{FunctionTranslator, LabelEntry, declare_and_set_local};
-use crate::nir_arena::{ArmData, BlockId, Body, Operand, PatId, PatKind};
+use crate::nir_arena::{ArmData, BlockId, Body, ExprKind, Operand, PatId, PatKind};
 
 /// Build `if condition { then_body } else { else_body }`, collapsing the
 /// boolean-materialization idiom `if C { 1 } else { 0 }` to `C`.
@@ -199,6 +200,57 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Bind `let [a, b] = builtin::i64_mul_wide_u(…)` straight into the
+    /// binding locals: the Wasm instruction pushes its two results on the
+    /// stack, so `MultiValueLocalBind` pops them into the bindings with no
+    /// tuple struct in between (a `Wildcard` slot drops its result). The
+    /// tuple struct the expression-position lowering builds
+    /// (`calls::wrap_multivalue_i64`) would otherwise have to be recovered
+    /// by a WIR pass.
+    ///
+    /// The pattern must name every result: one `local.set` per pushed value,
+    /// or the operand stack is left unbalanced. A rest pattern (`[a, ..]`)
+    /// does not, and neither does a shorter tuple — both fall through to the
+    /// tuple-struct path.
+    fn try_bind_multivalue_builtin(&mut self, pattern: PatId, value: Operand) -> Option<WirInstr> {
+        let PatKind::Tuple(patterns, has_rest) = &self.body.pats[pattern].kind else {
+            return None;
+        };
+        if *has_rest || patterns.len() != MULTIVALUE_I64_RESULTS {
+            return None;
+        }
+        let expr = value.as_expr()?;
+        let ExprKind::Call { func_id, args, .. } = &self.body.exprs[expr].kind else {
+            return None;
+        };
+        let (func_id, args) = (*func_id, args.clone());
+        let func = self.callee_descriptor(func_id);
+        let builtin_name = func
+            .builtin_name()
+            .or_else(|| func.monomorphized_builtin_name())?;
+        if !MULTIVALUE_I64_BUILTINS.contains(&builtin_name.as_str()) {
+            return None;
+        }
+
+        let bindings: Vec<Option<u32>> = patterns
+            .iter()
+            .map(|p| match &self.body.pats[*p].kind {
+                PatKind::Binding { local_index, .. } => Some(*local_index),
+                _ => None,
+            })
+            .collect();
+        let locals: Vec<Option<String>> = bindings
+            .iter()
+            .map(|b| b.map(|local_index| self.local_name(local_index)))
+            .collect();
+
+        let instr = self.translate_multivalue_i64_builtin(&builtin_name, &args);
+        Some(WirInstr::MultiValueLocalBind {
+            instr: Box::new(instr),
+            locals,
+        })
+    }
+
     /// Translate a `LetDestructure` statement.
     ///
     /// By the time WIR build runs, pattern lowering
@@ -211,11 +263,36 @@ impl FunctionTranslator<'_, '_> {
     /// * `Tuple` — multivalue-builtin call returning a tuple; destructure
     ///   each element into its `Binding` slot or skip `Wildcard` slots.
     ///
+<<<<<<< HEAD
     /// `Binding` (a single multivalue result) is also accepted. Any other shape
     /// means pattern lowering stopped rewriting one it used to rewrite; emitting
     /// nothing would drop the destructure and leave its bindings unassigned, so
     /// it panics instead.
     pub(super) fn translate_let_pattern(&mut self, pattern: PatId, value: Operand) -> WirInstr {
+||||||| f64e32ff7
+    /// Other variants are unreachable; we still match the obvious
+    /// `Binding` case (single multivalue result) defensively and leave a
+    /// catch-all `None` arm rather than `unreachable!` so a future
+    /// lower-pass change cannot turn into a hard ICE.
+    pub(super) fn translate_let_pattern(
+        &mut self,
+        pattern: PatId,
+        value: Operand,
+    ) -> Option<WirInstr> {
+=======
+    /// Other variants are unreachable; we still match the obvious
+    /// `Binding` case (single multivalue result) defensively and leave a
+    /// catch-all `None` arm rather than `unreachable!` so a future
+    /// lower-pass change cannot turn into a hard ICE.
+    pub(super) fn translate_let_pattern(
+        &mut self,
+        pattern: PatId,
+        value: Operand,
+    ) -> Option<WirInstr> {
+        if let Some(instr) = self.try_bind_multivalue_builtin(pattern, value) {
+            return Some(instr);
+        }
+>>>>>>> origin/main
         let value_instr = self.translate_operand(value);
         let value_ty = self.operand_type_id(value);
         let arena = self.body;

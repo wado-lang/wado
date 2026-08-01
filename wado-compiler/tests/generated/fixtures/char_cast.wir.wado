@@ -178,6 +178,7 @@ fn "char_cast.wado/char_cast_from_u32_fn"() with Stdout {
     let __match_42: ref "core:prelude/types.wado//Option<char>";
     let __match_43: ref "core:prelude/types.wado//Option<char>";
     let __match_44: ref "core:prelude/types.wado//Option<char>";
+    let __match_45: ref "core:prelude/types.wado//Option<char>";
     let __match_46: ref "core:prelude/types.wado//Option<char>";
     let __match_47: ref "core:prelude/types.wado//Option<char>";
     let __match_48: ref "core:prelude/types.wado//Option<char>";
@@ -236,8 +237,12 @@ fn "char_cast.wado/char_cast_from_u32_fn"() with Stdout {
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected None for too large"), used: 27 });
         unreachable;
     }
-    block {
-    };
+    __match_45 = struct.new "core:prelude/types.wado//Option<char>" { 1 };
+    if @likely(__match_45.discriminant == 1) {
+    } else {
+        "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected None for negative"), used: 26 });
+        unreachable;
+    }
     __match_46 = "core:prelude/primitive.wado/char::from_u32"(0);
     if @likely(ref.test "core:prelude/types.wado//Option<char>::Some"(__match_46)) {
         c_8 = ref.cast "core:prelude/types.wado//Option<char>::Some"(__match_46).payload_0;

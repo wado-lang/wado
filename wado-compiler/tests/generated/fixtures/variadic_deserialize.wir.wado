@@ -676,6 +676,10 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
     let f: u64;
     let c_hi_raw: u64;
     let c_lo_raw: u64;
+    let a1_lo_i: i64;
+    let a1_hi_i: i64;
+    let a0_lo_i: i64;
+    let a0_hi_i: i64;
     let sum_lo: u64;
     let carry1: u64;
     let top_lo: u64;
@@ -692,16 +696,12 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
     f = "core:prelude/fpfmt.wado/pow10_fine"(r);
     c_hi_raw = c_mv_hi - builtin::i64_extend_i32_u(c_mv_lo != 0_i64);
     c_lo_raw = 0_i64 - c_mv_lo;
-    let __mv_lo_1: i64;
-    let __mv_hi_1: i64;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(c_hi_raw, f);
-    let __mv_lo_2: i64;
-    let __mv_hi_2: i64;
-    multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.mul_wide_u(c_lo_raw, f);
-    carry1 = builtin::i64_extend_i32_u(local.tee sum_lo(__mv_lo_1 + __mv_hi_2) <u __mv_lo_1);
+    multivalue_bind [a1_lo_i, a1_hi_i] = i64.mul_wide_u(c_hi_raw, f);
+    multivalue_bind [a0_lo_i, a0_hi_i] = i64.mul_wide_u(c_lo_raw, f);
+    carry1 = builtin::i64_extend_i32_u(local.tee sum_lo(a1_lo_i + a0_hi_i) <u a1_lo_i);
     top_lo = sum_lo;
-    top_hi = __mv_hi_1 + carry1;
-    if __mv_lo_2 != 0_i64 {
+    top_hi = a1_hi_i + carry1;
+    if a0_lo_i != 0_i64 {
         top_lo = top_lo + 1_i64;
         if top_lo == 0_i64 {
             top_hi = top_hi + 1_i64;
@@ -718,19 +718,18 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
 }
 
 fn "core:prelude/fpfmt.wado/uscale"(x, pm_hi, pm_lo, s) {
+    let mid_i64: i64;
+    let hi_tmp: i64;
     let hi: u64;
     let sticky: u64;
-    let __mv_lo_1: i64;
-    let __mv_hi_1: i64;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(x, pm_hi);
-    hi = __mv_hi_1;
+    let mid2_i64: i64;
+    multivalue_bind [mid_i64, hi_tmp] = i64.mul_wide_u(x, pm_hi);
+    hi = hi_tmp;
     sticky = 1_i64;
     if (hi & ((1_i64 << builtin::i64_extend_i32_s(s & 63)) - 1_i64)) == 0_i64 {
-        let __mv_lo_2: i64;
-        let __mv_hi_2: i64;
-        multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.mul_wide_u(x, pm_lo);
-        sticky = builtin::i64_extend_i32_u((__mv_lo_1 - __mv_hi_2) >u 1_i64);
-        hi = hi - builtin::i64_extend_i32_u(__mv_lo_1 <u __mv_hi_2);
+        multivalue_bind [_, mid2_i64] = i64.mul_wide_u(x, pm_lo);
+        sticky = builtin::i64_extend_i32_u((mid_i64 - mid2_i64) >u 1_i64);
+        hi = hi - builtin::i64_extend_i32_u(mid_i64 <u mid2_i64);
     }
     return (hi >>u builtin::i64_extend_i32_s(s)) | sticky;
 }

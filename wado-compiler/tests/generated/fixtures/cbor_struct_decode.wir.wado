@@ -2018,7 +2018,8 @@ fn "core:cbor/core:cbor/CborDeserializer^Deserializer::deserialize_i32"(self) {
     let arg: u64;
     let __qm_v_10: ref "core:prelude/int128.wado//i128";
     let __qm_e_11: ref "core:serde//DeserializeError";
-    let v: ref "core:prelude/int128.wado//i128";
+    let v_12: ref "core:prelude/int128.wado//i128";
+    let __m0: ref "core:prelude/int128.wado//i128";
     start = builtin::i64_extend_i32_s(self.pos);
     major = (local.tee b(let __sroa___match_scrut_0_discriminant: i32; let __sroa___match_scrut_0_case0_payload_0: u8; let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError"; multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_case0_payload_0, __sroa___match_scrut_0_case1_payload_0] = "core:cbor/core:cbor/CborDeserializer::peek_byte"(self); (if @likely(__sroa___match_scrut_0_discriminant == 0) -> u8 {
         local.tee __qm_v_2(__sroa___match_scrut_0_case0_payload_0);
@@ -2060,7 +2061,7 @@ fn "core:cbor/core:cbor/CborDeserializer^Deserializer::deserialize_i32"(self) {
     let __sroa___match_scrut_2_case0_payload_0: ref null "core:prelude/int128.wado//i128";
     let __sroa___match_scrut_2_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa___match_scrut_2_discriminant, __sroa___match_scrut_2_case0_payload_0, __sroa___match_scrut_2_case1_payload_0] = "core:cbor/core:cbor/CborDeserializer::read_signed_i128"(self);
-    v = (if @likely(__sroa___match_scrut_2_discriminant == 0) -> ref "core:prelude/int128.wado//i128" {
+    v_12 = (if @likely(__sroa___match_scrut_2_discriminant == 0) -> ref "core:prelude/int128.wado//i128" {
         __qm_v_10 = ref.as_non_null(__sroa___match_scrut_2_case0_payload_0);
         __qm_v_10;
     } else {
@@ -2068,15 +2069,15 @@ fn "core:cbor/core:cbor/CborDeserializer^Deserializer::deserialize_i32"(self) {
         cold_path;
         return 1, 0, __qm_e_11;
     });
-    if @unlikely((if "core:prelude/int128.wado/core:prelude/int128.wado/i128^Ord::cmp"(global:core:cbor::__const_obj_25, v) != 2 -> i32 {
-        "core:prelude/int128.wado/core:prelude/int128.wado/i128^Ord::cmp"(v, global:core:cbor::__const_obj_24) != 2;
+    if @unlikely(__m0 = struct.new "core:prelude/int128.wado//i128" { low: v_12.low, high: v_12.high }; (if "core:prelude/int128.wado/core:prelude/int128.wado/i128^Ord::cmp"(global:core:cbor::__const_obj_25, __m0) != 2 -> i32 {
+        "core:prelude/int128.wado/core:prelude/int128.wado/i128^Ord::cmp"(__m0, global:core:cbor::__const_obj_24) != 2;
     } else {
         0;
     }) == 0) {
         cold_path;
         return 1, 0, ref.as_non_null("core:serde/core:serde/DeserializeError::overflow"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 }, start));
     }
-    return 0, builtin::i32_wrap_i64(v.low), ref.null none;
+    return 0, builtin::i32_wrap_i64(v_12.low), ref.null none;
 }
 
 fn "core:cbor/core:cbor/CborDeserializer^Deserializer::deserialize_string"(self) {

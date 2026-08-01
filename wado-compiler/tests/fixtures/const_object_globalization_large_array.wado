@@ -1,11 +1,18 @@
-// A hoisted array literal big enough for the `array.new_data` promotion must
-// keep the lazy-init guard (WEP: Constant Object Globalization).
+// A hoisted array literal the `array.new_data` promotion will take must keep
+// the lazy-init guard (WEP: Constant Object Globalization).
 //
 // `promote_constant_arrays_to_data` rewrites a constant primitive
-// `array.new_fixed` of 128+ elements into `array.new_data`, which is not
-// Wasm-const-expressible, so the classifier cannot delete the hoist's
-// assignment. Unguarded, the 150-element array is rebuilt and the global
-// rewritten on every loop iteration.
+// `array.new_fixed` into `array.new_data` when the packed bytes come out
+// smaller than the inline operands, which is not Wasm-const-expressible, so
+// the classifier cannot delete the hoist's assignment. Unguarded, the
+// 150-element array is rebuilt and the global rewritten on every loop
+// iteration.
+//
+// The elements are `f64` so the promotion pays: 8 packed bytes against the
+// 9 an `f64.const` operand costs. The same values as `i32` would pack to 4
+// bytes against 3 inline, so that literal stays `array.new_fixed`, becomes an
+// eager constant global, and needs no guard — see
+// `opt_array_data_promotion_profitability.wado`.
 //
 // The `black_box` index keeps the table read runtime-dependent, so neither
 // the element read nor the surrounding template folds away.
@@ -14,7 +21,7 @@ use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
     for let mut i = 0; i < 2; i += 1 {
-        let table: List<i32> = [
+        let table: List<f64> = [
             100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115,
             116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131,
             132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147,

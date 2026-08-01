@@ -1,0 +1,36 @@
+// `let b = a` where neither binding is ever written — no assignment, no field
+// mutation, no `&`/`&mut` — makes `a` and `b` indistinguishable, so the copy
+// propagates however many times each is read. The read-count gate used to
+// refuse this for value types, leaving the copy for WIR to remove.
+//
+// `mutated` is the guard: there `b` *is* written, so the copy must survive and
+// the two must print different values.
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+#[inline(never)]
+fn total(p: Point) -> i32 {
+    return p.x + p.y;
+}
+
+export fn run() with Stdout {
+    let a = Point { x: builtin::black_box(1), y: 2 };
+    let b = a;
+    println(`${total(a) + total(b) + a.x + b.y}`);
+
+    let c = Point { x: builtin::black_box(10), y: 20 };
+    let mut d = c;
+    d.x = 99;
+    println(`${total(c)} ${total(d)}`);
+}
+
+__DATA__
+{
+    "stdout": "9\n30 119\n",
+    "wir_not_expect:O2": ["b = a;"]
+}
