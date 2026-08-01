@@ -246,12 +246,21 @@ impl TokenStream {
         return self.triv_kinds.len();
     }
 
-    /// Append one hidden / skip token to the flat trivia arrays.
+    /// Append one hidden / skip token to the flat trivia arrays. The sole
+    /// writer of the trivia columns, so their lengths and capacities stay in
+    /// lockstep and one capacity check covers all four.
     pub fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
-        self.triv_kinds.push(kind);
-        self.triv_starts.push(start);
-        self.triv_ends.push(end);
-        self.triv_chans.push(channel);
+        if self.triv_kinds.len() >= self.triv_kinds.capacity() {
+            builtin::cold_path();
+            self.triv_kinds.grow();
+            self.triv_starts.grow();
+            self.triv_ends.grow();
+            self.triv_chans.grow();
+        }
+        self.triv_kinds.push_within_capacity(kind);
+        self.triv_starts.push_within_capacity(start);
+        self.triv_ends.push_within_capacity(end);
+        self.triv_chans.push_within_capacity(channel);
     }
 
     /// Append one parser (default-channel) token. The sole writer of the
@@ -272,12 +281,21 @@ impl TokenStream {
         flags: TokenFlags,
     ) -> i32 {
         let idx = self.kinds.len();
-        self.kinds.push(kind);
-        self.starts.push(start);
-        self.ends.push(end);
-        self.triv_lo.push(triv_lo);
-        self.triv_hi.push(triv_hi);
-        self.flags.push(flags);
+        if idx >= self.kinds.capacity() {
+            builtin::cold_path();
+            self.kinds.grow();
+            self.starts.grow();
+            self.ends.grow();
+            self.triv_lo.grow();
+            self.triv_hi.grow();
+            self.flags.grow();
+        }
+        self.kinds.push_within_capacity(kind);
+        self.starts.push_within_capacity(start);
+        self.ends.push_within_capacity(end);
+        self.triv_lo.push_within_capacity(triv_lo);
+        self.triv_hi.push_within_capacity(triv_hi);
+        self.flags.push_within_capacity(flags);
         return idx;
     }
 

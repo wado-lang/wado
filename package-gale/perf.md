@@ -97,6 +97,19 @@ one right-sized `array.new_default` instead of `log2(rows)` doubling reallocs, a
 2.52 → 2.36 ms/iter (~6%, build-heavy), `syntax_highlight` ~2% (build is a smaller
 share); no over-fill regression.
 
+**One capacity check per row/token (landed, 2026-08).** The `List<i32>::push`
+top frame (17.6% dev self on `sqlite_parse`): every column append paid `push`'s
+grow check even though the columns advance in lockstep. `TreeBuilder::push_row`,
+`TokenStream::push_token_flagged` and `push_trivia` now do one
+`len >= capacity` check on the lead column (growing every column together on
+the cold path — same length + same capacity ⇒ lockstep is preserved by
+construction) and then `push_within_capacity` across the row: 4/6/4 checks → 1.
+`TreeBuilder::finish` also dropped its exact-sized fill loop (4 × n `push`es)
+for a value-copy of the `b` column plus `List::filled` for `end`/`flags`/`next`
+(one alloc + fill each). Dev A/B best-of-3: 3.975 → 3.473 ms/iter (**~13%**);
+profile after: push family 17.6% → 12.8% (of which 9.4% is the
+`push_within_capacity` store floor), `finish` self 10.3% → 4.1%.
+
 ### Standing rules (measured)
 
 - **Live-set is the cost, not allocation count.** Under the copying collector,
@@ -171,23 +184,11 @@ CST column build is the largest bucket.
 
 Pick the current top frame off the live profile above rather than a fixed recipe
 here: the frames shift as levers land, and the mid-size ones are noisy, so
-re-measure before committing. Three candidates read off the profile above:
+re-measure before committing. Candidates read off the profile above (the
+`List<i32>::push` one-check-per-row lever has landed — see "Current state"; the
+keyword-classifier `match` rewrite was measured a no-go — see "Tried and didn't
+pan out"):
 
-- **`List<i32>::push` (14.5%, top frame).** The columns are already pre-sized, yet
-  every element still pays `push`'s `used >= repr.len()` grow check — ~10 columns per
-  token (`TokenStream`) plus 4 per CST row (`TreeBuilder::push_row`, `rows ≈ 3.44 ×
-  tokens`). `push_within_capacity` exists for exactly this ("a burst of appends after
-  one `reserve` pays a single capacity check instead of one per element"), but both
-  pre-sizes are heuristics (`4 × tokens`, `chars/4`) that a different input can exceed,
-  and `push_within_capacity` leaves an over-run to the array bounds check, i.e. a trap.
-  So the shape is **one capacity check per row/token with a grow fallback**, then
-  unchecked appends across the columns — 10 checks → 1, not 10 → 0.
-- **`char::to_ascii_lowercase` (4.4%).** `gen_keyword_check` (`lexer_gen.wado`) emits the
-  guard for every char from `kc = 0`, so each keyword arm re-tests the first char that the
-  enclosing dispatch already established; and that dispatch is a linear `else if` chain of
-  `eq_ignore_ascii_case` calls over the distinct first letters (~6–20 deep per length
-  bucket). Lowercase the first char once and `match` on it (br_table), and drop the
-  redundant `kc = 0` guard. Pure compute, so it carries to release intact.
 - **First-char dispatch is linear in the ranges, not the rules.** The dispatch is an
   `if / else if` chain over the first-char sets, so a rule opening on a large set costs
   a comparison per range — a `[\p{L}]` rule is ~700. Coalescing branches with identical
@@ -395,6 +396,16 @@ ATN literal is a measured problem.)
   13366 chars, so the mean unescaped stretch is ~4.6 chars and the per-run bookkeeping
   costs what the batching saves. Input-shape-bound: sparse captures would answer
   differently.
+
+- **Keyword classifier: fold-once + `match` first-char dispatch** (2026-08).
+  Rewrote `classify_keyword`'s per-length first-char dispatch from the linear
+  `eq_ignore_ascii_case` else-if chain to `let c0 = chars[start].to_ascii_lowercase()`
+  + `match c0` (br_table), dropping each arm's now-redundant case-insensitive
+  `kc = 0` guard. Dev A/B best-of-3 measured a consistent slight **loss**
+  (3.309 → 3.357 ms/iter, `sqlite_parse`): the short compare chain predicts
+  well, while the jump table adds an indirect branch — same shape as the
+  kind-set finding above (Cranelift lowers compare cascades competitively;
+  the frame is call-frequency-bound). Reverted.
 
 - **Index loops instead of `for x of &List<i32>`** (2026-07). Iterating by reference
   boxes every element; rewriting `follow_yields`'s membership scan and `classify`'s

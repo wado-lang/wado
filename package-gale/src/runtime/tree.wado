@@ -350,11 +350,21 @@ impl TreeBuilder {
         };
     }
 
+    /// The four event columns share length and capacity: `push_row` (and
+    /// `start_node_at` / `truncate`) always advance them together, so one
+    /// capacity check covers the whole row.
     fn push_row(&mut self, tag: EventTag, a: i32, b: i32) {
-        self.tag.push(tag);
-        self.a.push(a);
-        self.b.push(b);
-        self.alt.push(-1);
+        if self.tag.len() >= self.tag.capacity() {
+            builtin::cold_path();
+            self.tag.grow();
+            self.a.grow();
+            self.b.grow();
+            self.alt.grow();
+        }
+        self.tag.push_within_capacity(tag);
+        self.a.push_within_capacity(a);
+        self.b.push_within_capacity(b);
+        self.alt.push_within_capacity(-1);
     }
 
     /// Open a rule node of `kind` starting at byte offset `start`.
@@ -452,16 +462,10 @@ impl TreeBuilder {
     /// to the stream end (its `next` never stays 0), so traversal terminates.
     pub fn finish(&self) -> CstStore {
         let n = self.tag.len();
-        let mut b: List<i32> = List::with_capacity(n);
-        let mut end: List<i32> = List::with_capacity(n);
-        let mut flags: List<NodeFlags> = List::with_capacity(n);
-        let mut next: List<i32> = List::with_capacity(n);
-        for let mut r = 0; r < n; r += 1 {
-            b.push(self.b[r]);
-            end.push(0);
-            flags.push(NodeFlags::none());
-            next.push(0);
-        }
+        let mut b = self.b;
+        let mut end = List::filled(n, 0);
+        let mut flags = List::filled(n, NodeFlags::none());
+        let mut next = List::filled(n, 0);
         let mut stack: List<i32> = [];
         for let mut r = 0; r < n; r += 1 {
             match self.tag[r] {
