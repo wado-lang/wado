@@ -53,6 +53,20 @@ pub enum Value {
 /// enable; past this it is simply not a constant here.
 pub const MAX_SEQ_ELEMENTS: usize = 1024;
 
+/// A backing nobody else holds, to be written through in place.
+///
+/// `Rc::make_mut` covers `Rc<T>` but not `Rc<[T]>`, so the copy-on-write step
+/// is spelled out: a shared backing is copied and the copy handed back, a
+/// unique one is handed back where it lies. That is what keeps filling a
+/// sequence element by element linear — copying it per write is what makes it
+/// quadratic — while a value two locals share still forks on the first write.
+fn unshared<T: Clone>(backing: &mut Rc<[T]>) -> &mut [T] {
+    if Rc::get_mut(backing).is_none() {
+        *backing = backing.iter().cloned().collect();
+    }
+    Rc::get_mut(backing).expect("the backing was just replaced with a unique one")
+}
+
 impl Value {
     /// An aggregate over `fields`, canonicalized to `field_index` order so two
     /// literals listing the same fields in different order compare equal.
@@ -77,64 +91,46 @@ impl Value {
             .map(|pos| &fields[pos].1)
     }
 
-    /// This aggregate with field `index` replaced. `None` for a scalar or an
-    /// absent field — a NIR aggregate literal lists every field, so an absent
-    /// one means the value is not the aggregate the write assumed.
-    #[must_use]
-    pub fn with_field(&self, index: u32, value: Self) -> Option<Self> {
-        let Self::Aggregate { type_id, fields } = self else {
+    /// This aggregate's field `index`, to be written through. `None` for a
+    /// scalar or an absent field — a NIR aggregate literal lists every field,
+    /// so an absent one means the value is not the aggregate the write assumed.
+    pub fn field_mut(&mut self, index: u32) -> Option<&mut Self> {
+        let Self::Aggregate { fields, .. } = self else {
             return None;
         };
         let pos = fields.binary_search_by_key(&index, |(i, _)| *i).ok()?;
-        let mut fields = fields.to_vec();
-        fields[pos].1 = value;
-        Some(Self::Aggregate {
-            type_id: *type_id,
-            fields: fields.into(),
-        })
+        Some(&mut unshared(fields)[pos].1)
     }
 
-    /// This aggregate with the value at `path` replaced. `None` when the path
-    /// does not reach a field the value has.
-    #[must_use]
-    pub fn with_path(&self, path: &[u32], value: Self) -> Option<Self> {
-        let Some((head, rest)) = path.split_first() else {
-            return Some(value);
-        };
-        let updated = self.field(*head)?.with_path(rest, value)?;
-        self.with_field(*head, updated)
+    /// The value at `path` inside this one, to be written through. `None` when
+    /// the path does not reach a field the value has.
+    pub fn place_mut(&mut self, path: &[u32]) -> Option<&mut Self> {
+        path.iter().try_fold(self, |v, i| v.field_mut(*i))
     }
 
-    /// This sequence with element `index` replaced. `None` for a non-sequence
-    /// or an index past the end, where the write traps at run time.
-    #[must_use]
-    pub fn with_element(&self, index: u64, value: Self) -> Option<Self> {
-        let Self::Seq { type_id, elements } = self else {
+    /// Write `value` into element `index`. `None` for a non-sequence or an
+    /// index past the end, where the write traps at run time — and nothing is
+    /// written in either case.
+    pub fn set_element(&mut self, index: u64, value: Self) -> Option<()> {
+        let Self::Seq { elements, .. } = self else {
             return None;
         };
         let index = usize::try_from(index).ok()?;
         if index >= elements.len() {
             return None;
         }
-        let mut elements = elements.to_vec();
-        elements[index] = value;
-        Some(Self::Seq {
-            type_id: *type_id,
-            elements: elements.into(),
-        })
+        unshared(elements)[index] = value;
+        Some(())
     }
 
-    /// This sequence with `len` of `source`'s elements from `from` written at
-    /// `at`. `None` for a non-sequence or a run either side cannot supply,
-    /// where the copy traps at run time.
-    #[must_use]
-    pub fn with_run(&self, at: u64, source: &Self, from: u64, len: u64) -> Option<Self> {
-        let (
-            Self::Seq { type_id, elements },
-            Self::Seq {
-                elements: source, ..
-            },
-        ) = (self, source)
+    /// Write `len` of `source`'s elements from `from` at `at`. `None` for a
+    /// non-sequence or a run either side cannot supply, where the copy traps at
+    /// run time — the bounds are settled before anything is written, so a
+    /// refused copy leaves the destination as it was.
+    pub fn set_run(&mut self, at: u64, source: &Self, from: u64, len: u64) -> Option<()> {
+        let Self::Seq {
+            elements: source, ..
+        } = source
         else {
             return None;
         };
@@ -143,15 +139,16 @@ impl Value {
             usize::try_from(from).ok()?,
             usize::try_from(len).ok()?,
         );
-        let source = source.get(from..from.checked_add(len)?)?;
-        let mut elements = elements.to_vec();
-        elements
-            .get_mut(at..at.checked_add(len)?)?
-            .clone_from_slice(source);
-        Some(Self::Seq {
-            type_id: *type_id,
-            elements: elements.into(),
-        })
+        let source = source.get(from..from.checked_add(len)?)?.to_vec();
+        let Self::Seq { elements, .. } = self else {
+            return None;
+        };
+        let end = at.checked_add(len)?;
+        if end > elements.len() {
+            return None;
+        }
+        unshared(elements)[at..end].clone_from_slice(&source);
+        Some(())
     }
 
     /// The value `array.new_default` leaves in an element of this primitive

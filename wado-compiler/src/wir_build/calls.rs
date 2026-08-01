@@ -244,7 +244,12 @@ impl FunctionTranslator<'_, '_> {
         Some((type_id, src, src_type_id))
     }
 
-    fn build_bulk_array_clone(&mut self, type_id: WirTypeId, src: WirInstr) -> WirInstr {
+    fn build_bulk_array_clone(
+        &mut self,
+        type_id: WirTypeId,
+        src: WirInstr,
+        len: Option<WirInstr>,
+    ) -> WirInstr {
         let idx = type_id.index();
         let src_name = format!("__array_clone_src_{idx}");
         let dst_name = format!("__array_clone_dst_{idx}");
@@ -256,13 +261,16 @@ impl FunctionTranslator<'_, '_> {
 
         let mut seq = Vec::new();
         seq.extend(declare_and_set_local(src_name.clone(), ref_ty.clone(), src));
-        seq.extend(declare_and_set_local(
-            len_name.clone(),
-            WirType::I32,
+        let len_instr = len.unwrap_or_else(|| {
             WirInstr::ArrayLen(Box::new(WirInstr::LocalGet {
                 name: src_name.clone(),
                 result_ty: ref_ty.clone(),
-            })),
+            }))
+        });
+        seq.extend(declare_and_set_local(
+            len_name.clone(),
+            WirType::I32,
+            len_instr,
         ));
         seq.extend(declare_and_set_local(
             dst_name.clone(),
@@ -604,13 +612,31 @@ impl FunctionTranslator<'_, '_> {
                         type_id,
                         src: Box::new(src),
                         element_copy_mangle: Some(element_copy_mangle),
+                        len: None,
                     }),
-                    None => Some(self.build_bulk_array_clone(type_id, src)),
+                    None => Some(self.build_bulk_array_clone(type_id, src, None)),
+                }
+            }
+            "builtin::array_clone_prefix" => {
+                let (type_id, src, src_type_id) = self.translate_array_ref_operand(args)?;
+                let len = self.translate_operand(args[1].expr);
+                match self.array_element_copy_mangle(src_type_id) {
+                    Some(element_copy_mangle) => Some(WirInstr::ArrayClone {
+                        type_id,
+                        src: Box::new(src),
+                        element_copy_mangle: Some(element_copy_mangle),
+                        len: Some(Box::new(len)),
+                    }),
+                    None => Some(self.build_bulk_array_clone(type_id, src, Some(len))),
                 }
             }
             "builtin::array_clone_shallow" => {
+                // The demote pass retargets `array_clone` / `array_clone_prefix`
+                // calls here by id, keeping the call-site args — so a second
+                // arg, when present, is the prefix length to preserve.
                 let (type_id, src, _) = self.translate_array_ref_operand(args)?;
-                Some(self.build_bulk_array_clone(type_id, src))
+                let len = args.get(1).map(|arg| self.translate_operand(arg.expr));
+                Some(self.build_bulk_array_clone(type_id, src, len))
             }
             "builtin::array_fill" => {
                 let arr = self.translate_operand(args[0].expr);

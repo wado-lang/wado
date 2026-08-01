@@ -103,6 +103,7 @@ impl FunctionRef {
             | "array_copy"
             | "array_fill"
             | "array_clone"
+            | "array_clone_prefix"
             | "array_clone_shallow"
             | "select"
             | "copy_value"

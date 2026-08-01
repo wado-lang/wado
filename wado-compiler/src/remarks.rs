@@ -125,7 +125,11 @@ impl Collector<'_> {
         match builtin.as_deref() {
             // `array_clone(&agg.repr)` copies a `List<T>` / `String` backing
             // array; recover the owning aggregate type from the argument.
-            Some("builtin::array_clone" | "builtin::array_clone_shallow") => args
+            Some(
+                "builtin::array_clone"
+                | "builtin::array_clone_prefix"
+                | "builtin::array_clone_shallow",
+            ) => args
                 .first()
                 .and_then(|a| a.expr.as_expr())
                 .map(|e| clone_source_type(body, e)),

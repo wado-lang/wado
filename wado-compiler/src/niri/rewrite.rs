@@ -28,7 +28,7 @@ use super::{BodySink, EditSink, Interpreter, Lattice, PatBindings};
 impl Interpreter<'_> {
     /// Splice each constant-condition `if` statement of `block` into `block`
     /// itself, leaving the arm the condition chooses.
-    pub(crate) fn reduce_local_block<S: EditSink>(&mut self, sink: &mut S, block: BlockId) -> bool {
+    pub fn reduce_local_block<S: EditSink>(&mut self, sink: &mut S, block: BlockId) -> bool {
         let body = sink.body();
         let has_constant_if = body.blocks[block].stmts.iter().any(|s| {
             matches!(
@@ -68,11 +68,6 @@ impl Interpreter<'_> {
         true
     }
 
-    pub fn reduce_local_in_body(&mut self, body: &mut Body, e: ExprId) -> bool {
-        let mut sink = BodySink { body };
-        self.reduce_local(&mut sink, e)
-    }
-
     /// Reduce `e` to its flow-sensitive constant value or collapse a constant
     /// branch, committing every edit through `sink`.
     ///
@@ -83,7 +78,7 @@ impl Interpreter<'_> {
     /// would report a change at every visit and the worklist would never
     /// settle — and both rewrites replace the node with a kind neither ever
     /// matches again.
-    pub(crate) fn reduce_local<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
+    pub fn reduce_local<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
         if let Some(value) = self.flow_fold_candidate(sink.body(), e) {
             if value.is_scalar() {
                 if sink.replace_with_value(e, value.clone()) {
@@ -102,12 +97,10 @@ impl Interpreter<'_> {
             } else {
                 self.materialize_seq_via(sink, e, &value)
             };
+            self.frame.scratch_folds.insert(e, value);
             if committed {
                 return true;
             }
-            // Nothing took the value, so record it: a later visit reads it
-            // back instead of running the region again.
-            self.frame.scratch_folds.insert(e, value);
         }
         if rewrite_short_circuit_via(sink, e) {
             return true;
@@ -281,12 +274,6 @@ impl Interpreter<'_> {
         }
     }
 
-    /// In-place `reduce_local_block` for the CTFE scratch-body path.
-    pub fn reduce_local_block_in_body(&mut self, body: &mut Body, block: BlockId) -> bool {
-        let mut sink = BodySink { body };
-        self.reduce_local_block(&mut sink, block)
-    }
-
     /// Bottom-up reduce the subtree rooted at `e`, so a child fold is
     /// observable at its parent. Used by CTFE to evaluate a callee body whose
     /// children no outer walk has pre-reduced.
@@ -308,8 +295,8 @@ impl Interpreter<'_> {
             }
         };
         changed |= match node {
-            NodeRef::Expr(e) => self.reduce_local_in_body(body, e),
-            NodeRef::Block(b) => self.reduce_local_block_in_body(body, b),
+            NodeRef::Expr(e) => self.reduce_local(&mut BodySink { body }, e),
+            NodeRef::Block(b) => self.reduce_local_block(&mut BodySink { body }, b),
             NodeRef::Stmt(_) | NodeRef::Pat(_) => false,
         };
         changed
@@ -386,14 +373,6 @@ impl Interpreter<'_> {
         }
     }
 
-    /// Reduce the subtree bottom-up in place (so multi-level constant operands
-    /// fold), then project to a lattice. The standalone entry point for callers
-    /// with an unreduced expression — the `niri` unit tests.
-    pub fn reduce_to_lattice_full(&mut self, body: &mut Body, e: ExprId) -> Lattice {
-        self.reduce_in_place(body, e);
-        self.reduce_to_lattice(body, e)
-    }
-
     /// Collapse an `if` with a constant condition or equal arms.
     fn rewrite_if_expr_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
         let (condition, then_branch, else_branch) = match &sink.body().exprs[e].kind {
@@ -428,23 +407,22 @@ impl Interpreter<'_> {
     /// A constant scrutinee decides the whole rewrite: the arm it picks is the
     /// only sound one, so failing to pick it rules out the other collapses too.
     fn rewrite_match_expr_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
-        let body = sink.body();
-        let scrutinee = match &body.exprs[e].kind {
-            ExprKind::Match { expr, arms } if !arms.is_empty() => *expr,
-            _ => return false,
+        let ExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } = &sink.body().exprs[e].kind
+        else {
+            return false;
         };
-        let arms_data: Vec<ArmParts> = match &body.exprs[e].kind {
-            ExprKind::Match { arms, .. } => arms
-                .iter()
-                .map(|a| (a.guard, a.pattern, a.body, a.span))
-                .collect(),
-            _ => unreachable!(),
-        };
-        if let Lattice::Const(scrutinee_value) = self.operand_to_lattice(sink.body(), scrutinee) {
-            return self.splice_chosen_match_arm(sink, e, &scrutinee_value, &arms_data);
+        if arms.is_empty() {
+            return false;
         }
-        rewrite_bool_discriminator(sink, e, scrutinee, &arms_data)
-            || self.collapse_equal_match_arms(sink, e, scrutinee, &arms_data)
+        let (scrutinee, arms) = (*scrutinee, ArmParts::of(arms));
+        if let Lattice::Const(scrutinee_value) = self.operand_to_lattice(sink.body(), scrutinee) {
+            return self.splice_chosen_match_arm(sink, e, &scrutinee_value, &arms);
+        }
+        rewrite_bool_discriminator(sink, e, scrutinee, &arms)
+            || self.collapse_equal_match_arms(sink, e, scrutinee, &arms)
     }
 
     /// Replace the `match` with the arm a constant scrutinee selects, wrapped in
@@ -461,35 +439,35 @@ impl Interpreter<'_> {
         scrutinee_value: &Value,
         arms_data: &[ArmParts],
     ) -> bool {
-        let mut chosen: Option<(usize, PatBindings)> = None;
-        for (i, (guard, pat, _, _)) in arms_data.iter().enumerate() {
+        let mut chosen: Option<(&ArmParts, PatBindings)> = None;
+        for arm in arms_data {
             let mut binds = PatBindings::new();
-            match self.pattern_matches(sink.body(), scrutinee_value, *pat, &mut binds) {
+            match self.pattern_matches(sink.body(), scrutinee_value, arm.pattern, &mut binds) {
                 PatternMatch::No => continue,
                 PatternMatch::Unknown => return false,
                 PatternMatch::Yes => {}
             }
-            match guard {
+            match arm.guard {
                 None => {}
-                Some(g) => match self.guard_under_bindings(sink.body(), *g, &binds) {
+                Some(g) => match self.guard_under_bindings(sink.body(), g, &binds) {
                     Some(true) => {}
                     Some(false) => continue,
                     None => return false,
                 },
             }
-            chosen = Some((i, binds));
+            chosen = Some((arm, binds));
             break;
         }
-        let Some((idx, binds)) = chosen else {
+        let Some((arm, binds)) = chosen else {
             return false;
         };
-        let (body_op, arm_span) = (arms_data[idx].2, arms_data[idx].3);
+        let body_op = arm.body;
         if operand_reads_any_local(sink.body(), body_op, &binds) {
             return false;
         }
         let span = match body_op {
             Operand::Expr(ex) => sink.body().exprs[ex].span,
-            Operand::Value(_) => arm_span,
+            Operand::Value(_) => arm.span,
         };
         let stmt = sink.alloc_stmt(StmtKind::Expr(body_op), span);
         let block = sink.alloc_block(vec![stmt], span);
@@ -510,19 +488,15 @@ impl Interpreter<'_> {
         if !is_discardable_operand(sink.body(), scrutinee) {
             return false;
         }
-        if arms_data.iter().any(|(g, _, _, _)| g.is_some()) {
+        if arms_data.iter().any(|a| a.guard.is_some()) {
             return false;
         }
-        let arms: Vec<ArmData> = match &sink.body().exprs[e].kind {
-            ExprKind::Match { arms, .. } => arms.clone(),
-            _ => unreachable!(),
-        };
-        if !is_provably_exhaustive(sink.body(), &arms) {
+        if !is_provably_exhaustive(sink.body(), ArmParts::coverage(arms_data)) {
             return false;
         }
         let mut common: Option<Value> = None;
-        for (_, _, arm_body, _) in arms_data {
-            let Lattice::Const(v) = self.operand_to_lattice(sink.body(), *arm_body) else {
+        for arm in arms_data {
+            let Lattice::Const(v) = self.operand_to_lattice(sink.body(), arm.body) else {
                 return false;
             };
             match common {
@@ -537,7 +511,30 @@ impl Interpreter<'_> {
 
 /// The parts of a match arm the rewrites read, lifted out of the body so the
 /// sink can be borrowed mutably while they are consulted.
-type ArmParts = (Option<Operand>, PatId, Operand, crate::token::Span);
+pub(super) struct ArmParts {
+    guard: Option<Operand>,
+    pattern: PatId,
+    body: Operand,
+    span: crate::token::Span,
+}
+
+impl ArmParts {
+    fn of(arms: &[ArmData]) -> Vec<Self> {
+        arms.iter()
+            .map(|a| Self {
+                guard: a.guard,
+                pattern: a.pattern,
+                body: a.body,
+                span: a.span,
+            })
+            .collect()
+    }
+
+    /// What [`is_provably_exhaustive`] asks of each arm.
+    fn coverage(arms: &[Self]) -> impl Iterator<Item = (Option<Operand>, PatId)> + '_ {
+        arms.iter().map(|a| (a.guard, a.pattern))
+    }
+}
 
 /// Rewrite `match X { Case => true, _ => false }` to the equality test it is.
 /// The scrutinee moves inside the synthesised `Binary`, and the `Match` node
@@ -769,23 +766,23 @@ pub(super) fn try_match_bool_discriminator(
     let [yes_arm, no_arm] = arms else {
         return None;
     };
-    if yes_arm.0.is_some() || no_arm.0.is_some() {
+    if yes_arm.guard.is_some() || no_arm.guard.is_some() {
         return None;
     }
-    if !matches!(body.pats[no_arm.1].kind, PatKind::Wildcard) {
+    if !matches!(body.pats[no_arm.pattern].kind, PatKind::Wildcard) {
         return None;
     }
-    if operand_bool(body, yes_arm.2) != Some(true) {
+    if operand_bool(body, yes_arm.body) != Some(true) {
         return None;
     }
-    if operand_bool(body, no_arm.2) != Some(false) {
+    if operand_bool(body, no_arm.body) != Some(false) {
         return None;
     }
     let PatKind::Enum {
         enum_type,
         case_name,
         case_index,
-    } = &body.pats[yes_arm.1].kind
+    } = &body.pats[yes_arm.pattern].kind
     else {
         return None;
     };
@@ -793,7 +790,7 @@ pub(super) fn try_match_bool_discriminator(
         enum_type: *enum_type,
         case_index: *case_index,
         case_name: case_name.clone(),
-        span: yes_arm.3,
+        span: yes_arm.span,
     })
 }
 
@@ -807,4 +804,62 @@ pub(super) struct EnumEqReplacement {
     case_index: u32,
     case_name: String,
     span: crate::token::Span,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
+    use crate::niri::BodySink;
+    use crate::token::Span;
+
+    /// `20 + 22`, as the two pooled operands the skeleton carries.
+    fn add_body(left: u64, right: u64) -> (Body, ExprId) {
+        let mut body = Body::empty();
+        let l = body
+            .values
+            .alloc_unshared(ValueKind::Int(left, TypeTable::I32), TypeTable::I32);
+        let r = body
+            .values
+            .alloc_unshared(ValueKind::Int(right, TypeTable::I32), TypeTable::I32);
+        let e = body.exprs.push(ExprNode {
+            kind: ExprKind::Binary {
+                left: Operand::Value(l),
+                op: NirBinaryOp::Add,
+                right: Operand::Value(r),
+            },
+            type_id: TypeTable::I32,
+            span: Span::default(),
+        });
+        let stmt = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Expr(e)),
+            span: Span::default(),
+        });
+        body.root = body.blocks.push(BlockNode {
+            stmts: vec![stmt],
+            span: Span::default(),
+        });
+        (body, e)
+    }
+
+    fn int(value: u64) -> Value {
+        Value::Int {
+            value,
+            prim: crate::tir::PrimitiveType::I32,
+        }
+    }
+
+    /// A declined fold is remembered whichever backend declined it: the node a
+    /// value was folded from does not always survive the rewrite that takes it,
+    /// so a later read cannot be asked to recompute.
+    #[test]
+    fn a_declined_fold_is_remembered() {
+        let table = TypeTable::new();
+        let mut interp = Interpreter::new(&table);
+        let (mut body, e) = add_body(20, 22);
+
+        interp.reduce_local(&mut BodySink { body: &mut body }, e);
+
+        assert_eq!(interp.expr_to_lattice(&body, e), Lattice::Const(int(42)));
+    }
 }

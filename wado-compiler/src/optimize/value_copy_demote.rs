@@ -39,6 +39,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FunctionKind, FunctionRef, NirFunction, NirParam, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
+use crate::nir_visitor::reachable_exprs;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::storage_root;
@@ -225,23 +226,6 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
 }
 
 // ---------------------------------------------------------------------------
-// Reachable-node enumeration
-// ---------------------------------------------------------------------------
-
-/// Every `ExprId` reachable from the body root, in arbitrary order.
-fn reachable_exprs(body: &Body) -> Vec<ExprId> {
-    let mut out = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Expr(id) = node {
-            out.push(id);
-        }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    out
-}
-
-// ---------------------------------------------------------------------------
 // Helper-shape detection / rewrite
 // ---------------------------------------------------------------------------
 
@@ -347,10 +331,14 @@ fn array_clone_element_type(body: &Body, call: ExprId) -> Option<TypeId> {
     }
 }
 
-/// Whether the call's stamped `func_id` resolves to `builtin::array_clone`.
+/// Whether the call's stamped `func_id` resolves to `builtin::array_clone`
+/// or its right-sized sibling `builtin::array_clone_prefix` (the `List<T>` /
+/// `String` wrapper copies use the latter; both demote the same way).
 fn is_array_clone(func_id: FuncId, descriptors: &[FunctionRef]) -> bool {
-    builtin_gname(super::dce::callee_descriptor(descriptors, func_id)).as_deref()
-        == Some("builtin::array_clone")
+    matches!(
+        builtin_gname(super::dce::callee_descriptor(descriptors, func_id)).as_deref(),
+        Some("builtin::array_clone" | "builtin::array_clone_prefix")
+    )
 }
 
 /// Rewrite every reachable `builtin::array_clone` call in `body` to its

@@ -732,6 +732,32 @@ impl TypeTable {
     pub const UNKNOWN: TypeId = TypeId(17);
     pub const ERROR: TypeId = TypeId(18);
 
+    /// The primitive spelling → well-known `TypeId` mapping, the single
+    /// source for every by-name primitive resolution. `i128` / `u128` are
+    /// deliberately absent: they are struct-backed in the prelude, so their
+    /// names resolve through the declaration path, not to the raw
+    /// `PrimitiveType` ids.
+    pub fn primitive_by_name(name: &str) -> Option<TypeId> {
+        match name {
+            "i8" => Some(Self::I8),
+            "i16" => Some(Self::I16),
+            "i32" => Some(Self::I32),
+            "i64" => Some(Self::I64),
+            "u8" => Some(Self::U8),
+            "u16" => Some(Self::U16),
+            "u32" => Some(Self::U32),
+            "u64" => Some(Self::U64),
+            "f32" => Some(Self::F32),
+            "f64" => Some(Self::F64),
+            "bool" => Some(Self::BOOL),
+            "char" => Some(Self::CHAR),
+            "v128" => Some(Self::V128),
+            "()" => Some(Self::UNIT),
+            "!" => Some(Self::NEVER),
+            _ => None,
+        }
+    }
+
     /// Reserved `GenericInstance` base name of the built-in tuple. Not a
     /// writable type name, so it can never collide with a user-defined
     /// `struct Tuple` — that is what makes the name-only [`Self::is_tuple_type`]
@@ -3772,8 +3798,8 @@ impl FunctionRef {
 
         match generic_name {
             "array_get" | "array_get_ref" | "array_get_mut_ref" | "array_set" | "array_new"
-            | "array_len" | "array_copy" | "array_fill" | "array_clone" | "select"
-            | "copy_value" | "is_uninitialized" | "black_box" => {
+            | "array_len" | "array_copy" | "array_fill" | "array_clone" | "array_clone_prefix"
+            | "select" | "copy_value" | "is_uninitialized" | "black_box" => {
                 Some(format!("builtin::{generic_name}"))
             }
             _ => None,

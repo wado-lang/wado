@@ -1,0 +1,17 @@
+// A qualified call must select the same impl the method form does: the
+// ref-impl priority step runs under the named-trait filter rather than being
+// skipped, so `IntoIterator::into_iter(&list)` takes
+// `impl IntoIterator for &List<T>` (items are `&T`), not the base type's
+// by-value impl. WEP 2026-07-31.
+test "a qualified call takes the concrete ref impl" {
+    let list: List<i32> = [1, 2, 3];
+    let mut sum = 0;
+    let mut it = IntoIterator::into_iter(&list);
+    while let Some(x) = it.next() {
+        sum += *x;
+    }
+    assert sum == 6;
+}
+
+__DATA__
+{"test": {}}

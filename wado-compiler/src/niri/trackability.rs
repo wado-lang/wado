@@ -12,7 +12,9 @@ use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtId, StmtKind};
 
 use super::place::{borrowed_place_operand, lvalue_root_local, place_of};
-use super::{CalleeMap, CtfeBuiltinMap, reachable_exprs};
+use crate::nir_visitor::reachable_exprs;
+
+use super::{CalleeMap, CtfeBuiltinMap, ProgramFacts};
 
 /// A method's receiver is its first parameter.
 const RECEIVER: usize = 0;
@@ -69,13 +71,9 @@ pub(super) struct Reached {
 }
 
 impl Reached {
-    pub(super) fn in_frame(
-        body: &Body,
-        ctfe_builtins: Option<&CtfeBuiltinMap>,
-        callees: Option<&CalleeMap>,
-    ) -> Self {
+    pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>) -> Self {
         let performed = performed_exprs(body);
-        let mut reached = Self::collect(body, ctfe_builtins, callees, &performed);
+        let mut reached = Self::collect(body, facts, &performed);
         for e in &performed {
             if let ExprKind::Assign { target, .. } = &body.exprs[*e].kind
                 && place_of(body, (*target).into()).is_some()
@@ -114,27 +112,18 @@ impl Reached {
     /// carries out. The reads are collected as [`Self::in_frame`] collects them:
     /// what a statement-position write builtin reads is read wherever that
     /// mention appears, whoever performs the write.
-    pub(super) fn outside_frame(
-        body: &Body,
-        ctfe_builtins: Option<&CtfeBuiltinMap>,
-        callees: Option<&CalleeMap>,
-    ) -> Self {
+    pub(super) fn outside_frame(body: &Body, facts: ProgramFacts<'_>) -> Self {
         Self {
-            reads: Self::collect(body, ctfe_builtins, callees, &performed_exprs(body)).reads,
+            reads: Self::collect(body, facts, &performed_exprs(body)).reads,
             ..Self::default()
         }
     }
 
     /// What the walk reaches, given the expressions it performs.
-    fn collect(
-        body: &Body,
-        ctfe_builtins: Option<&CtfeBuiltinMap>,
-        callees: Option<&CalleeMap>,
-        performed: &IndexSet<ExprId>,
-    ) -> Self {
+    fn collect(body: &Body, facts: ProgramFacts<'_>, performed: &IndexSet<ExprId>) -> Self {
         let mut reached = Self::default();
-        reached.collect_builtin_borrows(body, ctfe_builtins, performed);
-        reached.collect_call_borrows(body, callees, performed);
+        reached.collect_builtin_borrows(body, facts.ctfe_builtins, performed);
+        reached.collect_call_borrows(body, facts.callees, performed);
         reached
     }
 
@@ -447,4 +436,32 @@ pub(super) fn clobbered_locals(body: &Body, reached: &Reached) -> LocalSet {
         }
     }
     set
+}
+
+/// What a walk of a body may hold values for: which locals may bind an
+/// aggregate constant, and which ones a compile-time frame cannot track.
+pub(super) struct Trackability {
+    pub(super) aggregate_locals: LocalSet,
+    pub(super) clobbered: LocalSet,
+}
+
+impl Trackability {
+    /// For a compile-time frame, which performs the writes it walks.
+    pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>) -> Self {
+        let reached = Reached::in_frame(body, facts);
+        Self {
+            aggregate_locals: aggregate_safe_locals(body, &reached),
+            clobbered: clobbered_locals(body, &reached),
+        }
+    }
+
+    /// For an ordinary walk, which performs nothing, so no write it reaches is
+    /// one it carries out.
+    pub(super) fn outside_frame(body: &Body, facts: ProgramFacts<'_>) -> Self {
+        let reached = Reached::outside_frame(body, facts);
+        Self {
+            aggregate_locals: aggregate_safe_locals(body, &reached),
+            clobbered: LocalSet::default(),
+        }
+    }
 }

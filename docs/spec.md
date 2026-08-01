@@ -2576,7 +2576,8 @@ fn dedup_sorted<T: Ord>(items: List<T>) -> List<T> { ... }
 
 A trait that reaches itself through supertraits is an error. A method name
 reachable through more than one of a receiver's bounds is ambiguous at the call
-site and must be renamed — Wado has no qualified call form to disambiguate one.
+site; name the trait to resolve it (`Left::name(&x)` — see
+[WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)).
 
 #### Multiple Traits
 
@@ -2758,11 +2759,18 @@ impl<T: Eq> Eq for Pair<T> {
 #### Not Yet Implemented
 
 - Trait objects (`dyn Trait`)
-- Fully qualified syntax for disambiguation (`<Type as Trait>::method()`)
+- Fully qualified `<Type as Trait>::method()`. Permanently out — a leading `<`
+  in expression position is JSX's. The trait-qualified (UFCS) form
+  `Trait::method(recv, …)` is implemented instead (see
+  [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)); an
+  associated function with no `self` has no receiver argument to bind `Self`
+  from and stays unspellable
 - Using bounds for method resolution on type parameters (calling `T.method()` where `T: Trait`)
-- Choosing between one trait's argument lists at a call site, from the argument
-  or expected types (`impl Take<A> for bool` alongside `impl Take<B> for bool`);
-  such a call is reported as ambiguous
+- Positional trait arguments in bound position (`T: Take<i32>`) — bounds
+  accept associated-type constraints (`T: Collect<Item = i32>`) but not a
+  trait's own type arguments, so the bound-path counterpart of
+  [argument-directed selection](#one-trait-at-two-argument-lists) does not
+  arise yet
 
 ### Coherence and Orphan Rules
 
@@ -2891,22 +2899,43 @@ impl<..T> Tag for &[..T] { … }        // ERROR: not supported yet
 
 #### One Trait at Two Argument Lists
 
-A trait may be implemented for one type at several argument lists, and each
-impl is legal — they implement different traits. But a method call names only
-the method, so a call on such a receiver is ambiguous and is rejected:
+A trait may be implemented for one type at several argument lists — each impl
+is legal, and the arguments choose between them
+([WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)):
 
 ```wado
 impl Take<A> for bool { … }
 impl Take<B> for bool { … }
 
-f.take(B { v: 1 })   // ERROR: ambiguous call to 'take'
+f.take(B { v: 1 })          // OK: a named struct literal selects Take<B>
+f.take(a)                    // OK: the local's declared type selects Take<A>
 ```
 
-Wado has no qualified call form (`<Type as Trait>::method()`) to pick one, and
-selection does not consider the argument or expected types. Operators are not
-affected: indexing and arithmetic resolve their impl by operand type, which is
-why `List<T>` implements `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>`,
-and `IndexValue<RangeInclusive<i32>>` at once.
+Selection is unique-or-error, with no ranking. An argument whose type the
+call site does not pin — above all a bare literal, which could coerce to
+several widths — admits every candidate it could coerce to and never selects
+one, so a literal-only distinction stays ambiguous:
+
+```wado
+impl Take<i32> for bool { … }
+impl Take<i64> for bool { … }
+
+f.take(42)                   // ERROR: the arguments do not select
+f.take(42 as i64)            // OK: the cast selects Take<i64>
+Take::<i64>::take(&f, 42)    // OK: the trait turbofish pins the list
+```
+
+This is deliberate: letting the literal's default type decide would make
+adding an `impl Take<i32>` silently retarget every existing call that meant
+`Take<i64>`. Operators resolve their impl by operand type on the same
+principle, which is why `List<T>` implements `IndexValue<i32>`,
+`IndexValue<RangeExclusive<i32>>`, and `IndexValue<RangeInclusive<i32>>` at
+once.
+
+Two _different_ traits declaring one method name for one receiver is a
+separate case and is always reported: name the trait
+(`Alpha::describe(&x)`). Argument selection never crosses trait lines —
+impls of different traits share no contract.
 
 ### Iterator Traits
 

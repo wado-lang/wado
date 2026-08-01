@@ -1545,8 +1545,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The name a trait was declared under, undoing a `use ... as` alias — a
     /// declaration only ever carries its own name.
-    fn declared_trait_name(&self, trait_name: &str) -> String {
+    pub(super) fn declared_trait_name(&self, trait_name: &str) -> String {
         self.canonical_decl_key(trait_name).1
+    }
+
+    /// The declaration key of the trait `name` names in the current frame.
+    /// The symbol table does not track trait declarations, so
+    /// [`Elaborator::canonical_decl_key`] alone would fall through to
+    /// `TraitEnv::find_trait_decl_key`'s bare-name global scan — which
+    /// answers with whichever module's same-named trait registered first.
+    /// A trait declared in the current module answers first (unless the
+    /// name is an import, which shadows it); only then the generic chain.
+    pub(super) fn trait_decl_key_in_frame(&self, name: &str) -> super::trait_env::DeclKey {
+        if !self.sem.imports.imported_type_sources.contains_key(name) {
+            let local = (self.current_module_source.clone(), name.to_string());
+            if self.tysys.trait_env.decl_index.contains_key(&local) {
+                return local;
+            }
+        }
+        self.canonical_decl_key(name)
+    }
+
+    /// Whether the trait declaration `decl` is in scope in the current frame:
+    /// declared by the current module, or imported into it under any local
+    /// name. Ties between same-named foreign declarations break on this.
+    pub(super) fn trait_decl_in_scope(&self, decl: &super::trait_env::DeclKey) -> bool {
+        if decl.0 == self.current_module_source {
+            return true;
+        }
+        self.sem
+            .imports
+            .imported_type_sources
+            .iter()
+            .any(|(local, src)| {
+                src == &decl.0
+                    && self
+                        .sem
+                        .imports
+                        .import_original_names
+                        .get(local)
+                        .unwrap_or(local)
+                        == &decl.1
+            })
     }
 
     /// Whether the trait named `trait_name` declares `method_name`. The cheap
@@ -2435,7 +2475,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_module_source = self.find_struct_module_source(struct_name);
         Some(TraitMethodMatch {
             // Auto-derived `Eq` / `Ord` take no type arguments.
-            trait_base_name: trait_name.clone(),
+            trait_decl: self.trait_decl_key_in_frame(&trait_name),
+            trait_args: vec![],
             trait_name,
             method_info,
             impl_module_source,

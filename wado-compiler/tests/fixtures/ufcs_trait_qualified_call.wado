@@ -1,0 +1,35 @@
+// Two traits declaring one method name for one receiver. A plain `x.describe()`
+// cannot say which is meant; the trait-qualified (UFCS) form names it, and the
+// receiver spells its own mode as the first argument. WEP 2026-07-31.
+struct Item {
+    id: i32,
+}
+
+trait Alpha {
+    fn describe(&self) -> String;
+}
+
+trait Beta {
+    fn describe(&self) -> String;
+}
+
+impl Alpha for Item {
+    fn describe(&self) -> String {
+        return `alpha ${self.id}`;
+    }
+}
+
+impl Beta for Item {
+    fn describe(&self) -> String {
+        return `beta ${self.id}`;
+    }
+}
+
+test "a trait-qualified call selects the named trait's method" {
+    let it = Item { id: 7 };
+    assert Alpha::describe(&it) == "alpha 7";
+    assert Beta::describe(&it) == "beta 7";
+}
+
+__DATA__
+{"test": {}}

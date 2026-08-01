@@ -209,7 +209,7 @@ Formats the value and writes to the given formatter.
 Trait for formatting values as binary integers.
 Used with the `${x:b}` format specifier.
 
-#### `fn fmt(&self, f: &mut Formatter)`
+#### `fn fmt_binary(&self, f: &mut Formatter)`
 
 Formats the value as binary and writes to the given formatter.
 
@@ -218,7 +218,7 @@ Formats the value as binary and writes to the given formatter.
 Trait for formatting values as octal integers.
 Used with the `${x:o}` format specifier.
 
-#### `fn fmt(&self, f: &mut Formatter)`
+#### `fn fmt_octal(&self, f: &mut Formatter)`
 
 Formats the value as octal and writes to the given formatter.
 
@@ -227,7 +227,7 @@ Formats the value as octal and writes to the given formatter.
 Trait for formatting values as lowercase hexadecimal.
 Used with the `${x:x}` format specifier.
 
-#### `fn fmt(&self, f: &mut Formatter)`
+#### `fn fmt_lower_hex(&self, f: &mut Formatter)`
 
 Formats the value as lowercase hex and writes to the given formatter.
 
@@ -236,7 +236,7 @@ Formats the value as lowercase hex and writes to the given formatter.
 Trait for formatting values as uppercase hexadecimal.
 Used with the `${x:X}` format specifier.
 
-#### `fn fmt(&self, f: &mut Formatter)`
+#### `fn fmt_upper_hex(&self, f: &mut Formatter)`
 
 Formats the value as uppercase hex and writes to the given formatter.
 
@@ -245,7 +245,7 @@ Formats the value as uppercase hex and writes to the given formatter.
 Trait for formatting values in lowercase exponential notation.
 Used with the `${x:e}` format specifier.
 
-#### `fn fmt(&self, f: &mut Formatter)`
+#### `fn fmt_lower_exp(&self, f: &mut Formatter)`
 
 Formats the value in lowercase exponential notation and writes to the given formatter.
 
@@ -254,7 +254,7 @@ Formats the value in lowercase exponential notation and writes to the given form
 Trait for formatting values in uppercase exponential notation.
 Used with the `${x:E}` format specifier.
 
-#### `fn fmt(&self, f: &mut Formatter)`
+#### `fn fmt_upper_exp(&self, f: &mut Formatter)`
 
 Formats the value in uppercase exponential notation and writes to the given formatter.
 
@@ -549,7 +549,7 @@ Formats the value and writes to the given formatter.
 Trait for formatting values as binary integers.
 Used with the `${x:b}` format specifier.
 
-#### `fn fmt(&self, f: &mut Formatter)`
+#### `fn fmt_binary(&self, f: &mut Formatter)`
 
 Formats the value as binary and writes to the given formatter.
 
@@ -558,7 +558,7 @@ Formats the value as binary and writes to the given formatter.
 Trait for formatting values as octal integers.
 Used with the `${x:o}` format specifier.
 
-#### `fn fmt(&self, f: &mut Formatter)`
+#### `fn fmt_octal(&self, f: &mut Formatter)`
 
 Formats the value as octal and writes to the given formatter.
 
@@ -567,7 +567,7 @@ Formats the value as octal and writes to the given formatter.
 Trait for formatting values as lowercase hexadecimal.
 Used with the `${x:x}` format specifier.
 
-#### `fn fmt(&self, f: &mut Formatter)`
+#### `fn fmt_lower_hex(&self, f: &mut Formatter)`
 
 Formats the value as lowercase hex and writes to the given formatter.
 
@@ -576,7 +576,7 @@ Formats the value as lowercase hex and writes to the given formatter.
 Trait for formatting values as uppercase hexadecimal.
 Used with the `${x:X}` format specifier.
 
-#### `fn fmt(&self, f: &mut Formatter)`
+#### `fn fmt_upper_hex(&self, f: &mut Formatter)`
 
 Formats the value as uppercase hex and writes to the given formatter.
 
@@ -585,7 +585,7 @@ Formats the value as uppercase hex and writes to the given formatter.
 Trait for formatting values in lowercase exponential notation.
 Used with the `${x:e}` format specifier.
 
-#### `fn fmt(&self, f: &mut Formatter)`
+#### `fn fmt_lower_exp(&self, f: &mut Formatter)`
 
 Formats the value in lowercase exponential notation and writes to the given formatter.
 
@@ -594,7 +594,7 @@ Formats the value in lowercase exponential notation and writes to the given form
 Trait for formatting values in uppercase exponential notation.
 Used with the `${x:E}` format specifier.
 
-#### `fn fmt(&self, f: &mut Formatter)`
+#### `fn fmt_upper_exp(&self, f: &mut Formatter)`
 
 Formats the value in uppercase exponential notation and writes to the given formatter.
 
@@ -1104,35 +1104,35 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `impl Binary for i8`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
 
 #### `impl Octal for i8`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
 
 #### `impl LowerHex for i8`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
 
 #### `impl UpperHex for i8`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
 
 #### `impl BinaryAlt for i8`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
 
 #### `impl OctalAlt for i8`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerHexAlt for i8`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl UpperHexAlt for i8`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for i8`
 
@@ -1200,35 +1200,35 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `impl Binary for u8`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
 
 #### `impl Octal for u8`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
 
 #### `impl LowerHex for u8`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
 
 #### `impl UpperHex for u8`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
 
 #### `impl BinaryAlt for u8`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
 
 #### `impl OctalAlt for u8`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerHexAlt for u8`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl UpperHexAlt for u8`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for u8`
 
@@ -1292,35 +1292,35 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `impl Binary for i16`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
 
 #### `impl Octal for i16`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
 
 #### `impl LowerHex for i16`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
 
 #### `impl UpperHex for i16`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
 
 #### `impl BinaryAlt for i16`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
 
 #### `impl OctalAlt for i16`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerHexAlt for i16`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl UpperHexAlt for i16`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for i16`
 
@@ -1392,35 +1392,35 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `impl Binary for u16`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
 
 #### `impl Octal for u16`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
 
 #### `impl LowerHex for u16`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
 
 #### `impl UpperHex for u16`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
 
 #### `impl BinaryAlt for u16`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
 
 #### `impl OctalAlt for u16`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerHexAlt for u16`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl UpperHexAlt for u16`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for u16`
 
@@ -1496,35 +1496,35 @@ Counts the number of set bits (population count).
 
 #### `impl Binary for i32`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
 
 #### `impl Octal for i32`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
 
 #### `impl LowerHex for i32`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
 
 #### `impl UpperHex for i32`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
 
 #### `impl BinaryAlt for i32`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
 
 #### `impl OctalAlt for i32`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerHexAlt for i32`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl UpperHexAlt for i32`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for i32`
 
@@ -1604,35 +1604,35 @@ Counts the number of set bits (population count).
 
 #### `impl Binary for u32`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
 
 #### `impl Octal for u32`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
 
 #### `impl LowerHex for u32`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
 
 #### `impl UpperHex for u32`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
 
 #### `impl BinaryAlt for u32`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
 
 #### `impl OctalAlt for u32`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerHexAlt for u32`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl UpperHexAlt for u32`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for u32`
 
@@ -1720,35 +1720,35 @@ Counts the number of set bits (population count).
 
 #### `impl Binary for i64`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
 
 #### `impl Octal for i64`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
 
 #### `impl LowerHex for i64`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
 
 #### `impl UpperHex for i64`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
 
 #### `impl BinaryAlt for i64`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
 
 #### `impl OctalAlt for i64`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerHexAlt for i64`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl UpperHexAlt for i64`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for i64`
 
@@ -1840,35 +1840,35 @@ Counts the number of set bits (population count).
 
 #### `impl Binary for u64`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
 
 #### `impl Octal for u64`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
 
 #### `impl LowerHex for u64`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
 
 #### `impl UpperHex for u64`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
 
 #### `impl BinaryAlt for u64`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
 
 #### `impl OctalAlt for u64`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerHexAlt for u64`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl UpperHexAlt for u64`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for u64`
 
@@ -2108,11 +2108,11 @@ Creates an f32 from its bit representation.
 
 #### `impl LowerExp for f32`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
 
 #### `impl UpperExp for f32`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
 
 #### `impl Eq for f32`
 
@@ -2350,11 +2350,11 @@ Creates an f64 from its bit representation.
 
 #### `impl LowerExp for f64`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
 
 #### `impl UpperExp for f64`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
 
 #### `impl Eq for f64`
 
@@ -2733,35 +2733,35 @@ Convert u128 to String (for template string interpolation)
 
 #### `impl Binary for u128`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
 
 #### `impl Octal for u128`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
 
 #### `impl LowerHex for u128`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
 
 #### `impl UpperHex for u128`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
 
 #### `impl BinaryAlt for u128`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
 
 #### `impl OctalAlt for u128`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerHexAlt for u128`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl UpperHexAlt for u128`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for u128`
 
@@ -2949,35 +2949,35 @@ Convert i128 to String (for template string interpolation)
 
 #### `impl Binary for i128`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
 
 #### `impl Octal for i128`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
 
 #### `impl LowerHex for i128`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
 
 #### `impl UpperHex for i128`
 
-##### `pub fn fmt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
 
 #### `impl BinaryAlt for i128`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_binary_alt(&self, f: &mut Formatter)`
 
 #### `impl OctalAlt for i128`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_octal_alt(&self, f: &mut Formatter)`
 
 #### `impl LowerHexAlt for i128`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_lower_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl UpperHexAlt for i128`
 
-##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+##### `pub fn fmt_upper_hex_alt(&self, f: &mut Formatter)`
 
 #### `impl Eq for i128`
 

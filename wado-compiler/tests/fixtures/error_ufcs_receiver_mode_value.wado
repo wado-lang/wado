@@ -1,0 +1,24 @@
+// A by-value `self` method consumes its receiver; a reference cannot answer
+// it through a qualified call. `Holder<T>` may carry a resource, so its
+// by-value `self` method is legal (WEP 2026-05-21). WEP 2026-07-31.
+struct Holder<T> {
+    v: T,
+}
+
+trait Consume {
+    fn consume(self) -> i32;
+}
+
+impl<T> Consume for Holder<T> {
+    fn consume(self) -> i32 {
+        return 3;
+    }
+}
+
+test "a reference receiver cannot answer a by-value self qualified call" {
+    let h: Holder<i32> = Holder { v: 3 };
+    assert Consume::consume(&h) == 3;
+}
+
+__DATA__
+{"test": {}, "compile_error": "'Consume::consume' takes 'self'"}

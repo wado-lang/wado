@@ -1,0 +1,28 @@
+// An integer literal coerces to an integer newtype, so `From<i64>` beside
+// `From<Meters>` (a newtype over i64) both admit `42` — the preselect must
+// report the ambiguity, not silently pick the primitive. WEP 2026-07-31.
+type Meters = i64;
+
+struct Wrapper {
+    tag: String,
+}
+
+impl From<i64> for Wrapper {
+    fn from(v: i64) -> Wrapper {
+        return Wrapper { tag: "i64" };
+    }
+}
+
+impl From<Meters> for Wrapper {
+    fn from(v: Meters) -> Wrapper {
+        return Wrapper { tag: "meters" };
+    }
+}
+
+test "a literal admitting a primitive and its newtype is ambiguous" {
+    let w = Wrapper::from(42);
+    assert w.tag == "i64";
+}
+
+__DATA__
+{"test": {}, "compile_error": "ambiguous"}

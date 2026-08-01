@@ -86,9 +86,10 @@ tree-sitter and Lezer.
 The residual ~4.1 ms GC is highlight's own captures/HTML allocation (the profile
 below), not the CST — `sqlite_parse` (build-then-discard,
 no highlight) is ~4.4 ms/iter and did not regress. One known transient:
-`TreeBuilder::finish` copies the `tag`/`a`/`alt` columns into the store because
-Wado has no by-value `self` / move (methods are `&self`/`&mut self`); the copy
-is exact-sized, dies immediately, and is free under `copying`.
+`TreeBuilder::finish` copies the `tag`/`a`/`b`/`alt` columns into the store
+because Wado has no by-value `self` / move (methods are `&self`/`&mut self`);
+each copy is exact-sized (a `List` value copy right-sizes to `used`) and the
+builder's originals die with the parse.
 
 **Column pre-size (landed).** `TreeBuilder::with_capacity` sizes the event columns
 to `4 × tokens` (measured `rows ≈ 3.44 × tokens`) so they never grow from empty —
@@ -137,11 +138,13 @@ share); no over-fill regression.
   carries over to release largely intact, since the dev host does not inflate
   pure compute.
 
-### Live profile (`syntax_highlight`, 1928 leaf samples @1 ms)
+### Live profile (`syntax_highlight`, 1928 leaf samples @1 ms, 2026-07)
 
-`List<i32>::push` is the top frame. The dev profile is noisy per-frame (see the
-measurement note); mid-size frames swing ±several points across runs, so read the
-buckets, not the individual rows.
+A dated snapshot — the `push` rows have shrunk since the runtime pushers went
+to one capacity check per row/token; re-profile before sizing a new lever off
+this table. The dev profile is noisy per-frame (see the measurement note);
+mid-size frames swing ±several points across runs, so read the buckets, not
+the individual rows.
 
 |   Pct | Symbol                             | bucket                                   |
 | ----: | ---------------------------------- | ---------------------------------------- |
@@ -171,23 +174,8 @@ CST column build is the largest bucket.
 
 Pick the current top frame off the live profile above rather than a fixed recipe
 here: the frames shift as levers land, and the mid-size ones are noisy, so
-re-measure before committing. Three candidates read off the profile above:
+re-measure before committing. Candidates read off the profile above:
 
-- **`List<i32>::push` (14.5%, top frame).** The columns are already pre-sized, yet
-  every element still pays `push`'s `used >= repr.len()` grow check — ~10 columns per
-  token (`TokenStream`) plus 4 per CST row (`TreeBuilder::push_row`, `rows ≈ 3.44 ×
-  tokens`). `push_within_capacity` exists for exactly this ("a burst of appends after
-  one `reserve` pays a single capacity check instead of one per element"), but both
-  pre-sizes are heuristics (`4 × tokens`, `chars/4`) that a different input can exceed,
-  and `push_within_capacity` leaves an over-run to the array bounds check, i.e. a trap.
-  So the shape is **one capacity check per row/token with a grow fallback**, then
-  unchecked appends across the columns — 10 checks → 1, not 10 → 0.
-- **`char::to_ascii_lowercase` (4.4%).** `gen_keyword_check` (`lexer_gen.wado`) emits the
-  guard for every char from `kc = 0`, so each keyword arm re-tests the first char that the
-  enclosing dispatch already established; and that dispatch is a linear `else if` chain of
-  `eq_ignore_ascii_case` calls over the distinct first letters (~6–20 deep per length
-  bucket). Lowercase the first char once and `match` on it (br_table), and drop the
-  redundant `kc = 0` guard. Pure compute, so it carries to release intact.
 - **First-char dispatch is linear in the ranges, not the rules.** The dispatch is an
   `if / else if` chain over the first-char sets, so a rule opening on a large set costs
   a comparison per range — a `[\p{L}]` rule is ~700. Coalescing branches with identical
@@ -284,6 +272,37 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
     Remaining P4 (the `lower`/`parser_gen` FIRST-set boundary, `rule_follow_kinds`)
     is smaller and coupled on SQLite; the keyword-dense TS/Rust grammars (GC-bound)
     are where the accumulated cut should matter most.
+
+- **Compute-side gen levers (2026-08, landed).** `benchmark/gale_gen` (Rust
+  grammar, dev host) profiled four compute hot spots; fixing them (plus the
+  review round: in-place FOLLOW propagation instead of per-contribution
+  FollowBits copies, and the left-corner reachability walks precomputed in id
+  space) took best-of-three from 728.8 to ~336 ms/iter (~2.2×), generated
+  output byte-identical for the Rust and SQLite grammars:
+  - `build_dispatch_groups` + first-char accumulation (~25% self): `add_range`
+    and the distinct-range collection deduped by linear scan, each (char, call)
+    probe walked the whole range list, and `ranges_meet_unclaimed` counted
+    claimed chars by filtering the full list per range. Now packed-i64 set
+    probes (insertion order kept), a sorted-starts/prefix-max-end index per
+    call, and binary-search claimed counts.
+  - `follow_env` fixed point (~11%): re-derived FIRST names and re-interned
+    them through a String TreeMap every iteration. FIRST contributions are
+    iteration-invariant, so each RuleRef site flattens once to (callee, static
+    kind-id bits, inherits-caller-FOLLOW) and the loop is pure bitset
+    propagation in the kind-id space.
+  - Kind-set canonicalisation (~6%): the per-call String sort + name-joined
+    registry key became an id sort by a lazily-rebuilt name-rank table with an
+    id-joined key. Rank order == name order, so canonical order and helper ids
+    are unchanged.
+  - `check_left_recursion` (~4%): per-element visiting-set nullable recursion
+    with a linear rule-name scan → one worklist nullable table + name→index
+    map per grammar (same least fixed point).
+
+  Remaining top self frames after these: `String^Eq::eq` + `String^Ord::cmp` +
+  `TreeMap<String, i32>` probes (~14%, the `visiting` lists and rule-name maps
+  of the SCC-memoized analyses), `$value_copy$` IR deep copies (~12%, diffuse
+  across lower / prediction / parse), and prediction (`build_sll_node` ~14%
+  inclusive).
 
   (A `type TokenId = i32` newtype for the id — so a `Display` can format token
   names later — currently trips a `$value_copy` codegen ICE when a
@@ -395,6 +414,17 @@ ATN literal is a measured problem.)
   13366 chars, so the mean unescaped stretch is ~4.6 chars and the per-run bookkeeping
   costs what the batching saves. Input-shape-bound: sparse captures would answer
   differently.
+
+- **Keyword classifier: fold-once + `match` first-char dispatch** (2026-08).
+  Rewrote `classify_keyword`'s per-length first-char dispatch from the linear
+  `eq_ignore_ascii_case` else-if chain to a fold-once
+  `chars[start].to_ascii_lowercase()` feeding a `match` (br_table), dropping
+  each arm's now-redundant case-insensitive `kc = 0` guard. Dev A/B best-of-3
+  measured a consistent slight **loss** (3.309 → 3.357 ms/iter,
+  `sqlite_parse`): the short compare chain predicts well, while the jump table
+  adds an indirect branch — same shape as the kind-set finding above (Cranelift
+  lowers compare cascades competitively; the frame is call-frequency-bound).
+  Reverted.
 
 - **Index loops instead of `for x of &List<i32>`** (2026-07). Iterating by reference
   boxes every element; rewriting `follow_yields`'s membership scan and `classify`'s

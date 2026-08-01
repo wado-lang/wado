@@ -386,7 +386,7 @@ fn "nested_array.wado/nested_array_mutate_test"() with Stdout {
     block {
     };
     v = builtin::array_get<ref "core:prelude//List<i32>">(matrix.repr, 0);
-    row = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<i32>; __array_clone_src_6 = v.repr; let __array_clone_len_6: i32; __array_clone_len_6 = builtin::array_len(__array_clone_src_6); let __array_clone_dst_6: ref Array<i32>; __array_clone_dst_6 = builtin::array_new<i32>(__array_clone_len_6); builtin::array_copy<i32>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: v.used };
+    row = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<i32>; __array_clone_src_6 = v.repr; let __array_clone_len_6: i32; __array_clone_len_6 = v.used; let __array_clone_dst_6: ref Array<i32>; __array_clone_dst_6 = builtin::array_new<i32>(__array_clone_len_6); builtin::array_copy<i32>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: v.used };
     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(row, 99);
     "core:cli/println"(__local_7_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7_7 }; "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>"(row.repr, row.used, __local_8, 1, __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_21: block -> i32 {
         block {
@@ -519,7 +519,7 @@ fn "nested_array.wado/__cm_export__run"() {
 }
 
 fn "nested_array.wado/$value_copy$core:prelude/list.wado/List<i32>"(v) {
-    return struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<i32>; __array_clone_src_6 = v.repr; let __array_clone_len_6: i32; __array_clone_len_6 = builtin::array_len(__array_clone_src_6); let __array_clone_dst_6: ref Array<i32>; __array_clone_dst_6 = builtin::array_new<i32>(__array_clone_len_6); builtin::array_copy<i32>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: v.used };
+    return struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<i32>; __array_clone_src_6 = v.repr; let __array_clone_len_6: i32; __array_clone_len_6 = v.used; let __array_clone_dst_6: ref Array<i32>; __array_clone_dst_6 = builtin::array_new<i32>(__array_clone_len_6); builtin::array_copy<i32>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: v.used };
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
@@ -1092,7 +1092,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/list.
         return ref.null none;
     }
     v = builtin::array_get<ref "core:prelude//List<i32>">(self.repr, self.index);
-    item = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<i32>; __array_clone_src_6 = v.repr; let __array_clone_len_6: i32; __array_clone_len_6 = builtin::array_len(__array_clone_src_6); let __array_clone_dst_6: ref Array<i32>; __array_clone_dst_6 = builtin::array_new<i32>(__array_clone_len_6); builtin::array_copy<i32>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: v.used };
+    item = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<i32>; __array_clone_src_6 = v.repr; let __array_clone_len_6: i32; __array_clone_len_6 = v.used; let __array_clone_dst_6: ref Array<i32>; __array_clone_dst_6 = builtin::array_new<i32>(__array_clone_len_6); builtin::array_copy<i32>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: v.used };
     self.index = self.index + 1;
     return item;
 }
@@ -1127,7 +1127,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/list.
         return ref.null none;
     }
     v = builtin::array_get<ref "core:prelude//List<core:prelude/list.wado/List<i32>>">(self.repr, self.index);
-    item = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude//List<i32>">(v.repr)), used: v.used };
+    item = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:prelude//List<i32>">(v.repr, v.used)), used: v.used };
     self.index = self.index + 1;
     return item;
 }
@@ -1139,7 +1139,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/list.
         return ref.null none;
     }
     v = builtin::array_get<ref "core:prelude//List<i32>">(self.repr, self.index);
-    item = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<i32>; __array_clone_src_6 = v.repr; let __array_clone_len_6: i32; __array_clone_len_6 = builtin::array_len(__array_clone_src_6); let __array_clone_dst_6: ref Array<i32>; __array_clone_dst_6 = builtin::array_new<i32>(__array_clone_len_6); builtin::array_copy<i32>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: v.used };
+    item = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<i32>; __array_clone_src_6 = v.repr; let __array_clone_len_6: i32; __array_clone_len_6 = v.used; let __array_clone_dst_6: ref Array<i32>; __array_clone_dst_6 = builtin::array_new<i32>(__array_clone_len_6); builtin::array_copy<i32>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: v.used };
     self.index = self.index + 1;
     return item;
 }

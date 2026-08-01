@@ -108,8 +108,16 @@ NIR→WIR lowering avoids a few redundant shapes, firing once during the build a
 1. Type representation — nullable-ref lowering; small-variant returns to multi-value.
 2. Box-local elimination — substitute the field read for a `Box<T>` local lowering minted.
 3. Data flow — forward constant struct fields for constant-index bounds-check elimination.
+<<<<<<< HEAD
 4. Library rewrites — short-string append expansion; constant-array data promotion (only where packing encodes smaller than the inline `T.const` operands, since a data segment stores each element at full width while an operand is LEB128-compressed); large-literal splitting.
 5. Peephole — Wasm instruction-selection rewrites with no NIR analogue.
+||||||| 50cf17a00
+4. Library rewrites — short-string append expansion; constant-array data promotion; large-literal splitting.
+5. Peephole — Wasm instruction-selection rewrites with no NIR analogue; multi-field struct elimination; nullability-driven rewrites (elide redundant `ref.as_non_null`, fold `ref.is_null` on a non-null reference).
+=======
+4. Library rewrites — short-string append expansion; constant-array data promotion; large-literal splitting; elision of a whole-array zero fill on a fresh `array.new_default` (the `List::filled(n, 0)` shape).
+5. Peephole — Wasm instruction-selection rewrites with no NIR analogue; multi-field struct elimination; nullability-driven rewrites (elide redundant `ref.as_non_null`, fold `ref.is_null` on a non-null reference).
+>>>>>>> origin/main
 6. Write-only local elimination — for locals only the WIR builder synthesises.
 7. Global cleanup — constant-initializer promotion, identical-global dedup, and dead-data pruning.
 8. Branch hints — `br_if` selection and trap-based cold/likely inference (also at `-O0`).

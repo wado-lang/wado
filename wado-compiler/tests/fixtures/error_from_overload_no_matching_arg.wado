@@ -1,0 +1,28 @@
+// A conversion call whose argument matches none of the receiver's impls.
+// The literal preselect passes (an integer literal admits neither String nor
+// bool), the argument elaborates to its default type, and the name hint
+// matches no impl — reported with the alternatives, where a trait-less
+// `Wrapper::from` used to reach WIR build and ICE ("unresolved Call").
+struct Wrapper {
+    tag: i32,
+}
+
+impl From<String> for Wrapper {
+    fn from(value: String) -> Wrapper {
+        return Wrapper { tag: 1 };
+    }
+}
+
+impl From<bool> for Wrapper {
+    fn from(value: bool) -> Wrapper {
+        return Wrapper { tag: 2 };
+    }
+}
+
+export fn run() {
+    let a = Wrapper::from(42);
+    assert a.tag == 2;
+}
+
+__DATA__
+{"compile_error": "no impl of 'From' for 'Wrapper' takes an argument of type 'i32'"}

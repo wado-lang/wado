@@ -10,8 +10,16 @@
 //! |-------------------|--------------------------------------------|
 //! | `nullable_ref`        | Null-niche variant representation (mandatory) |
 //! | `sroa_variant_return` | Multi-value return SROA (variants)          |
+<<<<<<< HEAD
 //! | `elide_struct`        | Box local elimination + seq-assign flattening |
 //! | `array`               | Push collapse / data promotion / splitting  |
+||||||| 50cf17a00
+//! | `elide_struct`        | Struct local elimination (single + multi)   |
+//! | `array`               | Push collapse / data promotion / splitting  |
+=======
+//! | `elide_struct`        | Struct local elimination (single + multi)   |
+//! | `array`               | Data promotion / splitting / zero-fill elision |
+>>>>>>> origin/main
 //! | `const_forward`       | Struct field constant forwarding            |
 //! | `peephole`            | Constant folding, copy elision              |
 //! | `elide_local`     | Write-only local elim for WIR-only locals  |
@@ -49,7 +57,9 @@ use crate::wir::WirPackage;
 
 pub use dce::{compact_dead_items, dce_unreachable_types, mark_unreachable_defined_functions};
 
-use array::{promote_constant_arrays_to_data, split_large_array_literals};
+use array::{
+    elide_zero_fill_of_fresh_arrays, promote_constant_arrays_to_data, split_large_array_literals,
+};
 use branch_hint::{infer_branch_hints, select_br_ifs};
 use cleanup::{cleanup, cleanup_global_inits};
 use const_forward::forward_struct_field_constants;
@@ -159,6 +169,14 @@ pub fn optimize_wir(
     wir_pass("wir/split_large_array_literals", module, profiler, |m| {
         split_large_array_literals(m);
     });
+    wir_pass(
+        "wir/elide_zero_fill_of_fresh_arrays",
+        module,
+        profiler,
+        |m| {
+            elide_zero_fill_of_fresh_arrays(m);
+        },
+    );
     profiler.span_end("wir/phase4_lib_rewrites");
 
     // Phase 5: peephole (instruction selection, const fold, copy elision), then

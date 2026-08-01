@@ -1,0 +1,27 @@
+// Two conversion impls distinguished only by numeric width: a literal admits
+// both and never selects — letting its default type decide would make adding
+// an impl silently retarget existing calls (WEP 2026-07-31). `from` has no
+// self, so the trait-turbofish escape does not apply; the fix is the cast.
+struct Wrapper {
+    tag: i32,
+}
+
+impl From<i32> for Wrapper {
+    fn from(value: i32) -> Wrapper {
+        return Wrapper { tag: 1 };
+    }
+}
+
+impl From<i64> for Wrapper {
+    fn from(value: i64) -> Wrapper {
+        return Wrapper { tag: 2 };
+    }
+}
+
+export fn run() {
+    let w = Wrapper::from(42);
+    assert w.tag == 1;
+}
+
+__DATA__
+{"compile_error": "ambiguous call to 'Wrapper::from': a literal argument admits 'i32' and 'i64'; annotate the argument"}

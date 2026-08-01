@@ -1,0 +1,31 @@
+// A value copy of a List / String right-sizes the backing array to the
+// current length: capacity is an allocation detail, not part of the value,
+// so a copy never inherits the source's slack (same contract as Rust's
+// `Vec::clone`). The source keeps its own capacity untouched.
+export fn run() {
+    let mut src: List<i32> = List::with_capacity(10);
+    src.push(1);
+    src.push(2);
+    let copy = src;
+    assert copy.len() == 2;
+    assert copy.capacity() == 2;
+    assert src.capacity() == 10;
+
+    let mut nested_src: List<List<i32>> = List::with_capacity(8);
+    nested_src.push([1, 2, 3]);
+    let nested_copy = nested_src;
+    assert nested_copy.capacity() == 1;
+    assert nested_copy[0].len() == 3;
+    assert nested_src.capacity() == 8;
+
+    let mut s = String::with_capacity(16);
+    s.push_str(&"ab");
+    let s_copy = s;
+    assert s_copy.len() == 2;
+    assert s_copy.capacity() == 2;
+    assert s.capacity() == 16;
+    assert s_copy == "ab";
+}
+
+__DATA__
+{"stdout": ""}

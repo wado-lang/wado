@@ -2565,6 +2565,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args: &[],
                 expected_type: None,
                 span,
+                required_trait: None,
             },
             ctx,
         );
@@ -2622,6 +2623,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args: &[],
                 expected_type: None,
                 span,
+                required_trait: None,
             },
             ctx,
         );
