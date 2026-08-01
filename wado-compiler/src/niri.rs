@@ -25,11 +25,10 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
-    StmtId, StmtKind, StmtNode,
+    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, Operand, PatId, StmtId,
+    StmtKind, StmtNode,
 };
 use crate::nir_value_graph::ValueKind;
-use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{TypeId, TypeTable};
 
 /// Three-state lattice over compile-time evaluation results, ordered
@@ -422,26 +421,6 @@ fn let_ref_global(body: &Body, stmt: &StmtKind) -> Option<(u32, GlobalKey)> {
 struct CallRun {
     result: Lattice,
     writes: Vec<(u32, Vec<u32>, Value)>,
-}
-
-/// Every expression id reachable from the body root, in arena order — or every
-/// expression, for a bare-expression body with no block structure.
-pub(crate) fn reachable_exprs(body: &Body) -> Vec<ExprId> {
-    struct Collect(Vec<ExprId>);
-    impl NirRefVisitor for Collect {
-        fn visit_node(&mut self, body: &Body, node: NodeRef) {
-            if let NodeRef::Expr(e) = node {
-                self.0.push(e);
-            }
-            self.walk_node(body, node);
-        }
-    }
-    if body.blocks.is_empty() {
-        return body.exprs.iter().map(|(e, _)| e).collect();
-    }
-    let mut collect = Collect(Vec::new());
-    collect.visit_node(body, NodeRef::Block(body.root));
-    collect.0
 }
 
 impl<'a> Interpreter<'a> {
