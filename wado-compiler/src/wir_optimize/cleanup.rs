@@ -19,6 +19,16 @@ pub(super) fn cleanup(module: &mut WirPackage) {
     }
 }
 
+/// Elide the redundant `RefAsNonNull` wrappers `struct_new` adds for
+/// non-nullable fields from every global initializer. The emitter drops them
+/// from a const expression anyway; stripping keeps the IR canonical and lets
+/// `dedupe_const_globals` compare inits structurally.
+pub(super) fn cleanup_global_inits(module: &mut WirPackage) {
+    for global in &mut module.globals {
+        CleanupVisitor.visit_instr(&mut global.init);
+    }
+}
+
 /// Remove `DeclareLocal` instructions for locals that are never referenced
 /// by any `LocalGet`, `LocalSet`, `LocalTee`, or `MultiValueLocalBind`.
 fn eliminate_dead_locals(body: &mut [WirInstr]) {
