@@ -116,7 +116,10 @@ impl Reached {
         }
     }
 
-    /// What the walk reaches, given the expressions it performs.
+    /// What the walk reaches, given the expressions it performs. Collected
+    /// over the whole arena, not the reachable tree: a displaced call is a
+    /// former parent whose argument facts may still witness a live mention —
+    /// see [`aggregate_safe_locals`] for the rule and its measurement.
     fn collect(body: &Body, facts: ProgramFacts<'_>, performed: &IndexSet<ExprId>) -> Self {
         let mut reached = Self::default();
         reached.collect_builtin_borrows(body, facts.ctfe_builtins, performed);
@@ -251,8 +254,17 @@ enum Reach {
 /// names the same storage — which is what lets `push_str(&b)` count as a read
 /// of `b` rather than an unknown mention.
 ///
-/// Only the reachable body is scanned: a mention an earlier rewrite orphaned
-/// cannot run, so it must not disqualify anything.
+/// The two sides of the check deliberately scan different populations.
+/// Mentions and disqualifications come from the reachable body alone: an
+/// orphaned mention cannot run, so it must not disqualify anything. The
+/// `value_reads` whitelist is collected from the whole arena — including the
+/// statement sweep below — because an in-place rewrite shares ids between a
+/// live node and the displaced parent that used to hold it, so a reachable
+/// mention's only read-position witness may sit in an orphaned statement.
+/// Narrowing the whitelist to the reachable tree disqualifies the
+/// string-building locals every Display chain folds through (measured: the
+/// `default_trait` and `display_1` goldens grew back by hundreds of lines);
+/// `a_displaced_parent_still_vouches_for_its_mention` pins the behavior.
 pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {

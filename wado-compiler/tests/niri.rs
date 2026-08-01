@@ -7208,6 +7208,51 @@ fn aggregate_binding_needs_a_read_only_local() {
 }
 
 #[test]
+fn a_displaced_parent_still_vouches_for_its_mention() {
+    // An in-place rewrite shares ids between a live node and the displaced
+    // parent that used to hold it, so a reachable mention's only read-position
+    // witness may sit in a statement no block lists any more. The whitelist
+    // must keep reading the whole arena: judged against the reachable tree
+    // alone, the mention below sits under a position the scan does not list
+    // and local 0 loses its aggregate — which, at scale, is the string-builder
+    // local of every Display chain (measured on the `default_trait` and
+    // `display_1` goldens).
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+
+    let mut body = Body::empty();
+    let mention = pe(
+        &mut body,
+        ExprKind::Local {
+            index: 0,
+            name: "l0".to_string(),
+        },
+        point,
+    );
+    let unlisted_parent = pe(
+        &mut body,
+        ExprKind::Unary {
+            op: NirUnaryOp::Neg,
+            expr: Operand::Expr(mention),
+        },
+        point,
+    );
+    let live = ps(&mut body, StmtKind::Expr(Operand::Expr(unlisted_parent)));
+    body.root = body.blocks.push(BlockNode {
+        stmts: vec![live],
+        span: Span::default(),
+    });
+    ps(&mut body, StmtKind::Expr(Operand::Expr(mention)));
+
+    let mut interp = Interpreter::new(&table);
+    interp.enter_function();
+    interp.record_aggregate_locals(&body);
+    interp.bind_local(0, Lattice::Const(point_value(point)));
+    let read = field_access(local_expr(0, point), 0, "x", TypeTable::I32);
+    assert_eq!(reduce_lat(&mut interp, &read), Lattice::Const(int(10)));
+}
+
+#[test]
 fn a_walk_that_performs_nothing_drops_a_container_a_call_writes() {
     // The exemptions belong to a compile-time frame, which performs the write
     // or abandons the evaluation. An ordinary walk performs nothing: it steps
