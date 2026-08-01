@@ -310,6 +310,70 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `Trait::method()` with no arguments: the trait-qualified call form
+    /// takes the receiver as its first argument, so there is nothing to
+    /// dispatch on.
+    TraitQualifiedCallNeedsReceiver {
+        trait_name: String,
+        method: String,
+        span: Span,
+    },
+
+    /// The receiver of a qualified call spells its own mode, and the spelled
+    /// mode disagrees with the method's `self` parameter. Passing a value
+    /// where the method takes `&mut self` would mutate a copy and silently
+    /// drop the change — the case this error exists for.
+    TraitQualifiedReceiverMode {
+        trait_name: String,
+        method: String,
+        /// The method's `self` mode, rendered (`self`, `&self`, `&mut self`).
+        expected: String,
+        /// How to spell the receiver, rendered (`value`, `&value`,
+        /// `&mut value`).
+        spelled: String,
+        span: Span,
+    },
+
+    /// A conversion reachable only through a blanket impl generic in its
+    /// source type (`impl<T: Display> From<T> for Wrapper`). Selecting the
+    /// instantiation from the argument's type is phase-4 work
+    /// (WEP 2026-07-31); until then the call is rejected rather than reaching
+    /// WIR build unresolved.
+    UnsupportedBlanketConversion {
+        trait_name: String,
+        receiver: String,
+        method: String,
+        arg_type: String,
+        span: Span,
+    },
+
+    /// A conversion call whose literal argument admits several impls
+    /// (`Wrapper::from(42)` against `From<i32>` beside `From<i64>`). A literal
+    /// never selects between the widths it could coerce to (WEP 2026-07-31),
+    /// and `from` has no `self`, so the trait turbofish escape does not apply
+    /// — the fix is annotating the argument.
+    AmbiguousConversionArgument {
+        receiver: String,
+        method: String,
+        /// The admitted source types, in candidate order.
+        candidates: Vec<String>,
+        span: Span,
+    },
+
+    /// A static call whose receiver provides the method only through trait
+    /// impls, none of which takes an argument of the call's type —
+    /// `Wrapper::from(42)` against `From<String>` and `From<i64>`. Reported at
+    /// the call: every impl is fine on its own, the argument matches none.
+    NoMatchingTraitArgument {
+        trait_name: String,
+        receiver: String,
+        method: String,
+        arg_type: String,
+        /// The argument types the impls do take, in candidate order.
+        candidates: Vec<String>,
+        span: Span,
+    },
+
     /// A type argument whose associated type does not match the constraint
     /// written on the bound (`T: Collect<Item = i32>` given `Item = String`).
     AssocTypeBoundNotSatisfied {
@@ -854,12 +918,16 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "ambiguous call to '{method}': the receiver implements {}, and Wado cannot pick between a trait's argument lists at a call site",
+                    "ambiguous call to '{method}': the arguments do not select between {}; annotate an argument (e.g. '42 as i64') or pin the trait, e.g. '{}::{method}(&value, …)'",
                     traits
                         .iter()
                         .map(|t| format!("'{t}'"))
                         .collect::<Vec<_>>()
-                        .join(" and ")
+                        .join(" and "),
+                    traits
+                        .first()
+                        .map(|t| t.replacen('<', "::<", 1))
+                        .expect("ambiguity reported with no candidate traits")
                 ),
                 *span,
             ),
@@ -870,10 +938,88 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "ambiguous method '{method}': declared by {}",
+                    "ambiguous method '{method}': declared by {}; name the trait, e.g. '{}::{method}(&value)'",
                     traits
                         .iter()
                         .map(|t| format!("'{t}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and "),
+                    traits
+                        .first()
+                        .map(String::as_str)
+                        .map(|t| t.split(" (from ").next().unwrap_or(t))
+                        .expect("ambiguity reported with no candidate traits")
+                ),
+                *span,
+            ),
+            TypeError::TraitQualifiedCallNeedsReceiver {
+                trait_name,
+                method,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "'{trait_name}::{method}' takes the receiver as its first argument, e.g. '{trait_name}::{method}(&value)'"
+                ),
+                *span,
+            ),
+            TypeError::TraitQualifiedReceiverMode {
+                trait_name,
+                method,
+                expected,
+                spelled,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "'{trait_name}::{method}' takes '{expected}'; the receiver spells its own mode: '{trait_name}::{method}({spelled}, …)'"
+                ),
+                *span,
+            ),
+            TypeError::AmbiguousConversionArgument {
+                receiver,
+                method,
+                candidates,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "ambiguous call to '{receiver}::{method}': a literal argument admits {}; annotate the argument (e.g. '42 as i64')",
+                    candidates
+                        .iter()
+                        .map(|c| format!("'{c}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and ")
+                ),
+                *span,
+            ),
+            TypeError::UnsupportedBlanketConversion {
+                trait_name,
+                receiver,
+                method,
+                arg_type,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "'{receiver}::{method}' resolves to a blanket '{trait_name}' impl, and selecting its instantiation from the argument is not supported yet; write a concrete 'impl {trait_name}<{arg_type}> for {receiver}'"
+                ),
+                *span,
+            ),
+            TypeError::NoMatchingTraitArgument {
+                trait_name,
+                receiver,
+                method,
+                arg_type,
+                candidates,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "no impl of '{trait_name}' for '{receiver}' takes an argument of type '{arg_type}'; '{receiver}::{method}' is available for {}",
+                    candidates
+                        .iter()
+                        .map(|c| format!("'{c}'"))
                         .collect::<Vec<_>>()
                         .join(" and ")
                 ),
@@ -1788,9 +1934,27 @@ pub(super) enum VarRef {
     },
 }
 
+/// The trait a qualified call names, resolved to its identity: the
+/// declaration key discriminates same-named traits from different modules,
+/// and `args` (present when a turbofish pinned an argument list) are the
+/// resolved types, so aliased spellings compare equal. `display` keeps the
+/// caller's spelling for diagnostics.
+pub(super) struct RequiredTrait {
+    pub(super) decl: super::trait_env::DeclKey,
+    pub(super) args: Option<Vec<TypeId>>,
+    pub(super) display: String,
+}
+
 /// Result of finding a trait method for a type via `find_trait_method_for_type`.
 pub(super) struct TraitMethodMatch {
     pub(super) trait_name: String,
+    /// The matched trait's declaration key, resolved from the impl's own
+    /// module — two same-named traits from different modules stay distinct.
+    pub(super) trait_decl: super::trait_env::DeclKey,
+    /// The impl's trait type arguments as resolved types (empty for a trait
+    /// with none). Two matches agreeing on `trait_decl` but not here are one
+    /// trait at different argument lists — an overload set.
+    pub(super) trait_args: Vec<TypeId>,
     pub(super) method_info: MethodInfo,
     pub(super) impl_module_source: ModuleSource,
     /// For blanket impl matches (e.g., `impl<I: Iterator> IntoIterator for I`),
@@ -1812,10 +1976,6 @@ pub(super) struct TraitMethodMatch {
     /// [..T]`). Coherence Rule 1 (WEP 2026-03-14 §5) ranks such a match below
     /// every non-variadic one.
     pub(super) is_variadic_impl: bool,
-    /// [`Self::trait_name`] without its type arguments (`Take` for `Take<A>`).
-    /// Two matches agreeing here but not on `trait_name` are impls of one
-    /// trait at different arguments — a selection this resolver cannot make.
-    pub(super) trait_base_name: String,
 }
 
 /// Read-only view that resolves a type name from a given module's perspective

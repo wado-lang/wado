@@ -1,0 +1,36 @@
+// Two different traits declaring one method name for one receiver used to
+// resolve silently, picking whichever an internal locality sort put first.
+// They share no contract, so there is nothing to select on: the call must name
+// the trait. WEP 2026-07-31.
+struct Item {
+    id: i32,
+}
+
+trait Alpha {
+    fn describe(&self) -> String;
+}
+
+trait Beta {
+    fn describe(&self) -> String;
+}
+
+impl Alpha for Item {
+    fn describe(&self) -> String {
+        return `alpha`;
+    }
+}
+
+impl Beta for Item {
+    fn describe(&self) -> String {
+        return `beta`;
+    }
+}
+
+export fn run() {
+    let it = Item { id: 1 };
+    let s = it.describe();
+    assert s == "alpha";
+}
+
+__DATA__
+{"compile_error": "ambiguous method 'describe': declared by 'Alpha' and 'Beta'; name the trait"}

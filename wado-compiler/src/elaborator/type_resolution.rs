@@ -338,71 +338,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return type_id;
         }
 
-        match name {
-            // Primitives
-            "i8" => TypeTable::I8,
-            "i16" => TypeTable::I16,
-            "i32" => TypeTable::I32,
-            "i64" => TypeTable::I64,
-            "u8" => TypeTable::U8,
-            "u16" => TypeTable::U16,
-            "u32" => TypeTable::U32,
-            "u64" => TypeTable::U64,
-            "f32" => TypeTable::F32,
-            "f64" => TypeTable::F64,
-            "bool" => TypeTable::BOOL,
-            "char" => TypeTable::CHAR,
-            "v128" => TypeTable::V128,
-            "()" => TypeTable::UNIT,
-            "!" => TypeTable::NEVER,
+        if let Some(primitive) = TypeTable::primitive_by_name(name) {
+            return primitive;
+        }
 
-            // Check newtypes, struct definitions, and variants
-            _ => {
-                if enforce_arity && let Some(expected) = self.bare_generic_type_arity(name) {
-                    let _ = self.emit(TypeError::MissingTypeArguments {
-                        name: name.to_string(),
-                        expected,
-                        span,
-                    });
-                    return TypeTable::ERROR;
-                }
-                if let Some(type_id) = self.lookup_newtype(name) {
-                    type_id
-                } else if let Some(struct_info) = self.lookup_struct_fields(name) {
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .type_id_of_decl(struct_info.defined_at)
-                } else if let Some(variant_info) = self.lookup_variant_case(name) {
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .type_id_of_decl(variant_info.defined_at)
-                } else if let Some(enum_info) = self.lookup_enum_case(name) {
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .type_id_of_decl(enum_info.defined_at)
-                } else if let Some(resource_info) = self.lookup_resource_type(name) {
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .type_id_of_decl(resource_info.defined_at)
-                } else if let Some(scope_mod) = self.annotate_ctx.default_scope_module.clone()
-                    && scope_mod != self.current_module_source
-                {
-                    // A default re-resolved at the caller may name a type
-                    // private to the callee's module (`fn f<T = Priv>()` called
-                    // cross-module); the caller can't name it, so retry in the
-                    // callee's perspective. Mirrors the ident / call fallback.
-                    self.with_module_perspective_for(&scope_mod, |s| {
-                        s.resolve_named_type(name, span, enforce_arity)
-                    })
-                } else {
-                    // Unknown type
-                    TypeTable::UNKNOWN
-                }
-            }
+        if enforce_arity && let Some(expected) = self.bare_generic_type_arity(name) {
+            let _ = self.emit(TypeError::MissingTypeArguments {
+                name: name.to_string(),
+                expected,
+                span,
+            });
+            return TypeTable::ERROR;
+        }
+        if let Some(type_id) = self.lookup_newtype(name) {
+            type_id
+        } else if let Some(struct_info) = self.lookup_struct_fields(name) {
+            self.tysys
+                .type_table
+                .borrow()
+                .type_id_of_decl(struct_info.defined_at)
+        } else if let Some(variant_info) = self.lookup_variant_case(name) {
+            self.tysys
+                .type_table
+                .borrow()
+                .type_id_of_decl(variant_info.defined_at)
+        } else if let Some(enum_info) = self.lookup_enum_case(name) {
+            self.tysys
+                .type_table
+                .borrow()
+                .type_id_of_decl(enum_info.defined_at)
+        } else if let Some(resource_info) = self.lookup_resource_type(name) {
+            self.tysys
+                .type_table
+                .borrow()
+                .type_id_of_decl(resource_info.defined_at)
+        } else if let Some(scope_mod) = self.annotate_ctx.default_scope_module.clone()
+            && scope_mod != self.current_module_source
+        {
+            // A default re-resolved at the caller may name a type
+            // private to the callee's module (`fn f<T = Priv>()` called
+            // cross-module); the caller can't name it, so retry in the
+            // callee's perspective. Mirrors the ident / call fallback.
+            self.with_module_perspective_for(&scope_mod, |s| {
+                s.resolve_named_type(name, span, enforce_arity)
+            })
+        } else {
+            TypeTable::UNKNOWN
         }
     }
 

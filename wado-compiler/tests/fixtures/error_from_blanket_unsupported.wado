@@ -1,0 +1,21 @@
+// A conversion reachable only through a blanket impl generic in its source
+// type has no way to select an instantiation yet (WEP 2026-07-31 phase 4).
+// This used to compile past the elaborator and ICE at WIR build
+// ("unresolved Call"); it must be a diagnostic.
+struct ByAny {
+    tag: i32,
+}
+
+impl<T: Display> From<T> for ByAny {
+    fn from(value: T) -> ByAny {
+        return ByAny { tag: 2 };
+    }
+}
+
+export fn run() {
+    let a = ByAny::from(42);
+    assert a.tag == 2;
+}
+
+__DATA__
+{"compile_error": "resolves to a blanket 'From' impl, and selecting its instantiation from the argument is not supported yet"}

@@ -1,0 +1,45 @@
+// Argument-directed selection among one trait's argument lists still works
+// when an unrelated blanket impl contributes a same-named candidate: the
+// blanket is the general case and does not break the overload set formed by
+// the concrete impls. WEP 2026-07-31.
+struct AKey {}
+
+struct BKey {}
+
+struct Locker {
+    id: i32,
+}
+
+trait Take<T> {
+    fn take(&self, x: T) -> String;
+}
+
+trait Loud {
+    fn take(&self, x: AKey) -> String;
+}
+
+impl<T: Inspect> Loud for T {
+    fn take(&self, x: AKey) -> String {
+        return "blanket";
+    }
+}
+
+impl Take<AKey> for Locker {
+    fn take(&self, x: AKey) -> String {
+        return "took A";
+    }
+}
+
+impl Take<BKey> for Locker {
+    fn take(&self, x: BKey) -> String {
+        return "took B";
+    }
+}
+
+test "a blanket rival does not defeat argument selection" {
+    let l = Locker { id: 1 };
+    assert l.take(BKey {}) == "took B";
+}
+
+__DATA__
+{"test": {}}

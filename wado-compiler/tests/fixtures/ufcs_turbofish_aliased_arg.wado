@@ -1,0 +1,13 @@
+// The trait-turbofish pins an argument list by the *types* the arguments
+// resolve to, not by their spelling: an aliased import still names the same
+// list the impl wrote under the original name. WEP 2026-07-31.
+use { Take, Holder, AUnit as Ay, BUnit as Bee } from "./sub/ufcs_take_lib.wado";
+
+test "an aliased turbofish argument names the impl's list" {
+    let h = Holder { id: 1 };
+    assert Take::<Ay>::take(&h, Ay {}) == "took A";
+    assert Take::<Bee>::take(&h, Bee {}) == "took B";
+}
+
+__DATA__
+{"test": {}}

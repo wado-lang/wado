@@ -1,0 +1,35 @@
+// A method reachable through two of a receiver's bounds is ambiguous where it
+// is called (WEP 2026-07-27), and renaming used to be the only fix. Naming the
+// trait resolves it. WEP 2026-07-31.
+struct Node {
+    v: i32,
+}
+
+trait Marker {
+    fn tag(&self) -> i32;
+}
+
+trait Signal {
+    fn tag(&self) -> i32;
+}
+
+impl Marker for Node {
+    fn tag(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Signal for Node {
+    fn tag(&self) -> i32 {
+        return self.v * 100;
+    }
+}
+
+test "naming the trait resolves a two-trait collision" {
+    let n = Node { v: 3 };
+    assert Marker::tag(&n) == 3;
+    assert Signal::tag(&n) == 300;
+}
+
+__DATA__
+{"test": {}}
