@@ -1,0 +1,20 @@
+// A mutable outer local never seeds a region: the walker records `let mut`
+// as non-constant, so the template keeps its runtime build (pinned below)
+// and both the pre-mutation template value and the mutation itself survive
+// (WEP: NIR Interpreter, regions).
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut s = "ab";
+    let t = `x${s}`;
+    s.push_str(&"c");
+    println(t);
+    println(s);
+}
+
+__DATA__
+{
+    "stdout": "xab\nabc\n",
+    "wir_expect:O2": ["internal_reserve_uninit"]
+}

@@ -7,10 +7,10 @@
 // so at -O2 the whole block collapses to `String { repr: packed"ab", used: 2 }`
 // and the append helpers drop out of the binary.
 //
-// The second case interpolates a constant `String` local. Globalization hoists
-// it, the region reads it back as a constant global through `push_str`'s
-// cast-wrapped borrows, and the post-globalization cleanup folds the block the
-// same way.
+// The second case interpolates a constant `String` local. The region only
+// reads it, so the region frame is seeded with its value from the walker's
+// environment and the block folds the same way, before globalization would
+// hoist it.
 
 use { println, Stdout } from "core:cli";
 

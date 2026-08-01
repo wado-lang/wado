@@ -7,6 +7,21 @@
 use crate::nir_package::NirPackage;
 use crate::wir::WirPackage;
 
+/// Whether a `PackedArray` of `len` bytes gets the constant
+/// `array.new_fixed<u8>` repr — the choice `translate_packed_array` makes,
+/// shared so `const_object_globalization` predicts the same verdict when it
+/// decides whether a hoist needs the lazy-init guard.
+#[must_use]
+pub(crate) fn packed_array_is_eager(
+    len: usize,
+    string_inline_max_bytes: usize,
+    prefer_fixed: bool,
+) -> bool {
+    len == 0
+        || len <= string_inline_max_bytes
+        || (prefer_fixed && len <= crate::name::INLINE_REF_EAGER_MAX_BYTES)
+}
+
 mod calls;
 pub mod component_imports;
 pub mod component_plan;

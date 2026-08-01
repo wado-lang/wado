@@ -142,7 +142,9 @@ fn "tir_optimize_short_circuit_bounds.wado/run"() with Stdout {
         break __inline_core_prelude_format_wado_Formatter__pad_spec0_2;
     }; __local_6);
     "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __inline_core_prelude_format_wado_Formatter__pad_spec0_3: block {
-        global:tir_optimize_short_circuit_bounds.wado::__const_obj_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
+        if ref.is_null(global:tir_optimize_short_circuit_bounds.wado::__const_obj_1) {
+            global:tir_optimize_short_circuit_bounds.wado::__const_obj_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
+        }
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_8, global:tir_optimize_short_circuit_bounds.wado::__const_obj_1);
         break __inline_core_prelude_format_wado_Formatter__pad_spec0_3;
     }; __local_8);
@@ -209,12 +211,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b6: block {
-        l7: loop {
-            break_if b6 i >= len;
+    b7: block {
+        l8: loop {
+            break_if b7 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l7;
+            continue l8;
         };
     };
 }
@@ -245,20 +247,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b8: block {
-        l9: loop {
-            break_if b8 offset >= count;
+    b9: block {
+        l10: loop {
+            break_if b9 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b8 (if (result >> 4) == 0 -> i32 {
+            break_if b9 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l9;
+            continue l10;
         };
     };
 }

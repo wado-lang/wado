@@ -341,6 +341,12 @@ struct FrameState {
     /// nothing, so a fold has nowhere else to be recorded. Empty during
     /// real-body folding, where rewrites promote through the engine.
     scratch_folds: IndexMap<ExprId, Value>,
+    /// Regions whose run this frame already attempted and abandoned. A seed's
+    /// value is fixed for the frame's flow (a reassigned local is never
+    /// `Const` here), so a failed run stays failed and re-running it would
+    /// re-pay the body copy at every visit. Cleared with [`Self::scratch_folds`]
+    /// wherever the environment restarts.
+    region_misses: IndexSet<ExprId>,
 }
 
 /// Partial evaluator over the arena `Body`.

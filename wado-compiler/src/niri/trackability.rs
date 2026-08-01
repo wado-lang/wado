@@ -281,7 +281,10 @@ enum Reach {
 ///
 /// The read positions are listed rather than inferred from the absence of the
 /// others, so a node kind nobody taught this walk about costs a fold and never
-/// a wrong one.
+/// a wrong one. A shared borrow and a cast are read positions that pass the
+/// read on to their operand — Wado has no interior mutability, and a cast
+/// names the same storage — which is what lets `push_str(&b)` count as a read
+/// of `b` rather than an unknown mention.
 ///
 /// Only the reachable body is scanned: a mention an earlier rewrite orphaned
 /// cannot run, so it must not disqualify anything.
@@ -336,6 +339,11 @@ pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet 
                     disqualify_root(body, *expr, &mut disqualified);
                 }
             }
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr,
+            }
+            | ExprKind::Cast { expr, .. } => read_value(*expr, &mut value_reads),
             ExprKind::MethodCall { receiver, args, .. } => {
                 if !reached.covers(body, *receiver) {
                     disqualify_root(body, *receiver, &mut disqualified);
@@ -362,7 +370,12 @@ pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet 
     }
     for (_, stmt) in &body.stmts {
         match &stmt.kind {
-            StmtKind::Return { value: Some(op) } => read_value(*op, &mut value_reads),
+            StmtKind::Return { value: Some(op) }
+            | StmtKind::Break {
+                value: Some(op), ..
+            } => {
+                read_value(*op, &mut value_reads);
+            }
             StmtKind::Let { value: op, .. } | StmtKind::Expr(op) => {
                 read_value(*op, &mut value_reads);
             }

@@ -299,12 +299,21 @@ Regions:
 
 ### Regions
 
-- A region's frame starts empty, so an outer binding reaches it only as a
-  promoted scalar operand or as a constant global. A constant `String` local
-  interpolated into a template folds because globalization hoists it first;
-  an outer aggregate nothing hoists stays out of reach. Seeding the region
-  frame from the walker's environment is the likely extension; it waits on
-  deciding which entries stay sound under the frame's own writes.
+- A region's frame is seeded from the walker's environment: an outer local
+  the region only reads, constant at the region's flow point, is bound in the
+  frame as a value snapshot. The write test is what keeps that sound —
+  `region_free_reads` rejects an outer local in a write position (an `Assign`
+  target, a `&mut` borrow root, or any argument the callee's signature takes
+  by `&mut` — the signature, because boxing can erase the borrow node at the
+  call site — refusing outright when a write's place no local roots), and a
+  reference-typed mention is refused, since reading a `&mut T` value hands a
+  callee the same write capability. A
+  reference-typed region result is refused for its own reason: the fold would
+  materialize a fresh value where the program yields an alias, and `ref.eq`
+  tells the two apart. A constant outer local therefore folds during the
+  loop, before globalization would hoist it — which also keeps globalization
+  from planting the hoist's `GlobalVarSet` inside the region, a write that
+  would disqualify it for good.
 
 ### Compile-time string formatting
 

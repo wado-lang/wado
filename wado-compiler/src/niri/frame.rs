@@ -11,6 +11,7 @@
 //! program never produced.
 
 use crate::const_eval::Value;
+use crate::name::RefKind;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
@@ -18,13 +19,21 @@ use crate::nir_visitor::NirRefVisitor;
 use crate::tir::TypeTable;
 
 use super::place::{borrowed_place_operand, overlapping_places, place_of};
-use super::region::{region_is_self_contained, region_shape, value_block_shape};
+use super::region::{region_free_reads, region_shape, value_block_shape};
 use super::trackability::{Reached, aggregate_safe_locals, clobbered_locals};
 use super::{
     COPY_CHARGE_DIVISOR, CallRun, CalleeKey, CtfeBuiltin, FrameState, Interpreter, Lattice,
 };
 
 impl FrameState {
+    /// Whether `index` takes part in a live place alias, as the alias handle
+    /// or as the place it names. Either role makes a value snapshot of the
+    /// local unsound to hand out.
+    fn alias_involves(&self, index: u32) -> bool {
+        self.place_aliases.contains_key(&index)
+            || self.place_aliases.values().any(|(root, _)| *root == index)
+    }
+
     /// The state a call's body runs under: what `body` lets a frame track, with
     /// the parameters already bound. A parameter the body can reach through
     /// another handle binds nothing, so a stale constant cannot outlive the
@@ -321,6 +330,7 @@ impl Interpreter<'_> {
             }
             snapshot.restore(body);
             self.frame.scratch_folds.clear();
+            self.frame.region_misses.clear();
         }
     }
 
@@ -735,9 +745,18 @@ impl Interpreter<'_> {
     /// The constant a self-contained region denotes: the block runs as a frame
     /// the engine starts from scratch, since a region that builds its value in
     /// locals of its own and touches only those is as self-contained as a call
-    /// body. `None` when the block is not such a region, or when running
+    /// body. An outer local the region only reads is seeded from the walker's
+    /// environment when it holds a constant there — a value snapshot at the
+    /// region's own flow point, sound because the region cannot write it back:
+    /// [`region_free_reads`] rejects write positions and reference-typed
+    /// mentions, and a local involved in a live place alias is refused here.
+    /// `None` when the block is not such a region, or when running
     /// it does not finish on a constant — the block survives as written, so
     /// anything it would do at run time still happens there.
+    ///
+    /// A region of reference type is refused whatever it reads: its value
+    /// would materialize as a fresh literal where the program yields an alias,
+    /// and `ref.eq` can tell the two apart.
     ///
     /// Safe on the re-entrant projection path even though it executes writes:
     /// self-containment confines every write to locals of the scratch run, so
@@ -750,18 +769,50 @@ impl Interpreter<'_> {
         if let Some(value) = self.frame.scratch_folds.get(&e) {
             return Some(value.clone());
         }
-        if !region_is_self_contained(body, block, self.callees, self.ctfe_builtins) {
+        if RefKind::from_resolved(self.type_table.get(body.exprs[e].type_id)).is_some() {
             return None;
+        }
+        if self.frame.region_misses.contains(&e) {
+            return None;
+        }
+        let free = region_free_reads(
+            body,
+            block,
+            self.callees,
+            self.ctfe_builtins,
+            self.type_table,
+        )?;
+        let mut seeds: Vec<(u32, Value)> = Vec::with_capacity(free.len());
+        for index in free {
+            if self.frame.alias_involves(index) {
+                crate::compiler_trace!("region_seed", "region {e:?}: local {index} is aliased");
+                return None;
+            }
+            let Some(Lattice::Const(value)) = self.frame.env.get(&index) else {
+                crate::compiler_trace!(
+                    "region_seed",
+                    "region {e:?}: local {index} not constant in the walker env"
+                );
+                return None;
+            };
+            seeds.push((index, value.clone()));
         }
         self.charge_body_copy(body)?;
         let mut scratch = body.nodes_only_clone();
         scratch.root = block;
         let reached = Reached::in_frame(&scratch, self.ctfe_builtins, self.callees);
-        let region = FrameState::for_call(&scratch, &reached, std::iter::empty());
+        let region = FrameState::for_call(&scratch, &reached, seeds);
         let caller = self.swap_frame(region);
         let flow = self.exec_block(&mut scratch, block);
         self.swap_frame(caller);
-        value_of_block_flow(flow, label).ok()?.as_const()
+        let value = value_of_block_flow(flow, label)
+            .ok()
+            .and_then(|lattice| lattice.as_const());
+        if value.is_none() {
+            crate::compiler_trace!("region_seed", "region {e:?}: run abandoned");
+            self.frame.region_misses.insert(e);
+        }
+        value
     }
 
     /// Charge the step budget for the copy of `body` a region run makes before

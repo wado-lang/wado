@@ -59,7 +59,7 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-use super::arena_query::{expr_mentions_local, is_local, strip_refs};
+use super::arena_query::{collect_reads, expr_mentions_local, is_local, strip_refs};
 
 /// A hoisting candidate, identified by its owning function. Resolved in an
 /// immutable analysis phase, applied in a later mutation phase to avoid
@@ -69,10 +69,10 @@ struct Candidate {
     ty: TypeId,
     module_source: ModuleSource,
     kind: CandidateKind,
-    /// Initializer contains a call, so it can never become a Wasm constant
-    /// and `wir_optimize::const_global` cannot delete the assignment. Such a
-    /// candidate needs the lazy-init guard; a literal one keeps the existing
-    /// unguarded shape so its eager promotion is unchanged.
+    /// Initializer cannot become a Wasm constant ([`needs_lazy_guard`]), so
+    /// `wir_optimize::const_global` cannot delete the assignment and the
+    /// candidate needs the lazy-init guard. An eager-promotable one keeps the
+    /// unguarded shape so its promotion is unchanged.
     guarded: bool,
 }
 
@@ -110,6 +110,21 @@ enum CandidateKind {
     },
 }
 
+impl CandidateKind {
+    /// Whether the hoisted global gets `prefer_fixed_string_repr`: an in-place
+    /// hoist keeps the value at its original call site, where a lazy
+    /// `array.new_data` global would cost a guard branch per call, so WIR
+    /// raises its eager bound to `INLINE_REF_EAGER_MAX_BYTES`. The in-place
+    /// guard decisions and the global's marking at mutation time derive from
+    /// this one answer.
+    fn prefer_fixed_repr(&self) -> bool {
+        match self {
+            CandidateKind::InlineRef { .. } | CandidateKind::ValueArg { .. } => true,
+            CandidateKind::LetBinding { .. } => false,
+        }
+    }
+}
+
 pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.clone();
     // One id serves every instantiation — the hoisted type rides the call node.
@@ -135,6 +150,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         hoistable_pure: &hoistable_pure,
         structs: &project.structs,
         param_readonly: RefCell::new(IndexMap::default()),
+        string_inline_max_bytes: project.string_inline_max_bytes,
     };
     let mut candidates: Vec<Candidate> = Vec::new();
     for (fi, f) in project.functions.iter().enumerate() {
@@ -167,13 +183,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             kind,
             guarded,
         } = cand;
-        // An in-place hoist keeps the value at its original call site, where a
-        // lazy `array.new_data` global would cost a guard branch per call; the
-        // fixed repr lets `wir_optimize::const_global` promote it to eager.
-        let prefer_fixed_repr = matches!(
-            kind,
-            CandidateKind::InlineRef { .. } | CandidateKind::ValueArg { .. }
-        );
+        let prefer_fixed_repr = kind.prefer_fixed_repr();
 
         let mut func = project.functions[func_idx].borrow_mut();
         let body = func.body.as_mut().expect("candidate function has a body");
@@ -256,6 +266,11 @@ fn collect_candidates(
 ) {
     let single_decl_locals = locals_declared_once(body);
     let siblings = sibling_const_locals(body, gate, &single_decl_locals);
+    // Skeleton mentions only: the pool-wide `opaque_local_sources` cannot
+    // stand in for the missing pool reads, since the append-only pool also
+    // names locals whose promoted reads have long folded away.
+    let mut read_locals = IndexSet::default();
+    collect_reads(body, &mut read_locals);
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
@@ -265,17 +280,23 @@ fn collect_candidates(
                 ..
             } = &body.stmts[s].kind
             && single_decl_locals.contains(local_index)
-            && let Some(sibling_lets) = let_stmt_qualifies(body, s, gate, &siblings)
+            && let Some(sibling_lets) = let_stmt_qualifies(body, s, gate, &siblings, &read_locals)
         {
+            // A sibling `let` moves into the initializer at mutation time,
+            // so it decides the guard as much as the candidate's own value.
+            let guarded = std::iter::once(s)
+                .chain(sibling_lets.iter().copied())
+                .any(|st| stmt_needs_lazy_guard(body, st, gate, false));
+            let kind = CandidateKind::LetBinding {
+                local_index: *local_index,
+                sibling_lets,
+            };
             out.push(Candidate {
                 func_idx,
                 ty: *type_id,
                 module_source: module_source.clone(),
-                kind: CandidateKind::LetBinding {
-                    local_index: *local_index,
-                    sibling_lets,
-                },
-                guarded: stmt_value_contains_call(body, s),
+                kind,
+                guarded,
             });
             continue;
         }
@@ -291,12 +312,14 @@ fn collect_candidates(
                 && is_globalizable_const(body, inner, gate, &mut IndexSet::default())
                 && contains_aggregate(body, inner, gate)
             {
+                let kind = CandidateKind::InlineRef { ref_expr: id };
+                let guarded = needs_lazy_guard(body, inner, gate, kind.prefer_fixed_repr());
                 out.push(Candidate {
                     func_idx,
                     ty: inner_ty,
                     module_source: module_source.clone(),
-                    kind: CandidateKind::InlineRef { ref_expr: id },
-                    guarded: expr_contains_call(body, inner),
+                    kind,
+                    guarded,
                 });
                 continue;
             }
@@ -305,12 +328,14 @@ fn collect_candidates(
             let hoisted = value_arg_candidates(body, id, gate);
             if !hoisted.is_empty() {
                 for &arg in &hoisted {
+                    let kind = CandidateKind::ValueArg { arg_expr: arg };
+                    let guarded = needs_lazy_guard(body, arg, gate, kind.prefer_fixed_repr());
                     out.push(Candidate {
                         func_idx,
                         ty: body.exprs[arg].type_id,
                         module_source: module_source.clone(),
-                        kind: CandidateKind::ValueArg { arg_expr: arg },
-                        guarded: expr_contains_call(body, arg),
+                        kind,
+                        guarded,
                     });
                 }
                 // The hoisted arguments keep their subtrees verbatim inside the
@@ -568,6 +593,7 @@ fn let_stmt_qualifies(
     stmt: StmtId,
     gate: &Gate<'_>,
     siblings: &SiblingConsts,
+    read_locals: &IndexSet<u32>,
 ) -> Option<Vec<StmtId>> {
     let StmtKind::Let {
         local_index,
@@ -583,6 +609,11 @@ fn let_stmt_qualifies(
         || !is_globalizable_const_operand(body, value, gate, &mut siblings.set.clone())
         || !is_readonly_body(body, local_index, gate)
     {
+        return None;
+    }
+    // An unread binding is dead code on its way out, not a hoist target:
+    // hoisting it manufactures a live global no WIR cleanup deletes.
+    if !read_locals.contains(&local_index) {
         return None;
     }
     // A sibling-const read (the flattened builder-temp pair `let mut __b =
@@ -939,6 +970,10 @@ struct Gate<'a> {
     /// Each verdict costs two walks of the callee body, and one helper taking a
     /// constant is typically called from many sites.
     param_readonly: RefCell<IndexMap<(usize, usize), bool>>,
+    /// The opt-level's `NirPackage::string_inline_max_bytes`, the eager
+    /// `array.new_fixed` bound `translate_packed_array` applies to a `let`-shape
+    /// global's value.
+    string_inline_max_bytes: usize,
 }
 
 impl Gate<'_> {
@@ -1634,41 +1669,85 @@ fn inline_sibling_lets(
     );
 }
 
-/// True when `expr` contains a call anywhere — the marker for an initializer
-/// that cannot reduce to a Wasm constant instruction.
-fn expr_contains_call(body: &Body, expr: ExprId) -> bool {
+/// True when `expr` cannot end as a Wasm constant instruction, so
+/// `wir_optimize::const_global` cannot delete the assignment and the
+/// candidate needs the lazy-init guard. Four shapes qualify:
+///
+/// - a call, never const-expressible;
+/// - a `PackedArray` outside the eager `array.new_fixed` bound
+///   ([`crate::wir_build::packed_array_is_eager`], the same choice
+///   `translate_packed_array` makes);
+/// - an `ArrayLiteral` past `ARRAY_NEW_FIXED_LIMIT`, whatever its elements,
+///   which `split_large_array_literals` rewrites into a build sequence;
+/// - an `ArrayLiteral` of packable scalars at or past
+///   `ARRAY_NEW_DATA_THRESHOLD`, which `promote_constant_arrays_to_data`
+///   rewrites to `array.new_data`. A pure scalar element is born as
+///   `Operand::Value`, so packability is read off the operands.
+fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bool) -> bool {
     let mut stack = vec![NodeRef::Expr(expr)];
     while let Some(node) = stack.pop() {
-        if let NodeRef::Expr(id) = node
-            && matches!(
-                body.exprs[id].kind,
+        if let NodeRef::Expr(id) = node {
+            match &body.exprs[id].kind {
                 ExprKind::Call { .. }
-                    | ExprKind::MethodCall { .. }
-                    | ExprKind::IndirectCall { .. }
-                    | ExprKind::CmRawCall { .. }
-            )
-        {
-            return true;
+                | ExprKind::MethodCall { .. }
+                | ExprKind::IndirectCall { .. }
+                | ExprKind::CmRawCall { .. } => return true,
+                ExprKind::PackedArray(bytes) => {
+                    if !crate::wir_build::packed_array_is_eager(
+                        bytes.len(),
+                        gate.string_inline_max_bytes,
+                        prefer_fixed,
+                    ) {
+                        return true;
+                    }
+                }
+                ExprKind::ArrayLiteral { elements } => {
+                    let packable = |op: &Operand| match op {
+                        // A pooled `Null` is a ref the data promotion cannot pack.
+                        Operand::Value(v) => matches!(
+                            body.values.kind(*v),
+                            crate::nir_value_graph::ValueKind::Int(..)
+                                | crate::nir_value_graph::ValueKind::Float(..)
+                                | crate::nir_value_graph::ValueKind::Bool(_)
+                                | crate::nir_value_graph::ValueKind::Char(_)
+                        ),
+                        Operand::Expr(e) => {
+                            matches!(body.exprs[*e].kind, ExprKind::EnumConstruct { .. })
+                        }
+                    };
+                    if elements.len() > crate::wir_optimize::array::ARRAY_NEW_FIXED_LIMIT {
+                        return true;
+                    }
+                    if elements.len() >= crate::wir_optimize::array::ARRAY_NEW_DATA_THRESHOLD
+                        && elements.iter().all(packable)
+                    {
+                        return true;
+                    }
+                }
+                _ => {}
+            }
         }
         body.for_each_child(node, |c| stack.push(c));
     }
     false
 }
 
-fn stmt_value_contains_call(body: &Body, stmt: StmtId) -> bool {
+fn stmt_needs_lazy_guard(body: &Body, stmt: StmtId, gate: &Gate<'_>, prefer_fixed: bool) -> bool {
     let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
-        return false;
+        unreachable!("[NIR] const_object_globalization: guard candidates are `let` bindings");
     };
-    value.as_expr().is_some_and(|e| expr_contains_call(body, e))
+    value
+        .as_expr()
+        .is_some_and(|e| needs_lazy_guard(body, e, gate, prefer_fixed))
 }
 
 /// Wrap a hoisted `GlobalVarSet` in `if builtin::is_uninitialized(<global>)`.
 ///
 /// The unguarded form is correct only because `wir_optimize::const_global`
 /// promotes a Wasm-const-expressible initializer into the global's eager
-/// `init` and deletes the assignment. A call is never const-expressible, so
-/// its assignment survives — and an unguarded one re-runs on every activation,
-/// which is the opposite of hoisting.
+/// `init` and deletes the assignment. An initializer [`needs_lazy_guard`]
+/// classes non-promotable survives — and an unguarded one re-runs on every
+/// activation, which is the opposite of hoisting.
 ///
 /// The guard also pins the semantics: initialization happens at the first
 /// execution of the expression it replaced, so a callee that traps or diverges
