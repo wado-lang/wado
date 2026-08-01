@@ -1707,6 +1707,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Accepts the bare head (`Take`) or a full spelling (`Take<A>`), so a
         // qualified call can pin one argument list.
         required_trait: Option<&str>,
+        // `probe`: per-argument shallow classes (`probe_arg_class`), used to
+        // select among one trait's argument lists. `None` from callers with
+        // no argument list at hand.
+        probe: Option<&[ProbeClass]>,
     ) -> Option<super::types::TraitMethodMatch> {
         // Resolving a trait method's signature here walks (possibly foreign)
         // impl-block parameter / return type AST nodes. Those nodes are owned
@@ -1724,6 +1728,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_type_id,
                 span,
                 required_trait,
+                probe,
             )
         })
     }
@@ -2060,6 +2065,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_id: Option<TypeId>,
         span: Span,
         required_trait: Option<&str>,
+        probe: Option<&[ProbeClass]>,
     ) -> Option<super::types::TraitMethodMatch> {
         use super::types::TraitMethodMatch;
         let mut found_traits: Vec<TraitMethodMatch> = Vec::new();
@@ -2092,7 +2098,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             found_traits.retain(|m| m.trait_base_name == wanted || m.trait_name == wanted);
         }
 
-        if let Some(m) = self.select_trait_match(found_traits, method_name, span) {
+        if let Some(m) = self.select_trait_match(found_traits, method_name, span, probe) {
             return Some(m);
         }
 
@@ -2527,11 +2533,202 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// trait also has a non-variadic one (coherence Rule 1, WEP 2026-03-14 §5),
     /// prefer a trait impl in the current module, dedup `(trait, module)`
     /// pairs, take the first remaining.
+    /// What a shallow, side-effect-free scan of an argument expression knows
+    /// about its type before any candidate signature exists — the phase-3
+    /// probe of WEP 2026-07-31. Deliberately not a speculative `resolve_expr`:
+    /// that would desync `FunctionContext`'s local-index walk with reify, leak
+    /// anonymous structs into the shared `TypeTable`, and emit diagnostics
+    /// with no suppression seam. The scan reads scopes and the type table and
+    /// mutates nothing.
+    ///
+    /// Every approximation errs toward [`ProbeClass::Admit`]: over-admitting
+    /// can only leave the candidate set ambiguous (an error asking the user
+    /// to disambiguate), while under-admitting could select the wrong
+    /// candidate.
+    pub(super) fn probe_arg_class(
+        &self,
+        expr: &crate::ast::Expr,
+        ctx: &super::types::FunctionContext,
+    ) -> ProbeClass {
+        use crate::ast::Expr;
+        match expr {
+            Expr::Literal(lit) => match &lit.value {
+                crate::ast::Literal::Number(raw) => {
+                    if raw.contains('.') {
+                        ProbeClass::FloatLit
+                    } else {
+                        ProbeClass::IntLit
+                    }
+                }
+                crate::ast::Literal::String(_) => ProbeClass::StrLit,
+                crate::ast::Literal::Byte(_) => ProbeClass::IntLit,
+                crate::ast::Literal::Char(_) => ProbeClass::Type(TypeTable::CHAR),
+                crate::ast::Literal::Bool(_) => ProbeClass::Type(TypeTable::BOOL),
+                crate::ast::Literal::Null => ProbeClass::NullLit,
+                crate::ast::Literal::Bytes(_)
+                | crate::ast::Literal::Unit
+                | crate::ast::Literal::LocationFile
+                | crate::ast::Literal::LocationLine
+                | crate::ast::Literal::LocationFunction
+                | crate::ast::Literal::DataSection
+                | crate::ast::Literal::IncludeStr(_)
+                | crate::ast::Literal::IncludeBytes(_) => ProbeClass::Admit,
+            },
+            Expr::TemplateString(_) => ProbeClass::StrLit,
+            Expr::Ident(id) if !id.name.contains("::") => {
+                for scope in ctx.scopes.iter().rev() {
+                    if let Some(var) = scope.get(&id.name) {
+                        return ProbeClass::Type(var.type_id);
+                    }
+                }
+                ProbeClass::Admit
+            }
+            Expr::Unary(u) => match u.op {
+                crate::ast::UnaryOp::Ref => match self.probe_arg_class(&u.expr, ctx) {
+                    ProbeClass::Type(t) => {
+                        ProbeClass::Type(self.tysys.type_table.borrow_mut().make_ref(t))
+                    }
+                    _ => ProbeClass::Admit,
+                },
+                crate::ast::UnaryOp::MutRef => match self.probe_arg_class(&u.expr, ctx) {
+                    ProbeClass::Type(t) => {
+                        ProbeClass::Type(self.tysys.type_table.borrow_mut().make_mut_ref(t))
+                    }
+                    _ => ProbeClass::Admit,
+                },
+                crate::ast::UnaryOp::Neg => match self.probe_arg_class(&u.expr, ctx) {
+                    c @ (ProbeClass::IntLit | ProbeClass::FloatLit) => c,
+                    _ => ProbeClass::Admit,
+                },
+                crate::ast::UnaryOp::Not
+                | crate::ast::UnaryOp::BitNot
+                | crate::ast::UnaryOp::Deref => ProbeClass::Admit,
+            },
+            Expr::Cast(c) => match &c.target_type {
+                crate::ast::Type::Named(n) => self
+                    .probe_named_type(&n.name)
+                    .map_or(ProbeClass::Admit, ProbeClass::Type),
+                _ => ProbeClass::Admit,
+            },
+            Expr::StructLiteral(sl) => match &sl.name {
+                Some(name) => self
+                    .probe_named_type(name)
+                    .map_or(ProbeClass::Admit, ProbeClass::Type),
+                None => ProbeClass::Admit,
+            },
+            Expr::Ident(_)
+            | Expr::Binary(_)
+            | Expr::Assign(_)
+            | Expr::CompoundAssign(_)
+            | Expr::ComparisonChain(_)
+            | Expr::Call(_)
+            | Expr::MethodCall(_)
+            | Expr::StaticMethodCall(_)
+            | Expr::FieldAccess(_)
+            | Expr::Index(_)
+            | Expr::Block(_)
+            | Expr::If(_)
+            | Expr::Match(_)
+            | Expr::Matches(_)
+            | Expr::Closure(_)
+            | Expr::LabeledBlock(_)
+            | Expr::TryOp(_)
+            | Expr::Spread(_, _)
+            | Expr::Range(_)
+            | Expr::TupleLiteral(_)
+            | Expr::WithHandler(_)
+            | Expr::Resume(_)
+            | Expr::Error(_) => ProbeClass::Admit,
+        }
+    }
+
+    /// A read-only name → `TypeId` lookup for the probe: primitives by name,
+    /// then non-generic structs through the canonical decl key. Anything else
+    /// (generics, enums, aliases the table has not interned) is `None`, which
+    /// the probe treats as admit-everything.
+    fn probe_named_type(&self, name: &str) -> Option<TypeId> {
+        let primitive = match name {
+            "i8" => Some(TypeTable::I8),
+            "i16" => Some(TypeTable::I16),
+            "i32" => Some(TypeTable::I32),
+            "i64" => Some(TypeTable::I64),
+            "i128" => Some(TypeTable::I128),
+            "u8" => Some(TypeTable::U8),
+            "u16" => Some(TypeTable::U16),
+            "u32" => Some(TypeTable::U32),
+            "u64" => Some(TypeTable::U64),
+            "u128" => Some(TypeTable::U128),
+            "f32" => Some(TypeTable::F32),
+            "f64" => Some(TypeTable::F64),
+            "bool" => Some(TypeTable::BOOL),
+            "char" => Some(TypeTable::CHAR),
+            _ => None,
+        };
+        if primitive.is_some() {
+            return primitive;
+        }
+        let (module, decl) = self.canonical_decl_key(name);
+        self.tysys
+            .type_table
+            .borrow()
+            .find_struct_type(&decl, &module)
+    }
+
+    /// Whether a candidate's parameter can accept an argument of this probe
+    /// class. Openness first: a parameter still mentioning a type parameter is
+    /// not yet comparable and admits everything.
+    fn probe_admits(&self, param: TypeId, class: &ProbeClass) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        if param == TypeTable::UNKNOWN || param == TypeTable::ERROR || tt.contains_type_param(param)
+        {
+            return true;
+        }
+        match class {
+            ProbeClass::Admit => true,
+            ProbeClass::Type(t) => {
+                if *t == param {
+                    return true;
+                }
+                // The one coercion argument passing applies: `&mut T` → `&T`.
+                matches!(
+                    (tt.get(param), tt.get(*t)),
+                    (ResolvedType::Ref(p), ResolvedType::MutRef(a)) if p == a
+                )
+            }
+            ProbeClass::IntLit => matches!(
+                tt.get(tt.get_ultimate_base_type(param)),
+                ResolvedType::Primitive(
+                    crate::tir::PrimitiveType::I8
+                        | crate::tir::PrimitiveType::I16
+                        | crate::tir::PrimitiveType::I32
+                        | crate::tir::PrimitiveType::I64
+                        | crate::tir::PrimitiveType::I128
+                        | crate::tir::PrimitiveType::U8
+                        | crate::tir::PrimitiveType::U16
+                        | crate::tir::PrimitiveType::U32
+                        | crate::tir::PrimitiveType::U64
+                        | crate::tir::PrimitiveType::U128
+                        | crate::tir::PrimitiveType::F32
+                        | crate::tir::PrimitiveType::F64
+                )
+            ),
+            ProbeClass::FloatLit => matches!(
+                tt.get(tt.get_ultimate_base_type(param)),
+                ResolvedType::Primitive(
+                    crate::tir::PrimitiveType::F32 | crate::tir::PrimitiveType::F64
+                )
+            ),
+            ProbeClass::StrLit => tt.base_type_name(tt.get_ultimate_base_type(param)) == "String",
+            ProbeClass::NullLit => tt.as_option(param).is_some(),
+        }
+    }
+
     fn select_trait_match(
         &self,
         mut found_traits: Vec<super::types::TraitMethodMatch>,
         method_name: &str,
         span: Span,
+        probe: Option<&[ProbeClass]>,
     ) -> Option<super::types::TraitMethodMatch> {
         // Rule 1 ranks the impls of *one* trait against each other, so it must
         // not outrank locality between traits: a foreign blanket
@@ -2554,6 +2751,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits.dedup_by(|a, b| {
             a.trait_name == b.trait_name && a.impl_module_source == b.impl_module_source
         });
+        // Phase 3 (WEP 2026-07-31): one base trait at several argument lists —
+        // the arguments choose. Only a homogeneous-base set is filtered;
+        // distinct traits never form an overload set, so a cross-trait
+        // collision falls through to its error untouched.
+        if let Some(probe) = probe
+            && found_traits.len() > 1
+            && found_traits
+                .iter()
+                .all(|m| m.trait_base_name == found_traits[0].trait_base_name)
+            && found_traits
+                .iter()
+                .any(|m| m.trait_name != found_traits[0].trait_name)
+        {
+            let admitted: Vec<usize> = found_traits
+                .iter()
+                .enumerate()
+                .filter(|(_, m)| {
+                    let params = &m.method_info.param_types;
+                    probe.len() <= params.len()
+                        && probe
+                            .iter()
+                            .zip(params.iter())
+                            .all(|(class, &param)| self.probe_admits(param, class))
+                })
+                .map(|(i, _)| i)
+                .collect();
+            // Unique-or-error: exactly one admitted candidate wins; zero or
+            // several leave the set for the ambiguity report below. No
+            // ranking — a literal admits every numeric width, so it never
+            // selects between them.
+            if let [winner] = admitted.as_slice() {
+                let m = found_traits.swap_remove(*winner);
+                found_traits = vec![m];
+            }
+        }
+
         self.report_trait_argument_ambiguity(&found_traits, method_name, span);
         self.report_cross_trait_ambiguity(&found_traits, method_name, span);
         // Still return a winner: reporting and then claiming the method is
@@ -3261,6 +3494,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(output_type),
                 method_call.span,
                 None,
+                None,
             )
         {
             method_trait_name = Some(trait_match.trait_name);
@@ -3457,4 +3691,19 @@ fn binding_mutability(name: &str, ctx: &FunctionContext) -> Option<bool> {
         return Some(true);
     }
     ctx.outer_locals.get(name).map(|outer| outer.is_mut)
+}
+
+/// See [`Elaborator::probe_arg_class`]. `Type` compares exactly (plus
+/// `&mut T` → `&T`); the literal classes admit every parameter the literal
+/// could coerce to, so a literal never *selects* between numeric widths —
+/// deliberate (WEP 2026-07-31): letting the default type decide would make
+/// adding an impl silently retarget existing calls.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum ProbeClass {
+    Type(crate::tir::TypeId),
+    IntLit,
+    FloatLit,
+    StrLit,
+    NullLit,
+    Admit,
 }

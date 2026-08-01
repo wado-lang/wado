@@ -890,12 +890,15 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "ambiguous call to '{method}': the receiver implements {}, and Wado cannot pick between a trait's argument lists at a call site",
+                    "ambiguous call to '{method}': the arguments do not select between {}; annotate an argument (e.g. '42 as i64') or pin the trait, e.g. '{}::{method}(&value, …)'",
                     traits
                         .iter()
                         .map(|t| format!("'{t}'"))
                         .collect::<Vec<_>>()
-                        .join(" and ")
+                        .join(" and "),
+                    traits
+                        .first()
+                        .map_or_else(|| "Trait".to_string(), |t| t.replace('<', "::<"))
                 ),
                 *span,
             ),

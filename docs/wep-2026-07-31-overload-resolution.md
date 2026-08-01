@@ -144,23 +144,31 @@ arity never discriminates, and no arity filter exists.
 
 ### Probe typing
 
-Selection needs argument types before any signature is chosen, so arguments are
-probe-typed: elaborated bottom-up with no expected type, under a speculation
-discipline — no facts recorded, no diagnostics emitted. Expressions with
-context-free types (variables, field reads, calls with known return types,
-named struct literals, ranges) produce their type. Literals produce a class,
-not a type:
+Selection needs argument types before any signature is chosen, so arguments
+are probe-typed. The probe is a shallow, side-effect-free scan
+(`probe_arg_class`), deliberately not a speculative `resolve_expr`: a full
+speculative resolve would desync `FunctionContext`'s local-index walk with
+reify, leak anonymous structs into the shared `TypeTable`, and emit
+diagnostics through a channel with no suppression seam. The scan reads scopes
+and the type table and mutates nothing. Expressions whose types are pinned at
+the call site — a local (scope lookup), a named non-generic struct literal, a
+cast to a named type, `&`/`&mut` of those, bool and char literals — produce
+their type. Literals produce a class, not a type:
 
-| Argument                       | Probe result  | Admissible parameters                          |
-| ------------------------------ | ------------- | ---------------------------------------------- |
-| integer literal                | IntLit        | integer types, floats, their newtypes          |
-| float literal                  | FloatLit      | float types, their newtypes                    |
-| string / template literal      | StrLit        | `String`, its newtypes                         |
-| `null`                         | NullLit       | any `Option<T>`                                |
-| `[…]` sequence literal         | SeqLit        | tuples of that arity, sequence-coercible types |
-| `{…}` anonymous struct literal | MapLit        | struct types, `TreeMap`-coercible types        |
-| closure literal                | its `fn` type | parameters are annotated, so the type is exact |
-| unresolvable expression        | Unknown       | every parameter (e.g. a nested ambiguous call) |
+| Argument                  | Probe result | Admissible parameters                 |
+| ------------------------- | ------------ | ------------------------------------- |
+| integer literal           | IntLit       | integer types, floats, their newtypes |
+| float literal             | FloatLit     | float types, their newtypes           |
+| string / template literal | StrLit       | `String`, its newtypes                |
+| `null`                    | NullLit      | any `Option<T>`                       |
+| everything else           | Admit        | every parameter                       |
+
+"Everything else" — compound literals, closures, calls, field reads — admits
+every candidate. The approximation direction is the invariant: over-admitting
+can only leave the set ambiguous (an error asking the user to disambiguate),
+while under-admitting could select the wrong candidate. Sharpening a class —
+teaching the scan field reads or call return types — is therefore always a
+backward-compatible refinement: it can only turn errors into resolutions.
 
 A literal class admits candidates; it never selects one. `f.take(42)` against
 `Take<i32>` beside `Take<i64>` is an ambiguity error — the fix is `42 as i64`,
@@ -341,45 +349,28 @@ Landing order — each phase keeps the suite green and is useful alone:
    migration this phase exists to enable. A foreign blanket beside a local
    impl is not a collision, which is what the blanket exception above records.
 
-3. Argument-directed selection: probe typing, then the filter in
-   `select_trait_match` (which becomes `&mut self` — it runs before arguments
-   are resolved today). Only calls whose candidate set has several argument
-   lists pay the probe cost. `find_method_in_trait_bounds`
-   (`trait_query.rs:1610`) gets the same grouping so `T: Take<A> + Take<B>`
-   behaves like the concrete case.
+3. Argument-directed selection: `probe_arg_class` runs per argument before
+   lookup (cheap, side-effect-free), and `select_trait_match` filters a
+   homogeneous-base candidate set by admission — exactly one admitted
+   candidate wins; zero or several fall through to the ambiguity report,
+   whose message names the two escapes (`42 as i64`, the trait turbofish).
+   The turbofish spelling `Take::<A>::take(recv, …)` routes through the same
+   qualified-call engine with the full trait spelling as the constraint.
+   The bounds counterpart (`T: Take<A> + Take<B>`) cannot arise yet —
+   positional trait arguments do not parse in bound position.
 
-   A scratch `ModuleSemantics` is necessary but not sufficient — the swap
-   already exists (`elaborator.rs:2054`, trait default-method synthesis) and
-   the annotation maps are `AstId`-keyed, so re-resolving overwrites rather
-   than duplicates. Four things sit outside those maps and a discarded probe
-   corrupts each:
-
-   - Diagnostics have no seam. `emit` calls `host.emit_diagnostic` directly
-     (`elaborator.rs:263` → `logger.rs:121`) and bumps a counter that fails the
-     whole compilation. A probe needs a depth counter gating `emit` / `warn`
-     and leaving `error_count` untouched.
-   - `FunctionContext` carries the Gap 7 walk-order invariant: annotate and
-     reify must allocate the same synthetic locals in the same order. A probe
-     that allocates one (`__ref_*` for a mut-capturing closure, `__qm_*` for
-     `?`, `__b` for a coerced literal) and is discarded desyncs every later
-     local index — silently wrong code, not an error. `FunctionContext` is not
-     `Clone`, so this is explicit save/restore.
-   - An anonymous struct literal interns into the shared `TypeTable` while its
-     `pending_anonymous_structs` push lives on the scratch. Discarding the
-     scratch leaves the dedup guard (`expr.rs:3859`) satisfied, so the real
-     resolve registers nothing and no `TirStruct` is emitted. The existing swap
-     drains that list back (`elaborator.rs:2088`); a probe must too, or skip
-     anon-struct registration.
-   - `record_bound_driven_synth_request` writes the shared `TypeTable` with no
-     removal API, so a probe over-synthesizes.
-
-   `TypeId` interning itself is safe — structurally deduped, and `retain`
-   tolerates unreachable ids. Closures register nothing global at annotate
-   time.
-
-   This is the phase's real cost, and it argues for probing the narrowest
-   expression that answers the question rather than running a general
-   speculative resolve.
+   The shallow scan is the load-bearing choice, not a stopgap. A speculative
+   `resolve_expr` against a scratch `ModuleSemantics` would still corrupt four
+   things that live outside the `AstId`-keyed annotation maps: diagnostics
+   (`emit` reaches `host.emit_diagnostic` directly, with no suppression seam,
+   and bumps a counter that fails the compilation), the `FunctionContext`
+   local-index walk that reify replays in lockstep (a discarded synthetic
+   local — `__ref_*`, `__qm_*`, `__b` — desyncs every later index into
+   silently wrong code), the anonymous-struct dedup guard in the shared
+   `TypeTable` (a probed literal would satisfy it and the real resolve would
+   register nothing), and `record_bound_driven_synth_request` (no removal
+   API). Any future sharpening of the probe must stay inside the
+   side-effect-free scan; upgrading it to a real resolve re-opens all four.
 
 4. Follow-ups: arithmetic RHS selection in `find_arithmetic_trait_impl`;
    folding the `from` / `try_from` hint path into the general mechanism. That

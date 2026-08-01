@@ -199,6 +199,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
+        // Shallow per-argument classes for argument-directed selection among
+        // one trait's argument lists (WEP 2026-07-31 phase 3). Computed before
+        // lookup — cheap, side-effect-free — because selection must run before
+        // any candidate's signature shapes the arguments.
+        let probe_classes: Vec<super::method_lookup::ProbeClass> = args_ast
+            .iter()
+            .map(|a| self.probe_arg_class(a, ctx))
+            .collect();
+
         // Base (non-ref) type for method lookup. `mut`: deferred-inference may
         // concretise the receiver below.
         let mut base_type_id = self.tysys.get_base_type(receiver.type_id);
@@ -328,6 +337,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(base_type_id),
                     span,
                     required_trait,
+                    Some(&probe_classes),
                 );
                 // Only use ref-type impls that target a concrete container type
                 // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
@@ -363,6 +373,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(base_type_id),
                 span,
                 required_trait,
+                Some(&probe_classes),
             )
         {
             matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
@@ -1206,21 +1217,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        let Some((receiver_ast, rest)) = call.args.split_first() else {
-            let _ = self.emit(TypeError::TraitQualifiedCallNeedsReceiver {
-                trait_name: trait_name.to_string(),
-                method: method_name.to_string(),
-                span: call.span,
-            });
-            return TypeTable::ERROR;
-        };
         let declared_trait = self.declared_trait_name(trait_name);
-        let receiver_type = self.resolve_expr(receiver_ast, ctx, None);
         let type_args: Vec<TypeId> = call
             .type_args
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
+        self.resolve_trait_qualified_call_parts(
+            declared_trait,
+            method_name,
+            &call.args,
+            type_args,
+            call.id,
+            call.span,
+            expected_type,
+            ctx,
+        )
+    }
+
+    /// The shared engine behind both qualified spellings: the bare
+    /// `Trait::method(recv, …)` ident form, and the trait-turbofish
+    /// `Take::<A>::take(recv, …)` static form whose `required_trait` carries
+    /// the full spelling and thereby pins one argument list.
+    #[allow(clippy::too_many_arguments)]
+    fn resolve_trait_qualified_call_parts(
+        &mut self,
+        required_trait: String,
+        method_name: &str,
+        args: &[ast::Expr],
+        type_args: Vec<TypeId>,
+        call_id: AstId,
+        span: Span,
+        expected_type: Option<TypeId>,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        let Some((receiver_ast, rest)) = args.split_first() else {
+            let _ = self.emit(TypeError::TraitQualifiedCallNeedsReceiver {
+                trait_name: required_trait,
+                method: method_name.to_string(),
+                span,
+            });
+            return TypeTable::ERROR;
+        };
+        let receiver_type = self.resolve_expr(receiver_ast, ctx, None);
         // `call_id: None` — the dispatcher would file the decision under
         // `method_dispatch`, which reify only reads for a `MethodCallExpr`
         // node. A qualified call spells its receiver's mode itself (`&x` for
@@ -1239,8 +1278,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_arg_holes: vec![],
                 args: rest,
                 expected_type,
-                span: call.span,
-                required_trait: Some(declared_trait),
+                span,
+                required_trait: Some(required_trait),
             },
             ctx,
         );
@@ -1259,9 +1298,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // An unannotated closure argument infers its parameter types from
             // this; without it the closure's functor is generated with
             // `unknown` params and dropped before codegen.
-            self.record_call_param_types(call.id, param_types);
+            self.record_call_param_types(call_id, param_types);
             self.sem.types.static_method_dispatch.insert(
-                call.id,
+                call_id,
                 super::sem::types::StaticMethodDispatch {
                     function_ref,
                     param_is_mut,
@@ -1330,6 +1369,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let ast::Type::Generic(g) = &static_call.target_type
             && self.tysys.trait_env.find_trait_decl_key(&g.name).is_some()
         {
+            // `Take::<A>::take(recv, …)` — the trait-turbofish qualified call
+            // (WEP 2026-07-31): the turbofish pins one argument list, spelled
+            // the way candidate `trait_name`s are (`get_type_name_full`), with
+            // the head resolved past any `use … as` alias. Gated on the
+            // turbofish matching the trait's declared arity: on a
+            // zero-parameter trait the turbofish cannot be trait arguments
+            // (`Shape::<Sq>::area` writes the receiver — a pre-existing
+            // misuse), so that shape keeps its unknown-function error.
+            if self.is_trait_instance_method(&g.name, &static_call.method)
+                && self
+                    .find_trait_decl_type_params(&self.declared_trait_name(&g.name))
+                    .is_some_and(|params| !params.is_empty() && params.len() == g.args.len())
+            {
+                let declared_head = self.declared_trait_name(&g.name);
+                let args_spelled: Vec<String> =
+                    g.args.iter().map(|a| self.get_type_name_full(a)).collect();
+                let required = format!("{declared_head}<{}>", args_spelled.join(", "));
+                let method_type_args: Vec<TypeId> = static_call
+                    .type_args
+                    .iter()
+                    .map(|ty| self.resolve_type(ty))
+                    .collect();
+                return self.resolve_trait_qualified_call_parts(
+                    required,
+                    &static_call.method.clone(),
+                    &static_call.args,
+                    method_type_args,
+                    static_call.id,
+                    static_call.span,
+                    None,
+                    ctx,
+                );
+            }
             let _ = self.emit(TypeError::UnknownFunction {
                 name: static_call_symbol_name(static_call),
                 span: static_call.span,
