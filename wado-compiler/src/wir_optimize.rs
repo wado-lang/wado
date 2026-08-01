@@ -11,7 +11,7 @@
 //! | `nullable_ref`        | Null-niche variant representation (mandatory) |
 //! | `sroa_variant_return` | Multi-value return SROA (variants)          |
 //! | `elide_struct`        | Struct local elimination (single + multi)   |
-//! | `array`               | Push collapse / data promotion / splitting  |
+//! | `array`               | Data promotion / splitting / zero-fill elision |
 //! | `const_forward`       | Struct field constant forwarding            |
 //! | `peephole`            | Constant folding, copy elision              |
 //! | `nullability_opt`     | Elide redundant `ref.as_non_null` / fold `ref.is_null` |
@@ -53,7 +53,9 @@ use crate::wir::WirPackage;
 
 pub use dce::{compact_dead_items, dce_unreachable_types, mark_unreachable_defined_functions};
 
-use array::{promote_constant_arrays_to_data, split_large_array_literals};
+use array::{
+    elide_zero_fill_of_fresh_arrays, promote_constant_arrays_to_data, split_large_array_literals,
+};
 use branch_hint::{infer_branch_hints, select_br_ifs};
 use cleanup::cleanup;
 use const_forward::forward_struct_field_constants;
@@ -172,6 +174,14 @@ pub fn optimize_wir(
     wir_pass("wir/split_large_array_literals", module, profiler, |m| {
         split_large_array_literals(m);
     });
+    wir_pass(
+        "wir/elide_zero_fill_of_fresh_arrays",
+        module,
+        profiler,
+        |m| {
+            elide_zero_fill_of_fresh_arrays(m);
+        },
+    );
     profiler.span_end("wir/phase4_lib_rewrites");
 
     // Phase 5: peephole (const fold, copy elision, multi-value struct elision),
