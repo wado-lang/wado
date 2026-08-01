@@ -12,9 +12,8 @@
 //!
 //! `select_br_ifs` collapses `if cond { br N }` with an empty else into a
 //! single `br_if N-1`, carrying any branch hint on the condition over to the
-//! `br_if`. It must run after `init_guard`, whose matcher keys on the
-//! `If { GlobalGet, [Br] }` shape, and before `infer_branch_hints`, so the
-//! trap-tail rule sees the selected `br_if`s.
+//! `br_if`. It must run before `infer_branch_hints`, so the trap-tail rule
+//! sees the selected `br_if`s.
 
 use crate::wir::{WirInstr, WirPackage};
 

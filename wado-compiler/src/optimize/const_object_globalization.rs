@@ -1679,10 +1679,8 @@ fn inline_sibling_lets(
 ///   `translate_packed_array` makes);
 /// - an `ArrayLiteral` past `ARRAY_NEW_FIXED_LIMIT`, whatever its elements,
 ///   which `split_large_array_literals` rewrites into a build sequence;
-/// - an `ArrayLiteral` of packable scalars at or past
-///   `ARRAY_NEW_DATA_THRESHOLD`, which `promote_constant_arrays_to_data`
-///   rewrites to `array.new_data`. A pure scalar element is born as
-///   `Operand::Value`, so packability is read off the operands.
+/// - an `ArrayLiteral` `promote_constant_arrays_to_data` will rewrite to
+///   `array.new_data` (see [`array_literal_promotes_to_data`]).
 fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bool) -> bool {
     let mut stack = vec![NodeRef::Expr(expr)];
     while let Some(node) = stack.pop() {
@@ -1702,25 +1700,10 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bo
                     }
                 }
                 ExprKind::ArrayLiteral { elements } => {
-                    let packable = |op: &Operand| match op {
-                        // A pooled `Null` is a ref the data promotion cannot pack.
-                        Operand::Value(v) => matches!(
-                            body.values.kind(*v),
-                            crate::nir_value_graph::ValueKind::Int(..)
-                                | crate::nir_value_graph::ValueKind::Float(..)
-                                | crate::nir_value_graph::ValueKind::Bool(_)
-                                | crate::nir_value_graph::ValueKind::Char(_)
-                        ),
-                        Operand::Expr(e) => {
-                            matches!(body.exprs[*e].kind, ExprKind::EnumConstruct { .. })
-                        }
-                    };
                     if elements.len() > crate::wir_optimize::array::ARRAY_NEW_FIXED_LIMIT {
                         return true;
                     }
-                    if elements.len() >= crate::wir_optimize::array::ARRAY_NEW_DATA_THRESHOLD
-                        && elements.iter().all(packable)
-                    {
+                    if array_literal_promotes_to_data(body, elements, gate) {
                         return true;
                     }
                 }
@@ -1730,6 +1713,58 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bo
         body.for_each_child(node, |c| stack.push(c));
     }
     false
+}
+
+/// Whether `promote_constant_arrays_to_data` will rewrite this literal to
+/// `array.new_data` — every element packable, and the packed bytes smaller
+/// than the same elements as inline operands. Mirrors the decision the WIR
+/// pass makes on the lowered form, through the shared
+/// [`crate::wir_optimize::array::data_promotion_pays`].
+///
+/// A pure scalar element is born as `Operand::Value`, so both its constant and
+/// its type are read off the operand; a `Null` is a ref the promotion cannot
+/// pack, and a non-constant element leaves the literal on the fixed path.
+fn array_literal_promotes_to_data(body: &Body, elements: &[Operand], gate: &Gate<'_>) -> bool {
+    use crate::nir_value_graph::ValueKind;
+    use crate::wir_optimize::array::{ConstOperand, data_promotion_pays, primitive_byte_width};
+
+    let type_table = gate.type_table.borrow();
+    let mut width = None;
+    let mut operand_bytes = 0;
+    for element in elements {
+        let Operand::Value(v) = element else {
+            return false;
+        };
+        let (elem_width, operand) = match body.values.kind(*v) {
+            ValueKind::Bool(b) => (1, ConstOperand::I32(i32::from(*b))),
+            ValueKind::Char(c) => (4, ConstOperand::I32(*c as i32)),
+            ValueKind::Int(value, ty) => {
+                let width = match type_table.get(*ty) {
+                    ResolvedType::Primitive(p) => primitive_byte_width(*p),
+                    // An enum or flags case lowers to the `u32` discriminant.
+                    ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => Some(4),
+                    _ => None,
+                };
+                let (width, operand) = match width {
+                    Some(8) => (8, ConstOperand::I64(*value as i64)),
+                    Some(w) => (w, ConstOperand::I32(*value as i32)),
+                    None => return false,
+                };
+                (width, operand)
+            }
+            ValueKind::Float(_, ty) => match type_table.get(*ty) {
+                ResolvedType::Primitive(crate::tir::PrimitiveType::F32) => (4, ConstOperand::F32),
+                ResolvedType::Primitive(crate::tir::PrimitiveType::F64) => (8, ConstOperand::F64),
+                _ => return false,
+            },
+            _ => return false,
+        };
+        if *width.get_or_insert(elem_width) != elem_width {
+            return false;
+        }
+        operand_bytes += operand.encoded_bytes();
+    }
+    width.is_some_and(|w| data_promotion_pays(elements.len(), w, operand_bytes))
 }
 
 fn stmt_needs_lazy_guard(body: &Body, stmt: StmtId, gate: &Gate<'_>, prefer_fixed: bool) -> bool {

@@ -324,7 +324,7 @@ fn "array_new.wado/array_new_data_i32"() with Stdout {
     let start_525: i32;
     let start_534: i32;
     let f_543: ref "core:prelude/format.wado//Formatter";
-    a = struct.new "core:prelude//List<i32>" { repr: array.new_data<i32>(10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210, 220, 230, 240, 250, 260, 270, 280, 290, 300, 310, 320, 330, 340, 350, 360, 370, 380, 390, 400, 410, 420, 430, 440, 450, 460, 470, 480, 490, 500, 510, 520, 530, 540, 550, 560, 570, 580, 590, 600, 610, 620, 630, 640, 650, 660, 670, 680, 690, 700, 710, 720, 730, 740, 750, 760, 770, 780, 790, 800, 810, 820, 830, 840, 850, 860, 870, 880, 890, 900, 910, 920, 930, 940, 950, 960, 970, 980, 990, 1000, 1010, 1020, 1030, 1040, 1050, 1060, 1070, 1080, 1090, 1100, 1110, 1120, 1130, 1140, 1150, 1160, 1170, 1180, 1190, 1200, 1210, 1220, 1230, 1240, 1250, 1260, 1270, 1280), used: 128 };
+    a = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210, 220, 230, 240, 250, 260, 270, 280, 290, 300, 310, 320, 330, 340, 350, 360, 370, 380, 390, 400, 410, 420, 430, 440, 450, 460, 470, 480, 490, 500, 510, 520, 530, 540, 550, 560, 570, 580, 590, 600, 610, 620, 630, 640, 650, 660, 670, 680, 690, 700, 710, 720, 730, 740, 750, 760, 770, 780, 790, 800, 810, 820, 830, 840, 850, 860, 870, 880, 890, 900, 910, 920, 930, 940, 950, 960, 970, 980, 990, 1000, 1010, 1020, 1030, 1040, 1050, 1060, 1070, 1080, 1090, 1100, 1110, 1120, 1130, 1140, 1150, 1160, 1170, 1180, 1190, 1200, 1210, 1220, 1230, 1240, 1250, 1260, 1270, 1280), used: 128 };
     sum = 0;
     __iter_11 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: a.repr, index: 0, end: 128 };
     b4: block {
@@ -718,6 +718,10 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
     let f: u64;
     let c_hi_raw: u64;
     let c_lo_raw: u64;
+    let a1_lo_i: i64;
+    let a1_hi_i: i64;
+    let a0_lo_i: i64;
+    let a0_hi_i: i64;
     let sum_lo: u64;
     let carry1: u64;
     let top_lo: u64;
@@ -734,16 +738,12 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
     f = "core:prelude/fpfmt.wado/pow10_fine"(r);
     c_hi_raw = c_mv_hi - builtin::i64_extend_i32_u(c_mv_lo != 0_i64);
     c_lo_raw = 0_i64 - c_mv_lo;
-    let __mv_lo_1: i64;
-    let __mv_hi_1: i64;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(c_hi_raw, f);
-    let __mv_lo_2: i64;
-    let __mv_hi_2: i64;
-    multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.mul_wide_u(c_lo_raw, f);
-    carry1 = builtin::i64_extend_i32_u(local.tee sum_lo(__mv_lo_1 + __mv_hi_2) <u __mv_lo_1);
+    multivalue_bind [a1_lo_i, a1_hi_i] = i64.mul_wide_u(c_hi_raw, f);
+    multivalue_bind [a0_lo_i, a0_hi_i] = i64.mul_wide_u(c_lo_raw, f);
+    carry1 = builtin::i64_extend_i32_u(local.tee sum_lo(a1_lo_i + a0_hi_i) <u a1_lo_i);
     top_lo = sum_lo;
-    top_hi = __mv_hi_1 + carry1;
-    if __mv_lo_2 != 0_i64 {
+    top_hi = a1_hi_i + carry1;
+    if a0_lo_i != 0_i64 {
         top_lo = top_lo + 1_i64;
         if top_lo == 0_i64 {
             top_hi = top_hi + 1_i64;
@@ -760,19 +760,18 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
 }
 
 fn "core:prelude/fpfmt.wado/uscale"(x, pm_hi, pm_lo, s) {
+    let mid_i64: i64;
+    let hi_tmp: i64;
     let hi: u64;
     let sticky: u64;
-    let __mv_lo_1: i64;
-    let __mv_hi_1: i64;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(x, pm_hi);
-    hi = __mv_hi_1;
+    let mid2_i64: i64;
+    multivalue_bind [mid_i64, hi_tmp] = i64.mul_wide_u(x, pm_hi);
+    hi = hi_tmp;
     sticky = 1_i64;
     if (hi & ((1_i64 << builtin::i64_extend_i32_s(s & 63)) - 1_i64)) == 0_i64 {
-        let __mv_lo_2: i64;
-        let __mv_hi_2: i64;
-        multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.mul_wide_u(x, pm_lo);
-        sticky = builtin::i64_extend_i32_u((__mv_lo_1 - __mv_hi_2) >u 1_i64);
-        hi = hi - builtin::i64_extend_i32_u(__mv_lo_1 <u __mv_hi_2);
+        multivalue_bind [_, mid2_i64] = i64.mul_wide_u(x, pm_lo);
+        sticky = builtin::i64_extend_i32_u((mid_i64 - mid2_i64) >u 1_i64);
+        hi = hi - builtin::i64_extend_i32_u(mid_i64 <u mid2_i64);
     }
     return (hi >>u builtin::i64_extend_i32_s(s)) | sticky;
 }
@@ -919,46 +918,41 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
     let d4: u64;
     let d2: u64;
     let d1b: u64;
+    let lo_21: i64;
+    let lo_26: i64;
+    let lo_31: i64;
+    let lo_36: i64;
+    let lo_41: i64;
     xv = x;
     pv = p;
-    let __mv_lo_1: i64;
-    let __mv_hi_1: i64;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(xv, -3689348814741910323_i64);
-    d1 = (__mv_lo_1 >>u 1_i64) | (__mv_lo_1 << 63_i64);
+    multivalue_bind [lo_21, _] = i64.mul_wide_u(xv, -3689348814741910323_i64);
+    d1 = (lo_21 >>u 1_i64) | (lo_21 << 63_i64);
     if d1 <=u 1844674407370955161_i64 {
         xv = d1;
         pv = pv + 1;
     } else {
         return xv, pv;
     }
-    let __mv_lo_2: i64;
-    let __mv_hi_2: i64;
-    multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.mul_wide_u(xv, -4078282918271054303_i64);
-    d8 = (__mv_lo_2 >>u 8_i64) | (__mv_lo_2 << 56_i64);
+    multivalue_bind [lo_26, _] = i64.mul_wide_u(xv, -4078282918271054303_i64);
+    d8 = (lo_26 >>u 8_i64) | (lo_26 << 56_i64);
     if d8 <=u 184467440737_i64 {
         xv = d8;
         pv = pv + 8;
     }
-    let __mv_lo_3: i64;
-    let __mv_hi_3: i64;
-    multivalue_bind [__mv_lo_3, __mv_hi_3] = i64.mul_wide_u(xv, -3276141747490816367_i64);
-    d4 = (__mv_lo_3 >>u 4_i64) | (__mv_lo_3 << 60_i64);
+    multivalue_bind [lo_31, _] = i64.mul_wide_u(xv, -3276141747490816367_i64);
+    d4 = (lo_31 >>u 4_i64) | (lo_31 << 60_i64);
     if d4 <=u 1844674407370955_i64 {
         xv = d4;
         pv = pv + 4;
     }
-    let __mv_lo_4: i64;
-    let __mv_hi_4: i64;
-    multivalue_bind [__mv_lo_4, __mv_hi_4] = i64.mul_wide_u(xv, -8116567392432202711_i64);
-    d2 = (__mv_lo_4 >>u 2_i64) | (__mv_lo_4 << 62_i64);
+    multivalue_bind [lo_36, _] = i64.mul_wide_u(xv, -8116567392432202711_i64);
+    d2 = (lo_36 >>u 2_i64) | (lo_36 << 62_i64);
     if d2 <=u 184467440737095516_i64 {
         xv = d2;
         pv = pv + 2;
     }
-    let __mv_lo_5: i64;
-    let __mv_hi_5: i64;
-    multivalue_bind [__mv_lo_5, __mv_hi_5] = i64.mul_wide_u(xv, -3689348814741910323_i64);
-    d1b = (__mv_lo_5 >>u 1_i64) | (__mv_lo_5 << 63_i64);
+    multivalue_bind [lo_41, _] = i64.mul_wide_u(xv, -3689348814741910323_i64);
+    d1b = (lo_41 >>u 1_i64) | (lo_41 << 63_i64);
     if d1b <=u 1844674407370955161_i64 {
         xv = d1b;
         pv = pv + 1;

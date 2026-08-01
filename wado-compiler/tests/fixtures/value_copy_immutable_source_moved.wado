@@ -1,0 +1,39 @@
+// `let d = c` skips the defensive copy when `c` is an immutable binding: an
+// immutable root cannot be written through, so `d` may share its storage.
+//
+// That premise only holds while `c` still owns the storage. A last-use move
+// hands it to another owner — here `push`, for which the argument read is the
+// final use of `c` — and the new owner is mutable, so writing through the list
+// writes the object `d` and `e` are still reading.
+//
+// `c` read after the push (the `mut_after` case) keeps the push a copy, so it
+// is the guard that this fixture is not just asserting "always copy".
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() with Stdout {
+    let c = Point { x: builtin::black_box(3), y: 4 };
+    let d = c;
+    let e = c;
+    let mut l: List<Point> = [];
+    l.push(c);
+    l[0].x = 99;
+    println(`${d.x} ${e.x} ${l[0].x}`);
+
+    let f = Point { x: builtin::black_box(5), y: 6 };
+    let g = f;
+    let mut m: List<Point> = [];
+    m.push(f);
+    m[0].x = 77;
+    println(`${g.x} ${f.x} ${m[0].x}`);
+}
+
+__DATA__
+{
+    "stdout": "3 3 99\n5 5 77\n"
+}

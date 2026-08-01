@@ -19,6 +19,17 @@ pub(super) fn cleanup(module: &mut WirPackage) {
     }
 }
 
+/// Elide the redundant `RefAsNonNull` wrappers `struct_new` adds for
+/// non-nullable fields from every global initializer, so a promoted initializer
+/// reads in the same normal form as a function body. Emitted output is
+/// unchanged: the wrapper is already transparent to `is_const_expressible`,
+/// to `dedupe_const_globals`, and to the emitter.
+pub(super) fn cleanup_global_inits(module: &mut WirPackage) {
+    for global in &mut module.globals {
+        CleanupVisitor.visit_instr(&mut global.init);
+    }
+}
+
 /// Remove `DeclareLocal` instructions for locals that are never referenced
 /// by any `LocalGet`, `LocalSet`, `LocalTee`, or `MultiValueLocalBind`.
 fn eliminate_dead_locals(body: &mut [WirInstr]) {

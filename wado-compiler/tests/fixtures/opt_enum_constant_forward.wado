@@ -1,0 +1,41 @@
+// An `enum` case is a compile-time constant, so a local bound to one forwards
+// into its uses like any other scalar literal: the second struct literal below
+// must carry the discriminant directly instead of reading `k2` back.
+//
+// The first call keeps a genuinely runtime-dependent `kind`, so it must *not*
+// fold — the guard against a forward that ignores the branch.
+
+use { println, Stdout } from "core:cli";
+
+enum ErrorKind {
+    Empty,
+    Overflow,
+}
+
+struct ParseError {
+    kind: ErrorKind,
+    at: i32,
+}
+
+#[inline(never)]
+fn describe(e: ParseError) -> i32 {
+    match e.kind {
+        Empty => { return e.at; },
+        Overflow => { return e.at + 1; },
+    }
+}
+
+export fn run() with Stdout {
+    let at = builtin::black_box(10);
+    let kind = if at > 5 { ErrorKind::Overflow } else { ErrorKind::Empty };
+    println(`${describe(ParseError { kind, at })}`);
+    let k2 = ErrorKind::Overflow;
+    println(`${describe(ParseError { kind: k2, at })}`);
+}
+
+__DATA__
+{
+    "stdout": "11\n11\n",
+    "wir_expect:O2": ["ParseError\" { kind: 1, at: 10 }"],
+    "wir_not_expect:O2": ["ParseError\" { kind: k2"]
+}
