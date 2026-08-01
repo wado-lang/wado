@@ -38,19 +38,14 @@ This is the data section.
 It can contain any text.
 ```
 
-Lexical rules:
+- The marker must start at column 1 and be alone on its line — only a newline or EOF may follow it. Anywhere else, `__DATA__` is an ordinary identifier.
+- Everything after the marker line, verbatim to EOF, is the content. The marker line is excluded and the content is not trimmed.
+- The content is never tokenized, so it may hold text that is not valid Wado.
+- A module has at most one data section, and `wado format` re-emits it unchanged.
 
-- The marker must start at column 1 and be alone on its line — only a newline or EOF may follow it.
-- Everything after the marker line, verbatim to EOF, is the content. The marker line itself is excluded; the content is not trimmed.
-- The content is never tokenized, so it may hold any text, including text that is not valid Wado.
-- A module has at most one data section.
-- `__DATA__` that violates the placement rules (indented, or with trailing content on its line) is an ordinary identifier.
+### Accessing the Content
 
-`wado format` round-trips the section: the marker and its content are re-emitted unchanged after the formatted source.
-
-### Accessing the Content from Wado: `#data`
-
-The `#data` compile-time literal expands to the module's data section as a `String` constant. Using it in a module with no data section is a compile error.
+The `#data` compile-time literal expands to the module's data section as a `String`. Using it in a module with no data section is a compile error.
 
 ```wado
 export fn run() with Stdout {
@@ -65,22 +60,11 @@ Hello from the data section!
 
 The literal yields raw text. There is no format-parsing form: a program that wants structured data parses the text itself (`core:json`, `core:cbor`, …), keeping the compiler free of format knowledge.
 
-### Compiler API
-
-`Module::data_section()` returns `Option<&str>` and is populated by the lexer, so it is available right after parsing, before type checking:
-
-```rust
-let parsed = wado_compiler::parse(source);
-if let Some(data) = parsed.ast.data_section() {
-    // Process the data section content
-}
-```
-
-The content is carried through the pipeline: the TIR and NIR module nodes each expose `data_section()` and `with_data_section()`.
+For tooling, the compiler exposes the content on the parsed module as `Option<&str>`, so a test runner or IDE can read it without compiling the file.
 
 ### E2E Test Format
 
-Compiler E2E fixtures (`wado-compiler/tests/fixtures/*.wado`) put their test specification in the data section as strict JSON — `serde_json` parses it, so comments are not allowed.
+Compiler E2E fixtures put their test specification in the data section as strict JSON — comments are not allowed.
 
 ```wado
 export fn run() with Stdout {
@@ -93,9 +77,7 @@ __DATA__
 }
 ```
 
-The target world comes from the top-level key: no world key means `wasi:cli/command`, `"test": {}` selects the test world, and `"wasi:http/service": {...}` the HTTP world. A fixture with no data section at all defaults to the test world, so a library-shaped source doubles as a fixture verbatim.
-
-The harness reads the section as text (`extract_data_section`) rather than compiling the fixture first, which keeps spec extraction independent of whether the fixture compiles — a fixture asserting `compile_error` still has a readable spec. The full field table lives in [`wado-compiler/CLAUDE.md`](../wado-compiler/CLAUDE.md).
+The target world comes from the top-level key: no world key means `wasi:cli/command`, `"test": {}` selects the test world, and `"wasi:http/service": {...}` the HTTP world. A fixture with no data section at all defaults to the test world, so a library-shaped source doubles as a fixture verbatim. The full field table lives in [`wado-compiler/CLAUDE.md`](../wado-compiler/CLAUDE.md).
 
 ## Consequences
 
@@ -104,7 +86,7 @@ The harness reads the section as text (`extract_data_section`) rather than compi
 - Self-contained tests: expectations live with the test source
 - Module-scoped: each file has an independent data section, unlike Ruby
 - Explicit access: `#data` makes the dependency visible at the use site
-- Tooling-friendly: available after parsing, and readable as plain text without parsing at all
+- Tooling-friendly: readable as plain text, without compiling the file
 - Strict JSON in fixtures: unambiguous, no dialect to implement
 
 ### Negative
@@ -135,7 +117,7 @@ Rejected: implicit globals conflict with Wado's explicit philosophy.
 let content: String;
 ```
 
-Rejected: it introduces a declaration whose value comes from nowhere visible, and it needs its own rules for placement, type, and duplicates. `#data` is an expression that reads exactly where the data is used, and reuses the compile-time literal machinery.
+Rejected: it introduces a declaration whose value comes from nowhere visible, and it needs its own rules for placement, type, and duplicates. `#data` is an expression that reads exactly where the data is used.
 
 ### Compile-Time Format Parsing
 
