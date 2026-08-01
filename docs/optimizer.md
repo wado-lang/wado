@@ -115,14 +115,13 @@ NIR→WIR lowering avoids a few redundant shapes, firing once during the build a
 8. Branch hints — `br_if` selection and trap-based cold/likely inference (also at `-O0`).
 9. Final DCE and compaction.
 
-A pass earns its place here only by changing the emitted Wasm. Single- and
-multi-field struct-local elimination, the nullability rewrites, and trivial
-init-guard removal were retired after skip-scanning every WIR pass over the
-benchmark, example, and fixture corpus left the output byte-identical: NIR's
-`sroa` / `sroa_param` / `elide_box_local` already produce the same code,
-`cleanup` strips the same `ref.as_non_null`, and `dce` / `cleanup` reclaim the
-same init guard. `split_large_array_literals` scans the same way but stays —
-it is a JIT-pathology guard for >256-element literals, not an optimization.
+A pass earns its place here only by changing the emitted Wasm. Skip-scanning
+one over the benchmark, example, and fixture corpus — disabling it and diffing
+the output — is what settles that; anything NIR or a sibling WIR pass already
+covers leaves the bytes identical and does not belong. The exception is
+`split_large_array_literals`, which scans as byte-neutral because no corpus
+program reaches its bound: it is a JIT-pathology guard for >256-element
+literals, not an optimization.
 
 Branch hints are transparent annotations on `if`/`br_if` conditions: a pass looks through a hint when matching, drops it when eliminating the branch, and flips it when negating the condition. wasmtime lays the cold side out of line; `-f no-branch-hinting` disables the feature for benchmarking.
 

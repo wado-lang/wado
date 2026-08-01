@@ -9,10 +9,8 @@
 //!   (`lower::plan::boxing`), so NIR's `elide_box_local` never sees them.
 //! - **Flatten seq assignments**: canonicalizes `LocalSet(x, Seq([preamble, final]))`.
 //!
-//! The single- and multi-field struct-local elision passes that used to live
-//! here are retired: NIR's `sroa` / `sroa_param` / `elide_box_local` already
-//! produce the same code, and removing them left the emitted Wasm byte-identical
-//! across the whole benchmark, example, and fixture corpus.
+//! Struct locals NIR can see are decomposed there, by `sroa` / `sroa_param` /
+//! `elide_box_local`.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage};
