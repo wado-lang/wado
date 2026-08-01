@@ -19,9 +19,7 @@ git merge-tree --write-tree --no-messages --name-only HEAD origin/main
 
 Exit 0 = mergeable; exit 1 = conflicts, printing the merged tree OID followed
 by one conflicted path per line. This runs the real (ort) merge in memory and
-touches neither the worktree nor the index. Never use the deprecated 3-arg
-form (`git merge-tree <base> <a> <b>`): it always exits 0, dumps conflicts
-only into stdout, and skips rename detection — it cannot guard anything.
+touches neither the worktree nor the index.
 
 If conflicting, resolve with the `git-upstream-sync` skill.
 
