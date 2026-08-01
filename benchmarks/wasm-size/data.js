@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785566722541,
+  "lastUpdate": 1785578528865,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45157,6 +45157,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/50cf17a00054ee6962b73d051138fcfc4154a059"
         },
         "date": 1785566722212,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16302,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273276,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "75589b791d4a0a05cb0716181a72e9406bd2c4b2",
+          "message": "Merge pull request #1727 from wado-lang/claude/gale-gen-performance-analysis-7hza79\n\nperf(gale): ~2x faster grammar assembly and codegen on large grammars",
+          "timestamp": "2026-08-01T18:50:56+09:00",
+          "tree_id": "15ae3f86aa169015eccfc6685821afac76bc1ae9",
+          "url": "https://github.com/wado-lang/wado/commit/75589b791d4a0a05cb0716181a72e9406bd2c4b2"
+        },
+        "date": 1785578528350,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
