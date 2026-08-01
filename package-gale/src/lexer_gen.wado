@@ -23,7 +23,7 @@ use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_lit, char_
 use { SuperOp, gen_super_interface, lexer_rule_calls_super } from "./superclass.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 
 pub struct LitToken {
     pub text: String,
@@ -2653,6 +2653,20 @@ pub fn compute_elem_first_chars(
     out: &mut List<[char, char]>,
     ci: bool,
 ) -> [bool, bool] {
+    let mut seen = TreeSet::<i64>::new();
+    for let r of out {
+        seen.insert(range_key(r[0], r[1]));
+    }
+    return elem_first_chars_dedup(body, all_rules, out, &mut seen, ci);
+}
+
+fn elem_first_chars_dedup(
+    body: &List<LexerAlternative>,
+    all_rules: &List<LexerRule>,
+    out: &mut List<[char, char]>,
+    seen: &mut TreeSet<i64>,
+    ci: bool,
+) -> [bool, bool] {
     let mut any_nullable = false;
     for let alt of body {
         if alt.elements.is_empty() {
@@ -2660,7 +2674,7 @@ pub fn compute_elem_first_chars(
         }
         let mut alt_nullable = true;
         for let mut i = 0; i < alt.elements.len(); i += 1 {
-            let r = compute_single_elem_first(&alt.elements[i], all_rules, out, ci);
+            let r = compute_single_elem_first(&alt.elements[i], all_rules, out, seen, ci);
             if r.0 {
                 return [true, false];
             }
@@ -2676,15 +2690,15 @@ pub fn compute_elem_first_chars(
     return [false, any_nullable];
 }
 
-fn add_folded_range(out: &mut List<[char, char]>, start: char, end: char, ci: bool) {
+fn add_folded_range(out: &mut List<[char, char]>, seen: &mut TreeSet<i64>, start: char, end: char, ci: bool) {
     if !ci {
-        add_range(out, start, end);
+        add_range(out, seen, start, end);
         return;
     }
     let mut folded: List<CharRange> = [];
     fold_range_ci(start, end, &mut folded);
     for let r of &folded {
-        add_range(out, r.start, r.end);
+        add_range(out, seen, r.start, r.end);
     }
 }
 
@@ -2694,16 +2708,17 @@ fn compute_single_elem_first(
     elem: &LexerElement,
     all_rules: &List<LexerRule>,
     out: &mut List<[char, char]>,
+    seen: &mut TreeSet<i64>,
     ci: bool,
 ) -> [bool, bool] {
     match *elem {
         Literal(text) => {
             let c = text.chars().next().unwrap();
-            add_folded_range(out, c, c, ci);
+            add_folded_range(out, seen, c, c, ci);
             return [false, false];
         },
         CharRange(pair) => {
-            add_folded_range(out, pair.0, pair.1, ci);
+            add_folded_range(out, seen, pair.0, pair.1, ci);
             return [false, false];
         },
         CharClass(cc) => {
@@ -2711,20 +2726,20 @@ fn compute_single_elem_first(
                 return [true, false];
             }
             for let r of &cc.ranges {
-                add_folded_range(out, r.start, r.end, ci);
+                add_folded_range(out, seen, r.start, r.end, ci);
             }
             return [false, false];
         },
         RuleRef(name) => {
             for let rule of all_rules {
                 if rule.name == name && rule.is_fragment {
-                    return compute_elem_first_chars(&rule.body, all_rules, out, ci);
+                    return elem_first_chars_dedup(&rule.body, all_rules, out, seen, ci);
                 }
             }
             return [true, false];
         },
         Repeat(rep) => {
-            let inner = compute_single_elem_first(&rep.element, all_rules, out, ci);
+            let inner = compute_single_elem_first(&rep.element, all_rules, out, seen, ci);
             if inner.0 {
                 return [true, false];
             }
@@ -2734,7 +2749,7 @@ fn compute_single_elem_first(
             return [false, nullable];
         },
         Group(alts) => {
-            return compute_elem_first_chars(&alts, all_rules, out, ci);
+            return elem_first_chars_dedup(&alts, all_rules, out, seen, ci);
         },
         _ => {
             return [true, false];
@@ -2742,13 +2757,8 @@ fn compute_single_elem_first(
     }
 }
 
-fn add_range(out: &mut List<[char, char]>, start: char, end: char) {
-    for let r of out {
-        if r[0] == start && r[1] == end {
-            return;
-        }
-    }
-    out.push([start, end]);
+fn range_key(start: char, end: char) -> i64 {
+    return (start as i32 as i64) << 32 | end as i32 as i64;
 }
 
 /// Check if a char matches any of the ranges in first_chars.
@@ -2761,15 +2771,86 @@ fn char_matches_ranges(c: char, ranges: &List<[char, char]>) -> bool {
     return false;
 }
 
+fn add_range(out: &mut List<[char, char]>, seen: &mut TreeSet<i64>, start: char, end: char) {
+    if seen.insert(range_key(start, end)) {
+        out.push([start, end]);
+    }
+}
+
+/// Sorted-by-start view of a call's first-char ranges for O(log n) membership:
+/// `max_end[i]` is the largest range end among `starts[0..=i]`, so a char `c`
+/// matches some range iff the last start <= `c` has `max_end >= c`.
+struct RangeIndex {
+    starts: List<char>,
+    max_end: List<char>,
+}
+
+fn build_range_index(ranges: &List<[char, char]>) -> RangeIndex {
+    let mut sorted = *ranges;
+    sorted.sort();
+    let mut starts: List<char> = [];
+    let mut max_end: List<char> = [];
+    for let mut i = 0; i < sorted.len(); i += 1 {
+        starts.push(sorted[i][0]);
+        let e = sorted[i][1];
+        if i > 0 && max_end[i - 1] > e {
+            max_end.push(max_end[i - 1]);
+        } else {
+            max_end.push(e);
+        }
+    }
+    return RangeIndex { starts, max_end };
+}
+
+fn range_index_matches(idx: &RangeIndex, c: char) -> bool {
+    let i = upper_bound_char(&idx.starts, c) - 1;
+    if i < 0 {
+        return false;
+    }
+    return idx.max_end[i] >= c;
+}
+
+/// First index whose element is >= `c` in a sorted list.
+fn lower_bound_char(chars: &List<char>, c: char) -> i32 {
+    let mut lo = 0;
+    let mut hi = chars.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        if chars[mid] < c {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
+
+/// First index whose element is > `c` in a sorted list.
+fn upper_bound_char(chars: &List<char>, c: char) -> i32 {
+    let mut lo = 0;
+    let mut hi = chars.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        if chars[mid] <= c {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
+
 /// True when `ranges` shares a char with `probe` that no single-char branch
 /// already claims. Those branches come first, so a rule whose first set inside
 /// `probe` is entirely `claimed` chars is unreachable from the range branch.
+/// `claimed` must be sorted; the claimed-count query is two binary searches.
 fn ranges_meet_unclaimed(ranges: &List<[char, char]>, probe: [char, char], claimed: &List<char>) -> bool {
-    return ranges.into_iter().any(|r: &[char, char]| {
+    for let mut i = 0; i < ranges.len(); i += 1 {
+        let r = ranges[i];
         let lo = if r[0] > probe[0] { r[0] } else { probe[0] };
         let hi = if r[1] < probe[1] { r[1] } else { probe[1] };
         if lo > hi {
-            return false;
+            continue;
         }
         // A `\p{...}` set runs to hundreds of ranges each wider than the whole
         // single-char branch set, so answer those by width alone.
@@ -2777,8 +2858,11 @@ fn ranges_meet_unclaimed(ranges: &List<[char, char]>, probe: [char, char], claim
         if width > claimed.len() {
             return true;
         }
-        return claimed.into_iter().filter(|c: &char| lo <= *c <= hi).count() < width;
-    });
+        if upper_bound_char(claimed, hi) - lower_bound_char(claimed, lo) < width {
+            return true;
+        }
+    }
+    return false;
 }
 
 /// The pattern of the branch every other branch falls through to; emitted as
@@ -2834,28 +2918,30 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     }
     all_chars.sort();
 
+    let mut range_indexes: List<RangeIndex> = [];
+    for let call of calls {
+        range_indexes.push(build_range_index(&call.first_chars));
+    }
+
     let mut groups: List<DispatchGroup> = [];
 
     // For each unique single char, find all matching calls (excluding catch-all rules)
+    let mut group_by_calls = TreeMap::<List<i32>, i32>::new();
     for let c of &all_chars {
         let mut matching: List<i32> = [];
         for let mut i = 0; i < calls.len(); i += 1 {
             if calls[i].is_catch_all {
                 continue;
             }
-            if calls[i].is_wildcard || char_matches_ranges(*c, &calls[i].first_chars) {
+            if calls[i].is_wildcard || range_index_matches(&range_indexes[i], *c) {
                 matching.push(i);
             }
         }
         // Check if this group already exists
-        let mut merged = false;
-        for let mut gi = 0; gi < groups.len(); gi += 1 {
-            if groups[gi].calls == matching {
-                groups[gi].pattern.push_str(&` | ${char_lit(*c)}`);
-                merged = true;
-            }
-        }
-        if !merged {
+        if let Some(gi) = group_by_calls.get(matching) {
+            groups[gi].pattern.push_str(&` | ${char_lit(*c)}`);
+        } else {
+            group_by_calls[matching] = groups.len();
             groups.push(DispatchGroup {
                 pattern: `${char_lit(*c)}`,
                 calls: matching,
@@ -2868,12 +2954,13 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     // that group therefore carries every rule the range meets, not just the one
     // the range came from. A rule that cannot match simply fails its `try_`.
     let mut distinct_ranges: List<[char, char]> = [];
+    let mut range_seen = TreeSet::<i64>::new();
     for let mut i = 0; i < calls.len(); i += 1 {
         if calls[i].is_wildcard {
             continue;
         }
         for let r of &calls[i].first_chars {
-            if r[0] != r[1] && !distinct_ranges.contains(r) {
+            if r[0] != r[1] && range_seen.insert(range_key(r[0], r[1])) {
                 distinct_ranges.push(*r);
             }
         }
@@ -3163,9 +3250,10 @@ fn gen_tokenize_fn(
             let fn_name = lit_try_fn_name(&lit.const_name);
             let c = lit.text.chars().next().unwrap();
             let mut fc: List<[char, char]> = [];
+            let mut fc_seen = TreeSet::<i64>::new();
             // Parser literals inherit grammar-level caseInsensitive. Under CI,
             // the literal's first char may appear in either case.
-            add_folded_range(&mut fc, c, c, grammar_ci);
+            add_folded_range(&mut fc, &mut fc_seen, c, c, grammar_ci);
             let tk = lit.const_name;
             let lit_extras = literal_command_extras(
                 lit,
