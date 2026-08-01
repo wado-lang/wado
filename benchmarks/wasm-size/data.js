@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785579984217,
+  "lastUpdate": 1785591786182,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45245,6 +45245,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9b81c7ce0e7d84c033d7b5dd0023650dc93e4cab"
         },
         "date": 1785579983737,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6061,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16302,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273276,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "49b76301da1a4229e63cb3253c7b270950b72de7",
+          "message": "Merge pull request #1729 from wado-lang/claude/overload-resolution-design-x43c7b\n\nfeat(elaborator): overload resolution — trait-qualified calls and argument-directed selection",
+          "timestamp": "2026-08-01T23:31:58+10:00",
+          "tree_id": "5b5119952603b9c8e422667e2fbc86ff54dc7b7c",
+          "url": "https://github.com/wado-lang/wado/commit/49b76301da1a4229e63cb3253c7b270950b72de7"
+        },
+        "date": 1785591785566,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
