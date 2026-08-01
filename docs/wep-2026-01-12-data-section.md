@@ -4,7 +4,7 @@ Status: Implemented
 
 ## Context
 
-E2E testing of the Wado compiler needs test metadata (expected stdout, stderr, exit code, target world) co-located with the test source. Programs also benefit from embedding static text (configuration, fixtures, documents) without a companion file.
+A module often carries static text that belongs with it — configuration, fixtures, embedded documents, metadata a tool reads — and a companion file for it drifts from the source it describes.
 
 Several languages provide similar mechanisms:
 
@@ -60,34 +60,16 @@ Hello from the data section!
 
 The literal yields raw text. There is no format-parsing form: a program that wants structured data parses the text itself (`core:json`, `core:cbor`, …), keeping the compiler free of format knowledge.
 
-For tooling, the compiler exposes the content on the parsed module as `Option<&str>`, so a test runner or IDE can read it without compiling the file.
-
-### E2E Test Format
-
-Compiler E2E fixtures put their test specification in the data section as strict JSON — comments are not allowed.
-
-```wado
-export fn run() with Stdout {
-    println("Hello");
-}
-
-__DATA__
-{
-  "stdout": "Hello\n"
-}
-```
-
-The target world comes from the top-level key: no world key means `wasi:cli/command`, `"test": {}` selects the test world, and `"wasi:http/service": {...}` the HTTP world. A fixture with no data section at all defaults to the test world, so a library-shaped source doubles as a fixture verbatim. The full field table lives in [`wado-compiler/CLAUDE.md`](../wado-compiler/CLAUDE.md).
+For tooling, the compiler exposes the content on the parsed module, so a tool can read it without compiling the file.
 
 ## Consequences
 
 ### Positive
 
-- Self-contained tests: expectations live with the test source
+- Self-contained: the data travels with the module that owns it
 - Module-scoped: each file has an independent data section, unlike Ruby
 - Explicit access: `#data` makes the dependency visible at the use site
 - Tooling-friendly: readable as plain text, without compiling the file
-- Strict JSON in fixtures: unambiguous, no dialect to implement
 
 ### Negative
 
@@ -139,17 +121,17 @@ Rejected: less declarative, and its compile-time evaluation is less obvious than
 ### Comment-Based Directives
 
 ```wado
-// CHECK-STDOUT: Hello
-// CHECK-EXIT: 0
+// key: value
+// other: value
 ```
 
-Rejected: less structured, and complex expectations are hard to express.
+Rejected: the payload is bound to the comment syntax, so it cannot hold arbitrary text, and multi-line data is awkward to write and to read back.
 
-### Separate Expectation Files
+### Separate Data Files
 
 ```
-tests/hello.wado
-tests/hello.expected.json
+hello.wado
+hello.data.json
 ```
 
-Rejected: file proliferation, and the two drift apart.
+Rejected: file proliferation, and the pair drifts apart.
