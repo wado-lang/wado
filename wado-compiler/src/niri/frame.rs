@@ -19,7 +19,7 @@ use crate::nir_arena::{
 use crate::nir_visitor::NirRefVisitor;
 use crate::tir::TypeTable;
 
-use super::callee::{CalleeKey, CallSite};
+use super::callee::{CallSite, CalleeKey};
 use super::place::{borrowed_place_operand, overlapping_places, place_of};
 use super::region::{region_free_reads, region_shape, value_block_shape};
 use super::trackability::Trackability;
@@ -655,8 +655,7 @@ impl Interpreter<'_> {
     /// aliasing. `is_mut_ref` is consulted as well as the type: it is captured
     /// pre-boxing, so it answers where the type no longer reads as a borrow.
     fn is_by_reference(&self, param: &NirParam) -> bool {
-        param.is_mut_ref
-            || RefKind::from_resolved(self.type_table.get(param.type_id)).is_some()
+        param.is_mut_ref || RefKind::from_resolved(self.type_table.get(param.type_id)).is_some()
     }
 
     /// The callee a call names, and the operands bound to its parameters, in

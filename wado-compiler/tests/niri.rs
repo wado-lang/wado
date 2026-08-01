@@ -5641,7 +5641,10 @@ fn repeated_heavy_calls_still_fold_when_the_budget_covers_their_copies() {
     interp.with_callees(&callees);
     interp.set_step_budget(DEFAULT_STEP_BUDGET);
 
-    assert_eq!(flow_fold(&mut interp, &call_expr(&caller, vec![])), i32_of(8));
+    assert_eq!(
+        flow_fold(&mut interp, &call_expr(&caller, vec![])),
+        i32_of(8)
+    );
 }
 
 #[test]

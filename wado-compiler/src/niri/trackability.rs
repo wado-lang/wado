@@ -18,9 +18,9 @@ use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
 
+use super::ProgramFacts;
 use super::callee::CallSite;
 use super::place::{borrowed_place_operand, lvalue_root_local, place_of};
-use super::ProgramFacts;
 
 /// Every node id reachable from the body root, walked once and shared by every
 /// question below — each of which is another scan over these same two lists.

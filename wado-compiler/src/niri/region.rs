@@ -20,9 +20,9 @@ use crate::nir_arena::{
 };
 use crate::tir::{TypeId, TypeTable};
 
-use super::callee::{Callee, CallSite};
-use super::place::write_root_local;
 use super::ProgramFacts;
+use super::callee::{CallSite, Callee};
+use super::place::write_root_local;
 
 /// Record the local each `&mut` parameter of `site` writes. `None` when the
 /// site does not match the signature, or when a write's place no local roots.
