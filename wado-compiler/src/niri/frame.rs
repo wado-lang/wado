@@ -637,8 +637,6 @@ impl Interpreter<'_> {
     /// inside it — survives.
     pub(super) fn try_call_fold(&mut self, body: &Body, e: ExprId) -> Lattice {
         match self.try_ctfe_builtin_fold(body, e) {
-            // A builtin that answered is the answer; one that answered
-            // `NonConst` would trap, and the call has to stay to do it.
             Lattice::Const(v) => return Lattice::Const(v),
             Lattice::NonConst => return Lattice::Unevaluated,
             Lattice::Unevaluated => {}

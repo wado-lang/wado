@@ -5573,8 +5573,8 @@ fn heavy_bodied_loop_fn() -> NirFunction {
 #[test]
 fn a_loop_iteration_is_charged_for_the_body_it_restores() {
     // Every iteration puts the loop body back as it was, which is a copy of
-    // that body. Charged one step an iteration, this fixture's eight rounds
-    // cost about thirty — and would copy half a million nodes for it.
+    // that body. This fixture's eight rounds copy half a million nodes between
+    // them, so a budget that only covers their statements must not admit them.
     assert_eq!(
         fold_call_within_budget(&heavy_bodied_loop_fn(), STATEMENTS_ONLY_BUDGET),
         None,
@@ -5617,9 +5617,9 @@ fn repeated_caller_fn(big: &NirFunction, calls: usize) -> NirFunction {
 
 #[test]
 fn a_call_is_charged_for_the_scratch_body_it_runs_on() {
-    // Running a call copies the callee's whole body first. Eight calls to a
-    // heavy callee is eight of those copies, and a per-call charge of one step
-    // hides every one of them.
+    // Running a call copies the callee's whole body first, so eight calls to a
+    // heavy callee is eight of those copies — work a per-call charge fixed at
+    // one step would hide entirely.
     let big = heavy_bodied_fn();
     let caller = repeated_caller_fn(&big, 8);
     let callees = build_callee_map_test(&[big, caller.clone()]);
