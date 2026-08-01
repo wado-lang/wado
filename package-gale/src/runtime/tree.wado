@@ -360,6 +360,10 @@ impl TreeBuilder {
             self.a.grow();
             self.b.grow();
             self.alt.grow();
+            assert self.a.capacity() == self.tag.capacity()
+                && self.b.capacity() == self.tag.capacity()
+                && self.alt.capacity() == self.tag.capacity(),
+                "TreeBuilder event columns must grow in lockstep";
         }
         self.tag.push_within_capacity(tag);
         self.a.push_within_capacity(a);
@@ -470,7 +474,9 @@ impl TreeBuilder {
         for let mut r = 0; r < n; r += 1 {
             match self.tag[r] {
                 Open => {
-                    flags[r] = if self.a[r] == K_ERROR as i32 { NodeFlags::Error } else { NodeFlags::none() };
+                    if self.a[r] == K_ERROR as i32 {
+                        flags[r] = NodeFlags::Error;
+                    }
                     end[r] = self.b[r];
                     stack.push(r);
                 },

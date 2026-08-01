@@ -256,6 +256,10 @@ impl TokenStream {
             self.triv_starts.grow();
             self.triv_ends.grow();
             self.triv_chans.grow();
+            assert self.triv_starts.capacity() == self.triv_kinds.capacity()
+                && self.triv_ends.capacity() == self.triv_kinds.capacity()
+                && self.triv_chans.capacity() == self.triv_kinds.capacity(),
+                "TokenStream trivia columns must grow in lockstep";
         }
         self.triv_kinds.push_within_capacity(kind);
         self.triv_starts.push_within_capacity(start);
@@ -289,6 +293,12 @@ impl TokenStream {
             self.triv_lo.grow();
             self.triv_hi.grow();
             self.flags.grow();
+            assert self.starts.capacity() == self.kinds.capacity()
+                && self.ends.capacity() == self.kinds.capacity()
+                && self.triv_lo.capacity() == self.kinds.capacity()
+                && self.triv_hi.capacity() == self.kinds.capacity()
+                && self.flags.capacity() == self.kinds.capacity(),
+                "TokenStream token columns must grow in lockstep";
         }
         self.kinds.push_within_capacity(kind);
         self.starts.push_within_capacity(start);

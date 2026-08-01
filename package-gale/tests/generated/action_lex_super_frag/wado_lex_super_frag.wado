@@ -262,6 +262,10 @@ impl TokenStream {
             self.triv_starts.grow();
             self.triv_ends.grow();
             self.triv_chans.grow();
+            assert self.triv_starts.capacity() == self.triv_kinds.capacity()
+                && self.triv_ends.capacity() == self.triv_kinds.capacity()
+                && self.triv_chans.capacity() == self.triv_kinds.capacity(),
+                "TokenStream trivia columns must grow in lockstep";
         }
         self.triv_kinds.push_within_capacity(kind);
         self.triv_starts.push_within_capacity(start);
@@ -295,6 +299,12 @@ impl TokenStream {
             self.triv_lo.grow();
             self.triv_hi.grow();
             self.flags.grow();
+            assert self.starts.capacity() == self.kinds.capacity()
+                && self.ends.capacity() == self.kinds.capacity()
+                && self.triv_lo.capacity() == self.kinds.capacity()
+                && self.triv_hi.capacity() == self.kinds.capacity()
+                && self.flags.capacity() == self.kinds.capacity(),
+                "TokenStream token columns must grow in lockstep";
         }
         self.kinds.push_within_capacity(kind);
         self.starts.push_within_capacity(start);
@@ -972,6 +982,10 @@ impl TreeBuilder {
             self.a.grow();
             self.b.grow();
             self.alt.grow();
+            assert self.a.capacity() == self.tag.capacity()
+                && self.b.capacity() == self.tag.capacity()
+                && self.alt.capacity() == self.tag.capacity(),
+                "TreeBuilder event columns must grow in lockstep";
         }
         self.tag.push_within_capacity(tag);
         self.a.push_within_capacity(a);
@@ -1082,7 +1096,9 @@ impl TreeBuilder {
         for let mut r = 0; r < n; r += 1 {
             match self.tag[r] {
                 Open => {
-                    flags[r] = if self.a[r] == K_ERROR as i32 { NodeFlags::Error } else { NodeFlags::none() };
+                    if self.a[r] == K_ERROR as i32 {
+                        flags[r] = NodeFlags::Error;
+                    }
                     end[r] = self.b[r];
                     stack.push(r);
                 },

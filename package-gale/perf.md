@@ -407,6 +407,15 @@ ATN literal is a measured problem.)
     kind-set finding above (Cranelift lowers compare cascades competitively;
     the frame is call-frequency-bound). Reverted.
 
+- **`shrink_to_fit` on the `CstStore` columns in `finish`** (2026-08). Right-sizing
+  the four capacity-carrying columns (`tag`/`a`/`b`/`alt`, ~16% slack from the
+  `4 × tokens` pre-size) cost a consistent ~3% on `sqlite_parse` (dev A/B
+  best-of-3 3.105 → 3.206 ms/iter): each shrink is an extra alloc + bulk copy per
+  parse, and for a build-then-discard store the slack is free under `copying`
+  (the live-set standing rule). Reverted. Worth revisiting only for a measured
+  long-lived-store consumer (LSP), where the retained slack is what the collector
+  re-traces.
+
 - **Index loops instead of `for x of &List<i32>`** (2026-07). Iterating by reference
   boxes every element; rewriting `follow_yields`'s membership scan and `classify`'s
   `rule_stack` scan as index loops removes every box and measured **within noise** (won
