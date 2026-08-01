@@ -23,8 +23,30 @@ pub mod synthesize;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
+
+/// The element type `T` of a `builtin::array_clone::<T>` /
+/// `array_clone_prefix::<T>` call, or `None` for any other expression. Shared
+/// by [`analyze`] (seeding element-copy helpers) and [`synthesize`] (closing
+/// the helper worklist), so the clone family is enumerated once.
+fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
+    let TirExprKind::Call { func, .. } = &expr.kind else {
+        return None;
+    };
+    if !func.module_source.is_core_builtin() {
+        return None;
+    }
+    let is_clone = ["array_clone", "array_clone_prefix"]
+        .into_iter()
+        .any(|name| crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), name));
+    if !is_clone {
+        return None;
+    }
+    func.monomorph_info
+        .as_ref()
+        .and_then(|mi| mi.impl_type_args.first().copied())
+}
 
 /// `TypeId` → `(ModuleSource, $value_copy$)` for every helper
 /// `synthesize_helpers` registered in [`FlatPackage::functions`], plus the

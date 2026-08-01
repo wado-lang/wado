@@ -2277,15 +2277,20 @@ impl<'a> WirEmitter<'a> {
                 let dst_local = self.resolve_local(&dst_name);
                 let len_local = self.resolve_local(&len_name);
                 let loop_idx_local = self.resolve_local(&loop_idx_name);
+                // Keep `src` on the operand stack while `len` is emitted: the
+                // scratch locals are shared per `type_id`, so a nested clone of
+                // the same array type inside the `len` subtree would clobber
+                // `src_local` if it were set before `len` runs.
                 self.emit_instr(f, src);
-                f.instruction(&Instruction::LocalSet(src_local));
                 if let Some(len) = len {
-                    self.emit_instr(f, len)
+                    self.emit_instr(f, len);
+                    f.instruction(&Instruction::LocalSet(len_local));
+                    f.instruction(&Instruction::LocalSet(src_local));
                 } else {
-                    f.instruction(&Instruction::LocalGet(src_local));
+                    f.instruction(&Instruction::LocalTee(src_local));
                     f.instruction(&Instruction::ArrayLen);
+                    f.instruction(&Instruction::LocalSet(len_local));
                 }
-                f.instruction(&Instruction::LocalSet(len_local));
                 f.instruction(&Instruction::LocalGet(len_local));
                 f.instruction(&Instruction::ArrayNewDefault(arr_wasm_idx));
                 f.instruction(&Instruction::LocalSet(dst_local));

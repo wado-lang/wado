@@ -65,7 +65,7 @@ impl SeedWalker<'_> {
     }
 
     fn record_array_clone_element(&mut self, expr: &TirExpr) {
-        if let Some(t) = array_clone_element_type_arg(expr)
+        if let Some(t) = super::array_clone_element_type_arg(expr)
             && super::needs_value_copy(t, self.type_table)
         {
             self.out.insert(t);
@@ -501,23 +501,5 @@ pub fn is_source_immutable(expr: &TirExpr, immutable_locals: &IndexSet<u32>) -> 
             call_expr: inner, ..
         } => is_source_immutable(inner, immutable_locals),
         _ => false,
-    }
-}
-
-fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
-    if let TirExprKind::Call { func, .. } = &expr.kind
-        && func.module_source.is_core_builtin()
-        && (crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "array_clone")
-            || crate::tir::matches_builtin(
-                &func.name,
-                func.monomorph_info.as_ref(),
-                "array_clone_prefix",
-            ))
-    {
-        func.monomorph_info
-            .as_ref()
-            .and_then(|mi| mi.impl_type_args.first().copied())
-    } else {
-        None
     }
 }
