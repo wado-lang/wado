@@ -319,6 +319,21 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// The receiver of a qualified call spells its own mode, and the spelled
+    /// mode disagrees with the method's `self` parameter. Passing a value
+    /// where the method takes `&mut self` would mutate a copy and silently
+    /// drop the change — the case this error exists for.
+    TraitQualifiedReceiverMode {
+        trait_name: String,
+        method: String,
+        /// The method's `self` mode, rendered (`self`, `&self`, `&mut self`).
+        expected: String,
+        /// How to spell the receiver, rendered (`value`, `&value`,
+        /// `&mut value`).
+        spelled: String,
+        span: Span,
+    },
+
     /// A conversion reachable only through a blanket impl generic in its
     /// source type (`impl<T: Display> From<T> for Wrapper`). Selecting the
     /// instantiation from the argument's type is phase-4 work
@@ -911,7 +926,8 @@ impl TypeError {
                         .join(" and "),
                     traits
                         .first()
-                        .map_or_else(|| "Trait".to_string(), |t| t.replace('<', "::<"))
+                        .map(|t| t.replacen('<', "::<", 1))
+                        .expect("ambiguity reported with no candidate traits")
                 ),
                 *span,
             ),
@@ -928,7 +944,11 @@ impl TypeError {
                         .map(|t| format!("'{t}'"))
                         .collect::<Vec<_>>()
                         .join(" and "),
-                    traits.first().map_or("Trait", String::as_str)
+                    traits
+                        .first()
+                        .map(String::as_str)
+                        .map(|t| t.split(" (from ").next().unwrap_or(t))
+                        .expect("ambiguity reported with no candidate traits")
                 ),
                 *span,
             ),
@@ -940,6 +960,19 @@ impl TypeError {
                 Code::TypeMismatch,
                 format!(
                     "'{trait_name}::{method}' takes the receiver as its first argument, e.g. '{trait_name}::{method}(&value)'"
+                ),
+                *span,
+            ),
+            TypeError::TraitQualifiedReceiverMode {
+                trait_name,
+                method,
+                expected,
+                spelled,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "'{trait_name}::{method}' takes '{expected}'; the receiver spells its own mode: '{trait_name}::{method}({spelled}, …)'"
                 ),
                 *span,
             ),
@@ -1901,9 +1934,27 @@ pub(super) enum VarRef {
     },
 }
 
+/// The trait a qualified call names, resolved to its identity: the
+/// declaration key discriminates same-named traits from different modules,
+/// and `args` (present when a turbofish pinned an argument list) are the
+/// resolved types, so aliased spellings compare equal. `display` keeps the
+/// caller's spelling for diagnostics.
+pub(super) struct RequiredTrait {
+    pub(super) decl: super::trait_env::DeclKey,
+    pub(super) args: Option<Vec<TypeId>>,
+    pub(super) display: String,
+}
+
 /// Result of finding a trait method for a type via `find_trait_method_for_type`.
 pub(super) struct TraitMethodMatch {
     pub(super) trait_name: String,
+    /// The matched trait's declaration key, resolved from the impl's own
+    /// module — two same-named traits from different modules stay distinct.
+    pub(super) trait_decl: super::trait_env::DeclKey,
+    /// The impl's trait type arguments as resolved types (empty for a trait
+    /// with none). Two matches agreeing on `trait_decl` but not here are one
+    /// trait at different argument lists — an overload set.
+    pub(super) trait_args: Vec<TypeId>,
     pub(super) method_info: MethodInfo,
     pub(super) impl_module_source: ModuleSource,
     /// For blanket impl matches (e.g., `impl<I: Iterator> IntoIterator for I`),
@@ -1925,10 +1976,6 @@ pub(super) struct TraitMethodMatch {
     /// [..T]`). Coherence Rule 1 (WEP 2026-03-14 §5) ranks such a match below
     /// every non-variadic one.
     pub(super) is_variadic_impl: bool,
-    /// [`Self::trait_name`] without its type arguments (`Take` for `Take<A>`).
-    /// Two matches agreeing here but not on `trait_name` are impls of one
-    /// trait at different arguments — a selection this resolver cannot make.
-    pub(super) trait_base_name: String,
 }
 
 /// Read-only view that resolves a type name from a given module's perspective

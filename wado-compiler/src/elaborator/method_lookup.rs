@@ -18,7 +18,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::infer::InferCtx;
 use super::sig::InstantiatedImplSig;
-use super::trait_env::{ImplHeader, TraitEnv};
+use super::trait_env::{DeclKey, ImplHeader, TraitEnv};
 use super::types::{
     ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
     IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, MethodOwner,
@@ -1703,10 +1703,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_id: Option<TypeId>,
         span: Span,
         // `required_trait`: set by a trait-qualified call
-        // (`Alpha::describe(&x)`), where only impls of that trait may answer.
-        // Accepts the bare head (`Take`) or a full spelling (`Take<A>`), so a
-        // qualified call can pin one argument list.
-        required_trait: Option<&str>,
+        // (`Alpha::describe(&x)`), where only impls of that trait's
+        // declaration may answer; its `args`, when present (turbofish), pin
+        // one argument list.
+        required_trait: Option<&super::types::RequiredTrait>,
         // `probe`: per-argument shallow classes (`probe_arg_class`), used to
         // select among one trait's argument lists. `None` from callers with
         // no argument list at hand.
@@ -2064,7 +2064,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
         span: Span,
-        required_trait: Option<&str>,
+        required_trait: Option<&super::types::RequiredTrait>,
         probe: Option<&[ProbeClass]>,
     ) -> Option<super::types::TraitMethodMatch> {
         use super::types::TraitMethodMatch;
@@ -2095,7 +2095,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // what keeps `select_trait_match` from reporting an ambiguity the call
         // site has resolved by naming one.
         if let Some(wanted) = required_trait {
-            found_traits.retain(|m| m.trait_base_name == wanted || m.trait_name == wanted);
+            found_traits.retain(|m| {
+                m.trait_decl == wanted.decl
+                    && wanted
+                        .args
+                        .as_ref()
+                        .is_none_or(|args| &m.trait_args == args)
+            });
         }
 
         if let Some(m) = self.select_trait_match(found_traits, method_name, span, probe) {
@@ -2108,7 +2114,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // so method-call resolution (and everything downstream of it) sees
         // the same view of "does this type have `.eq` / `.cmp`?" that
         // operator dispatch gets via `find_eq_trait_impl` / `find_ord_trait_impl`.
-        if let Some(recv_id) = receiver_type_id {
+        // A qualified call that names some *other* trait (`Same::eq(&a, &b)`)
+        // must not be answered by the derived prelude trait.
+        if let Some(recv_id) = receiver_type_id
+            && required_trait.is_none_or(|wanted| {
+                self.tysys
+                    .auto_derive_by_method(method_name)
+                    .is_some_and(|(derived, _)| {
+                        self.trait_decl_key_in_frame(&derived) == wanted.decl
+                    })
+            })
+        {
             // A template is registered under its mangled head, so the probe
             // is in that namespace, not the declaration one.
             return self.try_auto_derived_method_match(
@@ -2333,6 +2349,55 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (sig, m.type_params.clone())
             });
         let trait_type_for_name = header.trait_type.as_ref().unwrap().clone();
+        // The trait's identity, resolved in the impl's own frame: the decl key
+        // from the impl module's imports (so an alias resolves to the declaring
+        // module), the arguments with the impl's bound type params substituted
+        // (so `impl<T> Take<T> for Wrapper<T>` on `Wrapper<i32>` reads as
+        // `Take<i32>`). Spellings never carry identity (WEP 2026-07-31).
+        let trait_head_name = scope.get_type_name(&trait_type_for_name);
+        let trait_decl = scope.with_module_perspective_for(&impl_module_source, |s| {
+            s.trait_decl_key_in_frame(&trait_head_name)
+        });
+        let trait_args = {
+            // Only target-position params are bound above; a param free in the
+            // trait arguments (`impl<T> From<T> for Wrapper`) must still
+            // resolve — as itself, not as an unknown-type diagnostic. Bound
+            // temporarily: `impl_slots` below reads the scope's param map and
+            // must see exactly the target bindings.
+            let mut free_params: Vec<String> = Vec::new();
+            for (i, tp) in header.type_params.iter().enumerate() {
+                if !scope
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_params
+                    .contains_key(&tp.name)
+                {
+                    let id = scope
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_type_param(tp.name.clone(), i as u32);
+                    scope
+                        .annotate_ctx
+                        .trait_ctx
+                        .type_params
+                        .insert(tp.name.clone(), (i as u32, id));
+                    free_params.push(tp.name.clone());
+                }
+            }
+            let args: Vec<TypeId> = scope.with_module_perspective_for(&impl_module_source, |s| {
+                match &trait_type_for_name {
+                    Type::Generic(generic) => {
+                        generic.args.iter().map(|arg| s.resolve_type(arg)).collect()
+                    }
+                    _ => Vec::new(),
+                }
+            });
+            for name in free_params {
+                scope.annotate_ctx.trait_ctx.type_params.shift_remove(&name);
+            }
+            args
+        };
 
         let mut method_found = false;
         if let Some((method_sig, method_type_params)) = method_data {
@@ -2431,7 +2496,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             found_traits.push(TraitMethodMatch {
                 trait_name,
-                trait_base_name: trait_name_base,
+                trait_decl: trait_decl.clone(),
+                trait_args: trait_args.clone(),
                 method_info: MethodInfo {
                     impl_offset: Some(impl_offset),
                     return_type,
@@ -2469,9 +2535,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .filter(|m| m.default_body.is_some())
                 .cloned()
             {
-                let trait_args = scope.resolve_written_type_args(&trait_type_for_name);
                 let mut declaring_args = vec![receiver_type_id.unwrap_or(TypeTable::UNKNOWN)];
-                declaring_args.extend(trait_args);
+                declaring_args.extend(trait_args.iter().copied());
                 let instantiated = default_method.sig.instantiate_call(
                     &scope.tysys.type_table,
                     &declaring_args,
@@ -2482,7 +2547,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
                     trait_name: trait_name_str,
-                    trait_base_name: trait_name_base,
+                    trait_decl,
+                    trait_args: trait_args.clone(),
                     method_info: MethodInfo {
                         impl_offset: Some(default_method.sig.declaring_slot_count),
                         return_type: instantiated.return_type,
@@ -2538,8 +2604,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// probe of WEP 2026-07-31. Deliberately not a speculative `resolve_expr`:
     /// that would desync `FunctionContext`'s local-index walk with reify, leak
     /// anonymous structs into the shared `TypeTable`, and emit diagnostics
-    /// with no suppression seam. The scan reads scopes and the type table and
-    /// mutates nothing.
+    /// with no suppression seam. The scan reads scopes and the type table; its
+    /// only write is interning `&T` / `&mut T` for an already-known `T` — a
+    /// structural dedup that resolution would intern anyway, never a new
+    /// nominal type, a scope entry, or a diagnostic.
     ///
     /// Every approximation errs toward [`ProbeClass::Admit`]: over-admitting
     /// can only leave the candidate set ambiguous (an error asking the user
@@ -2554,7 +2622,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match expr {
             Expr::Literal(lit) => match &lit.value {
                 crate::ast::Literal::Number(raw) => {
-                    if raw.contains('.') {
+                    if super::util::is_float_only_literal(raw) {
                         ProbeClass::FloatLit
                     } else {
                         ProbeClass::IntLit
@@ -2588,17 +2656,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ProbeClass::Type(t) => {
                         ProbeClass::Type(self.tysys.type_table.borrow_mut().make_ref(t))
                     }
-                    _ => ProbeClass::Admit,
+                    ProbeClass::IntLit
+                    | ProbeClass::FloatLit
+                    | ProbeClass::StrLit
+                    | ProbeClass::NullLit
+                    | ProbeClass::Admit => ProbeClass::Admit,
                 },
                 crate::ast::UnaryOp::MutRef => match self.probe_arg_class(&u.expr, ctx) {
                     ProbeClass::Type(t) => {
                         ProbeClass::Type(self.tysys.type_table.borrow_mut().make_mut_ref(t))
                     }
-                    _ => ProbeClass::Admit,
+                    ProbeClass::IntLit
+                    | ProbeClass::FloatLit
+                    | ProbeClass::StrLit
+                    | ProbeClass::NullLit
+                    | ProbeClass::Admit => ProbeClass::Admit,
                 },
                 crate::ast::UnaryOp::Neg => match self.probe_arg_class(&u.expr, ctx) {
                     c @ (ProbeClass::IntLit | ProbeClass::FloatLit) => c,
-                    _ => ProbeClass::Admit,
+                    ProbeClass::Type(_)
+                    | ProbeClass::StrLit
+                    | ProbeClass::NullLit
+                    | ProbeClass::Admit => ProbeClass::Admit,
                 },
                 crate::ast::UnaryOp::Not
                 | crate::ast::UnaryOp::BitNot
@@ -2647,25 +2726,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (generics, enums, aliases the table has not interned) is `None`, which
     /// the probe treats as admit-everything.
     pub(super) fn probe_named_type(&self, name: &str) -> Option<TypeId> {
-        let primitive = match name {
-            "i8" => Some(TypeTable::I8),
-            "i16" => Some(TypeTable::I16),
-            "i32" => Some(TypeTable::I32),
-            "i64" => Some(TypeTable::I64),
-            "i128" => Some(TypeTable::I128),
-            "u8" => Some(TypeTable::U8),
-            "u16" => Some(TypeTable::U16),
-            "u32" => Some(TypeTable::U32),
-            "u64" => Some(TypeTable::U64),
-            "u128" => Some(TypeTable::U128),
-            "f32" => Some(TypeTable::F32),
-            "f64" => Some(TypeTable::F64),
-            "bool" => Some(TypeTable::BOOL),
-            "char" => Some(TypeTable::CHAR),
-            _ => None,
-        };
-        if primitive.is_some() {
-            return primitive;
+        if let Some(primitive) = TypeTable::primitive_by_name(name) {
+            return Some(primitive);
         }
         let (module, decl) = self.canonical_decl_key(name);
         self.tysys
@@ -2677,7 +2739,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether a candidate's parameter can accept an argument of this probe
     /// class. Openness first: a parameter still mentioning a type parameter is
     /// not yet comparable and admits everything.
-    fn probe_admits(&self, param: TypeId, class: &ProbeClass) -> bool {
+    pub(super) fn probe_admits(&self, param: TypeId, class: &ProbeClass) -> bool {
         let tt = self.tysys.type_table.borrow();
         if param == TypeTable::UNKNOWN || param == TypeTable::ERROR || tt.contains_type_param(param)
         {
@@ -2695,23 +2757,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     (ResolvedType::Ref(p), ResolvedType::MutRef(a)) if p == a
                 )
             }
-            ProbeClass::IntLit => matches!(
-                tt.get(tt.get_ultimate_base_type(param)),
-                ResolvedType::Primitive(
-                    crate::tir::PrimitiveType::I8
-                        | crate::tir::PrimitiveType::I16
-                        | crate::tir::PrimitiveType::I32
-                        | crate::tir::PrimitiveType::I64
-                        | crate::tir::PrimitiveType::I128
-                        | crate::tir::PrimitiveType::U8
-                        | crate::tir::PrimitiveType::U16
-                        | crate::tir::PrimitiveType::U32
-                        | crate::tir::PrimitiveType::U64
-                        | crate::tir::PrimitiveType::U128
-                        | crate::tir::PrimitiveType::F32
-                        | crate::tir::PrimitiveType::F64
-                )
-            ),
+            ProbeClass::IntLit => {
+                let base = tt.get_ultimate_base_type(param);
+                matches!(
+                    tt.get(base),
+                    ResolvedType::Primitive(
+                        crate::tir::PrimitiveType::I8
+                            | crate::tir::PrimitiveType::I16
+                            | crate::tir::PrimitiveType::I32
+                            | crate::tir::PrimitiveType::I64
+                            | crate::tir::PrimitiveType::I128
+                            | crate::tir::PrimitiveType::U8
+                            | crate::tir::PrimitiveType::U16
+                            | crate::tir::PrimitiveType::U32
+                            | crate::tir::PrimitiveType::U64
+                            | crate::tir::PrimitiveType::U128
+                            | crate::tir::PrimitiveType::F32
+                            | crate::tir::PrimitiveType::F64
+                    ) // The wide integers are struct-backed in the prelude, so
+                      // their base never reads as a `Primitive`.
+                ) || matches!(tt.base_type_name(base).as_str(), "i128" | "u128")
+            }
             ProbeClass::FloatLit => matches!(
                 tt.get(tt.get_ultimate_base_type(param)),
                 ResolvedType::Primitive(
@@ -2733,49 +2799,88 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Rule 1 ranks the impls of *one* trait against each other, so it must
         // not outrank locality between traits: a foreign blanket
         // `impl<T> A for T` would otherwise beat a local `impl<..T> B for [..T]`.
-        let traits_with_non_variadic: IndexSet<String> = found_traits
+        let traits_with_non_variadic: IndexSet<(DeclKey, Vec<TypeId>)> = found_traits
             .iter()
             .filter(|m| !m.is_variadic_impl)
-            .map(|m| m.trait_name.clone())
+            .map(|m| (m.trait_decl.clone(), m.trait_args.clone()))
             .collect();
-        found_traits
-            .retain(|m| !m.is_variadic_impl || !traits_with_non_variadic.contains(&m.trait_name));
+        found_traits.retain(|m| {
+            !m.is_variadic_impl
+                || !traits_with_non_variadic.contains(&(m.trait_decl.clone(), m.trait_args.clone()))
+        });
 
-        // Sort BEFORE dedup_by, since dedup_by only removes adjacent duplicates.
+        // Sort BEFORE dedup_by, since dedup_by only removes adjacent
+        // duplicates. A blanket is the general case and loses to any impl
+        // written for the receiver — even a local blanket to a foreign
+        // concrete impl — so concrete-vs-blanket ranks above locality.
         let current_module = &self.current_module_source;
         found_traits.sort_by(|a, b| {
+            let a_concrete = a.blanket_type_param.is_none();
+            let b_concrete = b.blanket_type_param.is_none();
             let a_local = &a.impl_module_source == current_module;
             let b_local = &b.impl_module_source == current_module;
-            b_local.cmp(&a_local)
+            b_concrete.cmp(&a_concrete).then(b_local.cmp(&a_local))
         });
         found_traits.dedup_by(|a, b| {
-            a.trait_name == b.trait_name && a.impl_module_source == b.impl_module_source
+            a.trait_decl == b.trait_decl
+                && a.trait_args == b.trait_args
+                && a.impl_module_source == b.impl_module_source
         });
-        // Phase 3 (WEP 2026-07-31): one base trait at several argument lists —
-        // the arguments choose. Only a homogeneous-base set is filtered;
-        // distinct traits never form an overload set, so a cross-trait
-        // collision falls through to its error untouched.
+
+        // Distinct same-name declarations tie-break on scope: a same-named
+        // foreign trait the calling module never imported is not a competitor
+        // (`cross_module_same_name_foreign_impl.wado` — each module's
+        // `s.shout()` dispatches to the `Loud` in scope there). Only when
+        // several colliding declarations are in scope does the cross-trait
+        // ambiguity below stand.
+        let distinct: IndexSet<DeclKey> = found_traits
+            .iter()
+            .filter(|m| m.blanket_type_param.is_none())
+            .map(|m| m.trait_decl.clone())
+            .collect();
+        if distinct.len() > 1 {
+            let visible: IndexSet<DeclKey> = distinct
+                .iter()
+                .filter(|d| self.trait_decl_in_scope(d))
+                .cloned()
+                .collect();
+            if visible.len() == 1 {
+                found_traits
+                    .retain(|m| m.blanket_type_param.is_some() || visible.contains(&m.trait_decl));
+            }
+        }
+        // Phase 3 (WEP 2026-07-31): one trait declaration at several argument
+        // lists — the arguments choose. The overload set is the concrete
+        // candidates of one declaration; distinct traits never form an
+        // overload set, so a cross-trait collision falls through to its error
+        // untouched, and blanket candidates neither form nor defeat the set
+        // (they lose to any concrete impl regardless).
+        let concrete: Vec<usize> = found_traits
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| m.blanket_type_param.is_none())
+            .map(|(i, _)| i)
+            .collect();
         if let Some(probe) = probe
-            && found_traits.len() > 1
-            && found_traits
+            && concrete.len() > 1
+            && concrete
                 .iter()
-                .all(|m| m.trait_base_name == found_traits[0].trait_base_name)
-            && found_traits
+                .all(|&i| found_traits[i].trait_decl == found_traits[concrete[0]].trait_decl)
+            && concrete
                 .iter()
-                .any(|m| m.trait_name != found_traits[0].trait_name)
+                .any(|&i| found_traits[i].trait_args != found_traits[concrete[0]].trait_args)
         {
-            let admitted: Vec<usize> = found_traits
+            let admitted: Vec<usize> = concrete
                 .iter()
-                .enumerate()
-                .filter(|(_, m)| {
-                    let params = &m.method_info.param_types;
+                .copied()
+                .filter(|&i| {
+                    let params = &found_traits[i].method_info.param_types;
                     probe.len() <= params.len()
                         && probe
                             .iter()
                             .zip(params.iter())
                             .all(|(class, &param)| self.probe_admits(param, class))
                 })
-                .map(|(i, _)| i)
                 .collect();
             // Unique-or-error: exactly one admitted candidate wins; zero or
             // several leave the set for the ambiguity report below. No
@@ -2814,9 +2919,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let rivals: Vec<&super::types::TraitMethodMatch> = found_traits
             .iter()
-            .filter(|m| {
-                m.trait_base_name == first.trait_base_name && m.trait_name != first.trait_name
-            })
+            .filter(|m| m.trait_decl == first.trait_decl && m.trait_args != first.trait_args)
             .collect();
         if rivals.is_empty() {
             return;
@@ -2853,19 +2956,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // and loses to any impl written for the receiver, which is the
         // specific-impls-win ordering the language already applies within one
         // trait. Selection is untouched — this decides only what is reported.
-        let mut bases: Vec<String> = found_traits
+        // The collision is counted on declarations, so two same-named traits
+        // from different modules still collide even though their spellings
+        // agree — identity is the declaration, not the name.
+        let mut seen: IndexSet<DeclKey> = IndexSet::default();
+        for m in found_traits
             .iter()
             .filter(|m| m.blanket_type_param.is_none())
-            .map(|m| m.trait_base_name.clone())
-            .collect();
-        // `found_traits` is ordered by impl locality, not by name, so equal
-        // names need not be adjacent — sort before dedup or one trait can be
-        // listed twice in the message.
-        bases.sort();
-        bases.dedup();
-        if bases.len() < 2 {
+        {
+            seen.insert(m.trait_decl.clone());
+        }
+        if seen.len() < 2 {
             return;
         }
+        // Same-named declarations are qualified by their declaring module —
+        // a bare `'Kind' and 'Kind'` names nothing the user can act on.
+        let mut bases: Vec<String> = seen
+            .iter()
+            .map(|(module, name)| {
+                if seen.iter().filter(|(_, n)| n == name).count() > 1 {
+                    format!("{name} (from \"{module}\")")
+                } else {
+                    name.clone()
+                }
+            })
+            .collect();
+        bases.sort();
+        bases.dedup();
         let _ = self.emit(TypeError::AmbiguousTraitMethod {
             method: method_name.to_string(),
             traits: bases,
@@ -3485,6 +3602,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut method_trait_name: Option<String> = None;
         let mut method_trait_impl_source: Option<ModuleSource> = None;
 
+        // This lookup commits the call's resolution (the desugared call is
+        // built from it), so argument-directed selection applies here exactly
+        // as on the plain method-call path.
+        let probe_classes: Vec<ProbeClass> = method_call
+            .args
+            .iter()
+            .map(|a| self.probe_arg_class(a, ctx))
+            .collect();
         if method_info.is_none()
             && let Some(trait_match) = self.find_trait_method_for_type(
                 &self.impl_target(&output_struct_name),
@@ -3494,7 +3619,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(output_type),
                 method_call.span,
                 None,
-                None,
+                Some(&probe_classes),
             )
         {
             method_trait_name = Some(trait_match.trait_name);

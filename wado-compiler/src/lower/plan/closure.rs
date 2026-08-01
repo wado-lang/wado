@@ -1899,6 +1899,9 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
                 for arg in &mut *args {
                     self.visit_expr(&mut arg.expr);
                 }
+                // A callee absent from `self_offsets` was not lowered in this
+                // package (an external import or a builtin); such a callee
+                // cannot take `self`, so its args start at parameter 0.
                 let arg_offset = self
                     .self_offsets
                     .get(&(func.module_source.clone(), func.name.clone()))

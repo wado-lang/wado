@@ -1,0 +1,25 @@
+// A qualified call spells the receiver's mode itself. Passing a value where
+// the method takes `&mut self` would mutate a copy and silently discard the
+// change, so it is rejected. WEP 2026-07-31.
+struct Counter {
+    n: i32,
+}
+
+trait Bump {
+    fn bump(&mut self);
+}
+
+impl Bump for Counter {
+    fn bump(&mut self) {
+        self.n = self.n + 1;
+    }
+}
+
+test "a by-value receiver cannot answer a &mut self qualified call" {
+    let mut c = Counter { n: 0 };
+    Bump::bump(c);
+    assert c.n == 1;
+}
+
+__DATA__
+{"test": {}, "compile_error": "takes '&mut self'"}

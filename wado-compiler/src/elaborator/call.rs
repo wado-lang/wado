@@ -451,25 +451,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Literal preselect for a conversion call (WEP 2026-07-31 phase 4):
         // see `resolve_static_method_call` — same rule, for the
         // `Wrapper::from(42)` spelling that arrives as a plain call.
-        if let Some(pos) = effective_name.find("::") {
-            let (recv_name, method_name) = (&effective_name[..pos], &effective_name[pos + 2..]);
-            if (method_name == "from" || method_name == "try_from") && call.args.len() == 1 {
-                let probe = self.probe_arg_class(&call.args[0], ctx);
-                match self.conversion_preselect(recv_name, method_name, &probe) {
-                    super::method_call::ConversionPreselect::Selected(source) => {
-                        param_types = vec![source];
-                    }
-                    super::method_call::ConversionPreselect::Ambiguous(candidates) => {
-                        let _ = self.emit(TypeError::AmbiguousConversionArgument {
-                            receiver: recv_name.to_string(),
-                            method: method_name.to_string(),
-                            candidates,
-                            span: call.span,
-                        });
-                        return TypeTable::ERROR;
-                    }
-                    super::method_call::ConversionPreselect::Pass => {}
-                }
+        if let Some(pos) = effective_name.find("::")
+            && call.args.len() == 1
+        {
+            let (recv_name, method_name) = (
+                effective_name[..pos].to_string(),
+                effective_name[pos + 2..].to_string(),
+            );
+            if self.try_conversion_preselect(
+                &recv_name,
+                &method_name,
+                &call.args[0],
+                call.span,
+                ctx,
+                &mut param_types,
+            ) {
+                return TypeTable::ERROR;
             }
         }
 
@@ -1128,6 +1125,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             param_is_mut,
                             type_args: vec![],
                             param_defaults,
+                            self_in_args: false,
                         },
                     );
 
@@ -1431,6 +1429,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut,
                 type_args: type_args.clone(),
                 param_defaults: vec![],
+                self_in_args: false,
             },
         );
         // Stage 7-B: reify rebuilds the `Call` TIR from the recorded
@@ -2784,6 +2783,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],
                     param_defaults,
+                    self_in_args: false,
                 },
             );
 

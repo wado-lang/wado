@@ -1,0 +1,21 @@
+// A blanket impl is the general case: an impl written for the receiver's own
+// type wins over it even when the blanket is the local one. WEP 2026-07-31.
+use { Show, Gadget } from "./sub/ufcs_show_lib.wado";
+
+trait Marker {}
+
+impl Marker for Gadget {}
+
+impl<T: Marker> Show for T {
+    fn show(&self) -> String {
+        return "blanket";
+    }
+}
+
+test "the receiver's own impl beats a local blanket" {
+    let g = Gadget { id: 1 };
+    assert g.show() == "concrete";
+}
+
+__DATA__
+{"test": {}}

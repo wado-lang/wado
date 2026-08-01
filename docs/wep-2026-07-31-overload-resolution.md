@@ -95,7 +95,12 @@ shape, including the concrete-receiver case that used to resolve silently. The
 rationale is twofold: impls of different traits share no contract, so a
 type-directed pick is a semantic guess; and allowing it would reintroduce ad-hoc
 overloading through one-method traits, which the design philosophy rules out.
-The escape is the qualified call syntax below, not renaming.
+The escape is the qualified call syntax below, not renaming. One tie-break
+before the error: when the colliding declarations share a bare name and exactly
+one is in scope at the call site (declared or imported by the calling module),
+that one is selected — a same-named foreign trait a module never imported does
+not break its calls, which is what keeps two libraries' private `trait Loud`
+from colliding through a shared receiver type.
 
 One exception: a blanket candidate does not count toward the collision. Wado
 does not scope method candidates by which traits are imported, so a foreign
@@ -116,7 +121,13 @@ methods; the ref-impl priority and the earlier steps are unchanged):
 1. Collect the candidate impls providing `m` for the receiver, as today
    (impl-index buckets along the newtype chain, plus satisfied blankets; for a
    generic receiver, the transitive closure of its bounds).
-2. Group candidates by trait identity: base trait name plus declaring module.
+2. Group candidates by trait identity. Identity is structural, never a
+   spelling: the trait is its declaration key (declaring module + declared
+   name), so two modules' same-named traits stay distinct and an alias
+   compares equal to the original; an argument list is its resolved types, so
+   `Take<Alias>` and `Take<A>` name one list. Each candidate's identity is
+   resolved in its impl's own frame — the impl module's imports, with the
+   impl's bound type parameters substituted.
 3. More than one group → ambiguity error naming every group's method as
    `Type^Trait::m` and suggesting a qualified call.
 4. One group with one argument list → resolved; today's path, unchanged.
@@ -193,7 +204,10 @@ literal's value.
 One form names a candidate explicitly: trait-qualified (UFCS)
 `Trait::method(receiver, args…)`. The `self` parameter becomes the first
 argument, spelled to match its mode — `&x` for `&self`, `&mut x` for
-`&mut self`, the value for `self`:
+`&mut self`, the value for `self`. A mismatched mode is an error, not a
+coercion: passing a value where the method takes `&mut self` would mutate a
+copy and silently drop the change. The one exception is the language's one
+reference coercion — `&mut x` also answers a `&self` method:
 
 ```wado
 Display::fmt(&p, f);          // p implements two traits declaring `fmt`
@@ -204,7 +218,11 @@ Take::<A>::take(f, B { … });  // one trait's argument list, pinned
 The receiver argument supplies `Self`, so the trait's own type arguments are
 all a turbofish needs to carry. That covers both collision shapes: across
 traits, the trait name discriminates; within one trait, the turbofish pins the
-argument list. This closes the escape gap Super Traits documents. If the named
+argument list. The head and the turbofish arguments resolve to identities
+(declaration key, resolved types) before filtering, so aliases and same-named
+foreign traits behave like everywhere else — and only the named declaration
+may answer: the auto-derived `Eq` / `Ord` bodies answer a qualified call only
+when it names them, never a user trait that happens to share the method name. This closes the escape gap Super Traits documents. If the named
 trait still has several argument lists for the receiver and no turbofish is
 written, argument-directed selection applies within it.
 
@@ -378,22 +396,27 @@ Landing order — each phase keeps the suite green and is useful alone:
 
 4. Conversion fold: `conversion_preselect` runs the literal's probe class
    over the receiver's conversion impls _before_ the argument is elaborated —
-   removing the circular ordering at its root. One admitted impl supplies the
-   argument's expected type (`Wrapper::from(42)` against `From<String>` /
-   `From<i64>` resolves to `From<i64>`, whichever is declared first); several
-   admitted impls report `AmbiguousConversionArgument`, whose fix is the cast
-   — `from` has no `self`, so the trait-turbofish escape cannot apply. A
-   non-literal argument passes through: its resolved type selects
-   deterministically via the existing name hint, whose matcher compares full
-   spellings (whitespace ignored, head un-aliased in the impl's module) with a
-   head-only fallback — the name-based mechanism's ceiling; full `TypeId`
-   matching remains the eventual replacement. Two shapes stay carved out at
-   the gate rather than guessed at: an inherent static `from` beside `From`
-   impls answers on the trait-less path, and a conversion reachable only
-   through a blanket generic in its source type
-   (`impl<T: Display> From<T> for Wrapper`) is rejected with its own
-   diagnostic — it has never compiled, and selecting its instantiation needs
-   generic-impl monomorphization, not name matching.
+   removing the circular ordering at its root. Admissibility is
+   `probe_admits` over each impl's source type _resolved in the impl's own
+   frame_ (`conversion_impl_survey`), the same table argument-directed
+   selection uses — so an integer newtype admits an integer literal here
+   exactly as it does there, and `From<i64>` beside `From<Meters>` is
+   ambiguous rather than silently primitive. One admitted impl supplies the
+   argument's expected type; several report `AmbiguousConversionArgument`,
+   whose fix is the cast — `from` has no `self`, so the trait-turbofish
+   escape cannot apply. A non-literal argument passes through: its resolved
+   type selects via the name hint, whose matcher compares the head
+   (un-aliased in the impl's module) and, for a generic argument spelling,
+   the full spelling with whitespace ignored — so same-head impls
+   (`From<List<i32>>` beside `From<List<String>>`) are told apart; nested
+   aliasing that changes the rendered arguments is the name-based
+   mechanism's remaining ceiling, with full `TypeId` matching the eventual
+   replacement. Two shapes stay carved out at the gate rather than guessed
+   at: an inherent static `from` beside `From` impls answers on the
+   trait-less path, and a conversion reachable only through a blanket
+   generic in its source type (`impl<T: Display> From<T> for Wrapper`) is
+   rejected with its own diagnostic — it has never compiled, and selecting
+   its instantiation needs generic-impl monomorphization, not name matching.
 
    Remaining follow-up: operator-trait parameterization
    (`trait Add<Rhs = Self>`), which is what would make RHS-directed operator
