@@ -230,10 +230,16 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         let type_table = &*ctx.package.type_table.borrow();
         let functor_wir_type = ctx.type_id_to_wir_type(type_table, functor.ref_type_id);
         let _ = type_table;
-        let functor_struct_type_id = match &functor_wir_type {
-            WirType::Ref { type_id, .. } => type_id.clone(),
-            _ => continue,
+        let WirType::Ref {
+            type_id: functor_struct_type_id,
+            ..
+        } = &functor_wir_type
+        else {
+            panic!(
+                "[WIR] closure functor `{functor_name}` has no registered struct type (got {functor_wir_type:?})"
+            );
         };
+        let functor_struct_type_id = functor_struct_type_id.clone();
 
         // Map each surviving `call_method.params` entry to its source slot
         // in the wrapper. Position 0 is always self (env, refcast); the
@@ -523,8 +529,24 @@ fn register_inspect_wrapper(
         }
     });
 
-    let body = match (target_func_id, formatter_struct_type_id, impl_param_names) {
-        (Some(func_id), Some(formatter_tid), Some(impl_params)) => {
+    // A DCE'd per-functor impl leaves no target: the vtable slot still has to
+    // exist so every `CanonicalClosure_K` keeps one schema, and nothing can
+    // reach the wrapper, so its body traps. The other two lookups are not
+    // independently optional — once the impl survives, both its params and the
+    // `Formatter` it takes must be there.
+    let body = match target_func_id {
+        None => vec![WirInstr::Unreachable],
+        Some(func_id) => {
+            let formatter_tid = formatter_struct_type_id.unwrap_or_else(|| {
+                panic!(
+                    "[WIR] `{functor_name}^{trait_name}::{method_name}` survived DCE but the `Formatter` struct is not registered"
+                )
+            });
+            let impl_params = impl_param_names.unwrap_or_else(|| {
+                panic!(
+                    "[WIR] `{functor_name}^{trait_name}::{method_name}` is in `func_map` but has no live function record"
+                )
+            });
             let typed_env_local = "__typed_env".to_string();
             let typed_formatter_local = "__typed_formatter".to_string();
             let needs_typed_env = impl_params.iter().any(|n| n == "self");
@@ -603,7 +625,6 @@ fn register_inspect_wrapper(
             });
             body
         }
-        _ => vec![WirInstr::Unreachable],
     };
 
     let wrapper_fq = format!("closure/{module_source}/__closure_{method_name}_wrapper_{global_id}");
@@ -1081,6 +1102,24 @@ impl FunctionTranslator<'_, '_> {
         self.ctx.type_id_to_wir_type(self.type_table, type_id)
     }
 
+    /// The WIR type index of a `TypeId` that must lower to a concrete reference
+    /// — a struct, variant, array, or list.
+    ///
+    /// Callers reach for this where the TIR shape already guarantees a
+    /// reference — a struct literal's own type, a `&Array<T>` builtin argument,
+    /// a variant scrutinee. It panics where the assumption was made rather than
+    /// letting the caller emit something that only fails Wasm validation.
+    #[track_caller]
+    pub(super) fn ref_type_id(&self, type_id: TypeId) -> WirTypeId {
+        match self.wir_type(type_id) {
+            WirType::Ref { type_id, .. } => type_id,
+            other => panic!(
+                "[WIR] expected a concrete reference type, got {other:?} for {:?}",
+                self.type_table.get(type_id)
+            ),
+        }
+    }
+
     /// Look up the WIR type of a struct field.
     pub(super) fn struct_field_wir_type(
         &self,
@@ -1182,21 +1221,21 @@ impl FunctionTranslator<'_, '_> {
     ) -> (WirTypeId, Vec<WirInstr>) {
         let elem_type_ids: Vec<crate::tir::TypeId> =
             elements.iter().map(|e| self.operand_type_id(*e)).collect();
-        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, tuple_type_id);
+        // A tuple interned by CM binding synthesis can carry `TypeId`s the
+        // registrar never saw, so this miss is recoverable: search for a
+        // structurally equal tuple, then define one.
+        let wir_type = self
+            .ctx
+            .try_type_id_to_wir_type(self.type_table, tuple_type_id);
         let wir_type_id = match &wir_type {
-            WirType::Ref { type_id, .. } => Some(type_id.clone()),
-            _ if elements.len() >= 2 => {
-                // Tuple types created in CM binding synthesis may have TypeIds
-                // from a different module's type_table, causing
-                // `type_id_to_wir_type` to return I32 or AbstractRef instead
-                // of Ref. Fall back to matching by element WIR types.
-                self.ctx
-                    .find_tuple_type_for_elements(self.type_table, &elem_type_ids)
-                    .or_else(|| {
-                        self.ctx
-                            .define_tuple_struct_for_elements(self.type_table, &elem_type_ids)
-                    })
-            }
+            Some(WirType::Ref { type_id, .. }) => Some(type_id.clone()),
+            _ if elements.len() >= 2 => self
+                .ctx
+                .find_tuple_type_for_elements(self.type_table, &elem_type_ids)
+                .or_else(|| {
+                    self.ctx
+                        .define_tuple_struct_for_elements(self.type_table, &elem_type_ids)
+                }),
             _ => None,
         };
         let Some(type_id) = wir_type_id else {
@@ -1417,13 +1456,18 @@ impl FunctionTranslator<'_, '_> {
                 if i < param_count {
                     continue;
                 }
+                let idx = u32::try_from(i).unwrap();
+                let local_name = self.local_name(idx);
+                assert!(
+                    local.type_id != TypeTable::UNKNOWN,
+                    "[WIR] local `{local_name}` of `{}` has no resolved type",
+                    self.tir_func.name
+                );
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, local.type_id);
                 // Skip unit-type locals (unit has no Wasm representation)
                 if matches!(wir_type, WirType::Unit) {
                     continue;
                 }
-                let idx = u32::try_from(i).unwrap();
-                let local_name = self.local_name(idx);
                 instrs.push(WirInstr::DeclareLocal {
                     name: local_name,
                     ty: wir_type,
@@ -1855,7 +1899,7 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
             StmtKind::LetDestructure { pattern, value, .. } => {
-                self.translate_let_pattern(*pattern, *value)
+                Some(self.translate_let_pattern(*pattern, *value))
             }
         }
     }
@@ -2782,8 +2826,13 @@ impl FunctionTranslator<'_, '_> {
                 return u32::try_from(i).unwrap();
             }
         }
-        // Fallback: depth 0 (should not happen with correct TIR)
-        0
+        // Semantic analysis rejects a `break` with no enclosing loop or with an
+        // unknown label, so the target is always on the stack. Depth 0 instead
+        // would branch out of whatever block happens to be innermost.
+        panic!(
+            "[WIR] `break` in `{}` has no target block on the label stack (label={label:?})",
+            self.tir_func.name
+        )
     }
 
     /// Compute the `br` depth for a continue statement.
@@ -2795,8 +2844,11 @@ impl FunctionTranslator<'_, '_> {
                 return u32::try_from(i).unwrap();
             }
         }
-        // Fallback: depth 0 (should not happen with correct TIR)
-        0
+        // See `compute_break_depth`: a `continue` outside a loop never gets here.
+        panic!(
+            "[WIR] `continue` in `{}` has no enclosing loop on the label stack",
+            self.tir_func.name
+        )
     }
 }
 

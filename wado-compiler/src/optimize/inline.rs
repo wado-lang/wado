@@ -924,8 +924,8 @@ struct InlineBinding {
     /// Parameter name (kept for the synthesized binding `Let`).
     name: String,
     is_mut: bool,
-    /// The binding's declared type (the arg's type — handles monomorphization
-    /// variance and `&mut self` ref wrapping).
+    /// The `Let`'s declared type: the callee parameter's own type, since the
+    /// binding stands in for that parameter.
     local_type: TypeId,
     /// The argument operand, already in the caller arena. The call node is
     /// discarded after inlining, so its argument subtrees / pool values are
@@ -1107,6 +1107,11 @@ fn try_inline_call_expr(
 
     // Args are already in the caller arena (operands of the discarded call); bind
     // each to its param `Let` directly (WEP: The Live ValueGraph).
+    //
+    // The `Let` stands in for the parameter, so it takes the parameter's
+    // declared type (`TypeId`s are package-wide after link). The argument's
+    // would propagate whatever the caller recorded, including the unresolved
+    // type of a synthesized default.
     let bindings: Vec<InlineBinding> = candidate
         .params
         .iter()
@@ -1115,7 +1120,7 @@ fn try_inline_call_expr(
             callee_local_index: param.local_index,
             name: param.name.clone(),
             is_mut: param.is_mut,
-            local_type: caller.operand_type(arg),
+            local_type: param.type_id,
             value: arg,
         })
         .collect();
@@ -1208,7 +1213,7 @@ fn try_inline_method_call_expr(
             callee_local_index: param.local_index,
             name: param.name.clone(),
             is_mut: param.is_mut,
-            local_type: caller.operand_type(arg),
+            local_type: param.type_id,
             value: arg,
         });
     }

@@ -110,13 +110,7 @@ impl FunctionTranslator<'_, '_> {
     /// into freshly declared locals via `MultiValueLocalBind`, then build
     /// a `StructNew` reading the locals back as the struct fields.
     fn wrap_multivalue_i64(&mut self, instr: WirInstr, result_type_id: TypeId) -> WirInstr {
-        let wir_type = self
-            .ctx
-            .type_id_to_wir_type(self.type_table, result_type_id);
-        let WirType::Ref { type_id, .. } = wir_type else {
-            // Fallback: just emit the instruction (shouldn't happen).
-            return instr;
-        };
+        let type_id = self.ref_type_id(result_type_id);
         self.local_counter += 1;
         let n = self.local_counter;
         let lo = format!("__mv_lo_{n}");
@@ -233,15 +227,11 @@ impl FunctionTranslator<'_, '_> {
     fn translate_array_ref_operand(
         &mut self,
         args: &[ArenaCallArg],
-    ) -> Option<(WirTypeId, WirInstr, TypeId)> {
+    ) -> (WirTypeId, WirInstr, TypeId) {
         let src_expr = args[0].expr;
         let src = self.translate_operand(src_expr);
         let src_type_id = self.operand_type_id(src_expr);
-        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, src_type_id);
-        let WirType::Ref { type_id, .. } = wir_type else {
-            return None;
-        };
-        Some((type_id, src, src_type_id))
+        (self.ref_type_id(src_type_id), src, src_type_id)
     }
 
     fn build_bulk_array_clone(
@@ -478,17 +468,10 @@ impl FunctionTranslator<'_, '_> {
             "builtin::array_new" => {
                 // array.new_default: creates a new array of the given element type
                 let len = self.translate_operand(args[0].expr);
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, result_type_id);
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    Some(WirInstr::ArrayNewDefault {
-                        type_id,
-                        len: Box::new(len),
-                    })
-                } else {
-                    None
-                }
+                Some(WirInstr::ArrayNewDefault {
+                    type_id: self.ref_type_id(result_type_id),
+                    len: Box::new(len),
+                })
             }
             "builtin::array_get_u8" => {
                 let arr = self.translate_operand(args[0].expr);
@@ -520,67 +503,46 @@ impl FunctionTranslator<'_, '_> {
             "builtin::array_get" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.operand_type_id(args[0].expr));
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    Some(WirInstr::ArrayGet {
-                        type_id: type_id.clone(),
-                        array: Box::new(arr),
-                        index: Box::new(idx),
-                        result_ty: self.array_element_wir_type(&type_id),
-                    })
-                } else {
-                    None
-                }
+                let type_id = self.ref_type_id(self.operand_type_id(args[0].expr));
+                Some(WirInstr::ArrayGet {
+                    result_ty: self.array_element_wir_type(&type_id),
+                    type_id,
+                    array: Box::new(arr),
+                    index: Box::new(idx),
+                })
             }
             "builtin::array_get_ref" | "builtin::array_get_mut_ref" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.operand_type_id(args[0].expr));
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    let elem_ty = self.array_element_wir_type(&type_id);
-                    let get = WirInstr::ArrayGet {
-                        type_id,
-                        array: Box::new(arr),
-                        index: Box::new(idx),
-                        result_ty: elem_ty.clone(),
-                    };
-                    let result_wir = self
-                        .ctx
-                        .type_id_to_wir_type(self.type_table, result_type_id);
-                    if super::translate::ref_binding_needs_boxing(&result_wir, Some(&elem_ty))
-                        && let WirType::Ref {
-                            type_id: box_tid, ..
-                        } = result_wir
-                    {
-                        Some(self.struct_new(box_tid, vec![get]))
-                    } else {
-                        Some(get)
-                    }
+                let type_id = self.ref_type_id(self.operand_type_id(args[0].expr));
+                let elem_ty = self.array_element_wir_type(&type_id);
+                let get = WirInstr::ArrayGet {
+                    type_id,
+                    array: Box::new(arr),
+                    index: Box::new(idx),
+                    result_ty: elem_ty.clone(),
+                };
+                let result_wir = self.wir_type(result_type_id);
+                if super::translate::ref_binding_needs_boxing(&result_wir, Some(&elem_ty))
+                    && let WirType::Ref {
+                        type_id: box_tid, ..
+                    } = result_wir
+                {
+                    Some(self.struct_new(box_tid, vec![get]))
                 } else {
-                    None
+                    Some(get)
                 }
             }
             "builtin::array_set" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
                 let val = self.translate_operand(args[2].expr);
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.operand_type_id(args[0].expr));
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    Some(WirInstr::ArraySet {
-                        type_id,
-                        array: Box::new(arr),
-                        index: Box::new(idx),
-                        value: Box::new(val),
-                    })
-                } else {
-                    None
-                }
+                Some(WirInstr::ArraySet {
+                    type_id: self.ref_type_id(self.operand_type_id(args[0].expr)),
+                    array: Box::new(arr),
+                    index: Box::new(idx),
+                    value: Box::new(val),
+                })
             }
             "builtin::array_copy" => {
                 let dst = self.translate_operand(args[0].expr);
@@ -588,25 +550,19 @@ impl FunctionTranslator<'_, '_> {
                 let src = self.translate_operand(args[2].expr);
                 let src_offset = self.translate_operand(args[3].expr);
                 let len = self.translate_operand(args[4].expr);
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.operand_type_id(args[0].expr));
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    Some(WirInstr::ArrayCopy {
-                        dest_type_id: type_id.clone(),
-                        src_type_id: type_id,
-                        dest: Box::new(dst),
-                        dest_offset: Box::new(dst_offset),
-                        src: Box::new(src),
-                        src_offset: Box::new(src_offset),
-                        len: Box::new(len),
-                    })
-                } else {
-                    None
-                }
+                let type_id = self.ref_type_id(self.operand_type_id(args[0].expr));
+                Some(WirInstr::ArrayCopy {
+                    dest_type_id: type_id.clone(),
+                    src_type_id: type_id,
+                    dest: Box::new(dst),
+                    dest_offset: Box::new(dst_offset),
+                    src: Box::new(src),
+                    src_offset: Box::new(src_offset),
+                    len: Box::new(len),
+                })
             }
             "builtin::array_clone" => {
-                let (type_id, src, src_type_id) = self.translate_array_ref_operand(args)?;
+                let (type_id, src, src_type_id) = self.translate_array_ref_operand(args);
                 match self.array_element_copy_mangle(src_type_id) {
                     Some(element_copy_mangle) => Some(WirInstr::ArrayClone {
                         type_id,
@@ -618,7 +574,7 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             "builtin::array_clone_prefix" => {
-                let (type_id, src, src_type_id) = self.translate_array_ref_operand(args)?;
+                let (type_id, src, src_type_id) = self.translate_array_ref_operand(args);
                 let len = self.translate_operand(args[1].expr);
                 match self.array_element_copy_mangle(src_type_id) {
                     Some(element_copy_mangle) => Some(WirInstr::ArrayClone {
@@ -634,7 +590,7 @@ impl FunctionTranslator<'_, '_> {
                 // The demote pass retargets `array_clone` / `array_clone_prefix`
                 // calls here by id, keeping the call-site args — so a second
                 // arg, when present, is the prefix length to preserve.
-                let (type_id, src, _) = self.translate_array_ref_operand(args)?;
+                let (type_id, src, _) = self.translate_array_ref_operand(args);
                 let len = args.get(1).map(|arg| self.translate_operand(arg.expr));
                 Some(self.build_bulk_array_clone(type_id, src, len))
             }
@@ -643,32 +599,24 @@ impl FunctionTranslator<'_, '_> {
                 let offset = self.translate_operand(args[1].expr);
                 let val = self.translate_operand(args[2].expr);
                 let len = self.translate_operand(args[3].expr);
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.operand_type_id(args[0].expr));
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    Some(WirInstr::ArrayFill {
-                        type_id,
-                        array: Box::new(arr),
-                        offset: Box::new(offset),
-                        value: Box::new(val),
-                        len: Box::new(len),
-                    })
-                } else {
-                    None
-                }
+                Some(WirInstr::ArrayFill {
+                    type_id: self.ref_type_id(self.operand_type_id(args[0].expr)),
+                    array: Box::new(arr),
+                    offset: Box::new(offset),
+                    value: Box::new(val),
+                    len: Box::new(len),
+                })
             }
 
             "builtin::v128_const" => {
-                // The argument is an i128 literal interpreted as v128 bit pattern
+                // The argument is an i128 literal interpreted as v128 bit pattern.
                 let o = self.translate_operand(args[0].expr);
-                // Extract the constant value - it should be an IntLiteral
-                if let WirInstr::I32Const(v) = &o {
-                    Some(WirInstr::V128Const(i128::from(*v)))
-                } else if let WirInstr::I64Const(v) = &o {
-                    Some(WirInstr::V128Const(i128::from(*v)))
-                } else {
-                    Some(WirInstr::V128Const(0))
+                match &o {
+                    WirInstr::I32Const(v) => Some(WirInstr::V128Const(i128::from(*v))),
+                    WirInstr::I64Const(v) => Some(WirInstr::V128Const(i128::from(*v))),
+                    other => panic!(
+                        "[WIR] builtin::v128_const needs a constant bit pattern, got {other:?}"
+                    ),
                 }
             }
             "builtin::memory_size" => Some(WirInstr::MemorySize),

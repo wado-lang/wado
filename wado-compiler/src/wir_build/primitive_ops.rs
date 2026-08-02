@@ -32,23 +32,29 @@ enum PrimitiveKind {
     F32,
     /// `f64`.
     F64,
-    /// Anything else — reference types or primitives not handled by
-    /// scalar binop/unop dispatch (e.g., `i128`, `u128`, `v128`).
-    Other,
 }
 
 impl PrimitiveKind {
-    /// Classify a `TypeId`'s underlying primitive.
-    fn from_type_id(type_table: &TypeTable, type_id: TypeId) -> Self {
-        match type_table.get(type_id) {
+    /// The scalar kind a `TypeId` is represented by, or `None` for one with no
+    /// scalar representation: a reference type, or a width WIR carries no
+    /// scalar for (`i128` / `u128` / `v128`).
+    fn from_type_id(type_table: &TypeTable, type_id: TypeId) -> Option<Self> {
+        match type_table.get(type_table.resolve_newtype_base(type_id)) {
             ResolvedType::Primitive(p) => Self::from_primitive(*p),
-            _ => Self::Other,
+            // A discriminant and a bitmask are both i32. Signed opcodes agree
+            // with unsigned ones over their non-negative range.
+            ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => Some(Self::I32Signed),
+            // A `Never` operand traps before the operation runs, so the node is
+            // never observed — but it still needs an opcode to keep its shape.
+            // (`Unit` has no value to feed one; the elaborator rejects it.)
+            ResolvedType::Never => Some(Self::I32Signed),
+            _ => None,
         }
     }
 
     /// Classify a `PrimitiveType` value.
-    fn from_primitive(p: PrimitiveType) -> Self {
-        match p {
+    fn from_primitive(p: PrimitiveType) -> Option<Self> {
+        Some(match p {
             PrimitiveType::I8 | PrimitiveType::I16 | PrimitiveType::I32 => Self::I32Signed,
             PrimitiveType::U8
             | PrimitiveType::U16
@@ -59,18 +65,8 @@ impl PrimitiveKind {
             PrimitiveType::U64 => Self::I64Unsigned,
             PrimitiveType::F32 => Self::F32,
             PrimitiveType::F64 => Self::F64,
-            PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128 => Self::Other,
-        }
-    }
-
-    /// True for `I64Signed` / `I64Unsigned`.
-    fn is_i64(self) -> bool {
-        matches!(self, Self::I64Signed | Self::I64Unsigned)
-    }
-
-    /// True for unsigned integer families (`I32Unsigned`, `I64Unsigned`).
-    fn is_unsigned(self) -> bool {
-        matches!(self, Self::I32Unsigned | Self::I64Unsigned)
+            PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128 => return None,
+        })
     }
 }
 
@@ -118,7 +114,8 @@ impl FunctionTranslator<'_, '_> {
             let data_index = self.ctx.packed_data_map.get(b).copied().expect(
                 "[WIR] PackedArray: long payload missing from packed_data_map (registration must cover every >threshold literal)",
             );
-            let len_i32 = i32::try_from(byte_len).unwrap_or(0);
+            let len_i32 = i32::try_from(byte_len)
+                .unwrap_or_else(|_| panic!("[WIR] literal of {byte_len} bytes exceeds i32 length"));
             WirInstr::ArrayNewData {
                 type_id: array_type_id,
                 data_index,
@@ -126,6 +123,19 @@ impl FunctionTranslator<'_, '_> {
                 len: Box::new(WirInstr::I32Const(len_i32)),
             }
         }
+    }
+
+    /// The scalar kind `type_id` lowers to, for an operator with only scalar
+    /// opcodes. Type checking rejects the rest, and falling back to i32 would
+    /// silently misread an `f64` or a reference.
+    #[track_caller]
+    fn scalar_kind(&self, type_id: TypeId, op: &impl std::fmt::Debug) -> PrimitiveKind {
+        PrimitiveKind::from_type_id(self.type_table, type_id).unwrap_or_else(|| {
+            panic!(
+                "[WIR] `{op:?}` has no scalar lowering for {:?}",
+                self.type_table.get(type_id)
+            )
+        })
     }
 
     /// Translate a binary operation to WIR.
@@ -136,26 +146,45 @@ impl FunctionTranslator<'_, '_> {
         right: Box<WirInstr>,
         left_type_id: TypeId,
     ) -> WirInstr {
-        let kind = PrimitiveKind::from_type_id(self.type_table, left_type_id);
+        // The reference-identity operators take operands with no scalar kind.
+        if let NirBinaryOp::RefEq = op {
+            return WirInstr::RefEq(left, right);
+        }
+        if let NirBinaryOp::RefNotEq = op {
+            return WirInstr::I32Eqz(Box::new(WirInstr::RefEq(left, right)));
+        }
+        let kind = self.scalar_kind(left_type_id, op);
 
         match op {
             NirBinaryOp::Add => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Add(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Add(left, right),
-                k if k.is_i64() => WirInstr::I64Add(left, right),
-                _ => WirInstr::I32Add(left, right),
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
+                    WirInstr::I64Add(left, right)
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
+                    WirInstr::I32Add(left, right)
+                }
             },
             NirBinaryOp::Sub => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Sub(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Sub(left, right),
-                k if k.is_i64() => WirInstr::I64Sub(left, right),
-                _ => WirInstr::I32Sub(left, right),
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
+                    WirInstr::I64Sub(left, right)
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
+                    WirInstr::I32Sub(left, right)
+                }
             },
             NirBinaryOp::Mul => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Mul(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Mul(left, right),
-                k if k.is_i64() => WirInstr::I64Mul(left, right),
-                _ => WirInstr::I32Mul(left, right),
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
+                    WirInstr::I64Mul(left, right)
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
+                    WirInstr::I32Mul(left, right)
+                }
             },
             NirBinaryOp::Div => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Div(left, right),
@@ -163,25 +192,37 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I64Unsigned => WirInstr::I64DivU(left, right),
                 PrimitiveKind::I64Signed => WirInstr::I64DivS(left, right),
                 PrimitiveKind::I32Unsigned => WirInstr::I32DivU(left, right),
-                _ => WirInstr::I32DivS(left, right),
+                PrimitiveKind::I32Signed => WirInstr::I32DivS(left, right),
             },
             NirBinaryOp::Mod => match kind {
+                // Wasm has no float remainder; `%` on a float is a type error.
+                PrimitiveKind::F32 | PrimitiveKind::F64 => {
+                    panic!("[WIR] `%` has no float lowering")
+                }
                 PrimitiveKind::I64Unsigned => WirInstr::I64RemU(left, right),
                 PrimitiveKind::I64Signed => WirInstr::I64RemS(left, right),
                 PrimitiveKind::I32Unsigned => WirInstr::I32RemU(left, right),
-                _ => WirInstr::I32RemS(left, right),
+                PrimitiveKind::I32Signed => WirInstr::I32RemS(left, right),
             },
             NirBinaryOp::Eq => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Eq(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Eq(left, right),
-                k if k.is_i64() => WirInstr::I64Eq(left, right),
-                _ => WirInstr::I32Eq(left, right),
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
+                    WirInstr::I64Eq(left, right)
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
+                    WirInstr::I32Eq(left, right)
+                }
             },
             NirBinaryOp::NotEq => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Ne(left, right),
                 PrimitiveKind::F32 => WirInstr::F32Ne(left, right),
-                k if k.is_i64() => WirInstr::I64Ne(left, right),
-                _ => WirInstr::I32Ne(left, right),
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
+                    WirInstr::I64Ne(left, right)
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
+                    WirInstr::I32Ne(left, right)
+                }
             },
             NirBinaryOp::Lt => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Lt(left, right),
@@ -189,7 +230,7 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I64Unsigned => WirInstr::I64LtU(left, right),
                 PrimitiveKind::I64Signed => WirInstr::I64LtS(left, right),
                 PrimitiveKind::I32Unsigned => WirInstr::I32LtU(left, right),
-                _ => WirInstr::I32LtS(left, right),
+                PrimitiveKind::I32Signed => WirInstr::I32LtS(left, right),
             },
             NirBinaryOp::LtEq => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Le(left, right),
@@ -197,7 +238,7 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I64Unsigned => WirInstr::I64LeU(left, right),
                 PrimitiveKind::I64Signed => WirInstr::I64LeS(left, right),
                 PrimitiveKind::I32Unsigned => WirInstr::I32LeU(left, right),
-                _ => WirInstr::I32LeS(left, right),
+                PrimitiveKind::I32Signed => WirInstr::I32LeS(left, right),
             },
             NirBinaryOp::Gt => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Gt(left, right),
@@ -205,7 +246,7 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I64Unsigned => WirInstr::I64GtU(left, right),
                 PrimitiveKind::I64Signed => WirInstr::I64GtS(left, right),
                 PrimitiveKind::I32Unsigned => WirInstr::I32GtU(left, right),
-                _ => WirInstr::I32GtS(left, right),
+                PrimitiveKind::I32Signed => WirInstr::I32GtS(left, right),
             },
             NirBinaryOp::GtEq => match kind {
                 PrimitiveKind::F64 => WirInstr::F64Ge(left, right),
@@ -213,44 +254,63 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I64Unsigned => WirInstr::I64GeU(left, right),
                 PrimitiveKind::I64Signed => WirInstr::I64GeS(left, right),
                 PrimitiveKind::I32Unsigned => WirInstr::I32GeU(left, right),
-                _ => WirInstr::I32GeS(left, right),
+                PrimitiveKind::I32Signed => WirInstr::I32GeS(left, right),
             },
-            NirBinaryOp::And | NirBinaryOp::BitAnd => {
-                if kind.is_i64() {
+            NirBinaryOp::And | NirBinaryOp::BitAnd => match kind {
+                PrimitiveKind::F32 | PrimitiveKind::F64 => {
+                    panic!("[WIR] `&` has no float lowering")
+                }
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
                     WirInstr::I64And(left, right)
-                } else {
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32And(left, right)
                 }
-            }
-            NirBinaryOp::Or | NirBinaryOp::BitOr => {
-                if kind.is_i64() {
+            },
+            NirBinaryOp::Or | NirBinaryOp::BitOr => match kind {
+                PrimitiveKind::F32 | PrimitiveKind::F64 => {
+                    panic!("[WIR] `|` has no float lowering")
+                }
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
                     WirInstr::I64Or(left, right)
-                } else {
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32Or(left, right)
                 }
-            }
-            NirBinaryOp::BitXor => {
-                if kind.is_i64() {
+            },
+            NirBinaryOp::BitXor => match kind {
+                PrimitiveKind::F32 | PrimitiveKind::F64 => {
+                    panic!("[WIR] `^` has no float lowering")
+                }
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
                     WirInstr::I64Xor(left, right)
-                } else {
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32Xor(left, right)
                 }
-            }
-            NirBinaryOp::Shl => {
-                if kind.is_i64() {
+            },
+            NirBinaryOp::Shl => match kind {
+                PrimitiveKind::F32 | PrimitiveKind::F64 => {
+                    panic!("[WIR] `<<` has no float lowering")
+                }
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
                     WirInstr::I64Shl(left, right)
-                } else {
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32Shl(left, right)
                 }
-            }
+            },
             NirBinaryOp::Shr => match kind {
+                PrimitiveKind::F32 | PrimitiveKind::F64 => {
+                    panic!("[WIR] `>>` has no float lowering")
+                }
                 PrimitiveKind::I64Unsigned => WirInstr::I64ShrU(left, right),
                 PrimitiveKind::I64Signed => WirInstr::I64ShrS(left, right),
-                k if k.is_unsigned() => WirInstr::I32ShrU(left, right),
-                _ => WirInstr::I32ShrS(left, right),
+                PrimitiveKind::I32Unsigned => WirInstr::I32ShrU(left, right),
+                PrimitiveKind::I32Signed => WirInstr::I32ShrS(left, right),
             },
-            NirBinaryOp::RefEq => WirInstr::RefEq(left, right),
-            NirBinaryOp::RefNotEq => WirInstr::I32Eqz(Box::new(WirInstr::RefEq(left, right))),
+            // Returned above, before the operand kind is classified.
+            NirBinaryOp::RefEq | NirBinaryOp::RefNotEq => unreachable!(),
         }
     }
 
@@ -261,23 +321,30 @@ impl FunctionTranslator<'_, '_> {
         operand: Box<WirInstr>,
         operand_type_id: TypeId,
     ) -> WirInstr {
-        let kind = PrimitiveKind::from_type_id(self.type_table, operand_type_id);
-
         match op {
-            NirUnaryOp::Neg => match kind {
+            NirUnaryOp::Neg => match self.scalar_kind(operand_type_id, op) {
                 PrimitiveKind::F64 => WirInstr::F64Neg(operand),
                 PrimitiveKind::F32 => WirInstr::F32Neg(operand),
-                k if k.is_i64() => WirInstr::I64Sub(Box::new(WirInstr::I64Const(0)), operand),
-                _ => WirInstr::I32Sub(Box::new(WirInstr::I32Const(0)), operand),
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
+                    WirInstr::I64Sub(Box::new(WirInstr::I64Const(0)), operand)
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
+                    WirInstr::I32Sub(Box::new(WirInstr::I32Const(0)), operand)
+                }
             },
+            // `!` is logical negation on `bool`, which is already i32-shaped.
             NirUnaryOp::Not => WirInstr::I32Eqz(operand),
-            NirUnaryOp::BitNot => {
-                if kind.is_i64() {
+            NirUnaryOp::BitNot => match self.scalar_kind(operand_type_id, op) {
+                PrimitiveKind::F32 | PrimitiveKind::F64 => {
+                    panic!("[WIR] `~` has no float lowering")
+                }
+                PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
                     WirInstr::I64Xor(operand, Box::new(WirInstr::I64Const(-1)))
-                } else {
+                }
+                PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32Xor(operand, Box::new(WirInstr::I32Const(-1)))
                 }
-            }
+            },
             // Ref/MutRef/Deref handled above in translate_expr
             NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref => {
                 WirInstr::Seq(vec![*operand])
@@ -297,7 +364,18 @@ impl FunctionTranslator<'_, '_> {
             PrimitiveType::U16 => {
                 WirInstr::I32And(Box::new(instr), Box::new(WirInstr::I32Const(0xFFFF)))
             }
-            _ => instr,
+            // At or above i32 width: nothing to mask off.
+            PrimitiveType::I32
+            | PrimitiveType::U32
+            | PrimitiveType::I64
+            | PrimitiveType::U64
+            | PrimitiveType::I128
+            | PrimitiveType::U128
+            | PrimitiveType::F32
+            | PrimitiveType::F64
+            | PrimitiveType::V128
+            | PrimitiveType::Bool
+            | PrimitiveType::Char => instr,
         }
     }
 
@@ -536,12 +614,7 @@ impl FunctionTranslator<'_, '_> {
         let arr = self.translate_operand(array_op);
         let idx = self.translate_operand(index_op);
 
-        // Unwrap reference types
-        let array_type_id = self.operand_type_id(array_op);
-        let base_type_id = match self.type_table.get(array_type_id) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => array_type_id,
-        };
+        let base_type_id = self.type_table.peel_refs(self.operand_type_id(array_op));
 
         if let Some(element_type_id) = self.type_table.as_list(base_type_id) {
             self.build_list_get(arr, idx, base_type_id, element_type_id)
@@ -658,11 +731,7 @@ impl FunctionTranslator<'_, '_> {
         let arr = self.translate_operand(array_op);
         let idx = self.translate_operand(index_op);
 
-        let array_type_id = self.operand_type_id(array_op);
-        let base_type_id = match self.type_table.get(array_type_id) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => array_type_id,
-        };
+        let base_type_id = self.type_table.peel_refs(self.operand_type_id(array_op));
 
         if let Some(element_type_id) = self.type_table.as_list(base_type_id) {
             let list_struct_wir = self.ctx.type_id_to_wir_type(self.type_table, base_type_id);

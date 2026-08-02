@@ -1322,7 +1322,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // An unannotated closure argument infers its parameter types from
             // this; without it the closure's functor is generated with
             // `unknown` params and dropped before codegen.
-            self.record_call_param_types(call_id, param_types);
+            self.record_call_param_types(call_id, param_types.clone());
             self.sem.types.static_method_dispatch.insert(
                 call_id,
                 super::sem::types::StaticMethodDispatch {
@@ -1330,6 +1330,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_is_mut,
                     type_args,
                     param_defaults,
+                    param_types,
                     self_in_args: true,
                 },
             );
@@ -2229,6 +2230,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut,
                 type_args: method_type_args,
                 param_defaults: static_method_defaults,
+                param_types: param_types.clone(),
                 self_in_args: false,
             },
         );
@@ -2312,6 +2314,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut: Vec::new(),
                 type_args: method_type_args.to_vec(),
                 param_defaults: static_method_defaults.to_vec(),
+                param_types: Vec::new(),
                 self_in_args: false,
             },
         );
@@ -3784,6 +3787,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))
             .map(|(_, is_mut)| is_mut)
             .collect();
+        let param_types =
+            self.lookup_static_method_param_types_keyed(&actual_struct_name, method_name, None);
         self.sem.types.static_method_dispatch.insert(
             call_id,
             super::sem::types::StaticMethodDispatch {
@@ -3791,6 +3796,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut,
                 type_args: vec![],
                 param_defaults,
+                param_types,
                 self_in_args: false,
             },
         );

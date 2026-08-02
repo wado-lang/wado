@@ -159,6 +159,8 @@ A body-less marker is itself an `Item::Impl` and lands in `TraitEnv`'s impl inde
 
 Each helper module calls back into `translate.rs` for sub-expression translation; cross-module access uses `pub(super)` on shared fields.
 
+Type lookup has two contracts. During registration a type may name one a later phase defines, so `type_id_to_wir_type_pending` yields a placeholder that the final fixup pass re-resolves. Everywhere after registration, `type_id_to_wir_type` treats a miss as a bug and panics: registration and lookup derive their keys through the same `name::wir_*_key` helpers, so they cannot drift apart without one of them being wrong.
+
 CM canonical operations (stream / future read + write, waitable-set, error-context) carry no `wir_build` code: they are lowered entirely in the synthesis phase (`synthesis/cm_binding/`) into ordinary TIR that translates like any other function.
 
 ## WIR Optimize

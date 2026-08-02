@@ -658,11 +658,12 @@ impl ClosureLowerer {
             body_locals.sort_by_key(|(idx, _)| *idx);
             for (idx, type_id) in &body_locals {
                 if *idx >= param_count {
-                    // Pad sparse indices with placeholders so the slot the
-                    // body actually uses lands at the right index.
+                    // Pad sparse indices so the slot the body uses lands at the
+                    // right index. Padding is never read or written, hence
+                    // `Unit` — `Unknown` would say inference failed.
                     while locals.len() <= *idx as usize {
                         let placeholder_idx = locals.len() as u32;
-                        locals.push(TirLocal::synth(placeholder_idx, TypeTable::UNKNOWN, false));
+                        locals.push(TirLocal::synth(placeholder_idx, TypeTable::UNIT, false));
                     }
                     locals[*idx as usize] = TirLocal::synth(*idx, *type_id, false);
                 }

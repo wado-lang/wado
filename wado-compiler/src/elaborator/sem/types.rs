@@ -691,6 +691,10 @@ pub(crate) struct StaticMethodDispatch {
     /// used by reify to pad trailing arguments the call omitted. Empty when
     /// the method declares no defaults (or for variant / builtin dispatches).
     pub(crate) param_defaults: Vec<(String, Option<crate::ast::Expr>)>,
+    /// The callee's resolved parameter types in declaration order, which reify
+    /// needs to type a default it materializes — a default on a trait method
+    /// has no body for annotate to walk, so nothing recorded its type.
+    pub(crate) param_types: Vec<crate::tir::TypeId>,
     /// The receiver is spelled as the first call-site argument — the
     /// trait-qualified (UFCS) shape `Trait::method(recv, …)` — so the
     /// arguments align with the callee's *full* parameter list including

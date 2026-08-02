@@ -1801,6 +1801,59 @@ impl TypeTable {
             .or_else(|| self.find_resource_type(name, module_source))
     }
 
+    /// Find any decl-backed named type scoped to a single CM *interface*,
+    /// addressed by the module it maps to (e.g. `sockets/ip_name_lookup.wado`).
+    ///
+    /// [`Self::find_named_type_by_cm_package`] scopes to the package, which
+    /// holds several interfaces — two can declare the same name, and that scan
+    /// returns whichever registered first.
+    #[must_use]
+    pub fn find_named_type_by_module_name(&self, name: &str, module_name: &str) -> Option<TypeId> {
+        for (type_id, resolved) in self.all_types() {
+            let (n, ms) = match resolved {
+                ResolvedType::Resource {
+                    name: n,
+                    module_source,
+                }
+                | ResolvedType::Enum {
+                    name: n,
+                    module_source,
+                }
+                | ResolvedType::Variant {
+                    name: n,
+                    module_source,
+                }
+                | ResolvedType::Struct {
+                    decl_name: n,
+                    module_source,
+                    ..
+                }
+                | ResolvedType::Flags {
+                    name: n,
+                    module_source,
+                }
+                | ResolvedType::Newtype {
+                    name: n,
+                    module_source,
+                    ..
+                } => (n, module_source),
+                _ => continue,
+            };
+            if n != name {
+                continue;
+            }
+            let matches = match ms {
+                ModuleSource::Wasi { interface } => &**interface == module_name,
+                ModuleSource::Core { name: cm_name } => &**cm_name == module_name,
+                _ => false,
+            };
+            if matches {
+                return Some(type_id);
+            }
+        }
+        None
+    }
+
     /// Find any decl-backed named type (resource, enum, variant, struct,
     /// flags, or newtype) scoped to a CM package.
     ///

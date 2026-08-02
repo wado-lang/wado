@@ -1,0 +1,21 @@
+// Two interfaces in one CM package can declare the same type name:
+// `wasi:sockets/types` and `wasi:sockets/ip-name-lookup` both declare
+// `ErrorCode`. Resolving a CM named type by package alone picked whichever
+// registered first, so the lift synthesized for `resolve_addresses` built the
+// `ip-name-lookup` `ErrorCode` but stored it into a `Result` typed with the
+// `types` one — invalid Wasm, reported as `expected (ref $type), found
+// (ref $type)` because the two spell themselves identically.
+use { println, Stdout } from "core:cli";
+use { IpNameLookup } from "wasi:sockets";
+
+export fn run() with Stdout, IpNameLookup {
+    // A syntactically invalid host name fails without touching the network, so
+    // the outcome is the same offline and online.
+    match IpNameLookup::resolve_addresses("").wait() {
+        Ok(_) => { println("resolved"); }
+        Err(_) => { println("rejected"); }
+    }
+}
+
+__DATA__
+{"stdout": "rejected\n"}

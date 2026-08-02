@@ -289,26 +289,34 @@ pub fn cm_type_to_type_id(
             // Unit type written as a named type "()"
             "()" => TypeTable::UNIT,
             // Resource/enum/variant types - look up the already-resolved TypeId.
-            // Lookups are strictly scoped by `(name, wasi_package)`. If the
-            // primary scope misses, we consult the registry for the canonical
-            // owning package and retry — never a bare-name scan, which would
-            // conflate same-named types from distinct interfaces (e.g.
-            // `wasi:filesystem/ErrorCode` vs. `wasi:http/ErrorCode`).
-            _ => type_table
-                .find_named_type_by_cm_package(named.name.as_str(), wasi_package)
-                .or_else(|| {
-                    canonical_wasi_package(registry, named.name.as_str()).and_then(|pkg| {
-                        type_table.find_named_type_by_cm_package(named.name.as_str(), pkg)
-                    })
-                })
-                // Component-imported (and `--lib`) types the cm-package prefix
-                // lookup can't match: resolve via the FQ -> ModuleSource provenance.
+            //
+            // The type's own `source_interface` leads: a package holds several
+            // interfaces and two can declare the same name (`wasi:sockets/types`
+            // and `wasi:sockets/ip-name-lookup` both declare `ErrorCode`), so
+            // scoping by package alone returns whichever registered first. The
+            // package lookups behind it cover a type with no recorded interface;
+            // neither is ever a bare-name scan.
+            _ => named
+                .source_interface
+                .as_deref()
+                .and_then(|fq| registry.cm_interface_module_source_of(fq))
+                .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
+                // A stdlib WASI interface has no recorded `ModuleSource`, so
+                // derive the module the FQ maps to and match it exactly.
                 .or_else(|| {
                     named
                         .source_interface
                         .as_deref()
-                        .and_then(|fq| registry.cm_interface_module_source_of(fq))
-                        .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
+                        .and_then(cm_interface_module_name)
+                        .and_then(|m| type_table.find_named_type_by_module_name(&named.name, &m))
+                })
+                .or_else(|| {
+                    type_table.find_named_type_by_cm_package(named.name.as_str(), wasi_package)
+                })
+                .or_else(|| {
+                    canonical_wasi_package(registry, named.name.as_str()).and_then(|pkg| {
+                        type_table.find_named_type_by_cm_package(named.name.as_str(), pkg)
+                    })
                 })
                 // A lib-local type defined in a submodule: the interface FQ maps
                 // to the entry module, so resolve via the type's own recorded
@@ -462,15 +470,32 @@ pub(super) fn module_source_for_cm_interface(
         return interner.wasi(&wasi_interface_suffix(source_interface));
     }
     if let Some(rest) = source_interface.strip_prefix("core:") {
-        let without_version = rest.split('@').next().unwrap_or(rest);
-        let name = if let Some((pkg, iface)) = without_version.split_once('/') {
-            format!("{pkg}/{}.wado", iface.replace('-', "_"))
-        } else {
-            format!("{without_version}.wado")
-        };
-        return interner.core(&name);
+        return interner.core(&interface_module_name(rest));
     }
     ModuleSource::default()
+}
+
+/// The module name a CM interface FQ maps to (`wasi:sockets/ip-name-lookup@0.3.0`
+/// → `sockets/ip_name_lookup.wado`), or `None` for an FQ in neither namespace.
+pub(super) fn cm_interface_module_name(source_interface: &str) -> Option<String> {
+    if source_interface.starts_with("wasi:") {
+        return Some(wasi_interface_suffix(source_interface));
+    }
+    source_interface
+        .strip_prefix("core:")
+        .map(interface_module_name)
+}
+
+/// The `{package}/{interface}.wado` spelling of a version-stripped interface path.
+fn interface_module_name(without_namespace: &str) -> String {
+    let without_version = without_namespace
+        .split('@')
+        .next()
+        .unwrap_or(without_namespace);
+    match without_version.split_once('/') {
+        Some((pkg, iface)) => format!("{pkg}/{}.wado", iface.replace('-', "_")),
+        None => format!("{without_version}.wado"),
+    }
 }
 
 /// Create an i32 addition expression.
