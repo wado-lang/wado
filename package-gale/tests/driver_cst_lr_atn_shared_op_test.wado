@@ -1,0 +1,59 @@
+use g from "./grammars/lr_atn_shared_op.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_atn_shared_op" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// Each operator alone: the `'not'` is absent, so the loop entry sees the
+// operator's own second token and the alternatives never compete.
+test "tree: bare in" {
+    assert_tree(&"a in b ;", &"(stat (expr (expr a) in (expr b)) ;)");
+}
+
+test "tree: bare like" {
+    assert_tree(&"a like b ;", &"(stat (expr (expr a) like (expr b)) ;)");
+}
+
+// Both operators now open on `'not'`; only the token after it tells them
+// apart.
+test "tree: not in" {
+    assert_tree(&"a not in b ;", &"(stat (expr (expr a) not in (expr b)) ;)");
+}
+
+test "tree: not like" {
+    assert_tree(&"a not like b ;", &"(stat (expr (expr a) not like (expr b)) ;)");
+}
+
+// The alternatives whose shape routes the rule to the simulator in the first
+// place must keep working.
+test "tree: and operator" {
+    assert_tree(&"a and b ;", &"(stat (expr (expr a) and (expr b)) ;)");
+}
+
+test "tree: between atom keeps its delimiter" {
+    assert_tree(&"between a and b ;", &"(stat (expr between (expr a) and (expr b)) ;)");
+}
+
+// Precedence still comes from alternative order, so `and` — declared first —
+// binds tighter than `like` and takes `b` as its left operand.
+test "tree: and binds tighter than not like" {
+    assert_tree(
+        &"a not like b and c ;",
+        &"(stat (expr (expr a) not like (expr (expr b) and (expr c))) ;)",
+    );
+}
+
+// The two shared-token operators against each other: `in` is declared before
+// `like`, so it binds tighter and `not like` takes the whole `a not in b`.
+test "tree: not in binds tighter than not like" {
+    assert_tree(
+        &"a not in b not like c ;",
+        &"(stat (expr (expr (expr a) not in (expr b)) not like (expr c)) ;)",
+    );
+}

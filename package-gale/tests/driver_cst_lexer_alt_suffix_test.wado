@@ -1,0 +1,40 @@
+//! A lexer alternation followed by a suffix must take the arm that lets the
+//! whole rule match — ANTLR4 simulates the rule, so the choice is not
+//! first-match and not simply longest-arm either.
+
+use g from "./grammars/lexer_alt_suffix_longest.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_alt_suffix" },
+    };
+use { TK_EOF } from "./grammars/lexer_alt_suffix_longest.g4";
+
+fn dump(input: &String) -> String {
+    return g::to_lexer_string(&g::tokenize(input), TK_EOF);
+}
+
+fn assert_tokens(input: &String, expected: &String) {
+    let actual = dump(input);
+    assert actual == *expected, `\ninput: ${*input}\nactual:\n${actual}\nexpected:\n${*expected}`;
+}
+
+// The first arm matches on its own but strands the suffix; only `'ab'` leaves
+// a `bc` behind.
+test "suffix decides the arm: long arm wins" {
+    assert_tokens(&"abbc", &"[@0,0:3='abbc',<1>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n");
+}
+
+// The same rule on input the short arm fits.
+test "suffix decides the arm: short arm wins" {
+    assert_tokens(&"abc", &"[@0,0:2='abc',<1>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+}
+
+// Preferring the longest arm unconditionally would strand `yz` here.
+test "short arm is kept when the long arm strands the suffix" {
+    assert_tokens(&"xyz", &"[@0,0:2='xyz',<2>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+}
+
+// Both arms admit the suffix; maximal munch is over the whole rule, so the
+// short arm wins by reaching further with `'qrs'`.
+test "the arm reaching furthest overall wins, not the longest arm" {
+    assert_tokens(&"pqrs", &"[@0,0:3='pqrs',<3>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n");
+}

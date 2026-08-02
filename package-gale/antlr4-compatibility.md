@@ -356,6 +356,19 @@ alts share a prefix and tie on static length (`'mut'? IDENT` vs `path '('
 site is a codegen-time panic; the fix is to file an issue, never to add
 backtracking.
 
+Emit reaches that tournament by two routes. The SLL prediction tree may
+give up (`Ambiguous`), or it may resolve the decision into a token cascade
+that turns out not to claim the lookahead — the walk approximates, so a
+cascade can be narrower than the alts really admit. A cascade therefore
+carries the tournament as its `else`: the tournament is the decision's
+floor, not a path the tree may prune away. The `else` is dropped only where
+the cascade is provably complete, or where no alt has a full scan and there
+is no tournament to fall back to.
+
+Where nothing wins that tournament the emit leaves the `else` instead of
+committing, so the rule's own error path still names the rule rather than one
+alternative's next token.
+
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
 greedy `+`/`*` inner can also match the suffix's first char (`'a'
@@ -364,6 +377,25 @@ once to the latest legal suffix start. This narrow lookahead-aware path
 fires only when inner and suffix are all single-char-consuming; other
 shapes fall through to the plain greedy loop (sound because the inner
 cannot consume the suffix's first char there).
+
+The first-character dispatch that picks which rules to try is a filter, not a
+decision: a rule admitted by its first character can still fail on the rest of
+its body, so a branch has to keep a candidate that always matches. A catch-all
+(`X : .`) is therefore carried by every branch except one whose rules each
+match on their own first character — those cannot fall through, and a
+same-length tie there goes to the earlier rule anyway. Fixture:
+`lexer_catch_all_reach.g4`.
+
+An alternation is decided the same way, and by what follows it. In tail
+position the arms compete on their own length, since the arm's length is the
+rule's. With a suffix after it neither first-match nor longest-arm is right —
+`('a' | 'ab') 'bc'` on `abbc` needs the second arm, `('x' | 'xy') 'yz'` on
+`xyz` needs the first — so each arm is scanned from the same start, its suffix
+peeked without consuming, and the arm whose arm-plus-suffix reaches furthest
+wins, ties to the first. Scoring on the suffix rather than the arm is what
+makes `('p' | 'pq') ('qrs' | 'r')` take the short arm on `pqrs`. Same window as
+the repeat path: outside it the alternation keeps the first-match emit.
+Fixture: `lexer_alt_suffix_longest.g4`.
 
 ### Static LL prediction — the runtime FOLLOW gate
 
@@ -601,11 +633,18 @@ or reject valid input silently. The set-complement `~X`, the `.`-led and
 `~X`-led left-recursive suffixes, and non-greedy `??` inside a
 left-recursive rule are covered by fixtures (`lr_complement_op.g4`,
 `lr_wildcard_postfix.g4`, `lr_dangling_else.g4`,
-`lr_suffix_non_greedy_opt.g4`); a few
-runtime-precision shapes (a shared delimiter past a nullable continuation,
-two enter edges sharing a first lookahead token) fall back to the complete
-simulator rather than guess. The mechanism and the full edge list live with
-the ATN runtime module.
+`lr_suffix_non_greedy_opt.g4`); a shared delimiter past a nullable
+continuation falls back to the complete simulator rather than guess. The
+mechanism and the full edge list live with the ATN runtime module.
+
+Two enter edges sharing a first lookahead token are settled without it. The
+loop decision tests one token against each continuation's FIRST set and takes
+the first edge admitting it, so it reports such alternatives in grammar order
+rather than by which one matches — strictly weaker than the second-token
+sub-dispatch the static LR path applies to the same question. The simulator is
+there for the enter-or-exit verdict, which needs full context; which member of
+the group to enter does not, and is re-taken from the scan twins by longest
+match, ties to the first alternative. Fixture: `lr_atn_shared_op.g4`.
 
 Which gaps stay static is a cost decision as much as a correctness one — one
 prediction is a full closure over the grammar; see [`perf.md`](./perf.md).

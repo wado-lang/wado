@@ -1,0 +1,47 @@
+//! The tournament backing an incomplete cascade has to fire where the cascade
+//! only looks complete, and has to stay out of the way when nothing matches.
+
+use g from "./grammars/ll_cascade_gaps.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_cascade_gaps" },
+    };
+
+fn assert_tree(entry: fn(&String, i32) -> g::ParseResult, input: &String, expected: &String) {
+    let result = entry(input, i32::MAX);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// `X` alone is alt 0 with `Y?` empty — a token the FIRST-derived cascade never
+// names, so only the tournament can reach it.
+test "tree: nullable remainder still parses" {
+    assert_tree(g::parse_n, &"X", &"(n X)");
+}
+
+test "tree: nullable remainder with its optional present" {
+    assert_tree(g::parse_n, &"X Y", &"(n X Y)");
+}
+
+test "tree: the competing alt is unaffected" {
+    assert_tree(g::parse_n, &"X Z", &"(n X Z)");
+}
+
+// The repeat alt the cascade cannot express.
+test "tree: repeat alt reached through the tournament" {
+    assert_tree(g::parse_m, &"X W W V", &"(m X W W V)");
+}
+
+test "tree: the competing two-token alt" {
+    assert_tree(g::parse_m, &"X W U", &"(m X W U)");
+}
+
+// Nothing the grammar accepts. The rule's own error path names the rule; a
+// fallback that committed to an alt would report that alt's next token from
+// deeper in the input instead.
+test "no alt matches: the rule's error path reports it" {
+    let result = g::parse_m(&"X W Q", i32::MAX);
+    assert !result.ok(), "expected a diagnostic";
+    let d = &result.diagnostics[0];
+    assert d.message == "expected m", `unexpected message: ${d.message}`;
+}

@@ -1,0 +1,44 @@
+//! The keyword classifier only runs on a span a carrier actually matched, so a
+//! carrier that cannot match the keyword's whole text does not make it
+//! reachable.
+
+use g from "./grammars/lexer_keyword_carrier_len.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_keyword_carrier" },
+    };
+use { TK_EOF } from "./grammars/lexer_keyword_carrier_len.g4";
+
+fn assert_tokens(input: &String, expected: &String) {
+    let actual = g::to_lexer_string(&g::tokenize(input), TK_EOF);
+    assert actual == *expected, `\ninput: ${*input}\nactual:\n${actual}\nexpected:\n${*expected}`;
+}
+
+// `D`'s only carrier is the one-char catch-all, so the shortcut cannot reach
+// it and `D` has to keep its own dispatch path.
+test "keyword whose only carrier is shorter than it still matches" {
+    assert_tokens(&"h2", &"[@0,0:1='h2',<2>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n");
+}
+
+// `MULTI` covers `g` and reaches three chars, but through different
+// alternatives — it can never produce `gn` either.
+test "carrier that covers and reaches through different alternatives" {
+    assert_tokens(&"gn", &"[@0,0:1='gn',<4>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n");
+}
+
+// `WORD` can match the whole `if`, so the shortcut is sound and still used.
+test "keyword whose carrier can match it is still reclassified" {
+    assert_tokens(&"if", &"[@0,0:1='if',<3>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n");
+}
+
+test "the carrier itself is unaffected" {
+    assert_tokens(&"xyz", &"[@0,0:2='xyz',<5>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+}
+
+// A bare `g` completes no keyword, so the carrier's own one-char arm takes it.
+test "the multi-alt carrier still matches through its short arm" {
+    assert_tokens(&"g", &"[@0,0:0='g',<6>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
+}
+
+test "an ordinary dispatched rule is unaffected" {
+    assert_tokens(&"a1", &"[@0,0:1='a1',<1>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n");
+}
