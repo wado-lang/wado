@@ -1,5 +1,8 @@
 #![generated(by = "gale", sources = ["tests/grammars/lexer_catch_all_reach.g4"])]
 
+// Grammar metadata from source .g4 prequels:
+//   option language = Wado
+
 //! Core lexing vocabulary shared by every generated parser and by Gale's
 //! own front end: source spans, lazy token-text slices, tokens, and the
 //! parse-error type. Prelude-only and self-contained so it can be both
@@ -1403,6 +1406,7 @@ pub enum TokenKind {
     A,
     B,
     D,
+    K,
     C,
     Eof,
     Error,
@@ -1411,9 +1415,10 @@ pub enum TokenKind {
 pub global TK_A: i32 = 0;
 pub global TK_B: i32 = 1;
 pub global TK_D: i32 = 2;
-pub global TK_C: i32 = 3;
-pub global TK_EOF: i32 = 4;
-pub global TK_ERROR: i32 = 5;
+pub global TK_K: i32 = 3;
+pub global TK_C: i32 = 4;
+pub global TK_EOF: i32 = 5;
+pub global TK_ERROR: i32 = 6;
 
 struct Lexer {
     chars: List<char>,
@@ -1463,6 +1468,31 @@ fn try_D(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn try_K(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    let alts_saved_0 = pos;
+    let mut alts_ok_0 = false;
+    alts_0_0: {
+        pos = alts_saved_0;
+        if pos >= chars.len() { break alts_0_0; }
+        if !((chars[pos] matches { 'k' })) { break alts_0_0; }
+        pos += 1;
+        if !( false ) { break alts_0_0; }
+        alts_ok_0 = true;
+    }
+    if !alts_ok_0 {
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= chars.len() { break alts_0_1; }
+            if !((chars[pos] matches { 'l' })) { break alts_0_1; }
+            pos += 1;
+            alts_ok_0 = true;
+        }
+    }
+    if !alts_ok_0 { return -1; }
+    return pos;
+}
+
 fn try_C(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
@@ -1486,6 +1516,11 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { 'h' } {
             end = try_D(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_D; }
+            end = try_C(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_C; }
+        } else if first_char matches { 'k' | 'l' } {
+            end = try_K(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_K; }
             end = try_C(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_C; }
         } else if first_char matches { 'a'..='f' } {
@@ -1524,6 +1559,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_A => "A",
         TK_B => "B",
         TK_D => "D",
+        TK_K => "K",
         TK_C => "C",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
@@ -1562,12 +1598,96 @@ struct Parser {
     max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
+    output: String,
 }
 
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], output: "" };
+    }
+
+    fn emit(&mut self, s: String) {
+        self.output.push_str(&s);
+    }
+
+    fn token_text(&self, i: i32) -> String {
+        return self.tokens.token_text(i);
+    }
+
+    fn token_kind(&self, i: i32) -> i32 {
+        return self.tokens.kind_at(i);
+    }
+
+    fn token_int(&self, i: i32) -> i32 {
+        let sp = self.tokens.span_at(i);
+        let mut acc: i32 = 0;
+        let mut neg = false;
+        let mut j = sp.start;
+        if j < sp.end && self.tokens.chars[j] == '-' {
+            neg = true;
+            j += 1;
+        }
+        while j < sp.end {
+            let c = self.tokens.chars[j];
+            if c >= '0' && c <= '9' {
+                acc = acc * 10 + (c as i32 - '0' as i32);
+            }
+            j += 1;
+        }
+        return if neg { -acc } else { acc };
+    }
+
+    fn token_line(&self, i: i32) -> i32 {
+        return line_col(self.tokens.chars, self.tokens.span_at(i).start).0;
+    }
+
+    fn token_col(&self, i: i32) -> i32 {
+        return line_col(self.tokens.chars, self.tokens.span_at(i).start).1;
+    }
+
+    fn token_start(&self, i: i32) -> i32 {
+        return self.tokens.starts[i];
+    }
+
+    fn la(&self, k: i32) -> i32 {
+        return self.peek_at(k - 1);
+    }
+
+    fn lt(&self, k: i32) -> i32 {
+        let idx = self.pos + k - 1;
+        if idx >= self.kinds.len() { return self.kinds.len() - 1; }
+        if idx < 0 { return 0; }
+        return idx;
+    }
+
+    fn text_span(&self, start: i32, end: i32) -> String {
+        let mut out = String::new();
+        let hi = if end < self.tokens.chars.len() { end } else { self.tokens.chars.len() };
+        for let mut i = start; i < hi; i += 1 {
+            out.push(self.tokens.chars[i]);
+        }
+        return out;
+    }
+
+    fn text_between(&self, lo: i32, hi: i32) -> String {
+        return self.tokens.rule_text(lo, hi);
+    }
+
+    fn rule_text(&self, start_tok: i32) -> String {
+        return self.tokens.rule_text(start_tok, self.pos - 1);
+    }
+
+    fn input_text(&self) -> String {
+        return self.text_span(0, self.tokens.chars.len());
+    }
+
+    fn rule_string_tree(&self) -> String {
+        return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    }
+
+    fn rule_string_tree_final(&self) -> String {
+        return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1790,17 +1910,27 @@ impl Parser {
     }
 }
 
+fn _ctx_token_names() -> List<String> {
+    let mut v: List<String> = List::with_capacity(7);
+    for let mut k = 0; k < 7; k += 1 {
+        v.push(token_kind_name(k));
+    }
+    return v;
+}
+
+global CTX_TOKEN_NAMES: List<String> = _ctx_token_names();
+
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(6);
-    for let mut k = 0; k < 6; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(7);
+    for let mut k = 0; k < 7; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(6);
-    for let mut k = 0; k < 6; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(7);
+    for let mut k = 0; k < 7; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;

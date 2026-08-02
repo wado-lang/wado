@@ -1747,10 +1747,6 @@ fn gen_lexer_repeat_lookahead_aware(
     }
 }
 
-/// Emit a save / try-suffix / restore block that records the current
-/// position in `accept_var` iff every suffix element would match
-/// starting here. Pos is restored unconditionally so the surrounding
-/// forward scan continues without committing the peeked suffix.
 /// Maximal-munch emit for an alternation that has a suffix after it.
 ///
 /// The arm matching first is not necessarily the one letting the rule match
@@ -1818,6 +1814,15 @@ fn gen_lexer_alts_lookahead_aware(
     w.end();
 }
 
+/// Emit a save / try-suffix / restore block that records a position in
+/// `accept_var` iff every suffix element would match starting here. Pos is
+/// restored unconditionally so the surrounding forward scan continues without
+/// committing the peeked suffix.
+///
+/// `record_end` picks which position is recorded: a repeat wants where the
+/// suffix would START, to resume its cursor there, while an alternation wants
+/// where it would END, because that is how far the whole rule reaches through
+/// this arm.
 fn gen_lexer_suffix_peek(
     w: &mut CodeWriter,
     suffix: &List<LexerElement>,
@@ -1835,9 +1840,6 @@ fn gen_lexer_suffix_peek(
     let label = `peek_${id}`;
     w.line(&`let ${save_var} = pos;`);
     w.line(&`let mut ${matched_var} = false;`);
-    // A repeat records where the suffix could START, to resume the cursor
-    // there; an alternation records where it would END, because that is what
-    // ranks its arms by how far the whole rule reaches.
     if record_end {
         w.line(&`let mut ${end_var}: i32 = -1;`);
     }
@@ -2285,21 +2287,29 @@ pub fn collect_keyword_rules(lexer_rules: &List<LexerRule>, grammar_opts: &List<
     return result;
 }
 
-/// An upper bound on the characters `rule` can match, or -1 when the shape is
-/// unbounded or not worth analysing. Only ever used to rule a carrier OUT, so
-/// -1 keeps a rule eligible.
+/// A length every alternative of `rule` is able to reach, or -1 when no
+/// alternative is bounded. The SHORTEST bounded alternative, not the longest:
+/// first-character coverage is tested against the rule's union of alternatives,
+/// so a carrier could otherwise clear both checks through two different
+/// alternatives — `WORD : [i-z] | 'abc'` covers `i` through one and reaches
+/// three chars through the other, while never producing a two-char span that
+/// starts with `i`. Requiring every alternative to reach the length makes the
+/// alternative that covers the first character reach it too.
+///
+/// Only ever used to rule a carrier OUT, so -1 keeps a rule eligible and an
+/// unbounded alternative imposes no constraint.
 fn lexer_rule_bounded_match_len(rule: &LexerRule) -> i32 {
-    let mut best = -1;
+    let mut shortest = -1;
     for let alt of &rule.body {
         let n = lexer_alt_bounded_len(alt);
         if n < 0 {
-            return -1;
+            continue;
         }
-        if n > best {
-            best = n;
+        if shortest < 0 || n < shortest {
+            shortest = n;
         }
     }
-    return best;
+    return shortest;
 }
 
 fn lexer_alt_bounded_len(alt: &LexerAlternative) -> i32 {
@@ -2664,12 +2674,18 @@ fn has_channel(rules: &List<LexerRule>) -> bool {
 /// fail, and no action or predicate can reject the match. Deliberately narrow
 /// — a `false` only costs the branch an extra catch-all call, while a wrong
 /// `true` loses the match entirely.
-fn lexer_rule_total_on_first_char(rule: &LexerRule) -> bool {
+fn lexer_rule_total_on_first_char(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
     if rule.body.is_empty() {
         return false;
     }
     for let alt of &rule.body {
         if !alt.actions.is_empty() || alt.elements.len() != 1 {
+            return false;
+        }
+        // A predicate anywhere the emit inlines below this element can reject
+        // the match, so the branch can still fall through: `('a' {p}? | 'b')`
+        // carries its predicate on the group's arm, not on this alt.
+        if lexer_alt_has_predicate_below(alt, all_rules) {
             return false;
         }
         if !lexer_element_can_consume_simple(&alt.elements[0]) {
@@ -2854,7 +2870,7 @@ fn build_rule_try_call(
         first_chars: chars,
         is_wildcard: is_wc,
         is_catch_all: catch_all,
-        total_on_first_char: lexer_rule_total_on_first_char(rule),
+        total_on_first_char: lexer_rule_total_on_first_char(rule, all_rules),
     };
 }
 

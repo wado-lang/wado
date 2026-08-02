@@ -7125,8 +7125,8 @@ fn _parse_delegate_grammar__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         if _kind_set_1(p.peek_kind()) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_1 = _parse_delegate_grammar__inner_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_0 = _parse_delegate_grammar__inner_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_delegate_grammar__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            let _sd_p_0 = _parse_delegate_grammar__inner_scan_0(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -7486,8 +7486,8 @@ fn _parse_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_rule_spec__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_rule_spec__inner_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_rule_spec__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_rule_spec__inner_scan_1(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -7498,13 +7498,15 @@ fn _parse_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                     _sd_best_p = _sd_p_1;
                     _sd_best_i = 1;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_rule_spec__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_rule_spec__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_rule_spec__inner_alt_1(p, follow);
+                    }
                     return _parse_rule_spec__inner_alt_1(p, follow);
                 }
-                return _parse_rule_spec__inner_alt_1(p, follow);
             }
         } else if p.peek_kind() == TK_TOKEN_REF {
             return _parse_rule_spec__inner_alt_1(p, follow);
@@ -8283,8 +8285,8 @@ fn _parse_lexer_command__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if _kind_set_20(p.peek_kind()) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_1 = _parse_lexer_command__inner_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_0 = _parse_lexer_command__inner_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_lexer_command__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            let _sd_p_0 = _parse_lexer_command__inner_scan_0(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -8553,8 +8555,8 @@ fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         if _kind_set_1(p.peek_kind()) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_element__inner_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = _parse_element__inner_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_element__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            let _sd_p_1 = _parse_element__inner_scan_1(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -8719,8 +8721,8 @@ fn _parse_predicate_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         if _kind_set_1(p.peek_kind()) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_predicate_option__inner_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = _parse_predicate_option__inner_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_predicate_option__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            let _sd_p_1 = _parse_predicate_option__inner_scan_1(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -8901,8 +8903,8 @@ fn _parse_lexer_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_lexer_atom__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_lexer_atom__inner_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_lexer_atom__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_lexer_atom__inner_scan_1(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -8913,13 +8915,15 @@ fn _parse_lexer_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     _sd_best_p = _sd_p_1;
                     _sd_best_i = 1;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_lexer_atom__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_lexer_atom__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_lexer_atom__inner_alt_1(p, follow);
+                    }
                     return _parse_lexer_atom__inner_alt_1(p, follow);
                 }
-                return _parse_lexer_atom__inner_alt_1(p, follow);
             }
         } else if p.peek_kind() == TK_TOKEN_REF {
             return _parse_lexer_atom__inner_alt_1(p, follow);
@@ -9149,8 +9153,8 @@ fn _parse_set_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         if p.peek_kind() == TK_STRING_LITERAL {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_1 = _parse_set_element__inner_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_set_element__inner_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_set_element__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            let _sd_p_2 = _parse_set_element__inner_scan_2(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -9453,8 +9457,8 @@ fn _parse_element_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         if _kind_set_1(p.peek_kind()) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_element_option__inner_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = _parse_element_option__inner_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_element_option__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            let _sd_p_1 = _parse_element_option__inner_scan_1(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {

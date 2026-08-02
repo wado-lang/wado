@@ -362,10 +362,17 @@ cascade that turns out not to claim the lookahead — the walk
 approximates, so a cascade can be narrower than the alts really admit. A
 cascade therefore carries the tournament as its `else`, which makes the
 tournament the decision's floor rather than a path the tree can prune
-away. The `else` is omitted where it would be dead: when an alt lacks a
-full scan (no tournament is available at all), and at a depth-0 node,
-whose branch tokens are the alts' exact FIRST at the element offset the
-node dispatches on. Only a deeper node can be missing a token.
+away. Where nothing wins that tournament the emit falls out of the `else`
+instead of committing, so the rule's own error path still names the rule
+rather than one alternative's next token.
+
+The `else` is omitted only where it would be dead: when an alt lacks a full
+scan (no tournament exists to fall back to), and at a depth-0 node whose
+branches already name every token its alts admit at the element offset it
+dispatches on. That second test needs FIRST to be exact, which it is only for
+a non-nullable remainder — an alt that can match empty from there also admits
+whatever follows the rule at the call site, so it keeps the fallback
+(`a : X Y? | X Z` on `X`).
 
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a

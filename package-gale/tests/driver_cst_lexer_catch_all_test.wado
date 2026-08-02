@@ -19,12 +19,12 @@ test "range branch: the rule wins when it matches" {
 
 // `e` enters `A`'s range branch and `A` then fails on the missing `1`.
 test "range branch: catch-all is reached when the rule fails" {
-    assert_tokens(&"e", &"[@0,0:0='e',<4>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
+    assert_tokens(&"e", &"[@0,0:0='e',<5>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
 }
 
 // A single-char branch is no different — `D` fails on the missing digit.
 test "single-char branch: catch-all is reached when the rule fails" {
-    assert_tokens(&"h", &"[@0,0:0='h',<4>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
+    assert_tokens(&"h", &"[@0,0:0='h',<5>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
 }
 
 test "single-char branch: the rule wins when it matches" {
@@ -39,5 +39,15 @@ test "single-char branch whose rule cannot fail" {
 
 // A char no branch claims already reached the catch-all through the fallback.
 test "fallback branch still reaches the catch-all" {
-    assert_tokens(&"z", &"[@0,0:0='z',<4>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
+    assert_tokens(&"z", &"[@0,0:0='z',<5>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
+}
+
+// `K`'s body is a single char, but the group's predicate can reject it — so
+// the branch can fall through and must keep the catch-all.
+test "predicate nested in a group: catch-all is reached when it rejects" {
+    assert_tokens(&"k", &"[@0,0:0='k',<5>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
+}
+
+test "predicate nested in a group: the unguarded arm still matches" {
+    assert_tokens(&"l", &"[@0,0:0='l',<4>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
 }

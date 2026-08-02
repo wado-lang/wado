@@ -1910,13 +1910,16 @@ fn _parse_a__inner(p: &mut Parser) -> () {
                     _sd_best_p = _sd_p_1;
                     _sd_best_i = 1;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_a__inner_alt_0(p);
-                }
-                if _sd_best_i == 1 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_a__inner_alt_0(p);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_a__inner_alt_1(p);
+                    }
                     return _parse_a__inner_alt_1(p);
                 }
-                return _parse_a__inner_alt_1(p);
+                p.pos += 1;
             }
         } else if p.peek_kind() == TK_LIT_C {
             p.pos -= 1;

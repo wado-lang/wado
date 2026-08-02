@@ -33033,8 +33033,8 @@ fn _parse_charset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     if kind == TK_Charset {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_0 = _parse_charset__inner_scan_0(_sd_tokens, _sd_pos);
-        let _sd_p_1 = _parse_charset__inner_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_0 = _parse_charset__inner_scan_0(_sd_tokens, _sd_pos, follow);
+        let _sd_p_1 = _parse_charset__inner_scan_1(_sd_tokens, _sd_pos, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -33275,10 +33275,10 @@ fn _parse_imports__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     if kind == TK_Import {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_0 = _parse_imports__inner_scan_0(_sd_tokens, _sd_pos);
-        let _sd_p_1 = _parse_imports__inner_scan_1(_sd_tokens, _sd_pos);
-        let _sd_p_2 = _parse_imports__inner_scan_2(_sd_tokens, _sd_pos);
-        let _sd_p_3 = _parse_imports__inner_scan_3(_sd_tokens, _sd_pos);
+        let _sd_p_0 = _parse_imports__inner_scan_0(_sd_tokens, _sd_pos, follow);
+        let _sd_p_1 = _parse_imports__inner_scan_1(_sd_tokens, _sd_pos, follow);
+        let _sd_p_2 = _parse_imports__inner_scan_2(_sd_tokens, _sd_pos, follow);
+        let _sd_p_3 = _parse_imports__inner_scan_3(_sd_tokens, _sd_pos, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -33487,8 +33487,8 @@ fn _parse_namespace___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     if kind == TK_Namespace {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_0 = _parse_namespace___inner_scan_0(_sd_tokens, _sd_pos);
-        let _sd_p_1 = _parse_namespace___inner_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_0 = _parse_namespace___inner_scan_0(_sd_tokens, _sd_pos, follow);
+        let _sd_p_1 = _parse_namespace___inner_scan_1(_sd_tokens, _sd_pos, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -34783,8 +34783,8 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -34795,13 +34795,15 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                     _sd_best_p = _sd_p_1;
                     _sd_best_i = 1;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_negation_arg__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_negation_arg__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_negation_arg__inner_alt_1(p, follow);
+                    }
                     return _parse_negation_arg__inner_alt_1(p, follow);
                 }
-                return _parse_negation_arg__inner_alt_1(p, follow);
             }
         } else if p.peek_kind() == TK_MediaOnly {
             if _kind_set_4(p.peek_at(1)) {
@@ -34811,8 +34813,8 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -34823,13 +34825,15 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                     _sd_best_p = _sd_p_1;
                     _sd_best_i = 1;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_negation_arg__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_negation_arg__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_negation_arg__inner_alt_1(p, follow);
+                    }
                     return _parse_negation_arg__inner_alt_1(p, follow);
                 }
-                return _parse_negation_arg__inner_alt_1(p, follow);
             }
         } else if p.peek_kind() == TK_Not {
             if _kind_set_4(p.peek_at(1)) {
@@ -34839,8 +34843,8 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -34851,13 +34855,15 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                     _sd_best_p = _sd_p_1;
                     _sd_best_i = 1;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_negation_arg__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_negation_arg__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_negation_arg__inner_alt_1(p, follow);
+                    }
                     return _parse_negation_arg__inner_alt_1(p, follow);
                 }
-                return _parse_negation_arg__inner_alt_1(p, follow);
             }
         } else if p.peek_kind() == TK_And {
             if _kind_set_4(p.peek_at(1)) {
@@ -34867,8 +34873,8 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -34879,13 +34885,15 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                     _sd_best_p = _sd_p_1;
                     _sd_best_i = 1;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_negation_arg__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_negation_arg__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_negation_arg__inner_alt_1(p, follow);
+                    }
                     return _parse_negation_arg__inner_alt_1(p, follow);
                 }
-                return _parse_negation_arg__inner_alt_1(p, follow);
             }
         } else if p.peek_kind() == TK_Or {
             if _kind_set_4(p.peek_at(1)) {
@@ -34895,8 +34903,8 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -34907,13 +34915,15 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                     _sd_best_p = _sd_p_1;
                     _sd_best_i = 1;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_negation_arg__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_negation_arg__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_negation_arg__inner_alt_1(p, follow);
+                    }
                     return _parse_negation_arg__inner_alt_1(p, follow);
                 }
-                return _parse_negation_arg__inner_alt_1(p, follow);
             }
         } else if p.peek_kind() == TK_From {
             if _kind_set_4(p.peek_at(1)) {
@@ -34923,8 +34933,8 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -34935,13 +34945,15 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                     _sd_best_p = _sd_p_1;
                     _sd_best_i = 1;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_negation_arg__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_negation_arg__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_negation_arg__inner_alt_1(p, follow);
+                    }
                     return _parse_negation_arg__inner_alt_1(p, follow);
                 }
-                return _parse_negation_arg__inner_alt_1(p, follow);
             }
         } else if p.peek_kind() == TK_To {
             if _kind_set_4(p.peek_at(1)) {
@@ -34951,8 +34963,8 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -34963,13 +34975,15 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                     _sd_best_p = _sd_p_1;
                     _sd_best_i = 1;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_negation_arg__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_negation_arg__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_negation_arg__inner_alt_1(p, follow);
+                    }
                     return _parse_negation_arg__inner_alt_1(p, follow);
                 }
-                return _parse_negation_arg__inner_alt_1(p, follow);
             }
         } else if p.peek_kind() == TK_LIT_STAR {
             if _kind_set_4(p.peek_at(1)) {
@@ -34979,8 +34993,8 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -34991,13 +35005,15 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                     _sd_best_p = _sd_p_1;
                     _sd_best_i = 1;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_negation_arg__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_negation_arg__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_negation_arg__inner_alt_1(p, follow);
+                    }
                     return _parse_negation_arg__inner_alt_1(p, follow);
                 }
-                return _parse_negation_arg__inner_alt_1(p, follow);
             }
         } else if p.peek_kind() == TK_LIT_PIPE {
             if _kind_set_4(p.peek_at(1)) {
@@ -35007,8 +35023,8 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -35019,13 +35035,15 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                     _sd_best_p = _sd_p_1;
                     _sd_best_i = 1;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_negation_arg__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_negation_arg__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_negation_arg__inner_alt_1(p, follow);
+                    }
                     return _parse_negation_arg__inner_alt_1(p, follow);
                 }
-                return _parse_negation_arg__inner_alt_1(p, follow);
             }
         }
     }
@@ -35261,8 +35279,8 @@ fn _parse_ruleset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         if _kind_set_36(p.peek_kind()) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_1 = _parse_ruleset__inner_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_0 = _parse_ruleset__inner_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_ruleset__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            let _sd_p_0 = _parse_ruleset__inner_scan_0(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -35438,8 +35456,8 @@ fn _parse_declaration__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         if _kind_set_8(p.peek_kind()) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_declaration__inner_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = _parse_declaration__inner_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_declaration__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            let _sd_p_1 = _parse_declaration__inner_scan_1(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -35693,10 +35711,10 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_term__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_term__inner_scan_1(_sd_tokens, _sd_pos);
-                let _sd_p_2 = _parse_term__inner_scan_2(_sd_tokens, _sd_pos);
-                let _sd_p_11 = _parse_term__inner_scan_11(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_term__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_term__inner_scan_1(_sd_tokens, _sd_pos, follow);
+                let _sd_p_2 = _parse_term__inner_scan_2(_sd_tokens, _sd_pos, follow);
+                let _sd_p_11 = _parse_term__inner_scan_11(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -35715,19 +35733,21 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                     _sd_best_p = _sd_p_11;
                     _sd_best_i = 11;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_term__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
-                    return _parse_term__inner_alt_1(p, follow);
-                }
-                if _sd_best_i == 2 {
-                    return _parse_term__inner_alt_2(p, follow);
-                }
-                if _sd_best_i == 11 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_term__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_term__inner_alt_1(p, follow);
+                    }
+                    if _sd_best_i == 2 {
+                        return _parse_term__inner_alt_2(p, follow);
+                    }
+                    if _sd_best_i == 11 {
+                        return _parse_term__inner_alt_11(p, follow);
+                    }
                     return _parse_term__inner_alt_11(p, follow);
                 }
-                return _parse_term__inner_alt_11(p, follow);
             }
         } else if p.peek_kind() == TK_Minus {
             if p.peek_at(1) == TK_Number {
@@ -35741,10 +35761,10 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_term__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_term__inner_scan_1(_sd_tokens, _sd_pos);
-                let _sd_p_2 = _parse_term__inner_scan_2(_sd_tokens, _sd_pos);
-                let _sd_p_11 = _parse_term__inner_scan_11(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_term__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_term__inner_scan_1(_sd_tokens, _sd_pos, follow);
+                let _sd_p_2 = _parse_term__inner_scan_2(_sd_tokens, _sd_pos, follow);
+                let _sd_p_11 = _parse_term__inner_scan_11(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -35763,19 +35783,21 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                     _sd_best_p = _sd_p_11;
                     _sd_best_i = 11;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_term__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
-                    return _parse_term__inner_alt_1(p, follow);
-                }
-                if _sd_best_i == 2 {
-                    return _parse_term__inner_alt_2(p, follow);
-                }
-                if _sd_best_i == 11 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_term__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_term__inner_alt_1(p, follow);
+                    }
+                    if _sd_best_i == 2 {
+                        return _parse_term__inner_alt_2(p, follow);
+                    }
+                    if _sd_best_i == 11 {
+                        return _parse_term__inner_alt_11(p, follow);
+                    }
                     return _parse_term__inner_alt_11(p, follow);
                 }
-                return _parse_term__inner_alt_11(p, follow);
             }
         } else if p.peek_kind() == TK_Number {
             return _parse_term__inner_alt_0(p, follow);
@@ -36188,10 +36210,10 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_1 = _parse_any___inner_scan_1(_sd_tokens, _sd_pos);
-                let _sd_p_2 = _parse_any___inner_scan_2(_sd_tokens, _sd_pos);
-                let _sd_p_3 = _parse_any___inner_scan_3(_sd_tokens, _sd_pos);
-                let _sd_p_4 = _parse_any___inner_scan_4(_sd_tokens, _sd_pos);
+                let _sd_p_1 = _parse_any___inner_scan_1(_sd_tokens, _sd_pos, follow);
+                let _sd_p_2 = _parse_any___inner_scan_2(_sd_tokens, _sd_pos, follow);
+                let _sd_p_3 = _parse_any___inner_scan_3(_sd_tokens, _sd_pos, follow);
+                let _sd_p_4 = _parse_any___inner_scan_4(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_1 > _sd_best_p {
@@ -36210,19 +36232,21 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                     _sd_best_p = _sd_p_4;
                     _sd_best_i = 4;
                 }
-                if _sd_best_i == 1 {
-                    return _parse_any___inner_alt_1(p, follow);
-                }
-                if _sd_best_i == 2 {
-                    return _parse_any___inner_alt_2(p, follow);
-                }
-                if _sd_best_i == 3 {
-                    return _parse_any___inner_alt_3(p, follow);
-                }
-                if _sd_best_i == 4 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 1 {
+                        return _parse_any___inner_alt_1(p, follow);
+                    }
+                    if _sd_best_i == 2 {
+                        return _parse_any___inner_alt_2(p, follow);
+                    }
+                    if _sd_best_i == 3 {
+                        return _parse_any___inner_alt_3(p, follow);
+                    }
+                    if _sd_best_i == 4 {
+                        return _parse_any___inner_alt_4(p, follow);
+                    }
                     return _parse_any___inner_alt_4(p, follow);
                 }
-                return _parse_any___inner_alt_4(p, follow);
             }
         } else if p.peek_kind() == TK_Minus {
             if p.peek_at(1) == TK_Number {
@@ -36236,10 +36260,10 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_1 = _parse_any___inner_scan_1(_sd_tokens, _sd_pos);
-                let _sd_p_2 = _parse_any___inner_scan_2(_sd_tokens, _sd_pos);
-                let _sd_p_3 = _parse_any___inner_scan_3(_sd_tokens, _sd_pos);
-                let _sd_p_4 = _parse_any___inner_scan_4(_sd_tokens, _sd_pos);
+                let _sd_p_1 = _parse_any___inner_scan_1(_sd_tokens, _sd_pos, follow);
+                let _sd_p_2 = _parse_any___inner_scan_2(_sd_tokens, _sd_pos, follow);
+                let _sd_p_3 = _parse_any___inner_scan_3(_sd_tokens, _sd_pos, follow);
+                let _sd_p_4 = _parse_any___inner_scan_4(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_1 > _sd_best_p {
@@ -36258,19 +36282,21 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                     _sd_best_p = _sd_p_4;
                     _sd_best_i = 4;
                 }
-                if _sd_best_i == 1 {
-                    return _parse_any___inner_alt_1(p, follow);
-                }
-                if _sd_best_i == 2 {
-                    return _parse_any___inner_alt_2(p, follow);
-                }
-                if _sd_best_i == 3 {
-                    return _parse_any___inner_alt_3(p, follow);
-                }
-                if _sd_best_i == 4 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 1 {
+                        return _parse_any___inner_alt_1(p, follow);
+                    }
+                    if _sd_best_i == 2 {
+                        return _parse_any___inner_alt_2(p, follow);
+                    }
+                    if _sd_best_i == 3 {
+                        return _parse_any___inner_alt_3(p, follow);
+                    }
+                    if _sd_best_i == 4 {
+                        return _parse_any___inner_alt_4(p, follow);
+                    }
                     return _parse_any___inner_alt_4(p, follow);
                 }
-                return _parse_any___inner_alt_4(p, follow);
             }
         } else if p.peek_kind() == TK_Number {
             return _parse_any___inner_alt_1(p, follow);
@@ -36939,9 +36965,9 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &
         if _kind_set_31(p.peek_kind()) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_1 = _parse_supports_condition__inner_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_supports_condition__inner_scan_2(_sd_tokens, _sd_pos);
-            let _sd_p_3 = _parse_supports_condition__inner_scan_3(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_supports_condition__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            let _sd_p_2 = _parse_supports_condition__inner_scan_2(_sd_tokens, _sd_pos, follow);
+            let _sd_p_3 = _parse_supports_condition__inner_scan_3(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -37044,9 +37070,9 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: &List<List
         if p.peek_kind() == TK_LIT_LPAREN {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_supports_condition_in_parens__inner_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = _parse_supports_condition_in_parens__inner_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_supports_condition_in_parens__inner_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_supports_condition_in_parens__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            let _sd_p_1 = _parse_supports_condition_in_parens__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            let _sd_p_2 = _parse_supports_condition_in_parens__inner_scan_2(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -37614,10 +37640,10 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_calc_value__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_calc_value__inner_scan_1(_sd_tokens, _sd_pos);
-                let _sd_p_2 = _parse_calc_value__inner_scan_2(_sd_tokens, _sd_pos);
-                let _sd_p_3 = _parse_calc_value__inner_scan_3(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_calc_value__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_calc_value__inner_scan_1(_sd_tokens, _sd_pos, follow);
+                let _sd_p_2 = _parse_calc_value__inner_scan_2(_sd_tokens, _sd_pos, follow);
+                let _sd_p_3 = _parse_calc_value__inner_scan_3(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -37636,19 +37662,21 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     _sd_best_p = _sd_p_3;
                     _sd_best_i = 3;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_calc_value__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
-                    return _parse_calc_value__inner_alt_1(p, follow);
-                }
-                if _sd_best_i == 2 {
-                    return _parse_calc_value__inner_alt_2(p, follow);
-                }
-                if _sd_best_i == 3 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_calc_value__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_calc_value__inner_alt_1(p, follow);
+                    }
+                    if _sd_best_i == 2 {
+                        return _parse_calc_value__inner_alt_2(p, follow);
+                    }
+                    if _sd_best_i == 3 {
+                        return _parse_calc_value__inner_alt_3(p, follow);
+                    }
                     return _parse_calc_value__inner_alt_3(p, follow);
                 }
-                return _parse_calc_value__inner_alt_3(p, follow);
             }
         } else if p.peek_kind() == TK_Minus {
             if p.peek_at(1) == TK_Number {
@@ -37662,10 +37690,10 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_calc_value__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_calc_value__inner_scan_1(_sd_tokens, _sd_pos);
-                let _sd_p_2 = _parse_calc_value__inner_scan_2(_sd_tokens, _sd_pos);
-                let _sd_p_3 = _parse_calc_value__inner_scan_3(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_calc_value__inner_scan_0(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = _parse_calc_value__inner_scan_1(_sd_tokens, _sd_pos, follow);
+                let _sd_p_2 = _parse_calc_value__inner_scan_2(_sd_tokens, _sd_pos, follow);
+                let _sd_p_3 = _parse_calc_value__inner_scan_3(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -37684,19 +37712,21 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     _sd_best_p = _sd_p_3;
                     _sd_best_i = 3;
                 }
-                if _sd_best_i == 0 {
-                    return _parse_calc_value__inner_alt_0(p, follow);
-                }
-                if _sd_best_i == 1 {
-                    return _parse_calc_value__inner_alt_1(p, follow);
-                }
-                if _sd_best_i == 2 {
-                    return _parse_calc_value__inner_alt_2(p, follow);
-                }
-                if _sd_best_i == 3 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_calc_value__inner_alt_0(p, follow);
+                    }
+                    if _sd_best_i == 1 {
+                        return _parse_calc_value__inner_alt_1(p, follow);
+                    }
+                    if _sd_best_i == 2 {
+                        return _parse_calc_value__inner_alt_2(p, follow);
+                    }
+                    if _sd_best_i == 3 {
+                        return _parse_calc_value__inner_alt_3(p, follow);
+                    }
                     return _parse_calc_value__inner_alt_3(p, follow);
                 }
-                return _parse_calc_value__inner_alt_3(p, follow);
             }
         } else if p.peek_kind() == TK_Number {
             return _parse_calc_value__inner_alt_0(p, follow);
@@ -37843,8 +37873,8 @@ fn _parse_font_face_declaration__inner(p: &mut Parser, follow: &List<List<i32>> 
         if _kind_set_8(p.peek_kind()) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_font_face_declaration__inner_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = _parse_font_face_declaration__inner_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_font_face_declaration__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            let _sd_p_1 = _parse_font_face_declaration__inner_scan_1(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {

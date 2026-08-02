@@ -12,9 +12,15 @@
 //
 // Char classes rather than literals throughout: a literal-only rule is hoisted
 // into the keyword classifier and would not exercise the dispatch at all.
+// `K` is the third way a branch falls through: its body is one char, but a
+// predicate nested in the group can reject it, so "matches on its first
+// character" has to be judged below the rule's own alternative.
 lexer grammar LexerCatchAllReach;
+
+options { language = Wado; }
 
 A : [a-f] '1' ;
 B : [+] ;
 D : [h] [0-9] ;
+K : ([k] { false }? | [l]) ;
 C : . ;

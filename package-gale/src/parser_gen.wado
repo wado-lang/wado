@@ -8209,18 +8209,28 @@ fn consume_advances_cursor(c: &ConsumeNode, alts: &List<Alternative>, skip: i32)
 /// parse success. This is the emit of lowering's `Tournament` dispatch, used
 /// both where the prediction tree gives up (`Ambiguous`) and where its token
 /// cascade turns out not to claim the lookahead (`Dispatch`'s fallback).
+///
+/// `fall_through_on_no_match` decides what a tournament nothing wins does. As
+/// the whole decision (`Ambiguous`) there is nowhere else to go, so it commits
+/// to the last alt and lets that parse report the mismatch. As a fallback the
+/// rule's own error path is still ahead, and it names the rule rather than one
+/// alt's next token, so the emit leaves the block instead of committing.
 fn emit_scan_tournament(
     w: &mut CodeWriter,
     sorted_indices: &List<i32>,
     fn_name: &String,
     rule_display: &String,
     ctx: &GenContext,
+    fall_through_on_no_match: bool = false,
 ) {
+    let fsep = follow_sep(ctx.emit_follow());
     w.line(&"let _sd_tokens = &p.kinds;");
     w.line(&"let _sd_pos = p.pos;");
     for let mut i = 0; i < sorted_indices.len(); i += 1 {
         let idx = sorted_indices[i];
-        w.line(&`let _sd_p_${idx} = ${*fn_name}_scan_${idx}(_sd_tokens, _sd_pos);`);
+        // The scan must see the caller follow the parse will, or a trailing
+        // token its `follow_yields` gate rejects still counts toward the score.
+        w.line(&`let _sd_p_${idx} = ${*fn_name}_scan_${idx}(_sd_tokens, _sd_pos${fsep});`);
     }
     if ctx.is_trace() {
         let rlit = str_lit(*rule_display);
@@ -8240,7 +8250,13 @@ fn emit_scan_tournament(
         let end_expr = `_sd_p_${idx}`;
         emit_argmax_update(w, &best_p, &best_i, &end_expr, idx);
     }
+    if fall_through_on_no_match {
+        w.begin(&"if _sd_best_i >= 0");
+    }
     emit_index_pick_dispatch(w, &"_sd_best_i", sorted_indices, fn_name, rule_display, ctx);
+    if fall_through_on_no_match {
+        w.end();
+    }
 }
 
 /// True when every alt in `indices` has a scan helper covering its whole body,
@@ -8287,8 +8303,13 @@ fn dispatch_fallback_indices(
 
 /// Whether `d`'s branches name every token some alt in `indices` admits at
 /// element offset `skip`. True for a complete cascade; false once the walk
-/// dropped a token. An alt already at its end contributes no token, so its
-/// continuation lives in the caller and the cascade cannot be shown complete.
+/// dropped a token.
+///
+/// An alt whose remainder from `skip` can match empty is not covered by its
+/// own FIRST — it also admits whatever follows the rule at the call site, so
+/// no branch set derived from FIRST can be shown to claim everything. That
+/// includes an alt already at its end (`skip` past the last element) and one
+/// whose remaining elements are all optional (`a : X Y? | X Z` on `X`).
 fn dispatch_claims_every_first_token(
     d: &PredictionDispatch,
     indices: &List<i32>,
@@ -8308,13 +8329,24 @@ fn dispatch_claims_every_first_token(
         }
     }
     for let idx of indices {
-        if skip >= alts[*idx].elements.len() {
+        if elements_from_are_nullable(&alts[*idx].elements, skip) {
             return false;
         }
         for let tk of &ctx.first_of_elements_from(&alts[*idx].elements, skip) {
             if !claimed.contains(tk) {
                 return false;
             }
+        }
+    }
+    return true;
+}
+
+/// Whether everything from `skip` on can match empty — including `skip` being
+/// past the last element.
+fn elements_from_are_nullable(elements: &List<Element>, skip: i32) -> bool {
+    for let mut i = skip; i < elements.len(); i += 1 {
+        if !is_nullable(&elements[i]) {
+            return false;
         }
     }
     return true;
@@ -8536,7 +8568,12 @@ fn gen_prediction_code_inner(
                 if skip > 0 {
                     w.line(&`p.pos -= ${skip};`);
                 }
-                emit_scan_tournament(w, &fallback, fn_name, rule_display, ctx);
+                emit_scan_tournament(w, &fallback, fn_name, rule_display, ctx, /*fall_through_on_no_match=*/ true);
+                // Nothing matched, so the rule's own error path runs next and
+                // must see the cursor the cascade left it at.
+                if skip > 0 {
+                    w.line(&`p.pos += ${skip};`);
+                }
             }
             w.end();
         },

@@ -2208,8 +2208,8 @@ fn _parse_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         if p.peek_kind() == TK_ID {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_stmt__inner_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = _parse_stmt__inner_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_stmt__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            let _sd_p_1 = _parse_stmt__inner_scan_1(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -2392,8 +2392,8 @@ fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             } else if p.peek_at(1) == TK_LIT_LPAREN {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_1 = _parse_item__inner_scan_1(_sd_tokens, _sd_pos);
-                let _sd_p_0 = _parse_item__inner_scan_0(_sd_tokens, _sd_pos);
+                let _sd_p_1 = _parse_item__inner_scan_1(_sd_tokens, _sd_pos, follow);
+                let _sd_p_0 = _parse_item__inner_scan_0(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -2414,8 +2414,8 @@ fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_1 = _parse_item__inner_scan_1(_sd_tokens, _sd_pos);
-                let _sd_p_0 = _parse_item__inner_scan_0(_sd_tokens, _sd_pos);
+                let _sd_p_1 = _parse_item__inner_scan_1(_sd_tokens, _sd_pos, follow);
+                let _sd_p_0 = _parse_item__inner_scan_0(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -2426,13 +2426,15 @@ fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                     _sd_best_p = _sd_p_1;
                     _sd_best_i = 1;
                 }
-                if _sd_best_i == 1 {
-                    return _parse_item__inner_alt_1(p, follow);
-                }
-                if _sd_best_i == 0 {
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 1 {
+                        return _parse_item__inner_alt_1(p, follow);
+                    }
+                    if _sd_best_i == 0 {
+                        return _parse_item__inner_alt_0(p, follow);
+                    }
                     return _parse_item__inner_alt_0(p, follow);
                 }
-                return _parse_item__inner_alt_0(p, follow);
             }
         }
     }
