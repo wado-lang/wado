@@ -1,0 +1,19 @@
+// Wasm has no float bitwise or shift instruction; lowering them anyway emitted
+// the i32 opcode over an f64 operand, which only surfaced as an opaque Wasm
+// validation failure. Newtypes resolve to their base, so an alias of a float is
+// rejected the same way.
+type Meters = f64;
+
+export fn run() {
+    let a = 4.0;
+    let _ = a << 1.0;
+    let _ = a >> 1.0;
+    let _ = a & 1.0;
+    let _ = a | 1.0;
+    let _ = a ^ 1.0;
+    let m: Meters = 5.0;
+    let _ = m % 2.0;
+}
+
+__DATA__
+{"compile_error": "bitwise and shift operators are integer-only"}

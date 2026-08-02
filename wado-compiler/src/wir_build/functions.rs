@@ -79,7 +79,10 @@ fn register_imports(ctx: &mut WirContext<'_>) {
                 vec![ctx.type_id_to_wir_type(type_table, import.return_type)]
             };
 
-        let type_fq = format!("functype//{}/{}", import.namespace, import.canonical_name);
+        let type_fq = crate::name::wir_func_type_key(&format!(
+            "{}/{}",
+            import.namespace, import.canonical_name
+        ));
         let type_id = ctx.register_func_type(type_fq, params, results);
 
         let name = WirName {
@@ -496,7 +499,7 @@ fn register_single_function(
 
     // Register function type
     let fq = fq.into_string();
-    let type_fq = format!("functype//{fq}");
+    let type_fq = crate::name::wir_func_type_key(&fq);
     let type_id = ctx.register_func_type(type_fq, params, results);
 
     let wir_func = WirFunction {

@@ -7255,6 +7255,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.reify_apply_param_defaults(
                 &mut args,
                 &dispatch.param_defaults,
+                &dispatch.param_types,
                 &callee_module,
                 static_call.span,
                 ctx,
@@ -7384,6 +7385,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         callee: &ast::Expr,
         args: &mut Vec<crate::tir::CallArg>,
+        param_types: &[crate::tir::TypeId],
         callee_module: &ModuleSource,
         callee_name: &str,
         ctx: &mut FunctionContext,
@@ -7397,7 +7399,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return;
         };
         let func_params = self.lookup_free_func_params(callee_module, callee_name);
-        self.reify_apply_param_defaults(args, &func_params, callee_module, callee.span(), ctx);
+        self.reify_apply_param_defaults(
+            args,
+            &func_params,
+            param_types,
+            callee_module,
+            callee.span(),
+            ctx,
+        );
     }
 
     /// Pad `args` with reified default values for the trailing `func_params`
@@ -7408,6 +7417,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         args: &mut Vec<crate::tir::CallArg>,
         func_params: &[(String, Option<ast::Expr>)],
+        param_types: &[crate::tir::TypeId],
         callee_module: &ModuleSource,
         call_span: crate::token::Span,
         ctx: &mut FunctionContext,
@@ -7480,7 +7490,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 Some((n, Some(d))) => (n.clone(), d.clone()),
                 _ => break,
             };
-            let resolved = self.reify_expr(&default_ast, ctx, None);
+            // A default declared on a trait method has no body for annotate to
+            // walk, so without the parameter's type here it reifies untyped.
+            let expected = param_types.get(i).copied();
+            let resolved = self.reify_expr(&default_ast, ctx, expected);
             // Later defaults may reference this one's parameter.
             self.default_arg_overrides.insert(name, resolved.clone());
             args.push(crate::tir::CallArg::new(resolved, false));
@@ -7499,59 +7512,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Wrap `Ord::cmp` into a `bool`: `<` → `cmp == Less`, `>` →
     /// `cmp == Greater`, `<=` → `cmp != Greater`, `>=` → `cmp != Less`.
-    /// Mirrors [`super::Elaborator::ord_bool_from_cmp`] (operators.rs:1605+).
     fn wrap_ord_bool_from_cmp(
         &mut self,
         cmp_call: TirExpr,
         op: ast::BinaryOp,
         span: crate::token::Span,
     ) -> TirExpr {
-        use crate::compiler_item::CompilerItem;
-        use crate::tir::{TirBinaryOp, TirExprKind, TypeTable};
-
-        let ordering_type_id = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_compiler_enum(CompilerItem::Ordering);
-        let (less_name, less_index, greater_name, greater_index) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            let (_, _, less_name, less_index) = items.require_enum_case(CompilerItem::OrderingLess);
-            let (_, _, greater_name, greater_index) =
-                items.require_enum_case(CompilerItem::OrderingGreater);
-            (
-                less_name.to_string(),
-                less_index,
-                greater_name.to_string(),
-                greater_index,
-            )
-        };
-        let (compare_op, case_name, case_index): (TirBinaryOp, String, u32) = match op {
-            ast::BinaryOp::Lt => (TirBinaryOp::Eq, less_name, less_index),
-            ast::BinaryOp::Gt => (TirBinaryOp::Eq, greater_name, greater_index),
-            ast::BinaryOp::LtEq => (TirBinaryOp::NotEq, greater_name, greater_index),
-            ast::BinaryOp::GtEq => (TirBinaryOp::NotEq, less_name, less_index),
-            _ => unreachable!("wrap_ord_bool_from_cmp called with non-Ord op {:?}", op),
-        };
-        let ordering_variant = TirExpr::new(
-            TirExprKind::EnumConstruct {
-                enum_type: ordering_type_id,
-                case_name,
-                case_index,
-            },
-            ordering_type_id,
-            span,
-        );
-        TirExpr::new(
-            TirExprKind::Binary {
-                op: compare_op,
-                left: Box::new(cmp_call),
-                right: Box::new(ordering_variant),
-            },
-            TypeTable::BOOL,
-            span,
-        )
+        super::operators::ord_bool_from_cmp(cmp_call, op, span, &self.tysys.type_table)
     }
 
     /// A function-typed global's `GlobalVarGet` parts
@@ -7724,6 +7691,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.reify_pad_args_with_defaults(
                 &call.callee,
                 &mut arg_exprs,
+                &dispatch.param_types,
                 &dispatch.function_ref.module_source,
                 &dispatch.function_ref.name,
                 ctx,
@@ -7734,6 +7702,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.reify_apply_param_defaults(
                 &mut arg_exprs,
                 &dispatch.param_defaults,
+                &dispatch.param_types,
                 &smc_module,
                 span,
                 ctx,
@@ -8094,9 +8063,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // this the type checker sees the padded arity but the TIR keeps
             // only the explicit args, so WIR lowers a call with a missing
             // trailing operand.
+            let param_types = self.ann_call_param_types(call.id).unwrap_or_default();
             self.reify_pad_args_with_defaults(
                 &call.callee,
                 &mut args,
+                &param_types,
                 &callee_module,
                 &callee_name,
                 ctx,

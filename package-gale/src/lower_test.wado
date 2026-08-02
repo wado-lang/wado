@@ -1466,11 +1466,9 @@ test "lower Repeat scan body mirrors parse body" {
             } else {
                 panic("expected Star (scan)");
             }
-            if let Plain = &r.strategy {
-                assert true;
-            } else {
-                panic("expected Plain (scan)");
-            }
+            // Scan has no `strategy`; greedy is spelled as `non_greedy: false`,
+            // which is what the parse side's `Plain` mirrors.
+            assert !r.non_greedy;
             if let Token(t) = &r.body {
                 assert t.kind == "TK_INT";
             } else {

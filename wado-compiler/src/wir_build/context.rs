@@ -24,6 +24,48 @@ use crate::wir::{
 /// defined functions have already been registered with their `WirFuncId`.
 pub const DEFINED_FUNC_BASE: u32 = 0x8000_0000;
 
+/// A declared type that has no WIR registration yet.
+///
+/// Expected during `register_types`, where the caller takes `placeholder` and
+/// [`super::types::fixup_abstract_struct_fields`] repairs it later. A bug
+/// anywhere after that.
+pub struct UnregisteredType {
+    /// What was looked for, for the panic message.
+    description: String,
+    /// The abstract ref the fixup pass recognises as unresolved.
+    placeholder: WirType,
+}
+
+impl UnregisteredType {
+    fn struct_ref(description: String) -> Self {
+        Self::new(description, crate::wir::WirAbstractHeapType::Struct)
+    }
+
+    fn array_ref(description: String) -> Self {
+        Self::new(description, crate::wir::WirAbstractHeapType::Array)
+    }
+
+    /// An enum is an i32 discriminant, so the placeholder is already the right
+    /// representation and only loses the enum's WIR identity — nothing for the
+    /// fixup pass to repair, hence no abstract ref.
+    fn enum_i32(description: String) -> Self {
+        Self {
+            description,
+            placeholder: WirType::I32,
+        }
+    }
+
+    fn new(description: String, heap_type: crate::wir::WirAbstractHeapType) -> Self {
+        Self {
+            description,
+            placeholder: WirType::AbstractRef {
+                heap_type,
+                nullable: false,
+            },
+        }
+    }
+}
+
 /// Builder context for the `tir_to_wir` translation.
 ///
 /// Accumulates all WIR entities and provides lookup maps for resolving
@@ -666,10 +708,84 @@ impl<'a> WirContext<'a> {
         func_id
     }
 
+    /// A non-nullable reference to a registered WIR type.
+    fn ref_to(type_id: &WirTypeId) -> WirType {
+        WirType::Ref {
+            type_id: type_id.clone(),
+            nullable: false,
+        }
+    }
+
+    /// Find a registered tuple whose elements have the same WIR types as
+    /// `elements`, ignoring `TypeId` identity. CM binding synthesis interns its
+    /// own `TypeId`s for element types that already have a registered tuple.
+    fn find_tuple_type_by_element_wir_types(
+        &self,
+        type_table: &TypeTable,
+        elements: &[TypeId],
+    ) -> Option<WirTypeId> {
+        // Every unresolved element compares as the same placeholder, so
+        // admitting one would match any tuple unresolved in that position.
+        let elem_wir_types: Vec<WirType> = elements
+            .iter()
+            .map(|e| self.lookup_wir_type(type_table, *e))
+            .collect::<Result<_, _>>()
+            .ok()?;
+        self.tuple_type_map
+            .iter()
+            .find(|(key_elems, _)| {
+                key_elems.len() == elem_wir_types.len()
+                    && key_elems.iter().zip(elem_wir_types.iter()).all(|(k, w)| {
+                        self.lookup_wir_type(type_table, *k)
+                            .is_ok_and(|kw| kw == *w)
+                    })
+            })
+            .map(|(_, type_id)| type_id.clone())
+    }
+
     /// Convert a TIR `TypeId` to a `WirType`.
+    ///
+    /// A miss means the registrar's key and the key derived here disagree —
+    /// both sides go through `name::wir_*_key` / [`StructName`] so they cannot.
+    /// Degrading to `AbstractRef` instead would be indistinguishable from the
+    /// deliberate one `ResolvedType::Function` produces.
+    ///
+    /// Use [`Self::type_id_to_wir_type_pending`] inside `register_types`.
+    #[track_caller]
     pub fn type_id_to_wir_type(&self, type_table: &TypeTable, type_id: TypeId) -> WirType {
+        self.lookup_wir_type(type_table, type_id)
+            .unwrap_or_else(|pending| panic!("[WIR] {} is not registered", pending.description))
+    }
+
+    /// [`Self::type_id_to_wir_type`] for use during type registration, where a
+    /// field can name a type a later phase defines — or the struct itself, since
+    /// Wasm GC rec groups permit the cycle. It takes the placeholder, which
+    /// [`super::types::fixup_abstract_struct_fields`] re-resolves.
+    pub fn type_id_to_wir_type_pending(&self, type_table: &TypeTable, type_id: TypeId) -> WirType {
+        self.lookup_wir_type(type_table, type_id)
+            .unwrap_or_else(|pending| pending.placeholder)
+    }
+
+    /// The `WirType` of `type_id`, or `None` when it has no WIR registration.
+    ///
+    /// For the one caller with a real recovery: a tuple interned by CM binding
+    /// synthesis can carry `TypeId`s the registrar never saw, and
+    /// `tuple_constructor_args` then searches for or defines a matching struct.
+    pub fn try_type_id_to_wir_type(
+        &self,
+        type_table: &TypeTable,
+        type_id: TypeId,
+    ) -> Option<WirType> {
+        self.lookup_wir_type(type_table, type_id).ok()
+    }
+
+    fn lookup_wir_type(
+        &self,
+        type_table: &TypeTable,
+        type_id: TypeId,
+    ) -> Result<WirType, UnregisteredType> {
         use crate::tir::{PrimitiveType, ResolvedType};
-        match type_table.get(type_id) {
+        Ok(match type_table.get(type_id) {
             ResolvedType::Primitive(prim) => match prim {
                 PrimitiveType::I8 => WirType::I8,
                 PrimitiveType::I16 => WirType::I16,
@@ -689,7 +805,9 @@ impl<'a> WirContext<'a> {
                 PrimitiveType::Char => WirType::Char,
             },
             ResolvedType::Unit => WirType::Unit,
-            ResolvedType::Never => WirType::Unit, // placeholder
+            // A `Never`-typed expression diverges, so it leaves no value behind —
+            // the same absence `Unit` denotes.
+            ResolvedType::Never => WirType::Unit,
             ResolvedType::Struct {
                 decl_name,
                 module_source,
@@ -705,179 +823,78 @@ impl<'a> WirContext<'a> {
                     module_source.clone()
                 };
                 let lookup_name = StructName::new(lookup_module, name.clone());
-                if let Some(type_id) = self.struct_type_map.get(&lookup_name) {
-                    WirType::Ref {
-                        type_id: type_id.clone(),
-                        nullable: false,
-                    }
-                } else {
-                    WirType::AbstractRef {
-                        heap_type: crate::wir::WirAbstractHeapType::Struct,
-                        nullable: false,
-                    }
-                }
+                let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
+                    return Err(UnregisteredType::struct_ref(format!(
+                        "struct `{lookup_name}`"
+                    )));
+                };
+                Self::ref_to(type_id)
             }
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } if name == "List" && type_args.len() == 1 => {
-                // Look up List<T> struct type. The element name must
-                // come from `mangle_type_arg_for_generic` so it agrees
-                // with the registration key produced by the
-                // monomorphizer's `instantiation_name` (which qualifies
-                // Struct / GenericInstance args by `ModuleSource`).
-                let elem_type_name = type_table.mangle_type_arg_for_generic(type_args[0]);
-                let array_fq = format!("core:prelude//List<{elem_type_name}>");
-                if let Some(type_id) = self.type_map.get(&array_fq) {
-                    WirType::Ref {
-                        type_id: type_id.clone(),
-                        nullable: false,
-                    }
-                } else {
-                    // Fallback: resolve newtypes in element type (e.g., FieldName → String)
-                    let resolved_name =
-                        type_table.mangle_type_arg_for_generic_resolving_newtypes(type_args[0]);
-                    if resolved_name != elem_type_name {
-                        let resolved_fq = format!("core:prelude//List<{resolved_name}>");
-                        if let Some(type_id) = self.type_map.get(&resolved_fq) {
-                            return WirType::Ref {
-                                type_id: type_id.clone(),
-                                nullable: false,
-                            };
-                        }
-                    }
-                    WirType::AbstractRef {
-                        heap_type: crate::wir::WirAbstractHeapType::Struct,
-                        nullable: false,
-                    }
-                }
+                let lookup_name = super::types::list_wrapper_struct_name(type_table, type_args[0]);
+                let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
+                    return Err(UnregisteredType::struct_ref(format!(
+                        "list wrapper struct `{lookup_name}`"
+                    )));
+                };
+                Self::ref_to(type_id)
             }
             ResolvedType::GenericInstance {
                 name,
                 type_args: elements,
                 module_source,
             } if TypeTable::is_tuple_type(name) => {
-                if let Some(type_id) = self.tuple_type_map.get(elements) {
-                    WirType::Ref {
-                        type_id: type_id.clone(),
-                        nullable: false,
-                    }
-                } else {
-                    // Cross-module TypeId mismatch: fall back to matching by element WIR types.
-                    let elem_wir_types: Vec<WirType> = elements
-                        .iter()
-                        .map(|e| self.type_id_to_wir_type(type_table, *e))
-                        .collect();
-                    let found = self.tuple_type_map.iter().find(|(key_elems, _)| {
-                        key_elems.len() == elem_wir_types.len()
-                            && key_elems
-                                .iter()
-                                .zip(elem_wir_types.iter())
-                                .all(|(k, w)| self.type_id_to_wir_type(type_table, *k) == *w)
+                // CM binding synthesis interns its own `TypeId`s for the same
+                // elements, so a miss falls back to structural matching.
+                let found =
+                    self.tuple_type_map.get(elements).cloned().or_else(|| {
+                        self.find_tuple_type_by_element_wir_types(type_table, elements)
                     });
-                    if let Some((_, type_id)) = found {
-                        WirType::Ref {
-                            type_id: type_id.clone(),
-                            nullable: false,
-                        }
-                    } else {
-                        WirType::AbstractRef {
-                            heap_type: crate::wir::WirAbstractHeapType::Struct,
-                            nullable: false,
-                        }
-                    }
-                }
+                let Some(type_id) = found else {
+                    return Err(UnregisteredType::struct_ref(format!(
+                        "tuple `{}` (no registered tuple matches its element types either)",
+                        type_table.mangle_type_name(type_id)
+                    )));
+                };
+                Self::ref_to(&type_id)
             }
             ResolvedType::GenericInstance {
                 name,
                 module_source,
                 type_args,
             } => {
-                // GenericInstance.name is the base name (e.g., "Box"), but after
-                // monomorphization the struct is registered with the mangled name
-                // (e.g., "Box<i32>"). Build the mangled name to look up.
-                let mangled = type_table.mangle_type_name(type_id);
+                // A generic instance is either a struct or a variant, and the
+                // two live in different maps. Registration aliases the
+                // newtype-resolved spelling onto the same type, so one key each.
+                let mangled = super::types::generic_instance_name(type_table, name, type_args);
                 let struct_name = StructName::new(module_source.clone(), mangled.clone());
-                if let Some(tid) = self.struct_type_map.get(&struct_name) {
-                    WirType::Ref {
-                        type_id: tid.clone(),
-                        nullable: false,
-                    }
-                } else {
-                    // Try as variant (in type_map)
-                    let variant_fq = format!("{module_source}//{mangled}");
-                    if let Some(tid) = self.type_map.get(&variant_fq) {
-                        WirType::Ref {
-                            type_id: tid.clone(),
-                            nullable: false,
-                        }
-                    } else {
-                        // Resolve newtypes in type_args and retry. Use the
-                        // module-qualifying mangle so the registered key
-                        // (also computed with `mangle_type_arg_for_generic`
-                        // by `register_mono_variants`) lines up.
-                        let resolved_args: Vec<String> = type_args
-                            .iter()
-                            .map(|t| type_table.mangle_type_arg_for_generic_resolving_newtypes(*t))
-                            .collect();
-                        let resolved_mangled =
-                            crate::name::mangle_generic_name(name, &resolved_args);
-                        if resolved_mangled != mangled {
-                            let resolved_sn =
-                                StructName::new(module_source.clone(), resolved_mangled.clone());
-                            if let Some(tid) = self.struct_type_map.get(&resolved_sn) {
-                                return WirType::Ref {
-                                    type_id: tid.clone(),
-                                    nullable: false,
-                                };
-                            }
-                            let resolved_fq = format!("{module_source}//{resolved_mangled}");
-                            if let Some(tid) = self.type_map.get(&resolved_fq) {
-                                return WirType::Ref {
-                                    type_id: tid.clone(),
-                                    nullable: false,
-                                };
-                            }
-                        }
-                        WirType::AbstractRef {
-                            heap_type: crate::wir::WirAbstractHeapType::Struct,
-                            nullable: false,
-                        }
-                    }
-                }
+                let type_id = self.struct_type_map.get(&struct_name).or_else(|| {
+                    self.type_map
+                        .get(&crate::name::wir_type_key(module_source, &mangled))
+                });
+                let Some(type_id) = type_id else {
+                    return Err(UnregisteredType::struct_ref(format!(
+                        "generic instance `{struct_name}` (as neither a struct nor a variant)"
+                    )));
+                };
+                Self::ref_to(type_id)
             }
             ResolvedType::BuiltinArray(elem_type_id) => {
-                if let Some(type_id) = self.array_type_map.get(elem_type_id) {
-                    WirType::Ref {
-                        type_id: type_id.clone(),
-                        nullable: false,
-                    }
-                } else {
-                    // Fallback: look up by element type name (handles cross-module TypeIds).
-                    // Uses qualified mangle to match `register_raw_array_type`'s key.
+                // Cross-module `TypeId`s for one element resolve by the
+                // element's name, which registration aliases both spellings of.
+                let type_id = self.array_type_map.get(elem_type_id).or_else(|| {
                     let elem_name = type_table.mangle_type_arg_for_generic(*elem_type_id);
-                    if let Some(type_id) = self.array_type_by_name.get(&elem_name) {
-                        WirType::Ref {
-                            type_id: type_id.clone(),
-                            nullable: false,
-                        }
-                    } else {
-                        // Fallback: resolve newtypes in element type
-                        let resolved_name = type_table
-                            .mangle_type_arg_for_generic_resolving_newtypes(*elem_type_id);
-                        if resolved_name != elem_name
-                            && let Some(type_id) = self.array_type_by_name.get(&resolved_name)
-                        {
-                            return WirType::Ref {
-                                type_id: type_id.clone(),
-                                nullable: false,
-                            };
-                        }
-                        WirType::AbstractRef {
-                            heap_type: crate::wir::WirAbstractHeapType::Array,
-                            nullable: false,
-                        }
-                    }
-                }
+                    self.array_type_by_name.get(&elem_name)
+                });
+                let Some(type_id) = type_id else {
+                    return Err(UnregisteredType::array_ref(format!(
+                        "array of `{}`",
+                        type_table.mangle_type_arg_for_generic(*elem_type_id)
+                    )));
+                };
+                Self::ref_to(type_id)
             }
             // Option<T> is handled as GenericInstance (variant).
             ResolvedType::Enum {
@@ -885,13 +902,12 @@ impl<'a> WirContext<'a> {
                 module_source,
                 ..
             } => {
-                let fq = format!("{module_source}//enum:{name}");
-                if let Some(type_id) = self.type_map.get(&fq) {
-                    WirType::Enum {
-                        type_id: type_id.clone(),
-                    }
-                } else {
-                    WirType::I32 // enums are i32 at Wasm level
+                let key = crate::name::wir_enum_type_key(module_source, name);
+                let Some(type_id) = self.type_map.get(&key) else {
+                    return Err(UnregisteredType::enum_i32(format!("enum `{key}`")));
+                };
+                WirType::Enum {
+                    type_id: type_id.clone(),
                 }
             }
             ResolvedType::Variant {
@@ -899,55 +915,25 @@ impl<'a> WirContext<'a> {
                 module_source,
                 ..
             } => {
-                let fq = format!("{module_source}//{name}");
-                if let Some(type_id) = self.type_map.get(&fq) {
-                    WirType::Ref {
-                        type_id: type_id.clone(),
-                        nullable: false,
-                    }
-                } else {
-                    WirType::AbstractRef {
-                        heap_type: crate::wir::WirAbstractHeapType::Struct,
-                        nullable: false,
-                    }
-                }
+                let key = crate::name::wir_type_key(module_source, name);
+                let Some(type_id) = self.type_map.get(&key) else {
+                    return Err(UnregisteredType::struct_ref(format!("variant `{key}`")));
+                };
+                Self::ref_to(type_id)
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                // For reference types (structs, variants, strings, arrays), the inner type
-                // is already a ref type in Wasm GC, so &T = T at the Wasm level.
-                // For value types (primitives, enums), we need Box<T> to provide
-                // a mutable location for &mut T semantics.
-                let inner_wir = self.type_id_to_wir_type(type_table, *inner);
-                match &inner_wir {
-                    WirType::Ref { .. } | WirType::AbstractRef { .. } => inner_wir,
-                    _ => {
-                        // Value type: use Box<T> for reference semantics.
-                        // Resolve through newtypes to find the base type name.
-                        let base_inner = type_table.resolve_newtype_base(*inner);
-                        let inner_name = type_table.mangle_type_name(base_inner);
-                        let box_name = crate::name::mangle_generic_name(
-                            "Box",
-                            std::slice::from_ref(&inner_name),
-                        );
-                        let box_module = self
-                            .package
-                            .type_table
-                            .borrow()
-                            .compiler_struct_module(crate::compiler_item::CompilerItem::Box)
-                            .cloned()
-                            .unwrap_or_else(ModuleSource::prelude);
-                        let box_sn = StructName::new(box_module, box_name);
-                        if let Some(tid) = self.struct_type_map.get(&box_sn) {
-                            WirType::Ref {
-                                type_id: tid.clone(),
-                                nullable: false,
-                            }
-                        } else {
-                            // Fallback: treat as value type (no boxing available)
-                            inner_wir
-                        }
-                    }
+                // `&T` = `T` for a GC type. A value type would need a `Box<T>`
+                // cell, but `lower::plan::boxing` already rewrote those ids to
+                // the struct — what reaches here is the kinds it leaves alone:
+                // opaque handles, whose reference is the handle.
+                let inner_wir = self.lookup_wir_type(type_table, *inner)?;
+                if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
+                    panic!(
+                        "[WIR] `&{prim:?}` survived boxing unrewritten; \
+                         `lower::plan::boxing` owns turning it into `Box<{prim:?}>`"
+                    );
                 }
+                inner_wir
             }
             ResolvedType::Function { .. } => {
                 // Function-typed values are canonical closure structs at runtime.
@@ -960,7 +946,7 @@ impl<'a> WirContext<'a> {
             }
             ResolvedType::Newtype { base_type, .. } => {
                 // Newtypes resolve to their base type
-                self.type_id_to_wir_type(type_table, *base_type)
+                self.lookup_wir_type(type_table, *base_type)?
             }
             // Generic resource types (Future<T>, Stream<T>, etc.) are opaque i32 handles
             ResolvedType::GenericResource { .. } => WirType::I32,
@@ -978,22 +964,12 @@ impl<'a> WirContext<'a> {
             ResolvedType::AssocTypeProjection { assoc_name, .. } => {
                 panic!("unsubstituted AssocTypeProjection `{assoc_name}` reached codegen")
             }
-            ResolvedType::Error | ResolvedType::Unknown | ResolvedType::Reactive(_) => WirType::I32,
-        }
-    }
-
-    /// Get the number of fields in a WIR struct type.
-    #[allow(dead_code)]
-    pub fn get_struct_field_count(&self, type_id: &WirTypeId) -> u32 {
-        let idx = type_id.index() as usize;
-        if idx < self.types.len() {
-            match &self.types[idx] {
-                WirTypeDef::Struct(s) => u32::try_from(s.fields.len()).unwrap(),
-                _ => 0,
-            }
-        } else {
-            0
-        }
+            // Type checking rejects a program that still holds these, and
+            // `Reactive` is erased before lowering.
+            ResolvedType::Error => panic!("error type reached codegen"),
+            ResolvedType::Unknown => panic!("unresolved type reached codegen"),
+            ResolvedType::Reactive(_) => panic!("unerased `Reactive` type reached codegen"),
+        })
     }
 
     /// Find a tuple WIR type that matches the given TIR elements by WIR type compatibility.
