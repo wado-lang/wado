@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785694395250,
+  "lastUpdate": 1785695461845,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45617,6 +45617,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 272570,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "75030cdab4e25990b948042d2e1f39f0630fea09",
+          "message": "Merge pull request #1736 from wado-lang/claude/soundness-compatibility-divergence-spot2l\n\nfix(gale): decide lexer and prediction dispatch on what a rule can match",
+          "timestamp": "2026-08-03T04:16:52+10:00",
+          "tree_id": "9df2d0f5e21aae818fee6e97682b01d4e8d76d6f",
+          "url": "https://github.com/wado-lang/wado/commit/75030cdab4e25990b948042d2e1f39f0630fea09"
+        },
+        "date": 1785695460995,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16265,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273279,
             "unit": "bytes"
           }
         ]
