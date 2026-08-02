@@ -1841,15 +1841,18 @@ fn gen_lr_suffix_dispatch_atn(
 ) {
     let valid = &lr_dispatch.valid_lr_alts;
     let pos_expr = if side.scan { "pos" } else { "p.pos" };
+    let decl = lr_atn_alt_decl(lr_dispatch);
     w.begin(&"loop");
     if side.scan {
         w.line(
-            &`let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, ${decision}, tokens, pos, TK_EOF, min_prec);`,
+            &`${decl} = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, ${decision}, tokens, pos, TK_EOF, min_prec);`,
         );
+        emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, &side.fn_name, &"tokens", &"pos", ctx);
     } else {
         w.line(
-            &`let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
+            &`${decl} = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
         );
+        emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, &side.scan_fn_name, &"&p.kinds", &"p.pos", ctx);
     }
     w.line(&`let _lr_pos0 = ${pos_expr};`);
     let mut is_first = true;
@@ -1887,6 +1890,76 @@ struct LrDispatchSide {
     fn_name: String,
     scan_fn_name: String,  // parse side only
     use_prec: bool,  // parse side only
+}
+
+/// Whether any loop-entry overlap group has more than one member — the shape
+/// `emit_lr_atn_group_repick` corrects, and the reason `_atn_alt` is mutable.
+/// A rule without one keeps the plain `let`, so its emit is unchanged.
+fn lr_atn_has_overlap_group(lr_dispatch: &LrDispatchData) -> bool {
+    for let group of &lr_dispatch.groups {
+        if group.len() >= 2 {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// `let _atn_alt = ...` for the loop decision, `let mut` where the group
+/// re-pick below will overwrite it.
+fn lr_atn_alt_decl(lr_dispatch: &LrDispatchData) -> String {
+    return if lr_atn_has_overlap_group(lr_dispatch) { "let mut _atn_alt" } else { "let _atn_alt" };
+}
+
+/// Settle which member of an overlap group the LR loop enters.
+///
+/// `atn_lr_loop_decision` tests one token against each continuation's FIRST
+/// set and returns the first edge admitting it, so alternatives that open on
+/// the same token are reported in grammar order rather than by which one
+/// matches (`expr 'not'? 'in' …` against `expr 'not'? 'like' …` on `not
+/// like`). Its full-context verdict — enter the loop rather than yield to the
+/// caller — is what needs the simulator and stands; only the choice within
+/// the group is re-taken, by the scan twins and longest-match rule the static
+/// LR dispatch already uses for the same question. A member below `min_prec`
+/// cannot be entered, so it does not scan; every scan failing leaves the
+/// simulator's answer untouched and its diagnostic path unchanged.
+fn emit_lr_atn_group_repick(
+    w: &mut CodeWriter,
+    lr_alts: &List<LrAlt>,
+    lr_dispatch: &LrDispatchData,
+    scan_fn: &String,
+    tokens_expr: &String,
+    pos_expr: &String,
+    ctx: &GenContext,
+) {
+    let fsep = follow_sep(ctx.emit_follow());
+    for let group of &lr_dispatch.groups {
+        if group.len() < 2 {
+            continue;
+        }
+        let mut cond = String::new();
+        for let mut k = 0; k < group.len(); k += 1 {
+            if k > 0 {
+                cond.push_str(&" || ");
+            }
+            cond.push_str(&`_atn_alt == ${group[k]}`);
+        }
+        w.begin(&`if ${cond}`);
+        w.line(&"let mut _lr_best: i32 = -1;");
+        for let gi of group {
+            let lr = &lr_alts[lr_dispatch.valid_lr_alts[*gi]];
+            w.line(&`let mut _lr_s_${*gi}: i32 = -1;`);
+            w.begin(&`if ${lr.own_prec} >= min_prec`);
+            w.line(&`_lr_s_${*gi} = ${*scan_fn}_lr_${lr.alt_index}(${*tokens_expr}, ${*pos_expr}${fsep});`);
+            w.end();
+        }
+        // Ascending member order with `emit_argmax_update`'s strict `>` gives
+        // ANTLR4's tie-break: an equal-length match goes to the first
+        // alternative in the grammar.
+        for let gi of group {
+            emit_argmax_update(w, &"_lr_best", &"_atn_alt", &`_lr_s_${*gi}`, *gi);
+        }
+        w.end();
+    }
 }
 
 fn gen_lr_branch_call(
@@ -5027,8 +5100,9 @@ fn gen_lr_fn_atn(
     w.begin(&"loop");
     w.line(&"if p.recovering { break; }");
     w.line(
-        &`let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
+        &`${lr_atn_alt_decl(lr_dispatch)} = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
     );
+    emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, &`scan_${rule.snake_name}`, &"&p.kinds", &"p.pos", ctx);
     w.line(&"let _lr_pos0 = p.pos;");
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {

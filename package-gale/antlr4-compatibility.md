@@ -612,11 +612,20 @@ or reject valid input silently. The set-complement `~X`, the `.`-led and
 `~X`-led left-recursive suffixes, and non-greedy `??` inside a
 left-recursive rule are covered by fixtures (`lr_complement_op.g4`,
 `lr_wildcard_postfix.g4`, `lr_dangling_else.g4`,
-`lr_suffix_non_greedy_opt.g4`); a few
-runtime-precision shapes (a shared delimiter past a nullable continuation,
-two enter edges sharing a first lookahead token) fall back to the complete
-simulator rather than guess. The mechanism and the full edge list live with
-the ATN runtime module.
+`lr_suffix_non_greedy_opt.g4`); a shared delimiter past a nullable
+continuation falls back to the complete simulator rather than guess. The
+mechanism and the full edge list live with the ATN runtime module.
+
+Two enter edges sharing a first lookahead token are settled without it. The
+loop decision tests one token against each continuation's FIRST set and takes
+the first edge admitting it, so it reports such alternatives in grammar order
+rather than by which one matches — strictly weaker than the second-token
+sub-dispatch the static LR path applies to the same question. What the
+simulator is there for is the enter-or-exit verdict, which needs full context;
+which member of the group to enter does not, and is re-taken from the scan
+twins by longest match, ties to the first alternative. A member below
+`min_prec` cannot be entered and so is not scanned, and every scan failing
+leaves the simulator's answer in place. Fixture: `lr_atn_shared_op.g4`.
 
 Which gaps stay static is a cost decision as much as a correctness one — one
 prediction is a full closure over the grammar; see [`perf.md`](./perf.md).
