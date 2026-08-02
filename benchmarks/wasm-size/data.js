@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785671591507,
+  "lastUpdate": 1785694395250,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45553,6 +45553,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b07ac9e9784712df7b42a8968ed57bf4afe1c44f"
         },
         "date": 1785671590713,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16265,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272570,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ea787a41392698e93f52f862243178bea5039abb",
+          "message": "Merge pull request #1737 from wado-lang/claude/sroa-smell-detection-2iqzss\n\nrefactor(sroa): give each SROA fact a single home",
+          "timestamp": "2026-08-03T04:02:04+10:00",
+          "tree_id": "42b4d894f1d30fe3dd87cdc0c2b035bce225c0d8",
+          "url": "https://github.com/wado-lang/wado/commit/ea787a41392698e93f52f862243178bea5039abb"
+        },
+        "date": 1785694394597,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
