@@ -2192,12 +2192,12 @@ fn check_all_orphan_rules(
 /// [`super::trait_query::canonical_decl_key_with`], over
 /// [`super::trait_query::decl_identity_core`].
 ///
-/// The two are complementary vantages, not a redundant pair. Measured over
-/// every fixture: they never answer differently, and the core declines
-/// (`None`) for ~97% of the names asked here, having no imports to consult at
-/// this vantage. What answers instead is the re-export resolution below,
-/// which the core has no branch for. Folding one into the other would change
-/// no answer and buy nothing.
+/// The two are disjoint, not a redundant pair. Measured over every fixture,
+/// the core declines (`None`) on all 27782 names asked at this vantage —
+/// every branch it has past the builtin names is import-driven, and an
+/// `impl` header is read before any import scope exists. What answers here is
+/// the re-export resolution below, which the core has no branch for. Delegating
+/// to it would add a call that can never return.
 ///
 /// `decl_keys` are the declaration identities to fall back to by bare name,
 /// in priority order, for a name the vantage module does not define.
