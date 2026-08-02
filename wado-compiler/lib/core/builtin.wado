@@ -102,6 +102,12 @@ fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset
 /// array fields of value-semantic structs.
 fn array_clone<T>(src: &Array<T>) -> Array<T>;
 
+/// Allocates a new Array<T> of exactly `len` and copies `src`'s first `len`
+/// elements into it. The `$value_copy$` of `List<T>` / `String` uses this to
+/// right-size the backing array to `used` — a value copy does not inherit the
+/// source's slack capacity. `len` must be <= `src.len()`.
+fn array_clone_prefix<T>(src: &Array<T>, len: i32) -> Array<T>;
+
 /// Fills a Array<T> with a value.
 /// Fills `len` elements starting at `offset` with `value`.
 fn array_fill<T>(arr: &mut Array<T>, offset: i32, value: T, len: i32);

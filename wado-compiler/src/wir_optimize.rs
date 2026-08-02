@@ -10,15 +10,13 @@
 //! |-------------------|--------------------------------------------|
 //! | `nullable_ref`        | Null-niche variant representation (mandatory) |
 //! | `sroa_variant_return` | Multi-value return SROA (variants)          |
-//! | `elide_struct`        | Struct local elimination (single + multi)   |
-//! | `array`               | Push collapse / data promotion / splitting  |
+//! | `elide_struct`        | Box local elimination + seq-assign flattening |
+//! | `array`               | Data promotion / splitting / zero-fill elision |
 //! | `const_forward`       | Struct field constant forwarding            |
 //! | `peephole`            | Constant folding, copy elision              |
-//! | `nullability_opt`     | Elide redundant `ref.as_non_null` / fold `ref.is_null` |
 //! | `elide_local`     | Write-only local elim for WIR-only locals  |
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
 //! | `branch_hint`     | `br_if` selection + trap-based hint inference |
-//! | `init_guard`      | Trivial init-guard global removal           |
 //! | `prune_dead_data` | Unreferenced passive data segment removal   |
 //! | `dce`             | Dead code / type / global elimination       |
 //!
@@ -37,9 +35,7 @@ mod dce;
 mod dedupe_const_globals;
 mod elide_local;
 mod elide_struct;
-mod init_guard;
 mod nullability;
-mod nullability_opt;
 mod nullable_ref;
 mod peephole;
 mod prune_dead_data;
@@ -53,18 +49,16 @@ use crate::wir::WirPackage;
 
 pub use dce::{compact_dead_items, dce_unreachable_types, mark_unreachable_defined_functions};
 
-use array::{promote_constant_arrays_to_data, split_large_array_literals};
+use array::{
+    elide_zero_fill_of_fresh_arrays, promote_constant_arrays_to_data, split_large_array_literals,
+};
 use branch_hint::{infer_branch_hints, select_br_ifs};
-use cleanup::cleanup;
+use cleanup::{cleanup, cleanup_global_inits};
 use const_forward::forward_struct_field_constants;
 use const_global::promote_const_global_inits;
 use dedupe_const_globals::dedupe_const_globals;
 use elide_local::elide_write_only_locals;
-use elide_struct::{
-    elide_adjacent_box_locals, elide_multi_field_struct_locals, elide_single_field_struct_locals,
-    flatten_seq_assignments,
-};
-use init_guard::remove_trivial_init_globals;
+use elide_struct::{elide_adjacent_box_locals, flatten_seq_assignments};
 use nullable_ref::lower_nullable_refs;
 use peephole::run_peephole;
 use prune_dead_data::prune_dead_data;
@@ -134,13 +128,8 @@ pub fn optimize_wir(
     });
     profiler.span_end("wir/phase1_type_repr");
 
-    // Phase 2: struct-local elimination (round 1). After NIR `sroa_param`
-    // scalarises single-field struct params, call sites hold
-    // `LocalSet(x, StructNew{[inner]})` read only via StructGet — substitute `inner`.
-    wir_pass("wir/elide_single_field_struct", module, profiler, |m| {
-        elide_single_field_struct_locals(m);
-    });
-
+    // Phase 2: box-local elimination — substitute `inner` at the single
+    // `StructGet` use of a `Box<T>` local `lower::plan::boxing` minted.
     wir_pass("wir/elide_adjacent_box_locals", module, profiler, |m| {
         elide_adjacent_box_locals(m);
     });
@@ -172,11 +161,19 @@ pub fn optimize_wir(
     wir_pass("wir/split_large_array_literals", module, profiler, |m| {
         split_large_array_literals(m);
     });
+    wir_pass(
+        "wir/elide_zero_fill_of_fresh_arrays",
+        module,
+        profiler,
+        |m| {
+            elide_zero_fill_of_fresh_arrays(m);
+        },
+    );
     profiler.span_end("wir/phase4_lib_rewrites");
 
-    // Phase 5: peephole (const fold, copy elision, multi-value struct elision),
-    // then flatten seq assignments to expose multi-field struct locals. Leftover
-    // Nops/dead locals are cleaned in phase 7.
+    // Phase 5: peephole (instruction selection, const fold, copy elision), then
+    // flatten seq assignments so the copy propagation below sees the
+    // destructures they hide. Leftover Nops/dead locals are cleaned in phase 7.
     profiler.span_start("wir/phase5_peephole");
     wir_pass("wir/run_peephole", module, profiler, |m| {
         let types = &m.types;
@@ -191,15 +188,7 @@ pub fn optimize_wir(
     wir_pass("wir/flatten_seq_assignments", module, profiler, |m| {
         flatten_seq_assignments(m);
     });
-    wir_pass(
-        "wir/elide_multi_field_struct_locals",
-        module,
-        profiler,
-        |m| {
-            elide_multi_field_struct_locals(m);
-        },
-    );
-    // Re-run copy propagation: elision rewrote destructures into fresh
+    // Re-run copy propagation: `flatten_seq_assignments` exposes fresh
     // `LocalSet alias = LocalGet temp` copies the phase-1 run never saw.
     wir_pass(
         "wir/propagate_trivial_copies_post_sroa",
@@ -221,12 +210,6 @@ pub fn optimize_wir(
     });
     profiler.span_end("wir/phase5_peephole");
 
-    // Phase 5b: nullability-driven rewrites (elide proven-redundant
-    // `ref.as_non_null`, fold `ref.is_null` on a non-null reference).
-    wir_pass("wir/optimize_nullability", module, profiler, |m| {
-        nullability_opt::optimize_nullability(m);
-    });
-
     // Phase 6: strip write-only WIR-synthesised locals (`__match_scrut_N`,
     // multi-value temps, `__pair_temp_N`) that no TIR pass can reach, so codegen
     // doesn't emit dead locals.
@@ -242,12 +225,12 @@ pub fn optimize_wir(
     wir_pass("wir/promote_const_global_inits", module, profiler, |m| {
         promote_const_global_inits(m);
     });
+    wir_pass("wir/cleanup_global_inits", module, profiler, |m| {
+        cleanup_global_inits(m);
+    });
     // Merge identical immutable const globals now that they are immutable.
     wir_pass("wir/dedupe_const_globals", module, profiler, |m| {
         dedupe_const_globals(m);
-    });
-    wir_pass("wir/remove_trivial_init_globals", module, profiler, |m| {
-        remove_trivial_init_globals(m);
     });
     wir_pass("wir/cleanup", module, profiler, |m| {
         cleanup(m);
@@ -258,8 +241,7 @@ pub fn optimize_wir(
     wir_pass("wir/prune_dead_data", module, profiler, |m| {
         prune_dead_data(m);
     });
-    // Collapse `if cond { br N }` guards into `br_if` (after `init_guard`, which
-    // keys on the `If { GlobalGet, [Br] }` shape), then infer trap-based hints.
+    // Collapse `if cond { br N }` guards into `br_if`, then infer trap-based hints.
     wir_pass("wir/select_br_if", module, profiler, |m| {
         select_br_ifs(m);
     });

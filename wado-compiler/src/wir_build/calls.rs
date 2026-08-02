@@ -68,16 +68,47 @@ macro_rules! replace_lane {
     }};
 }
 
+/// The wide-integer builtins whose Wasm instruction pushes two i64s.
+/// A `let [lo, hi] = …` over one of these binds the pair straight into the
+/// binding locals (`pattern_match::try_bind_multivalue_builtin`); only a use in
+/// expression position falls back to the tuple struct
+/// [`FunctionTranslator::wrap_multivalue_i64`] builds.
+pub(super) const MULTIVALUE_I64_BUILTINS: [&str; 4] = [
+    "builtin::i64_add128",
+    "builtin::i64_sub128",
+    "builtin::i64_mul_wide_u",
+    "builtin::i64_mul_wide_s",
+];
+
+/// How many Wasm results each of [`MULTIVALUE_I64_BUILTINS`] pushes.
+pub(super) const MULTIVALUE_I64_RESULTS: usize = 2;
+
 impl FunctionTranslator<'_, '_> {
+    /// Translate one of [`MULTIVALUE_I64_BUILTINS`] to its bare two-result
+    /// Wasm instruction, with no tuple struct around it.
+    pub(super) fn translate_multivalue_i64_builtin(
+        &mut self,
+        builtin_name: &str,
+        args: &[ArenaCallArg],
+    ) -> WirInstr {
+        let mut operand = |i: usize| Box::new(self.translate_operand(args[i].expr));
+        match builtin_name {
+            "builtin::i64_add128" => {
+                WirInstr::I64Add128(operand(0), operand(1), operand(2), operand(3))
+            }
+            "builtin::i64_sub128" => {
+                WirInstr::I64Sub128(operand(0), operand(1), operand(2), operand(3))
+            }
+            "builtin::i64_mul_wide_u" => WirInstr::I64MulWideU(operand(0), operand(1)),
+            "builtin::i64_mul_wide_s" => WirInstr::I64MulWideS(operand(0), operand(1)),
+            other => panic!("not a multi-value i64 builtin: {other}"),
+        }
+    }
+
     /// Wrap a multi-value [i64, i64] instruction in a tuple struct.
     /// The Wasm instruction pushes two i64s on the stack; we capture them
     /// into freshly declared locals via `MultiValueLocalBind`, then build
     /// a `StructNew` reading the locals back as the struct fields.
-    /// Subsequent destructure patterns at the call site are collapsed by
-    /// `wir_optimize::elide_struct::elide_multi_field_struct_locals`,
-    /// which recognises `LocalSet temp = StructNew { fields: [LocalGet, LocalGet] }`
-    /// followed by `StructGet × N` and substitutes each field access
-    /// directly — eliminating the heap allocation.
     fn wrap_multivalue_i64(&mut self, instr: WirInstr, result_type_id: TypeId) -> WirInstr {
         let wir_type = self
             .ctx
@@ -213,7 +244,12 @@ impl FunctionTranslator<'_, '_> {
         Some((type_id, src, src_type_id))
     }
 
-    fn build_bulk_array_clone(&mut self, type_id: WirTypeId, src: WirInstr) -> WirInstr {
+    fn build_bulk_array_clone(
+        &mut self,
+        type_id: WirTypeId,
+        src: WirInstr,
+        len: Option<WirInstr>,
+    ) -> WirInstr {
         let idx = type_id.index();
         let src_name = format!("__array_clone_src_{idx}");
         let dst_name = format!("__array_clone_dst_{idx}");
@@ -225,13 +261,16 @@ impl FunctionTranslator<'_, '_> {
 
         let mut seq = Vec::new();
         seq.extend(declare_and_set_local(src_name.clone(), ref_ty.clone(), src));
-        seq.extend(declare_and_set_local(
-            len_name.clone(),
-            WirType::I32,
+        let len_instr = len.unwrap_or_else(|| {
             WirInstr::ArrayLen(Box::new(WirInstr::LocalGet {
                 name: src_name.clone(),
                 result_ty: ref_ty.clone(),
-            })),
+            }))
+        });
+        seq.extend(declare_and_set_local(
+            len_name.clone(),
+            WirType::I32,
+            len_instr,
         ));
         seq.extend(declare_and_set_local(
             dst_name.clone(),
@@ -573,13 +612,31 @@ impl FunctionTranslator<'_, '_> {
                         type_id,
                         src: Box::new(src),
                         element_copy_mangle: Some(element_copy_mangle),
+                        len: None,
                     }),
-                    None => Some(self.build_bulk_array_clone(type_id, src)),
+                    None => Some(self.build_bulk_array_clone(type_id, src, None)),
+                }
+            }
+            "builtin::array_clone_prefix" => {
+                let (type_id, src, src_type_id) = self.translate_array_ref_operand(args)?;
+                let len = self.translate_operand(args[1].expr);
+                match self.array_element_copy_mangle(src_type_id) {
+                    Some(element_copy_mangle) => Some(WirInstr::ArrayClone {
+                        type_id,
+                        src: Box::new(src),
+                        element_copy_mangle: Some(element_copy_mangle),
+                        len: Some(Box::new(len)),
+                    }),
+                    None => Some(self.build_bulk_array_clone(type_id, src, Some(len))),
                 }
             }
             "builtin::array_clone_shallow" => {
+                // The demote pass retargets `array_clone` / `array_clone_prefix`
+                // calls here by id, keeping the call-site args — so a second
+                // arg, when present, is the prefix length to preserve.
                 let (type_id, src, _) = self.translate_array_ref_operand(args)?;
-                Some(self.build_bulk_array_clone(type_id, src))
+                let len = args.get(1).map(|arg| self.translate_operand(arg.expr));
+                Some(self.build_bulk_array_clone(type_id, src, len))
             }
             "builtin::array_fill" => {
                 let arr = self.translate_operand(args[0].expr);
@@ -654,35 +711,9 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
-            "builtin::i64_add128" => {
-                let a_lo = Box::new(self.translate_operand(args[0].expr));
-                let a_hi = Box::new(self.translate_operand(args[1].expr));
-                let b_lo = Box::new(self.translate_operand(args[2].expr));
-                let b_hi = Box::new(self.translate_operand(args[3].expr));
-                Some(self.wrap_multivalue_i64(
-                    WirInstr::I64Add128(a_lo, a_hi, b_lo, b_hi),
-                    result_type_id,
-                ))
-            }
-            "builtin::i64_sub128" => {
-                let a_lo = Box::new(self.translate_operand(args[0].expr));
-                let a_hi = Box::new(self.translate_operand(args[1].expr));
-                let b_lo = Box::new(self.translate_operand(args[2].expr));
-                let b_hi = Box::new(self.translate_operand(args[3].expr));
-                Some(self.wrap_multivalue_i64(
-                    WirInstr::I64Sub128(a_lo, a_hi, b_lo, b_hi),
-                    result_type_id,
-                ))
-            }
-            "builtin::i64_mul_wide_u" => {
-                let a = Box::new(self.translate_operand(args[0].expr));
-                let b = Box::new(self.translate_operand(args[1].expr));
-                Some(self.wrap_multivalue_i64(WirInstr::I64MulWideU(a, b), result_type_id))
-            }
-            "builtin::i64_mul_wide_s" => {
-                let a = Box::new(self.translate_operand(args[0].expr));
-                let b = Box::new(self.translate_operand(args[1].expr));
-                Some(self.wrap_multivalue_i64(WirInstr::I64MulWideS(a, b), result_type_id))
+            _ if MULTIVALUE_I64_BUILTINS.contains(&builtin_name) => {
+                let instr = self.translate_multivalue_i64_builtin(builtin_name, args);
+                Some(self.wrap_multivalue_i64(instr, result_type_id))
             }
 
             "builtin::i32_as_char" => Some(self.translate_operand(args[0].expr)),

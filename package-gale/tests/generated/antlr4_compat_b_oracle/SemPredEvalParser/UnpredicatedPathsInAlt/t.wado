@@ -193,10 +193,13 @@ pub flags TokenFlags {
 /// end; the generated-parser runtime uses `TokenStream` instead.
 ///
 /// Layout invariant: the per-token arrays (`kinds` / `starts` / `ends` /
-/// `triv_lo` / `triv_hi` / `flags`) always share a length, because
-/// `push_token` is the only writer and advances all of them together. Hidden /
-/// skip tokens ("trivia") live in the flat `triv_*` arrays in source order;
-/// each parser token owns the half-open range `[triv_lo[i], triv_hi[i])`.
+/// `triv_lo` / `triv_hi` / `flags`) always share a length and capacity:
+/// `push_token_flagged` is the only writer, advancing and growing them
+/// together behind one capacity check. The trivia columns (`triv_kinds` /
+/// `triv_starts` / `triv_ends` / `triv_chans`) form a second such lockstep
+/// group under `push_trivia`. Hidden / skip tokens ("trivia") live in the
+/// flat `triv_*` arrays in source order; each parser token owns the half-open
+/// range `[triv_lo[i], triv_hi[i])`.
 pub struct TokenStream {
     pub kinds: List<i32>,
     pub starts: List<i32>,
@@ -250,10 +253,20 @@ impl TokenStream {
 
     /// Append one hidden / skip token to the flat trivia arrays.
     pub fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
-        self.triv_kinds.push(kind);
-        self.triv_starts.push(start);
-        self.triv_ends.push(end);
-        self.triv_chans.push(channel);
+        if self.triv_kinds.len() >= self.triv_kinds.capacity() {
+            builtin::cold_path();
+            self.triv_kinds.grow();
+            self.triv_starts.grow();
+            self.triv_ends.grow();
+            self.triv_chans.grow();
+            assert self.triv_starts.capacity() == self.triv_kinds.capacity()
+                && self.triv_ends.capacity() == self.triv_kinds.capacity()
+                && self.triv_chans.capacity() == self.triv_kinds.capacity(), "TokenStream trivia columns must grow in lockstep";
+        }
+        self.triv_kinds.push_within_capacity(kind);
+        self.triv_starts.push_within_capacity(start);
+        self.triv_ends.push_within_capacity(end);
+        self.triv_chans.push_within_capacity(channel);
     }
 
     /// Append one parser (default-channel) token. The sole writer of the
@@ -274,12 +287,26 @@ impl TokenStream {
         flags: TokenFlags,
     ) -> i32 {
         let idx = self.kinds.len();
-        self.kinds.push(kind);
-        self.starts.push(start);
-        self.ends.push(end);
-        self.triv_lo.push(triv_lo);
-        self.triv_hi.push(triv_hi);
-        self.flags.push(flags);
+        if idx >= self.kinds.capacity() {
+            builtin::cold_path();
+            self.kinds.grow();
+            self.starts.grow();
+            self.ends.grow();
+            self.triv_lo.grow();
+            self.triv_hi.grow();
+            self.flags.grow();
+            assert self.starts.capacity() == self.kinds.capacity()
+                && self.ends.capacity() == self.kinds.capacity()
+                && self.triv_lo.capacity() == self.kinds.capacity()
+                && self.triv_hi.capacity() == self.kinds.capacity()
+                && self.flags.capacity() == self.kinds.capacity(), "TokenStream token columns must grow in lockstep";
+        }
+        self.kinds.push_within_capacity(kind);
+        self.starts.push_within_capacity(start);
+        self.ends.push_within_capacity(end);
+        self.triv_lo.push_within_capacity(triv_lo);
+        self.triv_hi.push_within_capacity(triv_hi);
+        self.flags.push_within_capacity(flags);
         return idx;
     }
 
@@ -940,11 +967,24 @@ impl TreeBuilder {
         };
     }
 
+    /// The four event columns share length and capacity: `push_row` (and
+    /// `start_node_at` / `truncate`) always advance them together, so one
+    /// capacity check covers the whole row.
     fn push_row(&mut self, tag: EventTag, a: i32, b: i32) {
-        self.tag.push(tag);
-        self.a.push(a);
-        self.b.push(b);
-        self.alt.push(-1);
+        if self.tag.len() >= self.tag.capacity() {
+            builtin::cold_path();
+            self.tag.grow();
+            self.a.grow();
+            self.b.grow();
+            self.alt.grow();
+            assert self.a.capacity() == self.tag.capacity()
+                && self.b.capacity() == self.tag.capacity()
+                && self.alt.capacity() == self.tag.capacity(), "TreeBuilder event columns must grow in lockstep";
+        }
+        self.tag.push_within_capacity(tag);
+        self.a.push_within_capacity(a);
+        self.b.push_within_capacity(b);
+        self.alt.push_within_capacity(-1);
     }
 
     /// Open a rule node of `kind` starting at byte offset `start`.
@@ -1042,21 +1082,17 @@ impl TreeBuilder {
     /// to the stream end (its `next` never stays 0), so traversal terminates.
     pub fn finish(&self) -> CstStore {
         let n = self.tag.len();
-        let mut b: List<i32> = List::with_capacity(n);
-        let mut end: List<i32> = List::with_capacity(n);
-        let mut flags: List<NodeFlags> = List::with_capacity(n);
-        let mut next: List<i32> = List::with_capacity(n);
-        for let mut r = 0; r < n; r += 1 {
-            b.push(self.b[r]);
-            end.push(0);
-            flags.push(NodeFlags::none());
-            next.push(0);
-        }
+        let mut b = self.b;
+        let mut end = List::filled(n, 0);
+        let mut flags = List::filled(n, NodeFlags::none());
+        let mut next = List::filled(n, 0);
         let mut stack: List<i32> = [];
         for let mut r = 0; r < n; r += 1 {
             match self.tag[r] {
                 Open => {
-                    flags[r] = if self.a[r] == K_ERROR as i32 { NodeFlags::Error } else { NodeFlags::none() };
+                    if self.a[r] == K_ERROR as i32 {
+                        flags[r] = NodeFlags::Error;
+                    }
                     end[r] = self.b[r];
                     stack.push(r);
                 },

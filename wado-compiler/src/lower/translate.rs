@@ -323,6 +323,9 @@ struct FunctionTranslator<'a, 'p> {
     /// (WEP 2026-05-21 read-only-share): a read-only local bound from a
     /// projection whose storage is provably never mutated while it is live.
     share_eligible_locals: IndexSet<u32>,
+    /// Locals a last-use move can hand to a new owner
+    /// ([`value_copy::last_use::compute_moved_roots`]).
+    moved_roots: IndexSet<u32>,
     /// May-alias components for this function, so a confined by-value argument
     /// keeps its copy exactly when it aliases a mutated sibling (WEP 2026-05-21).
     alias_components: value_copy::last_use::AliasComponents,
@@ -384,6 +387,11 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         } else {
             value_copy::last_use::MoveEligible::default()
         };
+        let moved_roots = if needs_copy_analysis {
+            value_copy::last_use::compute_moved_roots(func, &move_eligible, func_moved_spans)
+        } else {
+            IndexSet::default()
+        };
         let move_eligible_locals = move_eligible.locals;
         let move_eligible_place_spans = move_eligible.place_spans;
         let share_eligible_locals = if needs_copy_analysis {
@@ -415,6 +423,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             move_eligible_locals,
             move_eligible_place_spans,
             share_eligible_locals,
+            moved_roots,
             alias_components,
             arena: RefCell::new(Body::empty()),
         }
@@ -437,6 +446,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             move_eligible_locals: IndexSet::default(),
             move_eligible_place_spans: IndexSet::default(),
             share_eligible_locals: IndexSet::default(),
+            moved_roots: IndexSet::default(),
             alias_components: value_copy::last_use::AliasComponents::empty(),
             arena: RefCell::new(Body::empty()),
         }
@@ -667,6 +677,17 @@ impl FunctionTranslator<'_, '_> {
     /// Whether `value` is a move rather than a copy: a whole-local read at its
     /// final use, or a field / whole-value materialization that aliases out of a
     /// dead aggregate at a literal (place-level move, keyed by span).
+    /// Whether an immutable binding may alias `value`'s storage instead of
+    /// copying it: the source must be rooted at an immutable local whose
+    /// storage is never moved to a new owner.
+    fn source_shares_immutable_storage(&self, value: &TirExpr) -> bool {
+        if !value_copy::analyze::is_source_immutable(value, &self.immutable_locals) {
+            return false;
+        }
+        value_copy::analyze::source_root(value)
+            .is_some_and(|root| !self.moved_roots.contains(&root))
+    }
+
     fn is_last_use_move(&self, value: &TirExpr) -> bool {
         // A newtype cast hands over the same storage (see
         // `last_use::strip_casts`), so it must not hide the materialization
@@ -1072,11 +1093,7 @@ impl FunctionTranslator<'_, '_> {
                 };
                 let needs_value_copy_wrap = !*skip_value_copy
                     && !self.share_eligible_locals.contains(local_index)
-                    && (*is_mut
-                        || !value_copy::analyze::is_source_immutable(
-                            value,
-                            &self.immutable_locals,
-                        ))
+                    && (*is_mut || !self.source_shares_immutable_storage(value))
                     && self.should_wrap_value_copy(value);
                 let value_op = self.convert_operand(value);
                 let value_op = if needs_value_copy_wrap {

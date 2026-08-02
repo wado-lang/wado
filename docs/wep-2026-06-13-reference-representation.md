@@ -37,6 +37,12 @@ yet is replace-on-assign (see below). Mutability (`&` vs `&mut`) is a type-level
 distinction, not a representational one: a reference to a replace-on-assign type
 is `Box<T>` whether `&` or `&mut`.
 
+Since both collapse onto one wrapper, the resolved type no longer says which is
+which. The rewrite records the shared-`&T` origin separately, and anything asking
+whether a boxed handle can be written through MUST consult that record, not the
+type. A `Box<T>` parameter is the caller's storage, not a copy of it: reading it
+as a by-value struct snapshots an aliased reference and loses the write.
+
 ### Classification of types
 
 | Category                        | Types                                                                             | `&T` / `&mut T`                                        | Mutation through the reference             |

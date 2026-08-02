@@ -1180,7 +1180,15 @@ impl<'a> Builder<'a> {
                 }
                 None
             }
-            ExprKind::EnumConstruct { .. } => None,
+            // An enum case is a compile-time scalar constant: its discriminant.
+            // Interning it as the integer it lowers to (`WirInstr::I32Const`)
+            // makes every constant-propagating rule — store→load forwarding,
+            // copy propagation, CSE — see through a `let k = Enum::Case`.
+            ExprKind::EnumConstruct {
+                enum_type,
+                case_index,
+                ..
+            } => Some(self.pool.int_typed(u64::from(case_index), enum_type)),
             ExprKind::ClosureToCanonical { functor, .. } => {
                 self.walk_operand(functor);
                 None

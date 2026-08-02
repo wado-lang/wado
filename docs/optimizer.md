@@ -72,13 +72,13 @@ Variant and reference:
 
 Scalar and dataflow:
 
-- `copy_prop` — propagate trivial copies (`let x = y`) and drop the binding.
+- `copy_prop` — propagate trivial copies (`let x = y`) and drop the binding. A value-type copy propagates however many times each side is read when neither binding is ever written, since the sharing is then unobservable.
 - `param_spec` — interprocedural constant propagation over struct fields: clone a callee on the constant fields of a by-reference struct its caller passes, substituting those reads.
 - `dae` — drop parameters never read by the callee, and the pure argument at every call site.
 - `drve` — make a function void-returning when its result is dropped at every call site.
 - `store_load_forward` — forward a stored literal to a later unmodified load.
 - `elide_local` — drop a binding that is never read (keeping its value if impure).
-- `const_folding` — partial evaluation: constant arithmetic, compile-time execution, immutable-global reads, constant-branch collapse, short-circuit simplification (a neutral operand keeps the other, an absorbing one becomes the result when the deleted operand can neither trap nor be observed), and constant struct / tuple values (field projection, aggregate arguments and results of a compile-time call, and struct / tuple patterns over a constant scrutinee, with the arm's bindings and guard). A constant sequence's length and elements read out of it too, whether it is a local literal or a global. An immutable global's value is read from the assignment that fills its slot as well as from its initializer, since a non-trivial initializer is extracted into module init; a global something writes through, or hands a part of to a local, is not read at all. A compile-time call runs the callee's statements — `let` sequences, decided branches, early returns, loops, and the expression-position blocks inlining leaves — bounded by a work budget rather than by a constant trip count, and abandons the call rather than stepping past a statement it cannot perform. It also writes: a store, an element write, an allocation and a copy all land in the value the frame itself built, and a call writing through a `&mut` parameter runs and writes back into the caller's place. So a container filled at compile time — `push` and the growth it triggers included — is a compile-time value, and one whose elements are bytes leaves the engine as the literal a source string lowers to. A closed block — one that builds its value in locals of its own, writes only to those, and yields the result — runs as a frame of its own, which is what folds a fully-constant string template to the literal it denotes. Only a frame may step past a write, since only a frame performs one; an ordinary walk keeps no value across a call that writes.
+- `const_folding` — partial evaluation: constant arithmetic (an `enum` case counts as one — it interns as the discriminant it lowers to), compile-time execution, immutable-global reads, constant-branch collapse, short-circuit simplification (a neutral operand keeps the other, an absorbing one becomes the result when the deleted operand can neither trap nor be observed), and constant struct / tuple values (field projection, aggregate arguments and results of a compile-time call, and struct / tuple patterns over a constant scrutinee, with the arm's bindings and guard). A constant sequence's length and elements read out of it too, whether it is a local literal or a global. An immutable global's value is read from the assignment that fills its slot as well as from its initializer, since a non-trivial initializer is extracted into module init; a global something writes through, or hands a part of to a local, is not read at all. A compile-time call runs the callee's statements — `let` sequences, decided branches, early returns, loops, and the expression-position blocks inlining leaves — bounded by a work budget rather than by a constant trip count, and abandons the call rather than stepping past a statement it cannot perform. It also writes: a store, an element write, an allocation and a copy all land in the value the frame itself built, and a call writing through a `&mut` parameter runs and writes back into the caller's place. So a container filled at compile time — `push` and the growth it triggers included — is a compile-time value, and one whose elements are bytes leaves the engine as the literal a source string lowers to. A closed block — one that builds its value in locals of its own, writes only to those, and yields the result — runs as a frame of its own, which is what folds a fully-constant string template to the literal it denotes. Only a frame may step past a write, since only a frame performs one; an ordinary walk keeps no value across a call that writes.
 - `const_branch_prune` — simplify trivial blocks and fold a constant-condition `if` to its taken arm.
 
 Loop and field:
@@ -106,14 +106,22 @@ NIR→WIR lowering avoids a few redundant shapes, firing once during the build a
 `wir_optimize.rs` mutates the `WirPackage` in place after WIR build; phases run in order and may iterate.
 
 1. Type representation — nullable-ref lowering; small-variant returns to multi-value.
-2. Struct-local elimination — substitute field reads for single-field struct and box locals.
+2. Box-local elimination — substitute the field read for a `Box<T>` local lowering minted.
 3. Data flow — forward constant struct fields for constant-index bounds-check elimination.
-4. Library rewrites — short-string append expansion; constant-array data promotion; large-literal splitting.
-5. Peephole — Wasm instruction-selection rewrites with no NIR analogue; multi-field struct elimination; nullability-driven rewrites (elide redundant `ref.as_non_null`, fold `ref.is_null` on a non-null reference).
+4. Library rewrites — short-string append expansion; constant-array data promotion (only where packing encodes smaller than the inline `T.const` operands, since a data segment stores each element at full width while an operand is LEB128-compressed); large-literal splitting; elision of a whole-array zero fill on a fresh `array.new_default` (the `List::filled(n, 0)` shape).
+5. Peephole — Wasm instruction-selection rewrites with no NIR analogue.
 6. Write-only local elimination — for locals only the WIR builder synthesises.
 7. Global cleanup — constant-initializer promotion, identical-global dedup, and dead-data pruning.
 8. Branch hints — `br_if` selection and trap-based cold/likely inference (also at `-O0`).
 9. Final DCE and compaction.
+
+A pass earns its place here only by changing the emitted Wasm. Skip-scanning
+one over the benchmark, example, and fixture corpus — disabling it and diffing
+the output — is what settles that; anything NIR or a sibling WIR pass already
+covers leaves the bytes identical and does not belong. The exception is
+`split_large_array_literals`, which scans as byte-neutral because no corpus
+program reaches its bound: it is a JIT-pathology guard for >256-element
+literals, not an optimization.
 
 Branch hints are transparent annotations on `if`/`br_if` conditions: a pass looks through a hint when matching, drops it when eliminating the branch, and flips it when negating the condition. wasmtime lays the cold side out of line; `-f no-branch-hinting` disables the feature for benchmarking.
 
@@ -138,6 +146,14 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
       non-constant field still costs a GC load per read.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
+- [ ] Variant return ABI decided at NIR, the way `multi_value_return` already
+      decides the tuple and struct case. Until then every NIR pass sees a
+      `Result`-returning call as one opaque boxed value: the scalarization
+      happens in `wir_optimize::sroa_variant_return`, after they have all run.
+- [ ] Folding a `match` whose scrutinee is a syntactically known
+      `VariantConstruct`. The constant-scrutinee path runs through
+      `const_eval::Value`, which is all-or-nothing constant, so "case known,
+      payload opaque" is inexpressible there.
 
 ## Tried and found ineffective
 

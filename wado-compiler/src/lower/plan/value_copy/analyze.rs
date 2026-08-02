@@ -65,7 +65,7 @@ impl SeedWalker<'_> {
     }
 
     fn record_array_clone_element(&mut self, expr: &TirExpr) {
-        if let Some(t) = array_clone_element_type_arg(expr)
+        if let Some(t) = super::array_clone_element_type_arg(expr)
             && super::needs_value_copy(t, self.type_table)
         {
             self.out.insert(t);
@@ -78,13 +78,13 @@ impl TirRefVisitor for SeedWalker<'_> {
         match &stmt.kind {
             TirStmtKind::Let {
                 value,
-                is_mut,
                 skip_value_copy,
                 ..
             } => {
-                if !*skip_value_copy
-                    && (*is_mut || !is_source_immutable(value, &self.immutable_locals))
-                {
+                // Seed every candidate: whether an immutable source keeps its
+                // copy depends on per-function move analysis this walk cannot
+                // see. An unused helper is dead code `dce` removes.
+                if !*skip_value_copy {
                     self.record_if_wrap(value);
                 }
             }
@@ -491,28 +491,25 @@ fn scan_expr_for_breaks(
 /// An immutable destination binding can alias an immutable-rooted
 /// source without a defensive copy. Mirrors
 /// `wir_build::value_copy::is_source_immutable`.
+///
+/// Immutability of the *binding* is not immutability of the storage, so the
+/// caller also checks the root against
+/// [`super::last_use::compute_moved_roots`].
 pub fn is_source_immutable(expr: &TirExpr, immutable_locals: &IndexSet<u32>) -> bool {
+    source_root(expr).is_some_and(|r| immutable_locals.contains(&r))
+}
+
+/// The local an immutable-source chain is rooted at, or `None` for a shape
+/// [`is_source_immutable`] does not accept.
+pub fn source_root(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
-        TirExprKind::Local { index, .. } => immutable_locals.contains(index),
+        TirExprKind::Local { index, .. } => Some(*index),
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
         | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
-        } => is_source_immutable(inner, immutable_locals),
-        _ => false,
-    }
-}
-
-fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
-    if let TirExprKind::Call { func, .. } = &expr.kind
-        && func.module_source.is_core_builtin()
-        && crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "array_clone")
-    {
-        func.monomorph_info
-            .as_ref()
-            .and_then(|mi| mi.impl_type_args.first().copied())
-    } else {
-        None
+        } => source_root(inner),
+        _ => None,
     }
 }

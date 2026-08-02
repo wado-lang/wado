@@ -70,7 +70,7 @@ fully lowered. The pass:
   `GlobalSet` inside an `__inline___initialize_modules` guard block, duplicated
   per entry export, which a top-level-only scan would leave lazy.
 
-`init_guard` / `dce` / `cleanup` reclaim the emptied init body and the
+`dce` / `cleanup` reclaim the emptied init body and the
 `__modules_initialized` guard in the same phase. Promotion leaves `lazy_init`
 and the nullable slot as `register_globals` set them — a non-null const init is
 a valid subtype of a nullable slot.

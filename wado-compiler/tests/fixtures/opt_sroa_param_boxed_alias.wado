@@ -1,0 +1,135 @@
+// Soundness (P0) for `sroa_param`: a *boxed* reference parameter is not a copy.
+//
+// `boxing::prepare_types` collapses `&i32` and `&mut i32` onto one by-value
+// `Box<i32>`, so `sroa_param` sees a single-field struct passed by value and
+// used to assume "a by-value struct candidate is already a copy". It is not:
+// the box IS the caller's storage, and `&x` of an address-taken local lowers to
+// a read of that one box. Scalarizing a handle some other access path can write
+// turns it into a call-time snapshot, and the write is lost.
+//
+// Each case hides the aliasing handle one level further from the candidate; it
+// only has to be *reachable* from something the callee holds, not be the
+// sibling itself.
+//
+// `shared_pair` is the precision guard: two read-only handles cannot stale each
+// other, so scalarization must still fire. Its arguments come from a mutable
+// global so the call survives folding, and `wir_expect` pins the scalarized
+// signature — otherwise an over-conservative guard would pass unnoticed.
+use { println, Stdout } from "core:cli";
+
+struct Holder { r: &mut i32 }
+
+global mut SEED: i32 = 0;
+global mut ZERO: i32 = 0;
+global mut G: Holder = Holder { r: &mut ZERO };
+
+#[inline("never")]
+fn touch(a: &mut i32, b: &i32) -> i32 {
+    *a = 1;
+    return *b;
+}
+
+#[inline("never")]
+fn bump_both(a: &mut i32, b: &mut i32) -> i32 {
+    *a = *a + 10;
+    return *b;
+}
+
+#[inline("never")]
+fn by_value(p: &i32, h: Holder) -> i32 {
+    *h.r = 7;
+    return *p;
+}
+
+#[inline("never")]
+fn shared_holder(p: &i32, h: &Holder) -> i32 {
+    *h.r = 8;
+    return *p;
+}
+
+#[inline("never")]
+fn via_global(p: &i32) -> i32 {
+    *G.r = 9;
+    return *p;
+}
+
+#[inline("never")]
+fn via_closure(p: &i32, mut g: fn mut()) -> i32 {
+    g();
+    return *p;
+}
+
+#[inline("never")]
+fn next() -> i32 {
+    SEED = SEED + 7;
+    return SEED;
+}
+
+#[inline("never")]
+fn shared_pair(a: &i32, b: &i32) -> i32 {
+    return *a * 100 + *b;
+}
+
+export fn run() with Stdout {
+    let mut x = 0;
+    let sibling = touch(&mut x, &x);
+    if sibling != 1 {
+        panic(`sibling: expected 1, got ${sibling}`);
+    }
+
+    let mut y = 5;
+    let both_mut = bump_both(&mut y, &mut y);
+    if both_mut != 15 {
+        panic(`both_mut: expected 15, got ${both_mut}`);
+    }
+
+    let mut a = 0;
+    let held = by_value(&a, Holder { r: &mut a });
+    if held != 7 {
+        panic(`by_value: expected 7, got ${held}`);
+    }
+
+    let mut b = 0;
+    let hb = Holder { r: &mut b };
+    let shared = shared_holder(&b, &hb);
+    if shared != 8 {
+        panic(`shared_holder: expected 8, got ${shared}`);
+    }
+
+    let mut c = 0;
+    G = Holder { r: &mut c };
+    let global_held = via_global(&c);
+    if global_held != 9 {
+        panic(`via_global: expected 9, got ${global_held}`);
+    }
+
+    let mut d = 0;
+    let set_d = || {
+        d = 11;
+    };
+    let closed = via_closure(&d, set_d);
+    if closed != 11 {
+        panic(`via_closure: expected 11, got ${closed}`);
+    }
+
+    let p = next();
+    let q = next();
+    let apart = shared_pair(&p, &q);
+    if apart != 714 {
+        panic(`shared_pair: expected 714, got ${apart}`);
+    }
+
+    println(`ok ${x}`);
+}
+
+__DATA__
+{
+    "stdout": "ok 1\n",
+    "wir_expect:O2": [
+        "/shared_pair\" = fn(i32, i32) -> i32"
+    ],
+    "wir_not_expect:O2": [
+        "/touch\" = fn(i32, i32) -> i32",
+        "/bump_both\" = fn(i32, i32) -> i32"
+    ]
+}

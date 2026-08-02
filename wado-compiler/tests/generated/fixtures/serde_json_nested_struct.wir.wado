@@ -529,7 +529,7 @@ fn "serde_json_nested_struct.wado/__test_1_nested_struct_roundtrip"() {
     multivalue_bind [__sroa_json_r_discriminant, __sroa_json_r_case0_payload_0, __sroa_json_r_case1_payload_0] = "core:json/core/json/to_string<serde_json_nested_struct.wado/Line>"(global:serde_json_nested_struct.wado::__const_obj_83, struct.new "core:prelude/types.wado//Option<char>" { 1 });
     if @likely(__sroa_json_r_discriminant == 0) {
         json = ref.as_non_null(__sroa_json_r_case0_payload_0);
-        input = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = json.repr; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: json.used };
+        input = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = json.repr; let __array_clone_len_9: i32; __array_clone_len_9 = json.used; let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: json.used };
         let __sroa_parsed_r_discriminant: i32;
         let __sroa_parsed_r_case0_payload_0: ref null "serde_json_nested_struct.wado//Line";
         let __sroa_parsed_r_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -596,7 +596,7 @@ fn "serde_json_nested_struct.wado/__cm_export____test_1_nested_struct_roundtrip"
 
 fn "serde_json_nested_struct.wado/$value_copy$core:serde/DeserializeError"(v) {
     let v_1: ref "core:prelude/string.wado//String";
-    return struct.new "core:serde//DeserializeError" { kind: v.kind, message: ref.as_non_null(v_1 = v.message; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = v_1.repr; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: v_1.used }), offset: v.offset };
+    return struct.new "core:serde//DeserializeError" { kind: v.kind, message: ref.as_non_null(v_1 = v.message; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = v_1.repr; let __array_clone_len_9: i32; __array_clone_len_9 = v_1.used; let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: v_1.used }), offset: v.offset };
 }
 
 fn "core:base64/build_decode_table"() {
@@ -914,6 +914,10 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
     let f: u64;
     let c_hi_raw: u64;
     let c_lo_raw: u64;
+    let a1_lo_i: i64;
+    let a1_hi_i: i64;
+    let a0_lo_i: i64;
+    let a0_hi_i: i64;
     let sum_lo: u64;
     let carry1: u64;
     let top_lo: u64;
@@ -930,16 +934,12 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
     f = "core:prelude/fpfmt.wado/pow10_fine"(r);
     c_hi_raw = c_mv_hi - builtin::i64_extend_i32_u(c_mv_lo != 0_i64);
     c_lo_raw = 0_i64 - c_mv_lo;
-    let __mv_lo_1: i64;
-    let __mv_hi_1: i64;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(c_hi_raw, f);
-    let __mv_lo_2: i64;
-    let __mv_hi_2: i64;
-    multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.mul_wide_u(c_lo_raw, f);
-    carry1 = builtin::i64_extend_i32_u(local.tee sum_lo(__mv_lo_1 + __mv_hi_2) <u __mv_lo_1);
+    multivalue_bind [a1_lo_i, a1_hi_i] = i64.mul_wide_u(c_hi_raw, f);
+    multivalue_bind [a0_lo_i, a0_hi_i] = i64.mul_wide_u(c_lo_raw, f);
+    carry1 = builtin::i64_extend_i32_u(local.tee sum_lo(a1_lo_i + a0_hi_i) <u a1_lo_i);
     top_lo = sum_lo;
-    top_hi = __mv_hi_1 + carry1;
-    if __mv_lo_2 != 0_i64 {
+    top_hi = a1_hi_i + carry1;
+    if a0_lo_i != 0_i64 {
         top_lo = top_lo + 1_i64;
         if top_lo == 0_i64 {
             top_hi = top_hi + 1_i64;
@@ -956,19 +956,18 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
 }
 
 fn "core:prelude/fpfmt.wado/uscale"(x, pm_hi, pm_lo, s) {
+    let mid_i64: i64;
+    let hi_tmp: i64;
     let hi: u64;
     let sticky: u64;
-    let __mv_lo_1: i64;
-    let __mv_hi_1: i64;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(x, pm_hi);
-    hi = __mv_hi_1;
+    let mid2_i64: i64;
+    multivalue_bind [mid_i64, hi_tmp] = i64.mul_wide_u(x, pm_hi);
+    hi = hi_tmp;
     sticky = 1_i64;
     if (hi & ((1_i64 << builtin::i64_extend_i32_s(s & 63)) - 1_i64)) == 0_i64 {
-        let __mv_lo_2: i64;
-        let __mv_hi_2: i64;
-        multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.mul_wide_u(x, pm_lo);
-        sticky = builtin::i64_extend_i32_u((__mv_lo_1 - __mv_hi_2) >u 1_i64);
-        hi = hi - builtin::i64_extend_i32_u(__mv_lo_1 <u __mv_hi_2);
+        multivalue_bind [_, mid2_i64] = i64.mul_wide_u(x, pm_lo);
+        sticky = builtin::i64_extend_i32_u((mid_i64 - mid2_i64) >u 1_i64);
+        hi = hi - builtin::i64_extend_i32_u(mid_i64 <u mid2_i64);
     }
     return (hi >>u builtin::i64_extend_i32_s(s)) | sticky;
 }
@@ -1115,46 +1114,41 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
     let d4: u64;
     let d2: u64;
     let d1b: u64;
+    let lo_21: i64;
+    let lo_26: i64;
+    let lo_31: i64;
+    let lo_36: i64;
+    let lo_41: i64;
     xv = x;
     pv = p;
-    let __mv_lo_1: i64;
-    let __mv_hi_1: i64;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(xv, -3689348814741910323_i64);
-    d1 = (__mv_lo_1 >>u 1_i64) | (__mv_lo_1 << 63_i64);
+    multivalue_bind [lo_21, _] = i64.mul_wide_u(xv, -3689348814741910323_i64);
+    d1 = (lo_21 >>u 1_i64) | (lo_21 << 63_i64);
     if d1 <=u 1844674407370955161_i64 {
         xv = d1;
         pv = pv + 1;
     } else {
         return xv, pv;
     }
-    let __mv_lo_2: i64;
-    let __mv_hi_2: i64;
-    multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.mul_wide_u(xv, -4078282918271054303_i64);
-    d8 = (__mv_lo_2 >>u 8_i64) | (__mv_lo_2 << 56_i64);
+    multivalue_bind [lo_26, _] = i64.mul_wide_u(xv, -4078282918271054303_i64);
+    d8 = (lo_26 >>u 8_i64) | (lo_26 << 56_i64);
     if d8 <=u 184467440737_i64 {
         xv = d8;
         pv = pv + 8;
     }
-    let __mv_lo_3: i64;
-    let __mv_hi_3: i64;
-    multivalue_bind [__mv_lo_3, __mv_hi_3] = i64.mul_wide_u(xv, -3276141747490816367_i64);
-    d4 = (__mv_lo_3 >>u 4_i64) | (__mv_lo_3 << 60_i64);
+    multivalue_bind [lo_31, _] = i64.mul_wide_u(xv, -3276141747490816367_i64);
+    d4 = (lo_31 >>u 4_i64) | (lo_31 << 60_i64);
     if d4 <=u 1844674407370955_i64 {
         xv = d4;
         pv = pv + 4;
     }
-    let __mv_lo_4: i64;
-    let __mv_hi_4: i64;
-    multivalue_bind [__mv_lo_4, __mv_hi_4] = i64.mul_wide_u(xv, -8116567392432202711_i64);
-    d2 = (__mv_lo_4 >>u 2_i64) | (__mv_lo_4 << 62_i64);
+    multivalue_bind [lo_36, _] = i64.mul_wide_u(xv, -8116567392432202711_i64);
+    d2 = (lo_36 >>u 2_i64) | (lo_36 << 62_i64);
     if d2 <=u 184467440737095516_i64 {
         xv = d2;
         pv = pv + 2;
     }
-    let __mv_lo_5: i64;
-    let __mv_hi_5: i64;
-    multivalue_bind [__mv_lo_5, __mv_hi_5] = i64.mul_wide_u(xv, -3689348814741910323_i64);
-    d1b = (__mv_lo_5 >>u 1_i64) | (__mv_lo_5 << 63_i64);
+    multivalue_bind [lo_41, _] = i64.mul_wide_u(xv, -3689348814741910323_i64);
+    d1b = (lo_41 >>u 1_i64) | (lo_41 << 63_i64);
     if d1b <=u 1844674407370955161_i64 {
         xv = d1b;
         pv = pv + 1;
@@ -1955,7 +1949,7 @@ fn "core:json/core/json/to_string<serde_json_nested_struct.wado/Line>"(value, tr
         "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf, c);
     } else {
     }
-    return 0, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = buf.repr; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: buf.used }, ref.null none;
+    return 0, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = buf.repr; let __array_clone_len_9: i32; __array_clone_len_9 = buf.used; let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: buf.used }, ref.null none;
 }
 
 fn "core:json/core/json/from_bytes<serde_json_nested_struct.wado/Line,core:prelude/string.wado/String>"(input) {
@@ -3967,7 +3961,7 @@ fn "serde_json_nested_struct.wado/serde_json_nested_struct.wado/Line^Serialize::
         drop("core:json/core:json/JsonStructSerializer^SerializeStruct::field<serde_json_nested_struct.wado/Point>"(__local_3, global:serde_json_nested_struct.wado::__const_obj_114, self.end_point));
         return self_17 = __local_3.buf, start_19 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self_17, 1), builtin::array_set_u8(self_17.repr, start_19, 125), ref.null none;
     } else {
-        return ref.as_non_null(v_26 = ref.cast "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>::Err"(__result).payload_0; struct.new "core:serde//SerializeError" { kind: v_26.kind, message: ref.as_non_null(v_27 = v_26.message; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = v_27.repr; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: v_27.used }) });
+        return ref.as_non_null(v_26 = ref.cast "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>::Err"(__result).payload_0; struct.new "core:serde//SerializeError" { kind: v_26.kind, message: ref.as_non_null(v_27 = v_26.message; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = v_27.repr; let __array_clone_len_9: i32; __array_clone_len_9 = v_27.used; let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: v_27.used }) });
     }
 }
 
@@ -4111,7 +4105,7 @@ fn "serde_json_nested_struct.wado/serde_json_nested_struct.wado/Point^Serialize:
         drop("core:json/core:json/JsonStructSerializer^SerializeStruct::field<f64>"(__local_3, global:serde_json_nested_struct.wado::__const_obj_116, self.y));
         return self_17 = __local_3.buf, start_19 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self_17, 1), builtin::array_set_u8(self_17.repr, start_19, 125), ref.null none;
     } else {
-        return ref.as_non_null(v_26 = ref.cast "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>::Err"(__result).payload_0; struct.new "core:serde//SerializeError" { kind: v_26.kind, message: ref.as_non_null(v_27 = v_26.message; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = v_27.repr; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: v_27.used }) });
+        return ref.as_non_null(v_26 = ref.cast "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>::Err"(__result).payload_0; struct.new "core:serde//SerializeError" { kind: v_26.kind, message: ref.as_non_null(v_27 = v_26.message; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = v_27.repr; let __array_clone_len_9: i32; __array_clone_len_9 = v_27.used; let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: v_27.used }) });
     }
 }
 

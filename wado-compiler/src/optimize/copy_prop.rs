@@ -589,6 +589,20 @@ fn can_propagate_copy(
                 return false;
             }
             let is_value_type = needs_value_copy(binding.type_id, type_table);
+            // Neither binding is ever written — the target is already known
+            // unassigned and not address-taken, and the source is neither
+            // assigned, field-mutated, nor address-taken — so the copy only
+            // names a second, permanently identical object. Nothing can observe
+            // the sharing, whatever the read counts, so the coarse value-type
+            // gates below (which exist to keep two mutable views apart) do not
+            // apply.
+            if is_value_type
+                && !target_usage.has_field_mutation
+                && source_usage
+                    .is_none_or(|su| !su.is_assigned && !su.has_field_mutation && !su.address_taken)
+            {
+                return true;
+            }
             if is_value_type
                 && target_usage.read_count == 1
                 && let Some(su) = source_usage
