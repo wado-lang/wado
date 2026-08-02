@@ -25,6 +25,10 @@
 //! its fixed-point loop. Write-only-local elim is split — `optimize::elide_local`
 //! for TIR locals, `elide_local` here for `wir_build`-synthesised locals TIR
 //! can't see.
+//!
+//! Every `#![wasm_module(...)]` core module — the allocator — runs through this
+//! same pipeline as a package of its own ([`optimize_wasm_modules`]), since
+//! codegen emits those packages verbatim.
 
 pub(crate) mod array;
 mod branch_hint;
@@ -102,6 +106,8 @@ pub fn optimize_wir(
     flags: CodegenFlags,
     profiler: &dyn SpanEmitter,
 ) {
+    optimize_wasm_modules(module, opt_level, flags, profiler);
+
     // Mandatory representation lowering — runs before the `-O0` gate. See above.
     lower_nullable_refs(module);
 
@@ -265,6 +271,35 @@ pub fn optimize_wir(
     // Phase 9: finalize the declared-local SSoT now that no pass adds or removes
     // a `DeclareLocal`.
     finalize_locals(module);
+}
+
+/// Run this same pipeline over each `#![wasm_module(...)]` core module.
+///
+/// Codegen emits those packages verbatim, so this is the only WIR-level pass
+/// they get — without it the allocator ships unoptimized. Reachability is seeded
+/// from the module's own exports first so an unused allocator variant is dropped
+/// at every `-O`, matching what the memory module has always had.
+///
+/// Recursion terminates at one level: a wasm module's own package carries no
+/// nested `wasm_modules`.
+fn optimize_wasm_modules(
+    module: &mut WirPackage,
+    opt_level: OptLevel,
+    flags: CodegenFlags,
+    profiler: &dyn SpanEmitter,
+) {
+    let mut wasm_modules = std::mem::take(&mut module.wasm_modules);
+    for wasm_module in wasm_modules.values_mut() {
+        dce::mark_unreachable_defined_functions(wasm_module);
+        // A wasm module has a 1:1 function/type correspondence — each function
+        // owns the func type at its own index — so a dead function's type is
+        // dead too.
+        for i in wasm_module.dead_func_indices.clone() {
+            wasm_module.dead_type_indices.insert(i);
+        }
+        optimize_wir(wasm_module, opt_level, flags, profiler);
+    }
+    module.wasm_modules = wasm_modules;
 }
 
 /// Freeze each function's declared locals into `func.locals` for the emitter.

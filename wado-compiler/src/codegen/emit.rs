@@ -194,9 +194,7 @@ impl<'a> WirEmitter<'a> {
 
         // 11. Name section (optional)
         if !self.strip_names
-            && (self.wir.names.module_name.is_some()
-                || !self.wir.names.function_names.is_empty()
-                || !self.wir.functions.is_empty())
+            && (self.wir.names.module_name.is_some() || !self.wir.functions.is_empty())
         {
             let names = self.emit_name_section();
             module.section(&names);
@@ -2504,14 +2502,7 @@ impl<'a> WirEmitter<'a> {
             names.module(module_name);
         }
 
-        if !self.wir.names.function_names.is_empty() {
-            // Pre-populated names (e.g., memory module)
-            let mut name_map = NameMap::new();
-            for &(idx, ref name) in &self.wir.names.function_names {
-                name_map.append(idx, name);
-            }
-            names.functions(&name_map);
-        } else if !self.wir.functions.is_empty() {
+        if !self.wir.functions.is_empty() {
             // Generate names from WIR functions using remapped Wasm indices
             let mut name_map = NameMap::new();
             for (i, func) in self.wir.functions.iter().enumerate() {
