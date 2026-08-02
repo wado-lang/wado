@@ -598,7 +598,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let method_ast_id = self
                         .locate_static_method_impl(prefix, suffix, arg_hint.as_deref())
                         .and_then(|r| r.method_id)
-                        .or_else(|| self.static_method_decl_id(prefix, suffix));
+                        .or_else(|| self.static_method_decl_id(None, prefix, suffix));
                     if let Some(method_ast_id) = method_ast_id {
                         self.record_reference_to_def(suffix_seg.id, method_ast_id);
                     }

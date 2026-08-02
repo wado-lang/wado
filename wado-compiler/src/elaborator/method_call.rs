@@ -2208,11 +2208,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // one type declare the same `from`, so a name lookup cannot tell them
         // apart. It covers trait impls only; an inherent static has no
         // selection and reaches the index instead.
-        if let Some(method_ast_id) = selected
-            .as_ref()
-            .and_then(|r| r.method_id)
-            .or_else(|| self.static_method_decl_id(&struct_name, &static_call.method))
-        {
+        if let Some(method_ast_id) = selected.as_ref().and_then(|r| r.method_id).or_else(|| {
+            self.static_method_decl_id(Some(&struct_module), &struct_name, &static_call.method)
+        }) {
             self.record_reference_to_def(static_call.method_id, method_ast_id);
         }
 
@@ -2463,24 +2461,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Search via pre-built index (handles impls defined outside the struct's defining module).
-        //
-        // Both vantages are needed, and each fails alone. The written name may
-        // be an alias (`use { Counter as CounterA }`) that only the call site
-        // can undo — the declaring module knows the type by its original name.
-        // The module, in turn, only the caller knows: keying the undone name
-        // from *here* would answer with the call site's own `Pair` rather than
-        // the one `helper::Pair::new` names.
-        let declared_name = self
-            .sem
-            .imports
-            .import_original_names
-            .get(struct_name)
-            .map_or(struct_name, String::as_str);
-        let static_key = self.tysys.trait_env.declaring_side_key(
-            self.symbols,
-            &method_ref.module,
-            declared_name,
-        );
+        let static_key = self.static_receiver_key(Some(&method_ref.module), struct_name);
         // The decl pass already resolved this signature in the impl's own
         // frame — impl and method type params interned, `Self` bound to the
         // impl target, the impl module's imports in scope. Re-deriving all of

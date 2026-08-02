@@ -4440,9 +4440,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .is_some_and(|header| {
                     header.trait_name.as_deref() == Some(from_trait_name.as_str())
                         && matches!(&header.trait_type, Some(ast::Type::Generic(g))
-                            if g.args.first().is_some_and(|arg| {
-                                Self::get_type_name_static(arg) == from_name
-                            }))
+                        if g.args.first().is_some_and(|arg| {
+                            Self::get_type_name_static(arg) == from_name
+                        }))
                 })
         };
         let keys = self

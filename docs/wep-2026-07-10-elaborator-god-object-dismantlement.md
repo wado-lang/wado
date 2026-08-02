@@ -427,20 +427,25 @@ declaration-keyed digest genuinely cannot answer alone, and it splits three
 ways:
 
 - The trait method's `DeclSig`, with `Self` as slot 0 and the method's own
-  parameters after it. A declaration fact — S6.
+  parameters after it. A declaration fact — S6. The decl pass already records
+  it in exactly that frame.
 - The associated-type projections' `assoc_type_bindings`, computed from the
   _caller's_ where clause (`I: IntoIterator<Item = u8>` gives
   `[("Item", u8)]`). Use-site data, so it becomes an explicit substitution
-  input, never a re-resolution.
+  input, never a re-resolution. Instantiating the recorded signature carries
+  the trait frame's bindings through unchanged, so the caller's have to
+  replace them after the fact — the one piece of machinery S6 still needs.
 - The `ast::TraitBound` lists those projections are built from. Declaration
   facts, but name-keyed and AST-shaped — `TraitEnv`'s alphabet, where
   `assoc_type_bound_index` already keeps them.
 
-Binding `Self` to a slot needs one fix first:
-`TypeTable::substitute_type_params` returns an `AssocTypeProjection`
-unchanged when the substituted base is still a type parameter, so
-`Self::Item` with `Self := I` stays `Self::Item` instead of becoming
-`I::Item`. It must re-intern the projection over the new base.
+Reaching the digest by trait *name* is what blocks the last read. Traits have
+no symbol-table entry, so `canonical_decl_key` answers with the prelude's
+type whenever a module declares a trait sharing one of its names — a local
+`trait Left` against `core:prelude/format`'s `Left`. The AST route survives
+because it falls back to scanning the current module's items. Keying the
+digest by the declaration's `AstId` sidesteps it; removing the read outright
+needs trait-name resolution to become frame-aware, which is its own slice.
 
 - [x] S5c `ImplSig` — a block's target and trait type arguments and its
       associated-type bindings, resolved once in the block's own frame and
@@ -465,10 +470,12 @@ unchanged when the substituted base is still a type parameter, so
       exactly `TraitEnv`'s alphabet. An `ImplSig` *is* recorded for such a
       block, so the digest is total over `impl_headers` and dispatch reads
       it with `.expect` rather than a fallback.
-- [ ] S6 `Signatures` stage C — trait decls: method signatures + `has_body` +
-      `Rc` bodies; convert `find_trait_decl_methods_with_module` /
-      `find_method_in_trait_bounds`; reify reads default bodies from the
-      digest; the walker drops `loaded_modules`.
+- [ ] S6 `Signatures` stage C — trait decls. `TraitSig` / `TraitMethod` are
+      recorded and reify reads default bodies from them. What remains is
+      `find_method_in_trait_bounds`: its two whole-module scans are gone, but
+      it still re-resolves the method's parameter and return types from AST,
+      which needs the caller's associated-type bindings substituted into the
+      recorded signature.
 - [ ] S7 Query migration: `lookup_method_info` cluster and remaining
       callee-signature queries → `impl TypeSystem (ctx, scope)`; delete
       `suppress_reference_recording` / `with_reference_recording_suppressed`;
@@ -487,19 +494,25 @@ a time rather than as a single cut. S8–S9 are last.
 
 Progress metric:
 
-| Metric                                           | S4 | S5b-6 | Target |
-| ------------------------------------------------ | -- | ----- | ------ |
-| `loaded_modules` reads outside reify / decl pass | 25 | 8     | 0      |
-| AST-level type-param substitution helpers        | 2  | 0     | 0      |
-| `get_impl_block` + callers                       | 15 | 0     | 0      |
-| `with_module_perspective` call sites             | 16 | 5     | 1      |
-| `suppress_reference_recording` call sites        | 7  | 2     | 0      |
-| Manual scope save/restore clusters               | 0  | 0     | 0      |
-| `Elaborator` fields                              | 13 | 13    | 6      |
+| Metric                                           | S4 | S5b-6 | Now | Target |
+| ------------------------------------------------ | -- | ----- | --- | ------ |
+| `loaded_modules` reads outside reify / decl pass | 25 | 8     | 4   | 0      |
+| Whole-module AST scans                           | —  | 4     | 0   | 0      |
+| Name-keyed AST predicates                        | —  | 6     | 0   | 0      |
+| AST-level type-param substitution helpers        | 2  | 0     | 0   | 0      |
+| `get_impl_block` + callers                       | 15 | 0     | 0   | 0      |
+| `with_module_perspective` call sites             | 16 | 5     | 9   | 1      |
+| `suppress_reference_recording` call sites        | 7  | 2     | 3   | 0      |
+| Manual scope save/restore clusters               | 0  | 0     | 0   | 0      |
+| `Elaborator` fields                              | 13 | 13    | 13  | 6      |
 
-The eight that remain are three `method_call.rs` name-scan fallbacks, the
-three trait-declaration sites S6 takes, `expr.rs`'s scan for the module
-declaring a `From` impl, and `find_impl_method_ast_id`.
+Every surviving `loaded_modules` read is an indexed fetch of one declaration,
+not a scan: three in `method_call.rs` reached through `impl_index` /
+`all_impl_index`, and `find_trait_decl_with`, which S6 is waiting on. The two
+scope-swapping counts stand above their S5b-6 figures; S7 owns bringing them
+down, and one of the perspective swaps is the walker's own — typing an
+imported global in its declaring module, which is the callee-scope use the
+target of 1 reserves.
 
 ## Consequences
 

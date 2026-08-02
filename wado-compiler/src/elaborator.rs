@@ -534,16 +534,49 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// The receiver key the static-method index is built under.
+    ///
+    /// `receiver_module` is the declaring module when the caller has already
+    /// resolved one; keying from the call site instead would answer with its
+    /// own same-named type (`helper::Pair::new` finding the caller's `Pair`).
+    ///
+    /// `written_name` may be an alias only the call site can undo
+    /// (`use { Counter as CounterA }`), so the alias table is consulted —
+    /// but only when the declaring module does not know the name already.
+    /// Undoing unconditionally would rewrite a name that *is* the
+    /// declaration's whenever the call site happens to alias something else
+    /// to it.
+    pub(super) fn static_receiver_key(
+        &self,
+        receiver_module: Option<&ModuleSource>,
+        written_name: &str,
+    ) -> trait_env::DeclKey {
+        let Some(module) = receiver_module else {
+            return self.canonical_decl_key(written_name);
+        };
+        let declared = if self.symbols.is_defined_in_module(module, written_name) {
+            written_name
+        } else {
+            self.sem
+                .imports
+                .import_original_names
+                .get(written_name)
+                .map_or(written_name, String::as_str)
+        };
+        self.tysys
+            .trait_env
+            .declaring_side_key(self.symbols, module, declared)
+    }
+
     /// The declaring node of the static method `Type::method`, from the
-    /// static-method index. `Type` is canonicalised through the call site's
-    /// import context, so two modules' same-named types cannot answer for
-    /// each other.
+    /// static-method index.
     pub(super) fn static_method_decl_id(
         &self,
+        receiver_module: Option<&ModuleSource>,
         type_name: &str,
         method_name: &str,
     ) -> Option<crate::ast::AstId> {
-        let key = self.canonical_decl_key(type_name);
+        let key = self.static_receiver_key(receiver_module, type_name);
         self.tysys
             .trait_env
             .static_method_index

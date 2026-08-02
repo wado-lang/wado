@@ -1629,11 +1629,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<(ast::Function, Vec<ast::AssociatedTypeDecl>, ModuleSource)> {
         let (trait_decl, module) = self.find_trait_decl(trait_name)?;
         let method = trait_decl.methods.iter().find(|m| m.name == method_name)?;
-        Some((
-            method.clone(),
-            trait_decl.associated_types.clone(),
-            module,
-        ))
+        Some((method.clone(), trait_decl.associated_types.clone(), module))
     }
 
     /// Find a method in the trait declarations the bound names give, read in
