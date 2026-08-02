@@ -87,7 +87,7 @@ use crate::token::Span;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::reachable_blocks;
+use super::arena_query::{reachable_blocks, strip_one_value_copy};
 use super::gate::{FunctionGate, GatedPass};
 
 /// Signature key for a monomorphized `List<T>` method: (`trait_name`, `method_name`).
@@ -733,25 +733,6 @@ fn recognize_init_operand(
 ) -> Option<CandidateInit> {
     op.as_expr()
         .and_then(|e| recognize_init(body, e, sig, value_copy_ids))
-}
-
-/// Strip a single `$value_copy$T(inner)` wrapper, returning its inner
-/// expression, or `None` when `e` is not a one-argument value-copy call. Shared
-/// by every SROA site that sees through a value copy (including `sroa`'s
-/// soft-escape walk).
-pub(super) fn strip_one_value_copy(
-    body: &Body,
-    e: ExprId,
-    value_copy_ids: &IndexSet<crate::nir::FuncId>,
-) -> Option<ExprId> {
-    let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
-        return None;
-    };
-    if value_copy_ids.contains(func_id) && args.len() == 1 {
-        args[0].expr.as_expr()
-    } else {
-        None
-    }
 }
 
 /// Peel `$value_copy$T(inner)` wrappers, returning the innermost expression. A

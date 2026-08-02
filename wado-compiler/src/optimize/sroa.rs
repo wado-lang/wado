@@ -36,6 +36,7 @@ use std::cell::{Cell, RefCell};
 
 use cranelift_entity::EntityRef;
 
+use super::arena_query::strip_one_value_copy;
 use super::gate::{FunctionGate, GatedPass};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::NirFunction;
@@ -625,9 +626,7 @@ impl SoftCtx<'_> {
         // position regardless of the enclosing context (`g($value_copy$S(s))`,
         // `return $value_copy$S(s)`). The rewrite reconstructs the literal inside
         // the copy, which then copies a fresh literal (a redundant, sound no-op).
-        if let Some(inner) =
-            super::container_sroa::strip_one_value_copy(body, id, self.value_copy_ids)
-        {
+        if let Some(inner) = strip_one_value_copy(body, id, self.value_copy_ids) {
             self.expr(body, inner, true, hard_escaped);
             return;
         }
