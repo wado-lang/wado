@@ -30,9 +30,10 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
-use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, NodeRef, Operand};
+use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::token::Span;
 
 use cranelift_entity::EntityRef;
 
@@ -814,15 +815,21 @@ fn rewrite_call_expr(
             let Some(positions) = sroa_positions.get(func_id).cloned() else {
                 return false;
             };
-            let args: Vec<Option<ExprId>> = args.iter().map(|a| a.expr.as_expr()).collect();
+            let span = body.exprs[id].span;
+            let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+            let mut rewritten: Vec<(usize, Operand)> = Vec::with_capacity(positions.len());
             for (pi, info) in &positions {
-                rewrite_arg(
-                    body,
-                    scalarized_arg(&args, *pi),
-                    info,
-                    scalar_param_struct,
-                    type_table,
-                );
+                let op = scalarized_arg(&arg_ops, *pi);
+                rewritten.push((
+                    *pi,
+                    rewrite_arg_operand(body, op, info, scalar_param_struct, type_table, span),
+                ));
+            }
+            let ExprKind::Call { args, .. } = &mut body.exprs[id].kind else {
+                unreachable!("matched a Call above")
+            };
+            for (pi, op) in rewritten {
+                args[pi].expr = op;
             }
             true
         }
@@ -842,17 +849,24 @@ fn rewrite_call_expr(
                 else {
                     unreachable!();
                 };
-                if let Some(info) = positions.get(&0) {
-                    rewrite_arg_operand(body, receiver, info, scalar_param_struct, type_table);
-                }
-                let arg_exprs: Vec<Option<ExprId>> =
-                    args.iter().map(|a| a.expr.as_expr()).collect();
+                let span = body.exprs[id].span;
+                let mut args = args;
+                let receiver = rewrite_arg_operand(
+                    body,
+                    receiver,
+                    &positions[&0],
+                    scalar_param_struct,
+                    type_table,
+                    span,
+                );
+                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
                 for (pi, info) in &positions {
-                    if *pi == 0 {
+                    let Some(arg_idx) = pi.checked_sub(1) else {
                         continue;
-                    }
-                    let arg = scalarized_arg(&arg_exprs, *pi - 1);
-                    rewrite_arg(body, arg, info, scalar_param_struct, type_table);
+                    };
+                    let op = scalarized_arg(&arg_ops, arg_idx);
+                    args[arg_idx].expr =
+                        rewrite_arg_operand(body, op, info, scalar_param_struct, type_table, span);
                 }
                 let mut new_args = Vec::with_capacity(args.len() + 1);
                 new_args.push(ArenaCallArg {
@@ -869,13 +883,24 @@ fn rewrite_call_expr(
                 let ExprKind::MethodCall { args, .. } = &body.exprs[id].kind else {
                     unreachable!();
                 };
-                let args: Vec<Option<ExprId>> = args.iter().map(|a| a.expr.as_expr()).collect();
+                let span = body.exprs[id].span;
+                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+                let mut rewritten: Vec<(usize, Operand)> = Vec::with_capacity(positions.len());
                 for (pi, info) in &positions {
                     let arg_idx = pi
                         .checked_sub(1)
                         .expect("a scalarized receiver takes the collapse branch above");
-                    let arg = scalarized_arg(&args, arg_idx);
-                    rewrite_arg(body, arg, info, scalar_param_struct, type_table);
+                    let op = scalarized_arg(&arg_ops, arg_idx);
+                    rewritten.push((
+                        arg_idx,
+                        rewrite_arg_operand(body, op, info, scalar_param_struct, type_table, span),
+                    ));
+                }
+                let ExprKind::MethodCall { args, .. } = &mut body.exprs[id].kind else {
+                    unreachable!("matched a MethodCall above")
+                };
+                for (arg_idx, op) in rewritten {
+                    args[arg_idx].expr = op;
                 }
             }
             true
@@ -884,30 +909,45 @@ fn rewrite_call_expr(
     }
 }
 
-/// The argument expression at a scalarized parameter position.
-///
-/// The callee's signature already names the inner scalar, so an argument left
-/// un-unwrapped would emit a call whose type disagrees with it. Every such
-/// position must therefore carry a skeleton argument to rewrite.
-fn scalarized_arg(args: &[Option<ExprId>], arg_idx: usize) -> ExprId {
-    match args.get(arg_idx) {
-        Some(Some(arg)) => *arg,
-        Some(None) | None => {
-            panic!("sroa_param: no skeleton argument at scalarized position {arg_idx}")
-        }
-    }
+/// The argument operand at a scalarized parameter position. The position exists
+/// because the callee declares a parameter there, so a call reaching the rewrite
+/// supplies one.
+fn scalarized_arg(args: &[Operand], arg_idx: usize) -> Operand {
+    *args.get(arg_idx).unwrap_or_else(|| {
+        panic!("sroa_param: call has no argument at scalarized position {arg_idx}")
+    })
 }
 
+/// Rewrite the argument at a scalarized parameter position, returning the
+/// operand the call should carry from now on.
+///
+/// A skeleton argument is rewritten in place and handed back unchanged. A
+/// promoted constant has no node to rewrite, so it takes the same field
+/// projection [`rewrite_arg`]'s general case builds — `(<value>).f` over the
+/// operand itself, moving to the call site the read the callee used to perform.
+/// Leaving it alone is not an option: the callee's signature already names the
+/// inner scalar, so the call would disagree with it.
 fn rewrite_arg_operand(
     body: &mut Body,
     op: Operand,
     info: &SroaInfo,
     scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
     type_table: &TypeTable,
-) {
-    if let Some(e) = op.as_expr() {
-        rewrite_arg(body, e, info, scalar_param_struct, type_table);
-    }
+    span: Span,
+) -> Operand {
+    let Some(arg) = op.as_expr() else {
+        return Operand::Expr(body.exprs.push(ExprNode {
+            kind: ExprKind::FieldAccess {
+                expr: op,
+                field_index: 0,
+                field_name: info.field_name.clone(),
+            },
+            type_id: info.inner_type_id,
+            span,
+        }));
+    };
+    rewrite_arg(body, arg, info, scalar_param_struct, type_table);
+    op
 }
 
 fn rewrite_arg(
