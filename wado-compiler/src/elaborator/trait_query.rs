@@ -1810,6 +1810,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_name,
                     MethodInfo {
                         impl_offset: None,
+                        method_ast_id: Some(method.id),
                         return_type,
                         self_kind,
                         param_types,
@@ -2458,6 +2459,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .intern(ResolvedType::Ref(base_type_id));
         let method_info = MethodInfo {
             impl_offset: None,
+            method_ast_id: None,
             return_type,
             self_kind: ast::SelfKind::Ref,
             param_types: vec![ref_self_ty],

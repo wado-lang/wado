@@ -256,9 +256,9 @@ impl TypeSystem {
                     type_param_type_id,
                 };
             }
-            // Consumed as a declaration name: `is_static_method`,
-            // `locate_static_method_impl` and `find_impl_method_ast_id` all key
-            // on what an `impl` header writes, which carries no module.
+            // Consumed as a declaration name: `is_static_method` and
+            // `locate_static_method_impl` key on what an `impl` header
+            // writes, which carries no module.
             let concrete_name = self
                 .type_table
                 .borrow()
@@ -583,9 +583,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.record_item_reference_by_name(prefix_seg.id, prefix);
                 }
                 // Record the method segment (suffix) as a reference to the
-                // impl-block method's AstId in its defining module. Try the
-                // actual impl module first (trait-qualified resolution),
-                // falling back to the struct's own module.
+                // declaration this call resolves to. The impl selection knows
+                // which one answered — two conversion impls on a type declare
+                // the same `from`, and only the argument's type separates
+                // them. It covers trait impls only; an inherent static has no
+                // selection and reaches the index instead.
                 if let Some(suffix_seg) = ident.segments.get(1) {
                     let arg_hint = if (suffix == "from" || suffix == "try_from") && args.len() == 1
                     {
@@ -593,12 +595,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         None
                     };
-                    let method_module = self
+                    let method_ast_id = self
                         .locate_static_method_impl(prefix, suffix, arg_hint.as_deref())
-                        .map_or_else(|| self.find_struct_module_source(prefix), |r| r.module);
-                    if let Some(method_ast_id) =
-                        self.find_impl_method_ast_id(&method_module, prefix, suffix)
-                    {
+                        .and_then(|r| r.method_id)
+                        .or_else(|| self.static_method_decl_id(prefix, suffix));
+                    if let Some(method_ast_id) = method_ast_id {
                         self.record_reference_to_def(suffix_seg.id, method_ast_id);
                     }
                 }
@@ -1061,7 +1062,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         arg_type_hint.as_deref(),
                     );
                     let method_ref = resolved.unwrap_or_else(|| {
-                        StaticMethodRef::new(ns_source.clone(), type_name, method_name, None)
+                        StaticMethodRef::new(ns_source.clone(), type_name, method_name, None, None)
                     });
                     let trait_name = method_ref.trait_name.clone();
                     let struct_module = method_ref.module.clone();

@@ -472,6 +472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_found = method_info.is_some();
         let MethodInfo {
             impl_offset: sig_impl_offset,
+            method_ast_id: dispatched_method_ast_id,
             mut return_type,
             self_kind,
             param_types,
@@ -498,6 +499,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Default to Unknown type for error recovery
             MethodInfo {
                 impl_offset: None,
+                method_ast_id: None,
                 return_type: TypeTable::UNKNOWN,
                 self_kind: ast::SelfKind::Ref,
                 param_types: vec![],
@@ -1123,24 +1125,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Synthetic call sites (e.g. for-of's `.into_iter()` / `.next()`) pass
         // `method_id == None` so no edge is recorded — the call has no
         // source-level method name to navigate from.
-        // The impl-header scan compares against the name the header writes, so
-        // it needs the declaration name — read off the receiver's resolved type,
-        // never split out of the mangled head, which carries the declaring
-        // module and matches no header.
-        let receiver_key = self
-            .tysys
-            .type_table
-            .borrow()
-            .impl_receiver_key(method_impl_type_id);
-        let receiver_decl_name = receiver_key.decl_key().into_string();
-        if let Some(method_id) = method_id
-            && let Some(method_ast_id) = self.find_impl_method_ast_id(
-                &method_module_source,
-                &receiver_decl_name,
-                method_name,
-            )
-        {
-            self.record_reference_to_def(method_id, method_ast_id);
+        // The target is the declaration dispatch selected, carried on its
+        // signature. A name scan cannot stand in: two impls on one type can
+        // declare the same method, and only dispatch knows which answered.
+        if let (Some(method_id), Some(def_id)) = (method_id, dispatched_method_ast_id) {
+            self.record_reference_to_def(method_id, def_id);
         }
 
         let func = FunctionRef {
@@ -1237,12 +1226,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
+        // The method name is the second segment of `Trait::method`; the edge
+        // for jump-to-definition is recorded against it.
+        let method_id = match &call.callee {
+            ast::Expr::Ident(ident) => ident.segments.get(1).map(|seg| seg.id),
+            _ => None,
+        };
         self.resolve_trait_qualified_call_parts(
             required,
             method_name,
             &call.args,
             type_args,
             call.id,
+            method_id,
             call.span,
             expected_type,
             ctx,
@@ -1261,6 +1257,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[ast::Expr],
         type_args: Vec<TypeId>,
         call_id: AstId,
+        // The method-name token, for the use→def edge.
+        method_id: Option<AstId>,
         span: Span,
         expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
@@ -1287,7 +1285,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver: placeholder(receiver_type, receiver_ast.span()),
                 receiver_ast: Some(receiver_ast),
                 method_name,
-                method_id: None,
+                method_id,
                 call_id: None,
                 type_args: type_args.clone(),
                 type_arg_holes: vec![],
@@ -1462,6 +1460,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &static_call.args,
                     method_type_args,
                     static_call.id,
+                    Some(static_call.method_id),
                     static_call.span,
                     None,
                     ctx,
@@ -2075,11 +2074,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             None
         };
-        let trait_name_opt = self.find_static_method_trait_with_arg(
+        // Keep the whole selection: its trait names the mangled function and
+        // its `method_id` is the declaration this call resolved to, which the
+        // use→def edge below is recorded against.
+        let selected = self.locate_static_method_impl(
             &struct_name,
             &static_call.method,
             arg_type_hint.as_deref(),
         );
+        let trait_name_opt = selected.as_ref().and_then(|r| r.trait_name.clone());
 
         // The expected type that shaped the argument came from
         // `lookup_static_method_param_types_keyed`, which keys on (receiver,
@@ -2111,6 +2114,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             struct_name.clone(),
             static_call.method.clone(),
             trait_name_opt.clone(),
+            selected.as_ref().and_then(|r| r.method_id),
         );
 
         // Look up return type
@@ -2200,8 +2204,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.lookup_resource_static_cm(&struct_name, &struct_module, &static_call.method);
 
         // Record use->def for jump-to-definition on the method name token.
-        if let Some(method_ast_id) =
-            self.find_impl_method_ast_id(&struct_module, &struct_name, &static_call.method)
+        // The selection knows which impl answered — two conversion impls on
+        // one type declare the same `from`, so a name lookup cannot tell them
+        // apart. It covers trait impls only; an inherent static has no
+        // selection and reaches the index instead.
+        if let Some(method_ast_id) = selected
+            .as_ref()
+            .and_then(|r| r.method_id)
+            .or_else(|| self.static_method_decl_id(&struct_name, &static_call.method))
         {
             self.record_reference_to_def(static_call.method_id, method_ast_id);
         }
@@ -2267,6 +2277,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_param,
             method.to_string(),
             Some(trait_name.clone()),
+            None,
         );
         let template_return = self.lookup_static_method_return_type(&method_ref, &template_name);
         if template_return == TypeTable::UNKNOWN {
@@ -2958,16 +2969,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .and_then(|r| r.trait_name)
     }
 
-    pub(super) fn find_static_method_trait_with_arg(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-        arg_type_name: Option<&str>,
-    ) -> Option<String> {
-        self.locate_static_method_impl(struct_name, method_name, arg_type_name)
-            .and_then(|r| r.trait_name)
-    }
-
     /// Which conversion trait a static `from` / `try_from` call names.
     pub(super) fn conversion_trait_name(&self, method_name: &str) -> String {
         if method_name == "try_from" {
@@ -3369,8 +3370,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             !is_from_or_try_from(&base)
         };
 
+        // Returns the trait the impl names and the node declaring the method
+        // there — the identity of what this selection picked, so a caller
+        // recording a use→def edge names the impl the argument chose rather
+        // than the receiver's first same-named method.
         let check_impl =
-            |impl_block: &ast::ImplBlock, impl_module: &ModuleSource| -> Option<String> {
+            |impl_block: &ast::ImplBlock, impl_module: &ModuleSource| -> Option<(String, AstId)> {
                 let trait_type = impl_block.trait_type.as_ref()?;
                 if Self::get_type_name_static(&impl_block.ty) != struct_name
                     || !matches_arg_type(trait_type, impl_module, &impl_block.type_params)
@@ -3383,7 +3388,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .any(|p| p.self_kind != ast::SelfKind::None);
                     if method.name == method_name && !has_self {
-                        return Some(resolve_trait_name(trait_type));
+                        return Some((resolve_trait_name(trait_type), method.id));
                     }
                 }
                 // Fall back to the trait declaration's default methods: when
@@ -3400,20 +3405,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && method.default_body.is_some()
                     && method.sig.self_kind == ast::SelfKind::None
                 {
-                    return Some(resolve_trait_name(trait_type));
+                    return Some((resolve_trait_name(trait_type), method.sig.ast_id));
                 }
                 None
             };
 
         for item in self.current_module_items {
             if let Item::Impl(impl_block) = item
-                && let Some(trait_name) = check_impl(impl_block, &self.current_module_source)
+                && let Some((trait_name, method_id)) =
+                    check_impl(impl_block, &self.current_module_source)
             {
                 return Some(StaticMethodRef::new(
                     self.current_module_source.clone(),
                     struct_name,
                     method_name,
                     Some(trait_name),
+                    Some(method_id),
                 ));
             }
         }
@@ -3428,13 +3435,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (module_source, item_id) in entries {
                 if let Some(module) = self.loaded_modules.get(module_source)
                     && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
-                    && let Some(trait_name) = check_impl(impl_block, module_source)
+                    && let Some((trait_name, method_id)) = check_impl(impl_block, module_source)
                 {
                     return Some(StaticMethodRef::new(
                         module_source.clone(),
                         struct_name,
                         method_name,
                         Some(trait_name),
+                        Some(method_id),
                     ));
                 }
             }
@@ -3466,6 +3474,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 struct_name,
                 method_name,
                 Some(default_trait_name),
+                None,
             ));
         }
 
@@ -3703,6 +3712,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.find_struct_module_source(&actual_struct_name),
                 &actual_struct_name,
                 method_name,
+                None,
                 None,
             )
         });

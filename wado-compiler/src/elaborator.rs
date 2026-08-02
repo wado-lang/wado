@@ -534,34 +534,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Look up the `AstId` of an impl-block method by its defining module, the
-    /// receiving type name, and the method name. Returns `None` if the module
-    /// is not loaded or no matching method exists. Searches all impl blocks in
-    /// the module; for trait methods prefers the most specific match (struct +
-    /// method; trait name is not disambiguated here).
-    pub(super) fn find_impl_method_ast_id(
+    /// The declaring node of the static method `Type::method`, from the
+    /// static-method index. `Type` is canonicalised through the call site's
+    /// import context, so two modules' same-named types cannot answer for
+    /// each other.
+    pub(super) fn static_method_decl_id(
         &self,
-        module_source: &ModuleSource,
-        struct_name: &str,
+        type_name: &str,
         method_name: &str,
     ) -> Option<crate::ast::AstId> {
-        let items: &[Item] = if module_source == &self.current_module_source {
-            self.current_module_items
-        } else {
-            self.loaded_modules.get(module_source)?.items.as_slice()
-        };
-        for item in items {
-            if let Item::Impl(impl_block) = item
-                && Self::get_type_name_static(&impl_block.ty) == struct_name
-            {
-                for method in &impl_block.methods {
-                    if method.name == method_name {
-                        return Some(method.id);
-                    }
-                }
-            }
-        }
-        None
+        let key = self.canonical_decl_key(type_name);
+        self.tysys
+            .trait_env
+            .static_method_index
+            .get(&key)?
+            .iter()
+            .find(|e| e.name == method_name)
+            .map(|e| e.method_id)
     }
 
     /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active

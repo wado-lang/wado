@@ -492,6 +492,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if method_name == "len" {
                         return Some(MethodInfo {
                             impl_offset: None,
+                            method_ast_id: None,
                             return_type: TypeTable::I32,
                             self_kind: ast::SelfKind::Ref,
                             param_types: vec![],
@@ -533,6 +534,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let return_type = self.tysys.type_table.borrow_mut().make_tuple(transposed);
                         return Some(MethodInfo {
                             impl_offset: None,
+                            method_ast_id: None,
                             return_type,
                             self_kind: ast::SelfKind::Ref,
                             param_types: vec![],
@@ -785,6 +787,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         Some(MethodInfo {
             impl_offset: None,
+            method_ast_id: Some(sig.ast_id),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
@@ -836,6 +839,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         Some(MethodInfo {
             impl_offset: None,
+            method_ast_id: Some(sig.ast_id),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
@@ -2500,6 +2504,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
                     impl_offset: Some(impl_offset),
+                    method_ast_id: Some(method_sig.ast_id),
                     return_type,
                     self_kind,
                     param_types,
@@ -2551,6 +2556,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
                         impl_offset: Some(default_method.sig.declaring_slot_count),
+                        method_ast_id: Some(default_method.sig.ast_id),
                         return_type: instantiated.return_type,
                         self_kind,
                         param_types: instantiated.param_types[first_value_param..].to_vec(),
@@ -3626,6 +3632,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let MethodInfo {
             impl_offset: _,
+            method_ast_id: _,
             return_type,
             self_kind,
             param_types,
