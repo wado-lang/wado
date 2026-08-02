@@ -2463,14 +2463,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Search via pre-built index (handles impls defined outside the struct's defining module).
-        // The caller already resolved the receiver's module, so the key comes
-        // from the same rule `build` indexed by. Canonicalising the bare
-        // `struct_name` from *here* instead would answer with the call site's
-        // own `Pair` rather than the one `helper::Pair::new` names.
-        let static_key =
-            self.tysys
-                .trait_env
-                .declaring_side_key(self.symbols, &method_ref.module, struct_name);
+        //
+        // Both vantages are needed, and each fails alone. The written name may
+        // be an alias (`use { Counter as CounterA }`) that only the call site
+        // can undo — the declaring module knows the type by its original name.
+        // The module, in turn, only the caller knows: keying the undone name
+        // from *here* would answer with the call site's own `Pair` rather than
+        // the one `helper::Pair::new` names.
+        let declared_name = self
+            .sem
+            .imports
+            .import_original_names
+            .get(struct_name)
+            .map_or(struct_name, String::as_str);
+        let static_key = self.tysys.trait_env.declaring_side_key(
+            self.symbols,
+            &method_ref.module,
+            declared_name,
+        );
         // The decl pass already resolved this signature in the impl's own
         // frame — impl and method type params interned, `Self` bound to the
         // impl target, the impl module's imports in scope. Re-deriving all of
