@@ -191,19 +191,30 @@ receiver-collapse branches, both now a `has_receiver = false` assignment.
 
 ### Stage B — TIR (66 sites + 57 constructor sites)
 
-- [ ] `tir.rs` — drop the variant and the `MethodCallInvariant` /
-      `TirExprKind::method_call` pair; fix the stale `Call` doc comment
-      (`tir.rs:4035`) that still claims `method_info: Some(_)` means static
-- [ ] `tir_visitor.rs`, `unparse.rs`
-- [ ] `elaborator/` — `build_tir_method_call` becomes a `Call` builder that
-      prepends the receiver, keeping its 21 `reify.rs` callers' shape;
-      `self_in_args` becomes the `has_receiver` value rather than a separate
-      annotation read
-- [ ] `synthesis/` — `resource_rewrite`'s instance/static split reads
-      `has_receiver`; `effect_dispatch`'s `build_resource_fallback_call` collapses
-      its two branches into one
-- [ ] `monomorphize/`, `lower/plan/*`
-- [ ] `lower/translate.rs` becomes a pass-through
+- [x] `tir.rs` — drop the variant and the `MethodCallInvariant` witness;
+      `TirExprKind::method_call` keeps its signature and now builds a `Call`, so
+      all 57 constructor sites needed no edit. `as_method_call` reads the shape
+      back, mirroring the NIR accessor. The stale `Call` doc comment claiming
+      `method_info: Some(_)` means static is gone.
+- [x] `tir_visitor.rs`, `unparse.rs` — the renderer branches on `has_receiver`
+      so a closure's `Inspect` text stays source-shaped
+- [x] `elaborator/` — `build_tir_method_call` prepends the receiver
+- [x] `synthesis/` — `rewrite_cm_instance_method` and `rewrite_cm_static_method`
+      become one `rewrite_cm_call`: they only ever differed by whether `args[0]`
+      is cast to the i32 resource handle
+- [x] `monomorphize/`, `lower/plan/*`
+- [x] `lower/translate.rs` — one `convert_call`, no `MethodCall` arm
+
+`Call::func` is boxed. With `MethodCall` gone, `Call` is the only `FunctionRef`
+holder and unboxed it dominates `TirExprKind` by ~290 bytes, tripping
+`large_enum_variant` — the same treatment
+[`ConditionElement::Let`](../wado-compiler/src/ast.rs) already gives its
+`Pattern`.
+
+Two arms in closure planning collapsed outright: both already derived their
+argument slice from `self_param_offset`, which is exactly the
+receiver-at-`args[0]` shape, so the method arm was the same code with the offset
+hardcoded.
 
 ### Stage C — cleanup
 
@@ -243,14 +254,28 @@ method-specific offset: `dae` (whose `dead[0]` is already the receiver — it
 converges), `param_spec`, `sroa_param`, `multi_value_return`, `field_scalarize`,
 `container_sroa`.
 
-### The receiver gains a value-copy decision
+### The receiver must not gain a value-copy decision
 
-Today the receiver bypasses `convert_call_arg_at`, so it is never wrapped in a
-copy and carries no `is_mut`. Routing it through the uniform path must not
-introduce copies: `&self` / `&mut self` receivers are references
-(`should_wrap_value_copy` declines), and `is_mut` for slot 0 is
-`self_kind == MutRef` — the value the UFCS path already computes. Verify with
-`mise run benchmark-all` and `mise run report-wasm-size` before and after.
+This checkpoint fired, and it was a miscompile. Routing the receiver through
+`convert_call_arg_at` along with every other argument wraps a by-value argument
+in `$value_copy$T`; the receiver is a *place*, so the copy discarded the mutation
+the call exists to perform.
+
+The premise — that a receiver is always reference-typed, so `needs_value_copy`
+declines it — was wrong. A template string accumulates into a synthesized local
+of bare `String` type, so every `push_str` appended to a fresh copy and only the
+last part survived: `a${n}b${n}c` rendered as `33`, and an assert's diagnostic
+collapsed to its final interpolation.
+
+`lower::translate::convert_receiver_arg` gives `args[0]` the pre-merge treatment
+(plain `convert_operand`), which also keeps a specialized fn-param receiver from
+being re-wrapped as a canonical closure — the method was resolved against the
+receiver's own type, not `fn(...)`. Pinned by
+`tests/fixtures/method_receiver_no_value_copy.wado`.
+
+The receiver's `is_mut` is still the callee's `self` mode. TIR leaves it `false`
+and `lower` fills it in from `mut_ref_params`, which is where its only consumer
+lives; having the elaborator set it from `self_kind` is a Stage C follow-up.
 
 ### Unit erasure
 
@@ -260,9 +285,13 @@ claim now has to hold for `args[0]` rather than a distinct slot.
 
 ### Dump and `Inspect` output
 
-Preserved by `has_receiver` rendering, with one accepted change: a UFCS call
-`Trait::method(recv, …)` now dumps as `recv.method(…)`, since `has_receiver`
-records semantics rather than spelling.
+Preserved by `has_receiver` rendering. The anticipated UFCS change did not
+materialize: `TirExprKind::method_call` is the only writer of
+`has_receiver: true`, and a trait-qualified call is built as an ordinary `Call`,
+so `Trait::method(recv, …)` still dumps as itself. Setting `has_receiver` there
+too — making the flag fully semantic rather than "came from dot syntax" — is a
+Stage C follow-up, and it would change both the dump spelling and what
+`alias`/`niri` treat as a receiver.
 
 ### Lost guardrail
 
@@ -270,4 +299,5 @@ records semantics rather than spelling.
 checkpoint asserting that arguments were typechecked against the callee's declared
 parameters. `Call` has never had such a witness, so unification drops it. This is a
 deliberate trade; the surviving protection is that the elaborator still builds call
-arguments only from a resolved signature.
+arguments only from a resolved signature, and `TirExprKind::method_call` remains
+the single constructor every method call flows through.
