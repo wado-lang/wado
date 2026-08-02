@@ -480,8 +480,6 @@ struct Builder<'a> {
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
-    /// Per-`Call`-expr heap snapshots. See [`ValueGraphBuild::call_site_heap`].
-    call_site_heap: IndexMap<ExprId, HeapSnapshot>,
     /// `ExprId` indices of calls that mutate no caller local. See
     /// [`BuildConfig::pure_calls`].
     pure_calls: crate::hashmap::IndexSet<ExprId>,
@@ -521,7 +519,6 @@ impl<'a> Builder<'a> {
             ref_targets: IndexMap::default(),
             type_table,
             loop_entry_values: IndexMap::default(),
-            call_site_heap: IndexMap::default(),
             pure_calls: crate::hashmap::IndexSet::default(),
             pure_builtin_callees: crate::hashmap::IndexSet::default(),
         }
@@ -1199,11 +1196,6 @@ impl<'a> Builder<'a> {
                 for a in args {
                     self.walk_operand(a.expr);
                 }
-                // Heap version state the callee body would observe, captured
-                // after argument evaluation and before this call's own effects —
-                // persisted so the inline splice can re-value the callee with the
-                // caller's field versions ([`ValueGraphBuild::call_site_heap`]).
-                self.call_site_heap.insert(expr, self.heap_state.snapshot());
                 self.bump_call_effects(expr);
                 None
             }
