@@ -1849,12 +1849,38 @@ fn _parse_a__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
+fn _parse_a__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_A { return -1; }
+    pos += 1;
+    while pos < tokens.len() && tokens[pos] == TK_LIT_B {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos] != TK_LIT_B { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_C { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_a__inner_alt_1(p: &mut Parser) -> () {
     let start = p.peek_start();
     let lit_a = p.expect(TK_LIT_A, &SYNC_1);
     let lit_b = p.expect(TK_LIT_B, &SYNC_2);
     let lit_d = p.expect(TK_LIT_D, &EMPTY_SYNC);
     return;
+}
+
+fn _parse_a__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_A { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_B { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_D { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn _parse_a__inner(p: &mut Parser) -> () {
@@ -1867,6 +1893,29 @@ fn _parse_a__inner(p: &mut Parser) -> () {
                 return _parse_a__inner_alt_0(p);
             } else if p.peek_at(1) == TK_LIT_D {
                 p.pos -= 1;
+                return _parse_a__inner_alt_1(p);
+            } else {
+                p.pos -= 1;
+                let _sd_tokens = &p.kinds;
+                let _sd_pos = p.pos;
+                let _sd_p_0 = _parse_a__inner_scan_0(_sd_tokens, _sd_pos);
+                let _sd_p_1 = _parse_a__inner_scan_1(_sd_tokens, _sd_pos);
+                let mut _sd_best_i: i32 = -1;
+                let mut _sd_best_p: i32 = -1;
+                if _sd_p_0 > _sd_best_p {
+                    _sd_best_p = _sd_p_0;
+                    _sd_best_i = 0;
+                }
+                if _sd_p_1 > _sd_best_p {
+                    _sd_best_p = _sd_p_1;
+                    _sd_best_i = 1;
+                }
+                if _sd_best_i == 0 {
+                    return _parse_a__inner_alt_0(p);
+                }
+                if _sd_best_i == 1 {
+                    return _parse_a__inner_alt_1(p);
+                }
                 return _parse_a__inner_alt_1(p);
             }
         } else if p.peek_kind() == TK_LIT_C {

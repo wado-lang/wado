@@ -8165,16 +8165,17 @@ fn alts_all_scan_full(indices: &List<i32>, alts: &List<Alternative>, ctx: &mut G
 /// The alts a `Dispatch` node's tournament fallback must choose between, in
 /// tournament order — empty when the node needs no fallback.
 ///
-/// A node whose branches already claim every token its alts can start with is
-/// complete, so its `else` would be dead code. That is exactly the depth-0
-/// node: no config has advanced yet, so its branch tokens are the alts' own
-/// FIRST sets, the same union the enclosing group condition gates on. Only a
-/// deeper node — where the walk has advanced configs and may have
-/// under-approximated — can be missing a token.
+/// A node whose branches already claim every token its alts admit here is
+/// complete, so its `else` would be dead code. That is the depth-0 node: it
+/// has taken no branching decision, and the `Consume` steps that led to it
+/// only cross terminals every alt shares, so the alts' FIRST at element
+/// offset `skip` is exact. Only a deeper node — where the walk has advanced
+/// configs through shapes it approximates — can be missing a token.
 fn dispatch_fallback_indices(
     d: &PredictionDispatch,
     alts: &List<Alternative>,
     ctx: &mut GenContext,
+    skip: i32,
 ) -> List<i32> {
     let mut indices: List<i32> = [];
     for let branch of &d.branches {
@@ -8185,19 +8186,22 @@ fn dispatch_fallback_indices(
     if sorted_indices.len() < 2 || !alts_all_scan_full(&sorted_indices, alts, ctx) {
         return [];
     }
-    if dispatch_claims_every_first_token(d, &sorted_indices, alts, ctx) {
+    if dispatch_claims_every_first_token(d, &sorted_indices, alts, ctx, skip) {
         return [];
     }
     return sorted_indices;
 }
 
-/// Whether `d`'s branches name every token some alt in `indices` can start
-/// with. True for a complete cascade; false once the walk dropped a token.
+/// Whether `d`'s branches name every token some alt in `indices` admits at
+/// element offset `skip`. True for a complete cascade; false once the walk
+/// dropped a token. An alt already at its end contributes no token, so its
+/// continuation lives in the caller and the cascade cannot be shown complete.
 fn dispatch_claims_every_first_token(
     d: &PredictionDispatch,
     indices: &List<i32>,
     alts: &List<Alternative>,
     ctx: &mut GenContext,
+    skip: i32,
 ) -> bool {
     if d.depth != 0 {
         return false;
@@ -8211,7 +8215,10 @@ fn dispatch_claims_every_first_token(
         }
     }
     for let idx of indices {
-        for let tk of &ctx.first_of_elements_from(&alts[*idx].elements, 0) {
+        if skip >= alts[*idx].elements.len() {
+            return false;
+        }
+        for let tk of &ctx.first_of_elements_from(&alts[*idx].elements, skip) {
             if !claimed.contains(tk) {
                 return false;
             }
@@ -8437,7 +8444,7 @@ fn gen_prediction_code_inner(
             // longest-match tournament lowering already chose for this overlap
             // group. Only reachable when the cascade is genuinely incomplete;
             // a complete one never enters the `else`.
-            let fallback = dispatch_fallback_indices(d, alts, ctx);
+            let fallback = dispatch_fallback_indices(d, alts, ctx, skip);
             if !fallback.is_empty() {
                 w.else_begin(&"else");
                 // Undo what the `Consume` prefix advanced: the tournament
@@ -8474,16 +8481,31 @@ fn collect_referenced_scan_alts(
     alts: &List<Alternative>,
     ctx: &mut GenContext,
     out: &mut List<i32>,
+    skip: i32 = 0,
 ) {
     match *node {
         Leaf(_) => {
         },
-        Consume(c) => collect_referenced_scan_alts(&c.child, alts, ctx, out),
+        // Mirror the emit's `skip` bookkeeping: a `Consume` only advances the
+        // cursor when its terminal really is every alt's element at `skip`.
+        Consume(c) => {
+            let mut node_alts: List<i32> = [];
+            prediction_collect_all_indices(&c.child, &mut node_alts);
+            let mut elem_matches = !node_alts.is_empty();
+            for let a of &node_alts {
+                if skip >= alts[*a].elements.len() || !elements_match(&c.element, &alts[*a].elements[skip]) {
+                    elem_matches = false;
+                    break;
+                }
+            }
+            let next_skip = if elem_matches { skip + 1 } else { skip };
+            collect_referenced_scan_alts(&c.child, alts, ctx, out, next_skip);
+        },
         Dispatch(d) => {
             for let branch of &d.branches {
-                collect_referenced_scan_alts(&branch.child, alts, ctx, out);
+                collect_referenced_scan_alts(&branch.child, alts, ctx, out, skip);
             }
-            let fallback = dispatch_fallback_indices(&d, alts, ctx);
+            let fallback = dispatch_fallback_indices(&d, alts, ctx, skip);
             if !fallback.is_empty() {
                 for let idx of &fallback {
                     if !out.contains(idx) {

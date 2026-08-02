@@ -20667,10 +20667,24 @@ fn _parse_expression_with_block__inner_alt_5(p: &mut Parser, follow: &List<List<
     return;
 }
 
+fn _parse_expression_with_block__inner_scan_5(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_if_expression(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn _parse_expression_with_block__inner_alt_6(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let if_let_expression = _parse_if_let_expression(p, follow);
     return;
+}
+
+fn _parse_expression_with_block__inner_scan_6(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_if_let_expression(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
 fn _parse_expression_with_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
@@ -20733,6 +20747,28 @@ fn _parse_expression_with_block__inner(p: &mut Parser, follow: &List<List<i32>> 
             if _kind_set_50(p.peek_at(1)) {
                 return _parse_expression_with_block__inner_alt_5(p, follow);
             } else if p.peek_at(1) == TK_KW_LET {
+                return _parse_expression_with_block__inner_alt_6(p, follow);
+            } else {
+                let _sd_tokens = &p.kinds;
+                let _sd_pos = p.pos;
+                let _sd_p_5 = _parse_expression_with_block__inner_scan_5(_sd_tokens, _sd_pos);
+                let _sd_p_6 = _parse_expression_with_block__inner_scan_6(_sd_tokens, _sd_pos);
+                let mut _sd_best_i: i32 = -1;
+                let mut _sd_best_p: i32 = -1;
+                if _sd_p_5 > _sd_best_p {
+                    _sd_best_p = _sd_p_5;
+                    _sd_best_i = 5;
+                }
+                if _sd_p_6 > _sd_best_p {
+                    _sd_best_p = _sd_p_6;
+                    _sd_best_i = 6;
+                }
+                if _sd_best_i == 5 {
+                    return _parse_expression_with_block__inner_alt_5(p, follow);
+                }
+                if _sd_best_i == 6 {
+                    return _parse_expression_with_block__inner_alt_6(p, follow);
+                }
                 return _parse_expression_with_block__inner_alt_6(p, follow);
             }
         }
@@ -23213,6 +23249,18 @@ fn _parse_literal_pattern__inner_alt_8(p: &mut Parser, follow: &List<List<i32>> 
     return;
 }
 
+fn _parse_literal_pattern__inner_scan_8(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos] == TK_MINUS {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos] != TK_MINUS { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_INTEGER_LITERAL { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_literal_pattern__inner_alt_9(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     if p.peek_kind() == TK_MINUS {
@@ -23220,6 +23268,18 @@ fn _parse_literal_pattern__inner_alt_9(p: &mut Parser, follow: &List<List<i32>> 
     }
     let float_literal = p.expect(TK_FLOAT_LITERAL, &EMPTY_SYNC);
     return;
+}
+
+fn _parse_literal_pattern__inner_scan_9(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos] == TK_MINUS {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos] != TK_MINUS { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_FLOAT_LITERAL { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn _parse_literal_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
@@ -23262,6 +23322,28 @@ fn _parse_literal_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
             if p.peek_at(1) == TK_INTEGER_LITERAL {
                 return _parse_literal_pattern__inner_alt_8(p, follow);
             } else if p.peek_at(1) == TK_FLOAT_LITERAL {
+                return _parse_literal_pattern__inner_alt_9(p, follow);
+            } else {
+                let _sd_tokens = &p.kinds;
+                let _sd_pos = p.pos;
+                let _sd_p_8 = _parse_literal_pattern__inner_scan_8(_sd_tokens, _sd_pos);
+                let _sd_p_9 = _parse_literal_pattern__inner_scan_9(_sd_tokens, _sd_pos);
+                let mut _sd_best_i: i32 = -1;
+                let mut _sd_best_p: i32 = -1;
+                if _sd_p_8 > _sd_best_p {
+                    _sd_best_p = _sd_p_8;
+                    _sd_best_i = 8;
+                }
+                if _sd_p_9 > _sd_best_p {
+                    _sd_best_p = _sd_p_9;
+                    _sd_best_i = 9;
+                }
+                if _sd_best_i == 8 {
+                    return _parse_literal_pattern__inner_alt_8(p, follow);
+                }
+                if _sd_best_i == 9 {
+                    return _parse_literal_pattern__inner_alt_9(p, follow);
+                }
                 return _parse_literal_pattern__inner_alt_9(p, follow);
             }
         } else if p.peek_kind() == TK_INTEGER_LITERAL {
@@ -23470,6 +23552,18 @@ fn _parse_range_pattern_bound__inner_alt_2(p: &mut Parser, follow: &List<List<i3
     return;
 }
 
+fn _parse_range_pattern_bound__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos] == TK_MINUS {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos] != TK_MINUS { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_INTEGER_LITERAL { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_range_pattern_bound__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     if p.peek_kind() == TK_MINUS {
@@ -23477,6 +23571,18 @@ fn _parse_range_pattern_bound__inner_alt_3(p: &mut Parser, follow: &List<List<i3
     }
     let float_literal = p.expect(TK_FLOAT_LITERAL, &EMPTY_SYNC);
     return;
+}
+
+fn _parse_range_pattern_bound__inner_scan_3(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos] == TK_MINUS {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos] != TK_MINUS { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_FLOAT_LITERAL { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn _parse_range_pattern_bound__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
@@ -23495,6 +23601,28 @@ fn _parse_range_pattern_bound__inner(p: &mut Parser, follow: &List<List<i32>> = 
             if p.peek_at(1) == TK_INTEGER_LITERAL {
                 return _parse_range_pattern_bound__inner_alt_2(p, follow);
             } else if p.peek_at(1) == TK_FLOAT_LITERAL {
+                return _parse_range_pattern_bound__inner_alt_3(p, follow);
+            } else {
+                let _sd_tokens = &p.kinds;
+                let _sd_pos = p.pos;
+                let _sd_p_2 = _parse_range_pattern_bound__inner_scan_2(_sd_tokens, _sd_pos);
+                let _sd_p_3 = _parse_range_pattern_bound__inner_scan_3(_sd_tokens, _sd_pos);
+                let mut _sd_best_i: i32 = -1;
+                let mut _sd_best_p: i32 = -1;
+                if _sd_p_2 > _sd_best_p {
+                    _sd_best_p = _sd_p_2;
+                    _sd_best_i = 2;
+                }
+                if _sd_p_3 > _sd_best_p {
+                    _sd_best_p = _sd_p_3;
+                    _sd_best_i = 3;
+                }
+                if _sd_best_i == 2 {
+                    return _parse_range_pattern_bound__inner_alt_2(p, follow);
+                }
+                if _sd_best_i == 3 {
+                    return _parse_range_pattern_bound__inner_alt_3(p, follow);
+                }
                 return _parse_range_pattern_bound__inner_alt_3(p, follow);
             }
         } else if p.peek_kind() == TK_INTEGER_LITERAL {
