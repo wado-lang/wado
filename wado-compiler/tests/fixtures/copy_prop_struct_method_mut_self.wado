@@ -2,7 +2,7 @@
 // when the source struct is mutated by an inlined &mut self method call
 // after the binding.
 //
-// Root cause: when `c.increment()` is inlined, the MethodCall node is gone and
+// Root cause: when `c.increment()` is inlined, the call node is gone and
 // the body becomes `let self = &mut c; (*self).value += 1`. At TIR level the
 // mutation is through `*self`, not directly on `c`. Previously, only
 // `c.address_taken = true` was set (from the `&mut c` operand), but NOT
