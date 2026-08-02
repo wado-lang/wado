@@ -497,7 +497,7 @@ diagnostic; (2) the cross-module graph resolves the dispatch facts that leave
 no `references` edge. Independent of Phase 2.
 
 Each stage keeps `mise run test`, the WIR golden fixtures, and the LSP query
-tests green. Performance is not tracked during migration; see Trade-offs.
+tests green.
 
 ### Stage 7-B execution plan (done)
 
@@ -588,9 +588,8 @@ the remaining `loaded_modules` consumers, the `Scope` guard unification
 - Batch compilation walks bodies twice. Once in
   `annotate_bodies` (the heavy walk that does inference,
   resolution, and dispatch) and once in `reify` (the mechanical
-  walk that reads the annotations). Performance is not optimised
-  during the migration; if a workload regresses unacceptably, the
-  remedy is to specialise `reify` over the recorded annotations,
+  walk that reads the annotations). The remedy, should one be
+  wanted, is to specialise `reify` over the recorded annotations,
   not to merge the phases back. The clean phase boundary is
   the load-bearing decision.
 - Bigger up-front design surface. The four sub-structs and

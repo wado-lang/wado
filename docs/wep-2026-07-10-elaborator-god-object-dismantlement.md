@@ -501,10 +501,6 @@ The eight that remain are three `method_call.rs` name-scan fallbacks, the
 three trait-declaration sites S6 takes, `expr.rs`'s scan for the module
 declaring a `From` impl, and `find_impl_method_ast_id`.
 
-Compile-time is a stated benefit (one signature resolution per declaration
-instead of per use site), so the baseline is captured before S5 rather than
-inferred after it.
-
 ## Consequences
 
 ### Benefits
@@ -514,8 +510,7 @@ inferred after it.
   gone.
 - Each signature is resolved once, not once per use site (the old
   `method_info_cache` was removed, so the dispatch path re-resolves today).
-  Associated-const collection drops from O(N²) to O(N). Expected
-  compile-time win; measure after S5.
+  Associated-const collection drops from O(N²) to O(N).
 - One recorded truth for use→def edges — the suppression machinery is deleted
   rather than maintained, removing the "query clobbers the owning module's
   edge" bug class at the root.
@@ -533,13 +528,6 @@ inferred after it.
 - Diagnostic timing shifts: a broken signature errors once at its
   declaration, not at each use. Same-or-better, but golden fixtures need
   review during S4–S5.
-- **Compile time is ~8% worse than before this work, and the cause is not
-  yet known.** `wado compile -O2 benchmark/fts/fts.wado`, same machine,
-  fresh builds both sides: main 716/722/724 ms, branch 736…835 ms over
-  seven runs — the branch's minimum exceeds main's maximum, so this is not
-  noise. Indexing `entries_by_receiver` by receiver did not close it.
-  Profile before guessing again; the eager per-impl digesting over the
-  whole stdlib is the first suspect, not a conclusion.
 
 ### Risks and mitigations
 
