@@ -376,6 +376,18 @@ fires only when inner and suffix are all single-char-consuming; other
 shapes fall through to the plain greedy loop (sound because the inner
 cannot consume the suffix's first char there).
 
+An alternation is decided the same way, and by what follows it. In tail
+position the arms compete on their own length, since the arm's length is the
+rule's. With a suffix after it neither first-match nor longest-arm is right —
+`('a' | 'ab') 'bc'` on `abbc` needs the second arm, `('x' | 'xy') 'yz'` on
+`xyz` needs the first — so each arm is scanned once from the same start and
+its suffix peeked without consuming, and the arm whose arm-plus-suffix reaches
+furthest wins. Scoring on the suffix rather than on the arm is what makes
+`('p' | 'pq') ('qrs' | 'r')` take the short arm on `pqrs`. Ties go to the
+first arm. The same window as the repeat path applies: the suffix must be
+peekable and carry no predicate, or the alternation keeps the first-match
+emit. Fixture: `lexer_alt_suffix_longest.g4`.
+
 ### Static LL prediction — the runtime FOLLOW gate
 
 Gale's parser-side prediction is a static FOLLOW-based repair on top of

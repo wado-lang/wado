@@ -1540,6 +1540,36 @@ fn gen_lexer_alt_seq(
                 }
             }
         }
+        // An alternation with something after it cannot be decided by which
+        // arm matches first — the suffix has to be consulted. Same window as
+        // the repeat above: the suffix must be peekable, and a predicate after
+        // the alternation would change how often it is evaluated, so those
+        // keep the first-match emit.
+        if let Group(g_alts) = elem {
+            if g_alts.len() >= 2
+                && i + 1 < alt.elements.len()
+                && lexer_alts_prefer_longest(g_alts, all_rules)
+                && !lexer_alt_has_predicate_after(alt, i) {
+                let mut suffix_elems: List<LexerElement> = [];
+                for let mut j = i + 1; j < alt.elements.len(); j += 1 {
+                    suffix_elems.push(alt.elements[j]);
+                }
+                if lexer_suffix_is_peekable(&suffix_elems) {
+                    gen_lexer_alts_lookahead_aware(
+                        w,
+                        g_alts,
+                        &suffix_elems,
+                        all_rules,
+                        fail_action,
+                        ci,
+                        ea,
+                        hm,
+                        replay,
+                    );
+                    continue;
+                }
+            }
+        }
         gen_lexer_elem(
             w,
             elem,
@@ -1721,6 +1751,73 @@ fn gen_lexer_repeat_lookahead_aware(
 /// position in `accept_var` iff every suffix element would match
 /// starting here. Pos is restored unconditionally so the surrounding
 /// forward scan continues without committing the peeked suffix.
+/// Maximal-munch emit for an alternation that has a suffix after it.
+///
+/// The arm matching first is not necessarily the one letting the rule match
+/// (`I : ('a' | 'ab') 'bc'` on `abbc` needs the second arm), and neither is
+/// the longest arm (`K : ('x' | 'xy') 'yz'` on `xyz` needs the first). ANTLR4
+/// simulates the whole rule, so the arm to take is the one whose
+/// arm-plus-suffix reaches furthest — scored on the suffix, not on the arm,
+/// which is the difference when the suffix is itself variable-length
+/// (`P : ('p' | 'pq') ('qrs' | 'r')` on `pqrs`). Ties go to the first arm.
+///
+/// Each arm is scanned once from the same start and its suffix peeked without
+/// consuming; the winner's end is restored and the caller emits the suffix as
+/// usual. Same single-pass accept-state tracking as
+/// `gen_lexer_repeat_lookahead_aware`, and no try-fail-retry: the scan is
+/// match-only, so a losing arm never runs an action.
+fn gen_lexer_alts_lookahead_aware(
+    w: &mut CodeWriter,
+    alts: &List<LexerAlternative>,
+    suffix: &List<LexerElement>,
+    all_rules: &List<LexerRule>,
+    fail_action: &String,
+    ci: bool,
+    ea: bool,
+    hm: bool,
+    replay: bool,
+) {
+    let id = w.next_id();
+    w.line(&`let la_saved_${id} = pos;`);
+    w.line(&`let mut la_reach_${id}: i32 = -1;`);
+    w.line(&`let mut la_end_${id}: i32 = -1;`);
+    w.line(&`let mut la_win_${id}: i32 = -1;`);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let label = `la_alt_${id}_${i}`;
+        w.begin(&`${label}:`);
+        w.line(&`pos = la_saved_${id};`);
+        gen_lexer_alt_seq(w, &alts[i], all_rules, &`break ${label}`, ci, ea, hm, false, false);
+        w.line(&`let la_arm_${id}_${i} = pos;`);
+        w.line(&`let mut la_tot_${id}_${i}: i32 = -1;`);
+        gen_lexer_suffix_peek(w, suffix, all_rules, &`la_tot_${id}_${i}`, ci, ea, hm, /*record_end=*/ true);
+        // Strict `>` over arms in source order gives ANTLR4's tie-break.
+        w.begin(&`if la_tot_${id}_${i} > la_reach_${id}`);
+        w.line(&`la_reach_${id} = la_tot_${id}_${i};`);
+        w.line(&`la_end_${id} = la_arm_${id}_${i};`);
+        w.line(&`la_win_${id} = ${i};`);
+        w.end();
+        w.end();
+    }
+    w.line(&`if la_win_${id} < 0 \{ ${*fail_action}; \}`);
+    if !replay {
+        w.line(&`pos = la_end_${id};`);
+        return;
+    }
+    // Re-run the winner so its actions fire at the cursor they were written
+    // at. `ea = false`: the selection pass already evaluated this arm, and a
+    // state-dependent predicate could reject here what it accepted there.
+    w.line(&`pos = la_saved_${id};`);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if i == 0 {
+            w.begin(&`if la_win_${id} == ${i}`);
+        } else {
+            w.else_begin(&`else if la_win_${id} == ${i}`);
+        }
+        gen_lexer_alt_seq(w, &alts[i], all_rules, fail_action, ci, false, hm, false, true);
+    }
+    w.end();
+}
+
 fn gen_lexer_suffix_peek(
     w: &mut CodeWriter,
     suffix: &List<LexerElement>,
@@ -1729,22 +1826,33 @@ fn gen_lexer_suffix_peek(
     ci: bool,
     ea: bool,
     hm: bool,
+    record_end: bool = false,
 ) {
     let id = w.next_id();
     let save_var = `peek_save_${id}`;
     let matched_var = `peek_ok_${id}`;
+    let end_var = `peek_end_${id}`;
     let label = `peek_${id}`;
     w.line(&`let ${save_var} = pos;`);
     w.line(&`let mut ${matched_var} = false;`);
+    // A repeat records where the suffix could START, to resume the cursor
+    // there; an alternation records where it would END, because that is what
+    // ranks its arms by how far the whole rule reaches.
+    if record_end {
+        w.line(&`let mut ${end_var}: i32 = -1;`);
+    }
     w.begin(&`${label}:`);
     for let elem of suffix {
         gen_lexer_elem(w, elem, all_rules, &`break ${label}`, ci, ea, hm, false, false);
+    }
+    if record_end {
+        w.line(&`${end_var} = pos;`);
     }
     w.line(&`${matched_var} = true;`);
     w.end();
     w.line(&`pos = ${save_var};`);
     w.begin(&`if ${matched_var}`);
-    w.line(&`${*accept_var} = ${save_var};`);
+    w.line(&`${*accept_var} = ${if record_end { end_var } else { save_var }};`);
     w.end();
 }
 
