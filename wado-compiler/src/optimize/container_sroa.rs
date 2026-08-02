@@ -1130,7 +1130,6 @@ impl WhitelistChecker<'_> {
         }
     }
 
-<<<<<<< HEAD
     /// Classify a whitelisted `recv.m(args)` shape on a decomposition candidate.
     fn visit_method_call(
         &mut self,
@@ -1153,184 +1152,13 @@ impl WhitelistChecker<'_> {
             match (kind, arg_ops.len()) {
                 // v.push-shaped(source)
                 (Some(ListMethodKind::ElementWriter), 1) => {
-                    let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
-                    let layout = self
-                        .layout_of
-                        .get(&rec_local)
-                        .cloned()
-                        .unwrap_or(ElementLayout::Tuple);
-                    let all_scalar = self.all_scalar_of.get(&rec_local).copied().unwrap_or(false);
+                    let shape = self.shape(rec_local);
+                    let (arity, layout, all_scalar) =
+                        (shape.arity, shape.layout.clone(), shape.all_scalar);
                     if self.check_source_operand(body, arg_ops[0], arity, &layout, all_scalar) {
                         self.record_use(rec_local, ListMethodKind::ElementWriter);
                     } else {
                         self.mark(rec_local);
-||||||| b07ac9e97
-    fn visit_expr(&mut self, body: &Body, e: ExprId) {
-        match &body.exprs[e].kind {
-            // v.method(...) — inspect receiver for whitelisted patterns.
-            ExprKind::MethodCall {
-                receiver,
-                func_id,
-                args,
-                ..
-            } => {
-                let receiver = *receiver;
-                let Some(recv_e) = receiver.as_expr() else {
-                    return;
-                };
-                // Args are operands: a promoted constant (`Operand::Value`) is a
-                // valid index/source — duplicability and decomposability are
-                // judged per arg below, not by requiring every arg be a skeleton
-                // expression.
-                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                let kind = list_method_kind(*func_id, self.sig);
-                if let Some(rec_local) = receiver_local(body, receiver)
-                    && self.safe.contains(&rec_local)
-                {
-                    match (kind, arg_ops.len()) {
-                        // v.push-shaped(source)
-                        (Some(ListMethodKind::ElementWriter), 1) => {
-                            let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
-                            let layout = self
-                                .layout_of
-                                .get(&rec_local)
-                                .cloned()
-                                .unwrap_or(ElementLayout::Tuple);
-                            let all_scalar =
-                                self.all_scalar_of.get(&rec_local).copied().unwrap_or(false);
-                            if self
-                                .check_source_operand(body, arg_ops[0], arity, &layout, all_scalar)
-                            {
-                                self.record_use(rec_local, ListMethodKind::ElementWriter);
-                            } else {
-                                self.mark(rec_local);
-                            }
-                            return;
-                        }
-                        // v.len() / v.is_empty() / v.capacity() — Query, no arg
-                        (Some(ListMethodKind::Query), 0) => {
-                            self.record_use(rec_local, ListMethodKind::Query);
-                            return;
-                        }
-                        // v.index_assign-shaped(i, source)
-                        (Some(ListMethodKind::IndexWriter), 2) => {
-                            let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
-                            let layout = self
-                                .layout_of
-                                .get(&rec_local)
-                                .cloned()
-                                .unwrap_or(ElementLayout::Tuple);
-                            // The rewrite clones the destination index N times.
-                            if !is_duplicable_operand(body, arg_ops[0]) {
-                                self.mark(rec_local);
-                                self.visit_operand(body, arg_ops[0]);
-                                self.visit_operand(body, arg_ops[1]);
-                                return;
-                            }
-                            // index argument visited normally
-                            self.visit_operand(body, arg_ops[0]);
-                            let all_scalar =
-                                self.all_scalar_of.get(&rec_local).copied().unwrap_or(false);
-                            if self
-                                .check_source_operand(body, arg_ops[1], arity, &layout, all_scalar)
-                            {
-                                self.record_use(rec_local, ListMethodKind::IndexWriter);
-                            } else {
-                                self.mark(rec_local);
-                            }
-                            return;
-                        }
-                        // Bare v.index_value(i) — safe only when the *enclosing*
-                        // expression is a `FieldAccess` (handled below). Reaching
-                        // here directly means the whole struct value escapes.
-                        (Some(ListMethodKind::IndexReader), 1) => {
-                            self.mark(rec_local);
-                            self.visit_operand(body, arg_ops[0]);
-                            return;
-                        }
-                        // Any other method call on a candidate → escape.
-                        _ => {
-                            self.mark(rec_local);
-                        }
-=======
-    fn visit_expr(&mut self, body: &Body, e: ExprId) {
-        match &body.exprs[e].kind {
-            // v.method(...) — inspect receiver for whitelisted patterns.
-            ExprKind::MethodCall {
-                receiver,
-                func_id,
-                args,
-                ..
-            } => {
-                let receiver = *receiver;
-                let Some(recv_e) = receiver.as_expr() else {
-                    return;
-                };
-                // Args are operands: a promoted constant (`Operand::Value`) is a
-                // valid index/source — duplicability and decomposability are
-                // judged per arg below, not by requiring every arg be a skeleton
-                // expression.
-                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                let kind = list_method_kind(*func_id, self.sig);
-                if let Some(rec_local) = receiver_local(body, receiver)
-                    && self.safe.contains(&rec_local)
-                {
-                    match (kind, arg_ops.len()) {
-                        // v.push-shaped(source)
-                        (Some(ListMethodKind::ElementWriter), 1) => {
-                            let shape = self.shape(rec_local);
-                            let (arity, layout, all_scalar) =
-                                (shape.arity, shape.layout.clone(), shape.all_scalar);
-                            if self
-                                .check_source_operand(body, arg_ops[0], arity, &layout, all_scalar)
-                            {
-                                self.record_use(rec_local, ListMethodKind::ElementWriter);
-                            } else {
-                                self.mark(rec_local);
-                            }
-                            return;
-                        }
-                        // v.len() / v.is_empty() / v.capacity() — Query, no arg
-                        (Some(ListMethodKind::Query), 0) => {
-                            self.record_use(rec_local, ListMethodKind::Query);
-                            return;
-                        }
-                        // v.index_assign-shaped(i, source)
-                        (Some(ListMethodKind::IndexWriter), 2) => {
-                            let shape = self.shape(rec_local);
-                            let (arity, layout, all_scalar) =
-                                (shape.arity, shape.layout.clone(), shape.all_scalar);
-                            // The rewrite clones the destination index N times.
-                            if !is_duplicable_operand(body, arg_ops[0]) {
-                                self.mark(rec_local);
-                                self.visit_operand(body, arg_ops[0]);
-                                self.visit_operand(body, arg_ops[1]);
-                                return;
-                            }
-                            // index argument visited normally
-                            self.visit_operand(body, arg_ops[0]);
-                            if self
-                                .check_source_operand(body, arg_ops[1], arity, &layout, all_scalar)
-                            {
-                                self.record_use(rec_local, ListMethodKind::IndexWriter);
-                            } else {
-                                self.mark(rec_local);
-                            }
-                            return;
-                        }
-                        // Bare v.index_value(i) — safe only when the *enclosing*
-                        // expression is a `FieldAccess` (handled below). Reaching
-                        // here directly means the whole struct value escapes.
-                        (Some(ListMethodKind::IndexReader), 1) => {
-                            self.mark(rec_local);
-                            self.visit_operand(body, arg_ops[0]);
-                            return;
-                        }
-                        // Any other method call on a candidate → escape.
-                        _ => {
-                            self.mark(rec_local);
-                        }
->>>>>>> origin/main
                     }
                     return;
                 }
@@ -1341,12 +1169,9 @@ impl WhitelistChecker<'_> {
                 }
                 // v.index_assign-shaped(i, source)
                 (Some(ListMethodKind::IndexWriter), 2) => {
-                    let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
-                    let layout = self
-                        .layout_of
-                        .get(&rec_local)
-                        .cloned()
-                        .unwrap_or(ElementLayout::Tuple);
+                    let shape = self.shape(rec_local);
+                    let (arity, layout, all_scalar) =
+                        (shape.arity, shape.layout.clone(), shape.all_scalar);
                     // The rewrite clones the destination index N times.
                     if !is_duplicable_operand(body, arg_ops[0]) {
                         self.mark(rec_local);
@@ -1356,7 +1181,6 @@ impl WhitelistChecker<'_> {
                     }
                     // index argument visited normally
                     self.visit_operand(body, arg_ops[0]);
-                    let all_scalar = self.all_scalar_of.get(&rec_local).copied().unwrap_or(false);
                     if self.check_source_operand(body, arg_ops[1], arity, &layout, all_scalar) {
                         self.record_use(rec_local, ListMethodKind::IndexWriter);
                     } else {
@@ -2064,16 +1888,8 @@ fn build_index_reader_call(
                 expr: index,
                 is_mut: false,
             }],
-<<<<<<< HEAD
         ),
-        elem_ty,
-||||||| b07ac9e97
-        },
-        elem_ty,
-=======
-        },
         field.elem_type,
->>>>>>> origin/main
         span,
     )
 }

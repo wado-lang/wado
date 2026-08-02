@@ -793,7 +793,6 @@ fn rewrite_call_expr(
     scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
     type_table: &TypeTable,
 ) -> bool {
-<<<<<<< HEAD
     let ExprKind::Call {
         func_id,
         args,
@@ -809,203 +808,29 @@ fn rewrite_call_expr(
     // Scalarizing position 0 replaces a method's receiver with a plain scalar,
     // so the call stops being one.
     let receiver_scalarized = *has_receiver && positions.contains_key(&0);
-    let args: Vec<Option<ExprId>> = args.iter().map(|a| a.expr.as_expr()).collect();
+    let span = body.exprs[id].span;
+    let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+    let mut rewritten: Vec<(usize, Operand)> = Vec::with_capacity(positions.len());
     for (pi, info) in &positions {
-        if let Some(Some(arg)) = args.get(*pi).copied() {
-            rewrite_arg(body, arg, info, scalar_param_struct, type_table);
-||||||| b07ac9e97
-    match &body.exprs[id].kind {
-        ExprKind::Call { func_id, args, .. } => {
-            let Some(positions) = sroa_positions.get(func_id).cloned() else {
-                return false;
-            };
-            let args: Vec<Option<ExprId>> = args.iter().map(|a| a.expr.as_expr()).collect();
-            for (pi, info) in &positions {
-                if let Some(Some(arg)) = args.get(*pi).copied() {
-                    rewrite_arg(body, arg, info, scalar_param_struct, type_table);
-                }
-            }
-            true
-=======
-    match &body.exprs[id].kind {
-        ExprKind::Call { func_id, args, .. } => {
-            let Some(positions) = sroa_positions.get(func_id).cloned() else {
-                return false;
-            };
-            let span = body.exprs[id].span;
-            let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-            let mut rewritten: Vec<(usize, Operand)> = Vec::with_capacity(positions.len());
-            for (pi, info) in &positions {
-                let op = scalarized_arg(&arg_ops, *pi);
-                rewritten.push((
-                    *pi,
-                    rewrite_arg_operand(body, op, info, scalar_param_struct, type_table, span),
-                ));
-            }
-            let ExprKind::Call { args, .. } = &mut body.exprs[id].kind else {
-                unreachable!("matched a Call above")
-            };
-            for (pi, op) in rewritten {
-                args[pi].expr = op;
-            }
-            true
->>>>>>> origin/main
-        }
-<<<<<<< HEAD
-||||||| b07ac9e97
-        ExprKind::MethodCall { func_id, .. } => {
-            let Some(positions) = sroa_positions.get(func_id).cloned() else {
-                return false;
-            };
-            if positions.contains_key(&0) {
-                // Receiver SROA'd: collapse `MethodCall` → `Call`.
-                let ExprKind::MethodCall {
-                    receiver,
-                    func_id,
-                    type_args,
-                    args,
-                    ..
-                } = std::mem::replace(&mut body.exprs[id].kind, ExprKind::Dead)
-                else {
-                    unreachable!();
-                };
-                if let Some(info) = positions.get(&0) {
-                    rewrite_arg_operand(body, receiver, info, scalar_param_struct, type_table);
-                }
-                for (pi, info) in &positions {
-                    if *pi == 0 {
-                        continue;
-                    }
-                    let arg_idx = *pi - 1;
-                    if arg_idx < args.len()
-                        && let Some(arg_e) = args[arg_idx].expr.as_expr()
-                    {
-                        rewrite_arg(body, arg_e, info, scalar_param_struct, type_table);
-                    }
-                }
-                let mut new_args = Vec::with_capacity(args.len() + 1);
-                new_args.push(ArenaCallArg {
-                    expr: receiver,
-                    is_mut: false,
-                });
-                new_args.extend(args);
-                body.exprs[id].kind = ExprKind::Call {
-                    func_id,
-                    type_args,
-                    args: new_args,
-                };
-            } else {
-                let ExprKind::MethodCall { args, .. } = &body.exprs[id].kind else {
-                    unreachable!();
-                };
-                let args: Vec<Option<ExprId>> = args.iter().map(|a| a.expr.as_expr()).collect();
-                for (pi, info) in &positions {
-                    let arg_idx = pi.saturating_sub(1);
-                    if *pi >= 1
-                        && let Some(Some(arg)) = args.get(arg_idx).copied()
-                    {
-                        rewrite_arg(body, arg, info, scalar_param_struct, type_table);
-                    }
-                }
-            }
-            true
-        }
-        _ => false,
-=======
-        ExprKind::MethodCall { func_id, .. } => {
-            let Some(positions) = sroa_positions.get(func_id).cloned() else {
-                return false;
-            };
-            if positions.contains_key(&0) {
-                // Receiver SROA'd: collapse `MethodCall` → `Call`.
-                let ExprKind::MethodCall {
-                    receiver,
-                    func_id,
-                    type_args,
-                    args,
-                    ..
-                } = std::mem::replace(&mut body.exprs[id].kind, ExprKind::Dead)
-                else {
-                    unreachable!();
-                };
-                let span = body.exprs[id].span;
-                let mut args = args;
-                let receiver = rewrite_arg_operand(
-                    body,
-                    receiver,
-                    &positions[&0],
-                    scalar_param_struct,
-                    type_table,
-                    span,
-                );
-                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                for (pi, info) in &positions {
-                    let Some(arg_idx) = pi.checked_sub(1) else {
-                        continue;
-                    };
-                    let op = scalarized_arg(&arg_ops, arg_idx);
-                    args[arg_idx].expr =
-                        rewrite_arg_operand(body, op, info, scalar_param_struct, type_table, span);
-                }
-                let mut new_args = Vec::with_capacity(args.len() + 1);
-                new_args.push(ArenaCallArg {
-                    expr: receiver,
-                    is_mut: false,
-                });
-                new_args.extend(args);
-                body.exprs[id].kind = ExprKind::Call {
-                    func_id,
-                    type_args,
-                    args: new_args,
-                };
-            } else {
-                let ExprKind::MethodCall { args, .. } = &body.exprs[id].kind else {
-                    unreachable!();
-                };
-                let span = body.exprs[id].span;
-                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                let mut rewritten: Vec<(usize, Operand)> = Vec::with_capacity(positions.len());
-                for (pi, info) in &positions {
-                    let arg_idx = pi
-                        .checked_sub(1)
-                        .expect("a scalarized receiver takes the collapse branch above");
-                    let op = scalarized_arg(&arg_ops, arg_idx);
-                    rewritten.push((
-                        arg_idx,
-                        rewrite_arg_operand(body, op, info, scalar_param_struct, type_table, span),
-                    ));
-                }
-                let ExprKind::MethodCall { args, .. } = &mut body.exprs[id].kind else {
-                    unreachable!("matched a MethodCall above")
-                };
-                for (arg_idx, op) in rewritten {
-                    args[arg_idx].expr = op;
-                }
-            }
-            true
-        }
-        _ => false,
->>>>>>> origin/main
+        let op = scalarized_arg(&arg_ops, *pi);
+        rewritten.push((
+            *pi,
+            rewrite_arg_operand(body, op, info, scalar_param_struct, type_table, span),
+        ));
     }
-<<<<<<< HEAD
-    if receiver_scalarized && let ExprKind::Call { has_receiver, .. } = &mut body.exprs[id].kind {
+    let ExprKind::Call {
+        args, has_receiver, ..
+    } = &mut body.exprs[id].kind
+    else {
+        unreachable!("matched a Call above")
+    };
+    for (pi, op) in rewritten {
+        args[pi].expr = op;
+    }
+    if receiver_scalarized {
         *has_receiver = false;
     }
     true
-||||||| b07ac9e97
-}
-
-fn rewrite_arg_operand(
-    body: &mut Body,
-    op: Operand,
-    info: &SroaInfo,
-    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
-    type_table: &TypeTable,
-) {
-    if let Some(e) = op.as_expr() {
-        rewrite_arg(body, e, info, scalar_param_struct, type_table);
-    }
-=======
 }
 
 /// The argument operand at a scalarized parameter position. The position exists
@@ -1047,7 +872,6 @@ fn rewrite_arg_operand(
     };
     rewrite_arg(body, arg, info, scalar_param_struct, type_table);
     op
->>>>>>> origin/main
 }
 
 fn rewrite_arg(

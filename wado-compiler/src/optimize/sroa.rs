@@ -495,54 +495,10 @@ fn scan_candidate_uses(body: &Body, candidates: &[SroaCandidate]) -> CandidateUs
     uses
 }
 
-<<<<<<< HEAD
-/// Which fact the read-only walker records. Both modes share one dispatch
-/// skeleton over `FieldAccess` / `Assign` / `Local` / `Unary(Ref)`; they differ
-/// only in what they record at those leaves.
-#[derive(Clone, Copy)]
-enum ReadKind {
-    /// Record a candidate that appears in any non-projected position — a bare
-    /// use or a reference means it escapes decomposition.
-    Escape,
-    /// Record a candidate that appears as the base of a field access.
-    FieldAccess,
-}
-
-/// The unified read-only escape/field-access walker. `escape` and the
-/// field-access scan re-encoded the same traversal; this parameterizes the one
-/// skeleton by [`ReadKind`]. The soft-escape walk ([`SoftCtx`]) stays separate:
-/// it threads a soft-context flag, peels `$value_copy$T` wrappers, and treats
-/// call reference arguments specially, none of which this
-/// read-only pair needs.
-struct ReadWalk<'a> {
-    kind: ReadKind,
-||||||| b07ac9e97
-/// Which fact the read-only walker records. Both modes share one dispatch
-/// skeleton over `FieldAccess` / `Assign` / `Local` / `Unary(Ref)`; they differ
-/// only in what they record at those leaves.
-#[derive(Clone, Copy)]
-enum ReadKind {
-    /// Record a candidate that appears in any non-projected position — a bare
-    /// use or a reference means it escapes decomposition.
-    Escape,
-    /// Record a candidate that appears as the base of a field access.
-    FieldAccess,
-}
-
-/// The unified read-only escape/field-access walker. `escape` and the
-/// field-access scan re-encoded the same traversal; this parameterizes the one
-/// skeleton by [`ReadKind`]. The soft-escape walk ([`SoftCtx`]) stays separate:
-/// it threads a soft-context flag, peels `$value_copy$T` wrappers, and treats
-/// `Call` / `MethodCall` reference arguments specially, none of which this
-/// read-only pair needs.
-struct ReadWalk<'a> {
-    kind: ReadKind,
-=======
 /// The read-only walk behind [`CandidateUses`]. The soft-escape walk
 /// ([`SoftCtx`]) stays separate: it carries a context flag and a wrapper peel
 /// this one has no use for.
 struct UseWalk<'a> {
->>>>>>> origin/main
     candidates: &'a IndexSet<u32>,
 }
 
@@ -719,75 +675,7 @@ impl SoftCtx<'_> {
                     self.expr(body, arg, false, hard_escaped);
                 }
             }
-<<<<<<< HEAD
-            _ => {
-                let mut kids = Vec::new();
-                body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
-                for c in kids {
-                    self.walk(body, c, hard_escaped);
-                }
-            }
-||||||| b07ac9e97
-            ExprKind::MethodCall {
-                receiver,
-                func_id,
-                args,
-                ..
-            } => {
-                let receiver = *receiver;
-                let callee_id = *func_id;
-                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                if let Some(re) = receiver.as_expr()
-                    && (!is_immut_ref_to_candidate(body, re, self.candidates)
-                        || callee_stores_param_at(callee_id, 0, self.stores_lookup))
-                {
-                    self.expr(body, re, false, hard_escaped);
-                }
-                for (i, arg) in arg_ops.into_iter().enumerate() {
-                    let Some(arg) = arg.as_expr() else { continue };
-                    if is_immut_ref_to_candidate(body, arg, self.candidates)
-                        && !callee_stores_param_at(callee_id, i + 1, self.stores_lookup)
-                    {
-                        continue;
-                    }
-                    self.expr(body, arg, false, hard_escaped);
-                }
-            }
-            _ => {
-                let mut kids = Vec::new();
-                body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
-                for c in kids {
-                    self.walk(body, c, hard_escaped);
-                }
-            }
-=======
-            ExprKind::MethodCall {
-                receiver,
-                func_id,
-                args,
-                ..
-            } => {
-                let receiver = *receiver;
-                let callee_id = *func_id;
-                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                if let Some(re) = receiver.as_expr()
-                    && (!is_immut_ref_to_candidate(body, re, self.candidates)
-                        || callee_stores_param_at(callee_id, 0, self.stores_lookup))
-                {
-                    self.expr(body, re, false, hard_escaped);
-                }
-                for (i, arg) in arg_ops.into_iter().enumerate() {
-                    let Some(arg) = arg.as_expr() else { continue };
-                    if is_immut_ref_to_candidate(body, arg, self.candidates)
-                        && !callee_stores_param_at(callee_id, i + 1, self.stores_lookup)
-                    {
-                        continue;
-                    }
-                    self.expr(body, arg, false, hard_escaped);
-                }
-            }
             _ => body.for_each_child(NodeRef::Expr(id), |c| self.walk(body, c, hard_escaped)),
->>>>>>> origin/main
         }
     }
 }
