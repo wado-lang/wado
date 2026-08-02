@@ -30,7 +30,7 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
-use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
+use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, NodeRef, Operand};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -76,17 +76,7 @@ fn become_expr(body: &mut Body, id: ExprId, src: ExprId) {
     if id == src {
         return;
     }
-    let ty = body.exprs[src].type_id;
-    let span = body.exprs[src].span;
-    let node = std::mem::replace(
-        &mut body.exprs[src],
-        ExprNode {
-            kind: ExprKind::Dead,
-            type_id: ty,
-            span,
-        },
-    );
-    body.exprs[id] = node;
+    body.exprs[id] = body.take_expr(src);
 }
 
 // -----------------------------------------------------------------------
@@ -965,14 +955,8 @@ fn rewrite_arg(
     }
 
     // Case 3: general — extract the field via FieldAccess.
-    let span = body.exprs[arg].span;
-    let orig_ty = body.exprs[arg].type_id;
-    let orig_kind = std::mem::replace(&mut body.exprs[arg].kind, ExprKind::Dead);
-    let orig = body.exprs.push(ExprNode {
-        kind: orig_kind,
-        type_id: orig_ty,
-        span,
-    });
+    let moved = body.take_expr(arg);
+    let orig = body.exprs.push(moved);
     body.exprs[arg].kind = ExprKind::FieldAccess {
         expr: orig.into(),
         field_index: 0,

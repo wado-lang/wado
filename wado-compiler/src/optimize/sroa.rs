@@ -54,6 +54,8 @@ type StoresLookup = IndexMap<crate::nir::FuncId, IndexSet<usize>>;
 struct SroaCandidate {
     local_index: u32,
     local_name: String,
+    /// The `StructLiteral` / `TupleLiteral` the `Let` binds.
+    literal: ExprId,
     /// Per-field info: (`field_name`, `field_type_id`).
     fields: Vec<(String, TypeId)>,
     is_mut: bool,
@@ -164,11 +166,11 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
     }
 
     // Step 2: escape analysis.
-    let escaped = find_escaped_locals(engine.body, &candidates);
+    let uses = scan_candidate_uses(engine.body, &candidates);
     let soft_escaped = find_soft_escaped_locals(
         engine.body,
         &candidates,
-        &escaped,
+        &uses,
         rule.stores_lookup,
         rule.value_copy_ids,
     );
@@ -179,7 +181,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         if rule.stores_aliased.contains(&c.local_index) {
             continue;
         }
-        if !escaped.contains(&c.local_index) {
+        if !uses.escaped.contains(&c.local_index) {
             decomposed.insert(c.local_index);
         } else if soft_escaped.contains(&c.local_index) {
             decomposed.insert(c.local_index);
@@ -239,7 +241,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
     // function-scope fields directly).
     {
         let mut newly = rule.newly_aliased.borrow_mut();
-        mark_ref_field_locals_as_aliased(engine.body, engine.body.root, &decomposed, &mut newly);
+        mark_ref_field_locals_as_aliased(engine.body, &candidates, &decomposed, &mut newly);
     }
 
     // Step 4: rewrite — expand candidate Lets and replace field accesses.
@@ -261,31 +263,14 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
 
 fn mark_ref_field_locals_as_aliased(
     body: &Body,
-    block: BlockId,
+    candidates: &[SroaCandidate],
     decomposed: &IndexSet<u32>,
     stores_aliased: &mut IndexSet<u32>,
 ) {
-    let mut stack = vec![NodeRef::Block(block)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Stmt(s) = node
-            && let StmtKind::Let {
-                local_index, value, ..
-            } = &body.stmts[s].kind
-            && decomposed.contains(local_index)
-        {
-            collect_ref_locals_in_fields_operand(body, *value, stores_aliased);
+    for c in candidates {
+        if decomposed.contains(&c.local_index) {
+            collect_ref_locals_in_fields(body, c.literal, stores_aliased);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-}
-
-fn collect_ref_locals_in_fields_operand(
-    body: &Body,
-    op: Operand,
-    stores_aliased: &mut IndexSet<u32>,
-) {
-    if let Some(e) = op.as_expr() {
-        collect_ref_locals_in_fields(body, e, stores_aliased);
     }
 }
 
@@ -389,6 +374,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
             candidates.push(SroaCandidate {
                 local_index,
                 local_name: name,
+                literal: value_e,
                 fields: field_info,
                 is_mut,
                 aggregate_type_id,
@@ -404,6 +390,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
             candidates.push(SroaCandidate {
                 local_index,
                 local_name: name,
+                literal: value_e,
                 fields: field_info,
                 is_mut,
                 aggregate_type_id,
@@ -486,42 +473,38 @@ fn ref_to_candidate_local(
     candidates.contains(index).then_some((*index, is_mut))
 }
 
-fn find_escaped_locals(body: &Body, candidates: &[SroaCandidate]) -> IndexSet<u32> {
+/// What one read-only walk records about each candidate.
+#[derive(Default)]
+struct CandidateUses {
+    /// Appeared in a non-projected position — a bare use or a reference. Such a
+    /// candidate cannot be decomposed outright; the soft walk decides whether it
+    /// can be reconstructed instead.
+    escaped: IndexSet<u32>,
+    /// Appeared as the base of a field access, read or written. A reconstructed
+    /// candidate is only worth decomposing when some access projects it.
+    field_accessed: IndexSet<u32>,
+}
+
+fn scan_candidate_uses(body: &Body, candidates: &[SroaCandidate]) -> CandidateUses {
     let candidate_set: IndexSet<u32> = candidates.iter().map(|c| c.local_index).collect();
-    let mut escaped = IndexSet::default();
-    ReadWalk {
-        kind: ReadKind::Escape,
+    let mut uses = CandidateUses::default();
+    UseWalk {
         candidates: &candidate_set,
     }
-    .node(body, NodeRef::Block(body.root), &mut escaped);
-    escaped
+    .node(body, NodeRef::Block(body.root), &mut uses);
+    uses
 }
 
-/// Which fact the read-only walker records. Both modes share one dispatch
-/// skeleton over `FieldAccess` / `Assign` / `Local` / `Unary(Ref)`; they differ
-/// only in what they record at those leaves.
-#[derive(Clone, Copy)]
-enum ReadKind {
-    /// Record a candidate that appears in any non-projected position — a bare
-    /// use or a reference means it escapes decomposition.
-    Escape,
-    /// Record a candidate that appears as the base of a field access.
-    FieldAccess,
-}
-
-/// The unified read-only escape/field-access walker. `escape` and the
-/// field-access scan re-encoded the same traversal; this parameterizes the one
-/// skeleton by [`ReadKind`]. The soft-escape walk ([`SoftCtx`]) stays separate:
-/// it threads a soft-context flag, peels `$value_copy$T` wrappers, and treats
-/// `Call` / `MethodCall` reference arguments specially, none of which this
-/// read-only pair needs.
-struct ReadWalk<'a> {
-    kind: ReadKind,
+/// The read-only walk behind [`CandidateUses`]. The soft-escape walk
+/// ([`SoftCtx`]) stays separate: it threads a soft-context flag, peels
+/// `$value_copy$T` wrappers, and treats `Call` / `MethodCall` reference
+/// arguments specially, none of which this walk needs.
+struct UseWalk<'a> {
     candidates: &'a IndexSet<u32>,
 }
 
-impl ReadWalk<'_> {
-    fn node(&self, body: &Body, node: NodeRef, out: &mut IndexSet<u32>) {
+impl UseWalk<'_> {
+    fn node(&self, body: &Body, node: NodeRef, out: &mut CandidateUses) {
         if let NodeRef::Expr(id) = node {
             self.expr(body, id, out);
         } else {
@@ -529,20 +512,18 @@ impl ReadWalk<'_> {
         }
     }
 
-    fn expr_operand(&self, body: &Body, op: Operand, out: &mut IndexSet<u32>) {
+    fn expr_operand(&self, body: &Body, op: Operand, out: &mut CandidateUses) {
         if let Some(e) = op.as_expr() {
             self.expr(body, e, out);
         }
     }
 
-    fn expr(&self, body: &Body, id: ExprId, out: &mut IndexSet<u32>) {
+    fn expr(&self, body: &Body, id: ExprId, out: &mut CandidateUses) {
         match &body.exprs[id].kind {
             ExprKind::FieldAccess { expr: inner, .. } => {
                 let inner = *inner;
                 if let Some((idx, _)) = field_access_of_candidate(body, id, self.candidates) {
-                    if matches!(self.kind, ReadKind::FieldAccess) {
-                        out.insert(idx);
-                    }
+                    out.field_accessed.insert(idx);
                     return;
                 }
                 self.expr_operand(body, inner, out);
@@ -550,30 +531,21 @@ impl ReadWalk<'_> {
             ExprKind::Assign { target, value } => {
                 let (target, value) = (*target, *value);
                 if let Some((idx, _)) = field_access_of_candidate(body, target, self.candidates) {
-                    if matches!(self.kind, ReadKind::FieldAccess) {
-                        out.insert(idx);
-                    }
-                    if let Some(ve) = value.as_expr() {
-                        self.expr(body, ve, out);
-                    }
-                    return;
+                    out.field_accessed.insert(idx);
+                } else {
+                    self.expr(body, target, out);
                 }
-                self.expr(body, target, out);
-                if let Some(ve) = value.as_expr() {
-                    self.expr(body, ve, out);
-                }
+                self.expr_operand(body, value, out);
             }
             ExprKind::Local { index, .. } => {
-                if matches!(self.kind, ReadKind::Escape) && self.candidates.contains(index) {
-                    out.insert(*index);
+                if self.candidates.contains(index) {
+                    out.escaped.insert(*index);
                 }
             }
             ExprKind::Unary { expr: inner, .. } => {
                 let inner = *inner;
-                if let Some((idx, _)) = ref_to_candidate_local(body, id, self.candidates)
-                    && matches!(self.kind, ReadKind::Escape)
-                {
-                    out.insert(idx);
+                if let Some((idx, _)) = ref_to_candidate_local(body, id, self.candidates) {
+                    out.escaped.insert(idx);
                     return;
                 }
                 self.expr_operand(body, inner, out);
@@ -586,14 +558,14 @@ impl ReadWalk<'_> {
 fn find_soft_escaped_locals(
     body: &Body,
     candidates: &[SroaCandidate],
-    escaped: &IndexSet<u32>,
+    uses: &CandidateUses,
     stores_lookup: &StoresLookup,
     value_copy_ids: &IndexSet<crate::nir::FuncId>,
 ) -> IndexSet<u32> {
     let escaped_candidates: IndexSet<u32> = candidates
         .iter()
         .map(|c| c.local_index)
-        .filter(|idx| escaped.contains(idx))
+        .filter(|idx| uses.escaped.contains(idx))
         .collect();
     if escaped_candidates.is_empty() {
         return IndexSet::default();
@@ -607,16 +579,9 @@ fn find_soft_escaped_locals(
     let mut hard_escaped = IndexSet::default();
     soft.walk(body, NodeRef::Block(body.root), &mut hard_escaped);
 
-    let mut has_field_access = IndexSet::default();
-    ReadWalk {
-        kind: ReadKind::FieldAccess,
-        candidates: &escaped_candidates,
-    }
-    .node(body, NodeRef::Block(body.root), &mut has_field_access);
-
     escaped_candidates
         .into_iter()
-        .filter(|idx| !hard_escaped.contains(idx) && has_field_access.contains(idx))
+        .filter(|idx| !hard_escaped.contains(idx) && uses.field_accessed.contains(idx))
         .collect()
 }
 

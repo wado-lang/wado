@@ -231,21 +231,23 @@ fn case_field_bindings(
     )
 }
 
-fn scalarize_pairs(
-    instrs: &mut Vec<WirInstr>,
+/// Plan the `LocalSet(temp, X) ; [intervening] ; Return(LocalGet(temp))` pairs of
+/// one statement list as `set index → return index`. Read-only, so neither
+/// rewrite re-derives its own analysis while mutating, and both agree on what a
+/// pair is. `accept_value` adds the mode's demand on `X`.
+fn plan_return_temp_pairs(
+    instrs: &[WirInstr],
     valid: &IndexSet<String>,
-    cases: &IndexSet<u32>,
-    types: &[WirTypeDef],
-) {
-    // Planned against the original indices, which the rebuild below shifts.
+    mode: PairMode,
+    accept_value: impl Fn(&WirInstr) -> bool,
+) -> IndexMap<usize, usize> {
     let mut pairs: IndexMap<usize, usize> = IndexMap::default();
     let mut i = 0;
     while i < instrs.len() {
         if let WirInstr::LocalSet { name, value } = &instrs[i]
             && valid.contains(name.as_str())
-            && let WirInstr::StructNew { type_id, fields } = value.as_ref()
-            && case_field_bindings(type_id.index(), fields.len(), cases, types).is_some()
-            && let Some(j) = find_paired_return(instrs, i, name, value, PairMode::Scalarize)
+            && accept_value(value)
+            && let Some(j) = find_paired_return(instrs, i, name, value, mode)
         {
             pairs.insert(i, j);
             i = j + 1;
@@ -253,6 +255,20 @@ fn scalarize_pairs(
         }
         i += 1;
     }
+    pairs
+}
+
+fn scalarize_pairs(
+    instrs: &mut Vec<WirInstr>,
+    valid: &IndexSet<String>,
+    cases: &IndexSet<u32>,
+    types: &[WirTypeDef],
+) {
+    // Planned against the original indices, which the rebuild below shifts.
+    let pairs = plan_return_temp_pairs(instrs, valid, PairMode::Scalarize, |value| {
+        matches!(value, WirInstr::StructNew { type_id, fields }
+            if case_field_bindings(type_id.index(), fields.len(), cases, types).is_some())
+    });
     if pairs.is_empty() {
         for instr in instrs.iter_mut() {
             scalarize_pairs_in_instr(instr, valid, cases, types);
@@ -909,35 +925,24 @@ fn scan_return_temp_uses_in_expr(
 /// original `LocalSet`'s value moves into the `Return`; the `LocalSet`
 /// slot becomes a `Nop` so downstream cleanup passes can drop it.
 fn rewrite_return_temp_pairs(instrs: &mut [WirInstr], valid: &IndexSet<String>) {
-    let mut i = 0;
-    while i < instrs.len() {
-        // Match the relaxed pair shape: same predicate that
-        // `scan_return_temp_stats` accepted as paired.
-        if let WirInstr::LocalSet { name, value } = &instrs[i]
-            && valid.contains(name.as_str())
-            && reads_only_local_state(value)
-        {
-            let name_owned = name.clone();
-            if let Some(return_idx) =
-                find_paired_return(instrs, i, &name_owned, value, PairMode::Relocate)
-            {
-                let WirInstr::LocalSet { value, .. } =
-                    std::mem::replace(&mut instrs[i], WirInstr::Nop)
-                else {
-                    unreachable!()
-                };
-                instrs[return_idx] = WirInstr::Return { value: Some(value) };
-                // Recurse into the intervening stmts (their nested bodies
-                // may still contain other paired triples in nested blocks).
-                for j in (i + 1)..return_idx {
-                    rewrite_return_temp_pairs_in_instr(&mut instrs[j], valid);
-                }
-                i = return_idx + 1;
-                continue;
-            }
+    let pairs = plan_return_temp_pairs(instrs, valid, PairMode::Relocate, reads_only_local_state);
+    let mut consumed: IndexSet<usize> = IndexSet::default();
+    for (&set_idx, &return_idx) in &pairs {
+        let WirInstr::LocalSet { value, .. } =
+            std::mem::replace(&mut instrs[set_idx], WirInstr::Nop)
+        else {
+            unreachable!("planned relocate pair is not a LocalSet")
+        };
+        instrs[return_idx] = WirInstr::Return { value: Some(value) };
+        consumed.insert(set_idx);
+        consumed.insert(return_idx);
+    }
+    // The relocated value moved to the `Return`, so only the statements no pair
+    // consumed still hold nested bodies to descend into.
+    for (i, instr) in instrs.iter_mut().enumerate() {
+        if !consumed.contains(&i) {
+            rewrite_return_temp_pairs_in_instr(instr, valid);
         }
-        rewrite_return_temp_pairs_in_instr(&mut instrs[i], valid);
-        i += 1;
     }
 }
 
