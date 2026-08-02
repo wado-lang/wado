@@ -5,11 +5,13 @@
 // global, rewrites the other's reads to it, and drops it. Under value semantics
 // the merge is unobservable, and the output proves both reads still work.
 //
-// `const_object_globalization` also hoists unrelated `&`-literal call
-// arguments elsewhere in this program (e.g. the bounds-check assert
-// diagnostic's message fragments, built fresh at each `xs[i % 4]` / `ys[i %
-// 4]`), so the exact `__const_obj_N` numbering is not stable — this fixture
-// pins the shared post-dedup read site instead of a specific absent number.
+// `const_object_globalization` also hoists unrelated constant aggregates
+// elsewhere in this program — the bounds-check assert diagnostic's message
+// fragments, built fresh at each `xs[i % 4]` / `ys[i % 4]`, and the by-value
+// boxed receivers those diagnostics format. `__const_obj_N` is numbered in
+// hoist order, so anything that changes *how many* aggregates the pass takes
+// shifts the index of the one this fixture cares about. Only the read-site
+// pattern names a number; the rest are index-free on purpose.
 
 use { println, Stdout } from "core:cli";
 
@@ -43,11 +45,11 @@ __DATA__
 {
     "stdout": "100,100\n",
     "wir_expect:O2": [
-        "global global:const_global_dedup.wado::__const_obj_6",
+        "global global:const_global_dedup.wado::__const_obj_",
         "array.new_fixed<i32>(10, 20, 30, 40)",
-        "global:const_global_dedup.wado::__const_obj_6.repr"
+        "global:const_global_dedup.wado::__const_obj_8.repr"
     ],
     "wir_not_expect:O2": [
-        "global mut global:const_global_dedup.wado::__const_obj_6"
+        "global mut global:const_global_dedup.wado::__const_obj_"
     ]
 }

@@ -240,20 +240,36 @@ hardcoded.
 The sites below change behavior rather than just shape. Each needs its own
 red/green step; several are latent-bug fixes and should land with a fixture.
 
-### Merged arms that currently skip the receiver
+### Merged arms that skipped the receiver
 
-After the merge the receiver joins `args` and these loops start seeing it:
+After the merge the receiver joins `args`, so these loops see it. Reviewed one
+by one; three broadened deliberately, the rest kept their receiver-specific
+handling by branching on `has_receiver`.
 
-| Site                                     | Effect                                                           |
-| ---------------------------------------- | ---------------------------------------------------------------- |
-| `nir_arena.rs:712` (`map_expr_operands`) | LICM gains receiver hoisting / promotion — new optimization      |
-| `optimize/alias.rs:891`                  | Ref-escape collection covers receivers — more conservative alias |
-| `optimize/field_scalarize.rs:2467`       | `Slot::Arg(i)` indices shift by one for methods                  |
-| `optimize/arena_query.rs:621`            | review                                                           |
-| `optimize/clone_forward.rs:164`          | review                                                           |
-| `lower/plan/value_copy/analyze.rs:102`   | review                                                           |
-| `lower/translate/pattern.rs:2346`        | review                                                           |
-| `monomorphize/func_inst.rs:4023`         | review                                                           |
+| Site                                                                                                                                | Outcome                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `nir_arena::map_expr_operands`                                                                                                      | LICM gains receiver hoisting / promotion — new optimization                                |
+| `optimize/const_object_globalization.rs`                                                                                            | A by-value receiver is now a hoisting candidate — new optimization                         |
+| `optimize/alias.rs` (`collect_mut_escaped_node`)                                                                                    | `is_mut` loop over-approximates `args[0]`; conservative direction                          |
+| `optimize/alias.rs` (`collect_ref_arg_escapes`)                                                                                     | Skips `args[0]`: the receiver is judged by the callee's `self` mode                        |
+| `optimize/value_copy/mutation.rs`                                                                                                   | `args[0]` still reports as `Witness::Receiver`, not `CalleeArg`                            |
+| `niri/trackability.rs`                                                                                                              | A receiver is disqualified, never a passing read                                           |
+| `optimize/tmpl_hoist.rs`                                                                                                            | A receiver is scanned but not `mark_chain`'d                                               |
+| `optimize/clone_forward.rs`                                                                                                         | Keeps `method_mutates_receiver` on `args[0]`                                               |
+| `optimize/field_scalarize.rs`                                                                                                       | `Slot::Receiver` gone; `accumulate_call_sync`'s `_operand` wrappers were exact equivalents |
+| `optimize/dce.rs`                                                                                                                   | `record_method_call` vs `record_call` keyed on `as_method_call`                            |
+| `optimize/sroa.rs`, `arena_query.rs`, `lower/plan/value_copy/analyze.rs`, `lower/translate/pattern.rs`, `monomorphize/func_inst.rs` | Pure traversals; merging is exact                                                          |
+
+`const_object_globalization` is worth spelling out because it moved a golden
+fixture. `value_arg_candidates` gates on
+`callee_param_readonly(func_id, first_param + pos)`, and with the receiver at
+`args[0]` and `first_param` now uniformly 0, that asks the right question of
+parameter 0. `compute_param_readonly` rejects any `Ref` / `MutRef` parameter
+outright, so only a _by-value_ `self` that is read-only and non-escaping
+qualifies — the pass's existing soundness contract, one position wider. The
+effect is that a boxed literal receiver stops being re-allocated per call.
+`__const_obj_N` is numbered in hoist order, so `const_global_dedup.wado` needed
+its read-site index re-pinned; its other patterns are index-free now.
 
 ### Argument / parameter index shifts
 
