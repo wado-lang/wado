@@ -157,3 +157,4 @@ history is the SSoT for how the design got here.
 - [Structured Fq Names](./wep-2026-07-28-structured-fq-names.md)
 - [Name Namespaces as Types](./wep-2026-07-29-name-namespaces.md)
 - [Overload Resolution](./wep-2026-07-31-overload-resolution.md)
+- [Unifying `MethodCall` into `Call`](./wep-2026-08-02-methodcall-call-unification.md)
