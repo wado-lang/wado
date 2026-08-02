@@ -225,10 +225,13 @@ pub(super) fn builder_alias_sets(
         call_immutability,
         |body, node| {
             if let NodeRef::Expr(e) = node
-                && let ExprKind::MethodCall {
-                    receiver, func_id, ..
+                && let ExprKind::Call {
+                    args,
+                    func_id,
+                    has_receiver: true,
+                    ..
                 } = &body.exprs[e].kind
-                && let Some(re) = receiver.as_expr()
+                && let Some(re) = args.first().and_then(|a| a.expr.as_expr())
                 && method_mutates_receiver(
                     body,
                     re,
@@ -442,14 +445,14 @@ impl<'a> CallImmutability<'a> {
 
 use super::arena_query::storage_root;
 
-/// Call exprs that **mutate no caller local**: a free `Call` or `&self`
-/// `MethodCall` whose every argument is safe — not `mut`, an immutable `&`
+/// Call exprs that **mutate no caller local**: a free call, or a call with a
+/// `&self` receiver, whose every argument is safe — not `mut`, an immutable `&`
 /// borrow, or a by-value value of a call-immutable type (a deep copy the callee
 /// cannot reach back through). The value graph can skip a `mut_escaped`
 /// receiver's per-call bump for these, so a field read keeps its version across a
 /// pure accessor (`arr.len()` does not split `arr.used`'s version) — the
 /// precondition for promoting a spliced `FieldAccess` (WEP: the field-bound
-/// recovery). Unknown callees stay impure for a `MethodCall` receiver
+/// recovery). Unknown callees stay impure for a receiver
 /// (`method_mutates_receiver`'s conservative default); a free `Call` is pure when
 /// its args are all safe, since a callee can only mutate what it is handed
 /// mutably.
@@ -486,24 +489,31 @@ pub(super) fn pure_calls(
             return;
         };
         let pure = match &body.exprs[e].kind {
-            ExprKind::Call { args, .. } => args.iter().all(&arg_safe),
-            ExprKind::MethodCall {
-                receiver,
+            ExprKind::Call {
                 func_id,
                 args,
+                has_receiver,
                 ..
             } => {
-                receiver.as_expr().is_some_and(|re| {
-                    !method_mutates_receiver(
-                        body,
-                        re,
-                        *func_id,
-                        first_param_types,
-                        type_table,
-                        true,
-                        Some(call_immutability),
-                    )
-                }) && args.iter().all(&arg_safe)
+                // A receiver is judged by the callee's declared `self` mode, which
+                // stays conservative for a callee absent from `first_param_types`;
+                // `arg_safe` alone would clear an unknown one.
+                let receiver_safe = !*has_receiver
+                    || args
+                        .first()
+                        .and_then(|a| a.expr.as_expr())
+                        .is_some_and(|re| {
+                            !method_mutates_receiver(
+                                body,
+                                re,
+                                *func_id,
+                                first_param_types,
+                                type_table,
+                                true,
+                                Some(call_immutability),
+                            )
+                        });
+                receiver_safe && args.iter().skip(usize::from(*has_receiver)).all(&arg_safe)
             }
             _ => false,
         };
@@ -803,21 +813,15 @@ fn summarize_receiver_writes(
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } if inner.as_expr().is_some_and(projects_p0) => direct = true,
-            ExprKind::Call { args, .. } => {
-                if args
-                    .iter()
-                    .any(|a| a.is_mut && a.expr.as_expr().is_some_and(projects_p0))
-                {
-                    direct = true;
-                }
-            }
-            ExprKind::MethodCall {
-                receiver,
+            ExprKind::Call {
                 func_id,
                 args,
+                has_receiver,
                 ..
             } => {
-                if receiver.as_expr().is_some_and(projects_p0) {
+                if let Some(receiver) = has_receiver.then(|| args.first()).flatten()
+                    && receiver.expr.as_expr().is_some_and(projects_p0)
+                {
                     // self-rooted receiver: mutated iff the callee mutates its
                     // own receiver. A bodied callee (stamped id with a body) →
                     // defer to the fixpoint; an unstamped / bodyless callee →
@@ -888,10 +892,13 @@ fn collect_ref_arg_escapes(
         return;
     };
     match &body.exprs[e].kind {
-        ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => {
-            for arg in args {
-                // `is_mut` args are already aliased/escaped by the collectors
-                // above.
+        ExprKind::Call {
+            args, has_receiver, ..
+        } => {
+            // `is_mut` args are already aliased/escaped by the collectors above,
+            // and so is a receiver — `collect_mut_escaped_node` judges it by the
+            // callee's declared `self` mode instead of by argument type.
+            for arg in args.iter().skip(usize::from(*has_receiver)) {
                 if arg.is_mut {
                     continue;
                 }
@@ -958,28 +965,18 @@ fn collect_mut_escaped_node(
                 out.insert(r);
             }
         }
-        ExprKind::Call { args, .. } => {
-            for arg in args {
-                // A `mut` arg is a place; a promoted constant references no local.
-                if arg.is_mut
-                    && let Some(e) = arg.expr.as_expr()
-                    && let Some(r) = storage_root(body, e)
-                {
-                    out.insert(r);
-                }
-            }
-        }
-        ExprKind::MethodCall {
-            receiver,
+        ExprKind::Call {
             func_id,
             args,
+            has_receiver,
             ..
         } => {
             // Unknown callee (builtin / extern not in the project) → assume it
             // may mutate the receiver (`conservative_on_unknown = true`). A
             // promoted-value receiver carries no local root, so it aliases
             // nothing.
-            if let Some(re) = receiver.as_expr()
+            if let Some(receiver) = has_receiver.then(|| args.first()).flatten()
+                && let Some(re) = receiver.expr.as_expr()
                 && method_mutates_receiver(
                     body,
                     re,
@@ -993,6 +990,7 @@ fn collect_mut_escaped_node(
             {
                 out.insert(r);
             }
+            // A `mut` arg is a place; a promoted constant references no local.
             for arg in args {
                 if arg.is_mut
                     && let Some(r) = arg.expr.as_expr().and_then(|e| storage_root(body, e))
@@ -1259,25 +1257,14 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
                 }
             }
             // Calls with mut args may stash the reference — alias.
-            ExprKind::Call { args, .. } => {
-                for arg in args {
-                    // A `mut` arg is a place (never a promoted constant); a
-                    // constant arg references no local.
-                    if arg.is_mut
-                        && let Some(e) = arg.expr.as_expr()
-                        && let Some(index) = local(e)
-                    {
-                        out.insert(index);
-                    }
-                }
-            }
-            ExprKind::MethodCall { receiver, args, .. } => {
-                // Auto-ref: receiver may be passed as `&mut self`.
-                if let Some(index) = receiver.as_expr().and_then(local) {
-                    out.insert(index);
-                }
-                for arg in args {
-                    if arg.is_mut
+            ExprKind::Call {
+                args, has_receiver, ..
+            } => {
+                // A `mut` arg is a place (never a promoted constant); a constant
+                // arg references no local. Auto-ref: a receiver may be passed as
+                // `&mut self` whatever its own `is_mut`.
+                for (i, arg) in args.iter().enumerate() {
+                    if (arg.is_mut || (*has_receiver && i == 0))
                         && let Some(index) = arg.expr.as_expr().and_then(local)
                     {
                         out.insert(index);

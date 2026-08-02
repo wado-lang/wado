@@ -144,11 +144,6 @@ pub(super) fn region_free_reads(
                         record_write(body, target.expr, &mut written)?;
                     }
                 }
-                ExprKind::MethodCall { func_id, .. } => {
-                    let callee = facts.callees.and_then(|m| m.get(func_id))?;
-                    let site = CallSite::of(body, e)?;
-                    write_targets(body, &site, callee, &mut written)?;
-                }
                 ExprKind::Local { index, .. } => {
                     if seen.insert(*index) {
                         mentioned.push((*index, body.exprs[e].type_id));

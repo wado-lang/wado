@@ -736,8 +736,12 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
                         hit = true;
                     }
                 }
-                ExprKind::MethodCall { receiver, .. } => {
-                    if let Some(re) = receiver.as_expr()
+                ExprKind::Call {
+                    args,
+                    has_receiver: true,
+                    ..
+                } => {
+                    if let Some(re) = args.first().and_then(|a| a.expr.as_expr())
                         && let Some(root) = super::arena_query::storage_root(engine.body, re)
                         && is_root(root)
                     {

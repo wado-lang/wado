@@ -408,10 +408,7 @@ pub(super) fn expr_node_may_trap(body: &Body, id: ExprId) -> bool {
         | ExprKind::VariantTest { .. }
         | ExprKind::VariantPayload { .. } => true,
         // A callee may trap (`panic`, OOB index, division, `unreachable`).
-        ExprKind::Call { .. }
-        | ExprKind::MethodCall { .. }
-        | ExprKind::IndirectCall { .. }
-        | ExprKind::CmRawCall { .. } => true,
+        ExprKind::Call { .. } | ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => true,
         // A store through a projection traps on a null / OOB / mismatched
         // receiver; a bare-local rebind does not, but classify the node
         // conservatively — its sole consumer routes `Assign` through a
@@ -618,7 +615,7 @@ impl MutRefAliases {
                         self.record_borrow_target(body, ie, borrowed_refs);
                     }
                 }
-                ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => {
+                ExprKind::Call { args, .. } => {
                     for arg in args {
                         if arg.is_mut
                             && let Some(ae) = arg.expr.as_expr()

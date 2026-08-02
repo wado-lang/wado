@@ -1038,6 +1038,7 @@ impl FunctionTranslator<'_, '_> {
                     expr: value.into(),
                     is_mut: false,
                 }],
+                has_receiver: false,
             },
             type_id,
             span,
@@ -1349,20 +1350,27 @@ impl FunctionTranslator<'_, '_> {
                 crate::name::CLOSURE_CALL_METHOD.to_string(),
             );
             let call_method_borrow = functor.call_method.borrow();
-            let params_is_mut: Vec<bool> = call_method_borrow
-                .params
-                .iter()
-                .skip(1)
-                .map(|p| p.is_mut)
-                .collect();
-            let nir_args: Vec<ArenaCallArg> = args
-                .iter()
-                .zip(params_is_mut.into_iter().chain(std::iter::repeat(false)))
-                .map(|(arg, is_mut)| ArenaCallArg {
-                    expr: self.convert_operand(arg),
-                    is_mut,
-                })
-                .collect();
+            let params_is_mut: Vec<bool> =
+                call_method_borrow.params.iter().map(|p| p.is_mut).collect();
+            // The receiver is the functor; it heads `args` so the list lines up
+            // with `call_method`'s full parameter list including `self`.
+            let mut nir_args: Vec<ArenaCallArg> = vec![ArenaCallArg {
+                expr: nir_receiver.into(),
+                is_mut: params_is_mut.first().copied().unwrap_or(false),
+            }];
+            nir_args.extend(
+                args.iter()
+                    .zip(
+                        params_is_mut
+                            .into_iter()
+                            .skip(1)
+                            .chain(std::iter::repeat(false)),
+                    )
+                    .map(|(arg, is_mut)| ArenaCallArg {
+                        expr: self.convert_operand(arg),
+                        is_mut,
+                    }),
+            );
             let func = nir::FunctionRef {
                 module_source: functor.module_source.clone(),
                 name: call_method_name,
@@ -1371,11 +1379,11 @@ impl FunctionTranslator<'_, '_> {
             };
             let func_id = self.base.interner.borrow_mut().resolve(&func);
             return self.alloc_expr(
-                ExprKind::MethodCall {
+                ExprKind::Call {
                     func_id,
-                    receiver: nir_receiver.into(),
                     type_args: Vec::new(),
                     args: nir_args,
+                    has_receiver: true,
                 },
                 expr.type_id,
                 expr.span,
@@ -1518,21 +1526,21 @@ impl FunctionTranslator<'_, '_> {
                 args,
                 ..
             } => {
-                let mut_roots = self.call_mut_roots(func, Some(receiver), args, 1);
-                let tir_callee = func;
+                let ordered = self.call_args_in_param_order(func, Some(receiver), args);
+                let mut_roots = self.call_mut_roots(func, &ordered);
                 let nir_func = convert_function_ref(func);
                 let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
-                ExprKind::MethodCall {
+                ExprKind::Call {
                     func_id,
-                    receiver: self.convert_operand(receiver),
                     type_args: type_args.clone(),
-                    args: args
+                    args: ordered
                         .iter()
                         .enumerate()
-                        .map(|(i, a)| {
-                            self.convert_call_arg_at(a, Some(tir_callee), i + 1, &mut_roots)
+                        .map(|(i, (e, is_mut))| {
+                            self.convert_call_arg_at(e, *is_mut, Some(func), i, &mut_roots)
                         })
                         .collect(),
+                    has_receiver: true,
                 }
             }
             TirExprKind::FieldAccess {
@@ -1727,6 +1735,7 @@ impl FunctionTranslator<'_, '_> {
                         is_mut: a.is_mut,
                     })
                     .collect(),
+                has_receiver: false,
             };
         }
         if func.module_source.is_core_builtin()
@@ -1734,18 +1743,21 @@ impl FunctionTranslator<'_, '_> {
         {
             return rewritten;
         }
-        let mut_roots = self.call_mut_roots(func, None, args, 0);
-        let tir_callee = func;
+        let ordered = self.call_args_in_param_order(func, None, args);
+        let mut_roots = self.call_mut_roots(func, &ordered);
         let nir_func = convert_function_ref(func);
         let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
         ExprKind::Call {
             func_id,
             type_args: type_args.to_vec(),
-            args: args
+            args: ordered
                 .iter()
                 .enumerate()
-                .map(|(i, a)| self.convert_call_arg_at(a, Some(tir_callee), i, &mut_roots))
+                .map(|(i, (e, is_mut))| {
+                    self.convert_call_arg_at(e, *is_mut, Some(func), i, &mut_roots)
+                })
                 .collect(),
+            has_receiver: false,
         }
     }
 
@@ -1845,6 +1857,7 @@ impl FunctionTranslator<'_, '_> {
                         is_mut: a.is_mut,
                     })
                     .collect(),
+                has_receiver: false,
             });
         }
 
@@ -1895,6 +1908,7 @@ impl FunctionTranslator<'_, '_> {
                         is_mut: a.is_mut,
                     })
                     .collect(),
+                has_receiver: false,
             });
         }
 
@@ -1957,6 +1971,7 @@ impl FunctionTranslator<'_, '_> {
                     is_mut: a.is_mut,
                 })
                 .collect(),
+            has_receiver: false,
         })
     }
 
@@ -2169,38 +2184,39 @@ impl FunctionTranslator<'_, '_> {
 
     /// Convert one call argument, wrapping it in `$value_copy$T` unless
     /// `should_wrap_value_copy` says no or the callee parameter is confined.
+    /// `param_index` indexes the callee's full parameter list, so a method's
+    /// receiver is index 0 like any other argument.
     fn convert_call_arg_at(
         &self,
-        arg: &CallArg,
+        arg: &TirExpr,
+        is_mut: bool,
         callee: Option<&FunctionRef>,
         param_index: usize,
         mut_roots: &[u32],
     ) -> ArenaCallArg {
-        let needs_value_copy = self.should_wrap_value_copy(&arg.expr)
-            && !self.arg_confined(arg, callee, param_index, mut_roots);
-        let value_type = arg.expr.type_id;
-        let converted = self.convert_specialized_arg_operand(&arg.expr);
+        let needs_value_copy = self.should_wrap_value_copy(arg)
+            && !self.arg_confined(arg, is_mut, callee, param_index, mut_roots);
+        let value_type = arg.type_id;
+        let converted = self.convert_specialized_arg_operand(arg);
         let expr = if needs_value_copy {
             self.wrap_value_copy_operand(converted, value_type)
         } else {
             converted
         };
-        ArenaCallArg {
-            expr,
-            is_mut: arg.is_mut,
-        }
+        ArenaCallArg { expr, is_mut }
     }
 
     /// Whether a by-value argument into a confined parameter can skip its copy:
     /// the parameter is not `mut`-declared and the argument aliases no `mut_root`.
     fn arg_confined(
         &self,
-        arg: &CallArg,
+        arg: &TirExpr,
+        is_mut: bool,
         callee: Option<&FunctionRef>,
         param_index: usize,
         mut_roots: &[u32],
     ) -> bool {
-        if arg.is_mut {
+        if is_mut {
             return false;
         }
         let confined = callee.is_some_and(|c| {
@@ -2212,7 +2228,7 @@ impl FunctionTranslator<'_, '_> {
         if !confined {
             return false;
         }
-        match value_copy::last_use::alias_root(&arg.expr) {
+        match value_copy::last_use::alias_root(arg) {
             Some(r) => !mut_roots
                 .iter()
                 .any(|m| self.alias_components.may_alias(*m, r)),
@@ -2220,39 +2236,52 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// The storage roots a call mutates: the referent of each `&mut` parameter
-    /// (the receiver is index 0).
-    fn call_mut_roots(
-        &self,
-        callee: &FunctionRef,
-        receiver: Option<&TirExpr>,
-        args: &[CallArg],
-        param_offset: usize,
-    ) -> Vec<u32> {
-        let mut_of = |i: usize| {
-            self.base
-                .value_copy
-                .mut_ref_params
-                .get(&callee.module_source, &callee.name)
+    /// The storage roots a call mutates: the referent of each `&mut` parameter.
+    /// `args` is in the callee's parameter order, so a method's receiver is
+    /// `args[0]` and needs no offset.
+    fn call_mut_roots(&self, callee: &FunctionRef, args: &[(&TirExpr, bool)]) -> Vec<u32> {
+        let mut_ref_params = self
+            .base
+            .value_copy
+            .mut_ref_params
+            .get(&callee.module_source, &callee.name);
+        let mut roots = Vec::new();
+        for (i, (expr, _)) in args.iter().enumerate() {
+            if mut_ref_params
                 .and_then(|v| v.get(i))
                 .copied()
                 .unwrap_or(false)
-        };
-        let mut roots = Vec::new();
-        if let Some(recv) = receiver
-            && mut_of(0)
-            && let Some(r) = value_copy::last_use::alias_root(recv)
-        {
-            roots.push(r);
-        }
-        for (i, a) in args.iter().enumerate() {
-            if mut_of(param_offset + i)
-                && let Some(r) = value_copy::last_use::alias_root(&a.expr)
+                && let Some(r) = value_copy::last_use::alias_root(expr)
             {
                 roots.push(r);
             }
         }
         roots
+    }
+
+    /// A call's arguments paired with their declared `mut`-ness, in the callee's
+    /// parameter order. `receiver`, when present, heads the list as parameter 0
+    /// and takes its mutability from the callee's `self` parameter.
+    fn call_args_in_param_order<'b>(
+        &self,
+        callee: &FunctionRef,
+        receiver: Option<&'b TirExpr>,
+        args: &'b [CallArg],
+    ) -> Vec<(&'b TirExpr, bool)> {
+        let mut ordered = Vec::with_capacity(args.len() + usize::from(receiver.is_some()));
+        if let Some(recv) = receiver {
+            let self_is_mut_ref = self
+                .base
+                .value_copy
+                .mut_ref_params
+                .get(&callee.module_source, &callee.name)
+                .and_then(|v| v.first())
+                .copied()
+                .unwrap_or(false);
+            ordered.push((recv, self_is_mut_ref));
+        }
+        ordered.extend(args.iter().map(|a| (&a.expr, a.is_mut)));
+        ordered
     }
 
     fn convert_field(&self, field: &TirField) -> NirField {

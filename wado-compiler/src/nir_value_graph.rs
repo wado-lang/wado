@@ -112,7 +112,7 @@ impl HeapVersion {
 
 /// A pure-value expression. Hash-consed by structural equality.
 ///
-/// Side-effecting nodes (`Call`, `MethodCall`, `Assign`-to-heap, …) stay
+/// Side-effecting nodes (`Call`, `Assign`-to-heap, …) stay
 /// in the `SkelTree`. Pure operand positions connect to their `ValueId`s
 /// through the per-function side-table `value_of: IndexMap<ExprId,
 /// ValueId>` populated by [`crate::nir_value_graph::builder`]. Stage 7

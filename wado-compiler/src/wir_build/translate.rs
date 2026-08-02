@@ -1149,7 +1149,7 @@ impl FunctionTranslator<'_, '_> {
         WirInstr::StructNew { type_id, fields }
     }
 
-    /// Detect `let local = Call(f)` (or `MethodCall(f)`) where `f` has
+    /// Detect `let local = Call(f)` where `f` has
     /// `ReturnAbi::MultiValue` and emit `MultiValueLocalBind` to N split
     /// locals instead of a single `LocalSet`. Returns `Some` if the
     /// rewrite fired (the caller should not emit the regular `LocalSet`).
@@ -1159,15 +1159,12 @@ impl FunctionTranslator<'_, '_> {
     /// `FieldAccess(LocalGet(local), name)` accesses read the matching
     /// split local directly via `multi_value_split_locals`.
     fn try_emit_multi_value_let(&mut self, local_index: u32, value: ExprId) -> Option<WirInstr> {
-        // Only fire on direct `Call(f)` / `MethodCall(f)` initialisers —
-        // wrapped calls (e.g. inlined Block) should have been simplified
-        // before this point. Wrapped calls would also break the
-        // `MultiValueLocalBind { instr: <Call>, … }` shape codegen
-        // expects. `MethodCall` lowers to a single `WirInstr::Call` after
-        // receiver / arg translation, so it's interchangeable with `Call`
-        // for the multi-value-bind purpose.
+        // Only fire on a direct `Call(f)` initialiser — wrapped calls (e.g.
+        // inlined Block) should have been simplified before this point, and
+        // would also break the `MultiValueLocalBind { instr: <Call>, … }` shape
+        // codegen expects.
         let func_id = match &self.body.exprs[value].kind {
-            ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => *func_id,
+            ExprKind::Call { func_id, .. } => *func_id,
             _ => return None,
         };
         let func = self.callee_descriptor(func_id);
@@ -2382,45 +2379,12 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     self.unresolved_trait_call_or_trap(&func.name, expr.span, || {
                         format!(
-                            "[WIR] unresolved Call: name={:?} builtin={:?}",
-                            func.name, builtin
+                            "[WIR] unresolved Call: name={:?} module={} builtin={:?} method_info={:?}",
+                            func.name, func.module_source, builtin, func.method_info
                         )
                     })
                 }
             }
-            ExprKind::MethodCall {
-                func_id,
-                receiver,
-                args,
-                ..
-            } => {
-                // The callee descriptor comes from the function record by
-                // `func_id` (Phase 5); the call node carries no `FunctionRef`.
-                let func = &self.callee_descriptor(*func_id);
-
-                // Receiver first (self/&self/&mut self is never unit, so it
-                // always stays a call argument); args[i] maps to params[i+1].
-                let ordered: Vec<Operand> = std::iter::once(*receiver)
-                    .chain(args.iter().map(|a| a.expr))
-                    .collect();
-                let (prelude, translated_args) = self.translate_args_erasing_unit(&ordered);
-
-                if let Some(wir_func_id) = self.resolve_call(func, *func_id) {
-                    let call = WirInstr::Call {
-                        func_id: wir_func_id,
-                        args: translated_args,
-                    };
-                    self.wrap_call_with_prelude(prelude, call, expr.type_id)
-                } else {
-                    self.unresolved_trait_call_or_trap(&func.name, expr.span, || {
-                        format!(
-                            "[WIR] unresolved MethodCall: name={:?} module={} method_info={:?}",
-                            func.name, func.module_source, func.method_info
-                        )
-                    })
-                }
-            }
-
             ExprKind::StructLiteral { fields, .. } => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, expr.type_id);
                 let WirType::Ref { type_id, .. } = wir_type else {

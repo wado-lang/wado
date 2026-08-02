@@ -402,8 +402,8 @@ fn body_has_short_push_str(body: &Body, push_str_id: crate::nir::FuncId) -> bool
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(e) = node
-            && let ExprKind::MethodCall { func_id, args, .. } = &body.exprs[e].kind
-            && *func_id == push_str_id
+            && let Some((_, func_id, args)) = body.exprs[e].kind.as_method_call()
+            && func_id == push_str_id
             && args.len() == 1
             && let Some(arg) = args[0].expr.as_expr()
             && let ExprKind::Unary {
@@ -949,16 +949,14 @@ fn scan_inspect_signatures_block(
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(e) = node
-            && let ExprKind::MethodCall {
-                receiver, func_id, ..
-            } = &body.exprs[e].kind
-            && let Some(info) = &callee_descriptor(descriptors, *func_id).method_info
+            && let Some((receiver, func_id, _)) = body.exprs[e].kind.as_method_call()
+            && let Some(info) = &callee_descriptor(descriptors, func_id).method_info
             && info.base_struct_name() == "Fn"
             && let Some(trait_name) = info.base_trait_name.as_deref()
         {
             // Receiver is `&Fn(...)` (possibly wrapped in `Box<fn(...)>` by the
             // boxing pass); peel both to read the function's arity + return type.
-            let recv_type = type_table.peel_refs_and_box(body.operand_type(*receiver));
+            let recv_type = type_table.peel_refs_and_box(body.operand_type(receiver));
             if let ResolvedType::Function {
                 params,
                 return_type,
@@ -1488,13 +1486,13 @@ impl DceWalker<'_> {
                 match &body.exprs[e].kind {
                     ExprKind::Call { func_id, .. } => {
                         let d = self.descriptors;
-                        self.record_call(callee_descriptor(d, *func_id));
-                    }
-                    ExprKind::MethodCall {
-                        receiver, func_id, ..
-                    } => {
-                        let (d, recv_ty) = (self.descriptors, body.operand_type(*receiver));
-                        self.record_method_call(recv_ty, callee_descriptor(d, *func_id));
+                        match body.exprs[e].kind.as_method_call() {
+                            Some((receiver, _, _)) => {
+                                let recv_ty = body.operand_type(receiver);
+                                self.record_method_call(recv_ty, callee_descriptor(d, *func_id));
+                            }
+                            None => self.record_call(callee_descriptor(d, *func_id)),
+                        }
                     }
                     ExprKind::CmRawCall { local_name, .. } => self.record_cm_raw_call(local_name),
                     ExprKind::ClosureToCanonical {

@@ -40,8 +40,8 @@
 //! wrapper's signature is held fixed by the `is_cm_export` pin above.
 //!
 //! Methods receive no special pin either. A method whose `self` is dead
-//! is rewritten by `apply_dae` from `MethodCall(recv, name, args)` to
-//! `Call(method_func, args)` at every call site, mirroring what was
+//! has the receiver dropped from `args` by `apply_dae` at every call
+//! site, leaving a free call of the same callee — mirroring what was
 //! previously implemented for closure-functor `__call` only. The
 //! `closure_call_keys` set still exists for one purpose: to lift the
 //! `trait_name` pin on the closure-functor's `^Inspect` /
@@ -116,8 +116,8 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
 ///
 /// - `__Closure_N::__call` (the closure body). Reached via the
 ///   synthesised `__closure_wrapper_*` (function-table dispatch) and via
-///   `lower::plan::closure`'s fn-param-specialisation `MethodCall(g, __call,
-///   args)`. `wir_build::register_closure_wrappers` adapts the wrapper
+///   `lower::plan::closure`'s fn-param-specialisation `g.__call(args)`.
+///   `wir_build::register_closure_wrappers` adapts the wrapper
 ///   body to the surviving `call_method.params`.
 ///
 /// - `__Closure_N^Inspect::inspect` and `^InspectAlt::inspect_alt`. The
@@ -288,8 +288,9 @@ fn validate_call_sites(
     candidates
 }
 
-/// Validate every `Call` / `MethodCall` in a body: at each dead parameter
-/// position the supplied argument (or the dropped receiver) must be pure.
+/// Validate every call in a body: at each dead parameter position the supplied
+/// argument must be pure. A method's receiver is `args[0]`, so it validates
+/// under the same rule.
 fn validate_in_body(
     body: &Body,
     candidates: &IndexMap<FnKey, Vec<bool>>,
@@ -312,80 +313,34 @@ fn validate_call(
     rejected: &mut IndexSet<FnKey>,
     type_table: &crate::tir::TypeTable,
 ) {
-    match &body.exprs[id].kind {
-        ExprKind::Call { func_id, args, .. } => {
-            let key = *func_id;
-            let Some(dead) = candidates.get(&key) else {
-                return;
-            };
-            if rejected.contains(&key) {
-                return;
-            }
-            // Call positions map 1:1 to params.
-            for (i, dead_at_i) in dead.iter().enumerate() {
-                if !*dead_at_i {
-                    continue;
-                }
-                // Dropping the argument erases its evaluation, so a trapping
-                // (but side-effect-free) argument must keep the param alive.
-                let pure = match args.get(i).map(|a| a.expr) {
-                    Some(Operand::Value(_)) => true,
-                    Some(Operand::Expr(e)) => {
-                        arena_query::is_pure_nontrapping_expr_typed(body, e, Some(type_table))
-                    }
-                    None => false,
-                };
-                if !pure {
-                    rejected.insert(key);
-                    break;
-                }
-            }
+    let ExprKind::Call { func_id, args, .. } = &body.exprs[id].kind else {
+        return;
+    };
+    let key = *func_id;
+    let Some(dead) = candidates.get(&key) else {
+        return;
+    };
+    if rejected.contains(&key) {
+        return;
+    }
+    // Arguments map 1:1 to params, receiver included.
+    for (i, dead_at_i) in dead.iter().enumerate() {
+        if !*dead_at_i {
+            continue;
         }
-        ExprKind::MethodCall {
-            func_id,
-            receiver,
-            args,
-            ..
-        } => {
-            let key = *func_id;
-            let Some(dead) = candidates.get(&key) else {
-                return;
-            };
-            if rejected.contains(&key) {
-                return;
+        // Dropping the argument erases its evaluation, so a trapping (but
+        // side-effect-free) argument must keep the param alive.
+        let pure = match args.get(i).map(|a| a.expr) {
+            Some(Operand::Value(_)) => true,
+            Some(Operand::Expr(e)) => {
+                arena_query::is_pure_nontrapping_expr_typed(body, e, Some(type_table))
             }
-            // If the rewriter drops the receiver, the MethodCall collapses to
-            // a `Call` and the receiver is discarded — it must be pure.
-            let drops_receiver = dead.first() == Some(&true);
-            if drops_receiver
-                && !receiver.as_expr().is_none_or(|e| {
-                    arena_query::is_pure_nontrapping_expr_typed(body, e, Some(type_table))
-                })
-            {
-                rejected.insert(key);
-            } else {
-                // params[i+1] maps to args[i] regardless of whether position 0
-                // was dropped (the receiver is structural).
-                for (i, dead_at_i) in dead.iter().enumerate().skip(1) {
-                    if !*dead_at_i {
-                        continue;
-                    }
-                    match args.get(i - 1) {
-                        Some(arg)
-                            if arena_query::is_pure_nontrapping_operand_typed(
-                                body,
-                                arg.expr,
-                                Some(type_table),
-                            ) => {}
-                        _ => {
-                            rejected.insert(key);
-                            break;
-                        }
-                    }
-                }
-            }
+            None => false,
+        };
+        if !pure {
+            rejected.insert(key);
+            break;
         }
-        _ => {}
     }
 }
 
@@ -396,8 +351,8 @@ fn validate_call(
 /// Applies the rewrites and returns the indices of every function whose body or
 /// signature changed (confirmed callees + callers whose call sites were
 /// rewritten), so the caller can mark exactly those dirty in the gate. The call
-/// graph is unaffected: dae drops arguments and may collapse `MethodCall` →
-/// `Call` on the *same* callee, never adding or removing an edge.
+/// graph is unaffected: dae drops arguments, including a method's receiver, on
+/// the *same* callee — never adding or removing an edge.
 fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -> Vec<usize> {
     let mut touched: IndexSet<usize> = IndexSet::default();
     // Phase 3a: shrink the parameter list of every confirmed callee, then
@@ -425,18 +380,14 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -
     touched.into_iter().collect()
 }
 
-/// Rewrite every `Call` / `MethodCall` of a confirmed function in `body`:
-/// drop the dead-position arguments, collapsing a receiver-dropped
-/// `MethodCall` into a plain `Call`.
+/// Rewrite every call of a confirmed function in `body`: drop the dead-position
+/// arguments, clearing `has_receiver` when the receiver itself is dropped.
 fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
     let mut calls = Vec::new();
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(id) = node
-            && matches!(
-                &body.exprs[id].kind,
-                ExprKind::Call { .. } | ExprKind::MethodCall { .. }
-            )
+            && matches!(&body.exprs[id].kind, ExprKind::Call { .. })
         {
             calls.push(id);
         }
@@ -452,61 +403,30 @@ fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>
 }
 
 fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
-    let key = match &body.exprs[id].kind {
-        ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => *func_id,
-        _ => return false,
-    };
-    let Some(dead) = confirmed.get(&key).cloned() else {
+    let ExprKind::Call { func_id, .. } = &body.exprs[id].kind else {
         return false;
     };
-    match &mut body.exprs[id].kind {
-        ExprKind::Call { args, .. } => {
-            let mut i = 0;
-            args.retain(|_| {
-                let alive = !dead.get(i).copied().unwrap_or(false);
-                i += 1;
-                alive
-            });
-        }
-        ExprKind::MethodCall { .. } => {
-            let drops_receiver = dead.first() == Some(&true);
-            if drops_receiver {
-                // Collapse `MethodCall(recv, name, args)` to `Call(method_func,
-                // surviving_args)`. The receiver was verified pure, so dropping
-                // it (along with the dead `args`) is observation-free.
-                let ExprKind::MethodCall {
-                    func_id,
-                    type_args,
-                    args,
-                    ..
-                } = std::mem::replace(&mut body.exprs[id].kind, ExprKind::Dead)
-                else {
-                    unreachable!();
-                };
-                let mut new_args = Vec::with_capacity(args.len());
-                for (idx, arg) in args.into_iter().enumerate() {
-                    // dead[idx + 1] corresponds to args[idx] (params[i+1]).
-                    if dead.get(idx + 1).copied().unwrap_or(false) {
-                        continue;
-                    }
-                    new_args.push(arg);
-                }
-                body.exprs[id].kind = ExprKind::Call {
-                    func_id,
-                    type_args,
-                    args: new_args,
-                };
-            } else if let ExprKind::MethodCall { args, .. } = &mut body.exprs[id].kind {
-                let mut i = 0;
-                args.retain(|_| {
-                    let alive = !dead.get(i + 1).copied().unwrap_or(false);
-                    i += 1;
-                    alive
-                });
-            }
-        }
-        _ => return false,
+    let Some(dead) = confirmed.get(func_id).cloned() else {
+        return false;
+    };
+    let ExprKind::Call {
+        args, has_receiver, ..
+    } = &mut body.exprs[id].kind
+    else {
+        return false;
+    };
+    // Dropping `args[0]` of a method call makes it a free call of the same
+    // callee. The receiver was verified pure, so discarding it is
+    // observation-free.
+    if dead.first() == Some(&true) {
+        *has_receiver = false;
     }
+    let mut i = 0;
+    args.retain(|_| {
+        let alive = !dead.get(i).copied().unwrap_or(false);
+        i += 1;
+        alive
+    });
     true
 }
 

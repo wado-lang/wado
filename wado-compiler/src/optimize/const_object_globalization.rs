@@ -362,11 +362,8 @@ fn collect_candidates(
 /// fresh literal is handed over uncopied, so a callee that writes its parameter
 /// would write the shared global.
 fn value_arg_candidates(body: &Body, expr: ExprId, gate: &Gate<'_>) -> Vec<ExprId> {
-    // `self` occupies parameter 0 of a method, so its explicit arguments start
-    // one position later.
     let (func_id, args, first_param) = match &body.exprs[expr].kind {
         ExprKind::Call { func_id, args, .. } => (*func_id, args, 0),
-        ExprKind::MethodCall { func_id, args, .. } => (*func_id, args, 1),
         _ => return Vec::new(),
     };
     args.iter()
@@ -741,30 +738,21 @@ fn mutated_locals(body: &Body, gate: &Gate<'_>) -> IndexSet<u32> {
                         out.insert(r);
                     }
                 }
-                ExprKind::MethodCall {
-                    receiver,
+                ExprKind::Call {
                     func_id,
                     args,
+                    has_receiver,
                     ..
                 } => {
-                    if gate.callee_mutates_self(*func_id) != Some(false)
-                        && let Some(r) = receiver.as_expr().and_then(root_of)
-                    {
-                        out.insert(r);
-                    }
-                    for a in args {
-                        if a.is_mut
-                            && let Some(r) = a.expr.as_expr().and_then(root_of)
-                        {
-                            out.insert(r);
-                        }
-                    }
-                }
-                ExprKind::Call { args, .. } => {
-                    for a in args {
-                        if a.is_mut
-                            && let Some(r) = a.expr.as_expr().and_then(root_of)
-                        {
+                    for (i, a) in args.iter().enumerate() {
+                        // A receiver is written unless the callee is known not
+                        // to mutate `self`; every other arg only by `is_mut`.
+                        let writes = if *has_receiver && i == 0 {
+                            gate.callee_mutates_self(*func_id) != Some(false)
+                        } else {
+                            a.is_mut
+                        };
+                        if writes && let Some(r) = a.expr.as_expr().and_then(root_of) {
                             out.insert(r);
                         }
                     }
@@ -1174,21 +1162,25 @@ fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
                         return true;
                     }
                 }
-                ExprKind::Call { args, .. } => {
-                    if args.iter().any(|a| escapes(a.expr)) {
-                        return true;
-                    }
-                }
                 // A by-value `self` receiver hands the storage to the callee,
                 // which may return or store it in turn; `&self` only reads it.
-                ExprKind::MethodCall {
-                    receiver,
+                ExprKind::Call {
                     func_id,
                     args,
+                    has_receiver,
                     ..
                 } => {
-                    if args.iter().any(|a| escapes(a.expr))
-                        || (escapes(*receiver) && !gate.callee_borrows_self(*func_id))
+                    let (receiver, rest) = match (has_receiver, args.split_first()) {
+                        (true, Some((receiver, rest))) => (Some(receiver), rest),
+                        (true, None) => return true,
+                        (false, _) => (None, args.as_slice()),
+                    };
+                    if rest.iter().any(|a| escapes(a.expr)) {
+                        return true;
+                    }
+                    if let Some(receiver) = receiver
+                        && escapes(receiver.expr)
+                        && !gate.callee_borrows_self(*func_id)
                     {
                         return true;
                     }
@@ -1416,38 +1408,38 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
         // consuming use. Reject.
         ExprKind::Local { index, .. } => *index != idx,
 
-        ExprKind::MethodCall {
-            receiver,
+        ExprKind::Call {
             func_id,
             args,
+            has_receiver,
             ..
         } => {
-            let receiver = *receiver;
             let callee_id = *func_id;
-            let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-            let recv = receiver.as_expr().map(|e| strip_refs(body, e));
-            if recv.is_some_and(|r| is_local(body, r, idx)) {
-                if gate.callee_mutates_self(callee_id) != Some(false) {
+            let has_receiver = *has_receiver;
+            let mut rest = args.iter();
+            let receiver = has_receiver.then(|| rest.next()).flatten().map(|a| a.expr);
+            let rest: Vec<ExprId> = rest.filter_map(|a| a.expr.as_expr()).collect();
+            if let Some(receiver) = receiver {
+                let recv = receiver.as_expr().map(|e| strip_refs(body, e));
+                if recv.is_some_and(|r| is_local(body, r, idx)) {
+                    if gate.callee_mutates_self(callee_id) != Some(false) {
+                        return false;
+                    }
+                } else if receiver
+                    .as_expr()
+                    .is_some_and(|e| expr_mentions_local(body, e, idx))
+                {
+                    if gate.callee_mutates_self(callee_id) != Some(false) {
+                        return false;
+                    }
+                    if !expr_readonly_operand(body, receiver, idx, gate) {
+                        return false;
+                    }
+                } else if !expr_readonly_operand(body, receiver, idx, gate) {
                     return false;
                 }
-            } else if receiver
-                .as_expr()
-                .is_some_and(|e| expr_mentions_local(body, e, idx))
-            {
-                if gate.callee_mutates_self(callee_id) != Some(false) {
-                    return false;
-                }
-                if !expr_readonly_operand(body, receiver, idx, gate) {
-                    return false;
-                }
-            } else if !expr_readonly_operand(body, receiver, idx, gate) {
-                return false;
             }
-            args.iter().all(|&a| call_arg_readonly(body, a, idx, gate))
-        }
-        ExprKind::Call { args, .. } => {
-            let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-            args.iter().all(|&a| call_arg_readonly(body, a, idx, gate))
+            rest.iter().all(|&a| call_arg_readonly(body, a, idx, gate))
         }
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
@@ -1687,7 +1679,6 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bo
         if let NodeRef::Expr(id) = node {
             match &body.exprs[id].kind {
                 ExprKind::Call { .. }
-                | ExprKind::MethodCall { .. }
                 | ExprKind::IndirectCall { .. }
                 | ExprKind::CmRawCall { .. } => return true,
                 ExprKind::PackedArray(bytes) => {
@@ -1813,6 +1804,7 @@ fn guard_set_on_uninit(
                 expr: global_get.into(),
                 is_mut: false,
             }],
+            has_receiver: false,
         },
         type_id: TypeTable::BOOL,
         span,

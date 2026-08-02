@@ -774,10 +774,7 @@ pub(super) fn is_discardable_operand(body: &Body, op: crate::nir_arena::Operand)
 fn consumes_its_source(kind: &ExprKind) -> bool {
     matches!(
         kind,
-        ExprKind::Call { .. }
-            | ExprKind::MethodCall { .. }
-            | ExprKind::Block(_)
-            | ExprKind::LabeledBlock { .. }
+        ExprKind::Call { .. } | ExprKind::Block(_) | ExprKind::LabeledBlock { .. }
     )
 }
 

@@ -288,14 +288,6 @@ fn collect_param_field_usage_node(body: &Body, node: NodeRef, cx: &mut ParamUsag
                     mark_if_param_passed_operand(body, arg, cx);
                 }
             }
-            ExprKind::MethodCall { receiver, args, .. } => {
-                let receiver = *receiver;
-                let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-                mark_if_param_passed_operand(body, receiver, cx);
-                for arg in arg_ids {
-                    mark_if_param_passed(body, arg, cx);
-                }
-            }
             ExprKind::IndirectCall { args, .. } => {
                 for arg in args.clone() {
                     mark_if_param_passed_operand(body, arg, cx);
@@ -924,15 +916,6 @@ fn collect_alias_node(
                 }
                 return;
             }
-            ExprKind::MethodCall { receiver, args, .. } => {
-                let receiver = *receiver;
-                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                collect_alias_operand(body, receiver, true, type_table, out);
-                for a in arg_ops {
-                    collect_alias_operand(body, a, true, type_table, out);
-                }
-                return;
-            }
             ExprKind::CmRawCall { args, .. } => {
                 for a in args.clone() {
                     collect_alias_operand(body, a, true, type_table, out);
@@ -1217,20 +1200,6 @@ fn count_field_accesses_node(
                     count_field_accesses_operand(body, aid, counts, FaCtx::call_arg(), type_table);
                 }
             }
-            ExprKind::MethodCall { receiver, args, .. } => {
-                let receiver = *receiver;
-                let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-                count_field_accesses_operand(body, receiver, counts, FaCtx::call_arg(), type_table);
-                for aid in arg_ids {
-                    count_field_accesses_node(
-                        body,
-                        NodeRef::Expr(aid),
-                        counts,
-                        FaCtx::call_arg(),
-                        type_table,
-                    );
-                }
-            }
             ExprKind::IndirectCall { callee, args, .. } => {
                 let callee = *callee;
                 let arg_ids = args.clone();
@@ -1423,10 +1392,7 @@ fn collect_call_touched_node(
     if let NodeRef::Expr(e) = node {
         if matches!(
             &body.exprs[e].kind,
-            ExprKind::Call { .. }
-                | ExprKind::MethodCall { .. }
-                | ExprKind::IndirectCall { .. }
-                | ExprKind::CmRawCall { .. }
+            ExprKind::Call { .. } | ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. }
         ) {
             let mut sync = SyncFields::default();
             accumulate_call_sync(body, e, candidates, type_table, cache, &mut sync);
@@ -2314,7 +2280,7 @@ fn walk_expr(
     // Call sites: handle separately.
     if matches!(
         &body.exprs[e].kind,
-        ExprKind::Call { .. } | ExprKind::MethodCall { .. } | ExprKind::IndirectCall { .. }
+        ExprKind::Call { .. } | ExprKind::IndirectCall { .. }
     ) {
         walk_call_expr(body, e, states, out, ctx);
         return;
@@ -2351,7 +2317,7 @@ fn field_place_to_candidate(
     None
 }
 
-/// Process a call expression (`Call` / `MethodCall` / `IndirectCall`).
+/// Process a call expression (`Call` / `IndirectCall`).
 /// Recurses into args first, then determines which candidates the
 /// callee touches via `&T` (read-only) or `&mut T` (read-write),
 /// emits pre-call write-backs at stmt level for any not yet
@@ -2441,17 +2407,14 @@ fn hoist_call_inputs(
 ) -> (Vec<StmtId>, Vec<(u32, TypeId)>) {
     enum Slot {
         Callee,
-        Receiver,
         Arg(usize),
     }
+    // A method's receiver is `args[0]`, so it hoists as an ordinary argument.
     let slots: Vec<(Slot, Operand)> = match &body.exprs[call].kind {
         ExprKind::Call { args, .. } => args
             .iter()
             .enumerate()
             .map(|(i, a)| (Slot::Arg(i), a.expr))
-            .collect(),
-        ExprKind::MethodCall { receiver, args, .. } => std::iter::once((Slot::Receiver, *receiver))
-            .chain(args.iter().enumerate().map(|(i, a)| (Slot::Arg(i), a.expr)))
             .collect(),
         ExprKind::IndirectCall { callee, args, .. } => std::iter::once((Slot::Callee, *callee))
             .chain(args.iter().enumerate().map(|(i, a)| (Slot::Arg(i), *a)))
@@ -2464,11 +2427,10 @@ fn hoist_call_inputs(
         let (new_op, tmp_idx, tmp_type) = hoist_operand_to_temp(body, op, &mut prefix, ctx, span);
         temps.push((tmp_idx, tmp_type));
         match (&mut body.exprs[call].kind, slot) {
-            (ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. }, Slot::Arg(i)) => {
+            (ExprKind::Call { args, .. }, Slot::Arg(i)) => {
                 args[i].expr = new_op;
             }
             (ExprKind::IndirectCall { args, .. }, Slot::Arg(i)) => args[i] = new_op,
-            (ExprKind::MethodCall { receiver, .. }, Slot::Receiver) => *receiver = new_op,
             (ExprKind::IndirectCall { callee, .. }, Slot::Callee) => *callee = new_op,
             (other, _) => unreachable!("call kind changed during input hoist: {other:?}"),
         }
@@ -2483,30 +2445,18 @@ fn recurse_into_call_args(
     out: &mut Vec<StmtId>,
     ctx: &mut WalkCtx,
 ) {
-    let (receiver, callee, arg_ids): (Option<ExprId>, Option<ExprId>, Vec<ExprId>) =
-        match &body.exprs[e].kind {
-            ExprKind::Call { args, .. } => (
-                None,
-                None,
-                args.iter().filter_map(|a| a.expr.as_expr()).collect(),
-            ),
-            ExprKind::MethodCall { receiver, args, .. } => (
-                receiver.as_expr(),
-                None,
-                args.iter().filter_map(|a| a.expr.as_expr()).collect(),
-            ),
-            ExprKind::IndirectCall { callee, args, .. } => (
-                None,
-                callee.as_expr(),
-                args.iter().filter_map(|a| a.as_expr()).collect(),
-            ),
-            _ => unreachable!("recurse_into_call_args called on non-call expr"),
-        };
+    let (callee, arg_ids): (Option<ExprId>, Vec<ExprId>) = match &body.exprs[e].kind {
+        ExprKind::Call { args, .. } => {
+            (None, args.iter().filter_map(|a| a.expr.as_expr()).collect())
+        }
+        ExprKind::IndirectCall { callee, args, .. } => (
+            callee.as_expr(),
+            args.iter().filter_map(|a| a.as_expr()).collect(),
+        ),
+        _ => unreachable!("recurse_into_call_args called on non-call expr"),
+    };
     if let Some(callee) = callee {
         walk_expr(body, callee, states, true, out, ctx);
-    }
-    if let Some(receiver) = receiver {
-        walk_expr(body, receiver, states, true, out, ctx);
     }
     for aid in arg_ids {
         walk_expr(body, aid, states, true, out, ctx);
@@ -2609,39 +2559,6 @@ fn accumulate_call_sync(
                 add_scalar_write_for_field_ref_arg(body, aid, candidates, type_table, result);
             }
         }
-        ExprKind::MethodCall {
-            func_id,
-            receiver,
-            args,
-            ..
-        } => {
-            let callee_id = *func_id;
-            let receiver = *receiver;
-            let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-            let immut_ref = is_immut_ref_arg_operand(body, receiver, type_table);
-            add_sync_fields_for_arg_operand(
-                body, receiver, callee_id, 0, candidates, type_table, cache, immut_ref, result,
-            );
-            if let Some(re) = receiver.as_expr() {
-                add_scalar_write_for_field_ref_arg(body, re, candidates, type_table, result);
-            }
-            for (arg_position, aop) in arg_ops.into_iter().enumerate() {
-                let Some(aid) = aop.as_expr() else { continue };
-                let immut_ref = is_immut_ref_arg(body, aid, type_table);
-                add_sync_fields_for_arg(
-                    body,
-                    aid,
-                    callee_id,
-                    (arg_position + 1) as u32,
-                    candidates,
-                    type_table,
-                    cache,
-                    immut_ref,
-                    result,
-                );
-                add_scalar_write_for_field_ref_arg(body, aid, candidates, type_table, result);
-            }
-        }
         ExprKind::IndirectCall { args, .. } => {
             for aop in args.clone() {
                 if let Some(local_idx) = extract_gc_local_index_operand(body, aop, type_table) {
@@ -2662,7 +2579,7 @@ fn accumulate_call_sync(
         // The remaining `ExprKind` variants are not call sites. Both callers
         // (`compute_call_field_effects` via `walk_call_expr`, and
         // `compute_deferrable_candidates`' `CallTouchVisitor`) gate on the
-        // `Call` / `MethodCall` / `IndirectCall` / `CmRawCall` shape before
+        // `Call` / `IndirectCall` / `CmRawCall` shape before
         // dispatching here. Fail loud if a future refactor pushes a different
         // shape into here, rather than silently producing no sync.
         _ => unreachable!("accumulate_call_sync called on non-call expression"),
@@ -2818,7 +2735,7 @@ fn walk_other_expr_kinds(
         ExprKind::Assign { .. } => {
             unreachable!("Assign handled at the top of walk_expr")
         }
-        ExprKind::Call { .. } | ExprKind::MethodCall { .. } | ExprKind::IndirectCall { .. } => {
+        ExprKind::Call { .. } | ExprKind::IndirectCall { .. } => {
             unreachable!("call exprs handled by walk_call_expr in walk_expr")
         }
     }
@@ -3193,33 +3110,6 @@ fn is_immut_ref_arg(body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
                 if !matches!(type_table.get(*inner), ResolvedType::MutRef(_)))
         }
         _ => false,
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn add_sync_fields_for_arg_operand(
-    body: &Body,
-    op: Operand,
-    callee_id: crate::nir::FuncId,
-    param_position: u32,
-    candidates: &[ScalarizeCandidate],
-    type_table: &TypeTable,
-    cache: &FieldUsageCache,
-    is_immut_ref: bool,
-    result: &mut SyncFields,
-) {
-    if let Some(e) = op.as_expr() {
-        add_sync_fields_for_arg(
-            body,
-            e,
-            callee_id,
-            param_position,
-            candidates,
-            type_table,
-            cache,
-            is_immut_ref,
-            result,
-        );
     }
 }
 

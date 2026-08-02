@@ -350,16 +350,6 @@ impl ModRef {
                     self.accumulate_operand(body, a, scope);
                 }
             }
-            ExprKind::MethodCall { receiver, args, .. } => {
-                self.calls = true;
-                self.may_trap = true;
-                let receiver = *receiver;
-                let args: Vec<_> = args.iter().map(|a| a.expr).collect();
-                self.accumulate_operand(body, receiver, scope);
-                for a in args {
-                    self.accumulate_operand(body, a, scope);
-                }
-            }
             ExprKind::IndirectCall { callee, args } => {
                 self.calls = true;
                 self.may_trap = true;
@@ -901,7 +891,7 @@ pub(super) fn compute_fn_effects(
                     ExprKind::CmRawCall { .. } | ExprKind::IndirectCall { .. } => {
                         own.opaque = true;
                     }
-                    ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => {
+                    ExprKind::Call { func_id, .. } => {
                         callees[i].insert(func_id.index());
                     }
                     _ => {}
@@ -1122,6 +1112,7 @@ mod tests {
                 func_id: crate::nir::FuncId::new(0),
                 type_args: vec![],
                 args,
+                has_receiver: false,
             },
         )
     }

@@ -362,35 +362,6 @@ fn collect_local_uses(
                     );
                 }
             }
-            ExprKind::MethodCall {
-                func_id,
-                receiver,
-                args,
-                ..
-            } => {
-                classify_argument(
-                    body,
-                    tracked,
-                    signatures,
-                    *func_id,
-                    0,
-                    *receiver,
-                    &mut classified,
-                    out,
-                );
-                for (position, arg) in args.iter().enumerate() {
-                    classify_argument(
-                        body,
-                        tracked,
-                        signatures,
-                        *func_id,
-                        position + 1,
-                        arg.expr,
-                        &mut classified,
-                        out,
-                    );
-                }
-            }
             ExprKind::Assign { target, value } => {
                 if let ExprKind::Local { index, .. } = &body.exprs[*target].kind
                     && tracked.contains(index)
@@ -766,16 +737,6 @@ fn select_sites(
                 *func_id,
                 args.iter().enumerate().map(|(i, a)| (i, a.expr)).collect(),
             ),
-            ExprKind::MethodCall {
-                func_id,
-                receiver,
-                args,
-                ..
-            } => {
-                let mut all = vec![(0, *receiver)];
-                all.extend(args.iter().enumerate().map(|(i, a)| (i + 1, a.expr)));
-                (*func_id, all)
-            }
             _ => return,
         };
         if state.is_clone(callee) {
@@ -958,9 +919,7 @@ fn retarget_calls(project: &mut NirPackage, retarget: &[Retarget]) {
             continue;
         };
         match &mut body.exprs[*call].kind {
-            ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => {
-                *func_id = *target;
-            }
+            ExprKind::Call { func_id, .. } => *func_id = *target,
             _ => panic!("param_spec site is not a call"),
         }
     }
@@ -977,7 +936,7 @@ struct Clone {
 /// sites are born resolved. The size budget is the caller's to check.
 ///
 /// The clone's identity must differ from the original's along every axis the
-/// call graph keys on, `method_name` included — DCE resolves a `MethodCall`
+/// call graph keys on, `method_name` included — DCE resolves a method call
 /// through `method_info`, and would prune the clone as unreachable.
 fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize) -> Clone {
     let mut clone = project.functions[site.callee.index()].borrow().clone();

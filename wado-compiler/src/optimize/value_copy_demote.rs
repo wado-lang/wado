@@ -712,15 +712,11 @@ impl ElementClean<'_, '_> {
                     self.clean = false;
                 }
             }
-            ExprKind::MethodCall {
-                receiver,
-                func_id,
-                args,
-                ..
-            } => {
-                let receiver = *receiver;
-                let callee = *func_id;
-                let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+            kind if kind.as_method_call().is_some() => {
+                let Some((receiver, callee, rest)) = kind.as_method_call() else {
+                    return;
+                };
+                let args: Vec<Operand> = rest.iter().map(|a| a.expr).collect();
                 // A promoted constant receiver is never the demote candidate
                 // handle and has nothing to vet; only a skeleton receiver does.
                 if let Some(recv_e) = receiver.as_expr() {
@@ -1090,15 +1086,11 @@ impl ElementImmutable<'_, '_, '_> {
                     self.visit_expr(body, ve);
                 }
             }
-            ExprKind::MethodCall {
-                receiver,
-                func_id,
-                args,
-                ..
-            } => {
-                let receiver = *receiver;
-                let callee = *func_id;
-                let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
+            kind if kind.as_method_call().is_some() => {
+                let Some((receiver, callee, rest)) = kind.as_method_call() else {
+                    return;
+                };
+                let args: Vec<ExprId> = rest.iter().filter_map(|a| a.expr.as_expr()).collect();
                 // A call whose receiver is self-derived may mutate an element
                 // unless the callee is known `&self` (cannot mutate) or a
                 // verified element-immutable `&mut self` method. An

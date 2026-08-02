@@ -1503,11 +1503,6 @@ fn subst_variant_payload_in_expr(
         ExprKind::CmRawCall { args, .. } => {
             Walk::Exprs(args.iter().filter_map(|o| o.as_expr()).collect())
         }
-        ExprKind::MethodCall { receiver, args, .. } => {
-            let mut v: Vec<ExprId> = receiver.as_expr().into_iter().collect();
-            v.extend(args.iter().filter_map(|a| a.expr.as_expr()));
-            Walk::Exprs(v)
-        }
         ExprKind::IndirectCall { callee, args } => {
             let mut v: Vec<ExprId> = callee.as_expr().into_iter().collect();
             v.extend(args.iter().filter_map(|o| o.as_expr()));
@@ -1658,12 +1653,6 @@ pub(super) fn expr_has_free_unlabeled_loop_exit(body: &Body, e: ExprId, loop_dep
         ExprKind::Call { args, .. } => args
             .iter()
             .any(|a| expr_has_free_unlabeled_loop_exit_operand(body, a.expr, loop_depth)),
-        ExprKind::MethodCall { receiver, args, .. } => {
-            expr_has_free_unlabeled_loop_exit_operand(body, *receiver, loop_depth)
-                || args
-                    .iter()
-                    .any(|a| expr_has_free_unlabeled_loop_exit_operand(body, a.expr, loop_depth))
-        }
         ExprKind::IndirectCall { callee, args } => {
             expr_has_free_unlabeled_loop_exit_operand(body, *callee, loop_depth)
                 || args

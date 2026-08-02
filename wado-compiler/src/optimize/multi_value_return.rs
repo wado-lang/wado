@@ -42,7 +42,7 @@ fn candidate_call_idx_operand(
         .and_then(|e| candidate_call_idx(body, e, candidate_ids))
 }
 
-/// If `expr` is a direct `Call(f)` / `MethodCall(f)` whose callee is a
+/// If `expr` is a direct `Call(f)` whose callee is a
 /// candidate, return that candidate's index.
 fn candidate_call_idx(
     body: &Body,
@@ -50,7 +50,7 @@ fn candidate_call_idx(
     candidate_ids: &IndexMap<FuncId, usize>,
 ) -> Option<usize> {
     let func_id = match &body.exprs[expr].kind {
-        ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => *func_id,
+        ExprKind::Call { func_id, .. } => *func_id,
         _ => return None,
     };
     candidate_ids.get(&func_id).copied()
@@ -82,11 +82,6 @@ fn walk_call_args_for_uses(
 ) {
     let args: Vec<ExprId> = match &body.exprs[expr].kind {
         ExprKind::Call { args, .. } => args.iter().filter_map(|a| a.expr.as_expr()).collect(),
-        ExprKind::MethodCall { receiver, args, .. } => receiver
-            .as_expr()
-            .into_iter()
-            .chain(args.iter().filter_map(|a| a.expr.as_expr()))
-            .collect(),
         _ => return,
     };
     for a in args {
@@ -606,22 +601,6 @@ fn walk_expr_for_uses(
                 invalid.insert(candidate_idx);
             }
             let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-            for a in args {
-                walk_expr_for_uses(body, a, candidate_ids, candidates, invalid, tracked);
-            }
-        }
-        ExprKind::MethodCall {
-            receiver,
-            func_id,
-            args,
-            ..
-        } => {
-            if let Some(&candidate_idx) = candidate_ids.get(func_id) {
-                invalid.insert(candidate_idx);
-            }
-            let receiver = *receiver;
-            let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-            walk_expr_for_uses_operand(body, receiver, candidate_ids, candidates, invalid, tracked);
             for a in args {
                 walk_expr_for_uses(body, a, candidate_ids, candidates, invalid, tracked);
             }

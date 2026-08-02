@@ -510,7 +510,7 @@ enum ReadKind {
 /// field-access scan re-encoded the same traversal; this parameterizes the one
 /// skeleton by [`ReadKind`]. The soft-escape walk ([`SoftCtx`]) stays separate:
 /// it threads a soft-context flag, peels `$value_copy$T` wrappers, and treats
-/// `Call` / `MethodCall` reference arguments specially, none of which this
+/// call reference arguments specially, none of which this
 /// read-only pair needs.
 struct ReadWalk<'a> {
     kind: ReadKind,
@@ -710,31 +710,6 @@ impl SoftCtx<'_> {
                     let Some(arg) = arg.as_expr() else { continue };
                     if is_immut_ref_to_candidate(body, arg, self.candidates)
                         && !callee_stores_param_at(callee_id, i, self.stores_lookup)
-                    {
-                        continue;
-                    }
-                    self.expr(body, arg, false, hard_escaped);
-                }
-            }
-            ExprKind::MethodCall {
-                receiver,
-                func_id,
-                args,
-                ..
-            } => {
-                let receiver = *receiver;
-                let callee_id = *func_id;
-                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                if let Some(re) = receiver.as_expr()
-                    && (!is_immut_ref_to_candidate(body, re, self.candidates)
-                        || callee_stores_param_at(callee_id, 0, self.stores_lookup))
-                {
-                    self.expr(body, re, false, hard_escaped);
-                }
-                for (i, arg) in arg_ops.into_iter().enumerate() {
-                    let Some(arg) = arg.as_expr() else { continue };
-                    if is_immut_ref_to_candidate(body, arg, self.candidates)
-                        && !callee_stores_param_at(callee_id, i + 1, self.stores_lookup)
                     {
                         continue;
                     }

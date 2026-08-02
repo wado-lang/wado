@@ -10,7 +10,6 @@ use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtId, StmtKind};
 
-use super::callee::RECEIVER;
 use super::place::{borrowed_place_operand, lvalue_root_local, peel_wrappers, place_of};
 use crate::nir_visitor::reachable_exprs;
 
@@ -175,35 +174,17 @@ impl Reached {
             return;
         };
         for (e, node) in &body.exprs {
-            let (func_id, receiver, args) = match &node.kind {
-                ExprKind::Call { func_id, args, .. } => (func_id, None, args),
-                ExprKind::MethodCall {
-                    func_id,
-                    receiver,
-                    args,
-                    ..
-                } => (func_id, Some(*receiver), args),
-                _ => continue,
+            let ExprKind::Call { func_id, args, .. } = &node.kind else {
+                continue;
             };
             let Some(callee) = callees.get(func_id) else {
                 continue;
             };
-            let first_arg = usize::from(receiver.is_some());
-            if first_arg + args.len() != callee.arity() {
+            if args.len() != callee.arity() {
                 continue;
             }
             let at_statement = performed.contains(&e);
-            if let Some(receiver) = receiver {
-                match (callee.writes_param(RECEIVER), at_statement) {
-                    (false, _) if callee.reads_only(RECEIVER) => {
-                        self.record(body, receiver, Reach::Read);
-                    }
-                    (true, true) => self.record(body, receiver, Reach::Write),
-                    (false, _) | (true, false) => {}
-                }
-            }
-            for (i, arg) in args.iter().enumerate() {
-                let index = first_arg + i;
+            for (index, arg) in args.iter().enumerate() {
                 match (callee.writes_param(index), at_statement) {
                     (false, _) if callee.reads_only(index) => {
                         self.record(body, arg.expr, Reach::Read);
@@ -324,21 +305,13 @@ pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet 
                 expr,
             }
             | ExprKind::Cast { expr, .. } => read_value(*expr, &mut value_reads),
-            ExprKind::MethodCall { receiver, args, .. } => {
-                if !reached.covers(body, *receiver) {
-                    disqualify_root(body, *receiver, &mut disqualified);
-                }
-                for arg in args {
-                    if !arg.is_mut {
-                        read_value(arg.expr, &mut value_reads);
-                    } else if !reached.covers(body, arg.expr) {
-                        disqualify_root(body, arg.expr, &mut disqualified);
-                    }
-                }
-            }
-            ExprKind::Call { args, .. } => {
-                for arg in args {
-                    if !arg.is_mut {
+            ExprKind::Call {
+                args, has_receiver, ..
+            } => {
+                for (i, arg) in args.iter().enumerate() {
+                    // A receiver reaches the caller's storage whatever its
+                    // declared `self` mode, so it is never a passing read.
+                    if !(arg.is_mut || (*has_receiver && i == 0)) {
                         read_value(arg.expr, &mut value_reads);
                     } else if !reached.covers(body, arg.expr) {
                         disqualify_root(body, arg.expr, &mut disqualified);
@@ -406,18 +379,13 @@ pub(super) fn clobbered_locals(body: &Body, reached: &Reached) -> LocalSet {
                     disqualify(body, *expr, &mut set);
                 }
             }
-            ExprKind::MethodCall { receiver, args, .. } => {
-                if !reached.covers(body, *receiver) {
-                    disqualify(body, *receiver, &mut set);
-                }
-                for arg in args.iter().filter(|a| a.is_mut) {
-                    if !reached.covers(body, arg.expr) {
-                        disqualify(body, arg.expr, &mut set);
+            ExprKind::Call {
+                args, has_receiver, ..
+            } => {
+                for (i, arg) in args.iter().enumerate() {
+                    if !(arg.is_mut || (*has_receiver && i == 0)) {
+                        continue;
                     }
-                }
-            }
-            ExprKind::Call { args, .. } => {
-                for arg in args.iter().filter(|a| a.is_mut) {
                     if !reached.covers(body, arg.expr) {
                         disqualify(body, arg.expr, &mut set);
                     }

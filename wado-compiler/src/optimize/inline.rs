@@ -147,13 +147,6 @@ fn count_expr(
             .iter()
             .map(|a| count_operand(body, a.expr, type_table, descriptors))
             .sum(),
-        ExprKind::MethodCall { receiver, args, .. } => {
-            count_operand(body, *receiver, type_table, descriptors)
-                + args
-                    .iter()
-                    .map(|a| count_operand(body, a.expr, type_table, descriptors))
-                    .sum::<usize>()
-        }
         ExprKind::FieldAccess { expr, .. } => count_operand(body, *expr, type_table, descriptors),
         ExprKind::Index { expr, index, .. } => {
             count_operand(body, *expr, type_table, descriptors)
@@ -457,8 +450,8 @@ fn recursive_scc_members(call_graph: &[Vec<usize>]) -> Vec<bool> {
     recursive
 }
 
-/// Collect the store position (`func_id.index()`) of every `Call` /
-/// `MethodCall` callee reachable in `body`, via the shared `for_each_child`
+/// Collect the store position (`func_id.index()`) of every `Call` callee
+/// reachable in `body`, via the shared `for_each_child`
 /// walk (order is irrelevant — the result is a set feeding the recursion call
 /// graph). Each stamped `func_id` is total and resolves to a position in
 /// `project.functions`, which is exactly the call-graph node index.
@@ -466,8 +459,7 @@ fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(id) = node
-            && let ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } =
-                &body.exprs[id].kind
+            && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
         {
             callees.insert(func_id.index());
         }
@@ -839,23 +831,11 @@ fn inline_top_level(
         candidates,
         local_count,
         locals,
+        type_table,
         inline_counter,
         reval,
         cold,
-    )
-    .or_else(|| {
-        try_inline_method_call_expr(
-            body,
-            value,
-            candidates,
-            local_count,
-            locals,
-            type_table,
-            inline_counter,
-            reval,
-            cold,
-        )
-    });
+    );
     if let Some((new_id, inlined_key)) = result {
         if !inlined_funcs.contains(&inlined_key) {
             inlined_funcs.push(inlined_key);
@@ -1076,9 +1056,10 @@ fn build_inlined_labeled_block(
     })
 }
 
-/// Try to inline a free function call `call_id` in `caller`, splicing the callee
-/// body in place. Returns the new (labeled-block) expression id and the callee
-/// key, or `None` if the call is not an inline candidate.
+/// Try to inline the call at `call_id` in `caller`, splicing the callee body in
+/// place. Returns the new (labeled-block) expression id and the callee key, or
+/// `None` if the call is not an inline candidate. A method binds `self` from
+/// `args[0]`.
 #[allow(clippy::too_many_arguments)]
 fn try_inline_call_expr(
     caller: &mut Body,
@@ -1086,14 +1067,25 @@ fn try_inline_call_expr(
     candidates: &IndexMap<FuncId, NirFunction>,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
+    type_table: &TypeTable,
     inline_counter: &mut u32,
     reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) -> Option<(ExprId, FuncId)> {
-    let (func_id, arg_ops): (FuncId, Vec<Operand>) = match &caller.exprs[call_id].kind {
-        ExprKind::Call { func_id, args, .. } => (*func_id, args.iter().map(|a| a.expr).collect()),
-        _ => return None,
-    };
+    let (func_id, arg_ops, has_receiver): (FuncId, Vec<Operand>, bool) =
+        match &caller.exprs[call_id].kind {
+            ExprKind::Call {
+                func_id,
+                args,
+                has_receiver,
+                ..
+            } => (
+                *func_id,
+                args.iter().map(|a| a.expr).collect(),
+                *has_receiver,
+            ),
+            _ => return None,
+        };
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.get(&func_id)?;
@@ -1112,111 +1104,49 @@ fn try_inline_call_expr(
     // declared type (`TypeId`s are package-wide after link). The argument's
     // would propagate whatever the caller recorded, including the unresolved
     // type of a synthesized default.
-    let bindings: Vec<InlineBinding> = candidate
-        .params
-        .iter()
-        .zip(arg_ops.iter())
-        .map(|(param, &arg)| InlineBinding {
-            callee_local_index: param.local_index,
-            name: param.name.clone(),
-            is_mut: param.is_mut,
-            local_type: param.type_id,
-            value: arg,
-        })
-        .collect();
-
-    let inlined = build_inlined_labeled_block(
-        caller,
-        candidate,
-        callee,
-        &candidate.name,
-        bindings,
-        call_span,
-        call_id,
-        local_count,
-        locals,
-        inline_counter,
-        reval,
-    );
-    Some((inlined, func_id))
-}
-
-/// Try to inline a method call `call_id` in `caller`.
-#[allow(clippy::too_many_arguments)]
-fn try_inline_method_call_expr(
-    caller: &mut Body,
-    call_id: ExprId,
-    candidates: &IndexMap<FuncId, NirFunction>,
-    local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
-    type_table: &TypeTable,
-    inline_counter: &mut u32,
-    reval: &mut Vec<InlineRevalInfo>,
-    cold: bool,
-) -> Option<(ExprId, FuncId)> {
-    let (func_id, receiver_op, arg_ops): (FuncId, Operand, Vec<Operand>) =
-        match &caller.exprs[call_id].kind {
-            ExprKind::MethodCall {
-                receiver,
-                func_id,
-                args,
-                ..
-            } => (*func_id, *receiver, args.iter().map(|a| a.expr).collect()),
-            _ => return None,
-        };
-    let call_span = caller.exprs[call_id].span;
-    // The call's stamped `func_id` is the exact callee identity; look the
-    // candidate up directly (no `(module, name)` resolution).
-    let candidate = candidates.get(&func_id)?;
-    // A cold call site keeps the call: inlining there only bloats the hot
-    // caller. An explicit `#[inline(always)]` wins over the suppression.
-    if cold && candidate.inline_hint != InlineHint::Always {
-        return None;
-    }
-    let callee = candidate.body.as_ref()?;
-
-    let first_param = &candidate.params[0];
-    let recv_type = caller.operand_type(receiver_op);
-    // Bind receiver to the first parameter (self). For `&mut self`, wrap the
-    // receiver in a `MutRef` so field mutations write back to the original (the
-    // receiver is then an lvalue `Expr`, never a promoted constant); for
-    // `&self` / by-value, pass the receiver operand directly.
-    let (self_type_id, self_value): (TypeId, Operand) =
-        if matches!(type_table.get(first_param.type_id), ResolvedType::MutRef(_)) {
-            if matches!(type_table.get(recv_type), ResolvedType::MutRef(_)) {
-                (recv_type, receiver_op)
-            } else {
+    let mut params = candidate.params.iter();
+    let mut args = arg_ops.iter();
+    let mut bindings: Vec<InlineBinding> = Vec::with_capacity(candidate.params.len());
+    if has_receiver {
+        let self_param = params.next()?;
+        let receiver_op = *args.next()?;
+        // Bind the receiver to `self`. For `&mut self`, wrap it in a `MutRef` so
+        // field mutations write back to the original (the receiver is then an
+        // lvalue `Expr`, never a promoted constant); for `&self` / by-value pass
+        // the operand directly. The binding takes the receiver's own type where
+        // no wrap is needed, since the wrap is what would retype it.
+        let recv_type = caller.operand_type(receiver_op);
+        let (self_type_id, self_value): (TypeId, Operand) =
+            if matches!(type_table.get(self_param.type_id), ResolvedType::MutRef(_))
+                && !matches!(type_table.get(recv_type), ResolvedType::MutRef(_))
+            {
                 let mr = caller.exprs.push(ExprNode {
                     kind: ExprKind::Unary {
                         op: NirUnaryOp::MutRef,
                         expr: receiver_op,
                     },
-                    type_id: first_param.type_id,
+                    type_id: self_param.type_id,
                     span: call_span,
                 });
-                (first_param.type_id, mr.into())
-            }
-        } else {
-            (recv_type, receiver_op)
-        };
-
-    let mut bindings: Vec<InlineBinding> = Vec::with_capacity(candidate.params.len());
-    bindings.push(InlineBinding {
-        callee_local_index: first_param.local_index,
-        name: first_param.name.clone(),
-        is_mut: first_param.is_mut,
-        local_type: self_type_id,
-        value: self_value,
-    });
-    for (param, &arg) in candidate.params.iter().skip(1).zip(arg_ops.iter()) {
+                (self_param.type_id, mr.into())
+            } else {
+                (recv_type, receiver_op)
+            };
         bindings.push(InlineBinding {
-            callee_local_index: param.local_index,
-            name: param.name.clone(),
-            is_mut: param.is_mut,
-            local_type: param.type_id,
-            value: arg,
+            callee_local_index: self_param.local_index,
+            name: self_param.name.clone(),
+            is_mut: self_param.is_mut,
+            local_type: self_type_id,
+            value: self_value,
         });
     }
+    bindings.extend(params.zip(args).map(|(param, &arg)| InlineBinding {
+        callee_local_index: param.local_index,
+        name: param.name.clone(),
+        is_mut: param.is_mut,
+        local_type: param.type_id,
+        value: arg,
+    }));
 
     let inlined = build_inlined_labeled_block(
         caller,
@@ -1644,8 +1574,9 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             func_id,
             type_args,
             args,
+            has_receiver,
         } => {
-            let (func_id, type_args) = (*func_id, type_args.clone());
+            let (func_id, type_args, has_receiver) = (*func_id, type_args.clone(), *has_receiver);
             let arg_data: Vec<(Operand, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
             ExprKind::Call {
                 func_id,
@@ -1657,6 +1588,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                         is_mut: m,
                     })
                     .collect(),
+                has_receiver,
             }
         }
         ExprKind::CmRawCall { local_name, args } => {
@@ -1666,27 +1598,6 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                 args: args
                     .into_iter()
                     .map(|a| splice_operand(caller, callee, a, ctx))
-                    .collect(),
-            }
-        }
-        ExprKind::MethodCall {
-            receiver,
-            func_id,
-            type_args,
-            args,
-        } => {
-            let (rcv, func_id, type_args) = (*receiver, *func_id, type_args.clone());
-            let arg_data: Vec<(Operand, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
-            ExprKind::MethodCall {
-                receiver: splice_operand(caller, callee, rcv, ctx),
-                func_id,
-                type_args,
-                args: arg_data
-                    .into_iter()
-                    .map(|(e, m)| ArenaCallArg {
-                        expr: splice_operand(caller, callee, e, ctx),
-                        is_mut: m,
-                    })
                     .collect(),
             }
         }
@@ -1918,170 +1829,90 @@ fn inline_calls_in_expr(
     reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) {
-    enum Call {
-        Free,
-        Method,
-        Other,
-    }
-    let kind = match &body.exprs[e].kind {
-        ExprKind::Call { .. } => Call::Free,
-        ExprKind::MethodCall { .. } => Call::Method,
-        _ => Call::Other,
+    let args: Option<Vec<Operand>> = match &body.exprs[e].kind {
+        ExprKind::Call { args, .. } => Some(args.iter().map(|a| a.expr).collect()),
+        _ => None,
     };
-    match kind {
-        Call::Free => {
-            // Recurse into arguments first, then attempt to inline this call.
-            let args: Vec<Operand> = match &body.exprs[e].kind {
-                ExprKind::Call { args, .. } => args.iter().map(|a| a.expr).collect(),
-                _ => Vec::new(),
-            };
-            for a in args {
-                let Some(a) = a.as_expr() else { continue };
-                inline_calls_in_expr(
-                    body,
-                    a,
-                    candidates,
-                    descriptors,
-                    local_count,
-                    locals,
-                    type_table,
-                    inlined_funcs,
-                    inline_counter,
-                    reval,
-                    cold,
-                );
-            }
-            if let Some((new_id, inlined_key)) = try_inline_call_expr(
+    let Some(args) = args else {
+        let (exprs, blocks) = inline_expr_children(body, e);
+        for ex in exprs {
+            inline_calls_in_expr(
                 body,
-                e,
+                ex,
                 candidates,
-                local_count,
-                locals,
-                inline_counter,
-                reval,
-                cold,
-            ) {
-                if !inlined_funcs.contains(&inlined_key) {
-                    inlined_funcs.push(inlined_key);
-                }
-                // Move the inlined labeled-block node into the call slot and
-                // null out the now-dead `new_id`, so the inner block is owned
-                // by exactly one node (`e`). Cloning would leave `new_id` as an
-                // orphan sharing the same `BlockId`, violating the arena's
-                // one-parent-per-node invariant.
-                let span = body.exprs[new_id].span;
-                let moved = std::mem::replace(
-                    &mut body.exprs[new_id],
-                    ExprNode {
-                        kind: ExprKind::Dead,
-                        type_id: TypeTable::UNIT,
-                        span,
-                    },
-                );
-                body.exprs[e] = moved;
-            }
-        }
-        Call::Method => {
-            let (receiver, args): (Operand, Vec<Operand>) = match &body.exprs[e].kind {
-                ExprKind::MethodCall { receiver, args, .. } => {
-                    (*receiver, args.iter().map(|a| a.expr).collect())
-                }
-                _ => unreachable!(),
-            };
-            if let Some(receiver) = receiver.as_expr() {
-                inline_calls_in_expr(
-                    body,
-                    receiver,
-                    candidates,
-                    descriptors,
-                    local_count,
-                    locals,
-                    type_table,
-                    inlined_funcs,
-                    inline_counter,
-                    reval,
-                    cold,
-                );
-            }
-            for a in args {
-                let Some(a) = a.as_expr() else { continue };
-                inline_calls_in_expr(
-                    body,
-                    a,
-                    candidates,
-                    descriptors,
-                    local_count,
-                    locals,
-                    type_table,
-                    inlined_funcs,
-                    inline_counter,
-                    reval,
-                    cold,
-                );
-            }
-            if let Some((new_id, inlined_key)) = try_inline_method_call_expr(
-                body,
-                e,
-                candidates,
+                descriptors,
                 local_count,
                 locals,
                 type_table,
+                inlined_funcs,
                 inline_counter,
                 reval,
                 cold,
-            ) {
-                if !inlined_funcs.contains(&inlined_key) {
-                    inlined_funcs.push(inlined_key);
-                }
-                // Move the inlined labeled-block node into the call slot and
-                // null out the now-dead `new_id`, so the inner block is owned
-                // by exactly one node (`e`). Cloning would leave `new_id` as an
-                // orphan sharing the same `BlockId`, violating the arena's
-                // one-parent-per-node invariant.
-                let span = body.exprs[new_id].span;
-                let moved = std::mem::replace(
-                    &mut body.exprs[new_id],
-                    ExprNode {
-                        kind: ExprKind::Dead,
-                        type_id: TypeTable::UNIT,
-                        span,
-                    },
-                );
-                body.exprs[e] = moved;
-            }
+            );
         }
-        Call::Other => {
-            let (exprs, blocks) = inline_expr_children(body, e);
-            for ex in exprs {
-                inline_calls_in_expr(
-                    body,
-                    ex,
-                    candidates,
-                    descriptors,
-                    local_count,
-                    locals,
-                    type_table,
-                    inlined_funcs,
-                    inline_counter,
-                    reval,
-                    cold,
-                );
-            }
-            for b in blocks {
-                inline_calls_in_block(
-                    body,
-                    b,
-                    candidates,
-                    descriptors,
-                    local_count,
-                    locals,
-                    type_table,
-                    inlined_funcs,
-                    inline_counter,
-                    reval,
-                    cold,
-                );
-            }
+        for b in blocks {
+            inline_calls_in_block(
+                body,
+                b,
+                candidates,
+                descriptors,
+                local_count,
+                locals,
+                type_table,
+                inlined_funcs,
+                inline_counter,
+                reval,
+                cold,
+            );
         }
+        return;
+    };
+
+    // Recurse into arguments first, then attempt to inline this call. A method's
+    // receiver is `args[0]`, so the same loop covers it.
+    for a in args {
+        let Some(a) = a.as_expr() else { continue };
+        inline_calls_in_expr(
+            body,
+            a,
+            candidates,
+            descriptors,
+            local_count,
+            locals,
+            type_table,
+            inlined_funcs,
+            inline_counter,
+            reval,
+            cold,
+        );
+    }
+    if let Some((new_id, inlined_key)) = try_inline_call_expr(
+        body,
+        e,
+        candidates,
+        local_count,
+        locals,
+        type_table,
+        inline_counter,
+        reval,
+        cold,
+    ) {
+        if !inlined_funcs.contains(&inlined_key) {
+            inlined_funcs.push(inlined_key);
+        }
+        // Move the inlined labeled-block node into the call slot and null out
+        // the now-dead `new_id`, so the inner block is owned by exactly one node
+        // (`e`). Cloning would leave `new_id` as an orphan sharing the same
+        // `BlockId`, violating the arena's one-parent-per-node invariant.
+        let span = body.exprs[new_id].span;
+        let moved = std::mem::replace(
+            &mut body.exprs[new_id],
+            ExprNode {
+                kind: ExprKind::Dead,
+                type_id: TypeTable::UNIT,
+                span,
+            },
+        );
+        body.exprs[e] = moved;
     }
 }

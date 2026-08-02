@@ -815,6 +815,7 @@ fn try_fill_idiom(
                     is_mut: false,
                 },
             ],
+            has_receiver: false,
         },
         TypeTable::UNIT,
         span,

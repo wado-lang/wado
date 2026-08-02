@@ -41,13 +41,6 @@ impl<'a> MutationOracle<'a> {
     pub(in crate::optimize) fn new(param_mut: &'a IndexMap<FuncId, Vec<bool>>) -> Self {
         Self { param_mut }
     }
-
-    /// Whether the callee may write the caller's receiver. `None` for a
-    /// bodyless callee.
-    pub(in crate::optimize) fn receiver_mutates(&self, func_id: FuncId) -> Option<bool> {
-        self.arg_mutates(func_id, 0)
-    }
-
     /// Whether the callee may write the caller's storage through parameter
     /// `idx` (`self` is 0). `None` for a bodyless callee.
     pub(in crate::optimize) fn arg_mutates(&self, func_id: FuncId, idx: usize) -> Option<bool> {
@@ -110,34 +103,25 @@ pub(in crate::optimize) fn expr_witnesses(
                 sink(Witness::MutBorrow(e));
             }
         }
-        ExprKind::Call { func_id, args, .. } => {
-            for (i, arg) in args.iter().enumerate() {
-                if let Some(ae) = arg.expr.as_expr() {
-                    sink(Witness::CalleeArg {
-                        expr: ae,
-                        verdict: oracle.arg_mutates(*func_id, i),
-                        is_mut: arg.is_mut,
-                    });
-                }
-            }
-        }
-        ExprKind::MethodCall {
-            receiver,
+        ExprKind::Call {
             func_id,
             args,
+            has_receiver,
             ..
         } => {
-            if let Some(re) = receiver.as_expr() {
-                sink(Witness::Receiver {
-                    expr: re,
-                    verdict: oracle.receiver_mutates(*func_id),
-                });
-            }
             for (i, arg) in args.iter().enumerate() {
-                if let Some(ae) = arg.expr.as_expr() {
+                let Some(ae) = arg.expr.as_expr() else {
+                    continue;
+                };
+                let verdict = oracle.arg_mutates(*func_id, i);
+                // A receiver reports as `Receiver` so a bodyless callee falls
+                // back to the receiver's type rather than to `is_mut`.
+                if *has_receiver && i == 0 {
+                    sink(Witness::Receiver { expr: ae, verdict });
+                } else {
                     sink(Witness::CalleeArg {
                         expr: ae,
-                        verdict: oracle.arg_mutates(*func_id, i + 1),
+                        verdict,
                         is_mut: arg.is_mut,
                     });
                 }

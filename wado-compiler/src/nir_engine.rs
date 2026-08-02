@@ -1066,6 +1066,7 @@ impl<'a> Engine<'a> {
                 func_id,
                 type_args,
                 args,
+                has_receiver,
             } => ExprKind::Call {
                 func_id,
                 type_args,
@@ -1076,27 +1077,11 @@ impl<'a> Engine<'a> {
                         is_mut: a.is_mut,
                     })
                     .collect(),
+                has_receiver,
             },
             ExprKind::CmRawCall { local_name, args } => ExprKind::CmRawCall {
                 local_name,
                 args: args.into_iter().map(|a| self.clone_operand(a)).collect(),
-            },
-            ExprKind::MethodCall {
-                receiver,
-                func_id,
-                type_args,
-                args,
-            } => ExprKind::MethodCall {
-                receiver: self.clone_operand(receiver),
-                func_id,
-                type_args,
-                args: args
-                    .into_iter()
-                    .map(|a| crate::nir_arena::ArenaCallArg {
-                        expr: self.clone_operand(a.expr),
-                        is_mut: a.is_mut,
-                    })
-                    .collect(),
             },
             ExprKind::FieldAccess {
                 expr,

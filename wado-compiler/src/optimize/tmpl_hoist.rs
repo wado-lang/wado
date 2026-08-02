@@ -443,18 +443,15 @@ impl<'a> EscapeScan<'a> {
     fn scan_expr(&mut self, e: ExprId) {
         let body = self.body;
         match &body.exprs[e].kind {
-            // Function call: args (not receiver) escape.
-            ExprKind::Call { args, .. } => {
-                for arg in args {
-                    self.mark_chain(arg.expr);
-                    self.scan_operand(arg.expr);
-                }
-            }
-            ExprKind::MethodCall { receiver, args, .. } => {
-                // Receiver (self) doesn't escape — only non-self args escape.
-                self.scan_operand(*receiver);
-                for arg in args {
-                    self.mark_chain(arg.expr);
+            // Function call: args escape. A method's receiver (`self`) does
+            // not, so it is scanned without being marked.
+            ExprKind::Call {
+                args, has_receiver, ..
+            } => {
+                for (i, arg) in args.iter().enumerate() {
+                    if !(*has_receiver && i == 0) {
+                        self.mark_chain(arg.expr);
+                    }
                     self.scan_operand(arg.expr);
                 }
             }
@@ -835,11 +832,6 @@ fn transform_expr(
     let walk = match &engine.body.exprs[e].kind {
         ExprKind::Call { args, .. } => {
             Walk::Exprs(args.iter().filter_map(|a| a.expr.as_expr()).collect())
-        }
-        ExprKind::MethodCall { receiver, args, .. } => {
-            let mut v: Vec<ExprId> = receiver.as_expr().into_iter().collect();
-            v.extend(args.iter().filter_map(|a| a.expr.as_expr()));
-            Walk::Exprs(v)
         }
         ExprKind::Binary { left, right, .. } => Walk::Exprs(
             [*left, *right]
@@ -1849,6 +1841,7 @@ mod tests {
                     expr: arg.into(),
                     is_mut: false,
                 }],
+                has_receiver: false,
             },
             type_id: TypeId(0),
             span: Span::default(),

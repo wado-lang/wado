@@ -165,16 +165,29 @@ Method: delete the variant, then let `rustc` enumerate the work.
 
 ### Stage A — NIR (115 sites)
 
-- [ ] `nir_arena.rs` — drop the variant, add `has_receiver` to `Call`; fix
+- [x] `nir_arena.rs` — drop the variant, add `has_receiver` to `Call`; fix
       `clone_expr_kind`, `replace_operand_to`, `for_each_child`; delete
       `for_each_operand` and `map_operands` (no callers)
-- [ ] `lower/translate.rs` — emit `Call { has_receiver: true, args: [receiver, …args] }`
+- [x] `lower/translate.rs` — emit `Call { has_receiver: true, args: [receiver, …args] }`
       from `TirExprKind::MethodCall`, routing the receiver through
       `convert_call_arg_at(_, callee, 0, _)`; drop `call_mut_roots`'s offset
-- [ ] `nir_unparse.rs` — render a `has_receiver` call as `recv.method(rest)`
-- [ ] `optimize/*` (≈90 sites)
-- [ ] `niri/*`, `nir_value_graph/builder.rs`, `nir_engine.rs`
-- [ ] `wir_build/translate.rs`
+- [x] `nir_unparse.rs` — render a `has_receiver` call as `recv.method(rest)`
+- [x] `optimize/*` (≈90 sites)
+- [x] `niri/*`, `nir_value_graph/builder.rs`, `nir_engine.rs`
+- [x] `wir_build/translate.rs`
+
+Two accessors carry the merged shape where a pass genuinely reasons about a
+receiver: `ExprKind::as_method_call()` returns `(receiver, func_id, rest)` for a
+`has_receiver` call, and `ExprKind::method_call(func_id, receiver,
+receiver_is_mut, args)` builds one. Both are views over the single argument
+list, not a second storage shape.
+
+Collapsed along the way: `niri::CallSite`'s `receiver: Option<Operand>` field
+and its `arity()` / `operands()` offset arithmetic; `inline`'s
+`try_inline_method_call_expr` (merged into `try_inline_call_expr`) and the
+`Call::{Free,Method,Other}` dispatch in `inline_calls_in_expr`;
+`field_scalarize`'s `Slot::Receiver`; `dae`'s and `sroa_param`'s
+receiver-collapse branches, both now a `has_receiver = false` assignment.
 
 ### Stage B — TIR (66 sites + 57 constructor sites)
 

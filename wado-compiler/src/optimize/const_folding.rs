@@ -591,21 +591,18 @@ impl GlobalStoreCollector<'_> {
                 op: NirUnaryOp::MutRef,
                 expr,
             } => self.record_escape(body, *expr),
-            ExprKind::MethodCall {
-                receiver,
+            ExprKind::Call {
                 func_id,
                 args,
+                has_receiver,
                 ..
             } => {
                 // An unresolvable receiver mutability counts as mutating.
-                if self.callee_mutates_self(*func_id) != Some(false) {
-                    self.record_escape(body, *receiver);
+                if let Some(receiver) = has_receiver.then(|| args.first()).flatten()
+                    && self.callee_mutates_self(*func_id) != Some(false)
+                {
+                    self.record_escape(body, receiver.expr);
                 }
-                for arg in args.iter().filter(|a| a.is_mut) {
-                    self.record_escape(body, arg.expr);
-                }
-            }
-            ExprKind::Call { args, .. } => {
                 for arg in args.iter().filter(|a| a.is_mut) {
                     self.record_escape(body, arg.expr);
                 }
@@ -1139,21 +1136,6 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
         }
         // A mut-ref argument or a `&mut self` method receiver may be mutated.
         ExprKind::Call { args, .. } => {
-            for arg in args {
-                if arg.is_mut
-                    && let Some(ae) = arg.expr.as_expr()
-                    && let ExprKind::Local { index, .. } = &body.exprs[ae].kind
-                {
-                    effects.mut_borrowed.insert(*index);
-                }
-            }
-        }
-        ExprKind::MethodCall { receiver, args, .. } => {
-            if let Some(re) = receiver.as_expr()
-                && let ExprKind::Local { index, .. } = &body.exprs[re].kind
-            {
-                effects.mut_borrowed.insert(*index);
-            }
             for arg in args {
                 if arg.is_mut
                     && let Some(ae) = arg.expr.as_expr()
