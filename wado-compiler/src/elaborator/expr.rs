@@ -3,7 +3,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Item, Literal, MatchArm};
+use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
@@ -4428,48 +4428,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .compiler_trait_name(crate::compiler_item::CompilerItem::From)
             .to_string();
-        let check_impl = |impl_block: &ast::ImplBlock| -> bool {
-            let impl_target = Self::get_type_name_static(&impl_block.ty);
-            if impl_target != target_name {
-                return false;
-            }
-            if let Some(trait_type) = &impl_block.trait_type {
-                let base = Self::get_type_name_static(trait_type);
-                if base != from_trait_name {
-                    return false;
-                }
-                // Check the type arg matches from_name
-                if let ast::Type::Generic(g) = trait_type
-                    && let Some(arg) = g.args.first()
-                {
-                    return Self::get_type_name_static(arg) == from_name;
-                }
-            }
-            false
+        // `From<From>` for the target, read off the impl headers: the block's
+        // trait reference and its argument are header facts, so the impls are
+        // reached by the target's canonical key rather than by scanning every
+        // module for one whose written target name matches.
+        let declares_from = |key: &(ModuleSource, crate::ast::AstId)| -> bool {
+            self.tysys
+                .trait_env
+                .impl_headers
+                .get(key)
+                .is_some_and(|header| {
+                    header.trait_name.as_deref() == Some(from_trait_name.as_str())
+                        && matches!(&header.trait_type, Some(ast::Type::Generic(g))
+                            if g.args.first().is_some_and(|arg| {
+                                Self::get_type_name_static(arg) == from_name
+                            }))
+                })
         };
-
-        // Search current module items
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && check_impl(impl_block)
-            {
-                return self.current_module_source.clone();
-            }
-        }
-
-        // Search loaded modules
-        for (source, module) in self.loaded_modules {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
-                    && check_impl(impl_block)
-                {
-                    return source.clone();
-                }
-            }
-        }
-
-        // Fallback: use current module (the From impl may be synthesized later)
-        self.current_module_source.clone()
+        let keys = self
+            .tysys
+            .trait_env
+            .all_impl_keys(&self.impl_target(target_name));
+        // The current module wins a tie, as the scan's ordering did.
+        keys.iter()
+            .find(|key| key.0 == self.current_module_source && declares_from(key))
+            .or_else(|| keys.iter().find(|key| declares_from(key)))
+            .map(|(module, _)| module.clone())
+            // The `From` impl may be synthesized later, so a miss is not an error.
+            .unwrap_or_else(|| self.current_module_source.clone())
     }
 }
 
