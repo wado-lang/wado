@@ -1892,9 +1892,6 @@ struct LrDispatchSide {
     use_prec: bool,  // parse side only
 }
 
-/// Whether any loop-entry overlap group has more than one member — the shape
-/// `emit_lr_atn_group_repick` corrects, and the reason `_atn_alt` is mutable.
-/// A rule without one keeps the plain `let`, so its emit is unchanged.
 fn lr_atn_has_overlap_group(lr_dispatch: &LrDispatchData) -> bool {
     for let group of &lr_dispatch.groups {
         if group.len() >= 2 {
@@ -1904,8 +1901,8 @@ fn lr_atn_has_overlap_group(lr_dispatch: &LrDispatchData) -> bool {
     return false;
 }
 
-/// `let _atn_alt = ...` for the loop decision, `let mut` where the group
-/// re-pick below will overwrite it.
+/// `let mut` only where `emit_lr_atn_group_repick` will overwrite `_atn_alt`,
+/// so a rule without an overlap group keeps its emit unchanged.
 fn lr_atn_alt_decl(lr_dispatch: &LrDispatchData) -> String {
     return if lr_atn_has_overlap_group(lr_dispatch) { "let mut _atn_alt" } else { "let _atn_alt" };
 }
@@ -1913,15 +1910,13 @@ fn lr_atn_alt_decl(lr_dispatch: &LrDispatchData) -> String {
 /// Settle which member of an overlap group the LR loop enters.
 ///
 /// `atn_lr_loop_decision` tests one token against each continuation's FIRST
-/// set and returns the first edge admitting it, so alternatives that open on
-/// the same token are reported in grammar order rather than by which one
-/// matches (`expr 'not'? 'in' …` against `expr 'not'? 'like' …` on `not
-/// like`). Its full-context verdict — enter the loop rather than yield to the
-/// caller — is what needs the simulator and stands; only the choice within
-/// the group is re-taken, by the scan twins and longest-match rule the static
-/// LR dispatch already uses for the same question. A member below `min_prec`
-/// cannot be entered, so it does not scan; every scan failing leaves the
-/// simulator's answer untouched and its diagnostic path unchanged.
+/// set and takes the first edge admitting it, so alternatives opening on the
+/// same token come back in grammar order rather than by which one matches
+/// (`expr 'not'? 'in' …` against `expr 'not'? 'like' …` on `not like`). Its
+/// enter-or-yield verdict needs the simulator and stands; the choice within
+/// the group does not, and is re-taken from the scan twins by longest match
+/// as the static LR dispatch does. Every scan failing leaves the simulator's
+/// answer, and with it its diagnostic path, untouched.
 fn emit_lr_atn_group_repick(
     w: &mut CodeWriter,
     lr_alts: &List<LrAlt>,
@@ -1952,9 +1947,7 @@ fn emit_lr_atn_group_repick(
             w.line(&`_lr_s_${*gi} = ${*scan_fn}_lr_${lr.alt_index}(${*tokens_expr}, ${*pos_expr}${fsep});`);
             w.end();
         }
-        // Ascending member order with `emit_argmax_update`'s strict `>` gives
-        // ANTLR4's tie-break: an equal-length match goes to the first
-        // alternative in the grammar.
+        // Ascending order under a strict `>` gives ANTLR4's tie-break.
         for let gi of group {
             emit_argmax_update(w, &"_lr_best", &"_atn_alt", &`_lr_s_${*gi}`, *gi);
         }
@@ -8185,9 +8178,9 @@ fn emit_spec_alt_try(w: &mut CodeWriter, call: &String, idx: i32, ctx: &GenConte
 }
 
 /// Whether a `Consume` node's terminal really is every reachable alt's element
-/// at `skip` — the condition under which emit advances both the cursor and the
-/// element offset. The emitter and `collect_referenced_scan_alts` both read it
-/// so their `skip` bookkeeping cannot drift apart.
+/// at `skip`, and so whether emit advances the cursor past it. Read by both
+/// the emitter and `collect_referenced_scan_alts`, whose `skip` bookkeeping
+/// has to match it.
 fn consume_advances_cursor(c: &ConsumeNode, alts: &List<Alternative>, skip: i32) -> bool {
     let mut node_alts: List<i32> = [];
     prediction_collect_all_indices(&c.child, &mut node_alts);
@@ -8202,19 +8195,17 @@ fn consume_advances_cursor(c: &ConsumeNode, alts: &List<Alternative>, skip: i32)
     return true;
 }
 
-/// Longest-match scan tournament over `sorted_indices` via the per-alt
+/// Emit lowering's `Tournament` dispatch over the per-alt
 /// `<fn_name>_scan_<idx>` helpers: scan every alt from the current position,
 /// parse the one reaching furthest, ties to the first grammar alt. Requires
-/// every alt's scan to be full (`alts_all_scan_full`) so scan success implies
-/// parse success. This is the emit of lowering's `Tournament` dispatch, used
-/// both where the prediction tree gives up (`Ambiguous`) and where its token
-/// cascade turns out not to claim the lookahead (`Dispatch`'s fallback).
+/// `alts_all_scan_full`, so scan success implies parse success. Reached both
+/// where the prediction tree gives up (`Ambiguous`) and where its cascade
+/// turns out not to claim the lookahead (`Dispatch`'s fallback).
 ///
-/// `fall_through_on_no_match` decides what a tournament nothing wins does. As
-/// the whole decision (`Ambiguous`) there is nowhere else to go, so it commits
-/// to the last alt and lets that parse report the mismatch. As a fallback the
-/// rule's own error path is still ahead, and it names the rule rather than one
-/// alt's next token, so the emit leaves the block instead of committing.
+/// `fall_through_on_no_match` says what happens when nothing wins. As the
+/// whole decision there is nowhere else to go, so it commits to the last alt
+/// and lets that parse report the mismatch; as a fallback the rule's own error
+/// path is still ahead and names the rule, so the emit leaves the block.
 fn emit_scan_tournament(
     w: &mut CodeWriter,
     sorted_indices: &List<i32>,
@@ -8228,8 +8219,8 @@ fn emit_scan_tournament(
     w.line(&"let _sd_pos = p.pos;");
     for let mut i = 0; i < sorted_indices.len(); i += 1 {
         let idx = sorted_indices[i];
-        // The scan must see the caller follow the parse will, or a trailing
-        // token its `follow_yields` gate rejects still counts toward the score.
+        // Without the caller follow, a trailing token the helper's
+        // `follow_yields` gate rejects still counts toward the score.
         w.line(&`let _sd_p_${idx} = ${*fn_name}_scan_${idx}(_sd_tokens, _sd_pos${fsep});`);
     }
     if ctx.is_trace() {
@@ -8241,9 +8232,8 @@ fn emit_scan_tournament(
     }
     w.line(&"let mut _sd_best_i: i32 = -1;");
     w.line(&"let mut _sd_best_p: i32 = -1;");
-    // Iterate in ascending alt-index order so a scan-length tie resolves to
-    // the first grammar alternative (ANTLR4's ambiguity resolution), not to
-    // the sort's front-runner.
+    // Ascending alt-index order, not the sort's, so a scan-length tie goes to
+    // the first grammar alternative (ANTLR4's ambiguity resolution).
     let best_i = "_sd_best_i";
     let best_p = "_sd_best_p";
     for let idx of sorted_indices.sorted() {
@@ -8271,15 +8261,9 @@ fn alts_all_scan_full(indices: &List<i32>, alts: &List<Alternative>, ctx: &mut G
     return true;
 }
 
-/// The alts a `Dispatch` node's tournament fallback must choose between, in
-/// tournament order — empty when the node needs no fallback.
-///
-/// A node whose branches already claim every token its alts admit here is
-/// complete, so its `else` would be dead code. That is the depth-0 node: it
-/// has taken no branching decision, and the `Consume` steps that led to it
-/// only cross terminals every alt shares, so the alts' FIRST at element
-/// offset `skip` is exact. Only a deeper node — where the walk has advanced
-/// configs through shapes it approximates — can be missing a token.
+/// The alts a `Dispatch` node's tournament fallback chooses between, in
+/// tournament order — empty when the node needs no fallback because its
+/// branches are provably complete or no tournament is available.
 fn dispatch_fallback_indices(
     d: &PredictionDispatch,
     alts: &List<Alternative>,
@@ -8302,14 +8286,13 @@ fn dispatch_fallback_indices(
 }
 
 /// Whether `d`'s branches name every token some alt in `indices` admits at
-/// element offset `skip`. True for a complete cascade; false once the walk
-/// dropped a token.
+/// element offset `skip`.
 ///
-/// An alt whose remainder from `skip` can match empty is not covered by its
-/// own FIRST — it also admits whatever follows the rule at the call site, so
-/// no branch set derived from FIRST can be shown to claim everything. That
-/// includes an alt already at its end (`skip` past the last element) and one
-/// whose remaining elements are all optional (`a : X Y? | X Z` on `X`).
+/// Provable only at depth 0, where no branching decision has been taken and
+/// the `Consume` steps crossed terminals every alt shares, so FIRST at `skip`
+/// is exact. It is not exact for an alt whose remainder there can match empty:
+/// that alt also admits whatever follows the rule at the call site, which no
+/// FIRST-derived branch set names (`a : X Y? | X Z` on `X`).
 fn dispatch_claims_every_first_token(
     d: &PredictionDispatch,
     indices: &List<i32>,
@@ -8552,25 +8535,21 @@ fn gen_prediction_code_inner(
                     rule_display,
                 );
             }
-            // The cascade claims only the tokens the SLL walk enumerated, and
-            // that walk approximates — a `Repeat` config is advanced past the
-            // repeat as if it iterated exactly once, so a second iteration's
-            // token reaches no branch (`a : X+ Y | X Z` on `X X Y`). Falling
-            // through would reject valid input, so hand the decision to the
-            // longest-match tournament lowering already chose for this overlap
-            // group. Only reachable when the cascade is genuinely incomplete;
-            // a complete one never enters the `else`.
+            // The cascade names only what the SLL walk enumerated, and that
+            // walk approximates — a `Repeat` config is advanced past the repeat
+            // as if it iterated once, so a second iteration's token reaches no
+            // branch (`a : X+ Y | X Z` on `X X Y`). Falling through would
+            // reject valid input, so hand those tokens to the tournament
+            // lowering already chose for this overlap group.
             let fallback = dispatch_fallback_indices(d, alts, ctx, skip);
             if !fallback.is_empty() {
                 w.else_begin(&"else");
-                // Undo what the `Consume` prefix advanced: the tournament
-                // scans each alt from its first element, as `Leaf` does.
+                // The tournament scans each alt from its first element, as
+                // `Leaf` does; the rule's error path expects the cursor back.
                 if skip > 0 {
                     w.line(&`p.pos -= ${skip};`);
                 }
                 emit_scan_tournament(w, &fallback, fn_name, rule_display, ctx, /*fall_through_on_no_match=*/ true);
-                // Nothing matched, so the rule's own error path runs next and
-                // must see the cursor the cascade left it at.
                 if skip > 0 {
                     w.line(&`p.pos += ${skip};`);
                 }

@@ -357,22 +357,17 @@ site is a codegen-time panic; the fix is to file an issue, never to add
 backtracking.
 
 Emit reaches that tournament by two routes. The SLL prediction tree may
-give up (`Ambiguous`), or it may resolve the decision into a token
-cascade that turns out not to claim the lookahead — the walk
-approximates, so a cascade can be narrower than the alts really admit. A
-cascade therefore carries the tournament as its `else`, which makes the
-tournament the decision's floor rather than a path the tree can prune
-away. Where nothing wins that tournament the emit falls out of the `else`
-instead of committing, so the rule's own error path still names the rule
-rather than one alternative's next token.
+give up (`Ambiguous`), or it may resolve the decision into a token cascade
+that turns out not to claim the lookahead — the walk approximates, so a
+cascade can be narrower than the alts really admit. A cascade therefore
+carries the tournament as its `else`: the tournament is the decision's
+floor, not a path the tree may prune away. The `else` is dropped only where
+the cascade is provably complete, or where no alt has a full scan and there
+is no tournament to fall back to.
 
-The `else` is omitted only where it would be dead: when an alt lacks a full
-scan (no tournament exists to fall back to), and at a depth-0 node whose
-branches already name every token its alts admit at the element offset it
-dispatches on. That second test needs FIRST to be exact, which it is only for
-a non-nullable remainder — an alt that can match empty from there also admits
-whatever follows the rule at the call site, so it keeps the fallback
-(`a : X Y? | X Z` on `X`).
+Where nothing wins that tournament the emit leaves the `else` instead of
+committing, so the rule's own error path still names the rule rather than one
+alternative's next token.
 
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
@@ -395,13 +390,12 @@ An alternation is decided the same way, and by what follows it. In tail
 position the arms compete on their own length, since the arm's length is the
 rule's. With a suffix after it neither first-match nor longest-arm is right —
 `('a' | 'ab') 'bc'` on `abbc` needs the second arm, `('x' | 'xy') 'yz'` on
-`xyz` needs the first — so each arm is scanned once from the same start and
-its suffix peeked without consuming, and the arm whose arm-plus-suffix reaches
-furthest wins. Scoring on the suffix rather than on the arm is what makes
-`('p' | 'pq') ('qrs' | 'r')` take the short arm on `pqrs`. Ties go to the
-first arm. The same window as the repeat path applies: the suffix must be
-peekable and carry no predicate, or the alternation keeps the first-match
-emit. Fixture: `lexer_alt_suffix_longest.g4`.
+`xyz` needs the first — so each arm is scanned from the same start, its suffix
+peeked without consuming, and the arm whose arm-plus-suffix reaches furthest
+wins, ties to the first. Scoring on the suffix rather than the arm is what
+makes `('p' | 'pq') ('qrs' | 'r')` take the short arm on `pqrs`. Same window as
+the repeat path: outside it the alternation keeps the first-match emit.
+Fixture: `lexer_alt_suffix_longest.g4`.
 
 ### Static LL prediction — the runtime FOLLOW gate
 
@@ -647,12 +641,10 @@ Two enter edges sharing a first lookahead token are settled without it. The
 loop decision tests one token against each continuation's FIRST set and takes
 the first edge admitting it, so it reports such alternatives in grammar order
 rather than by which one matches — strictly weaker than the second-token
-sub-dispatch the static LR path applies to the same question. What the
-simulator is there for is the enter-or-exit verdict, which needs full context;
-which member of the group to enter does not, and is re-taken from the scan
-twins by longest match, ties to the first alternative. A member below
-`min_prec` cannot be entered and so is not scanned, and every scan failing
-leaves the simulator's answer in place. Fixture: `lr_atn_shared_op.g4`.
+sub-dispatch the static LR path applies to the same question. The simulator is
+there for the enter-or-exit verdict, which needs full context; which member of
+the group to enter does not, and is re-taken from the scan twins by longest
+match, ties to the first alternative. Fixture: `lr_atn_shared_op.g4`.
 
 Which gaps stay static is a cost decision as much as a correctness one — one
 prediction is a full closure over the grammar; see [`perf.md`](./perf.md).

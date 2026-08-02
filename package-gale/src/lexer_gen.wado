@@ -1540,11 +1540,9 @@ fn gen_lexer_alt_seq(
                 }
             }
         }
-        // An alternation with something after it cannot be decided by which
-        // arm matches first — the suffix has to be consulted. Same window as
-        // the repeat above: the suffix must be peekable, and a predicate after
-        // the alternation would change how often it is evaluated, so those
-        // keep the first-match emit.
+        // An alternation with something after it cannot be decided by which arm
+        // matches first. Same window as the repeat above; outside it the
+        // alternation keeps the first-match emit.
         if let Group(g_alts) = elem {
             if g_alts.len() >= 2
                 && i + 1 < alt.elements.len()
@@ -1749,19 +1747,17 @@ fn gen_lexer_repeat_lookahead_aware(
 
 /// Maximal-munch emit for an alternation that has a suffix after it.
 ///
-/// The arm matching first is not necessarily the one letting the rule match
-/// (`I : ('a' | 'ab') 'bc'` on `abbc` needs the second arm), and neither is
-/// the longest arm (`K : ('x' | 'xy') 'yz'` on `xyz` needs the first). ANTLR4
-/// simulates the whole rule, so the arm to take is the one whose
-/// arm-plus-suffix reaches furthest — scored on the suffix, not on the arm,
-/// which is the difference when the suffix is itself variable-length
-/// (`P : ('p' | 'pq') ('qrs' | 'r')` on `pqrs`). Ties go to the first arm.
+/// The arm matching first need not be the one letting the rule match
+/// (`('a' | 'ab') 'bc'` on `abbc` needs the second), and neither need the
+/// longest (`('x' | 'xy') 'yz'` on `xyz` needs the first). ANTLR4 simulates
+/// the whole rule, so the winner is the arm whose arm-plus-suffix reaches
+/// furthest — scored on the suffix, not the arm, which differs once the suffix
+/// is itself variable-length (`('p' | 'pq') ('qrs' | 'r')` on `pqrs`). Ties go
+/// to the first arm.
 ///
-/// Each arm is scanned once from the same start and its suffix peeked without
-/// consuming; the winner's end is restored and the caller emits the suffix as
-/// usual. Same single-pass accept-state tracking as
-/// `gen_lexer_repeat_lookahead_aware`, and no try-fail-retry: the scan is
-/// match-only, so a losing arm never runs an action.
+/// Same single-pass accept-state tracking as
+/// `gen_lexer_repeat_lookahead_aware`, and no try-fail-retry: the selection
+/// scan is match-only, so a losing arm never runs an action.
 fn gen_lexer_alts_lookahead_aware(
     w: &mut CodeWriter,
     alts: &List<LexerAlternative>,
@@ -1799,9 +1795,9 @@ fn gen_lexer_alts_lookahead_aware(
         w.line(&`pos = la_end_${id};`);
         return;
     }
-    // Re-run the winner so its actions fire at the cursor they were written
-    // at. `ea = false`: the selection pass already evaluated this arm, and a
-    // state-dependent predicate could reject here what it accepted there.
+    // Re-run the winner so its actions fire at the cursor they were written at.
+    // `ea = false`: re-evaluating a state-dependent predicate could reject here
+    // what the selection pass accepted.
     w.line(&`pos = la_saved_${id};`);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i == 0 {
@@ -1819,10 +1815,9 @@ fn gen_lexer_alts_lookahead_aware(
 /// restored unconditionally so the surrounding forward scan continues without
 /// committing the peeked suffix.
 ///
-/// `record_end` picks which position is recorded: a repeat wants where the
-/// suffix would START, to resume its cursor there, while an alternation wants
-/// where it would END, because that is how far the whole rule reaches through
-/// this arm.
+/// `record_end` picks which position: a repeat wants where the suffix would
+/// START, to resume its cursor there; an alternation wants where it would END,
+/// which is how far the whole rule reaches through the arm being scored.
 fn gen_lexer_suffix_peek(
     w: &mut CodeWriter,
     suffix: &List<LexerElement>,
@@ -2287,17 +2282,16 @@ pub fn collect_keyword_rules(lexer_rules: &List<LexerRule>, grammar_opts: &List<
     return result;
 }
 
-/// A length every alternative of `rule` is able to reach, or -1 when no
-/// alternative is bounded. The SHORTEST bounded alternative, not the longest:
-/// first-character coverage is tested against the rule's union of alternatives,
-/// so a carrier could otherwise clear both checks through two different
-/// alternatives — `WORD : [i-z] | 'abc'` covers `i` through one and reaches
-/// three chars through the other, while never producing a two-char span that
-/// starts with `i`. Requiring every alternative to reach the length makes the
-/// alternative that covers the first character reach it too.
+/// A length every alternative of `rule` can reach, or -1 when none is bounded.
 ///
-/// Only ever used to rule a carrier OUT, so -1 keeps a rule eligible and an
-/// unbounded alternative imposes no constraint.
+/// The shortest bounded alternative, not the longest: first-character coverage
+/// is tested against the union of alternatives, so a carrier could otherwise
+/// clear both checks through two different ones — `[i-z] | 'abc'` covers `i`
+/// through the first and reaches three chars through the second, never both at
+/// once. Requiring every alternative to reach the length makes the one that
+/// covers the first character reach it too.
+///
+/// Only ever rules a carrier OUT, so -1 keeps a rule eligible.
 fn lexer_rule_bounded_match_len(rule: &LexerRule) -> i32 {
     let mut shortest = -1;
     for let alt of &rule.body {
@@ -2355,10 +2349,9 @@ fn lexer_element_bounded_len(elem: &LexerElement) -> i32 {
 /// the keyword unconditionally, so it is only sound when:
 ///
 /// - some carrier declared *after* the keyword can match its first character
-///   AND is able to match as many characters as the keyword has (reachability —
-///   the classifier only runs on a span a carrier matched, so a carrier that
-///   cannot reach the keyword's length never presents it: `D : 'h' '2'` behind
-///   `C : .` is asked about `h`, never `h2`), and
+///   AND reach its length (reachability — the classifier only runs on a span a
+///   carrier matched, so a shorter carrier never presents the keyword:
+///   `D : 'h' '2'` behind `C : .` is asked about `h`, never `h2`), and
 /// - no carrier declared *before* the keyword can match its first character
 ///   (priority — that earlier carrier wins the tie under ANTLR4 rules, so
 ///   reclassifying its match into the keyword would mis-tag it; the canonical
@@ -2670,10 +2663,10 @@ fn has_channel(rules: &List<LexerRule>) -> bool {
 }
 
 /// Whether `rule` always matches once its first character does: every
-/// alternative is one char-consuming element, so nothing follows that could
-/// fail, and no action or predicate can reject the match. Deliberately narrow
-/// — a `false` only costs the branch an extra catch-all call, while a wrong
-/// `true` loses the match entirely.
+/// alternative is one char-consuming element, with nothing after it and no
+/// predicate below it that could reject the match. Deliberately narrow — a
+/// wrong `false` costs a branch one extra catch-all call, a wrong `true` loses
+/// the match.
 fn lexer_rule_total_on_first_char(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
     if rule.body.is_empty() {
         return false;
@@ -2682,9 +2675,7 @@ fn lexer_rule_total_on_first_char(rule: &LexerRule, all_rules: &List<LexerRule>)
         if !alt.actions.is_empty() || alt.elements.len() != 1 {
             return false;
         }
-        // A predicate anywhere the emit inlines below this element can reject
-        // the match, so the branch can still fall through: `('a' {p}? | 'b')`
-        // carries its predicate on the group's arm, not on this alt.
+        // `('a' {p}? | 'b')` carries its predicate on the group's arm, not here.
         if lexer_alt_has_predicate_below(alt, all_rules) {
             return false;
         }
@@ -2724,10 +2715,9 @@ struct TryCall {
     first_chars: List<[char, char]>,
     is_wildcard: bool,
     is_catch_all: bool,
-    /// The rule matches whenever its first character does — its body is that
-    /// one character, with nothing after it that can fail. A branch made only
-    /// of such rules always produces a match, which is what lets the catch-all
-    /// stay out of it.
+    /// The rule matches whenever its first character does. A branch made only
+    /// of these always produces a match, which is what lets the catch-all stay
+    /// out of it.
     total_on_first_char: bool,
     /// Index of this rule's `apply_<rule>_actions` replay, or -1 when the rule
     /// runs no `{ ... }` action. When the rule wins the tournament, its winner
@@ -2855,10 +2845,9 @@ fn build_rule_try_call(
     );
     let mut chars: List<[char, char]> = [];
     let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars, ci).0;
-    // A catch-all rule (e.g., UNEXPECTED_CHAR: .) matches any single character.
-    // It is redundant in a dispatch branch whose rules all match on their first
-    // character, and required in every other branch: a rule with a suffix can
-    // enter its branch and still fail (`A : [a-f] '1'` on `e`).
+    // A catch-all (`UNEXPECTED_CHAR : .`) matches any single character, so it
+    // is redundant only in a branch whose rules all match on their first
+    // character — see `branch_catch_all_calls`.
     let catch_all = is_wc
         && rule.body.len() == 1
         && rule.body[0].elements.len() == 1
