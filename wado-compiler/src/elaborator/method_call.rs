@@ -3304,7 +3304,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The index holds only what `TraitEnv::build` classified as a static
         // method; ask the headers directly for the rest.
         if self.keys_declare_static_method(
-            &self.tysys.trait_env.all_impl_keys(&self.impl_target(struct_name)),
+            &self
+                .tysys
+                .trait_env
+                .all_impl_keys(&self.impl_target(struct_name)),
             method_name,
         ) {
             return true;
