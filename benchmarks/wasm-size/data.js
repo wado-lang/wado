@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785627431639,
+  "lastUpdate": 1785629269480,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45441,6 +45441,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 273867,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9cec8593a4c2d291cfb76b99456c172936fabcea",
+          "message": "Merge pull request #1734 from wado-lang/claude/wir-to-nir-optimize-migration-ihezns\n\nperf(optimizer): move constant and copy reasoning into NIR, and pay for data promotion only when it shrinks",
+          "timestamp": "2026-08-02T09:53:24+10:00",
+          "tree_id": "a565042f509a279d35625cc902c42983f9858a2a",
+          "url": "https://github.com/wado-lang/wado/commit/9cec8593a4c2d291cfb76b99456c172936fabcea"
+        },
+        "date": 1785629269188,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16247,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272570,
             "unit": "bytes"
           }
         ]
