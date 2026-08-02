@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785629269480,
+  "lastUpdate": 1785638718688,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45480,6 +45480,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 16247,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272570,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c314b259e8dbb096002df3ec2d5934cc552ae633",
+          "message": "Merge pull request #1732 from wado-lang/claude/wir-build-module-smell-k5sfwo\n\nfix(wir_build): resolve a type by its exact key; reject an operand with no lowering",
+          "timestamp": "2026-08-02T12:33:40+10:00",
+          "tree_id": "16ed2110c6386d209b629b5fb97618be24ffa084",
+          "url": "https://github.com/wado-lang/wado/commit/c314b259e8dbb096002df3ec2d5934cc552ae633"
+        },
+        "date": 1785638717835,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16265,
             "unit": "bytes"
           },
           {
