@@ -1350,8 +1350,15 @@ impl FunctionTranslator<'_, '_> {
                 crate::name::CLOSURE_CALL_METHOD.to_string(),
             );
             let call_method_borrow = functor.call_method.borrow();
-            let params_is_mut: Vec<bool> =
-                call_method_borrow.params.iter().map(|p| p.is_mut).collect();
+            // `ArenaCallArg::is_mut` means "the callee may write the caller's
+            // storage through this slot", which is `is_mut_ref` — the same
+            // source `call_args_in_param_order` reads. A declared-`mut` binding
+            // is the callee's own local and says nothing about the caller's.
+            let params_is_mut: Vec<bool> = call_method_borrow
+                .params
+                .iter()
+                .map(|p| p.is_mut_ref)
+                .collect();
             // The receiver is the functor; it heads `args` so the list lines up
             // with `call_method`'s full parameter list including `self`.
             let mut nir_args: Vec<ArenaCallArg> = vec![ArenaCallArg {

@@ -1134,10 +1134,14 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
                 effects.mut_borrowed.insert(*index);
             }
         }
-        // A mut-ref argument or a `&mut self` method receiver may be mutated.
-        ExprKind::Call { args, .. } => {
-            for arg in args {
-                if arg.is_mut
+        // A mut-ref argument may be mutated, and so may a receiver: the callee
+        // reaches its storage whatever `self` mode it declares, which is the
+        // rule `record_loop_heap_write` and niri's trackability walks keep too.
+        ExprKind::Call {
+            args, has_receiver, ..
+        } => {
+            for (i, arg) in args.iter().enumerate() {
+                if (arg.is_mut || (*has_receiver && i == 0))
                     && let Some(ae) = arg.expr.as_expr()
                     && let ExprKind::Local { index, .. } = &body.exprs[ae].kind
                 {

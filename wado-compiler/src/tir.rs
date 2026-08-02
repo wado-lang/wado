@@ -4055,11 +4055,15 @@ pub enum TirExprKind {
         /// `args[0]` is the method receiver, so `args[i]` maps to `params[i]` for
         /// every call shape — there is no receiver slot outside this list.
         args: Vec<CallArg>,
-        /// Whether `args[0]` is the receiver of an instance method. Semantic,
-        /// not syntactic: a trait-qualified (UFCS) call spells its receiver as
-        /// the first argument and still sets this. Built through
-        /// [`TirExprKind::method_call`], read back through
-        /// [`TirExprKind::as_method_call`].
+        /// Whether `args[0]` is the receiver of an instance method.
+        ///
+        /// Set only by [`TirExprKind::method_call`], so it marks a call written
+        /// with dot syntax. A trait-qualified (UFCS) call also carries its
+        /// receiver in `args[0]` but leaves this `false`: it spells the
+        /// receiver's mode itself (`Trait::m(&mut x, …)`), so the receiver is
+        /// already reference-typed and needs none of the treatment this flag
+        /// gates — notably `lower`'s never-value-copy-a-receiver rule.
+        /// Read back through [`TirExprKind::as_method_call`].
         has_receiver: bool,
     },
     /// Raw Component Model call to a lowered WASI import.

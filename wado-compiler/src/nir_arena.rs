@@ -203,9 +203,10 @@ pub enum ExprKind {
         /// `args[0]` is the method receiver, so `args[i]` maps to `params[i]` for
         /// every call shape — there is no receiver slot outside this list.
         args: Vec<ArenaCallArg>,
-        /// Whether `args[0]` is the receiver of an instance method. Semantic,
-        /// not syntactic: a trait-qualified (UFCS) call spells its receiver as
-        /// the first argument and still sets this.
+        /// Whether `args[0]` is the receiver of an instance method. Carried
+        /// down from TIR, where only a dot-syntax call sets it; a
+        /// trait-qualified (UFCS) call keeps its receiver in `args[0]` with
+        /// this `false` (see [`crate::tir::TirExprKind::Call`]).
         has_receiver: bool,
     },
     CmRawCall {
