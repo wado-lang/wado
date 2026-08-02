@@ -98,19 +98,16 @@ impl Interpreter<'_> {
     /// container, and memoize what the sink did not take, reporting whether
     /// the node was rewritten.
     ///
-    /// A reference-typed node is refused whole — its value would materialize
-    /// as a fresh literal where the program yields an alias, and `ref.eq` can
-    /// tell the two apart. [`Self::try_region_fold`] applies the same test
-    /// before it runs; this is the call path's half of it.
+    /// A reference-typed node is refused whole: its value would stand as a
+    /// fresh literal where the program yields an alias, and `ref.eq` can tell
+    /// the two apart.
     ///
-    /// A declined scalar is always memoized: the scratch backend promotes
+    /// A declined scalar is always memoized — the scratch backend promotes
     /// nothing, so the memo is where its folds live. An aggregate is
-    /// materialized or memoized only over the shapes whose fold consumed what
-    /// produced the value — a call body run to completion, a region run as a
-    /// frame (see [`consumes_its_source`]) — since those are the values a
-    /// revisit would otherwise have to recompute and an enclosing fold cannot
-    /// re-derive once the rewrite lands. Anywhere else the aggregate is
-    /// re-derivable from the tree, so nothing is recorded.
+    /// materialized or memoized only over a shape that consumed its source
+    /// ([`consumes_its_source`]): a revisit would re-run a body to recompute
+    /// those, while everywhere else the tree still derives the value, so
+    /// nothing needs recording.
     fn commit_fold<S: EditSink>(&mut self, sink: &mut S, e: ExprId, value: Value) -> bool {
         let node_type = sink.body().exprs[e].type_id;
         if RefKind::from_resolved(self.type_table.get(node_type)).is_some() {

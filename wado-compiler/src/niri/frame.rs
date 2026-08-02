@@ -172,11 +172,10 @@ fn named_local(body: &Body, op: Operand) -> Option<u32> {
 /// second handle on the same storage either reads a value the program never had
 /// or has its own write undone.
 ///
-/// `places` holds every argument's place, the target's own included. Whether
-/// the other argument could actually observe the write is not asked: after
-/// `prepare_types` a shared borrow of a primitive, plain enum, variant or fn
-/// type is the same `Box<T>` a by-value one is, so no signature test tells them
-/// apart here.
+/// Whether the other argument could actually observe the write is not asked:
+/// after `prepare_types` a shared borrow of a primitive, plain enum, variant
+/// or fn type is the same `Box<T>` a by-value parameter carries, so no
+/// signature test tells them apart here.
 ///
 /// Wado has no borrow checker, so this is ordinary source: the frame declines
 /// to run the call rather than mis-run it.
@@ -751,9 +750,8 @@ impl Interpreter<'_> {
     /// it does not finish on a constant — the block survives as written, so
     /// anything it would do at run time still happens there.
     ///
-    /// A region of reference type is refused whatever it reads: its value
-    /// would materialize as a fresh literal where the program yields an alias,
-    /// and `ref.eq` can tell the two apart.
+    /// A reference-typed region is refused before the body is copied;
+    /// `Interpreter::commit_fold` states why a reference never folds.
     ///
     /// Safe on the re-entrant projection path even though it executes writes:
     /// self-containment confines every write to locals of the scratch run, so
