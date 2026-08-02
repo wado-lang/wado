@@ -3,6 +3,10 @@
 //! `is_local`, `expr_mentions_local`, `stmt_mentions_local`, `is_pure_expr`,
 //! `collect_reads`, … read the [`Body`] arena directly, so the ported passes
 //! need no `Body ↔ tree` bridge.
+//!
+//! `niri/place.rs` keeps its own statement of the transparent-wrapper set
+//! (`wrapped_operand`), so a new see-through node kind must be taught there
+//! as well as to `storage_root` / `strip_refs` below.
 
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBinaryOp, NirUnaryOp};

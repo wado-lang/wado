@@ -6,18 +6,15 @@
 //! performs it — inside a compile-time frame, which either carries the write
 //! out or abandons the evaluation. An ordinary walk performs nothing at all.
 
-use indexmap::IndexSet;
-
+use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtId, StmtKind};
 
-use super::place::{borrowed_place_operand, lvalue_root_local, place_of};
+use super::callee::RECEIVER;
+use super::place::{borrowed_place_operand, lvalue_root_local, peel_wrappers, place_of};
 use crate::nir_visitor::reachable_exprs;
 
 use super::{CalleeMap, CtfeBuiltinMap, ProgramFacts};
-
-/// A method's receiver is its first parameter.
-const RECEIVER: usize = 0;
 
 /// The expressions a walk carries out: the operand each reachable statement
 /// performs. Reachable from the body root, because an orphaned statement never
@@ -119,7 +116,9 @@ impl Reached {
         }
     }
 
-    /// What the walk reaches, given the expressions it performs.
+    /// What the walk reaches, given the expressions it performs. Collected
+    /// over the whole arena, not the reachable tree — [`aggregate_safe_locals`]
+    /// owns the rule.
     fn collect(body: &Body, facts: ProgramFacts<'_>, performed: &IndexSet<ExprId>) -> Self {
         let mut reached = Self::default();
         reached.collect_builtin_borrows(body, facts.ctfe_builtins, performed);
@@ -216,46 +215,25 @@ impl Reached {
         }
     }
 
-    /// Both directions of the mention check peel casts as well as borrows:
-    /// an argument reaches a builtin as `&x.repr as &Array<u8>`, and a
-    /// mention recorded at the cast would never match the borrow the
-    /// disqualification walk asks about.
+    /// Both directions of the mention check go through [`peel_wrappers`], so a
+    /// mention recorded at a cast still matches the borrow the disqualification
+    /// walk asks about.
     fn covers(&self, body: &Body, op: Operand) -> bool {
-        let mut op = op;
-        loop {
-            let Some(e) = op.as_expr() else {
-                return false;
-            };
-            match &body.exprs[e].kind {
-                ExprKind::Unary {
-                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
-                    expr,
-                }
-                | ExprKind::Cast { expr, .. } => op = *expr,
-                _ => return self.reads.contains(&e) || self.writes.contains(&e),
-            }
-        }
+        let Some(e) = peel_wrappers(body, op) else {
+            return false;
+        };
+        self.reads.contains(&e) || self.writes.contains(&e)
     }
 
-    /// Records the place `op` names, peeling the borrows and casts it may be
-    /// wrapped in.
+    /// Records the place `op` names.
     fn record(&mut self, body: &Body, op: Operand, reach: Reach) {
-        let Some(e) = op.as_expr() else {
+        let Some(e) = peel_wrappers(body, op) else {
             return;
         };
-        match &body.exprs[e].kind {
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
-                expr,
-            }
-            | ExprKind::Cast { expr, .. } => self.record(body, *expr, reach),
-            _ => {
-                match reach {
-                    Reach::Read => self.reads.insert(e),
-                    Reach::Write => self.writes.insert(e),
-                };
-            }
-        }
+        match reach {
+            Reach::Read => self.reads.insert(e),
+            Reach::Write => self.writes.insert(e),
+        };
     }
 }
 
@@ -275,8 +253,21 @@ enum Reach {
 /// names the same storage — which is what lets `push_str(&b)` count as a read
 /// of `b` rather than an unknown mention.
 ///
-/// Only the reachable body is scanned: a mention an earlier rewrite orphaned
-/// cannot run, so it must not disqualify anything.
+/// The two sides of the check deliberately scan different populations.
+/// Mentions and disqualifications come from the reachable body alone: an
+/// orphaned mention cannot run, so it must not disqualify anything. Two of the
+/// `value_reads` sources read the whole arena instead — the statement sweep
+/// below and [`Reached`]'s call collectors; the taught-position expression
+/// walk above stays reachable — because an in-place rewrite shares ids
+/// between a live node and the displaced parent that used to hold it, so a
+/// reachable mention's only read-position witness may sit in a statement or
+/// call no live node refers to. Narrowing those sweeps to the reachable tree
+/// disqualifies the string-building locals every Display chain folds through
+/// (measured: the `default_trait` and `display_1` goldens grew back by
+/// hundreds of lines). This is the rule's one home;
+/// `a_displaced_parent_still_vouches_for_its_mention` pins the statement
+/// witness and `a_displaced_call_still_vouches_for_its_argument` the call
+/// one.
 pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
