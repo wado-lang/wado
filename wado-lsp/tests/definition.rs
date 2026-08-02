@@ -906,3 +906,37 @@ fn conversion_overload_definition_follows_the_argument() {
         assert_range(&from_i32, 2, 7, 11);
     });
 }
+
+#[test]
+fn namespaced_static_call_definition() {
+    futures::executor::block_on(async {
+        let helper = concat!(
+            "pub struct Pair { pub x: i32 }\n",
+            "impl Pair {\n",
+            "    pub fn make() -> Pair {\n",
+            "        return Pair { x: 1 };\n",
+            "    }\n",
+            "}\n",
+        );
+        // `ns::Type::method` is three segments, so the namespace prefix is
+        // never stripped and the bare `Type::method` branch — the one that
+        // records the edge — is not reached.
+        let entry = concat!(
+            "use helper from \"./helper.wado\";\n",
+            "fn f() -> i32 {\n",
+            "    let p = helper::Pair::make();\n",
+            "    return p.x;\n",
+            "}\n",
+        );
+        let result = def_at_in(
+            &[("./helper.wado", helper), ("/test.wado", entry)],
+            "/test.wado",
+            2,
+            27,
+        )
+        .await
+        .expect("helper::Pair::make");
+        assert_eq!(result.uri, "file:///helper.wado");
+        assert_range(&result, 2, 11, 15);
+    });
+}

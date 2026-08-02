@@ -390,6 +390,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ModuleSource::primitive();
         }
 
+        // The name as written may be an alias (`use { Helper as Counter }`),
+        // and the bare-name index below is keyed by what a declaration calls
+        // itself. Ask which declaration the name resolves to first, so an
+        // alias answers with its target rather than with another module's
+        // type that happens to be spelled the same.
+        let (canonical_module, canonical_name) = self.canonical_decl_key(struct_name);
+        if canonical_name != struct_name
+            && self
+                .tysys
+                .trait_env
+                .struct_like_decl_modules
+                .get(&canonical_name)
+                .is_some_and(|modules| modules.contains(&canonical_module))
+        {
+            return canonical_module;
+        }
+
         // Struct / resource / variant / enum / builtin declarations from the
         // digest (covers every loaded module, incl. the current one). The
         // current module wins when it declares the type; else the first
