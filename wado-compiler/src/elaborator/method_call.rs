@@ -2419,43 +2419,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return true;
             }
         }
-        // Check current module's impl blocks
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item {
-                let impl_struct_name = self.get_type_name(&impl_block.ty);
-                if impl_struct_name == struct_name {
-                    for method in &impl_block.methods {
-                        let has_self = method
-                            .params
-                            .iter()
-                            .any(|p| p.self_kind != ast::SelfKind::None);
-                        if method.name == method_name && !has_self {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-        // Check loaded modules' impl blocks
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item {
-                    let impl_struct_name = Self::get_type_name_static(&impl_block.ty);
-                    if impl_struct_name == struct_name {
-                        for method in &impl_block.methods {
-                            let has_self = method
-                                .params
-                                .iter()
-                                .any(|p| p.self_kind != ast::SelfKind::None);
-                            if method.name == method_name && !has_self {
-                                return true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        false
+        // Every impl block on the type, inherent and trait alike.
+        let keys = self
+            .tysys
+            .trait_env
+            .all_impl_keys(&self.impl_target(struct_name));
+        self.keys_declare_static_method(&keys, method_name)
     }
 
     /// Look up static method return type based on struct name and method name
@@ -3058,42 +3027,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Whether any impl block among `keys` declares `method_name` taking no
+    /// receiver. Headers name the methods and the signature digest says
+    /// whether each takes `self`, so the question is answered without an
+    /// impl-block AST — and keyed canonically, so two modules' same-named
+    /// types cannot answer for each other.
+    fn keys_declare_static_method(
+        &self,
+        keys: &[(ModuleSource, crate::ast::AstId)],
+        method_name: &str,
+    ) -> bool {
+        keys.iter().any(|key| {
+            self.tysys
+                .trait_env
+                .impl_headers
+                .get(key)
+                .into_iter()
+                .flat_map(|header| header.methods.iter())
+                .any(|m| {
+                    m.name == method_name
+                        && self
+                            .tysys
+                            .signatures
+                            .method_sig(m.ast_id)
+                            .is_some_and(|sig| sig.self_kind == ast::SelfKind::None)
+                })
+        })
+    }
+
     /// Whether an inherent impl (`impl Type { … }`) declares a no-self method
     /// of this name. A conversion-call guard needs the distinction: a trait
     /// lookup returning `None` is a failure only when no inherent static can
     /// answer instead.
     pub(super) fn has_inherent_static_method(&self, struct_name: &str, method_name: &str) -> bool {
-        let declares = |impl_block: &ast::ImplBlock| -> bool {
-            impl_block.trait_type.is_none()
-                && Self::get_type_name_static(&impl_block.ty) == struct_name
-                && impl_block.methods.iter().any(|m| {
-                    m.name == method_name
-                        && !m.params.iter().any(|p| p.self_kind != ast::SelfKind::None)
-                })
-        };
-        if self
-            .current_module_items
-            .iter()
-            .any(|item| matches!(item, Item::Impl(b) if declares(b)))
-        {
-            return true;
-        }
-        if let Some(entries) = self
+        let keys = self
             .tysys
             .trait_env
-            .impl_index
-            .get(&self.impl_target(struct_name))
-        {
-            for (module_source, item_id) in entries {
-                if let Some(module) = self.loaded_modules.get(module_source)
-                    && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
-                    && declares(impl_block)
-                {
-                    return true;
-                }
-            }
-        }
-        false
+            .inherent_impl_keys(&self.impl_target(struct_name));
+        self.keys_declare_static_method(&keys, method_name)
     }
 
     /// The literal preselect over a receiver's conversion impls
@@ -3509,22 +3480,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
 
-        // Check current module's impl blocks (not in the pre-built index)
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item {
-                let impl_struct_name = self.get_type_name(&impl_block.ty);
-                if impl_struct_name == struct_name {
-                    for method in &impl_block.methods {
-                        let has_self = method
-                            .params
-                            .iter()
-                            .any(|p| p.self_kind != ast::SelfKind::None);
-                        if method.name == method_name && !has_self {
-                            return true;
-                        }
-                    }
-                }
-            }
+        // The index holds only what `TraitEnv::build` classified as a static
+        // method; ask the headers directly for the rest.
+        if self.keys_declare_static_method(
+            &self.tysys.trait_env.all_impl_keys(&self.impl_target(struct_name)),
+            method_name,
+        ) {
+            return true;
         }
 
         // O(1) lookup via pre-built resource static method index.

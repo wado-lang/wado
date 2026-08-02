@@ -2,7 +2,7 @@
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::{self, Expr, Item, Type};
+use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
@@ -900,24 +900,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow()
                         .compiler_trait_name(crate::compiler_item::CompilerItem::From)
                         .to_string();
-                    let matching_impl = self.current_module_items.iter().any(|item| {
-                        if let Item::Impl(impl_block) = item
-                            && impl_block.is_synthesize_request
-                            && let Some(trait_type) = &impl_block.trait_type
-                            && Self::get_type_name_static(trait_type) == from_trait_name
-                            && Self::get_type_name_static(&impl_block.ty) == prefix
-                        {
-                            if let ast::Type::Generic(generic) = trait_type
-                                && generic.args.len() == 1
-                            {
-                                self.get_type_name_full(&generic.args[0]) == from_type_name
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    });
+                    // `impl From<X> for Prefix;` — a body-less derivation
+                    // request. Both the flag and the trait reference are
+                    // header facts, so the impls are reached by the target's
+                    // canonical key rather than by scanning one module's AST
+                    // for a matching written name.
+                    let matching_impl = self
+                        .tysys
+                        .trait_env
+                        .all_impl_keys(&self.impl_target(prefix))
+                        .iter()
+                        .filter_map(|key| self.tysys.trait_env.impl_headers.get(key))
+                        .any(|header| {
+                            header.is_synthesize_request
+                                && header.trait_name.as_deref() == Some(from_trait_name.as_str())
+                                && matches!(&header.trait_type, Some(ast::Type::Generic(generic))
+                                    if generic.args.len() == 1
+                                        && self.get_type_name_full(&generic.args[0])
+                                            == from_type_name)
+                        });
                     if matching_impl {
                         return self
                             .resolve_from_call(

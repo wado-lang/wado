@@ -1168,6 +1168,11 @@ impl TraitEnv {
     /// Keys of the **inherent** impls on `type_name`, in global build order —
     /// the `trait_name.is_none()` subset of [`Self::all_impl_index`]. Used by
     /// instance-method lookup, which must not treat trait impls as inherent.
+    /// Every impl block indexed on `type_key`, inherent and trait alike.
+    pub(super) fn all_impl_keys(&self, type_key: &ImplTargetKey) -> Vec<(ModuleSource, AstId)> {
+        self.all_impl_index.get(type_key).cloned().unwrap_or_default()
+    }
+
     pub(super) fn inherent_impl_keys(
         &self,
         type_key: &ImplTargetKey,
