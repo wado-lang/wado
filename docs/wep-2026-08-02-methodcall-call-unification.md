@@ -218,14 +218,22 @@ hardcoded.
 
 ### Stage C — cleanup
 
-- [ ] `effect_check.rs` — `is_method = func_ref.method_info.is_some() && !self_in_args`
-      becomes a direct read
-- [ ] Update the WEPs describing the two-node model:
+- [x] Update the WEPs describing the two-node model:
       [NIR](./wep-2026-05-11-nir.md),
       [CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md),
       [Effect Handler](./wep-2026-04-11-effect-handler.md),
-      [Worklist Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md)
-- [ ] Update `docs/compiler.md` and `docs/optimizer.md`
+      [Worklist Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md),
+      [Closure Internals](./wep-2026-01-25-closure-implementation-internals.md),
+      [NIR Array Literal](./wep-2026-05-31-nir-array-literal.md).
+      `docs/compiler.md` and `docs/optimizer.md` never named the node.
+- [ ] The elaborator sets `has_receiver` for a trait-qualified (UFCS) call, so
+      the flag means "args[0] is the receiver" rather than "came from dot
+      syntax". This changes the dump spelling and what `alias` / `niri` treat as
+      a receiver, so it wants its own red/green step.
+- [ ] The elaborator sets the receiver's `is_mut` from `self_kind`, and
+      `lower`'s `call_args_in_param_order` drops the `mut_ref_params` override.
+- [ ] `effect_check.rs` — `is_method = func_ref.method_info.is_some() && !self_in_args`
+      becomes a direct read once the flag above is semantic.
 
 ## Consequences
 
@@ -258,7 +266,7 @@ converges), `param_spec`, `sroa_param`, `multi_value_return`, `field_scalarize`,
 
 This checkpoint fired, and it was a miscompile. Routing the receiver through
 `convert_call_arg_at` along with every other argument wraps a by-value argument
-in `$value_copy$T`; the receiver is a *place*, so the copy discarded the mutation
+in `$value_copy$T`; the receiver is a _place_, so the copy discarded the mutation
 the call exists to perform.
 
 The premise — that a receiver is always reference-typed, so `needs_value_copy`

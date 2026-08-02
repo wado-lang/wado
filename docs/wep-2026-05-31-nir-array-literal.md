@@ -30,7 +30,7 @@ arr.push_literal(3);
 ```
 
 In NIR terms this is one `NirStmtKind::Let` binding `arr` to a
-`with_capacity` call, followed by N `NirStmtKind::Expr(MethodCall …)`
+`with_capacity` call, followed by N `NirStmtKind::Expr(Call …)`
 push statements on that local. The fixed-shape, const-array form only
 re-materializes much later, at WIR, where
 `wir_optimize::array::collapse_array_push_sequences` rewrites the

@@ -231,7 +231,7 @@ Wasm has no notion of shared vs exclusive references. The `fn` / `fn mut` distin
 
 ## Canonical Closure as Vtable
 
-A closure value that needs to be type-erased is wrapped in a canonical, signature-keyed struct so any holder of a canonical closure of a given signature can dispatch through a uniform shape. The lower-phase escape analysis decides per local: a closure local that only appears as the callee of `IndirectCall` / receiver of `MethodCall` keeps the specialised `&__Closure_N` form; every other position forces canonicalisation.
+A closure value that needs to be type-erased is wrapped in a canonical, signature-keyed struct so any holder of a canonical closure of a given signature can dispatch through a uniform shape. The lower-phase escape analysis decides per local: a closure local that only appears as the callee of `IndirectCall` / receiver of a method call keeps the specialised `&__Closure_N` form; every other position forces canonicalisation.
 
 Three indices appear in this section:
 
@@ -303,7 +303,7 @@ The transition proceeds in phases, each leaving the compiler in a green state. F
 - [x] Closure lowering to functor structs with `__call` methods (`lower/plan/closure.rs`)
 - [x] Default type parameters (`T = DefaultType` syntax)
 - [x] Internal `Fn<Args, Ret, Effects>` trait declared in `lib/core/prelude/traits.wado:289-305` (currently unused as a bound)
-- [x] `__Closure_N` struct + funcref codegen, stable `functor_id`, specialised path (`MethodCall` on `__Closure_N`)
+- [x] `__Closure_N` struct + funcref codegen, stable `functor_id`, specialised path (a direct call on `__Closure_N`)
 - [x] Canonical closure path: `NirExprKind::ClosureToCanonical`, per-`(N, Ret)` `CanonicalClosure_K`, inspectable supertype `$canonical_inspectable_base`, per-functor wrapper triple
 - [x] `FnCanonicalDispatch` synthesised dispatch stubs (`synthesis/traits.rs:1565-1599`)
 - [x] Heap promotion via boxing pass over `address_taken_locals` (`lower/plan/boxing.rs:476-499`)
@@ -357,7 +357,7 @@ Tasks:
 
 ### Phase 5: `mut` binding enforcement
 
-In `IndirectCall` / `MethodCall` resolution, require the callee binding to be `let mut` (or `mut f:` parameter) when the closure type is `fn mut`.
+In `IndirectCall` / method-call resolution, require the callee binding to be `let mut` (or `mut f:` parameter) when the closure type is `fn mut`.
 
 Tasks:
 

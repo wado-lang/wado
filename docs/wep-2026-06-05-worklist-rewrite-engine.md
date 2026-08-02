@@ -105,7 +105,7 @@ share an allocation. Deferred until measurement justifies it.
 ### Heap modeling
 
 `FieldAccess` carries a heap version the builder bumps when a Skel node
-may write the heap (Assign-to-FieldAccess; non-pure Call / MethodCall /
+may write the heap (Assign-to-FieldAccess; non-pure Call /
 IndirectCall; LoopPhi body-iter when the body may write). MVP uses
 per-field granularity (a write to `obj.f` bumps the `f` slot only); a
 later stage promotes to per-(receiver-root, field) using `mod_ref.rs`.

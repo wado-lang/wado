@@ -94,7 +94,7 @@ section records only the current state.
       sites — both static (`Stream::<u8>::new()`) and instance
       (`tx.write(payload)`) — are rewritten through the matching
       wrapper. The wrapper's no-handler else-branch emits the same
-      `MethodCall`/`Call { cm_name }` shape that user code emits, with
+      `Call { cm_name }` shape that user code emits, with
       `MonomorphInfo { impl_type_args }` for static methods, so
       cm_binding rewrites both paths uniformly.
       Fixtures: `effect_handler_resource_stream.wado` (`MockStream`
