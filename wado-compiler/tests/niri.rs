@@ -4712,6 +4712,10 @@ fn select_picks_the_arm_its_condition_names() {
             prim: PrimitiveType::I32,
         }),
     );
+    // Each `pick` builds a fresh body whose arena reuses the same ids, so the
+    // frame — fold memo included — must reset between them, as the driving
+    // visitor resets it per function.
+    interp.enter_function();
     assert_eq!(
         reduce_lat(&mut interp, &pick(false)),
         Lattice::Const(Value::Int {
@@ -7207,19 +7211,11 @@ fn aggregate_binding_needs_a_read_only_local() {
     assert_eq!(reduce_lat(&mut interp, &reread), Lattice::NonConst);
 }
 
-#[test]
-fn a_displaced_parent_still_vouches_for_its_mention() {
-    // An in-place rewrite shares ids between a live node and the displaced
-    // parent that used to hold it, so a reachable mention's only read-position
-    // witness may sit in a statement no block lists any more. The whitelist
-    // must keep reading the whole arena: judged against the reachable tree
-    // alone, the mention below sits under a position the scan does not list
-    // and local 0 loses its aggregate — which, at scale, is the string-builder
-    // local of every Display chain (measured on the `default_trait` and
-    // `display_1` goldens).
-    let mut table = TypeTable::new();
-    let point = point_type(&mut table);
-
+/// A reachable mention of local 0 whose only live parent is a position the
+/// mention scan does not list (`Unary::Neg`), so any read-position witness
+/// must come from elsewhere in the arena. The rule these tests pin lives on
+/// `aggregate_safe_locals`.
+fn body_with_unlisted_mention(point: TypeId) -> (Body, ExprId) {
     let mut body = Body::empty();
     let mention = pe(
         &mut body,
@@ -7242,9 +7238,55 @@ fn a_displaced_parent_still_vouches_for_its_mention() {
         stmts: vec![live],
         span: Span::default(),
     });
+    (body, mention)
+}
+
+#[test]
+fn a_displaced_parent_still_vouches_for_its_mention() {
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let (mut body, mention) = body_with_unlisted_mention(point);
+    // The witness: a statement no block lists, holding the same mention id.
     ps(&mut body, StmtKind::Expr(Operand::Expr(mention)));
 
     let mut interp = Interpreter::new(&table);
+    interp.enter_function();
+    interp.record_aggregate_locals(&body);
+    interp.bind_local(0, Lattice::Const(point_value(point)));
+    let read = field_access(local_expr(0, point), 0, "x", TypeTable::I32);
+    assert_eq!(reduce_lat(&mut interp, &read), Lattice::Const(int(10)));
+}
+
+#[test]
+fn a_displaced_call_still_vouches_for_its_argument() {
+    let mut table = TypeTable::new();
+    let point = point_type(&mut table);
+    let reader = make_pure_fn(
+        "reader",
+        vec![("v", point)],
+        TypeTable::I32,
+        return_stmt(int_lit(0, TypeTable::I32, "0")),
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&reader));
+
+    let (mut body, mention) = body_with_unlisted_mention(point);
+    // The witness: a call expression no live node refers to, passing the same
+    // mention id by value.
+    pe(
+        &mut body,
+        ExprKind::Call {
+            func_id: reader.id.expect("test function must have an id"),
+            type_args: Vec::new(),
+            args: vec![wado_compiler::nir_arena::ArenaCallArg {
+                expr: Operand::Expr(mention),
+                is_mut: false,
+            }],
+        },
+        TypeTable::I32,
+    );
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
     interp.enter_function();
     interp.record_aggregate_locals(&body);
     interp.bind_local(0, Lattice::Const(point_value(point)));

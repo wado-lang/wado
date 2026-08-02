@@ -36,11 +36,9 @@ literal depends on it. It is confined to the frame that wrote it and cleared
 wherever the environment restarts.
 
 Do not narrow niri's trackability read-position whitelist to the reachable
-tree. In-place rewrites share ids between a live node and its displaced
-parent, so a reachable mention's only read witness may sit in an orphaned
-statement; two attempts at the narrowing each lost the string-builder folds
-(`default_trait`, `display_1`). `aggregate_safe_locals` states the rule and
-`a_displaced_parent_still_vouches_for_its_mention` pins it.
+tree — two attempts each lost the string-builder folds. The rule, its
+mechanism, and its measurement live on `aggregate_safe_locals`; the two
+`still_vouches` tests in `tests/niri.rs` pin it.
 
 Details: `docs/wep-2026-06-15-live-value-graph.md`.
 

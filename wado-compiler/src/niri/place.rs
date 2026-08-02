@@ -10,7 +10,9 @@ use crate::nir_arena::{Body, ExprId, ExprKind, Operand};
 /// The operand a borrow or a cast wraps. Both name the same storage as their
 /// operand — `&mut x.repr as &mut Array<u8>` is how a borrow reaches a builtin
 /// after monomorphization — so every walk asking what storage is named looks
-/// through them, and the set of node kinds that qualify is stated here alone.
+/// through them. This is niri's one statement of the wrapper set; the
+/// optimizer keeps its own in `optimize/arena_query.rs` (`strip_refs`,
+/// `storage_root`), so a new transparent node kind must be taught to both.
 fn wrapped_operand(body: &Body, e: ExprId) -> Option<Operand> {
     match &body.exprs[e].kind {
         ExprKind::Unary {

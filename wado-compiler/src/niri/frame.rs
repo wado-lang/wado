@@ -607,7 +607,14 @@ impl Interpreter<'_> {
     /// statement position, where the executor applies the writes.
     /// `Unevaluated` on any miss, so the original call — and any runtime trap
     /// inside it — survives.
+    ///
+    /// A run this frame already made answers from the fold memo, as a region
+    /// does: re-running would re-pay the body copy and the step budget for a
+    /// value already in hand.
     pub(super) fn try_call_fold(&mut self, body: &Body, e: ExprId) -> Lattice {
+        if let Some(v) = self.frame.scratch_folds.get(&e) {
+            return Lattice::Const(v.clone());
+        }
         match self.try_ctfe_builtin_fold(body, e) {
             Lattice::Const(v) => return Lattice::Const(v),
             Lattice::NonConst => return Lattice::Unevaluated,

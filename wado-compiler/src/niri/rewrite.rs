@@ -12,6 +12,7 @@
 
 use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
+use crate::name::RefKind;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArenaStructField, ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind,
@@ -69,43 +70,20 @@ impl Interpreter<'_> {
     }
 
     /// Reduce `e` to its flow-sensitive constant value or collapse a constant
-    /// branch, committing every edit through `sink`.
-    ///
-    /// A value no rewrite took is memoized, so the next visit reads it back
-    /// instead of computing it again — which for a `Call` means running the
-    /// callee's body a second time.
-    ///
-    /// An aggregate is materialized only over a `Call` or a self-contained
-    /// region: the literal a materialization writes denotes the same value, so
-    /// re-materializing one would report a change at every visit and the
-    /// worklist would never settle — and both rewrites replace the node with a
-    /// kind neither ever matches again. A node outside those two shapes is left
-    /// alone entirely, memo included: nothing computed it, so there is nothing
-    /// a later visit would repeat.
+    /// branch, committing every edit through `sink`. Both value sources — the
+    /// flow-sensitive candidate and a self-contained region run — land through
+    /// [`Self::commit_fold`], so what is promoted, materialized, memoized, and
+    /// refused is decided in one place.
     pub fn reduce_local<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
-        if let Some(value) = self.flow_fold_candidate(sink.body(), e) {
-            if value.is_scalar() {
-                if sink.replace_with_value(e, value.clone()) {
-                    return true;
-                }
-                self.frame.scratch_folds.insert(e, value);
-            } else if matches!(sink.body().exprs[e].kind, ExprKind::Call { .. }) {
-                if self.materialize_seq_via(sink, e, &value) {
-                    return true;
-                }
-                self.frame.scratch_folds.insert(e, value);
-            }
+        if let Some(value) = self.flow_fold_candidate(sink.body(), e)
+            && self.commit_fold(sink, e, value)
+        {
+            return true;
         }
-        if let Some(value) = self.try_region_fold(sink.body(), e) {
-            let committed = if value.is_scalar() {
-                sink.replace_with_value(e, value.clone())
-            } else {
-                self.materialize_seq_via(sink, e, &value)
-            };
-            self.frame.scratch_folds.insert(e, value);
-            if committed {
-                return true;
-            }
+        if let Some(value) = self.try_region_fold(sink.body(), e)
+            && self.commit_fold(sink, e, value)
+        {
+            return true;
         }
         if rewrite_short_circuit_via(sink, e) {
             return true;
@@ -114,6 +92,43 @@ impl Interpreter<'_> {
             return true;
         }
         self.rewrite_match_expr_via(sink, e)
+    }
+
+    /// Take `value` over `e`: promote a scalar, materialize a byte-sequence
+    /// container, and memoize what the sink did not take, reporting whether
+    /// the node was rewritten.
+    ///
+    /// A reference-typed node is refused whole — its value would materialize
+    /// as a fresh literal where the program yields an alias, and `ref.eq` can
+    /// tell the two apart. [`Self::try_region_fold`] applies the same test
+    /// before it runs; this is the call path's half of it.
+    ///
+    /// A declined scalar is always memoized: the scratch backend promotes
+    /// nothing, so the memo is where its folds live. An aggregate is
+    /// materialized or memoized only over the shapes whose fold consumed what
+    /// produced the value — a call body run to completion, a region run as a
+    /// frame (see [`consumes_its_source`]) — since those are the values a
+    /// revisit would otherwise have to recompute and an enclosing fold cannot
+    /// re-derive once the rewrite lands. Anywhere else the aggregate is
+    /// re-derivable from the tree, so nothing is recorded.
+    fn commit_fold<S: EditSink>(&mut self, sink: &mut S, e: ExprId, value: Value) -> bool {
+        let node_type = sink.body().exprs[e].type_id;
+        if RefKind::from_resolved(self.type_table.get(node_type)).is_some() {
+            return false;
+        }
+        if value.is_scalar() {
+            if sink.replace_with_value(e, value.clone()) {
+                return true;
+            }
+            self.frame.scratch_folds.insert(e, value);
+            return false;
+        }
+        if !consumes_its_source(&sink.body().exprs[e].kind) {
+            return false;
+        }
+        let committed = self.materialize_seq_via(sink, e, &value);
+        self.frame.scratch_folds.insert(e, value);
+        committed
     }
 
     /// Write `value` back over `e` as the container literal the lower phase
@@ -752,6 +767,21 @@ pub(super) fn is_discardable(body: &Body, e: ExprId) -> bool {
 /// always discardable.
 pub(super) fn is_discardable_operand(body: &Body, op: crate::nir_arena::Operand) -> bool {
     op.as_expr().is_none_or(|e| is_discardable(body, e))
+}
+
+/// The shapes whose fold consumes what produced the value: a call body run to
+/// completion, a region run as a frame. Rewriting one replaces the node with a
+/// kind no rewrite matches again, so re-materializing cannot ping the worklist
+/// forever — and the value is worth memoizing, since a revisit would otherwise
+/// run the body again.
+fn consumes_its_source(kind: &ExprKind) -> bool {
+    matches!(
+        kind,
+        ExprKind::Call { .. }
+            | ExprKind::MethodCall { .. }
+            | ExprKind::Block(_)
+            | ExprKind::LabeledBlock { .. }
+    )
 }
 
 /// The boolean value of an operand: a promoted `ValueKind::Bool` in the pool.
