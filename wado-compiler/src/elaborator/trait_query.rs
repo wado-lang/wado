@@ -1591,56 +1591,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether the trait named `trait_name` declares `method_name`. The cheap
     /// form of [`Self::find_trait_decl_method`], for counting candidates
-    /// without cloning each one's declaration.
+    /// without reaching for a declaration.
     fn trait_declares_method(&self, trait_name: &str, method_name: &str) -> bool {
-        let trait_name = &self.declared_trait_name(trait_name);
-        let declares = |items: &[Item]| {
-            items.iter().any(|item| {
-                matches!(item, Item::Trait(t)
-                    if t.name == *trait_name && t.methods.iter().any(|m| m.name == method_name))
-            })
-        };
-        self.loaded_modules
-            .iter()
-            .any(|(_, module)| declares(&module.items))
-            || declares(self.current_module_items)
+        self.trait_sig_by_name(trait_name)
+            .is_some_and(|sig| sig.method(method_name).is_some())
     }
 
     /// The declaration of `method_name` in the trait named `trait_name`, with
-    /// the trait's associated types and declaring module. Shares its search
-    /// order with [`Self::trait_declares_method`], so counting candidates and
-    /// resolving one cannot disagree.
+    /// the trait's associated types and declaring module. Reaches the trait
+    /// through the declaration index, the same route
+    /// [`Self::trait_declares_method`] takes through the digest, so counting
+    /// candidates and resolving one cannot disagree.
     fn find_trait_decl_method(
         &self,
         trait_name: &str,
         method_name: &str,
     ) -> Option<(ast::Function, Vec<ast::AssociatedTypeDecl>, ModuleSource)> {
-        let trait_name = self.declared_trait_name(trait_name);
-        let search = |items: &[Item], module: &ModuleSource| {
-            items.iter().find_map(|item| {
-                let Item::Trait(trait_decl) = item else {
-                    return None;
-                };
-                if trait_decl.name != trait_name {
-                    return None;
-                }
-                trait_decl
-                    .methods
-                    .iter()
-                    .find(|m| m.name == method_name)
-                    .map(|m| {
-                        (
-                            m.clone(),
-                            trait_decl.associated_types.clone(),
-                            module.clone(),
-                        )
-                    })
-            })
-        };
-        self.loaded_modules
-            .iter()
-            .find_map(|(module_src, module)| search(&module.items, module_src))
-            .or_else(|| search(self.current_module_items, &self.current_module_source))
+        let (trait_decl, module) = find_trait_decl_with(
+            &self.declared_trait_name(trait_name),
+            &self.current_module_source,
+            self.current_module_items,
+            &self.sem.imports,
+            self.symbols,
+            &self.tysys.trait_env,
+            self.loaded_modules,
+        )?;
+        let method = trait_decl.methods.iter().find(|m| m.name == method_name)?;
+        Some((
+            method.clone(),
+            trait_decl.associated_types.clone(),
+            module,
+        ))
     }
 
     /// Find a method in the trait declarations the bound names give, read in
