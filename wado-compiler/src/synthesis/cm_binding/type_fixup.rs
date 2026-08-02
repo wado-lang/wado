@@ -1141,6 +1141,7 @@ fn rewrite_calls_in_expr(
                     .map(|e| CallArg::new(e, false))
                     .collect(),
                 type_args: vec![],
+                has_receiver: false,
             };
 
             // Recurse into args of the new Call
@@ -1268,6 +1269,7 @@ fn rewrite_calls_in_expr(
                     .map(|e| CallArg::new(e, false))
                     .collect(),
                 type_args: vec![],
+                has_receiver: false,
             };
 
             // Recurse into args of the new Call

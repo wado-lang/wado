@@ -1712,6 +1712,7 @@ fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
             },
             type_args: vec![],
             args: vec![],
+            has_receiver: false,
         },
         result_type,
         span,

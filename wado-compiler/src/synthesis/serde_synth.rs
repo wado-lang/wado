@@ -1016,6 +1016,7 @@ fn default_value_for_type(
             },
             type_args: vec![],
             args: vec![],
+            has_receiver: false,
         },
         type_id,
         span,

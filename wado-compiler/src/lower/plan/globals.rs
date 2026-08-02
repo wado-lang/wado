@@ -300,7 +300,7 @@ impl crate::tir_visitor::TirRefVisitor for BodyReads {
             } => {
                 self.globals.insert((module_source.clone(), name.clone()));
             }
-            TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => {
+            TirExprKind::Call { func, .. } => {
                 self.callees.insert(func.full_name());
             }
             // A function named as a value reaches a call this walk cannot see —
@@ -578,12 +578,6 @@ fn renumber_locals_in_expr(expr: &mut TirExpr, offset: u32) {
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 renumber_locals_in_expr(arg, offset);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            renumber_locals_in_expr(receiver, offset);
-            for arg in args {
-                renumber_locals_in_expr(&mut arg.expr, offset);
             }
         }
         TirExprKind::IndirectCall {
@@ -877,6 +871,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
                 },
                 type_args: Vec::new(),
                 args: Vec::new(),
+                has_receiver: false,
             },
             TypeTable::UNIT,
             span,
@@ -954,6 +949,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
             },
             type_args: Vec::new(),
             args: Vec::new(),
+            has_receiver: false,
         },
         TypeTable::UNIT,
         span,

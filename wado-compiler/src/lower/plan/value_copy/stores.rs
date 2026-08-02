@@ -168,10 +168,6 @@ impl StoresWalker<'_> {
             TirExprKind::Call { args, .. } => {
                 args.iter().flat_map(|a| self.carries(&a.expr)).collect()
             }
-            TirExprKind::MethodCall { receiver, args, .. } => std::iter::once(&**receiver)
-                .chain(args.iter().map(|a| &a.expr))
-                .flat_map(|e| self.carries(e))
-                .collect(),
             TirExprKind::IndirectCall { args, .. } => {
                 args.iter().flat_map(|a| self.carries(a)).collect()
             }
@@ -275,18 +271,6 @@ impl TirRefVisitor for StoresWalker<'_> {
                 let stores = Some(self.oracle.direct(func));
                 for (i, a) in args.iter().enumerate() {
                     self.arg(&a.expr, i, &stores);
-                }
-            }
-            TirExprKind::MethodCall {
-                func,
-                receiver,
-                args,
-                ..
-            } => {
-                let stores = Some(self.oracle.direct(func));
-                self.arg(receiver, 0, &stores);
-                for (i, a) in args.iter().enumerate() {
-                    self.arg(&a.expr, i + 1, &stores);
                 }
             }
             TirExprKind::IndirectCall { callee, args } => {

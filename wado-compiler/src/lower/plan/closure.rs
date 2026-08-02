@@ -1381,6 +1381,7 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
                     },
                     type_args: Vec::new(),
                     args: call_args,
+                    has_receiver: false,
                 },
                 sig.return_type,
                 span,

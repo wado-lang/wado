@@ -219,17 +219,6 @@ impl TirRefVisitor for SinkWalker<'_> {
                 let operands: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                 self.raise_call_sides(func, &operands);
             }
-            TirExprKind::MethodCall {
-                func,
-                receiver,
-                args,
-                ..
-            } => {
-                let operands: Vec<&TirExpr> = std::iter::once(receiver.as_ref())
-                    .chain(args.iter().map(|a| &a.expr))
-                    .collect();
-                self.raise_call_sides(func, &operands);
-            }
             _ => {}
         }
         self.walk_expr(expr);
@@ -377,17 +366,6 @@ fn taint_of(ctx: &Ctx, taint: &IndexMap<u32, Taint>, expr: &TirExpr) -> Taint {
             .unwrap_or_default(),
         TirExprKind::Call { func, args, .. } => {
             let operands: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
-            call_result_taint(ctx, taint, func, &operands)
-        }
-        TirExprKind::MethodCall {
-            func,
-            receiver,
-            args,
-            ..
-        } => {
-            let operands: Vec<&TirExpr> = std::iter::once(receiver.as_ref())
-                .chain(args.iter().map(|a| &a.expr))
-                .collect();
             call_result_taint(ctx, taint, func, &operands)
         }
         _ => subtree_local_taint(taint, expr),

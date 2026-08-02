@@ -160,12 +160,6 @@ impl StringCollector {
                     self.collect_expr(arg);
                 }
             }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.collect_expr(receiver);
-                for arg in args {
-                    self.collect_expr(&arg.expr);
-                }
-            }
             TirExprKind::Block(block) => {
                 self.collect_block(block);
             }

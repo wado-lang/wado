@@ -86,7 +86,7 @@ struct CalleeCollector<'a> {
 impl TirRefVisitor for CalleeCollector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
-            TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => {
+            TirExprKind::Call { func, .. } => {
                 if let Some(id) = self.index.id(&func.module_source, &func.name) {
                     self.callees.push(id);
                 }

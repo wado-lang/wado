@@ -4438,6 +4438,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
                 type_args: vec![],
                 args: vec![CallArg::new(value, false)],
+                has_receiver: false,
             },
             target_type,
             span,

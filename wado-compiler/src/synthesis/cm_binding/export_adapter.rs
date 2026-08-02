@@ -1631,6 +1631,7 @@ fn build_call_user(
                 .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
                 .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
                 .collect(),
+            has_receiver: false,
         },
         return_type,
         synth_span(),

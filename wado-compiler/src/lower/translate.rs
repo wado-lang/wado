@@ -1514,39 +1514,12 @@ impl FunctionTranslator<'_, '_> {
                 func,
                 type_args,
                 args,
-            } => self.convert_call(func, type_args, args),
+                has_receiver,
+            } => self.convert_call(func, type_args, args, *has_receiver),
             TirExprKind::CmRawCall { local_name, args } => ExprKind::CmRawCall {
                 local_name: local_name.clone(),
                 args: args.iter().map(|a| self.convert_operand(a)).collect(),
             },
-            TirExprKind::MethodCall {
-                receiver,
-                func,
-                type_args,
-                args,
-                ..
-            } => {
-                let ordered = self.call_args_in_param_order(func, Some(receiver), args);
-                let mut_roots = self.call_mut_roots(func, &ordered);
-                let nir_func = convert_function_ref(func);
-                let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
-                ExprKind::Call {
-                    func_id,
-                    type_args: type_args.clone(),
-                    args: ordered
-                        .iter()
-                        .enumerate()
-                        .map(|(i, (e, is_mut))| {
-                            if i == 0 {
-                                self.convert_receiver_arg(e, *is_mut)
-                            } else {
-                                self.convert_call_arg_at(e, *is_mut, Some(func), i, &mut_roots)
-                            }
-                        })
-                        .collect(),
-                    has_receiver: true,
-                }
-            }
             TirExprKind::FieldAccess {
                 expr,
                 field_index,
@@ -1709,6 +1682,7 @@ impl FunctionTranslator<'_, '_> {
         func: &FunctionRef,
         type_args: &[tir::TypeId],
         args: &[CallArg],
+        has_receiver: bool,
     ) -> ExprKind {
         if func.module_source.is_core_builtin()
             && crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
@@ -1747,7 +1721,7 @@ impl FunctionTranslator<'_, '_> {
         {
             return rewritten;
         }
-        let ordered = self.call_args_in_param_order(func, None, args);
+        let ordered = self.call_args_in_param_order(func, has_receiver, args);
         let mut_roots = self.call_mut_roots(func, &ordered);
         let nir_func = convert_function_ref(func);
         let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
@@ -1758,10 +1732,14 @@ impl FunctionTranslator<'_, '_> {
                 .iter()
                 .enumerate()
                 .map(|(i, (e, is_mut))| {
-                    self.convert_call_arg_at(e, *is_mut, Some(func), i, &mut_roots)
+                    if has_receiver && i == 0 {
+                        self.convert_receiver_arg(e, *is_mut)
+                    } else {
+                        self.convert_call_arg_at(e, *is_mut, Some(func), i, &mut_roots)
+                    }
                 })
                 .collect(),
-            has_receiver: false,
+            has_receiver,
         }
     }
 
@@ -2283,12 +2261,14 @@ impl FunctionTranslator<'_, '_> {
     fn call_args_in_param_order<'b>(
         &self,
         callee: &FunctionRef,
-        receiver: Option<&'b TirExpr>,
+        has_receiver: bool,
         args: &'b [CallArg],
     ) -> Vec<(&'b TirExpr, bool)> {
-        let mut ordered = Vec::with_capacity(args.len() + usize::from(receiver.is_some()));
-        if let Some(recv) = receiver {
-            let self_is_mut_ref = self
+        // TIR leaves a receiver's `is_mut` unset (see `TirExprKind::method_call`);
+        // the callee's declared `self` mode is the authority, and this is its
+        // only consumer.
+        let self_is_mut_ref = has_receiver
+            && self
                 .base
                 .value_copy
                 .mut_ref_params
@@ -2296,10 +2276,17 @@ impl FunctionTranslator<'_, '_> {
                 .and_then(|v| v.first())
                 .copied()
                 .unwrap_or(false);
-            ordered.push((recv, self_is_mut_ref));
-        }
-        ordered.extend(args.iter().map(|a| (&a.expr, a.is_mut)));
-        ordered
+        args.iter()
+            .enumerate()
+            .map(|(i, a)| {
+                let is_mut = if has_receiver && i == 0 {
+                    self_is_mut_ref
+                } else {
+                    a.is_mut
+                };
+                (&a.expr, is_mut)
+            })
+            .collect()
     }
 
     fn convert_field(&self, field: &TirField) -> NirField {
