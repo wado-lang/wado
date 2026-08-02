@@ -362,15 +362,19 @@ impl Monomorphizer {
     }
 
     fn rewrite_method_call_expr(&self, expr: &mut TirExpr, type_table: &TypeTable) {
-        let TirExprKind::MethodCall {
-            receiver,
+        let TirExprKind::Call {
             func: method_func,
             type_args,
-            ..
+            args,
+            has_receiver: true,
         } = &mut expr.kind
         else {
             return;
         };
+        let Some((receiver, _)) = args.split_first() else {
+            return;
+        };
+        let receiver = &receiver.expr;
 
         // Extract method name from method_info or fall back to function name
         let method_name = method_func
@@ -845,10 +849,16 @@ impl TirMutVisitor for CallRewriter<'_> {
 
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         match &expr.kind {
-            TirExprKind::Call { .. } => {
+            TirExprKind::Call {
+                has_receiver: false,
+                ..
+            } => {
                 self.mono.rewrite_call_expr(expr, self.type_table);
             }
-            TirExprKind::MethodCall { .. } => {
+            TirExprKind::Call {
+                has_receiver: true,
+                ..
+            } => {
                 self.mono.rewrite_method_call_expr(expr, self.type_table);
             }
             TirExprKind::FuncRef { .. } => {

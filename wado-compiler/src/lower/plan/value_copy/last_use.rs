@@ -1124,7 +1124,7 @@ impl Analyzer<'_> {
                         op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
                         expr,
                     } => (expr.as_ref(), Some(*op)),
-                    _ => (receiver.as_ref(), None),
+                    _ => (receiver, None),
                 };
                 match clean_root(recv_place) {
                     Some(base) => {
@@ -1403,34 +1403,30 @@ impl Analyzer<'_> {
             }
             // Calls classify each `&`/`&mut` argument as a transient borrow (see
             // `walk_call_arg`); the callee / receiver is an ordinary read.
-            TirExprKind::Call { func, args, .. } => {
-                if record {
-                    let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
-                    self.mark_sibling_mut_aliases(&exprs, None);
-                }
-                for (pos, arg) in args.iter().enumerate().rev() {
-                    self.walk_call_arg(&arg.expr, Some(func), pos, live, record);
-                }
-            }
             TirExprKind::Call {
                 func,
                 args,
-                has_receiver: true,
+                has_receiver,
                 ..
             } => {
-                let Some((receiver, rest)) = args.split_first() else {
-                    return;
-                };
                 if record {
-                    let exprs: Vec<&TirExpr> = rest.iter().map(|a| &a.expr).collect();
-                    let recv_mut_root = self
-                        .mut_receiver_methods
-                        .contains(&func.module_source, &func.name)
-                        .then(|| alias_root(&receiver.expr))
-                        .flatten();
+                    // A `&mut self` receiver mutates for the whole call, so its
+                    // root is the mut-alias the *other* arguments are checked
+                    // against — it is not itself one of the siblings.
+                    let (recv_mut_root, siblings) = match has_receiver.then(|| args.split_first()).flatten() {
+                        Some((receiver, rest)) => (
+                            self.mut_receiver_methods
+                                .contains(&func.module_source, &func.name)
+                                .then(|| alias_root(&receiver.expr))
+                                .flatten(),
+                            rest,
+                        ),
+                        None => (None, args.as_slice()),
+                    };
+                    let exprs: Vec<&TirExpr> = siblings.iter().map(|a| &a.expr).collect();
                     self.mark_sibling_mut_aliases(&exprs, recv_mut_root);
                 }
-                // Reverse order leaves the receiver (position 0) for last, and
+                // Reverse order leaves a receiver (position 0) for last, and
                 // `walk_call_arg` handles it exactly as `walk_method_receiver`
                 // used to — by asking `callee_stores(func, 0)`.
                 for (pos, arg) in args.iter().enumerate().rev() {

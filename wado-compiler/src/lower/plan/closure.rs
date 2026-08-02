@@ -1554,12 +1554,19 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
                 }
                 self.in_callee_position = prev;
             }
-            TirExprKind::MethodCall { receiver, args, .. } => {
+            TirExprKind::Call {
+                args,
+                has_receiver: true,
+                ..
+            } => {
+                let Some((receiver, rest)) = args.split_first() else {
+                    return;
+                };
                 let prev = self.in_callee_position;
                 self.in_callee_position = true;
-                self.visit_expr(receiver);
+                self.visit_expr(&receiver.expr);
                 self.in_callee_position = false;
-                for arg in args {
+                for arg in rest {
                     self.visit_expr(&arg.expr);
                 }
                 self.in_callee_position = prev;
@@ -1714,7 +1721,7 @@ impl ClosureCallSiteLowerer<'_> {
     /// receiver that doesn't peel down to a local (or peels to one not
     /// in the map, i.e. a canonicalised value) falls through to the
     /// generic dispatch stub.
-    fn try_redirect_inspect_to_functor(&self, receiver: &mut Box<TirExpr>, func: &mut FunctionRef) {
+    fn try_redirect_inspect_to_functor(&self, receiver: &mut TirExpr, func: &mut FunctionRef) {
         let info = match &func.method_info {
             Some(info) => info,
             None => return,
@@ -1774,7 +1781,7 @@ impl ClosureCallSiteLowerer<'_> {
         let new_name = new_method_info.to_mangled_name();
 
         let span = receiver.span;
-        **receiver = TirExpr::new(
+        *receiver = TirExpr::new(
             TirExprKind::Local {
                 index: local_idx,
                 name: local_name,
@@ -1897,12 +1904,18 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
                     expr.type_id = return_type;
                 }
             }
-            TirExprKind::Call { func, args, .. } => {
+            TirExprKind::Call {
+                func,
+                args,
+                has_receiver,
+                ..
+            } => {
                 for arg in &mut *args {
                     self.visit_expr(&mut arg.expr);
                 }
-                // A callee absent from `self_offsets` was not lowered in this
-                // package (an external import or a builtin); such a callee
+                // Value arguments start after the callee's `self`, if it has
+                // one. A callee absent from `self_offsets` was not lowered in
+                // this package (an external import or a builtin); such a callee
                 // cannot take `self`, so its args start at parameter 0.
                 let arg_offset = self
                     .self_offsets
@@ -1910,19 +1923,11 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
                     .copied()
                     .unwrap_or(0) as usize;
                 self.try_redirect_to_specialized_callee(func, args, arg_offset);
-            }
-            TirExprKind::MethodCall {
-                receiver,
-                func,
-                args,
-                ..
-            } => {
-                self.visit_expr(receiver);
-                for arg in &mut *args {
-                    self.visit_expr(&mut arg.expr);
+                if *has_receiver
+                    && let Some((receiver, _)) = args.split_first_mut()
+                {
+                    self.try_redirect_inspect_to_functor(&mut receiver.expr, func);
                 }
-                self.try_redirect_to_specialized_callee(func, args, 0);
-                self.try_redirect_inspect_to_functor(receiver, func);
             }
             _ => self.walk_expr(expr),
         }
@@ -2071,28 +2076,6 @@ impl TirRefVisitor for FnParamSpecCollector<'_> {
                         }
                     }
                 }
-                for arg in args {
-                    self.visit_expr(&arg.expr);
-                }
-            }
-            TirExprKind::MethodCall {
-                receiver,
-                func,
-                args,
-                ..
-            } => {
-                if let Some(callee_rc) = self
-                    .func_by_name
-                    .get(&(func.module_source.clone(), func.name.clone()))
-                {
-                    let callee = callee_rc.borrow();
-                    let params_without_self: Vec<TirParam> =
-                        callee.params.iter().skip(1).cloned().collect();
-                    if let Some(key) = self.create_key(&callee, &params_without_self, args) {
-                        self.requests.push((key, Rc::clone(callee_rc)));
-                    }
-                }
-                self.visit_expr(receiver);
                 for arg in args {
                     self.visit_expr(&arg.expr);
                 }

@@ -489,16 +489,19 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
         // Recurse first so nested calls are handled bottom-up, matching the
         // original walk order.
         self.walk_expr(expr);
-        let TirExprKind::MethodCall {
-            receiver,
+        let TirExprKind::Call {
             func,
             type_args,
             args,
-            ..
+            has_receiver: true,
         } = &mut expr.kind
         else {
             return;
         };
+        let Some((receiver, args)) = args.split_first() else {
+            return;
+        };
+        let receiver = &receiver.expr;
         // Only methods with empty `type_args` and an empty `method_type_args`
         // need inference (the latter signals method-level type params inferred
         // from arguments rather than pinned by turbofish).
@@ -601,7 +604,7 @@ impl Monomorphizer {
                 func,
                 type_args,
                 args,
-                ..
+                has_receiver: false,
             } => {
                 let qualified_func_key =
                     generic_function_key(func.is_method(), &func.module_source, &func.name);
@@ -720,13 +723,16 @@ impl Monomorphizer {
                     );
                 }
             }
-            TirExprKind::MethodCall {
-                receiver,
+            TirExprKind::Call {
                 func: method_func,
                 type_args,
                 args,
-                ..
+                has_receiver: true,
             } => {
+                let Some((receiver, args)) = args.split_first() else {
+                    return;
+                };
+                let receiver = &receiver.expr;
                 // Extract method name from method_info or fall back to function name
                 let method_name = method_func
                     .method_info
@@ -1857,7 +1863,7 @@ impl Monomorphizer {
                 func: call_func,
                 type_args,
                 args,
-                ..
+                has_receiver: false,
             } => {
                 for type_arg in type_args.iter_mut() {
                     *type_arg = self.substitute_type(*type_arg, substitution, type_table);
@@ -2170,13 +2176,16 @@ impl Monomorphizer {
                     );
                 }
             }
-            TirExprKind::MethodCall {
-                receiver,
+            TirExprKind::Call {
                 func: method_func,
                 type_args,
                 args,
-                ..
+                has_receiver: true,
             } => {
+                let Some((receiver, args)) = args.split_first_mut() else {
+                    return;
+                };
+                let receiver = &mut receiver.expr;
                 self.substitute_types_in_expr(
                     receiver,
                     substitution,
@@ -3819,12 +3828,16 @@ impl Monomorphizer {
                     expr.type_id = elem_type;
                 }
             }
-            TirExprKind::MethodCall {
-                receiver,
+            TirExprKind::Call {
                 func,
                 args,
+                has_receiver: true,
                 ..
             } => {
+                let Some((receiver, args)) = args.split_first_mut() else {
+                    return;
+                };
+                let receiver = &mut receiver.expr;
                 self.rewrite_variadic_types_in_expr(receiver, binding_local, elem_type, type_table);
                 for arg in args.iter_mut() {
                     self.rewrite_variadic_types_in_expr(
@@ -4020,7 +4033,7 @@ impl Monomorphizer {
                     }
                 }
             }
-            TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
+            TirExprKind::Call { args, .. } => {
                 for arg in args {
                     Self::fixup_pack_expansion_locals_in_expr(&mut arg.expr, local_count, locals);
                 }
