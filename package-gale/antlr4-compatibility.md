@@ -356,6 +356,17 @@ alts share a prefix and tie on static length (`'mut'? IDENT` vs `path '('
 site is a codegen-time panic; the fix is to file an issue, never to add
 backtracking.
 
+Emit reaches that tournament by two routes. The SLL prediction tree may
+give up (`Ambiguous`), or it may resolve the decision into a token
+cascade that turns out not to claim the lookahead — the walk
+approximates, so a cascade can be narrower than the alts really admit. A
+cascade therefore carries the tournament as its `else`, which makes the
+tournament the decision's floor rather than a path the tree can prune
+away. The `else` is omitted where it would be dead: when an alt lacks a
+full scan (no tournament is available at all), and at a depth-0 node,
+whose branch tokens are the alts' exact FIRST at the element offset the
+node dispatches on. Only a deeper node can be missing a token.
+
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
 greedy `+`/`*` inner can also match the suffix's first char (`'a'

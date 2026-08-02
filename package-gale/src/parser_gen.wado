@@ -47,6 +47,7 @@ use { TreeSet } from "core:collections";
 use {
     PredictionNode,
     PredictionDispatch,
+    ConsumeNode,
     AmbiguousNode,
     AmbiguityReason,
     build_group_prediction_tree,
@@ -8109,6 +8110,24 @@ fn emit_spec_alt_try(w: &mut CodeWriter, call: &String, idx: i32, ctx: &GenConte
     w.end();
 }
 
+/// Whether a `Consume` node's terminal really is every reachable alt's element
+/// at `skip` — the condition under which emit advances both the cursor and the
+/// element offset. The emitter and `collect_referenced_scan_alts` both read it
+/// so their `skip` bookkeeping cannot drift apart.
+fn consume_advances_cursor(c: &ConsumeNode, alts: &List<Alternative>, skip: i32) -> bool {
+    let mut node_alts: List<i32> = [];
+    prediction_collect_all_indices(&c.child, &mut node_alts);
+    if node_alts.is_empty() {
+        return false;
+    }
+    for let a of &node_alts {
+        if skip >= alts[*a].elements.len() || !elements_match(&c.element, &alts[*a].elements[skip]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// Longest-match scan tournament over `sorted_indices` via the per-alt
 /// `<fn_name>_scan_<idx>` helpers: scan every alt from the current position,
 /// parse the one reaching furthest, ties to the first grammar alt. Requires
@@ -8253,16 +8272,7 @@ fn gen_prediction_code_inner(
             // match every alt below (the group need not contain alt 0; regression:
             // ll_consume_group.g4); on a mismatch leave `p.pos`/`skip` so the Leaf
             // rewinds exactly what was advanced.
-            let mut node_alts: List<i32> = [];
-            prediction_collect_all_indices(&c.child, &mut node_alts);
-            let mut elem_matches = !node_alts.is_empty();
-            for let a of &node_alts {
-                if skip >= alts[*a].elements.len() || !elements_match(&c.element, &alts[*a].elements[skip]) {
-                    elem_matches = false;
-                    break;
-                }
-            }
-            if elem_matches {
+            if consume_advances_cursor(c, alts, skip) {
                 w.line(&"p.pos += 1;");
                 gen_prediction_code_inner(
                     w,
@@ -8486,19 +8496,8 @@ fn collect_referenced_scan_alts(
     match *node {
         Leaf(_) => {
         },
-        // Mirror the emit's `skip` bookkeeping: a `Consume` only advances the
-        // cursor when its terminal really is every alt's element at `skip`.
         Consume(c) => {
-            let mut node_alts: List<i32> = [];
-            prediction_collect_all_indices(&c.child, &mut node_alts);
-            let mut elem_matches = !node_alts.is_empty();
-            for let a of &node_alts {
-                if skip >= alts[*a].elements.len() || !elements_match(&c.element, &alts[*a].elements[skip]) {
-                    elem_matches = false;
-                    break;
-                }
-            }
-            let next_skip = if elem_matches { skip + 1 } else { skip };
+            let next_skip = if consume_advances_cursor(&c, alts, skip) { skip + 1 } else { skip };
             collect_referenced_scan_alts(&c.child, alts, ctx, out, next_skip);
         },
         Dispatch(d) => {
