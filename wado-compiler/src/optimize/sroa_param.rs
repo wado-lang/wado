@@ -178,13 +178,14 @@ fn collect_and_validate(
     loop {
         let mut invalid: IndexSet<(FnKey, usize)> = IndexSet::default();
         for ((key, pi), _info) in &candidates {
-            let Some(func_rc) = lookup_function(project, key) else {
+            let Some(func_rc) = project.functions.get(key.index()) else {
                 invalid.insert((*key, *pi));
                 continue;
             };
             let func = func_rc.borrow();
             let local_index = func.params[*pi].local_index;
-            let body = func.body.as_ref().unwrap();
+            // `is_eligible` (via `is_dae_sroa_eligible`) rejected body-less functions.
+            let body = func.body.as_ref().expect("candidate function has a body");
             if !body_uses_param_safely(body, local_index, &candidates) {
                 invalid.insert((*key, *pi));
             }
@@ -212,7 +213,7 @@ fn candidate_info_for(
     };
     let key = struct_key_of(struct_type_id, type_table)?;
     let (field_name, inner_type_id) = single_field.get(&key)?.clone();
-    if !is_sroa_eligible_inner_type(inner_type_id, type_table) {
+    if !is_sroa_eligible_inner_type(inner_type_id) {
         return None;
     }
     Some(SroaInfo {
@@ -222,11 +223,9 @@ fn candidate_info_for(
     })
 }
 
-fn is_sroa_eligible_inner_type(type_id: TypeId, _type_table: &TypeTable) -> bool {
-    if type_id == crate::tir::TypeTable::UNIT || type_id == crate::tir::TypeTable::NEVER {
-        return false;
-    }
-    true
+/// A wrapper field that has no Wasm value cannot become a parameter.
+fn is_sroa_eligible_inner_type(type_id: TypeId) -> bool {
+    type_id != TypeTable::UNIT && type_id != TypeTable::NEVER
 }
 
 fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(String, ModuleSource)> {
@@ -567,13 +566,13 @@ fn check_node(
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
 ) -> bool {
     if let NodeRef::Expr(id) = node {
-        check_expr(body, id, idx, candidates)
-    } else {
-        let mut kids = Vec::new();
-        body.for_each_child(node, |c| kids.push(c));
-        kids.into_iter()
-            .all(|c| check_node(body, c, idx, candidates))
+        return check_expr(body, id, idx, candidates);
     }
+    let mut ok = true;
+    body.for_each_child(node, |c| {
+        ok = ok && check_node(body, c, idx, candidates);
+    });
+    ok
 }
 
 fn check_expr(
@@ -625,10 +624,11 @@ fn check_expr(
             check_expr(body, target, idx, candidates) && check_operand(body, value, idx, candidates)
         }
         _ => {
-            let mut kids = Vec::new();
-            body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
-            kids.into_iter()
-                .all(|c| check_node(body, c, idx, candidates))
+            let mut ok = true;
+            body.for_each_child(NodeRef::Expr(id), |c| {
+                ok = ok && check_node(body, c, idx, candidates);
+            });
+            ok
         }
     }
 }
@@ -824,9 +824,13 @@ fn rewrite_call_expr(
             };
             let args: Vec<Option<ExprId>> = args.iter().map(|a| a.expr.as_expr()).collect();
             for (pi, info) in &positions {
-                if let Some(Some(arg)) = args.get(*pi).copied() {
-                    rewrite_arg(body, arg, info, scalar_param_struct, type_table);
-                }
+                rewrite_arg(
+                    body,
+                    scalarized_arg(&args, *pi),
+                    info,
+                    scalar_param_struct,
+                    type_table,
+                );
             }
             true
         }
@@ -849,16 +853,14 @@ fn rewrite_call_expr(
                 if let Some(info) = positions.get(&0) {
                     rewrite_arg_operand(body, receiver, info, scalar_param_struct, type_table);
                 }
+                let arg_exprs: Vec<Option<ExprId>> =
+                    args.iter().map(|a| a.expr.as_expr()).collect();
                 for (pi, info) in &positions {
                     if *pi == 0 {
                         continue;
                     }
-                    let arg_idx = *pi - 1;
-                    if arg_idx < args.len()
-                        && let Some(arg_e) = args[arg_idx].expr.as_expr()
-                    {
-                        rewrite_arg(body, arg_e, info, scalar_param_struct, type_table);
-                    }
+                    let arg = scalarized_arg(&arg_exprs, *pi - 1);
+                    rewrite_arg(body, arg, info, scalar_param_struct, type_table);
                 }
                 let mut new_args = Vec::with_capacity(args.len() + 1);
                 new_args.push(ArenaCallArg {
@@ -877,17 +879,34 @@ fn rewrite_call_expr(
                 };
                 let args: Vec<Option<ExprId>> = args.iter().map(|a| a.expr.as_expr()).collect();
                 for (pi, info) in &positions {
-                    let arg_idx = pi.saturating_sub(1);
-                    if *pi >= 1
-                        && let Some(Some(arg)) = args.get(arg_idx).copied()
-                    {
-                        rewrite_arg(body, arg, info, scalar_param_struct, type_table);
-                    }
+                    // The receiver position is the branch above's business, and
+                    // this `else` is entered only when it is not scalarized.
+                    let arg_idx = pi
+                        .checked_sub(1)
+                        .expect("receiver position taken by the collapse branch");
+                    let arg = scalarized_arg(&args, arg_idx);
+                    rewrite_arg(body, arg, info, scalar_param_struct, type_table);
                 }
             }
             true
         }
         _ => false,
+    }
+}
+
+/// The argument expression at a scalarized parameter position.
+///
+/// Every such position must carry a skeleton argument. The callee's signature
+/// already names the inner scalar, so an argument left un-unwrapped — because it
+/// is missing or because it is a promoted constant with no node to rewrite —
+/// would emit a call whose type disagrees with the callee. Failing loudly beats
+/// emitting that call.
+fn scalarized_arg(args: &[Option<ExprId>], arg_idx: usize) -> ExprId {
+    match args.get(arg_idx) {
+        Some(Some(arg)) => *arg,
+        Some(None) | None => {
+            panic!("sroa_param: no skeleton argument at scalarized position {arg_idx}")
+        }
     }
 }
 
@@ -965,16 +984,8 @@ fn rewrite_arg(
 }
 
 // -----------------------------------------------------------------------
-// Pinning + lookup helpers
+// Pinning
 // -----------------------------------------------------------------------
-
-fn lookup_function<'a>(
-    project: &'a NirPackage,
-    key: &FnKey,
-) -> Option<&'a std::rc::Rc<std::cell::RefCell<NirFunction>>> {
-    use cranelift_entity::EntityRef;
-    project.functions.get(key.index())
-}
 
 /// Pinning rules, shared with DAE via [`super::dae::is_dae_sroa_eligible`].
 /// `relax_closure_call = false` keeps closure `__call` functors pinned (their

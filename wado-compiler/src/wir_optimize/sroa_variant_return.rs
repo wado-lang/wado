@@ -41,10 +41,10 @@
 //! matching variant return type.
 
 use crate::compiler_trace;
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{
-    WirFuncType, WirFunction, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId, WirVariantRepr,
-    WirVariantType,
+    WirAbstractHeapType, WirFuncType, WirFunction, WirInstr, WirPackage, WirType, WirTypeDef,
+    WirTypeId, WirVariantRepr, WirVariantType,
 };
 
 use super::util::{collect_pinned_func_ids, is_root_observable};
@@ -52,8 +52,10 @@ use super::util::{collect_pinned_func_ids, is_root_observable};
 /// Result-vector cap for the shared (homogeneous) layout:
 /// 1 discriminant + 3 shared payload slots.
 const MAX_SHARED_RESULT_FIELDS: usize = 4;
-/// Result-vector cap for the per-case layout:
-/// 1 discriminant + up to 7 per-case payload slots.
+/// Result-vector cap for the per-case layout: 1 discriminant + up to 7 payload
+/// slots *summed over the cases*. Any single case is still held to
+/// [`MAX_SHARED_RESULT_FIELDS`], which [`compute_variant_layout`] checks before
+/// it reaches the per-case fallback.
 const MAX_PER_CASE_RESULT_FIELDS: usize = 8;
 
 /// Variant-return SROA (Scalar Replacement of Aggregates).
@@ -190,15 +192,12 @@ fn scalarize_case_types(
 }
 
 fn scalarize_body(body: &mut Vec<WirInstr>, cases: &IndexSet<u32>, types: &[WirTypeDef]) {
-    let mut stats: crate::hashmap::IndexMap<String, ReturnTempStats> =
-        crate::hashmap::IndexMap::default();
+    let mut stats: IndexMap<String, ReturnTempStats> = IndexMap::default();
     scan_return_temp_stats(body, PairMode::Scalarize, &mut stats);
 
     let valid: IndexSet<String> = stats
         .iter()
-        .filter(|(_, s)| {
-            !s.has_other_use && s.paired_writes == s.total_writes && s.total_writes > 0
-        })
+        .filter(|(_, s)| s.is_return_only())
         .map(|(name, _)| name.clone())
         .collect();
     if valid.is_empty() {
@@ -240,7 +239,7 @@ fn scalarize_pairs(
     types: &[WirTypeDef],
 ) {
     // Planned against the original indices, which the rebuild below shifts.
-    let mut pairs: crate::hashmap::IndexMap<usize, usize> = crate::hashmap::IndexMap::default();
+    let mut pairs: IndexMap<usize, usize> = IndexMap::default();
     let mut i = 0;
     while i < instrs.len() {
         if let WirInstr::LocalSet { name, value } = &instrs[i]
@@ -390,8 +389,6 @@ struct SroaCandidate {
     /// The field types of the new multi-value result types:
     /// `[i32 (discriminant), payload_type_0, payload_type_1, ...]`.
     field_types: Vec<WirType>,
-    /// Number of multi-value result fields.
-    field_count: usize,
     /// Field names for the multi-value results:
     /// `["discriminant", "payload_0", "payload_1", ...]`.
     field_names: Vec<String>,
@@ -404,8 +401,10 @@ struct SroaCandidate {
 struct VariantSroaInfo {
     /// WIR type indices of the case struct types (index = case discriminant).
     case_type_indices: Vec<Option<u32>>,
-    /// Total payload slot count in the multi-value result.
-    max_payload_count: usize,
+    /// Total payload slot count in the multi-value result — the whole result
+    /// vector minus the discriminant. Under the per-case layout that is the sum
+    /// over cases, not any one case's payload count.
+    payload_slot_count: usize,
     /// Per-case payload slot offsets in the multi-value result.
     /// `case_slot_offsets[case_discriminant]` is the starting index (0-based)
     /// within the payload portion (after the discriminant) for that case's payloads.
@@ -418,11 +417,11 @@ struct VariantReplacement {
     /// Local name holding the discriminant value.
     disc_local: String,
     /// `case_wir_type_idx` → discriminant value (i32).
-    case_disc_values: crate::hashmap::IndexMap<u32, i32>,
+    case_disc_values: IndexMap<u32, i32>,
     /// `(case_wir_type_idx, field_name_in_case_struct)` → sroa local name.
-    field_to_local: crate::hashmap::IndexMap<(u32, String), String>,
+    field_to_local: IndexMap<(u32, String), String>,
     /// SROA locals that hold ref types (need `ref.as_non_null` when read).
-    ref_locals: crate::hashmap::IndexSet<String>,
+    ref_locals: IndexSet<String>,
 }
 
 /// Returns true if a `WirType` is a valid Wasm value type for multi-value returns.
@@ -471,48 +470,17 @@ struct ReturnTempStats {
     has_other_use: bool,
 }
 
-/// Phase 0: collapse `LocalSet(temp, X) ; [intervening stmts] ;
-/// Return(LocalGet(temp))` triples to `Return(X)`. NIR `field_scalarize`
-/// (HFS) introduces `__hfs_call_N` locals to capture a match arm's value
-/// before convergence sync, even when the captured value flows straight
-/// into the surrounding function's `Return`. The pattern in WIR is
-///
-/// ```text
-/// __hfs_call_N = struct.new Result::Err { ... };
-/// self.pos = __hfs_pos_X;                       // HFS write-back
-/// return __hfs_call_N;
-/// ```
-///
-/// The intermediate `LocalGet(name)` would otherwise hide a `StructNew`
-/// leaf from the return-shape checker, blocking the variant-return SROA
-/// candidate analysis. Eliding the temp leaves the equivalent
-/// `Return(StructNew)` shape that the analysis already understands.
-///
-/// Soundness: rewriting one such triple moves `X` past the intervening
-/// stmts to the `Return` site, so we require:
-///   1. Every `LocalGet(name)` is the paired `Return(LocalGet(name))`
-///      value, and every write to `name` is paired with such a `Return`
-///      after zero or more intervening stmts that don't reference `name`.
-///   2. `X` reads no heap / struct / array / memory / global state and
-///      contains no `Call*` — i.e. its value is fixed by the locals it
-///      reads at the moment it would have been evaluated. Any intervening
-///      `StructSet` / memory store therefore can't change `X`'s value.
-///   3. The intervening stmts' local-state effects are disjoint from
-///      `X`'s local-state effects: nothing intervening writes a local
-///      `X` reads, and nothing intervening reads a local `X` writes
-///      (e.g. an internal `offset_N = …; struct.new …`).
-///
-/// HFS-synthesised values consist of locals + literals + pure arithmetic
-/// plus a few internal `LocalSet` temps; their reads / writes are disjoint
-/// from the surrounding `self.pos = __hfs_pos_X` HFS write-back, so they
-/// all pass these checks. `Call`-shaped values fail check (2) — a sub-call
-/// reordered past a `StructSet` could observe different state.
-///
-/// Values that can *trap* (division, casts, truncations, …) still qualify:
-/// a trap depends only on the locally-read operands, not on heap state.
-/// [`find_paired_return`] separately forbids relocating a trap-capable
-/// value past intervening statements, where the reorder would move the
-/// trap across observable effects or control-flow exits.
+impl ReturnTempStats {
+    /// Whether the temp exists only to ferry a value into a `Return`: every
+    /// write is paired with one, and nothing else touches it.
+    fn is_return_only(&self) -> bool {
+        !self.has_other_use && self.paired_writes == self.total_writes && self.total_writes > 0
+    }
+}
+
+/// A root-position read of non-local state. Relocating such a value past an
+/// intervening statement could observe a different heap / global / memory, so
+/// [`reads_only_local_state`] refuses any value containing one.
 fn is_root_heap_read(expr: &WirInstr) -> bool {
     matches!(
         expr,
@@ -637,6 +605,49 @@ fn collect_local_io(expr: &WirInstr, reads: &mut IndexSet<String>, writes: &mut 
         }
     }
 }
+
+/// Phase 0: collapse `LocalSet(temp, X) ; [intervening stmts] ;
+/// Return(LocalGet(temp))` triples to `Return(X)`. NIR `field_scalarize`
+/// (HFS) introduces `__hfs_call_N` locals to capture a match arm's value
+/// before convergence sync, even when the captured value flows straight
+/// into the surrounding function's `Return`. The pattern in WIR is
+///
+/// ```text
+/// __hfs_call_N = struct.new Result::Err { ... };
+/// self.pos = __hfs_pos_X;                       // HFS write-back
+/// return __hfs_call_N;
+/// ```
+///
+/// The intermediate `LocalGet(name)` would otherwise hide a `StructNew`
+/// leaf from the return-shape checker, blocking the variant-return SROA
+/// candidate analysis. Eliding the temp leaves the equivalent
+/// `Return(StructNew)` shape that the analysis already understands.
+///
+/// Soundness: rewriting one such triple moves `X` past the intervening
+/// stmts to the `Return` site, so we require:
+///   1. Every `LocalGet(name)` is the paired `Return(LocalGet(name))`
+///      value, and every write to `name` is paired with such a `Return`
+///      after zero or more intervening stmts that don't reference `name`.
+///   2. `X` reads no heap / struct / array / memory / global state and
+///      contains no `Call*` — i.e. its value is fixed by the locals it
+///      reads at the moment it would have been evaluated. Any intervening
+///      `StructSet` / memory store therefore can't change `X`'s value.
+///   3. The intervening stmts' local-state effects are disjoint from
+///      `X`'s local-state effects: nothing intervening writes a local
+///      `X` reads, and nothing intervening reads a local `X` writes
+///      (e.g. an internal `offset_N = …; struct.new …`).
+///
+/// HFS-synthesised values consist of locals + literals + pure arithmetic
+/// plus a few internal `LocalSet` temps; their reads / writes are disjoint
+/// from the surrounding `self.pos = __hfs_pos_X` HFS write-back, so they
+/// all pass these checks. `Call`-shaped values fail check (2) — a sub-call
+/// reordered past a `StructSet` could observe different state.
+///
+/// Values that can *trap* (division, casts, truncations, …) still qualify:
+/// a trap depends only on the locally-read operands, not on heap state.
+/// [`find_paired_return`] separately forbids relocating a trap-capable
+/// value past intervening statements, where the reorder would move the
+/// trap across observable effects or control-flow exits.
 fn elide_return_only_temps(module: &mut WirPackage, pinned: &IndexSet<u32>) {
     let defined_func_base = module.defined_func_base;
     for (i, func) in module.functions.iter_mut().enumerate() {
@@ -655,15 +666,12 @@ fn elide_return_only_temps(module: &mut WirPackage, pinned: &IndexSet<u32>) {
 }
 
 fn elide_return_only_temps_in_body(body: &mut [WirInstr]) {
-    let mut stats: crate::hashmap::IndexMap<String, ReturnTempStats> =
-        crate::hashmap::IndexMap::default();
+    let mut stats: IndexMap<String, ReturnTempStats> = IndexMap::default();
     scan_return_temp_stats(body, PairMode::Relocate, &mut stats);
 
     let valid: IndexSet<String> = stats
         .iter()
-        .filter(|(_, s)| {
-            !s.has_other_use && s.paired_writes == s.total_writes && s.total_writes > 0
-        })
+        .filter(|(_, s)| s.is_return_only())
         .map(|(name, _)| name.clone())
         .collect();
     if valid.is_empty() {
@@ -686,7 +694,7 @@ fn elide_return_only_temps_in_body(body: &mut [WirInstr]) {
 fn scan_return_temp_stats(
     instrs: &[WirInstr],
     mode: PairMode,
-    stats: &mut crate::hashmap::IndexMap<String, ReturnTempStats>,
+    stats: &mut IndexMap<String, ReturnTempStats>,
 ) {
     let mut i = 0;
     while i < instrs.len() {
@@ -815,7 +823,7 @@ fn find_paired_return(
 fn scan_return_temp_uses_in_instr(
     instr: &WirInstr,
     mode: PairMode,
-    stats: &mut crate::hashmap::IndexMap<String, ReturnTempStats>,
+    stats: &mut IndexMap<String, ReturnTempStats>,
 ) {
     match instr {
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
@@ -860,7 +868,7 @@ fn scan_return_temp_uses_in_expr(
     expr: &WirInstr,
     skip_name: Option<&str>,
     mode: PairMode,
-    stats: &mut crate::hashmap::IndexMap<String, ReturnTempStats>,
+    stats: &mut IndexMap<String, ReturnTempStats>,
 ) {
     if let WirInstr::LocalGet { name, .. } = expr {
         if skip_name != Some(name.as_str()) {
@@ -961,11 +969,6 @@ fn rewrite_return_temp_pairs_in_instr(instr: &mut WirInstr, valid: &IndexSet<Str
 /// discovery can re-check return shapes without redoing the layout analysis.
 struct PotentialCandidate {
     func_id_index: u32,
-    variant_type_idx: u32,
-    /// WIR type indices that are valid `StructNew` targets at the leaf of a
-    /// `Return` — every case struct of the variant plus the base variant
-    /// type (for unit cases).
-    valid_case_type_indices: IndexSet<u32>,
     candidate: SroaCandidate,
 }
 
@@ -1015,13 +1018,10 @@ fn find_sroa_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<(u32
         let ret_type_idx = ret_type_id.index();
 
         if let Some(WirTypeDef::Variant(variant_type)) = module.types.get(ret_type_idx as usize)
-            && let Some((candidate, valid_case_type_indices)) =
-                analyze_variant_layout(module, i, ret_type_idx, variant_type)
+            && let Some(candidate) = analyze_variant_layout(module, i, ret_type_idx, variant_type)
         {
             potentials.push(PotentialCandidate {
                 func_id_index,
-                variant_type_idx: ret_type_idx,
-                valid_case_type_indices,
                 candidate,
             });
         }
@@ -1040,12 +1040,11 @@ fn find_sroa_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<(u32
     // members, which is exactly the property `apply_sroa` relies on.
     let mut accepted: IndexSet<u32> = potentials.iter().map(|p| p.func_id_index).collect();
     loop {
-        let mut accepted_by_variant: crate::hashmap::IndexMap<u32, IndexSet<u32>> =
-            crate::hashmap::IndexMap::default();
+        let mut accepted_by_variant: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
         for p in &potentials {
             if accepted.contains(&p.func_id_index) {
                 accepted_by_variant
-                    .entry(p.variant_type_idx)
+                    .entry(p.candidate.struct_type_idx)
                     .or_default()
                     .insert(p.func_id_index);
             }
@@ -1062,10 +1061,13 @@ fn find_sroa_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<(u32
                 .unwrap();
             let empty: IndexSet<u32> = IndexSet::default();
             let tail_call_set = accepted_by_variant
-                .get(&p.variant_type_idx)
+                .get(&p.candidate.struct_type_idx)
                 .unwrap_or(&empty);
-            if !all_returns_are_variant_struct_new(body, &p.valid_case_type_indices, tail_call_set)
-            {
+            if !all_returns_are_variant_struct_new(
+                body,
+                &p.candidate.valid_case_type_indices,
+                tail_call_set,
+            ) {
                 refuted.push(p.func_id_index);
             }
         }
@@ -1120,8 +1122,7 @@ fn compute_variant_layout(
     let mut max_payload_count: usize = 0;
 
     // Build a mapping of case_wir_type_idx for this variant from variant_case_info
-    let mut case_idx_to_type_idx: crate::hashmap::IndexMap<u32, u32> =
-        crate::hashmap::IndexMap::default();
+    let mut case_idx_to_type_idx: IndexMap<u32, u32> = IndexMap::default();
     for (&case_wir_idx, &(parent_variant_idx, case_index)) in &module.variant_case_info {
         if parent_variant_idx == variant_type_idx {
             case_idx_to_type_idx.insert(case_index, case_wir_idx);
@@ -1150,9 +1151,10 @@ fn compute_variant_layout(
         }
     }
 
-    // Total multi-value fields: discriminant + max_payload_count
-    let field_count = 1 + max_payload_count;
-    if field_count > MAX_SHARED_RESULT_FIELDS {
+    // Cap the shared layout up front. A case with more payloads than the shared
+    // vector holds is out of scope under the per-case layout too, which only
+    // grows from here.
+    if 1 + max_payload_count > MAX_SHARED_RESULT_FIELDS {
         return None;
     }
 
@@ -1177,7 +1179,7 @@ fn compute_variant_layout(
         }
     }
 
-    let (field_types, field_names, field_count, case_slot_offsets) = if homogeneous {
+    let (field_types, field_names, case_slot_offsets) = if homogeneous {
         // Shared layout: all cases use the same type at each position
         let mut payload_types: Vec<WirType> = Vec::with_capacity(max_payload_count);
         for pos in 0..max_payload_count {
@@ -1190,16 +1192,15 @@ fn compute_variant_layout(
             }
             payload_types.push(found?.clone());
         }
-        let fc = 1 + max_payload_count;
-        let mut ft = Vec::with_capacity(fc);
+        let mut ft = Vec::with_capacity(1 + max_payload_count);
         ft.push(WirType::I32);
         ft.extend(payload_types.into_iter().map(WirType::as_nullable));
-        let mut fn_ = Vec::with_capacity(fc);
+        let mut fn_ = Vec::with_capacity(1 + max_payload_count);
         fn_.push("discriminant".to_string());
         for pos in 0..max_payload_count {
             fn_.push(format!("payload_{pos}"));
         }
-        (ft, fn_, fc, None)
+        (ft, fn_, None)
     } else {
         // Per-case layout: each case gets its own payload slots
         // Layout: [disc, case0_payload_0, ..., case1_payload_0, ...]
@@ -1214,15 +1215,14 @@ fn compute_variant_layout(
                 fn_.push(format!("case{case_idx}_payload_{pos}"));
             }
         }
-        let fc = ft.len();
-        if fc > MAX_PER_CASE_RESULT_FIELDS {
+        if ft.len() > MAX_PER_CASE_RESULT_FIELDS {
             return None;
         }
-        (ft, fn_, fc, Some(offsets))
+        (ft, fn_, Some(offsets))
     };
 
-    // Recompute max_payload_count for per-case layout: total payload slots (not per-case max)
-    let total_payload_slots = field_count - 1;
+    // Under the per-case layout this is the sum over cases, not `max_payload_count`.
+    let payload_slot_count = field_types.len() - 1;
 
     // Collect ALL case type indices (including unit cases) for return validation
     let mut all_case_type_indices: IndexSet<u32> = IndexSet::default();
@@ -1239,7 +1239,7 @@ fn compute_variant_layout(
         field_names,
         variant_info: VariantSroaInfo {
             case_type_indices,
-            max_payload_count: total_payload_slots,
+            payload_slot_count,
             case_slot_offsets,
         },
         valid_case_type_indices: all_case_type_indices,
@@ -1257,21 +1257,16 @@ fn analyze_variant_layout(
     func_array_idx: usize,
     variant_type_idx: u32,
     variant_type: &WirVariantType,
-) -> Option<(SroaCandidate, IndexSet<u32>)> {
+) -> Option<SroaCandidate> {
     let layout = compute_variant_layout(module, variant_type_idx, variant_type)?;
-    let valid = layout.valid_case_type_indices.clone();
-    Some((
-        SroaCandidate {
-            func_array_idx,
-            struct_type_idx: variant_type_idx,
-            valid_case_type_indices: valid.clone(),
-            field_count: layout.field_types.len(),
-            field_types: layout.field_types,
-            field_names: layout.field_names,
-            variant_info: layout.variant_info,
-        },
-        valid,
-    ))
+    Some(SroaCandidate {
+        func_array_idx,
+        struct_type_idx: variant_type_idx,
+        valid_case_type_indices: layout.valid_case_type_indices,
+        field_types: layout.field_types,
+        field_names: layout.field_names,
+        variant_info: layout.variant_info,
+    })
 }
 
 /// Check that every `Return` in the body produces a leaf shape we can rewrite:
@@ -1391,7 +1386,8 @@ fn embedded_returns_compatible(
     ok
 }
 
-/// Check if an instruction contains `Unreachable` (indicating dead code).
+/// Whether this value position is dead: an `Unreachable`, or a `Seq` with one
+/// anywhere in it. A dead exit value needs no variant shape.
 fn contains_unreachable(instr: &WirInstr) -> bool {
     match instr {
         WirInstr::Unreachable => true,
@@ -1603,9 +1599,9 @@ fn all_br_variant_values_are_struct_new(
 #[derive(Default)]
 struct LocalDefUse {
     /// `LocalSet` + `LocalTee` writes per local name.
-    sets: crate::hashmap::IndexMap<String, usize>,
+    sets: IndexMap<String, usize>,
     /// `LocalGet` reads per local name.
-    gets: crate::hashmap::IndexMap<String, usize>,
+    gets: IndexMap<String, usize>,
 }
 
 impl LocalDefUse {
@@ -1649,7 +1645,7 @@ struct CallSiteCtx<'a> {
     /// structs — the only type ids the call-site rewriter's
     /// `case_disc_values` / `field_to_local` maps carry, hence the only
     /// ids a `RefTest` / `RefCast` on the temp may name.
-    case_types_by_candidate: &'a crate::hashmap::IndexMap<u32, IndexSet<u32>>,
+    case_types_by_candidate: &'a IndexMap<u32, IndexSet<u32>>,
     /// Def/use counts over `root_body`.
     def_use: &'a LocalDefUse,
     /// True when the function being validated is itself a candidate; only
@@ -1673,7 +1669,7 @@ fn validate_call_sites(
 ) -> Vec<(u32, SroaCandidate)> {
     let mut candidate_ids: IndexSet<u32> = candidates.iter().map(|(id, _)| *id).collect();
 
-    let case_types_by_candidate: crate::hashmap::IndexMap<u32, IndexSet<u32>> = candidates
+    let case_types_by_candidate: IndexMap<u32, IndexSet<u32>> = candidates
         .iter()
         .map(|(id, c)| {
             let case_types: IndexSet<u32> = c
@@ -1748,8 +1744,7 @@ fn validate_call_sites(
                 .copied()
                 .filter(|id| !round_invalid.contains(id))
                 .collect();
-            let mut effective_by_variant: crate::hashmap::IndexMap<u32, IndexSet<u32>> =
-                crate::hashmap::IndexMap::default();
+            let mut effective_by_variant: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
             for (id, c) in candidates {
                 if effective.contains(id) {
                     effective_by_variant
@@ -2391,7 +2386,7 @@ fn find_nested_candidate_calls(
 /// and every call site rebound through `MultiValueLocalBind`.
 fn apply_sroa(module: &mut WirPackage, confirmed: &[(u32, SroaCandidate)]) {
     // Build a lookup from func_id_index → candidate info
-    let candidate_map: crate::hashmap::IndexMap<u32, &SroaCandidate> =
+    let candidate_map: IndexMap<u32, &SroaCandidate> =
         confirmed.iter().map(|(id, c)| (*id, c)).collect();
     let candidate_ids: IndexSet<u32> = candidate_map.keys().copied().collect();
 
@@ -2657,7 +2652,7 @@ fn pad_variant_fields(
                 }
             }
         }
-        for pos in payload_count..vi.max_payload_count {
+        for pos in payload_count..vi.payload_slot_count {
             let ty = &result_types[1 + pos]; // +1 to skip discriminant
             new_fields.push(default_value_for_type(ty));
         }
@@ -2846,7 +2841,7 @@ fn default_value_for_type(ty: &WirType) -> WirInstr {
         WirType::F64 => WirInstr::F64Const(0.0),
         WirType::V128 => WirInstr::V128Const(0),
         WirType::Ref { .. } | WirType::AbstractRef { .. } => WirInstr::RefNull {
-            heap_type: crate::wir::WirAbstractHeapType::None,
+            heap_type: WirAbstractHeapType::None,
         },
         WirType::Unit => panic!("variant SROA cannot pad a unit-typed result slot"),
     }
@@ -2862,16 +2857,14 @@ fn default_value_for_type(ty: &WirType) -> WirInstr {
 /// ([`rewrite_call_sites`]) and the nested-slot flattener
 /// ([`flatten_variant_slots`]), so both derive the exact same replacement.
 fn build_variant_replacement(
-    field_map: &crate::hashmap::IndexMap<String, String>,
+    field_map: &IndexMap<String, String>,
     vi: &VariantSroaInfo,
     variant_type_idx: u32,
     types: &[WirTypeDef],
 ) -> VariantReplacement {
     let disc_local = field_map["discriminant"].clone();
-    let mut case_disc_values: crate::hashmap::IndexMap<u32, i32> =
-        crate::hashmap::IndexMap::default();
-    let mut field_to_local: crate::hashmap::IndexMap<(u32, String), String> =
-        crate::hashmap::IndexMap::default();
+    let mut case_disc_values: IndexMap<u32, i32> = IndexMap::default();
+    let mut field_to_local: IndexMap<(u32, String), String> = IndexMap::default();
 
     for (disc_val, case_type_opt) in vi.case_type_indices.iter().enumerate() {
         if let Some(case_type_idx) = case_type_opt {
@@ -2910,7 +2903,7 @@ fn build_variant_replacement(
     // is always declared nullable for the Option<&T> boxing optimisation,
     // which loses the information that a `Some(non_null_ref)` payload is
     // semantically non-null at the Wado source level.
-    let mut ref_locals = crate::hashmap::IndexSet::default();
+    let mut ref_locals = IndexSet::default();
     if let Some(WirTypeDef::Variant(wv)) = types.get(variant_type_idx as usize) {
         for (disc_val_2, case_type_opt_2) in vi.case_type_indices.iter().enumerate() {
             if case_type_opt_2.is_none() {
@@ -2960,13 +2953,12 @@ fn build_variant_replacement(
 ///    `StructGet { RefCast { LocalGet(T) } }` with `LocalGet`.
 fn rewrite_call_sites(
     instrs: &mut Vec<WirInstr>,
-    candidate_map: &crate::hashmap::IndexMap<u32, &SroaCandidate>,
+    candidate_map: &IndexMap<u32, &SroaCandidate>,
     candidate_ids: &IndexSet<u32>,
     types: &[WirTypeDef],
 ) {
     // Variant replacements: temp_name → VariantReplacement
-    let mut variant_replacements: crate::hashmap::IndexMap<String, VariantReplacement> =
-        crate::hashmap::IndexMap::default();
+    let mut variant_replacements: IndexMap<String, VariantReplacement> = IndexMap::default();
 
     // First pass: find call sites and prepare MultiValueLocalBind + replacement map
     let mut result = Vec::with_capacity(instrs.len());
@@ -2999,9 +2991,8 @@ fn rewrite_call_sites(
         let candidate = candidate_map[&func_id_idx];
 
         // Generate fresh local names for each field and declare them
-        let mut field_map: crate::hashmap::IndexMap<String, String> =
-            crate::hashmap::IndexMap::default();
-        let mut locals: Vec<Option<String>> = Vec::with_capacity(candidate.field_count);
+        let mut field_map: IndexMap<String, String> = IndexMap::default();
+        let mut locals: Vec<Option<String>> = Vec::with_capacity(candidate.field_types.len());
         for (fi, field_name) in candidate.field_names.iter().enumerate() {
             let fresh = format!("__sroa_{temp_name}_{field_name}");
             field_map.insert(field_name.clone(), fresh.clone());
@@ -3060,8 +3051,7 @@ fn rewrite_call_sites(
         // where `temp` is a variant-SROA'd local. After copy propagation, `ref.cast` may
         // reference the SROA temp directly but be stored to an intermediate local, with a
         // separate `StructGet { field, LocalGet(cast_var) }` reading the payload.
-        let mut refcast_aliases: crate::hashmap::IndexMap<String, (String, u32)> =
-            crate::hashmap::IndexMap::default();
+        let mut refcast_aliases: IndexMap<String, (String, u32)> = IndexMap::default();
         collect_refcast_aliases(instrs, &variant_replacements, &mut refcast_aliases);
 
         for instr in instrs.iter_mut() {
@@ -3081,7 +3071,7 @@ fn rewrite_call_sites(
 /// statement lists.
 fn recurse_rewrite_call_sites(
     instr: &mut WirInstr,
-    candidate_map: &crate::hashmap::IndexMap<u32, &SroaCandidate>,
+    candidate_map: &IndexMap<u32, &SroaCandidate>,
     candidate_ids: &IndexSet<u32>,
     types: &[WirTypeDef],
 ) {
@@ -3113,11 +3103,7 @@ fn recurse_rewrite_call_sites(
 }
 /// Produce a `LocalGet` for an SROA local, wrapping with `RefAsNonNull` if the local
 /// holds a nullable ref type (variant SROA payload locals use nullable types for padding).
-fn sroa_local_get(
-    local_name: &str,
-    ref_locals: &crate::hashmap::IndexSet<String>,
-    result_ty: crate::wir::WirType,
-) -> WirInstr {
+fn sroa_local_get(local_name: &str, ref_locals: &IndexSet<String>, result_ty: WirType) -> WirInstr {
     if ref_locals.contains(local_name) {
         // Set the LocalGet's own result type to nullable so downstream
         // cleanup passes don't strip the RefAsNonNull wrapper as
@@ -3126,16 +3112,14 @@ fn sroa_local_get(
         // callee's non-null `ref T` parameter), after the variant case
         // test has already proved the payload is non-null at runtime.
         let nullable_ty = match &result_ty {
-            crate::wir::WirType::Ref { type_id, .. } => crate::wir::WirType::Ref {
+            WirType::Ref { type_id, .. } => WirType::Ref {
                 type_id: type_id.clone(),
                 nullable: true,
             },
-            crate::wir::WirType::AbstractRef { heap_type, .. } => {
-                crate::wir::WirType::AbstractRef {
-                    heap_type: heap_type.clone(),
-                    nullable: true,
-                }
-            }
+            WirType::AbstractRef { heap_type, .. } => WirType::AbstractRef {
+                heap_type: heap_type.clone(),
+                nullable: true,
+            },
             _ => result_ty.clone(),
         };
         let get = WirInstr::LocalGet {
@@ -3157,8 +3141,8 @@ fn sroa_local_get(
 /// `StructGet { field, LocalGet(cast_var) }` can be resolved through the alias.
 fn collect_refcast_aliases(
     instrs: &mut [WirInstr],
-    variant_replacements: &crate::hashmap::IndexMap<String, VariantReplacement>,
-    aliases: &mut crate::hashmap::IndexMap<String, (String, u32)>,
+    variant_replacements: &IndexMap<String, VariantReplacement>,
+    aliases: &mut IndexMap<String, (String, u32)>,
 ) {
     for instr in instrs.iter_mut() {
         if let WirInstr::LocalSet { name, value } = instr
@@ -3207,8 +3191,8 @@ fn collect_refcast_aliases(
 /// 4. `StructGet { field, expr: LocalGet(cast_alias) }` where `cast_alias` was a `RefCast` alias → same
 fn replace_variant_accesses(
     instr: &mut WirInstr,
-    variant_replacements: &crate::hashmap::IndexMap<String, VariantReplacement>,
-    refcast_aliases: &crate::hashmap::IndexMap<String, (String, u32)>,
+    variant_replacements: &IndexMap<String, VariantReplacement>,
+    refcast_aliases: &IndexMap<String, (String, u32)>,
 ) {
     // Pattern 3: `RefAsNonNull(StructGet(RefCast(LocalGet(temp))))` — the
     // variant-payload extraction form emitted by `wir_build::pattern_match`.
@@ -3249,7 +3233,7 @@ fn replace_variant_accesses(
         *instr = WirInstr::I32Eq(
             Box::new(WirInstr::LocalGet {
                 name: vr.disc_local.clone(),
-                result_ty: crate::wir::WirType::I32,
+                result_ty: WirType::I32,
             }),
             Box::new(WirInstr::I32Const(disc_val)),
         );
@@ -3865,7 +3849,7 @@ pub(super) fn flatten_variant_slots(module: &mut WirPackage) {
 /// Phase 3: rewrite signatures, returns, and call sites of confirmed slot
 /// candidates.
 fn apply_slot_flatten(module: &mut WirPackage, confirmed: &[SlotFlattenCand]) {
-    let by_func: crate::hashmap::IndexMap<u32, &SlotFlattenCand> =
+    let by_func: IndexMap<u32, &SlotFlattenCand> =
         confirmed.iter().map(|c| (c.func_id_index, c)).collect();
 
     // Step A: signatures + returns of the confirmed functions.
@@ -3957,14 +3941,13 @@ fn rewrite_slot_returns(instr: &mut WirInstr, cand: &SlotFlattenCand, old_arity:
 /// mutations a prior bind made; the mutation pass then consumes those plans.
 fn rewrite_slot_call_sites(
     body: &mut Vec<WirInstr>,
-    by_func: &crate::hashmap::IndexMap<u32, &SlotFlattenCand>,
+    by_func: &IndexMap<u32, &SlotFlattenCand>,
     types: &[WirTypeDef],
 ) {
     // Plan: classify every candidate call site's slot consumer against the full
     // body. Keyed by slot local (single-level SROA gives each call site a unique
     // slot-local name).
-    let mut plans: crate::hashmap::IndexMap<String, SlotConsumer> =
-        crate::hashmap::IndexMap::default();
+    let mut plans: IndexMap<String, SlotConsumer> = IndexMap::default();
     {
         let root: &[WirInstr] = body;
         let def_use = LocalDefUse::of_body(root);
@@ -3982,12 +3965,10 @@ fn rewrite_slot_call_sites(
         }
     }
     // Expand the binds and register the inner-variant replacements.
-    let mut replacements: crate::hashmap::IndexMap<String, VariantReplacement> =
-        crate::hashmap::IndexMap::default();
+    let mut replacements: IndexMap<String, VariantReplacement> = IndexMap::default();
     expand_slot_binds(body, by_func, &plans, types, &mut replacements);
     // Replace variant accesses on the slot local / unwrap alias.
-    let mut aliases: crate::hashmap::IndexMap<String, (String, u32)> =
-        crate::hashmap::IndexMap::default();
+    let mut aliases: IndexMap<String, (String, u32)> = IndexMap::default();
     collect_refcast_aliases(body, &replacements, &mut aliases);
     for instr in body.iter_mut() {
         replace_variant_accesses(instr, &replacements, &aliases);
@@ -3999,9 +3980,9 @@ fn rewrite_slot_call_sites(
 fn plan_slot_call_sites(
     instr: &WirInstr,
     root: &[WirInstr],
-    by_func: &crate::hashmap::IndexMap<u32, &SlotFlattenCand>,
+    by_func: &IndexMap<u32, &SlotFlattenCand>,
     def_use: &LocalDefUse,
-    plans: &mut crate::hashmap::IndexMap<String, SlotConsumer>,
+    plans: &mut IndexMap<String, SlotConsumer>,
 ) {
     if let WirInstr::MultiValueLocalBind {
         instr: call,
@@ -4026,10 +4007,10 @@ fn plan_slot_call_sites(
 /// turned into a guard) or, for a direct consumer, by the slot local itself.
 fn expand_slot_binds(
     body: &mut Vec<WirInstr>,
-    by_func: &crate::hashmap::IndexMap<u32, &SlotFlattenCand>,
-    plans: &crate::hashmap::IndexMap<String, SlotConsumer>,
+    by_func: &IndexMap<u32, &SlotFlattenCand>,
+    plans: &IndexMap<String, SlotConsumer>,
     types: &[WirTypeDef],
-    replacements: &mut crate::hashmap::IndexMap<String, VariantReplacement>,
+    replacements: &mut IndexMap<String, VariantReplacement>,
 ) {
     let mut i = 0;
     while i < body.len() {
@@ -4081,8 +4062,7 @@ fn expand_slot_binds(
         // `build_variant_replacement` can resolve each case struct's fields. The
         // field name (`discriminant`, `payload_0`, `caseN_payload_M`) is kept in
         // the local name so the flattened slot stays self-documenting.
-        let mut field_map: crate::hashmap::IndexMap<String, String> =
-            crate::hashmap::IndexMap::default();
+        let mut field_map: IndexMap<String, String> = IndexMap::default();
         let mut sub_locals: Vec<Option<String>> = Vec::with_capacity(cand.layout.field_names.len());
         let mut decls: Vec<WirInstr> = Vec::with_capacity(cand.layout.field_names.len());
         for (field_name, field_ty) in cand.layout.field_names.iter().zip(&cand.layout.field_types) {
