@@ -1,7 +1,7 @@
 //! Single-field parameter SROA for Wado NIR.
 //!
-//! NIR analog of `wir_optimize/sroa_param.rs`. Rewrites internal functions whose
-//! parameter type is `&S` / `&mut S` for some single-field struct `S` (with `Box<T>`
+//! Rewrites internal functions whose parameter type is
+//! `&S` / `&mut S` for some single-field struct `S` (with `Box<T>`
 //! the canonical case) to take the inner scalar `T` directly. At call sites, the
 //! corresponding `StructLiteral S { field: val }` allocation is replaced with
 //! `val`, eliminating heap traffic.
@@ -21,11 +21,9 @@
 //! (or extract via `FieldAccess`), collapsing a receiver-SROA'd `MethodCall`
 //! into a `Call`.
 //!
-//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the validation walk and
-//! both rewrite phases read and mutate the arena `Body` directly; global
-//! initializers are arena bodies too, so the call-site rewrite runs on them
-//! directly.
+//! The validation walk and both rewrite phases read and mutate the arena `Body`
+//! directly. Global initializers are arena bodies too, so the call-site rewrite
+//! runs on them as well.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -926,7 +924,7 @@ fn scalarized_arg(args: &[Operand], arg_idx: usize) -> Operand {
 /// projection [`rewrite_arg`]'s general case builds — `(<value>).f` over the
 /// operand itself, moving to the call site the read the callee used to perform.
 /// Leaving it alone is not an option: the callee's signature already names the
-/// inner scalar, so the call would disagree with it.
+/// inner scalar.
 fn rewrite_arg_operand(
     body: &mut Body,
     op: Operand,

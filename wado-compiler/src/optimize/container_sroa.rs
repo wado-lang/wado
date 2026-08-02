@@ -62,8 +62,8 @@
 //! lets container SROA pick up new `List<Tuple<...>>` locals exposed by
 //! earlier-iteration inlining of helper functions.
 //!
-//! Runs on the worklist rewrite engine (combine migration; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
+//! Runs on the worklist rewrite engine
+//! (`docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
 //! per-function standalone engine session whose `apply_block` fires once at
 //! the body root and performs the whole-function rewrite in one shot. The
 //! analysis phases (candidate collection, escape / used-kinds) stay read-only

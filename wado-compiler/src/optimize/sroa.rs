@@ -20,8 +20,8 @@
 //!
 //! Copy propagation then eliminates the trivial copies.
 //!
-//! Runs on the worklist rewrite engine (combine migration; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
+//! Runs on the worklist rewrite engine
+//! (`docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
 //! per-function standalone engine session whose `apply_block` fires once at
 //! the function root and performs the whole-function decomposition in one
 //! shot. The analysis phases (candidate collection, escape / soft-escape) read
@@ -477,12 +477,11 @@ fn ref_to_candidate_local(
 /// What one read-only walk records about each candidate.
 #[derive(Default)]
 struct CandidateUses {
-    /// Appeared in a non-projected position — a bare use or a reference. Such a
-    /// candidate cannot be decomposed outright; the soft walk decides whether it
-    /// can be reconstructed instead.
+    /// Appeared in a non-projected position — a bare use or a reference. The
+    /// soft walk decides whether such a candidate can still be reconstructed.
     escaped: IndexSet<u32>,
     /// Appeared as the base of a field access, read or written. A reconstructed
-    /// candidate is only worth decomposing when some access projects it.
+    /// candidate is worth decomposing only when some access projects it.
     field_accessed: IndexSet<u32>,
 }
 
@@ -497,9 +496,8 @@ fn scan_candidate_uses(body: &Body, candidates: &[SroaCandidate]) -> CandidateUs
 }
 
 /// The read-only walk behind [`CandidateUses`]. The soft-escape walk
-/// ([`SoftCtx`]) stays separate: it threads a soft-context flag, peels
-/// `$value_copy$T` wrappers, and treats `Call` / `MethodCall` reference
-/// arguments specially, none of which this walk needs.
+/// ([`SoftCtx`]) stays separate: it carries a context flag and a wrapper peel
+/// this one has no use for.
 struct UseWalk<'a> {
     candidates: &'a IndexSet<u32>,
 }

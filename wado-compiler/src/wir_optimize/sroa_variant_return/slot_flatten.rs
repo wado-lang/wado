@@ -13,8 +13,7 @@
 //! eligible `SubtypeHierarchy` variant (`Result`, a multi-case variant, an
 //! `Option<(scalar, scalar)>`), not just `Option<scalar>`. Only `Option<&T>`
 //! null-niche variants (already unboxed, no discriminant field) are out of
-//! scope. Running the pass to a fix-point flattens nested-in-nested slots one
-//! level per round.
+//! scope.
 //!
 //! Bail-everywhere: a slot is expanded only when every return of the function
 //! decomposes structurally and every call site's slot local is consumed solely
@@ -22,6 +21,7 @@
 //! `local = if Ok { payload } else { return Err }` (whose then-arm copies the
 //! slot out and whose else-arm diverges). Any other shape leaves the slot at its
 //! single-level (boxed) form, which is already correct.
+
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{
     WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId, WirVariantRepr,

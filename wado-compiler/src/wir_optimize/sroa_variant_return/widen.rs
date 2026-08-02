@@ -2,6 +2,10 @@
 //! vector [`compute_variant_layout`](super::layout::compute_variant_layout)
 //! describes: candidate discovery, call-site validation, then the rewrite of
 //! both the returns and every call site.
+//!
+//! Discovery propagates through tail calls, so a helper whose body ends in
+//! `return another_parse(...)` qualifies alongside the candidate it forwards
+//! to, instead of staying boxed for want of a `StructNew` at the leaf.
 
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
