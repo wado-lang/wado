@@ -53,9 +53,8 @@ use super::util::{collect_pinned_func_ids, is_root_observable};
 /// 1 discriminant + 3 shared payload slots.
 const MAX_SHARED_RESULT_FIELDS: usize = 4;
 /// Result-vector cap for the per-case layout: 1 discriminant + up to 7 payload
-/// slots *summed over the cases*. Any single case is still held to
-/// [`MAX_SHARED_RESULT_FIELDS`], which [`compute_variant_layout`] checks before
-/// it reaches the per-case fallback.
+/// slots *summed over the cases*. Any one case is still held to
+/// [`MAX_SHARED_RESULT_FIELDS`].
 const MAX_PER_CASE_RESULT_FIELDS: usize = 8;
 
 /// Variant-return SROA (Scalar Replacement of Aggregates).
@@ -401,9 +400,8 @@ struct SroaCandidate {
 struct VariantSroaInfo {
     /// WIR type indices of the case struct types (index = case discriminant).
     case_type_indices: Vec<Option<u32>>,
-    /// Total payload slot count in the multi-value result — the whole result
-    /// vector minus the discriminant. Under the per-case layout that is the sum
-    /// over cases, not any one case's payload count.
+    /// The result vector minus the discriminant. Under the per-case layout that
+    /// is the sum over cases, not any one case's payload count.
     payload_slot_count: usize,
     /// Per-case payload slot offsets in the multi-value result.
     /// `case_slot_offsets[case_discriminant]` is the starting index (0-based)
@@ -472,15 +470,15 @@ struct ReturnTempStats {
 
 impl ReturnTempStats {
     /// Whether the temp exists only to ferry a value into a `Return`: every
-    /// write is paired with one, and nothing else touches it.
+    /// write is paired with one and nothing else touches it.
     fn is_return_only(&self) -> bool {
         !self.has_other_use && self.paired_writes == self.total_writes && self.total_writes > 0
     }
 }
 
-/// A root-position read of non-local state. Relocating such a value past an
-/// intervening statement could observe a different heap / global / memory, so
-/// [`reads_only_local_state`] refuses any value containing one.
+/// A root-position read of non-local state: relocating it past an intervening
+/// statement could observe a different heap, global, or memory. No value
+/// containing one passes [`reads_only_local_state`].
 fn is_root_heap_read(expr: &WirInstr) -> bool {
     matches!(
         expr,
@@ -1151,9 +1149,8 @@ fn compute_variant_layout(
         }
     }
 
-    // Cap the shared layout up front. A case with more payloads than the shared
-    // vector holds is out of scope under the per-case layout too, which only
-    // grows from here.
+    // A case the shared vector cannot hold is out of scope under the per-case
+    // layout too, which only grows from here.
     if 1 + max_payload_count > MAX_SHARED_RESULT_FIELDS {
         return None;
     }
@@ -1221,7 +1218,6 @@ fn compute_variant_layout(
         (ft, fn_, Some(offsets))
     };
 
-    // Under the per-case layout this is the sum over cases, not `max_payload_count`.
     let payload_slot_count = field_types.len() - 1;
 
     // Collect ALL case type indices (including unit cases) for return validation

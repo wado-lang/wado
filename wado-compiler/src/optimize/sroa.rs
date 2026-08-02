@@ -460,10 +460,9 @@ fn field_access_of_candidate(
     None
 }
 
-/// If `expr` is `&candidate` or `&mut candidate` (a bare candidate local behind a
-/// reference), return `(candidate local index, is the reference mutable)`. A
-/// reference to a decomposed local is an escape both in the hard and the soft
-/// walk; only the soft walk distinguishes the two mutabilities.
+/// If `expr` is `&candidate` / `&mut candidate`, return `(local index, is the
+/// reference mutable)`. Either escapes the candidate; only the soft walk cares
+/// which.
 fn ref_to_candidate_local(
     body: &Body,
     expr: ExprId,
@@ -761,7 +760,7 @@ fn callee_stores_param_at(
 // -----------------------------------------------------------------------
 
 struct Rewrite<'a> {
-    /// Every candidate being decomposed — the safe ones plus the soft-escaped
+    /// Every decomposed candidate: the non-escaping ones plus the soft-escaped
     /// ones [`Rewrite::reconstruct_info`] re-materializes.
     decomposed: &'a IndexSet<u32>,
     field_map: &'a IndexMap<(u32, u32), FieldSlot>,

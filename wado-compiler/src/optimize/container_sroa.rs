@@ -145,9 +145,8 @@ enum ListMethodKind {
     Query,
 }
 
-/// Classify a `List` method's signature into a [`ListMethodKind`], if it matches
-/// any of the recognized shapes. The element type `T` comes from the method's
-/// own `monomorph_info`, so every shape below is checked against it.
+/// Classify a `List` method into a [`ListMethodKind`] by signature shape, read
+/// against the element type its `monomorph_info` names.
 fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Option<ListMethodKind> {
     // Must be a method (instance or static) on `List`.
     let info = func.method_info.as_ref()?;
@@ -590,16 +589,11 @@ struct RewriteCtx<'a> {
     value_copy_ids: &'a IndexSet<crate::nir::FuncId>,
 }
 
-/// Check that every [`ListMethodKind`] the rewrite will need for this candidate
-/// has a monomorphization in the catalog for every per-field element type.
+/// Whether the catalog holds, for every per-field element type, each
+/// [`ListMethodKind`] the rewrite will emit.
 ///
-/// `Constructor` is always required (every per-field initializer uses it). The
-/// other kinds are required only when escape analysis observed a use of that
-/// kind on the candidate — the rewrite emits per-field versions of the methods
-/// that are actually called, and nothing else.
-///
-/// `Query` (`len` / `is_empty` / `capacity`) is rewritten by dispatching to
-/// field 0, so only field 0 needs its monomorphization.
+/// `Constructor` is always needed; the rest only where escape analysis observed
+/// a use. `Query` dispatches to field 0, so only field 0 needs it.
 fn required_methods_available(
     c: &Candidate,
     used_kinds: &IndexSet<ListMethodKind>,
@@ -950,7 +944,7 @@ fn compute_safe_set(
 
 /// The per-candidate facts the whitelist walk keys on.
 struct CandidateShape {
-    /// Element arity — the number of parallel lists the candidate decomposes to.
+    /// Number of parallel lists the candidate decomposes to.
     arity: usize,
     layout: ElementLayout,
     /// Whether every field is a scalar; gates the `$value_copy$T` see-through
@@ -969,8 +963,8 @@ struct WhitelistChecker<'a> {
 }
 
 impl WhitelistChecker<'_> {
-    /// The shape of a candidate the walk already knows is in `safe` — every safe
-    /// local was collected as a candidate, so a miss is a bug, not a fallback.
+    /// The shape of a `safe` local. Every safe local was collected as a
+    /// candidate, so a miss is a bug rather than a case to default through.
     fn shape(&self, idx: u32) -> &CandidateShape {
         self.shape_of
             .get(&idx)
@@ -1384,7 +1378,6 @@ impl Rewriter<'_, '_> {
         let capacity = info.init.capacity;
         for k in 0..arity {
             let field = ctx.field_map[&(local_index, k as u32)].clone();
-            // Deep-clone the (duplicable) capacity once per field.
             let cap = clone_or_dup(engine, capacity);
             let init = build_with_capacity_call(engine, &field, cap, span, ctx);
             let let_stmt = engine.alloc_stmt(
@@ -1759,8 +1752,7 @@ impl Rewriter<'_, '_> {
             None
         };
         if let Some((rec_local, sig)) = query {
-            // Field 0 is representative: push, slot assign, and the
-            // constructor keep every per-field list in lockstep.
+            // Field 0 is representative: every writer keeps the lists in lockstep.
             let field = ctx.field_map[&(rec_local, 0)].clone();
             let (_, new_func_id) = ctx
                 .catalog
@@ -1800,8 +1792,8 @@ impl Rewriter<'_, '_> {
     }
 }
 
-/// Deep-clone a skeleton operand for one more per-field use; a promoted constant
-/// is immutable and shareable, so reuse it as is (WEP: The Live `ValueGraph`).
+/// Duplicate an operand for one more per-field use: a skeleton is deep-cloned,
+/// a promoted constant is immutable and reused as is.
 fn clone_or_dup(engine: &mut Engine, op: Operand) -> Operand {
     match op {
         Operand::Expr(e) => Operand::Expr(engine.clone_expr(e)),
@@ -1809,7 +1801,7 @@ fn clone_or_dup(engine: &mut Engine, op: Operand) -> Operand {
     }
 }
 
-/// Build a `Unary::{Ref|MutRef}(Local{field.local_index})` receiver expression.
+/// The `&v_field` / `&mut v_field` receiver of a per-field call.
 fn build_receiver(engine: &mut Engine, field: &FieldList, mut_ref: bool, span: Span) -> ExprId {
     let local = engine.alloc_expr(
         ExprKind::Local {
@@ -1926,8 +1918,7 @@ fn build_index_writer_call(
     )
 }
 
-/// Build `v_field.IndexReader(index)` — e.g. `index_value(index)`, of the field's
-/// element type.
+/// Build `v_field.IndexReader(index)` — e.g. `index_value(index)`.
 fn build_index_reader_call(
     engine: &mut Engine,
     field: &FieldList,

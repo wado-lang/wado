@@ -184,8 +184,10 @@ fn collect_and_validate(
             };
             let func = func_rc.borrow();
             let local_index = func.params[*pi].local_index;
-            // `is_eligible` (via `is_dae_sroa_eligible`) rejected body-less functions.
-            let body = func.body.as_ref().expect("candidate function has a body");
+            let body = func
+                .body
+                .as_ref()
+                .expect("is_eligible rejects a body-less function");
             if !body_uses_param_safely(body, local_index, &candidates) {
                 invalid.insert((*key, *pi));
             }
@@ -879,11 +881,9 @@ fn rewrite_call_expr(
                 };
                 let args: Vec<Option<ExprId>> = args.iter().map(|a| a.expr.as_expr()).collect();
                 for (pi, info) in &positions {
-                    // The receiver position is the branch above's business, and
-                    // this `else` is entered only when it is not scalarized.
                     let arg_idx = pi
                         .checked_sub(1)
-                        .expect("receiver position taken by the collapse branch");
+                        .expect("a scalarized receiver takes the collapse branch above");
                     let arg = scalarized_arg(&args, arg_idx);
                     rewrite_arg(body, arg, info, scalar_param_struct, type_table);
                 }
@@ -896,11 +896,9 @@ fn rewrite_call_expr(
 
 /// The argument expression at a scalarized parameter position.
 ///
-/// Every such position must carry a skeleton argument. The callee's signature
-/// already names the inner scalar, so an argument left un-unwrapped — because it
-/// is missing or because it is a promoted constant with no node to rewrite —
-/// would emit a call whose type disagrees with the callee. Failing loudly beats
-/// emitting that call.
+/// The callee's signature already names the inner scalar, so an argument left
+/// un-unwrapped would emit a call whose type disagrees with it. Every such
+/// position must therefore carry a skeleton argument to rewrite.
 fn scalarized_arg(args: &[Option<ExprId>], arg_idx: usize) -> ExprId {
     match args.get(arg_idx) {
         Some(Some(arg)) => *arg,
