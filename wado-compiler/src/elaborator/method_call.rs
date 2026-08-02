@@ -2427,25 +2427,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.keys_declare_static_method(&keys, method_name)
     }
 
-    /// Canonical receiver key for a static-method lookup whose declaring
-    /// module the caller already resolved.
-    ///
-    /// `TraitEnv::build` keys the static-method index by what the *impl's*
-    /// module calls the target type, so a receiver reached through another
-    /// module (`helper::Pair::new`) must be keyed the same way. Falls back to
-    /// the call site's import context when that module declares no such name —
-    /// a blanket-parameter receiver, whose "module" is not a declaring one.
-    fn static_receiver_key(
-        &self,
-        receiver_module: &ModuleSource,
-        type_name: &str,
-    ) -> crate::elaborator::trait_env::DeclKey {
-        self.symbols
-            .lookup_in_module(receiver_module, type_name)
-            .map(|sym| (sym.module_source().clone(), sym.name.clone()))
-            .unwrap_or_else(|| self.canonical_decl_key(type_name))
-    }
-
     /// Look up static method return type based on struct name and method name
     pub(super) fn lookup_static_method_return_type(
         &mut self,
@@ -2482,10 +2463,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Search via pre-built index (handles impls defined outside the struct's defining module).
-        // The receiver's own module decides the key when the caller resolved
-        // one — canonicalising the bare `struct_name` from *here* would pick
-        // the call site's `Pair` over the one `helper::Pair::new` names.
-        let static_key = self.static_receiver_key(&method_ref.module, struct_name);
+        // The caller already resolved the receiver's module, so the key comes
+        // from the same rule `build` indexed by. Canonicalising the bare
+        // `struct_name` from *here* instead would answer with the call site's
+        // own `Pair` rather than the one `helper::Pair::new` names.
+        let static_key =
+            self.tysys
+                .trait_env
+                .declaring_side_key(self.symbols, &method_ref.module, struct_name);
         // The decl pass already resolved this signature in the impl's own
         // frame — impl and method type params interned, `Self` bound to the
         // impl target, the impl module's imports in scope. Re-deriving all of

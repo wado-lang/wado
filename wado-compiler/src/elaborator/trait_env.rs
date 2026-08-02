@@ -521,6 +521,10 @@ pub struct TraitEnv {
     /// `effect_decl_index` to recognise handler-installable kinds in `with`
     /// clauses and `impl R for T` blocks.
     pub(super) resource_decl_index: ResourceDeclIndex,
+    /// Every type-shaped declaration's identity (struct / variant / enum /
+    /// flags / newtype). Kept so [`Self::declaring_side_key`] can offer the
+    /// same by-name fallbacks `build` did; nothing else reads it.
+    type_decl_index: IndexMap<DeclKey, ModuleSource>,
     /// Digested headers for every indexed impl block, keyed by
     /// `(ModuleSource, AstId)`. Trait/method queries read this instead of
     /// re-fetching the impl block AST from `loaded_modules`. See [`ImplHeader`].
@@ -842,31 +846,16 @@ impl TraitEnv {
         // and to references whose target wasn't registered as a
         // top-level declaration.
         let canonical_key = |module_source: &ModuleSource, name: &str| -> DeclKey {
-            // Built-in primitives (`i32`, `f64`, `char`, …) have no
-            // `Symbol` entry and no decl item, but they share a known
-            // canonical module: `core:prelude/primitive`. Lookups via
-            // `Elaborator::canonical_decl_key` use the same shortcut, so
-            // every inherent `impl <primitive> { … }` block keys into
-            // the same bucket regardless of which file the impl lives in.
-            if super::is_primitive_type_name(name) {
-                return (ModuleSource::primitive(), name.to_string());
-            }
-            if let Some(sym) = symbols.lookup_in_module(module_source, name) {
-                return (sym.module_source().clone(), sym.name.clone());
-            }
-            if let Some(key) = decl_index.keys().find(|(_, n)| n == name) {
-                return key.clone();
-            }
-            if let Some(key) = effect_decl_index.keys().find(|(_, n)| n == name) {
-                return key.clone();
-            }
-            if let Some(key) = resource_decl_index.keys().find(|(_, n)| n == name) {
-                return key.clone();
-            }
-            if let Some(key) = type_decl_index.keys().find(|(_, n)| n == name) {
-                return key.clone();
-            }
-            (module_source.clone(), name.to_string())
+            declaring_side_decl_key(
+                module_source,
+                name,
+                symbols,
+                decl_index
+                    .keys()
+                    .chain(effect_decl_index.keys())
+                    .chain(resource_decl_index.keys())
+                    .chain(type_decl_index.keys()),
+            )
         };
 
         // Pass 2: walk impl blocks now that all decl indices are
@@ -1116,6 +1105,7 @@ impl TraitEnv {
                 resource_static_method_index,
                 trait_impl_modules,
                 concrete_trait_impl_modules,
+                type_decl_index,
                 synthesised: None,
             }),
             violations,
@@ -1163,6 +1153,27 @@ impl TraitEnv {
         self.supertrait_closures_by_name
             .get(name)
             .map_or(&[], Vec::as_slice)
+    }
+
+    /// The identity `build` keyed a type name by, for a lookup that holds the
+    /// same vantage — the module that declared or wrote the name. See
+    /// [`declaring_side_decl_key`].
+    pub(super) fn declaring_side_key(
+        &self,
+        symbols: &SymbolTable,
+        module_source: &ModuleSource,
+        name: &str,
+    ) -> DeclKey {
+        declaring_side_decl_key(
+            module_source,
+            name,
+            symbols,
+            self.decl_index
+                .keys()
+                .chain(self.effect_decl_index.keys())
+                .chain(self.resource_decl_index.keys())
+                .chain(self.type_decl_index.keys()),
+        )
     }
 
     /// Keys of every impl block on `type_key`, in global build order —
@@ -2167,6 +2178,55 @@ fn check_all_orphan_rules(
 /// Canonical [`ImplTargetKey`] for an impl target written in `module_source`.
 /// The declaring module and original name come from that module's import
 /// scope, so `impl T for Alias` keys the same as `impl T for Original`.
+/// Which declaration a type name means, read from the module that *wrote*
+/// the name — the vantage an `impl` header has and a use site does not.
+///
+/// This is the rule [`TraitEnv::build`] keys its impl indexes by, so any
+/// later lookup holding the same vantage must reach it through here rather
+/// than re-deriving one: a lookup that canonicalises the bare name from the
+/// *call site* instead answers with the caller's same-named type
+/// (`helper::Pair::new` finding the caller's own `Pair`).
+///
+/// The call-site counterpart — which consults `use` declarations, and so
+/// cannot exist before the decl pass — is
+/// [`super::trait_query::canonical_decl_key_with`], over
+/// [`super::trait_query::decl_identity_core`].
+///
+/// The two are complementary vantages, not a redundant pair. Measured over
+/// every fixture: they never answer differently, and the core declines
+/// (`None`) for ~97% of the names asked here, having no imports to consult at
+/// this vantage. What answers instead is the re-export resolution below,
+/// which the core has no branch for. Folding one into the other would change
+/// no answer and buy nothing.
+///
+/// `decl_keys` are the declaration identities to fall back to by bare name,
+/// in priority order, for a name the vantage module does not define.
+pub(super) fn declaring_side_decl_key<'a>(
+    module_source: &ModuleSource,
+    name: &str,
+    symbols: &SymbolTable,
+    decl_keys: impl Iterator<Item = &'a DeclKey>,
+) -> DeclKey {
+    // Built-in primitives (`i32`, `f64`, `char`, …) have no `Symbol` entry
+    // and no decl item, but they share a known canonical module:
+    // `core:prelude/primitive`. The call-site rule uses the same shortcut, so
+    // every inherent `impl <primitive> { … }` block keys into the same bucket
+    // regardless of which file the impl lives in.
+    if super::is_primitive_type_name(name) {
+        return (ModuleSource::primitive(), name.to_string());
+    }
+    // Resolves re-export chains, so an alias keys to the origin declaration.
+    if let Some(sym) = symbols.lookup_in_module(module_source, name) {
+        return (sym.module_source().clone(), sym.name.clone());
+    }
+    if let Some(key) = decl_keys.into_iter().find(|(_, n)| n == name) {
+        return key.clone();
+    }
+    // A blanket type parameter, or a reference whose target is no top-level
+    // declaration: the writing module is the whole identity.
+    (module_source.clone(), name.to_string())
+}
+
 pub(super) fn impl_target_key(
     ty: &ast::Type,
     module_source: &ModuleSource,
