@@ -1608,15 +1608,23 @@ pub fn tokenize(input: &String) -> TokenStream {
         if first_char matches { 'a' } {
             end = try_I(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_I; }
+            end = try_J(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_J; }
         } else if first_char matches { 'm' } {
             end = try_M(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_M; }
+            end = try_J(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_J; }
         } else if first_char matches { 'n' } {
             end = try_N(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_N; }
+            end = try_J(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_J; }
         } else if first_char matches { 'x' } {
             end = try_K(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_K; }
+            end = try_J(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_J; }
         } else {
             end = try_J(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_J; }

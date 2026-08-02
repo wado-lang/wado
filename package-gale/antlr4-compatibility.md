@@ -376,6 +376,14 @@ fires only when inner and suffix are all single-char-consuming; other
 shapes fall through to the plain greedy loop (sound because the inner
 cannot consume the suffix's first char there).
 
+The first-character dispatch that picks which rules to try is a filter, not a
+decision: a rule admitted by its first character can still fail on the rest of
+its body, so a branch has to keep a candidate that always matches. A catch-all
+(`X : .`) is therefore carried by every branch except one whose rules each
+match on their own first character — those cannot fall through, and a
+same-length tie there goes to the earlier rule anyway. Fixture:
+`lexer_catch_all_reach.g4`.
+
 An alternation is decided the same way, and by what follows it. In tail
 position the arms compete on their own length, since the arm's length is the
 rule's. With a suffix after it neither first-match nor longest-arm is right —

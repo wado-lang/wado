@@ -1,0 +1,43 @@
+//! A rule that enters a dispatch branch on its first character but then fails
+//! must still fall to the catch-all, which the branch has to carry.
+
+use g from "./grammars/lexer_catch_all_reach.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_catch_all" },
+    };
+use { TK_EOF } from "./grammars/lexer_catch_all_reach.g4";
+
+fn assert_tokens(input: &String, expected: &String) {
+    let actual = g::to_lexer_string(&g::tokenize(input), TK_EOF);
+    assert actual == *expected, `\ninput: ${*input}\nactual:\n${actual}\nexpected:\n${*expected}`;
+}
+
+// `A` matches in full, so the catch-all loses on length.
+test "range branch: the rule wins when it matches" {
+    assert_tokens(&"a1", &"[@0,0:1='a1',<1>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n");
+}
+
+// `e` enters `A`'s range branch and `A` then fails on the missing `1`.
+test "range branch: catch-all is reached when the rule fails" {
+    assert_tokens(&"e", &"[@0,0:0='e',<4>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
+}
+
+// A single-char branch is no different — `D` fails on the missing digit.
+test "single-char branch: catch-all is reached when the rule fails" {
+    assert_tokens(&"h", &"[@0,0:0='h',<4>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
+}
+
+test "single-char branch: the rule wins when it matches" {
+    assert_tokens(&"h5", &"[@0,0:1='h5',<3>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n");
+}
+
+// `B` is one char, so its branch cannot fall through and keeps the catch-all
+// out; a same-length tie would go to `B` anyway, first in grammar order.
+test "single-char branch whose rule cannot fail" {
+    assert_tokens(&"+", &"[@0,0:0='+',<2>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
+}
+
+// A char no branch claims already reached the catch-all through the fallback.
+test "fallback branch still reaches the catch-all" {
+    assert_tokens(&"z", &"[@0,0:0='z',<4>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
+}

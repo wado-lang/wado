@@ -2595,6 +2595,48 @@ fn has_channel(rules: &List<LexerRule>) -> bool {
     return false;
 }
 
+/// Whether `rule` always matches once its first character does: every
+/// alternative is one char-consuming element, so nothing follows that could
+/// fail, and no action or predicate can reject the match. Deliberately narrow
+/// — a `false` only costs the branch an extra catch-all call, while a wrong
+/// `true` loses the match entirely.
+fn lexer_rule_total_on_first_char(rule: &LexerRule) -> bool {
+    if rule.body.is_empty() {
+        return false;
+    }
+    for let alt of &rule.body {
+        if !alt.actions.is_empty() || alt.elements.len() != 1 {
+            return false;
+        }
+        if !lexer_element_can_consume_simple(&alt.elements[0]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The catch-all calls a dispatch branch has to carry: none when every rule in
+/// the branch matches on its first character, all of them otherwise.
+fn branch_catch_all_calls(calls: &List<TryCall>, members: &List<i32>) -> List<i32> {
+    let mut needed = false;
+    for let i of members {
+        if !calls[*i].total_on_first_char {
+            needed = true;
+            break;
+        }
+    }
+    if !needed {
+        return [];
+    }
+    let mut out: List<i32> = [];
+    for let mut i = 0; i < calls.len(); i += 1 {
+        if calls[i].is_catch_all {
+            out.push(i);
+        }
+    }
+    return out;
+}
+
 struct TryCall {
     fn_name: String,
     token_kind: String,
@@ -2602,6 +2644,11 @@ struct TryCall {
     first_chars: List<[char, char]>,
     is_wildcard: bool,
     is_catch_all: bool,
+    /// The rule matches whenever its first character does — its body is that
+    /// one character, with nothing after it that can fail. A branch made only
+    /// of such rules always produces a match, which is what lets the catch-all
+    /// stay out of it.
+    total_on_first_char: bool,
     /// Index of this rule's `apply_<rule>_actions` replay, or -1 when the rule
     /// runs no `{ ... }` action. When the rule wins the tournament, its winner
     /// block records `best_act = act_index` so the commit dispatches the replay.
@@ -2729,8 +2776,9 @@ fn build_rule_try_call(
     let mut chars: List<[char, char]> = [];
     let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars, ci).0;
     // A catch-all rule (e.g., UNEXPECTED_CHAR: .) matches any single character.
-    // It's only useful in the wildcard fallback, never in specific dispatch branches
-    // where another rule already matches at least 1 character.
+    // It is redundant in a dispatch branch whose rules all match on their first
+    // character, and required in every other branch: a rule with a suffix can
+    // enter its branch and still fail (`A : [a-f] '1'` on `e`).
     let catch_all = is_wc
         && rule.body.len() == 1
         && rule.body[0].elements.len() == 1
@@ -2742,6 +2790,7 @@ fn build_rule_try_call(
         first_chars: chars,
         is_wildcard: is_wc,
         is_catch_all: catch_all,
+        total_on_first_char: lexer_rule_total_on_first_char(rule),
     };
 }
 
@@ -3030,6 +3079,9 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
                 matching.push(i);
             }
         }
+        for let ci of &branch_catch_all_calls(calls, &matching) {
+            matching.push(*ci);
+        }
         // Check if this group already exists
         if let Some(gi) = group_by_calls.get(matching) {
             groups[gi].pattern.push_str(&` | ${char_lit(*c)}`);
@@ -3067,6 +3119,9 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
             if calls[j].is_wildcard || ranges_meet_unclaimed(&calls[j].first_chars, *r, &all_chars) {
                 cs.push(j);
             }
+        }
+        for let ci of &branch_catch_all_calls(calls, &cs) {
+            cs.push(*ci);
         }
         groups.push(DispatchGroup {
             pattern: `${char_lit(r[0])}..=${char_lit(r[1])}`,
@@ -3365,6 +3420,9 @@ fn gen_tokenize_fn(
                 first_chars: fc,
                 is_wildcard: false,
                 is_catch_all: false,
+                // A one-char literal is its own first character, so it cannot
+                // fail once dispatched to; a longer one can.
+                total_on_first_char: lit.text.chars().count() == 1,
             });
         }
         for let rule of lexer_rules {

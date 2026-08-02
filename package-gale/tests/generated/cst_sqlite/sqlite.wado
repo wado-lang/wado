@@ -2701,12 +2701,18 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '!' } {
             end = try_lit_bangeq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_BANGEQ; best_channel = 0; }
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         } else if first_char matches { '"' | '[' | '_' | '`' } {
             end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         } else if first_char matches { '$' | ':' | '?' | '@' } {
             end = try_BIND_PARAMETER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BIND_PARAMETER; best_channel = 0; }
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         } else if first_char matches { '%' } {
             end = try_lit_percent(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_PERCENT; best_channel = 0; }
@@ -2716,6 +2722,8 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '\'' } {
             end = try_STRING_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; best_channel = 0; }
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         } else if first_char matches { '(' } {
             end = try_lit_lparen(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; best_channel = 0; }
@@ -2736,16 +2744,22 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; best_channel = 0; }
             end = try_SINGLE_LINE_COMMENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SINGLE_LINE_COMMENT; best_channel = 1; }
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         } else if first_char matches { '.' } {
             end = try_lit_dot(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_DOT; best_channel = 0; }
             end = try_NUMERIC_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         } else if first_char matches { '/' } {
             end = try_lit_slash(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; best_channel = 0; }
             end = try_MULTILINE_COMMENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_MULTILINE_COMMENT; best_channel = 1; }
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         } else if first_char matches { ';' } {
             end = try_lit_semi(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; best_channel = 0; }
@@ -2758,11 +2772,15 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_LIT_LTEQ; best_channel = 0; }
             end = try_lit_ltgt(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LTGT; best_channel = 0; }
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         } else if first_char matches { '=' } {
             end = try_lit_eq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_EQ; best_channel = 0; }
             end = try_lit_eqeq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_EQEQ; best_channel = 0; }
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         } else if first_char matches { '>' } {
             end = try_lit_gtgt(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_GTGT; best_channel = 0; }
@@ -2770,25 +2788,35 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_LIT_GT; best_channel = 0; }
             end = try_lit_gteq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_GTEQ; best_channel = 0; }
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         } else if first_char matches { 'X' | 'x' } {
             end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
             end = try_BLOB_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOB_LITERAL; best_channel = 0; }
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         } else if first_char matches { '|' } {
             end = try_lit_pipepipe(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_PIPEPIPE; best_channel = 0; }
             end = try_lit_pipe(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; best_channel = 0; }
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         } else if first_char matches { '~' } {
             end = try_lit_tilde(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_TILDE; best_channel = 0; }
         } else if first_char matches { 'a'..='z' | 'A'..='Z' } {
             end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         } else if first_char matches { '0'..='9' } {
             end = try_NUMERIC_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         } else {
             end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
