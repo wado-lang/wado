@@ -868,9 +868,8 @@ impl<'a> Engine<'a> {
         if dst == src {
             return;
         }
-        let type_id = self.body.exprs[src].type_id;
-        let span = self.body.exprs[src].span;
-        let src_kind = std::mem::replace(&mut self.body.exprs[src].kind, ExprKind::Dead);
+        let moved = self.body.take_expr(src);
+        let (type_id, span, src_kind) = (moved.type_id, moved.span, moved.kind);
         // `src` is now `Dead`; if it named a local, that mention belongs at
         // `dst` after the move, so drop it here — `replace_expr_kind` re-adds it
         // for `dst` when `src_kind` is itself a `Local`.

@@ -861,6 +861,22 @@ impl Body {
         }
     }
 
+    /// Take a node's content, leaving the slot `Dead` so every id pointing at it
+    /// stays valid. The arena half of a node move — a caller holding an index
+    /// (the rewrite engine's use index) layers its own bookkeeping on top.
+    pub fn take_expr(&mut self, id: ExprId) -> ExprNode {
+        let type_id = self.exprs[id].type_id;
+        let span = self.exprs[id].span;
+        std::mem::replace(
+            &mut self.exprs[id],
+            ExprNode {
+                kind: ExprKind::Dead,
+                type_id,
+                span,
+            },
+        )
+    }
+
     /// Deep-copy an operand. A promoted pure value is shared (the same pool
     /// backs the clone, so its `ValueId` stays valid); an effectful subtree is
     /// cloned into fresh nodes.
