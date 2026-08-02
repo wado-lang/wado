@@ -3928,43 +3928,53 @@ impl CallArg {
     }
 }
 
-/// Zero-sized witness that a [`TirExprKind::MethodCall`] was constructed
-/// through [`TirExprKind::method_call`], the sole constructor.  The inner
-/// `()` is private to this module so no code outside `tir` can build one —
-/// this makes direct struct-literal construction of `TirExprKind::MethodCall`
-/// impossible and channels every elaborator-side emission through the
-/// single checkpoint maintained in `Elaborator::build_tir_method_call`,
-/// which in turn guarantees arguments were typechecked against the
-/// callee's declared parameter types.
-///
-/// Post-resolve phases (monomorphize / lower / optimize / codegen) still
-/// rebuild `MethodCall` nodes legitimately; they do so via the same
-/// constructor, which is pub(crate) and therefore available only inside
-/// the compiler.
-#[derive(Debug, Clone)]
-pub struct MethodCallInvariant(());
-
 impl TirExprKind {
-    /// Sole constructor of [`TirExprKind::MethodCall`].
+    /// Build `recv.m(args)`: a [`TirExprKind::Call`] whose receiver heads the
+    /// argument list, so `args[i]` maps to the callee's `params[i]`.
     ///
     /// Callers are expected to have typechecked `args` against the callee's
-    /// declared parameter types before reaching here.  Elaborator-side
-    /// constructions flow through `Elaborator::build_tir_method_call`;
-    /// post-resolve rewriters thread already-checked TIR through this
-    /// function too so the variant's `invariant` field stays coherent.
+    /// declared parameter types before reaching here.
+    ///
+    /// The receiver's `is_mut` is left `false`; `lower` fills the real value in
+    /// from the callee's `self` parameter, which is where every consumer of it
+    /// lives.
     pub(crate) fn method_call(
         receiver: Box<TirExpr>,
         func: FunctionRef,
         type_args: Vec<TypeId>,
         args: Vec<CallArg>,
     ) -> Self {
-        Self::MethodCall {
-            receiver,
+        let mut all = Vec::with_capacity(args.len() + 1);
+        all.push(CallArg::new(*receiver, false));
+        all.extend(args);
+        Self::Call {
             func,
             type_args,
-            args,
-            invariant: MethodCallInvariant(()),
+            args: all,
+            has_receiver: true,
         }
+    }
+
+    /// An instance-method call viewed as receiver plus the arguments after it —
+    /// the shape a pass matching `recv.m(a, b)` wants, without re-deriving that
+    /// the receiver is `args[0]`. `None` for a free call.
+    ///
+    /// The split is a view, not storage: the node keeps one argument list in the
+    /// callee's parameter order, so a pass that treats every argument alike
+    /// (traversal, substitution, type-arg rewriting) matches `Call` directly and
+    /// never needs this.
+    pub fn as_method_call(&self) -> Option<(&TirExpr, &FunctionRef, &[CallArg])> {
+        let TirExprKind::Call {
+            func,
+            args,
+            has_receiver: true,
+            ..
+        } = self
+        else {
+            return None;
+        };
+        let (receiver, rest) = args.split_first()?;
+        Some((&receiver.expr, func, rest))
     }
 }
 
@@ -4030,17 +4040,24 @@ pub enum TirExprKind {
         target_type: TypeId,
     },
 
-    /// Free function call (`foo(args)`) or static method call (`Type::method(args)`).
-    ///
-    /// Whether this is a static method call is encoded in `func.method_info`:
-    /// `None` → free function, `Some(_)` → static method.
-    /// Both map to the same `WirInstr::Call` and share identical semantics.
+    /// Every call: free function (`foo(args)`), static method
+    /// (`Type::method(args)`), and instance method (`recv.method(args)`), which
+    /// all map to the same `WirInstr::Call` and share identical semantics.
     Call {
         /// Function reference (resolved TIR function or external)
         func: FunctionRef,
         /// Explicit type arguments for generic functions: `identity::<i32>(x)`
         type_args: Vec<TypeId>,
+        /// Arguments in the callee's parameter order. When [`Self::Call::has_receiver`],
+        /// `args[0]` is the method receiver, so `args[i]` maps to `params[i]` for
+        /// every call shape — there is no receiver slot outside this list.
         args: Vec<CallArg>,
+        /// Whether `args[0]` is the receiver of an instance method. Semantic,
+        /// not syntactic: a trait-qualified (UFCS) call spells its receiver as
+        /// the first argument and still sets this. Built through
+        /// [`TirExprKind::method_call`], read back through
+        /// [`TirExprKind::as_method_call`].
+        has_receiver: bool,
     },
     /// Raw Component Model call to a lowered WASI import.
     ///
@@ -4052,21 +4069,6 @@ pub enum TirExprKind {
         local_name: String,
         /// Flat ABI arguments (already lowered to core Wasm types)
         args: Vec<TirExpr>,
-    },
-    MethodCall {
-        receiver: Box<TirExpr>,
-        /// Method reference (resolved TIR function or external)
-        func: FunctionRef,
-        /// Explicit type arguments for generic methods: `obj.method::<i32>()`
-        type_args: Vec<TypeId>,
-        args: Vec<CallArg>,
-        /// Witness that this node was constructed through
-        /// [`TirExprKind::method_call`], which is the sole public
-        /// constructor.  Its inner field is private to this module, so
-        /// code outside `tir` cannot build a `MethodCall` struct literal
-        /// directly and must route through the constructor.  Pattern
-        /// matches elsewhere in the crate use `..` to ignore this field.
-        invariant: MethodCallInvariant,
     },
 
     FieldAccess {
