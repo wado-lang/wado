@@ -51,7 +51,7 @@ use crate::tir::{FunctionRef, TypeId};
 ///
 /// `function_ref` captures the resolved target (module, mangled name,
 /// monomorph info, and method-name metadata) so `reify` can emit the
-/// [`crate::tir::TirExprKind::MethodCall`] without re-running
+/// method [`crate::tir::TirExprKind::Call`] without re-running
 /// trait lookup, blanket-impl selection, or method-name mangling.
 /// `self_kind` carries the receiver-adjustment decision (`self` / `&self`
 /// / `&mut self`) so reify can drive `adjust_receiver_for_self_kind` with
@@ -60,7 +60,7 @@ use crate::tir::{FunctionRef, TypeId};
 /// Short-circuiting paths inside
 /// [`super::super::Elaborator::resolve_method_call_with`] (tuple `.len()`
 /// / `.zip()`, the static-method-as-instance error) do *not* leave an
-/// entry here — they rewrite the call into a non-`MethodCall` TIR shape
+/// entry here — they rewrite the call into a non-method-call TIR shape
 /// that reify recognises from the receiver type alone. The synthetic
 /// for-of `.into_iter()` / `.next()` dispatches also skip recording
 /// because they have no source-level `MethodCallExpr` to attach to.
@@ -91,14 +91,14 @@ pub(crate) struct MethodDispatch {
     /// Per-parameter default expression ASTs (`None` for required).
     pub(crate) param_defaults: Vec<Option<crate::ast::Expr>>,
     /// The resolved method's return [`TypeId`] — the authoritative result
-    /// type of the call. Reify uses this for the `MethodCall`'s
+    /// type of the call. Reify uses this for the the method call's
     /// `type_id` rather than the per-`AstId` `expression_types` entry,
     /// which can carry a stale/wrong type for the call site (a unit
     /// method whose `expression_types` slot was recorded as another
     /// type makes reify emit a spurious `drop` of a value-less call →
     /// Wasm stack underflow).
     pub(crate) return_type: TypeId,
-    /// Method-level type args for the [`crate::tir::TirExprKind::MethodCall`]
+    /// Method-level type args for the method [`crate::tir::TirExprKind::Call`]
     /// node, in the exact form the combined walk passes to
     /// [`super::super::Elaborator::build_tir_method_call`]. The
     /// monomorphizer's `collect_func_instantiation_sites` keys off this

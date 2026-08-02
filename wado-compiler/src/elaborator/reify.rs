@@ -2826,7 +2826,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // `arr.index_assign(i, v)`. The elaborator's
                 // `assign_to_target` records the resolved
                 // `FunctionRef` on `index_assign_dispatch[index.id]`;
-                // reify replays the same `MethodCall` shape.
+                // reify replays the same method-call shape.
                 if let ast::Expr::Index(index_expr) = &assign.target
                     && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
                 {
@@ -3278,12 +3278,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let assert_failed_module_source = self.interner.borrow_mut().core("rt");
         let panic_call = TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef {
+                func: Box::new(FunctionRef {
                     module_source: assert_failed_module_source,
                     name: "assert_failed".to_string(),
                     monomorph_info: None,
                     method_info: None,
-                },
+                }),
                 type_args: Vec::new(),
                 args: vec![CallArg::new(template_tir, false)],
                 has_receiver: false,
@@ -4400,7 +4400,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// operator to a trait method (Gap 11), the
     /// `sem.types.operator_dispatch[binary.id]` entry carries the
     /// `(FunctionRef, self_kind, arg_ref_wraps, return_type)` reify
-    /// needs to emit the same `TirExprKind::MethodCall` shape. Absence
+    /// needs to emit the same method-call shape. Absence
     /// of an entry means the elaborator emitted a native
     /// `TirExprKind::Binary`; reify mirrors with the 1:1 op mapping.
     fn reify_binary(
@@ -6390,7 +6390,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let capacity = tuple_lit.elements.len() as u64;
         let new_call = TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef {
+                func: Box::new(FunctionRef {
                     module_source: facts.impl_module_source.clone(),
                     name: facts.new_mangled_name.clone(),
                     monomorph_info: if facts.type_arg_ids.is_empty() {
@@ -6404,7 +6404,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         })
                     },
                     method_info: Some(new_method_info),
-                },
+                }),
                 type_args: vec![],
                 args: vec![CallArg::new(
                     TirExpr::new(
@@ -6612,7 +6612,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let new_call = TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef {
+                func: Box::new(FunctionRef {
                     module_source: facts.impl_module_source.clone(),
                     name: facts.new_mangled_name.clone(),
                     monomorph_info: if facts.type_arg_ids.is_empty() {
@@ -6626,7 +6626,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         })
                     },
                     method_info: Some(new_method_info),
-                },
+                }),
                 type_args: vec![],
                 args: new_args,
                 has_receiver: false,
@@ -6819,7 +6819,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef {
+                func: Box::new(FunctionRef {
                     module_source: facts.module_source,
                     name: facts.mangled_name,
                     monomorph_info: None,
@@ -6836,7 +6836,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         is_ref_impl: false,
                         cm_name: None,
                     }),
-                },
+                }),
                 type_args: vec![],
                 args: vec![CallArg::new(value, false)],
                 has_receiver: false,
@@ -7270,7 +7270,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return TirExpr::new(
                 TirExprKind::Call {
                     type_args: dispatch.type_args,
-                    func: dispatch.function_ref,
+                    func: Box::new(dispatch.function_ref),
                     args,
                     has_receiver: false,
                 },
@@ -7722,7 +7722,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return TirExpr::new(
                 TirExprKind::Call {
                     type_args: dispatch.type_args,
-                    func: dispatch.function_ref,
+                    func: Box::new(dispatch.function_ref),
                     args: arg_exprs,
                     has_receiver: false,
                 },
@@ -8011,12 +8011,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             .collect();
                         return TirExpr::new(
                             TirExprKind::Call {
-                                func: crate::tir::FunctionRef {
+                                func: Box::new(crate::tir::FunctionRef {
                                     module_source: ns_source,
                                     name: rest.to_string(),
                                     monomorph_info: None,
                                     method_info: None,
-                                },
+                                }),
                                 type_args,
                                 args: arg_calls,
                                 has_receiver: false,
@@ -8082,12 +8082,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
             return TirExpr::new(
                 TirExprKind::Call {
-                    func: crate::tir::FunctionRef {
+                    func: Box::new(crate::tir::FunctionRef {
                         module_source: callee_module,
                         name: callee_name,
                         monomorph_info: None,
                         method_info: None,
-                    },
+                    }),
                     type_args,
                     args,
                     has_receiver: false,
@@ -8152,7 +8152,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify reads both, reifies the container + index, builds
     /// `container.index_mut(idx)`, then adjusts the receiver via
     /// the outer dispatch's `self_kind` / `is_ref_impl` and emits
-    /// the outer `MethodCall` TIR.
+    /// the outer method-call TIR.
     fn reify_index_mut_method_call(
         &mut self,
         method_call: &ast::MethodCallExpr,
@@ -8202,7 +8202,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
 
         // Step 2: adjust the index_mut result for the outer method's
-        // self_kind and build the outer MethodCall TIR.
+        // self_kind and build the outer method-call TIR.
         let receiver_for_method = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
             index_mut_call,
             outer_dispatch.self_kind,
@@ -8444,7 +8444,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &self.tysys.type_table,
         );
 
-        // Method-level type args for the TIR `MethodCall` node — the exact
+        // Method-level type args for the TIR method-call node — the exact
         // vector annotate fed into `build_tir_method_call`. The monomorphizer's
         // `collect_func_instantiation_sites` keys off this field to queue
         // `Struct^Trait::method<Args>` instances, so it must match what the
@@ -9447,7 +9447,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let func = make_func_ref(&self.tysys, item);
                 let call = TirExpr::new(
                     crate::tir::TirExprKind::Call {
-                        func,
+                        func: Box::new(func),
                         type_args: vec![],
                         args: vec![crate::tir::CallArg::new(inner, false)],
                         has_receiver: false,

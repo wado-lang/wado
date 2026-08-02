@@ -1396,7 +1396,7 @@ impl FunctionTranslator<'_, '_> {
         self.alloc_expr(kind, expr.type_id, expr.span)
     }
 
-    /// Convert a `Call` / `MethodCall` argument. When the argument is
+    /// Convert a a call argument. When the argument is
     /// a specialized fn-param `Local` and the slot still expects
     /// `fn(...)`, wrap the converted `Local` in
     /// `ExprKind::ClosureToCanonical` so the callee sees the

@@ -270,7 +270,7 @@ fn lookup_template_with_trait_fallback<'a, V>(
 ///
 /// Replaces the manual recursive traversal in `collect_func_instantiation_sites_in_*`
 /// with visitor-based traversal. The visitor's `walk_expr`/`walk_stmt` handles
-/// recursion into all TIR node kinds automatically, so only Call and `MethodCall`
+/// recursion into all TIR node kinds automatically, so only call
 /// need custom handling.
 pub(super) struct InstantiationCollector<'a> {
     pub mono: &'a mut Monomorphizer,
@@ -280,7 +280,7 @@ pub(super) struct InstantiationCollector<'a> {
 
 impl TirRefVisitor for InstantiationCollector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        // Handle Call and MethodCall instantiation logic
+        // Handle call instantiation logic
         self.mono.collect_func_instantiation_sites_in_expr(
             expr,
             self.generic_functions,
@@ -450,7 +450,7 @@ fn expr_reads_local(expr: &TirExpr, index: u32) -> bool {
     finder.found
 }
 
-/// Fills in inferred method-level `type_args` on `MethodCall` nodes whose type
+/// Fills in inferred method-level `type_args` on method-call nodes whose type
 /// arguments were left empty (T inferred from a `TypePack` element at resolution
 /// time, only concrete after variadic expansion). Rides the shared mutable walk
 /// so the inference reaches method calls in every in-frame position, not just
@@ -560,7 +560,7 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
 }
 
 impl Monomorphizer {
-    /// Collect function instantiation sites from Call/MethodCall expressions
+    /// Collect function instantiation sites from call expressions
     pub fn collect_function_instantiation_sites(
         &mut self,
         module: &TirModule,
@@ -626,7 +626,7 @@ impl Monomorphizer {
                     method_info: Some(info),
                     monomorph_info: Some(monomorph),
                     ..
-                } = func
+                } = &**func
                     && (!monomorph.impl_type_args.is_empty()
                         || !monomorph.method_type_args.is_empty())
                 {
@@ -1238,7 +1238,7 @@ impl Monomorphizer {
                 let blanket_lookup = if let FunctionRef {
                     monomorph_info: Some(mono),
                     ..
-                } = method_func
+                } = &**method_func
                     && mono.is_blanket
                 {
                     let receiver_module = receiver_module_hint(type_table, receiver.type_id);
@@ -1274,7 +1274,7 @@ impl Monomorphizer {
                         monomorph_info: Some(mono),
                         ..
                     },
-                ) = (blanket_lookup, method_func)
+                ) = (blanket_lookup, &**method_func)
                 {
                     let generic_func = generic_func_rc.borrow();
                     let info = method_func.method_info.as_ref();
@@ -1299,7 +1299,7 @@ impl Monomorphizer {
                     let method_info = generic_func.method_info.clone();
                     // impl_type_args and method_type_args are now separate in MonomorphInfo.
                     // For blanket impls, impl_type_args contains the concrete receiver type.
-                    // method_type_args comes from the MethodCall's type_args field.
+                    // method_type_args comes from the call's type_args field.
                     // If method_type_args is empty but the callee has type params, infer from args.
                     let impl_ta = pack_args.unwrap_or_else(|| mono.impl_type_args.clone());
                     let method_ta = if !generic_func.has_real_type_params() {
@@ -1890,7 +1890,7 @@ impl Monomorphizer {
                     let (sub_impl_type_args, sub_method_type_args) = if let FunctionRef {
                         monomorph_info: Some(mi),
                         ..
-                    } = &*call_func
+                    } = &**call_func
                     {
                         (
                             mi.impl_type_args
@@ -1969,7 +1969,7 @@ impl Monomorphizer {
                         && let FunctionRef {
                             monomorph_info: Some(mi),
                             ..
-                        } = &*call_func
+                        } = &**call_func
                     {
                         let substituted_method_args: Vec<TypeId> = mi
                             .method_type_args
@@ -2070,7 +2070,7 @@ impl Monomorphizer {
                             let method_type_arg_tids: Vec<TypeId> = if let FunctionRef {
                                 monomorph_info: Some(mi),
                                 ..
-                            } = &*call_func
+                            } = &**call_func
                             {
                                 mi.method_type_args
                                     .iter()
@@ -2144,7 +2144,7 @@ impl Monomorphizer {
                                     concrete_type_id,
                                 )
                             });
-                            *call_func = FunctionRef {
+                            **call_func = FunctionRef {
                                 module_source: resolved_module,
                                 name: new_func_name,
                                 monomorph_info: new_monomorph,
@@ -2158,7 +2158,7 @@ impl Monomorphizer {
                             method_type_args: sub_method_type_args,
                             is_blanket: false,
                         });
-                        *call_func = FunctionRef {
+                        **call_func = FunctionRef {
                             module_source,
                             name: new_func_name,
                             monomorph_info,
@@ -3629,7 +3629,7 @@ impl Monomorphizer {
                     type_table,
                 );
             }
-            // Populate type_args on MethodCall nodes that have inferred generic params.
+            // Populate type_args on method-call nodes that have inferred generic params.
             // Inside variadic for-of, method calls like `seq.element(&v)` have empty type_args
             // because T was inferred from a TypePack at resolution time. Now that types are
             // concrete, fill in type_args so the monomorphizer can instantiate the generic method.
@@ -3725,7 +3725,7 @@ impl Monomorphizer {
     /// After variadic for-of expansion, method calls that had inferred type params
     /// (empty `type_args`) need their `type_args` populated from the concrete argument types.
     /// e.g., `seq.element(&v)` where element<T: Serialize> — infer T from the arg type.
-    /// Populate inferred method-level `type_args` on every `MethodCall` in a
+    /// Populate inferred method-level `type_args` on every method call in a
     /// (post variadic-for-of-expansion) block. Delegates to
     /// [`MethodTypeArgInferer`] so the traversal is exhaustive.
     fn infer_method_call_type_args(

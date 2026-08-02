@@ -3948,7 +3948,7 @@ impl TirExprKind {
         all.push(CallArg::new(*receiver, false));
         all.extend(args);
         Self::Call {
-            func,
+            func: Box::new(func),
             type_args,
             args: all,
             has_receiver: true,
@@ -4044,8 +4044,11 @@ pub enum TirExprKind {
     /// (`Type::method(args)`), and instance method (`recv.method(args)`), which
     /// all map to the same `WirInstr::Call` and share identical semantics.
     Call {
-        /// Function reference (resolved TIR function or external)
-        func: FunctionRef,
+        /// Function reference (resolved TIR function or external). Boxed to keep
+        /// the variant compact: with `MethodCall` merged in, `Call` is the only
+        /// `FunctionRef` holder, and unboxed it dominates the enum by ~290 bytes
+        /// (clippy's `large_enum_variant`).
+        func: Box<FunctionRef>,
         /// Explicit type arguments for generic functions: `identity::<i32>(x)`
         type_args: Vec<TypeId>,
         /// Arguments in the callee's parameter order. When [`Self::Call::has_receiver`],

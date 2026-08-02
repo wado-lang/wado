@@ -104,12 +104,12 @@ fn build_i128_from_i64_call(
     let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: ctor.module_source.clone(),
                 name: mangled_name,
                 monomorph_info: None,
                 method_info: Some(method_info),
-            },
+            }),
             type_args: vec![],
             args: vec![CallArg::new(inner_literal, false)],
             has_receiver: false,
@@ -138,12 +138,12 @@ fn build_u128_from_u64_call(
     let mangled_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: ctor.module_source.clone(),
                 name: mangled_name,
                 monomorph_info: None,
                 method_info: Some(method_info),
-            },
+            }),
             type_args: vec![],
             args: vec![CallArg::new(inner_literal, false)],
             has_receiver: false,
@@ -179,12 +179,12 @@ fn build_i128_from_pair_call(
     let method_info = LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: ctor.module_source.clone(),
                 name: method_info.to_mangled_name(),
                 monomorph_info: None,
                 method_info: Some(method_info),
-            },
+            }),
             type_args: vec![],
             args: vec![
                 CallArg::new(low_literal, false),
@@ -223,12 +223,12 @@ fn build_u128_from_pair_call(
     let method_info = LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: ctor.module_source.clone(),
                 name: method_info.to_mangled_name(),
                 monomorph_info: None,
                 method_info: Some(method_info),
-            },
+            }),
             type_args: vec![],
             args: vec![
                 CallArg::new(low_literal, false),

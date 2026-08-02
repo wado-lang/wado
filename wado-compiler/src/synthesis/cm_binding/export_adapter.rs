@@ -1624,7 +1624,10 @@ fn build_call_user(
     let param_is_mut: Vec<bool> = user_func_ref.params.iter().map(|p| p.is_mut).collect();
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::from_resolved(&user_func_ref, callee_module.clone()),
+            func: Box::new(FunctionRef::from_resolved(
+                &user_func_ref,
+                callee_module.clone(),
+            )),
             type_args: vec![],
             args: call_args
                 .into_iter()

@@ -301,13 +301,6 @@ fn expand_expr(expr: &mut TirExpr, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx
             }
             return;
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            expand_expr(receiver, alloc, ctx);
-            for a in args {
-                expand_expr(&mut a.expr, alloc, ctx);
-            }
-            return;
-        }
         TirExprKind::Binary { left, right, .. } => {
             expand_expr(left, alloc, ctx);
             expand_expr(right, alloc, ctx);
@@ -455,7 +448,7 @@ fn build_template_block(
     // let mut __r = String::with_capacity(N);
     let with_capacity_call = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: ModuleSource::string(),
                 name: with_capacity_qualified,
                 monomorph_info: None,
@@ -464,7 +457,7 @@ fn build_template_block(
                     None,
                     "with_capacity".to_string(),
                 )),
-            },
+            }),
             type_args: vec![],
             args: vec![CallArg::new(
                 TirExpr::new(
@@ -840,7 +833,7 @@ fn build_formatter_expr(
     if !has_custom_spec {
         return TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef {
+                func: Box::new(FunctionRef {
                     module_source: ModuleSource::format(),
                     name: format!("{}::new", names.formatter_fq),
                     monomorph_info: None,
@@ -849,7 +842,7 @@ fn build_formatter_expr(
                         None,
                         "new".to_string(),
                     )),
-                },
+                }),
                 type_args: vec![],
                 args: vec![CallArg::new(buf_mut_ref, false)],
                 has_receiver: false,

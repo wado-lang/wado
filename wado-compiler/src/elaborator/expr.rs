@@ -4422,7 +4422,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef {
+                func: Box::new(FunctionRef {
                     module_source,
                     name: method_name,
                     monomorph_info: None,
@@ -4435,7 +4435,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         Some(from_trait),
                         "from".to_string(),
                     )),
-                },
+                }),
                 type_args: vec![],
                 args: vec![CallArg::new(value, false)],
                 has_receiver: false,

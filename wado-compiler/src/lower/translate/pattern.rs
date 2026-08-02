@@ -1447,7 +1447,7 @@ impl<'a> PatternLowerer<'a> {
             TirLiteralPattern::Null => TirExpr::new(TirExprKind::Null, TypeTable::UNKNOWN, span),
         };
 
-        // For String, use MethodCall to String^Eq::eq
+        // For String, use a method call to String^Eq::eq
         if matches!(lit, TirLiteralPattern::String(_)) {
             return self.string_eq_call(local_expr, literal_expr, local_type, span);
         }

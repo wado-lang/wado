@@ -294,7 +294,7 @@ impl Monomorphizer {
                 monomorph_info: Some(monomorph),
                 method_info: Some(info),
                 ..
-            } = func
+            } = &**func
                 && (!monomorph.impl_type_args.is_empty() || !monomorph.method_type_args.is_empty())
             {
                 let mut names_to_try = vec![MethodName::format_local(
@@ -684,7 +684,7 @@ impl Monomorphizer {
             let blanket_lookup = if let FunctionRef {
                 monomorph_info: Some(mono),
                 ..
-            } = &*method_func
+            } = &**method_func
                 && mono.is_blanket
             {
                 let info = method_func.method_info.as_ref();
@@ -856,8 +856,7 @@ impl TirMutVisitor for CallRewriter<'_> {
                 self.mono.rewrite_call_expr(expr, self.type_table);
             }
             TirExprKind::Call {
-                has_receiver: true,
-                ..
+                has_receiver: true, ..
             } => {
                 self.mono.rewrite_method_call_expr(expr, self.type_table);
             }

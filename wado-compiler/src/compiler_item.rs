@@ -16,7 +16,7 @@
 //! and names (`LocalMethodName::new("String", None, "push_str")`,
 //! `name == "Option"`) at every site. Renaming a stdlib item would
 //! silently break those sites — failures showed up only at runtime as
-//! "unresolved `MethodCall`" errors. With the registry, renames on the
+//! "unresolved call" errors. With the registry, renames on the
 //! Wado side are invisible to the Rust side as long as the
 //! `#[compiler_item("...")]` value stays put; renaming the
 //! `compiler_item` value, in turn, fails the compiler's own build by

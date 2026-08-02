@@ -416,7 +416,7 @@ impl Monomorphizer {
             //    any body in the batch.
             //
             // 3. `rewrite_types_in_function` rewrites every `TypeId` in each
-            //    new body — including `Call`/`MethodCall::type_args` —
+            //    new body — including a call's `type_args` —
             //    through `type_substitutions`, so the body is in canonical
             //    `Struct` form.
             //

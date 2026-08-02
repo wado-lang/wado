@@ -2347,7 +2347,7 @@ pub(super) struct ArithmeticTraitInfo {
 /// by [`Elaborator::build_trait_op_method_call_on_resolved`][bop]. Having a
 /// single, always-populated data type for trait-method dispatch eliminates
 /// the `param_types: vec![]` anti-pattern that previously caused codegen
-/// ICEs when operator dispatch built `TirExprKind::MethodCall` without any
+/// ICEs when operator dispatch built a method call without any
 /// argument-type check.
 ///
 /// [rtq]: crate::elaborator::Elaborator::resolve_trait_method_for_op

@@ -3731,7 +3731,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Stage 4 of WEP 2026-05-26: the IndexMut rewrite is the only
-        // path that builds the user-visible MethodCall TIR without going
+        // path that builds the user-visible method-call TIR without going
         // through `resolve_method_call_with`. Record dispatch here so
         // `m["k"].push(1)` and friends leave the same annotation as the
         // ordinary path.
@@ -3758,14 +3758,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         // Stage 7-B: reify (`reify_index_mut_method_call`) rebuilds the
-        // outer `MethodCall` (and the `__index_mut_val` synthesis) from the
+        // outer method call (and the `__index_mut_val` synthesis) from the
         // recorded `method_dispatch` + `IndexMutMethodCall` desugar; the
         // combined walk projects only the result type. The args were resolved
         // above for their fact-recording side effects.
         Some(placeholder(return_type, method_call.span))
     }
 
-    /// Sole elaborator-side constructor of [`TirExprKind::MethodCall`].
+    /// Sole elaborator-side constructor of a method call: a
+    /// [`TirExprKind::Call`] whose receiver heads its `args`.
     ///
     /// Centralizing construction here establishes a single audit point for
     /// the invariant "every elaborator-emitted method call has been
@@ -3774,11 +3775,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the helper exists so that any future machine-enforced invariant
     /// (e.g. privatizing the enum variant's fields, adding a debug
     /// assertion, wiring a `LocalMethodName` witness type) can plug in
-    /// here without having to chase down scattered `TirExprKind::MethodCall
-    /// { … }` literals.
+    /// here without having to chase down scattered `Call { … }` literals.
     ///
     /// Post-resolve phases (monomorphize / lower / optimize / codegen)
-    /// rebuild `TirExprKind::MethodCall` nodes from already-checked
+    /// rebuild method-call nodes from already-checked
     /// expressions and legitimately bypass this helper; they operate on
     /// TIR that is guaranteed to have been produced through this path
     /// originally.

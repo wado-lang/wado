@@ -863,12 +863,12 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
     for module_source in &modules_with_init {
         let call = TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef {
+                func: Box::new(FunctionRef {
                     module_source: module_source.clone(),
                     name: crate::name::MODULE_INIT_FUNCTION.to_string(),
                     monomorph_info: None,
                     method_info: None,
-                },
+                }),
                 type_args: Vec::new(),
                 args: Vec::new(),
                 has_receiver: false,
@@ -941,12 +941,12 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
     // Inject call to __initialize_modules at the start of entry point functions
     let init_call = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: entry_source.clone(),
                 name: crate::name::MODULES_INIT_FUNCTION.to_string(),
                 monomorph_info: None,
                 method_info: None,
-            },
+            }),
             type_args: Vec::new(),
             args: Vec::new(),
             has_receiver: false,

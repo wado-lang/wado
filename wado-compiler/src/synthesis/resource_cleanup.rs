@@ -8,7 +8,7 @@
 //! reuse the table eventually exhausts (issue #1133).
 //!
 //! This pass runs pre-monomorphize, before CM-binding synthesis, while
-//! resource method calls are still `MethodCall` / `Call` nodes. For every
+//! resource method calls are still a call nodes. For every
 //! function body it tracks each owned resource value and inserts a
 //! `resource.drop` (emitted as a `CmRawCall` to the `resource-drop:<cm>`
 //! canonical intrinsic) on every control-flow path where the value is still
@@ -250,7 +250,7 @@ pub fn elaborate_resource_drops(project: &mut Package) {
     };
     let tt = type_table.borrow();
 
-    // The receiver of a `MethodCall` is consumed only when the method takes
+    // The receiver of a method call is consumed only when the method takes
     // `self` by value; collect those methods up front. Methods live both as
     // free `functions` and inside `impls`.
     let mut owned_self: IndexSet<String> = IndexSet::default();
@@ -652,36 +652,37 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
             scan_transfers(inner, false, consumed, cx);
         }
 
-        TirExprKind::MethodCall {
-            receiver,
+        TirExprKind::Call {
             func,
             args,
+            has_receiver,
             ..
         } => {
-            // `&self` methods auto-reference the receiver; look through that
-            // `&` to reach the underlying value.
-            let recv_inner = match &receiver.kind {
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                    expr,
-                } => expr.as_ref(),
-                _ => receiver.as_ref(),
+            let rest = match has_receiver.then(|| args.split_first()).flatten() {
+                Some((receiver, rest)) => {
+                    // `&self` methods auto-reference the receiver; look through
+                    // that `&` to reach the underlying value.
+                    let recv_inner = match &receiver.expr.kind {
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                            expr,
+                        } => expr.as_ref(),
+                        _ => &receiver.expr,
+                    };
+                    // The receiver is transferred exactly when the method takes
+                    // `self` by value. Extraction (`Result::unwrap`) is such a
+                    // by-value method, so it is covered here with no
+                    // aggregate-shape guessing.
+                    let receiver_consumed = func
+                        .method_info
+                        .as_ref()
+                        .is_some_and(|info| cx.owned_self.contains(&info.base_dispatch_key()));
+                    scan_transfers(recv_inner, receiver_consumed, consumed, cx);
+                    rest
+                }
+                None => args.as_slice(),
             };
-            // The receiver is transferred exactly when the method takes `self`
-            // by value. Extraction (`Result::unwrap`) is such a by-value method,
-            // so it is covered here with no aggregate-shape guessing.
-            let receiver_consumed = func
-                .method_info
-                .as_ref()
-                .is_some_and(|info| cx.owned_self.contains(&info.base_dispatch_key()));
-            scan_transfers(recv_inner, receiver_consumed, consumed, cx);
-            for arg in args {
-                scan_transfers(&arg.expr, true, consumed, cx);
-            }
-        }
-
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
+            for arg in rest {
                 scan_transfers(&arg.expr, true, consumed, cx);
             }
         }

@@ -760,7 +760,7 @@ fn wrap_copy_value(expr: TirExpr, type_id: TypeId, span: Span) -> TirExpr {
     };
     TirExpr::new(
         TirExprKind::Call {
-            func,
+            func: Box::new(func),
             type_args: vec![type_id],
             args: vec![CallArg::new(expr, false)],
             has_receiver: false,
@@ -816,7 +816,7 @@ fn build_array_clone(
     }
     TirExpr::new(
         TirExprKind::Call {
-            func,
+            func: Box::new(func),
             type_args: vec![elem_type],
             args,
             has_receiver: false,

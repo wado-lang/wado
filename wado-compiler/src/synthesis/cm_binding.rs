@@ -238,7 +238,7 @@ impl TirRefVisitor for CalleeCollector {
     }
 
     fn visit_expr(&mut self, expr: &TirExpr) {
-        if let TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } = &expr.kind {
+        if let TirExprKind::Call { func, .. } = &expr.kind {
             self.callees
                 .push((func.module_source.clone(), func.name.clone()));
         }
