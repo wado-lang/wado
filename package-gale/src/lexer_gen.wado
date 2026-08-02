@@ -2253,6 +2253,7 @@ pub fn collect_keyword_rules(lexer_rules: &List<LexerRule>, grammar_opts: &List<
     let mut carrier_indices: List<i32> = [];
     let mut carrier_first_chars: List<List<[char, char]>> = [];
     let mut carrier_is_wildcard: List<bool> = [];
+    let mut carrier_max_len: List<i32> = [];
     for let mut i = 0; i < lexer_rules.len(); i += 1 {
         let rule = &lexer_rules[i];
         if rule.is_fragment || rule.is_virtual {
@@ -2265,6 +2266,7 @@ pub fn collect_keyword_rules(lexer_rules: &List<LexerRule>, grammar_opts: &List<
         carrier_indices.push(i);
         carrier_first_chars.push(try_call.first_chars);
         carrier_is_wildcard.push(try_call.is_wildcard);
+        carrier_max_len.push(lexer_rule_bounded_match_len(rule));
     }
     let mut result: List<KeywordInfo> = [];
     for let mut c = 0; c < candidates.len(); c += 1 {
@@ -2275,11 +2277,64 @@ pub fn collect_keyword_rules(lexer_rules: &List<LexerRule>, grammar_opts: &List<
             &carrier_indices,
             &carrier_first_chars,
             &carrier_is_wildcard,
+            &carrier_max_len,
         ) {
             result.push(*kw);
         }
     }
     return result;
+}
+
+/// An upper bound on the characters `rule` can match, or -1 when the shape is
+/// unbounded or not worth analysing. Only ever used to rule a carrier OUT, so
+/// -1 keeps a rule eligible.
+fn lexer_rule_bounded_match_len(rule: &LexerRule) -> i32 {
+    let mut best = -1;
+    for let alt of &rule.body {
+        let n = lexer_alt_bounded_len(alt);
+        if n < 0 {
+            return -1;
+        }
+        if n > best {
+            best = n;
+        }
+    }
+    return best;
+}
+
+fn lexer_alt_bounded_len(alt: &LexerAlternative) -> i32 {
+    let mut total = 0;
+    for let elem of &alt.elements {
+        let n = lexer_element_bounded_len(elem);
+        if n < 0 {
+            return -1;
+        }
+        total += n;
+    }
+    return total;
+}
+
+fn lexer_element_bounded_len(elem: &LexerElement) -> i32 {
+    return match *elem {
+        Literal(text) => text.chars().count(),
+        CharRange(_) | CharClass(_) | AnyChar => 1,
+        // Set-complement consumes exactly one character, whatever it negates.
+        Not(_) => 1,
+        Group(alts) => {
+            let mut best = -1;
+            for let alt of alts {
+                let n = lexer_alt_bounded_len(&alt);
+                if n < 0 {
+                    return -1;
+                }
+                if n > best {
+                    best = n;
+                }
+            }
+            best;
+        },
+        _ => -1,
+    };
 }
 
 /// Decides whether a keyword candidate may use the classifier shortcut.
@@ -2290,8 +2345,10 @@ pub fn collect_keyword_rules(lexer_rules: &List<LexerRule>, grammar_opts: &List<
 /// the keyword unconditionally, so it is only sound when:
 ///
 /// - some carrier declared *after* the keyword can match its first character
-///   (reachability — otherwise the classifier never runs and the rule would be
-///   unreachable), and
+///   AND is able to match as many characters as the keyword has (reachability —
+///   the classifier only runs on a span a carrier matched, so a carrier that
+///   cannot reach the keyword's length never presents it: `D : 'h' '2'` behind
+///   `C : .` is asked about `h`, never `h2`), and
 /// - no carrier declared *before* the keyword can match its first character
 ///   (priority — that earlier carrier wins the tie under ANTLR4 rules, so
 ///   reclassifying its match into the keyword would mis-tag it; the canonical
@@ -2306,10 +2363,12 @@ fn keyword_carrier_admits(
     carrier_indices: &List<i32>,
     carrier_first_chars: &List<List<[char, char]>>,
     carrier_is_wildcard: &List<bool>,
+    carrier_max_len: &List<i32>,
 ) -> bool {
     let first_char = kw.lowercase_text.chars().next().unwrap();
     let first_ci = kw.char_ci[0];
     let upper = if first_ci { first_char.to_ascii_uppercase() } else { first_char };
+    let kw_len = kw.lowercase_text.chars().count();
     let mut has_later_carrier = false;
     for let mut i = 0; i < carrier_indices.len(); i += 1 {
         let covers = carrier_is_wildcard[i]
@@ -2320,8 +2379,13 @@ fn keyword_carrier_admits(
         }
         if carrier_indices[i] < kw_index {
             // An earlier carrier ties with the keyword and wins under ANTLR4
-            // priority — the shortcut would mis-reclassify its match.
+            // priority — the shortcut would mis-reclassify its match. The
+            // first character stays the proxy here: a carrier ruled out for
+            // reachability may still collide, and rejecting is the safe side.
             return false;
+        }
+        if carrier_max_len[i] >= 0 && carrier_max_len[i] < kw_len {
+            continue;
         }
         has_later_carrier = true;
     }
