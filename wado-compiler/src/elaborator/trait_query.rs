@@ -1591,10 +1591,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether the trait named `trait_name` declares `method_name`. The cheap
     /// form of [`Self::find_trait_decl_method`], for counting candidates
-    /// without reaching for a declaration.
+    /// without cloning each one's declaration.
+    ///
+    /// Reaches the trait exactly as `find_trait_decl_method` does, so counting
+    /// candidates and resolving one cannot disagree. The digest cannot stand in
+    /// here: it is keyed by `canonical_decl_key`, which answers with the
+    /// prelude's type when a module declares a trait sharing one of its names
+    /// (`trait Left` against `core:prelude/format`'s `Left`), and the
+    /// current-module fallback below is what finds the local declaration.
     fn trait_declares_method(&self, trait_name: &str, method_name: &str) -> bool {
-        self.trait_sig_by_name(trait_name)
-            .is_some_and(|sig| sig.method(method_name).is_some())
+        self.find_trait_decl(trait_name)
+            .is_some_and(|(decl, _)| decl.methods.iter().any(|m| m.name == method_name))
+    }
+
+    /// The trait `trait_name` names in this frame, with its declaring module.
+    fn find_trait_decl(&self, trait_name: &str) -> Option<(&ast::TraitDecl, ModuleSource)> {
+        find_trait_decl_with(
+            &self.declared_trait_name(trait_name),
+            &self.current_module_source,
+            self.current_module_items,
+            &self.sem.imports,
+            self.symbols,
+            &self.tysys.trait_env,
+            self.loaded_modules,
+        )
     }
 
     /// The declaration of `method_name` in the trait named `trait_name`, with
@@ -1607,15 +1627,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_name: &str,
         method_name: &str,
     ) -> Option<(ast::Function, Vec<ast::AssociatedTypeDecl>, ModuleSource)> {
-        let (trait_decl, module) = find_trait_decl_with(
-            &self.declared_trait_name(trait_name),
-            &self.current_module_source,
-            self.current_module_items,
-            &self.sem.imports,
-            self.symbols,
-            &self.tysys.trait_env,
-            self.loaded_modules,
-        )?;
+        let (trait_decl, module) = self.find_trait_decl(trait_name)?;
         let method = trait_decl.methods.iter().find(|m| m.name == method_name)?;
         Some((
             method.clone(),
