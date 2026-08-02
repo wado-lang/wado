@@ -1151,7 +1151,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Stage 4 of WEP 2026-05-26: record the dispatch decision so the
-        // future `reify` pass can emit the same `MethodCall` TIR without
+        // future `reify` pass can emit the same method-call TIR without
         // re-running trait lookup / method-name mangling. Skipped when:
         //  - `call_id == None` (synthetic call: for-of's `.into_iter()`
         //    / `.next()`),
@@ -1190,7 +1190,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None
         };
 
-        // Reify rebuilds the `MethodCall` TIR from the recorded dispatch;
+        // Reify rebuilds the method-call TIR from the recorded dispatch;
         // the walk projects only the result type. `receiver` and `args`
         // were resolved above for their fact-recording side effects.
         MethodCallOutcome {

@@ -732,14 +732,15 @@ fn build_dispatch_wrapper_function(
         };
         let wrap_call = TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef {
+                func: Box::new(FunctionRef {
                     module_source: entry_source.clone(),
                     name: crate::name::cm_wrap_async_func_name(base_name, op_name),
                     monomorph_info: None,
                     method_info: None,
-                },
+                }),
                 type_args: vec![],
                 args: wrap_args,
+                has_receiver: false,
             },
             return_type,
             span,
@@ -777,7 +778,7 @@ fn build_dispatch_wrapper_function(
     // runs, so the fallback emits the same shape user code would have
     // emitted if no handler were installed: an effect-like `Call`
     // (`Counter::next()` form) for effects, and a `cm_name`-tagged
-    // `MethodCall` / `Call` for resources. cm_binding then walks every
+    // a call for resources. cm_binding then walks every
     // function body — including these wrapper fallbacks — and rewrites
     // both shapes uniformly:
     //
@@ -830,18 +831,19 @@ fn build_dispatch_wrapper_function(
         // an open effect is "call the consumer's implementation", not a trap.
         let effect_call = TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef {
+                func: Box::new(FunctionRef {
                     module_source: interner.borrow_mut().local(base_name),
                     name: op_name.clone(),
                     monomorph_info: None,
                     method_info: None,
-                },
+                }),
                 type_args: vec![],
                 args: arg_exprs
                     .iter()
                     .cloned()
                     .map(|e| CallArg::new(e, false))
                     .collect(),
+                has_receiver: false,
             },
             return_type,
             span,
@@ -878,14 +880,15 @@ fn build_dispatch_wrapper_function(
         );
         let panic_call = TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef {
+                func: Box::new(FunctionRef {
                     module_source: ModuleSource::rt(),
                     name: "panic".to_string(),
                     monomorph_info: None,
                     method_info: None,
-                },
+                }),
                 type_args: vec![],
                 args: vec![CallArg::new(message, false)],
+                has_receiver: false,
             },
             TypeTable::NEVER,
             span,
@@ -1029,7 +1032,7 @@ fn build_dispatch_wrapper_function(
 
 /// Build the wrapper-fallback placeholder for a resource operation
 /// (one that carries a `#[cm("...")]` attribute). Emits the same
-/// pre-cm_binding call shape that user code emits — `MethodCall` for
+/// pre-cm_binding call shape that user code emits — a method call for
 /// instance ops (those whose first param is the synthesised `self`
 /// receiver from gap 3), `Call` for static ops — with `method_info`
 /// carrying the original `cm_name`. `cm_binding`'s
@@ -1126,9 +1129,10 @@ fn build_resource_fallback_call(
             .collect();
         TirExpr::new(
             TirExprKind::Call {
-                func: func_ref,
+                func: Box::new(func_ref),
                 type_args: vec![],
                 args,
+                has_receiver: false,
             },
             return_type,
             span,
@@ -1365,12 +1369,6 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 lower_dispatch_in_expr(arg, env, ctx);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            lower_dispatch_in_expr(receiver, env, ctx);
-            for arg in args {
-                lower_dispatch_in_expr(&mut arg.expr, env, ctx);
             }
         }
         TirExprKind::Binary { left, right, .. } => {
@@ -2188,12 +2186,6 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
                     self.visit_expr(arg);
                 }
             }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.visit_expr(receiver);
-                for arg in args {
-                    self.visit_expr(&mut arg.expr);
-                }
-            }
             TirExprKind::StructLiteral { fields, .. } => {
                 for f in fields {
                     self.visit_expr(&mut f.value);
@@ -2381,14 +2373,15 @@ fn build_trap_closure(
     let closure_ret = handler_return_type(op, &type_table.borrow());
     let trap_call = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: ModuleSource::builtin(),
                 name: "unreachable".to_string(),
                 monomorph_info: None,
                 method_info: None,
-            },
+            }),
             type_args: vec![],
             args: vec![],
+            has_receiver: false,
         },
         closure_ret,
         span,
@@ -2420,7 +2413,7 @@ fn build_trap_closure(
 /// 1. **User-effect shape** — `Call` whose `func.module_source` is
 ///    `ModuleSource::Local { path: "<E>" }` and `func.name` is the
 ///    bare op name. Produced by the elaborator for `Effect::op(...)`.
-/// 2. **Resource `cm_name` shape** — `Call` (static) or `MethodCall`
+/// 2. **Resource `cm_name` shape** — a static or instance call
 ///    (instance) whose `func.method_info.cm_name` is `Some(...)`.
 ///    Produced by the elaborator for `R::op(args)` /
 ///    `receiver.op(args)` on a resource declaration.
@@ -2454,7 +2447,7 @@ fn rewrite_call_sites_to_wrappers(
     //     rewriter intercepts these via `(interface_name, op_name)` in
     //     `user_to_wrapper`.
     //   * resource methods (`Fields::new()`, `tx.write(payload)`,
-    //     `Stream::<u8>::new()`) resolve to a `Call` / `MethodCall`
+    //     `Stream::<u8>::new()`) resolve to a `Call`
     //     whose `func.module_source` is the resource's declaring
     //     module and whose `func.method_info.cm_name` is `Some(...)`.
     //     The rewriter intercepts these via
@@ -2535,8 +2528,8 @@ struct RewriteCtx<'a> {
     /// (e.g. `Counter::next()`).
     user_to_wrapper: &'a IndexMap<(String, String), String>,
     /// `(resource_module, base_name, cm_name) → [(type_args,
-    /// wrapper_name)]` for resource `MethodCalls` / Calls with
-    /// `method_info.cm_name` set. Multiple instantiations live under
+    /// wrapper_name)]` for calls with `method_info.cm_name` set.
+    /// Multiple instantiations live under
     /// the same key; the rewriter narrows by the call's type args.
     cm_to_wrappers: &'a IndexMap<(ModuleSource, String, String), Vec<(Vec<TypeId>, String)>>,
     type_table: std::rc::Rc<std::cell::RefCell<TypeTable>>,
@@ -2651,12 +2644,17 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
     // Recurse into children first.
     rewrite_call_children(expr, ctx);
 
-    // Then check if THIS expression is a Call/MethodCall worth
-    // rewriting. The two pre-cm_binding shapes the rewriter routes
-    // are: user-effect Calls (`Effect::op(...)`) and resource calls
-    // tagged with `cm_name` on `method_info`.
+    // Then check if THIS expression is a call worth rewriting. The two
+    // pre-cm_binding shapes the rewriter routes are: user-effect calls
+    // (`Effect::op(...)`) and resource calls tagged with `cm_name` on
+    // `method_info`.
     let new_call: Option<TirExpr> = match &expr.kind {
-        TirExprKind::Call { func, args, .. } => {
+        TirExprKind::Call {
+            func,
+            args,
+            has_receiver: false,
+            ..
+        } => {
             let return_type = expr.type_id;
             // Resource static call?
             if let Some(method_info) = &func.method_info
@@ -2697,12 +2695,16 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 None
             }
         }
-        TirExprKind::MethodCall {
-            receiver,
+        TirExprKind::Call {
             func,
             args,
+            has_receiver: true,
             ..
         } => {
+            let Some((receiver, args)) = args.split_first() else {
+                return;
+            };
+            let receiver = &receiver.expr;
             let mi_cm = func
                 .method_info
                 .as_ref()
@@ -2720,12 +2722,12 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
             {
                 let return_type = expr.type_id;
                 // The wrapper's first parameter is the resource receiver
-                // typed as `&Self` (gap-3). User MethodCall receivers
+                // typed as `&Self` (gap-3). User method-call receivers
                 // arrive as the resource value (e.g. `tx:
                 // StreamWritable<u8>`) rather than `&StreamWritable<u8>`,
                 // so wrap with `&` to match the wrapper's signature
                 // before forwarding.
-                let receiver_value = (**receiver).clone();
+                let receiver_value = receiver.clone();
                 let is_already_ref = matches!(
                     ctx.type_table.borrow().get(receiver_value.type_id),
                     crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
@@ -2766,14 +2768,15 @@ fn wrapper_call(
 ) -> TirExpr {
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: entry_source.clone(),
                 name: wrapper_name,
                 monomorph_info: None,
                 method_info: None,
-            },
+            }),
             type_args: Vec::new(),
             args,
+            has_receiver: false,
         },
         return_type,
         span,
@@ -2819,12 +2822,6 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 rewrite_calls_in_expr(arg, ctx);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            rewrite_calls_in_expr(receiver, ctx);
-            for arg in args {
-                rewrite_calls_in_expr(&mut arg.expr, ctx);
             }
         }
         TirExprKind::Binary { left, right, .. } => {
@@ -2911,7 +2908,7 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
 /// through it. Runs **before** `cm_binding::generate_adapters` so:
 ///
 /// - User resource calls (`tx.write(payload)`, `Stream::<u8>::new()`)
-///   are caught at their pre-cm_binding shape — `MethodCall` / `Call`
+///   are caught at their pre-cm_binding shape — a call
 ///   with `func.method_info.cm_name` set — and replaced with `Call`s
 ///   to the per-monomorphisation wrapper.
 /// - Wrapper fallback bodies emit the same cm_name-tagged placeholder
@@ -3099,13 +3096,13 @@ type HandlerImplKey = (String, ModuleSource, String, Vec<TypeId>);
 #[derive(Debug, Clone)]
 struct HandlerImplInfo {
     /// Module that owns the impl block — used to build the
-    /// `FunctionRef::module_source` of the generated `MethodCall`.
+    /// `FunctionRef::module_source` of the generated call.
     impl_module: ModuleSource,
     /// Per-operation call target, keyed by operation name.
     methods: IndexMap<String, HandlerMethodTarget>,
 }
 
-/// The TIR function a synthesised dispatch `MethodCall` must target for
+/// The TIR function a synthesised dispatch call must target for
 /// one effect operation: the impl method's mangled name and its
 /// `method_info`, exactly as reify registered them. Reusing them verbatim
 /// (rather than reconstructing the name from strings) keeps the

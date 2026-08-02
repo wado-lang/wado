@@ -351,7 +351,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Identifier callees are handled separately above (locals with
         // fn type) and below (named functions, static methods, variant
         // constructors, ...). Method-call syntax `foo.bar()` is parsed as
-        // `MethodCall`, not as `Call { callee: FieldAccess }`, so this
+        // `ast::Expr::MethodCall`, not `Call { callee: FieldAccess }`, so this
         // branch never alters method dispatch (Rust policy).
         if !matches!(&call.callee, Expr::Ident(_)) {
             let callee_type = self.resolve_expr(&call.callee, ctx, None);

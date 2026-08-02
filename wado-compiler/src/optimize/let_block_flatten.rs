@@ -178,6 +178,7 @@ mod tests {
             func_id: crate::nir::FuncId::from_u32(0),
             type_args: vec![],
             args: vec![],
+            has_receiver: false,
         }
     }
 

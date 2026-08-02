@@ -297,19 +297,11 @@ impl Collapser<'_> {
         let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmt].kind else {
             return None;
         };
-        let ExprKind::MethodCall {
-            receiver,
-            func_id,
-            args,
-            ..
-        } = &body.exprs[*e].kind
-        else {
-            return None;
-        };
-        if !self.push_ids.contains(func_id) || args.len() != 1 {
+        let (receiver, func_id, args) = body.exprs[*e].kind.as_method_call()?;
+        if !self.push_ids.contains(&func_id) || args.len() != 1 {
             return None;
         }
-        let path = place_path_operand(body, *receiver, local)?;
+        let path = place_path_operand(body, receiver, local)?;
         Some((path, args[0].expr))
     }
 }

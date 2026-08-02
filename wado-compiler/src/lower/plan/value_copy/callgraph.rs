@@ -85,13 +85,10 @@ struct CalleeCollector<'a> {
 
 impl TirRefVisitor for CalleeCollector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        match &expr.kind {
-            TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => {
-                if let Some(id) = self.index.id(&func.module_source, &func.name) {
-                    self.callees.push(id);
-                }
-            }
-            _ => {}
+        if let TirExprKind::Call { func, .. } = &expr.kind
+            && let Some(id) = self.index.id(&func.module_source, &func.name)
+        {
+            self.callees.push(id);
         }
         self.walk_expr(expr);
     }

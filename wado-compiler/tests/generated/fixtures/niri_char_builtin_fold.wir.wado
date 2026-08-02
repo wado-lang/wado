@@ -109,6 +109,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 global mut global:niri_char_builtin_fold.wado::__modules_initialized: bool = 0;
 global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:niri_char_builtin_fold.wado::__const_obj_1: ref null "core:prelude/types.wado//Box<char>" = struct.new "core:prelude/types.wado//Box<char>" { value: 107 };
 
 fn "niri_char_builtin_fold.wado/run"() with Stdout {
     let c_1: char;
@@ -124,7 +125,7 @@ fn "niri_char_builtin_fold.wado/run"() with Stdout {
         global:niri_char_builtin_fold.wado::__modules_initialized = 1;
     };
     eq = (local.tee c_1(81) | (((c_1 - 65) <u 26) * 32)) == 113;
-    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/char^Display::fmt"(struct.new "core:prelude/types.wado//Box<char>" { value: 107 }, __local_4); start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_3, 1); builtin::array_set_u8(__local_3.repr, start, 32); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; f_24 = __local_4; "core:prelude/primitive.wado/i32::fmt_decimal"(eq, f_24); __local_3);
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/char^Display::fmt"(global:niri_char_builtin_fold.wado::__const_obj_1, __local_4); start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_3, 1); builtin::array_set_u8(__local_3.repr, start, 32); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; f_24 = __local_4; "core:prelude/primitive.wado/i32::fmt_decimal"(eq, f_24); __local_3);
 }
 
 fn "niri_char_builtin_fold.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

@@ -54,8 +54,8 @@ const CLOSURE_FORMAT_TRAITS: [(CompilerItem, FunctorFmtBody); 4] = [
 /// - Retag `Local` reads of the param to the functor `&__Closure_N`
 ///   type instead of the original `fn(...)` declared type.
 /// - Rewrite `IndirectCall { callee: Local(param), .. }` into
-///   `MethodCall` on the functor's `__call` method.
-/// - Wrap `Local(param)` args to `Call` / `MethodCall` slots that
+///   a call to the functor's `__call` method.
+/// - Wrap `Local(param)` args to call slots that
 ///   still expect `fn(...)` in `ExprKind::ClosureToCanonical`,
 ///   converting the specialized value back to its canonical
 ///   function-shaped view.
@@ -239,7 +239,7 @@ struct FnParamSpecKey {
 /// Transformations (selective - only for closures stored in locals and called directly):
 /// - `Closure { params, body, captures }` → `StructLiteral { __Closure_N, capture_values }`
 /// - `Capture { index }` (in body) → `FieldAccess { self, __capture_{index} }`
-/// - `IndirectCall { callee, args }` (known closure) → `MethodCall { callee, __call, args }`
+/// - `IndirectCall { callee, args }` (known closure) → `callee.__call(args)`
 ///
 /// Closures passed as function arguments are transformed via fn-param specialization:
 /// - A specialized version of the callee is generated with functor struct params
@@ -258,7 +258,7 @@ struct ClosureLowerer {
     functor_infos: Vec<ClosureFunctor>,
     /// Per-function map (cleared between functions) recording which locals
     /// hold which closure. Read by Phase 2 (safety analysis) and Phase 3
-    /// (IndirectCall→MethodCall + `update_local_types`).
+    /// (IndirectCall→method call + `update_local_types`).
     local_to_closure: IndexMap<u32, u32>,
     /// Closure IDs safe for direct specialisation (the closure is stored
     /// in a local and only used by direct calls). Non-specialisable ones
@@ -413,7 +413,7 @@ impl ClosureLowerer {
             .extend(std::mem::take(&mut self.generated_functions));
     }
 
-    /// Convert `FuncRef` nodes (used as values, not in Call/MethodCall func positions) to
+    /// Convert `FuncRef` nodes (used as values, not in call func positions) to
     /// zero-capture `Closure` nodes. This enables named functions to be passed as function-type
     /// arguments (e.g., `apply(double, 21)` or `apply(&double, 21)`).
     fn convert_func_refs_to_closures(&self, flat: &mut FlatPackage) {
@@ -1059,7 +1059,7 @@ impl ClosureLowerer {
     /// Phase 2.5: when a function takes a `fn(A) -> B` parameter and is
     /// called with a closure literal, generate a specialised callee whose
     /// fn-type parameters are the functor struct types and whose
-    /// `IndirectCall`s become direct `MethodCall`s on `__call`.
+    /// `IndirectCall`s become direct calls to `__call`.
     fn generate_fn_param_specializations(
         &mut self,
         func_refs: &[Rc<RefCell<TirFunction>>],
@@ -1153,7 +1153,7 @@ impl ClosureLowerer {
             // Capture the original `fn(...)` type before we overwrite
             // the local's declared type — the translator needs it as
             // `target_fn_type` when re-wrapping a fn-param `Local`
-            // into `ExprKind::ClosureToCanonical` at a Call/MethodCall
+            // into `ExprKind::ClosureToCanonical` at a call
             // arg slot that still expects `fn(...)`.
             let original_fn_type = new_locals
                 .get(slot)
@@ -1182,7 +1182,7 @@ impl ClosureLowerer {
 
         // The body is cloned as-is. The TIR → NIR translator handles
         // the per-function rewrites (`Local` retag, `IndirectCall` →
-        // `MethodCall` on `__call`, fn-param-`Local` arg-slot wrap in
+        // a call to `__call`, fn-param-`Local` arg-slot wrap in
         // `ExprKind::ClosureToCanonical`) by consulting
         // `ClosurePlan::specialized_locals` keyed on
         // `(self.module_source, specialized_name)`.
@@ -1297,9 +1297,8 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
 /// Phase 0 rewriter: turn `FuncRef` values into zero-capture `Closure`
 /// nodes so the rest of the closure pipeline handles them uniformly.
 ///
-/// `FuncRefs` in callee position of `Call` / `MethodCall` are not
-/// `TirExprKind::FuncRef` (the call elaborator emits a `Call`/`MethodCall`
-/// directly), so they're left alone by the default walk. `&FuncRef` is
+/// A callee position holds no `TirExprKind::FuncRef` — the call elaborator
+/// emits the `Call` directly — so the default walk leaves it alone. `&FuncRef` is
 /// just `&` applied to a `fn(...)` value: the inner `FuncRef` becomes a
 /// zero-capture closure and the outer `Unary::Ref` stays put, producing a
 /// genuine `&fn(...)` reference value.
@@ -1373,14 +1372,15 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
 
             let body = TirExpr::new(
                 TirExprKind::Call {
-                    func: FunctionRef {
+                    func: Box::new(FunctionRef {
                         module_source: func_module,
                         name: func_name,
                         monomorph_info: None,
                         method_info: None,
-                    },
+                    }),
                     type_args: Vec::new(),
                     args: call_args,
+                    has_receiver: false,
                 },
                 sig.return_type,
                 span,
@@ -1466,7 +1466,7 @@ impl TirRefVisitor for LocalCollector<'_> {
 /// type.
 ///
 /// The escape decision is made by tracking `in_callee_position`: only the
-/// callee of `IndirectCall` / receiver of `MethodCall` / func of `Call` is
+/// callee of `IndirectCall` / receiver or func of `Call` is
 /// a non-escape position. Every other slot (struct literal field, return
 /// value, global assignment, let-rebinding, …) is an escape, and finding a
 /// closure-bearing `Local` or a `Closure` literal there marks it
@@ -1553,12 +1553,19 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
                 }
                 self.in_callee_position = prev;
             }
-            TirExprKind::MethodCall { receiver, args, .. } => {
+            TirExprKind::Call {
+                args,
+                has_receiver: true,
+                ..
+            } => {
+                let Some((receiver, rest)) = args.split_first() else {
+                    return;
+                };
                 let prev = self.in_callee_position;
                 self.in_callee_position = true;
-                self.visit_expr(receiver);
+                self.visit_expr(&receiver.expr);
                 self.in_callee_position = false;
-                for arg in args {
+                for arg in rest {
                     self.visit_expr(&arg.expr);
                 }
                 self.in_callee_position = prev;
@@ -1586,8 +1593,8 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
 
 /// Phase 3: rewrite every closure call site:
 /// - `Closure` literal (specialisable) → struct literal of `__Closure_N`
-/// - `IndirectCall` on a closure-bearing local → `MethodCall` on `__call`
-/// - `Call` / `MethodCall` whose closure args have a matching specialised
+/// - `IndirectCall` on a closure-bearing local → a call to `__call`
+/// - call whose closure args have a matching specialised
 ///   callee → redirected to that callee
 ///
 /// Closure bodies live in their own local-index namespace, so this pass
@@ -1610,7 +1617,7 @@ struct ClosureCallSiteLowerer<'a> {
 impl ClosureCallSiteLowerer<'_> {
     /// `arg_offset` is the count of leading `args` that are not value
     /// arguments — 1 for a trait-qualified `Call` carrying its receiver in
-    /// `args[0]`, 0 for a `MethodCall` (receiver held separately) and for
+    /// `args[0]`, 0 for a free call and for
     /// free / static callees. Key indices are value-argument indices, so the
     /// scan skips the receiver and records positions relative to it.
     fn try_redirect_to_specialized_callee(
@@ -1684,7 +1691,7 @@ impl ClosureCallSiteLowerer<'_> {
         };
     }
 
-    /// When a `MethodCall` resolves to `Fn<N, Ret>^Inspect`,
+    /// When a method call resolves to `Fn<N, Ret>^Inspect`,
     /// `^InspectAlt`, `^Display`, or `^DisplayAlt` with a receiver that
     /// is a specialised closure local — either let-bound by the closure
     /// safety analyser, or a fn-param specialised parameter
@@ -1713,7 +1720,7 @@ impl ClosureCallSiteLowerer<'_> {
     /// receiver that doesn't peel down to a local (or peels to one not
     /// in the map, i.e. a canonicalised value) falls through to the
     /// generic dispatch stub.
-    fn try_redirect_inspect_to_functor(&self, receiver: &mut Box<TirExpr>, func: &mut FunctionRef) {
+    fn try_redirect_inspect_to_functor(&self, receiver: &mut TirExpr, func: &mut FunctionRef) {
         let info = match &func.method_info {
             Some(info) => info,
             None => return,
@@ -1773,7 +1780,7 @@ impl ClosureCallSiteLowerer<'_> {
         let new_name = new_method_info.to_mangled_name();
 
         let span = receiver.span;
-        **receiver = TirExpr::new(
+        *receiver = TirExpr::new(
             TirExprKind::Local {
                 index: local_idx,
                 name: local_name,
@@ -1868,7 +1875,7 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
                     self.visit_expr(arg);
                 }
 
-                // Specializable closure stored in local → MethodCall on __call.
+                // Specializable closure stored in local → a call to __call.
                 if let TirExprKind::Local { index, .. } = &callee.kind
                     && let Some(closure_id) = self.local_to_closure.get(index)
                     && self.specializable.contains(closure_id)
@@ -1896,12 +1903,18 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
                     expr.type_id = return_type;
                 }
             }
-            TirExprKind::Call { func, args, .. } => {
+            TirExprKind::Call {
+                func,
+                args,
+                has_receiver,
+                ..
+            } => {
                 for arg in &mut *args {
                     self.visit_expr(&mut arg.expr);
                 }
-                // A callee absent from `self_offsets` was not lowered in this
-                // package (an external import or a builtin); such a callee
+                // Value arguments start after the callee's `self`, if it has
+                // one. A callee absent from `self_offsets` was not lowered in
+                // this package (an external import or a builtin); such a callee
                 // cannot take `self`, so its args start at parameter 0.
                 let arg_offset = self
                     .self_offsets
@@ -1909,19 +1922,9 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
                     .copied()
                     .unwrap_or(0) as usize;
                 self.try_redirect_to_specialized_callee(func, args, arg_offset);
-            }
-            TirExprKind::MethodCall {
-                receiver,
-                func,
-                args,
-                ..
-            } => {
-                self.visit_expr(receiver);
-                for arg in &mut *args {
-                    self.visit_expr(&mut arg.expr);
+                if *has_receiver && let Some((receiver, _)) = args.split_first_mut() {
+                    self.try_redirect_inspect_to_functor(&mut receiver.expr, func);
                 }
-                self.try_redirect_to_specialized_callee(func, args, 0);
-                self.try_redirect_inspect_to_functor(receiver, func);
             }
             _ => self.walk_expr(expr),
         }
@@ -2003,7 +2006,7 @@ impl TirMutVisitor for ClosureBodyTransformer<'_> {
 }
 
 /// Phase 2.5 collector: scan function bodies and record every direct
-/// call (`Call` / `MethodCall`) whose closure args want a specialised
+/// call whose closure args want a specialised
 /// callee. Closures embed their `functor_id` from Phase 1, so the key
 /// is reconstructible without any traversal-order counter.
 struct FnParamSpecCollector<'a> {
@@ -2056,7 +2059,7 @@ impl TirRefVisitor for FnParamSpecCollector<'_> {
                     // `Call` whose args lead with the receiver while the
                     // callee's params lead with `self`. Skip both so the
                     // recorded indices are value-argument indices — the
-                    // convention the MethodCall arm records and the
+                    // convention the method-call arm records and the
                     // `+ param_offset` shift in the generate step assumes —
                     // and both call spellings share one key, hence one
                     // specialized clone per callee.
@@ -2070,28 +2073,6 @@ impl TirRefVisitor for FnParamSpecCollector<'_> {
                         }
                     }
                 }
-                for arg in args {
-                    self.visit_expr(&arg.expr);
-                }
-            }
-            TirExprKind::MethodCall {
-                receiver,
-                func,
-                args,
-                ..
-            } => {
-                if let Some(callee_rc) = self
-                    .func_by_name
-                    .get(&(func.module_source.clone(), func.name.clone()))
-                {
-                    let callee = callee_rc.borrow();
-                    let params_without_self: Vec<TirParam> =
-                        callee.params.iter().skip(1).cloned().collect();
-                    if let Some(key) = self.create_key(&callee, &params_without_self, args) {
-                        self.requests.push((key, Rc::clone(callee_rc)));
-                    }
-                }
-                self.visit_expr(receiver);
                 for arg in args {
                     self.visit_expr(&arg.expr);
                 }
@@ -2134,7 +2115,7 @@ impl TirRefVisitor for StructFieldFnParamCheck<'_> {
 }
 
 // `SpecializerTransformer` removed: the per-function rewrites it used
-// to apply (`Local` retag, `IndirectCall` → `MethodCall`, fn-param
+// to apply (`Local` retag, `IndirectCall` → a direct call, fn-param
 // `Local` arg-slot wrap in `ClosureToCanonical`) are now performed by
 // the TIR → NIR translator, which reads
 // `ClosurePlan::specialized_locals` per converted function.

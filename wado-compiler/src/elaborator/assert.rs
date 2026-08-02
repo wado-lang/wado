@@ -198,7 +198,7 @@ struct CaptureScanner {
     /// `Binary` / `Unary` is not captured because it would just
     /// duplicate `__cond`.
     is_root: bool,
-    /// `true` while descending into `Call` / `MethodCall` /
+    /// `true` while descending into `Call` /
     /// `StaticMethodCall` arguments. A bare `Ident` in that position
     /// is a function-reference coercion site; extracting it into
     /// `let __vK = name;` would lose the coercion context and the
@@ -309,7 +309,7 @@ impl CaptureScanner {
             }
             Expr::FieldAccess(_) | Expr::Index(_) => {
                 // Receiver / index recursion deferred (same reason as
-                // `MethodCall`): capture the access whole.
+                // a method call): capture the access whole.
                 self.add(unparse_expr_simple(expr), ast_id);
             }
             Expr::TemplateString(_) => {

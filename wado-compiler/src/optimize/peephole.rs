@@ -30,7 +30,7 @@
 //! must run after all other transformations.
 //!
 //! The pass is invoked at two points in the fixed-point loop — before `inline`
-//! (so `string_push` sees the `push_str` `MethodCall` before inlining expands it;
+//! (so `string_push` sees the `push_str` call before inlining expands it;
 //! `value_copy_demote` then runs after) and after `inline` (so `array_literal`
 //! sees the exposed
 //! `array_new + push` window, `RefElimRule` cleans up the ref bindings

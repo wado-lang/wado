@@ -494,14 +494,6 @@ fn walk_expr_for_leftmost(
             let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             walk_children_observable(body, args.into_iter(), candidate, field_name)
         }
-        ExprKind::MethodCall { receiver, args, .. } => {
-            let children: Vec<ExprId> = receiver
-                .as_expr()
-                .into_iter()
-                .chain(args.iter().filter_map(|a| a.expr.as_expr()))
-                .collect();
-            walk_children_observable(body, children.into_iter(), candidate, field_name)
-        }
         ExprKind::IndirectCall { callee, args } => {
             let children: Vec<ExprId> = callee
                 .as_expr()

@@ -25,8 +25,8 @@ use crate::token::Span;
 /// promotion (WEP: The Live `ValueGraph`). It is either a pure value living in the
 /// function's [`ValuePool`] (literals, `Binary`, pure `Unary`, `Cast`, and the
 /// `Local` / `FieldAccess` reads the graph resolves to a value), or an effectful
-/// / control subtree kept in the skeleton (`Call`, `MethodCall`, allocation
-/// literals, `If` / `Match` / `Block` value positions). Pure values no longer
+/// / control subtree kept in the skeleton (`Call`, allocation literals,
+/// `If` / `Match` / `Block` value positions). Pure values no longer
 /// occupy `ExprId` slots; the slot holds their `ValueId` directly.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Operand {
@@ -199,17 +199,16 @@ pub enum ExprKind {
         /// call node carries no `FunctionRef`.
         func_id: crate::nir::FuncId,
         type_args: Vec<TypeId>,
+        /// Arguments in the callee's parameter order — a method's receiver is
+        /// `args[0]`, so `args[i]` maps to `params[i]` for every call shape.
         args: Vec<ArenaCallArg>,
+        /// Whether `args[0]` is the receiver of an instance method, carried down
+        /// from [`crate::tir::TirExprKind::Call`] with its meaning intact.
+        has_receiver: bool,
     },
     CmRawCall {
         local_name: String,
         args: Vec<Operand>,
-    },
-    MethodCall {
-        receiver: Operand,
-        func_id: crate::nir::FuncId,
-        type_args: Vec<TypeId>,
-        args: Vec<ArenaCallArg>,
     },
     FieldAccess {
         expr: Operand,
@@ -286,6 +285,51 @@ pub enum ExprKind {
         arms: Vec<BlockId>,
         default: BlockId,
     },
+}
+
+impl ExprKind {
+    /// Build `recv.m(args)`: the receiver heads the argument list, carrying the
+    /// callee's `self` mutability as its own `is_mut`.
+    pub fn method_call(
+        func_id: crate::nir::FuncId,
+        receiver: Operand,
+        receiver_is_mut: bool,
+        args: Vec<ArenaCallArg>,
+    ) -> Self {
+        let mut all = Vec::with_capacity(args.len() + 1);
+        all.push(ArenaCallArg {
+            expr: receiver,
+            is_mut: receiver_is_mut,
+        });
+        all.extend(args);
+        ExprKind::Call {
+            func_id,
+            type_args: Vec::new(),
+            args: all,
+            has_receiver: true,
+        }
+    }
+
+    /// An instance-method call viewed as receiver plus the arguments after it.
+    /// `None` for a free call.
+    ///
+    /// The split is a view, not storage: the node keeps one argument list in the
+    /// callee's parameter order, so a pass that treats every argument alike
+    /// (traversal, substitution, operand rewriting) matches `Call` directly and
+    /// never needs this.
+    pub fn as_method_call(&self) -> Option<(Operand, crate::nir::FuncId, &[ArenaCallArg])> {
+        let ExprKind::Call {
+            func_id,
+            args,
+            has_receiver: true,
+            ..
+        } = self
+        else {
+            return None;
+        };
+        let (receiver, rest) = args.split_first()?;
+        Some((receiver.expr, *func_id, rest))
+    }
 }
 
 /// Statement kinds.
@@ -668,29 +712,8 @@ impl Body {
         })
     }
 
-    /// Apply `f` to every operand slot in the body, replacing it in place. Used
-    /// by promotion to lift pure operands to `Operand::Value` (WEP: The Live
-    /// `ValueGraph`). `f` is the only mutator; it does not borrow the body.
-    pub fn map_operands(&mut self, mut f: impl FnMut(Operand) -> Operand) {
-        let eids: Vec<ExprId> = self.exprs.keys().collect();
-        for id in eids {
-            self.map_expr_operands(id, &mut f);
-        }
-        let sids: Vec<StmtId> = self.stmts.keys().collect();
-        for id in sids {
-            self.map_stmt_operands(id, &mut f);
-        }
-        let pids: Vec<PatId> = self.pats.keys().collect();
-        for id in pids {
-            if let PatKind::ConstantValue { expr } = &mut self.pats[id].kind {
-                *expr = f(*expr);
-            }
-        }
-    }
-
-    /// Map every operand slot of a single expression node. The per-node half of
-    /// [`Body::map_operands`]; a scoped rewrite (e.g. a loop subtree) collects
-    /// the node ids and calls this on each.
+    /// Map every operand slot of a single expression node. A scoped rewrite
+    /// (e.g. a loop subtree) collects the node ids and calls this on each.
     pub fn map_expr_operands(&mut self, id: ExprId, f: &mut impl FnMut(Operand) -> Operand) {
         match &mut self.exprs[id].kind {
             ExprKind::GlobalVarSet { value, .. } => *value = f(*value),
@@ -709,7 +732,7 @@ impl Body {
                 *expr = f(*expr);
                 *index = f(*index);
             }
-            ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => {
+            ExprKind::Call { args, .. } => {
                 for a in args {
                     a.expr = f(a.expr);
                 }
@@ -756,8 +779,8 @@ impl Body {
         }
     }
 
-    /// Map every operand slot of a single statement node (the per-node half of
-    /// [`Body::map_operands`]).
+    /// Map every operand slot of a single statement node, the statement
+    /// counterpart of [`Body::map_expr_operands`].
     pub fn map_stmt_operands(&mut self, id: StmtId, f: &mut impl FnMut(Operand) -> Operand) {
         match &mut self.stmts[id].kind {
             StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
@@ -770,94 +793,6 @@ impl Body {
             }
             StmtKind::If { condition, .. } => *condition = f(*condition),
             _ => {}
-        }
-    }
-
-    /// Read-only visit of every operand slot in the body — the `&self` mirror of
-    /// [`Body::map_operands`]. Visits all slots (including any orphaned subtree
-    /// not yet DCE'd), which over-approximates "live" but stays conservative for
-    /// liveness queries.
-    pub fn for_each_operand(&self, mut f: impl FnMut(Operand)) {
-        for id in self.exprs.keys() {
-            match &self.exprs[id].kind {
-                ExprKind::GlobalVarSet { value, .. } => f(*value),
-                ExprKind::Binary { left, right, .. } => {
-                    f(*left);
-                    f(*right);
-                }
-                ExprKind::Unary { expr, .. }
-                | ExprKind::Cast { expr, .. }
-                | ExprKind::FieldAccess { expr, .. }
-                | ExprKind::VariantTag { expr }
-                | ExprKind::VariantTest { expr, .. }
-                | ExprKind::VariantPayload { expr, .. } => f(*expr),
-                ExprKind::Assign { value, .. } => f(*value),
-                ExprKind::Index { expr, index } => {
-                    f(*expr);
-                    f(*index);
-                }
-                ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => {
-                    for a in args {
-                        f(a.expr);
-                    }
-                }
-                ExprKind::CmRawCall { args, .. } => {
-                    for a in args {
-                        f(*a);
-                    }
-                }
-                ExprKind::If { condition, .. } => f(*condition),
-                ExprKind::Match { expr, arms } => {
-                    f(*expr);
-                    for arm in arms {
-                        if let Some(g) = arm.guard {
-                            f(g);
-                        }
-                        f(arm.body);
-                    }
-                }
-                ExprKind::StructLiteral { fields, .. } => {
-                    for fld in fields {
-                        f(fld.value);
-                    }
-                }
-                ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-                    for el in elements {
-                        f(*el);
-                    }
-                }
-                ExprKind::IndirectCall { callee, args } => {
-                    f(*callee);
-                    for a in args {
-                        f(*a);
-                    }
-                }
-                ExprKind::ClosureToCanonical { functor, .. } => f(*functor),
-                ExprKind::VariantConstruct { payload, .. } => {
-                    if let Some(p) = payload {
-                        f(*p);
-                    }
-                }
-                ExprKind::Switch { scrutinee, .. } => f(*scrutinee),
-                _ => {}
-            }
-        }
-        for id in self.stmts.keys() {
-            match &self.stmts[id].kind {
-                StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => f(*value),
-                StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-                    if let Some(v) = value {
-                        f(*v);
-                    }
-                }
-                StmtKind::If { condition, .. } => f(*condition),
-                _ => {}
-            }
-        }
-        for id in self.pats.keys() {
-            if let PatKind::ConstantValue { expr } = &self.pats[id].kind {
-                f(*expr);
-            }
         }
     }
 
@@ -948,6 +883,7 @@ impl Body {
                 func_id,
                 type_args,
                 args,
+                has_receiver,
             } => ExprKind::Call {
                 func_id,
                 type_args,
@@ -958,27 +894,11 @@ impl Body {
                         is_mut: a.is_mut,
                     })
                     .collect(),
+                has_receiver,
             },
             ExprKind::CmRawCall { local_name, args } => ExprKind::CmRawCall {
                 local_name,
                 args: args.into_iter().map(|a| self.clone_operand(a)).collect(),
-            },
-            ExprKind::MethodCall {
-                receiver,
-                func_id,
-                type_args,
-                args,
-            } => ExprKind::MethodCall {
-                receiver: self.clone_operand(receiver),
-                func_id,
-                type_args,
-                args: args
-                    .into_iter()
-                    .map(|a| ArenaCallArg {
-                        expr: self.clone_operand(a.expr),
-                        is_mut: a.is_mut,
-                    })
-                    .collect(),
             },
             ExprKind::FieldAccess {
                 expr,
@@ -1294,12 +1214,6 @@ impl Body {
                         swap(&mut a.expr);
                     }
                 }
-                ExprKind::MethodCall { receiver, args, .. } => {
-                    swap(receiver);
-                    for a in args {
-                        swap(&mut a.expr);
-                    }
-                }
                 ExprKind::CmRawCall { args, .. } => {
                     for a in args {
                         swap(a);
@@ -1446,12 +1360,6 @@ impl Body {
                 ExprKind::CmRawCall { args, .. } => {
                     for a in args {
                         op_child(*a, &mut f);
-                    }
-                }
-                ExprKind::MethodCall { receiver, args, .. } => {
-                    op_child(*receiver, &mut f);
-                    for a in args {
-                        op_child(a.expr, &mut f);
                     }
                 }
                 ExprKind::Block(b) => f(NodeRef::Block(*b)),

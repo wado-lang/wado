@@ -1704,14 +1704,15 @@ pub(super) fn generate_case_bridge_helpers(
 fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: ModuleSource::builtin(),
                 name: "unreachable".to_string(),
                 monomorph_info: None,
                 method_info: None,
-            },
+            }),
             type_args: vec![],
             args: vec![],
+            has_receiver: false,
         },
         result_type,
         span,

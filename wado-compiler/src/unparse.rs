@@ -4791,50 +4791,47 @@ impl<'a> TirUnparser<'a> {
                 func,
                 type_args,
                 args,
-                ..
+                has_receiver,
             } => {
-                let func_name = func.name.clone();
-                let full_name = if self.source_form {
-                    func_name
+                // A method still renders `recv.method(rest)` — this text is read
+                // back by `Inspect` on a closure, so it stays source-shaped.
+                let rest = if *has_receiver && let Some((receiver, rest)) = args.split_first() {
+                    // The elaborator wraps `self` receivers in `&`/`&mut`
+                    // automatically; strip that wrapper so the rendering
+                    // reflects the source value.
+                    let actual_receiver = match &receiver.expr.kind {
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                            expr: inner,
+                        } => inner.as_ref(),
+                        _ => &receiver.expr,
+                    };
+                    self.unparse_expr(actual_receiver);
+                    self.output.push('.');
+                    // Name the resolved method (e.g. `Type::method`) so the
+                    // output captures which impl was selected, spelled as
+                    // source writes it.
+                    self.output.push_str(&Self::quote_if_needed(
+                        &crate::name::display_method_name(&func.name),
+                    ));
+                    rest
                 } else {
-                    format!("{}::{func_name}", func.module_path().join("::"))
+                    let func_name = func.name.clone();
+                    let full_name = if self.source_form {
+                        func_name
+                    } else {
+                        format!("{}::{func_name}", func.module_path().join("::"))
+                    };
+                    self.output.push_str(&Self::quote_if_needed(&full_name));
+                    args.as_slice()
                 };
-                self.output.push_str(&Self::quote_if_needed(&full_name));
                 self.unparse_type_args(type_args);
-                self.delimited("(", ")", args, |s, arg| s.unparse_expr(&arg.expr));
+                self.delimited("(", ")", rest, |s, arg| s.unparse_expr(&arg.expr));
             }
             TirExprKind::CmRawCall { local_name, args } => {
                 self.output.push_str("cm_raw_call ");
                 self.output.push_str(local_name);
                 self.delimited("(", ")", args, TirUnparser::unparse_expr);
-            }
-            TirExprKind::MethodCall {
-                receiver,
-                func,
-                type_args,
-                args,
-                ..
-            } => {
-                // The elaborator wraps `self` receivers in `&`/`&mut` automatically;
-                // strip that wrapper so the rendering reflects the source value.
-                let actual_receiver = match &receiver.kind {
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                        expr: inner,
-                    } => inner.as_ref(),
-                    _ => receiver.as_ref(),
-                };
-                self.unparse_expr(actual_receiver);
-                self.output.push('.');
-                // Name the resolved method (e.g. `Type::method`) so the output
-                // captures which impl was selected, spelled as source writes
-                // it — this text is read back by `Inspect` on a closure.
-                self.output
-                    .push_str(&Self::quote_if_needed(&crate::name::display_method_name(
-                        &func.name,
-                    )));
-                self.unparse_type_args(type_args);
-                self.delimited("(", ")", args, |s, arg| s.unparse_expr(&arg.expr));
             }
             TirExprKind::FieldAccess {
                 expr: inner,

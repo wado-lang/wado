@@ -892,17 +892,18 @@ pub(super) fn build_int128_from_pair(
 
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: mangled_func_name,
                 monomorph_info: None,
                 method_info: Some(method_info),
-            },
+            }),
             type_args: vec![],
             args: vec![
                 CallArg::new(low_literal, false),
                 CallArg::new(high_literal, false),
             ],
+            has_receiver: false,
         },
         target_type,
         span,
@@ -961,14 +962,15 @@ pub(super) fn build_int128_literal_call(
 
         return TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef {
+                func: Box::new(FunctionRef {
                     module_source: ModuleSource::int128(),
                     name: mangled_func_name,
                     monomorph_info: None,
                     method_info: Some(method_info),
-                },
+                }),
                 type_args: vec![],
                 args: vec![CallArg::new(inner_literal, false)],
+                has_receiver: false,
             },
             target_type,
             span,
@@ -998,14 +1000,15 @@ pub(super) fn build_int128_from_intermediate(
     let mangled_func_name = method_info.to_mangled_name();
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: mangled_func_name,
                 monomorph_info: None,
                 method_info: Some(method_info),
-            },
+            }),
             type_args: vec![],
             args: vec![CallArg::new(intermediate, false)],
+            has_receiver: false,
         },
         target_type,
         span,

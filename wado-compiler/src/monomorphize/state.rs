@@ -268,7 +268,7 @@ impl Monomorphizer {
     /// with faithful Ref/MutRef mangling (so `[&T]` and `[T]` mangle to
     /// distinct names) and `TypeRewriter`'s post-monomorphisation
     /// type-id rewrite over **every** `TypeId` field reachable from a
-    /// `TirFunction` body — including `Call`/`MethodCall::type_args` —
+    /// `TirFunction` body — including a call's `type_args` —
     /// every concrete instantiation site reaches `try_queue_function`
     /// with `GenericInstance`/`Struct`-canonicalised type args. That
     /// makes `function_id_for(func)` injective over `project.functions`

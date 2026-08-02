@@ -9,7 +9,7 @@
 //!   `buf.push_ascii_unchecked(<byte>)`, skipping `encode_char`'s UTF-8 width dispatch.
 //!
 //! Must run *before* `inline`: once the inliner expands `push_str`'s body
-//! the `MethodCall` node is replaced by a labeled block, after which the
+//! the call node is replaced by a labeled block, after which the
 //! literal-recognising rewrite no longer fires.
 //!
 //! Identifies the methods via their [`crate::compiler_item::CompilerItem`]
@@ -137,7 +137,7 @@ impl Rule for ShortPushStrRule {
 /// rule on the shared worklist.
 ///
 /// `push` is `&mut self`-returning-unit, so its call is always a statement
-/// expression; the rewrite is an in-place `MethodCall` edit (swap the callee
+/// expression; the rewrite is an in-place call edit (swap the callee
 /// and coerce the `char` argument to its `u8` byte).
 pub(super) struct ConstAsciiPushRule {
     push_char_id: crate::nir::FuncId,
@@ -158,19 +158,22 @@ impl ConstAsciiPushRule {
 impl Rule for ConstAsciiPushRule {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
         let (receiver, arg0, type_args_empty) = {
-            let ExprKind::MethodCall {
-                receiver,
+            let ExprKind::Call {
                 func_id,
                 args,
                 type_args,
+                has_receiver: true,
             } = &engine.body.exprs[id].kind
             else {
                 return false;
             };
-            if *func_id != self.push_char_id || args.len() != 1 {
+            let [receiver, arg0] = args.as_slice() else {
+                return false;
+            };
+            if *func_id != self.push_char_id {
                 return false;
             }
-            (*receiver, args[0].expr, type_args.is_empty())
+            (receiver.expr, arg0.expr, type_args.is_empty())
         };
         if !type_args_empty {
             return false;
@@ -188,15 +191,15 @@ impl Rule for ConstAsciiPushRule {
         );
         engine.replace_expr_kind(
             id,
-            ExprKind::MethodCall {
-                func_id: self.push_ascii_id,
+            ExprKind::method_call(
+                self.push_ascii_id,
                 receiver,
-                type_args: Vec::new(),
-                args: vec![ArenaCallArg {
+                true,
+                vec![ArenaCallArg {
                     expr: byte_arg,
                     is_mut: false,
                 }],
-            },
+            ),
         );
         true
     }
@@ -211,19 +214,11 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
     };
 
     let (receiver, arg0) = {
-        let ExprKind::MethodCall {
-            receiver,
-            func_id,
-            args,
-            ..
-        } = &engine.body.exprs[expr_id].kind
-        else {
-            return None;
-        };
-        if *func_id != ctx.push_str_id || args.len() != 1 {
+        let (receiver, func_id, args) = engine.body.exprs[expr_id].kind.as_method_call()?;
+        if func_id != ctx.push_str_id || args.len() != 1 {
             return None;
         }
-        (*receiver, args[0].expr)
+        (receiver, args[0].expr)
     };
 
     let receiver_expr = receiver.as_expr()?;
@@ -276,15 +271,15 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
         let char_arg =
             engine.const_operand(crate::nir_value_graph::ValueKind::Char(ch), TypeTable::CHAR);
         let call = engine.alloc_expr(
-            ExprKind::MethodCall {
-                func_id: ctx.push_char_id,
-                receiver: recv_clone.into(),
-                type_args: Vec::new(),
-                args: vec![ArenaCallArg {
+            ExprKind::method_call(
+                ctx.push_char_id,
+                recv_clone.into(),
+                true,
+                vec![ArenaCallArg {
                     expr: char_arg,
                     is_mut: false,
                 }],
-            },
+            ),
             TypeTable::UNIT,
             span,
         );
@@ -298,7 +293,7 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
 /// excluded so duplicating it cannot change semantics.
 ///
 /// `String::push_str`'s `&mut self` parameter constrains what a NIR
-/// `MethodCall` receiver can syntactically be: it must be a place, so
+/// call receiver can syntactically be: it must be a place, so
 /// in practice we only ever see `Local`, an `&mut`-wrapped `Local`, or
 /// a `FieldAccess` chain rooted at a `Local`. The broader leaves
 /// (`GlobalVarGet`) are accepted defensively because they are pure reads

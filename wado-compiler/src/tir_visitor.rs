@@ -173,12 +173,6 @@ pub trait TirMutVisitor {
                     self.visit_expr(arg);
                 }
             }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.visit_expr(receiver);
-                for arg in args {
-                    self.visit_expr(&mut arg.expr);
-                }
-            }
             TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
                 self.visit_block(block);
             }
@@ -406,12 +400,6 @@ pub trait TirRefVisitor {
             TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.visit_expr(arg);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.visit_expr(receiver);
-                for arg in args {
-                    self.visit_expr(&arg.expr);
                 }
             }
             TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
@@ -648,12 +636,6 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
                 changed |= visitor.visit_expr(arg);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            changed |= visitor.visit_expr(receiver);
-            for arg in args {
-                changed |= visitor.visit_expr(&mut arg.expr);
-            }
-        }
         TirExprKind::IndirectCall { callee, args } => {
             changed |= visitor.visit_expr(callee);
             for arg in args {
@@ -837,10 +819,6 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
             fields.iter().any(|f| expr_has_break_to(label, &f.value))
         }
         TirExprKind::Call { args, .. } => args.iter().any(|a| expr_has_break_to(label, &a.expr)),
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            expr_has_break_to(label, receiver)
-                || args.iter().any(|a| expr_has_break_to(label, &a.expr))
-        }
         TirExprKind::CmRawCall { args, .. } => args.iter().any(|a| expr_has_break_to(label, a)),
         TirExprKind::IndirectCall { callee, args } => {
             expr_has_break_to(label, callee) || args.iter().any(|a| expr_has_break_to(label, a))

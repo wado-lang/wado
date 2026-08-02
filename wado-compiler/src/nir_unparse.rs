@@ -665,20 +665,43 @@ impl<'a> NirUnparser<'a> {
                 func_id,
                 type_args,
                 args,
-                ..
+                has_receiver,
             } => {
                 let func_id = *func_id;
-                let full_name = match self.callee(func_id) {
-                    Some(func) => {
-                        let func_name = func.name.clone();
-                        let module_path = func.module_path();
-                        format!("{}::{func_name}", module_path.join("::"))
-                    }
-                    None => format!("fn#{func_id:?}"),
-                };
                 let type_args = type_args.clone();
-                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                self.output.push_str(&Self::quote_if_needed(&full_name));
+                let mut arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+                if *has_receiver {
+                    // Quote the full resolved method name (e.g. `"Type::method"`)
+                    // so the output captures which impl was selected.
+                    let func_name = match self.callee(func_id) {
+                        Some(func) => func.name.clone(),
+                        None => format!("fn#{func_id:?}"),
+                    };
+                    let receiver = arg_ops.remove(0);
+                    // The elaborator wraps `self` receivers in `&`/`&mut`
+                    // automatically; strip that wrapper so the rendering reflects
+                    // the source value.
+                    let actual_receiver = match receiver.as_expr().map(|e| &body.exprs[e].kind) {
+                        Some(ExprKind::Unary {
+                            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                            expr: inner,
+                        }) => *inner,
+                        _ => receiver,
+                    };
+                    self.unparse_operand(body, actual_receiver);
+                    self.output.push('.');
+                    self.output.push_str(&Self::quote_if_needed(&func_name));
+                } else {
+                    let full_name = match self.callee(func_id) {
+                        Some(func) => {
+                            let func_name = func.name.clone();
+                            let module_path = func.module_path();
+                            format!("{}::{func_name}", module_path.join("::"))
+                        }
+                        None => format!("fn#{func_id:?}"),
+                    };
+                    self.output.push_str(&Self::quote_if_needed(&full_name));
+                }
                 self.unparse_type_args(&type_args);
                 self.delimited("(", ")", arg_ops, |s, op| s.unparse_operand(body, op));
             }
@@ -688,38 +711,6 @@ impl<'a> NirUnparser<'a> {
                 self.output.push_str("cm_raw_call ");
                 self.output.push_str(&local_name);
                 self.delimited("(", ")", args, |s, aid| s.unparse_operand(body, aid));
-            }
-            ExprKind::MethodCall {
-                receiver,
-                func_id,
-                type_args,
-                args,
-                ..
-            } => {
-                let receiver = *receiver;
-                let func_name = match self.callee(*func_id) {
-                    Some(func) => func.name.clone(),
-                    None => format!("fn#{func_id:?}"),
-                };
-                let type_args = type_args.clone();
-                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                // The elaborator wraps `self` receivers in `&`/`&mut`
-                // automatically; strip that wrapper so the rendering reflects the
-                // source value.
-                let actual_receiver = match receiver.as_expr().map(|e| &body.exprs[e].kind) {
-                    Some(ExprKind::Unary {
-                        op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-                        expr: inner,
-                    }) => *inner,
-                    _ => receiver,
-                };
-                self.unparse_operand(body, actual_receiver);
-                self.output.push('.');
-                // Quote the full resolved method name (e.g. `"Type::method"`) so
-                // the output captures which impl was selected.
-                self.output.push_str(&Self::quote_if_needed(&func_name));
-                self.unparse_type_args(&type_args);
-                self.delimited("(", ")", arg_ops, |s, op| s.unparse_operand(body, op));
             }
             ExprKind::FieldAccess {
                 expr: inner,

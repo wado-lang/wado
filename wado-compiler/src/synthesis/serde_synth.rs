@@ -1008,14 +1008,15 @@ fn default_value_for_type(
     };
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source,
                 name: mangled_name,
                 monomorph_info,
                 method_info: Some(method_info),
-            },
+            }),
             type_args: vec![],
             args: vec![],
+            has_receiver: false,
         },
         type_id,
         span,

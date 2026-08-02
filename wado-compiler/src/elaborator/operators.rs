@@ -1506,7 +1506,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // operator-overloaded (non-primitive, e.g. `u128 /= u128`),
         // `build_binary_op_tir` dispatches the combined value through the
         // trait method (`Div::div` → `div_rem`). Tag the record with the
-        // compound's AstId so reify replays that MethodCall instead of a raw
+        // compound's AstId so reify replays that method call instead of a raw
         // `Binary` (a primitive `/` on struct operands is invalid Wasm).
         let combined = self.build_binary_op_tir(read, op, rhs, compound.span, Some(compound.id));
         let result = self.assign_to_target(
@@ -1664,7 +1664,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// 3. Wrapping each argument in `&` iff the matching parameter type
     ///    is a reference — never otherwise, so `Shl::shl(&self, rhs:
     ///    u32)` receives the `u32` by value.
-    /// 4. Constructing the [`TirExprKind::MethodCall`] with the correct
+    /// 4. Constructing the method [`TirExprKind::Call`] with the correct
     ///    mangled name and `resolved.return_type`.
     fn build_trait_op_method_call_on_resolved(
         &mut self,
@@ -1757,7 +1757,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // When the operator-dispatch request carries a source AST id in
         // `origin`, record the dispatch decision so reify can re-emit the
-        // same `MethodCall` TIR for the binary / index expression.
+        // same method-call TIR for the binary / index expression.
         // Synthesised callers (e.g. `desugar_comparison_chain`'s inner
         // comparisons) pass `None` and the record is skipped — they have
         // no source-level `BinaryExpr` reify would key on.
@@ -1774,7 +1774,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        // Reify rebuilds the overloaded operator's `MethodCall`
+        // Reify rebuilds the overloaded operator's method call
         // from the recorded `operator_dispatch` (receiver adjustment via
         // `self_kind`, arg `&`-wrapping via `arg_ref_wraps`) + the AST; the
         // combined walk projects only the result type. `receiver` and

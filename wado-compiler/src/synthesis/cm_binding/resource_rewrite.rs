@@ -8,7 +8,7 @@
 //! - [`rewrite_cm_resource_methods`] walks every TIR function body and
 //!   rewrites `#[cm("...")]` resource method calls into the appropriate
 //!   raw / internal / entry-module call, before downstream phases see a
-//!   `cm_name`-tagged `MethodCall` they don't know how to translate.
+//!   `cm_name`-tagged call they don't know how to translate.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -277,10 +277,7 @@ pub(super) fn synthesize_future_writes(project: &mut Package) {
 /// The payload type of a `future-write` method call, or `None` if the
 /// expression is not a future-write.
 fn future_write_payload(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
-    let (func, receiver) = match &expr.kind {
-        TirExprKind::MethodCall { func, receiver, .. } => (func, receiver),
-        _ => return None,
-    };
+    let (receiver, func, _) = expr.kind.as_method_call()?;
     if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("future-write") {
         return None;
     }
@@ -320,10 +317,7 @@ pub(super) fn synthesize_stream_writes(project: &mut Package) {
 /// The stream-write element type for a scalar / structural `stream-write`, or
 /// `None` for `u8` and record streams (handled elsewhere).
 fn stream_write_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
-    let (func, receiver) = match &expr.kind {
-        TirExprKind::MethodCall { func, receiver, .. } => (func, receiver),
-        _ => return None,
-    };
+    let (receiver, func, _) = expr.kind.as_method_call()?;
     if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("stream-write") {
         return None;
     }
@@ -366,9 +360,8 @@ pub(super) fn synthesize_stream_reads(project: &mut Package) {
 /// The stream-read element type for a value-payload `stream-read`, or `None`
 /// for `u8` and WASI record streams (handled by their own paths).
 fn stream_read_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
-    let func = match &expr.kind {
-        TirExprKind::MethodCall { func, .. } | TirExprKind::Call { func, .. } => func,
-        _ => return None,
+    let TirExprKind::Call { func, .. } = &expr.kind else {
+        return None;
     };
     if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("stream-read") {
         return None;
@@ -899,9 +892,8 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
 /// The `(payload, Option<payload>)` types of a `future-read` call, or `None`
 /// if the expression is not a future-read.
 fn future_read_payload(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId, TypeId)> {
-    let func = match &expr.kind {
-        TirExprKind::MethodCall { func, .. } | TirExprKind::Call { func, .. } => func,
-        _ => return None,
+    let TirExprKind::Call { func, .. } = &expr.kind else {
+        return None;
     };
     if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("future-read") {
         return None;
@@ -1129,9 +1121,8 @@ fn synthesize_future_read_func(
 /// The `(element, List<element>)` types of a WASI-record `stream-read`, or
 /// `None` for `u8` and value-payload streams (handled by their own paths).
 fn record_stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId, TypeId)> {
-    let func = match &expr.kind {
-        TirExprKind::MethodCall { func, .. } | TirExprKind::Call { func, .. } => func,
-        _ => return None,
+    let TirExprKind::Call { func, .. } = &expr.kind else {
+        return None;
     };
     if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("stream-read") {
         return None;
@@ -1296,7 +1287,7 @@ fn synthesize_stream_read_func(
     let with_capacity = list_method("with_capacity");
     let empty_arr = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: ModuleSource::list(),
                 name: with_capacity.to_mangled_name(),
                 monomorph_info: Some(MonomorphInfo {
@@ -1306,12 +1297,13 @@ fn synthesize_stream_read_func(
                     is_blanket: false,
                 }),
                 method_info: Some(with_capacity),
-            },
+            }),
             type_args: vec![],
             args: vec![CallArg::new(
                 local_ref(count_idx, "count", TypeTable::I32),
                 false,
             )],
+            has_receiver: false,
         },
         array_type_id,
         synth_span(),
@@ -1667,7 +1659,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         self.walk_expr(expr);
 
         let cm_name = match &expr.kind {
-            TirExprKind::MethodCall { func, .. } | TirExprKind::Call { func, .. } => {
+            TirExprKind::Call { func, .. } => {
                 func.method_info.as_ref().and_then(|m| m.cm_name.clone())
             }
             _ => return,
@@ -1687,7 +1679,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             && let Some(payload_type_id) = future_write_payload(self.tt, expr)
         {
             let func_name = future_write_func_name(self.tt, payload_type_id);
-            rewrite_cm_instance_method(expr, BindingTarget::Entry, &func_name, self.entry_source);
+            rewrite_cm_call(expr, BindingTarget::Entry, &func_name, self.entry_source);
             return;
         }
         // Scalar / structural stream writes call a generated per-element binding;
@@ -1696,19 +1688,14 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             && let Some(elem_type_id) = stream_write_value_element(self.tt, expr)
         {
             let func_name = stream_write_func_name(self.tt, elem_type_id);
-            rewrite_cm_instance_method(expr, BindingTarget::Entry, &func_name, self.entry_source);
+            rewrite_cm_call(expr, BindingTarget::Entry, &func_name, self.entry_source);
             return;
         }
         // Future reads call a generated per-payload binding function.
         if cm_name == "future-read" {
             if let Some((payload_type_id, _)) = future_read_payload(self.tt, expr) {
                 let func_name = future_read_func_name(self.tt, payload_type_id);
-                rewrite_cm_instance_method(
-                    expr,
-                    BindingTarget::Entry,
-                    &func_name,
-                    self.entry_source,
-                );
+                rewrite_cm_call(expr, BindingTarget::Entry, &func_name, self.entry_source);
             }
             return;
         }
@@ -1716,7 +1703,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         // WASI-record reads fall through to the `__cm_stream_read_<record>` path.
         if let Some(elem_type_id) = stream_read_value_element(self.tt, expr) {
             let func_name = stream_read_value_func_name(self.tt, elem_type_id);
-            rewrite_cm_instance_method(expr, BindingTarget::Entry, &func_name, self.entry_source);
+            rewrite_cm_call(expr, BindingTarget::Entry, &func_name, self.entry_source);
             return;
         }
         // WASI-record stream reads call a generated binding function.
@@ -1724,12 +1711,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             if let Some((elem_type_id, _)) = record_stream_read_element(self.tt, expr) {
                 let elem_name = self.tt.base_type_name(elem_type_id);
                 let func_name = record_stream_read_func_name(&elem_name);
-                rewrite_cm_instance_method(
-                    expr,
-                    BindingTarget::Entry,
-                    &func_name,
-                    self.entry_source,
-                );
+                rewrite_cm_call(expr, BindingTarget::Entry, &func_name, self.entry_source);
                 return;
             }
             if !is_u8_array_type(expr.type_id, self.tt) {
@@ -1742,19 +1724,14 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             let parameterized =
                 parameterize_stream_cm_name(&cm_name, expr, self.tt, self.cm_interface_registry);
             if parameterized != cm_name {
-                rewrite_cm_instance_method(
-                    expr,
-                    BindingTarget::Raw,
-                    &parameterized,
-                    self.entry_source,
-                );
+                rewrite_cm_call(expr, BindingTarget::Raw, &parameterized, self.entry_source);
                 return;
             }
         }
         // Future drop / cancel: parameterize the canonical name by the future's
         // payload and rewrite as a raw CmRawCall (mirrors the stream path above).
         if let Some(parameterized) = parameterize_future_cm_name(&cm_name, expr, self.tt) {
-            rewrite_cm_instance_method(expr, BindingTarget::Raw, &parameterized, self.entry_source);
+            rewrite_cm_call(expr, BindingTarget::Raw, &parameterized, self.entry_source);
             return;
         }
         // Look up the binding function for everything else.
@@ -1762,66 +1739,34 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             // Not handled by synthesis yet — falls through to WIR translate.
             return;
         };
-        match &mut expr.kind {
-            TirExprKind::MethodCall { .. } => {
-                rewrite_cm_instance_method(expr, target, func_name, self.entry_source);
-            }
-            TirExprKind::Call { .. } => {
-                rewrite_cm_static_method(expr, target, func_name, self.entry_source);
-            }
-            _ => {}
-        }
+        rewrite_cm_call(expr, target, func_name, self.entry_source);
     }
 }
 
-/// Rewrite a CM instance method call (receiver.method(args)) to a builtin/internal call.
-/// The receiver is cast to i32 (resource handle) and passed as the first argument.
-fn rewrite_cm_instance_method(
+/// Rewrite a CM call — `recv.method(args)` or `Type::method(args)` — to a
+/// builtin/internal call. An instance method's receiver is `args[0]`, cast to
+/// i32: the resource handle the canonical import takes.
+fn rewrite_cm_call(
     expr: &mut TirExpr,
     target: BindingTarget,
     func_name: &str,
     entry_source: &ModuleSource,
 ) {
-    let TirExprKind::MethodCall { receiver, args, .. } = &mut expr.kind else {
+    let TirExprKind::Call {
+        args, has_receiver, ..
+    } = &mut expr.kind
+    else {
         return;
     };
-
-    // Take ownership of receiver and args
-    let taken_receiver = std::mem::replace(
-        receiver.as_mut(),
-        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
-    );
-    let taken_args: Vec<TirExpr> = std::mem::take(args).into_iter().map(|a| a.expr).collect();
-
-    // Cast receiver to i32 (resource handle)
-    let handle = cast(taken_receiver, TypeTable::I32);
-
-    // Build argument list: handle first, then the rest
-    let mut all_args = vec![handle];
-    all_args.extend(taken_args);
-
-    // Create the replacement call
-    let new_expr = match target {
-        BindingTarget::Raw => cm_raw_call(func_name, all_args, expr.type_id),
-        BindingTarget::Internal => internal_call(func_name, all_args, expr.type_id),
-        BindingTarget::Entry => entry_call(func_name, all_args, expr.type_id, entry_source.clone()),
-    };
-
-    *expr = new_expr;
-}
-
-/// Rewrite a CM static method call (`Type::method(args)`) to a raw/internal call.
-fn rewrite_cm_static_method(
-    expr: &mut TirExpr,
-    target: BindingTarget,
-    func_name: &str,
-    entry_source: &ModuleSource,
-) {
-    let TirExprKind::Call { args, .. } = &mut expr.kind else {
-        return;
-    };
-
-    let taken_args: Vec<TirExpr> = std::mem::take(args).into_iter().map(|a| a.expr).collect();
+    let has_receiver = *has_receiver;
+    let mut taken_args: Vec<TirExpr> = std::mem::take(args).into_iter().map(|a| a.expr).collect();
+    if has_receiver && let Some(receiver) = taken_args.first_mut() {
+        let taken = std::mem::replace(
+            receiver,
+            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
+        );
+        *receiver = cast(taken, TypeTable::I32);
+    }
 
     let new_expr = match target {
         BindingTarget::Raw => cm_raw_call(func_name, taken_args, expr.type_id),
@@ -1877,7 +1822,7 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
     let packed = cm_raw_call(&canonical_name, vec![], TypeTable::I64);
     *expr = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: ModuleSource::rt(),
                 name: helper.to_string(),
                 monomorph_info: Some(MonomorphInfo {
@@ -1887,9 +1832,10 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
                     is_blanket: false,
                 }),
                 method_info: None,
-            },
+            }),
             type_args: vec![payload_tid],
             args: vec![CallArg::new(packed, false)],
+            has_receiver: false,
         },
         result_type,
         synth_span(),
@@ -1911,9 +1857,7 @@ fn parameterize_future_cm_name(cm_name: &str, expr: &TirExpr, tt: &TypeTable) ->
         "future-cancel-write" => CanonicalIntrinsic::FutureCancelWrite,
         _ => return None,
     };
-    let TirExprKind::MethodCall { receiver, .. } = &expr.kind else {
-        return None;
-    };
+    let (receiver, _, _) = expr.kind.as_method_call()?;
     let mut type_id = receiver.type_id;
     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
         type_id = *inner;
@@ -1939,10 +1883,10 @@ fn parameterize_stream_cm_name(
     cm_interface_registry: &CmInterfaceRegistry,
 ) -> String {
     // Get the receiver's type from the method call
-    let receiver_type_id = match &expr.kind {
-        TirExprKind::MethodCall { receiver, .. } => receiver.type_id,
-        _ => return cm_name.to_string(),
+    let Some((receiver, _, _)) = expr.kind.as_method_call() else {
+        return cm_name.to_string();
     };
+    let receiver_type_id = receiver.type_id;
     // Resolve through references: &Stream<T> → Stream<T>
     let mut type_id = receiver_type_id;
     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {

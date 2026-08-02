@@ -75,7 +75,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(28)
 
-type "functype//newtype_multiple_params.wado/newtype_multiple_params.wado/Point::combine" = fn(ref "newtype_multiple_params.wado//Point", ref "newtype_multiple_params.wado//Point", ref "newtype_multiple_params.wado//Point") -> [i32, i32];  // TypeId(29)
+type "functype//newtype_multiple_params.wado/newtype_multiple_params.wado/Point::combine" = fn(ref "newtype_multiple_params.wado//Point", ref "newtype_multiple_params.wado//Point", ref "newtype_multiple_params.wado//Point") -> ref "newtype_multiple_params.wado//Point";  // TypeId(29)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(30)
 
@@ -101,24 +101,29 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:newtype_multiple_params.wado::__modules_initialized: bool = 0;
-global global:newtype_multiple_params.wado::__const_obj_1: ref null "newtype_multiple_params.wado//Point" = struct.new "newtype_multiple_params.wado//Point" { x: 3, y: 3 };
-global global:newtype_multiple_params.wado::__const_obj_2: ref null "newtype_multiple_params.wado//Point" = struct.new "newtype_multiple_params.wado//Point" { x: 2, y: 2 };
-global global:newtype_multiple_params.wado::__const_obj_3: ref null "newtype_multiple_params.wado//Point" = struct.new "newtype_multiple_params.wado//Point" { x: 1, y: 1 };
-global global:core:prelude/primitive.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global mut global:newtype_multiple_params.wado::__const_obj_1: ref null "newtype_multiple_params.wado//Point" = ref.null none;
+global mut global:newtype_multiple_params.wado::__const_obj_2: ref null "newtype_multiple_params.wado//Point" = ref.null none;
+global mut global:newtype_multiple_params.wado::__const_obj_3: ref null "newtype_multiple_params.wado//Point" = ref.null none;
+global mut global:newtype_multiple_params.wado::__const_obj_4: ref null "newtype_multiple_params.wado//Point" = ref.null none;
+global global:core:prelude/primitive.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "newtype_multiple_params.wado/run"() with Stdout {
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
+    let self_10: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:newtype_multiple_params.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:newtype_multiple_params.wado::__modules_initialized = 1;
     };
-    let result_mv_x: i32;
-    let result_mv_y: i32;
-    multivalue_bind [result_mv_x, result_mv_y] = "newtype_multiple_params.wado/newtype_multiple_params.wado/Point::combine"(global:newtype_multiple_params.wado::__const_obj_3, global:newtype_multiple_params.wado::__const_obj_2, global:newtype_multiple_params.wado::__const_obj_1);
-    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(result_mv_x, __local_5); __local_4);
+    if ref.is_null(global:newtype_multiple_params.wado::__const_obj_1) {
+        global:newtype_multiple_params.wado::__const_obj_4 = struct.new "newtype_multiple_params.wado//Point" { x: 1, y: 1 };
+        global:newtype_multiple_params.wado::__const_obj_3 = struct.new "newtype_multiple_params.wado//Point" { x: 2, y: 2 };
+        global:newtype_multiple_params.wado::__const_obj_2 = struct.new "newtype_multiple_params.wado//Point" { x: 3, y: 3 };
+        global:newtype_multiple_params.wado::__const_obj_1 = "newtype_multiple_params.wado/newtype_multiple_params.wado/Point::combine"(global:newtype_multiple_params.wado::__const_obj_4, global:newtype_multiple_params.wado::__const_obj_3, global:newtype_multiple_params.wado::__const_obj_2);
+    }
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_10(global:newtype_multiple_params.wado::__const_obj_1.x), __local_5); __local_4);
 }
 
 fn "newtype_multiple_params.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -187,12 +192,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b2: block {
-        l3: loop {
-            break_if b2 t <= 0_i64;
+    b3: block {
+        l4: loop {
+            break_if b3 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l3;
+            continue l4;
         };
     };
     return n;
@@ -206,13 +211,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b5: block {
-            l6: loop {
-                break_if b5 temp <= 0_i64;
+        b6: block {
+            l7: loop {
+                break_if b6 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l6;
+                continue l7;
             };
         };
     }
@@ -221,12 +226,12 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b7: block {
-        l8: loop {
-            break_if b7 i >= len;
+    b8: block {
+        l9: loop {
+            break_if b8 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l8;
+            continue l9;
         };
     };
 }
@@ -257,20 +262,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b9: block {
-        l10: loop {
-            break_if b9 offset >= count;
+    b10: block {
+        l11: loop {
+            break_if b10 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b9 (if (result >> 4) == 0 -> i32 {
+            break_if b10 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l10;
+            continue l11;
         };
     };
 }
@@ -321,7 +326,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
 }
 
 fn "newtype_multiple_params.wado/newtype_multiple_params.wado/Point::combine"(self, a, b) {
-    return (self.x + a.x) + b.x, (self.y + a.y) + b.y;
+    return struct.new "newtype_multiple_params.wado//Point" { x: (self.x + a.x) + b.x, y: (self.y + a.y) + b.y };
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
@@ -332,7 +337,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_4, digit_count);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_5, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 

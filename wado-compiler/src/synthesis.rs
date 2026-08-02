@@ -88,7 +88,7 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
     // Effect-dispatch wrapper synthesis + call-site rewriting must
     // run BEFORE cm_binding so that user resource calls (like
     // `tx.write(payload)` on a `StreamWritable<u8>`) get intercepted
-    // at their pre-cm_binding shape — `MethodCall`/`Call` with
+    // at their pre-cm_binding shape — a call with
     // `func.method_info.cm_name` set — and routed to the per-
     // monomorphisation dispatch wrapper. The wrapper bodies' fallback
     // paths emit the same cm_name-tagged placeholder shape that user
@@ -101,9 +101,8 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
     let project = effect_dispatch::synthesize_pre_cm_binding(project)?;
 
     // Insert `resource.drop` for every owned Component Model resource that is
-    // never transferred. Runs before CM-binding synthesis so resource method
-    // calls are still `MethodCall`/`Call` nodes (their post-rewrite forms
-    // would obscure the borrow-vs-transfer distinction).
+    // never transferred. Runs before CM-binding synthesis, whose rewrite of
+    // resource method calls would obscure the borrow-vs-transfer distinction.
     let mut project = project;
     resource_cleanup::elaborate_resource_drops(&mut project);
 

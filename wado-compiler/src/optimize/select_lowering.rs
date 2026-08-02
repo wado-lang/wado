@@ -108,6 +108,7 @@ impl Rule for SelectLoweringRule<'_> {
                         is_mut: false,
                     },
                 ],
+                has_receiver: false,
             },
         );
         true

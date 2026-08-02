@@ -19,8 +19,8 @@
 //!   so we never have to reason about an implicit trailing-value return.
 //! - Requires every other `Return` in the body to also carry a pure value.
 //! - Requires every call site to appear as a top-level statement
-//!   (`StmtKind::Expr(Call(f, ...))` or `StmtKind::Expr(MethodCall(f,
-//!   ...))`); any nested or `Let`-bound use disqualifies the candidate.
+//!   (`StmtKind::Expr(Call(f, ...))`); any nested or `Let`-bound use
+//!   disqualifies the candidate.
 //! - Requires at least one observed call site (otherwise DCE will delete
 //!   the function anyway and there is nothing to optimise).
 //!
@@ -190,7 +190,7 @@ fn validate_call_sites(project: &NirPackage, mut candidates: IndexSet<FnKey>) ->
     }
     // A global initializer can never be a `_ = call(...)` drop site — any
     // appearance of a candidate there consumes its result, disqualifying it.
-    // `scan_node` rejects every candidate used as a `Call` / `MethodCall`.
+    // `scan_node` rejects every candidate used as a call.
     for global in &project.globals {
         ctx.scan_node(
             global.init.slot_expr().body(),
@@ -208,8 +208,8 @@ fn validate_call_sites(project: &NirPackage, mut candidates: IndexSet<FnKey>) ->
 }
 
 /// Arena walk that recognises the "top-level Expr(Call)" drop-position pattern.
-/// At a statement boundary, `Expr(Call(f, args))` / `Expr(MethodCall(f, …))`
-/// observe `f` in drop position; their args / receiver are use-scanned.
+/// At a statement boundary, `Expr(Call(f, args))` observes `f` in drop
+/// position; its args are use-scanned.
 /// Everything else (Let values, return values, nested expression trees) is
 /// use-scanned, where any candidate appearance rejects it.
 struct ValidateCtx<'a> {
@@ -234,16 +234,6 @@ impl ValidateCtx<'_> {
                     Some(*func_id),
                     args.iter().filter_map(|a| a.expr.as_expr()).collect(),
                 ),
-                ExprKind::MethodCall {
-                    func_id,
-                    receiver,
-                    args,
-                    ..
-                } => {
-                    let mut scan: Vec<ExprId> = receiver.as_expr().into_iter().collect();
-                    scan.extend(args.iter().filter_map(|a| a.expr.as_expr()));
-                    (Some(*func_id), scan)
-                }
                 // Not a top-level call: the whole expression is a use.
                 _ => (None, vec![e]),
             };
@@ -270,12 +260,11 @@ impl ValidateCtx<'_> {
         }
     }
 
-    /// Reject every candidate that appears as a `Call` / `MethodCall` anywhere
-    /// in the subtree at `node` (value position).
+    /// Reject every candidate that appears as a call anywhere in the subtree
+    /// at `node` (value position).
     fn scan_node(&mut self, body: &Body, node: NodeRef) {
         if let NodeRef::Expr(id) = node
-            && let ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } =
-                &body.exprs[id].kind
+            && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
             && self.candidates.contains(func_id)
         {
             self.rejected.insert(*func_id);
@@ -349,15 +338,13 @@ fn void_returns(body: &mut Body) {
     }
 }
 
-/// Set `type_id` to `Unit` at every `Call` / `MethodCall` of a confirmed
-/// function in the body.
+/// Set `type_id` to `Unit` at every call of a confirmed function in the body.
 fn retype_calls(body: &mut Body, confirmed: &IndexSet<FnKey>) -> bool {
     let mut targets = Vec::new();
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(id) = node
-            && let ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } =
-                &body.exprs[id].kind
+            && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
             && confirmed.contains(func_id)
         {
             targets.push(id);

@@ -675,31 +675,6 @@ impl SoftCtx<'_> {
                     self.expr(body, arg, false, hard_escaped);
                 }
             }
-            ExprKind::MethodCall {
-                receiver,
-                func_id,
-                args,
-                ..
-            } => {
-                let receiver = *receiver;
-                let callee_id = *func_id;
-                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                if let Some(re) = receiver.as_expr()
-                    && (!is_immut_ref_to_candidate(body, re, self.candidates)
-                        || callee_stores_param_at(callee_id, 0, self.stores_lookup))
-                {
-                    self.expr(body, re, false, hard_escaped);
-                }
-                for (i, arg) in arg_ops.into_iter().enumerate() {
-                    let Some(arg) = arg.as_expr() else { continue };
-                    if is_immut_ref_to_candidate(body, arg, self.candidates)
-                        && !callee_stores_param_at(callee_id, i + 1, self.stores_lookup)
-                    {
-                        continue;
-                    }
-                    self.expr(body, arg, false, hard_escaped);
-                }
-            }
             _ => body.for_each_child(NodeRef::Expr(id), |c| self.walk(body, c, hard_escaped)),
         }
     }

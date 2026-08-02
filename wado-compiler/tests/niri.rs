@@ -3565,6 +3565,7 @@ fn seq_write_call(func_id: wado_compiler::nir::FuncId, args: Vec<Build>, type_id
                 func_id,
                 type_args: Vec::new(),
                 args,
+                has_receiver: false,
             },
             type_id,
         ))
@@ -3591,6 +3592,7 @@ fn ctfe_builtin_call(
                 func_id,
                 type_args: Vec::new(),
                 args,
+                has_receiver: false,
             },
             type_id,
         ))
@@ -5191,6 +5193,7 @@ fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
                 func_id,
                 type_args: Vec::new(),
                 args: call_args,
+                has_receiver: false,
             },
             return_type,
         ))
@@ -5216,6 +5219,7 @@ fn call_expr_args(func: &NirFunction, args: Vec<(Build, bool)>) -> Build {
                 func_id,
                 type_args: Vec::new(),
                 args: call_args,
+                has_receiver: false,
             },
             return_type,
         ))
@@ -5237,12 +5241,7 @@ fn method_call_expr(func: &NirFunction, receiver: Build, args: Vec<Build>) -> Bu
             .collect();
         Operand::Expr(pe(
             b,
-            ExprKind::MethodCall {
-                receiver,
-                func_id,
-                type_args: Vec::new(),
-                args: call_args,
-            },
+            ExprKind::method_call(func_id, receiver, false, call_args),
             return_type,
         ))
     })
@@ -7281,6 +7280,7 @@ fn a_displaced_call_still_vouches_for_its_argument() {
                 expr: Operand::Expr(mention),
                 is_mut: false,
             }],
+            has_receiver: false,
         },
         TypeTable::I32,
     );

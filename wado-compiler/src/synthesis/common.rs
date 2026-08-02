@@ -29,14 +29,15 @@ pub fn synth_span() -> Span {
 pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: ModuleSource::builtin(),
                 name: name.to_string(),
                 monomorph_info: None,
                 method_info: None,
-            },
+            }),
             type_args: vec![],
             args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
+            has_receiver: false,
         },
         return_type,
         synth_span(),
@@ -47,14 +48,15 @@ pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirE
 pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: ModuleSource::rt(),
                 name: name.to_string(),
                 monomorph_info: None,
                 method_info: None,
-            },
+            }),
             type_args: vec![],
             args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
+            has_receiver: false,
         },
         return_type,
         synth_span(),
@@ -70,14 +72,15 @@ pub fn entry_call(
 ) -> TirExpr {
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source: entry_module_source,
                 name: name.to_string(),
                 monomorph_info: None,
                 method_info: None,
-            },
+            }),
             type_args: vec![],
             args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
+            has_receiver: false,
         },
         return_type,
         synth_span(),
@@ -391,14 +394,15 @@ pub fn generic_static_call(
     let _n = args.len();
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef {
+            func: Box::new(FunctionRef {
                 module_source,
                 name: mangled_name,
                 monomorph_info,
                 method_info: Some(info),
-            },
+            }),
             type_args: vec![],
             args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
+            has_receiver: false,
         },
         return_type,
         synth_span(),

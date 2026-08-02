@@ -480,8 +480,6 @@ struct Builder<'a> {
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
-    /// Per-`Call`-expr heap snapshots. See [`ValueGraphBuild::call_site_heap`].
-    call_site_heap: IndexMap<ExprId, HeapSnapshot>,
     /// `ExprId` indices of calls that mutate no caller local. See
     /// [`BuildConfig::pure_calls`].
     pure_calls: crate::hashmap::IndexSet<ExprId>,
@@ -521,7 +519,6 @@ impl<'a> Builder<'a> {
             ref_targets: IndexMap::default(),
             type_table,
             loop_entry_values: IndexMap::default(),
-            call_site_heap: IndexMap::default(),
             pure_calls: crate::hashmap::IndexSet::default(),
             pure_builtin_callees: crate::hashmap::IndexSet::default(),
         }
@@ -1199,11 +1196,6 @@ impl<'a> Builder<'a> {
                 for a in args {
                     self.walk_operand(a.expr);
                 }
-                // Heap version state the callee body would observe, captured
-                // after argument evaluation and before this call's own effects —
-                // persisted so the inline splice can re-value the callee with the
-                // caller's field versions ([`ValueGraphBuild::call_site_heap`]).
-                self.call_site_heap.insert(expr, self.heap_state.snapshot());
                 self.bump_call_effects(expr);
                 None
             }
@@ -1213,14 +1205,6 @@ impl<'a> Builder<'a> {
                 }
                 // Raw CM calls have opaque captures; stay fully conservative.
                 self.heap_state.bump_all();
-                None
-            }
-            ExprKind::MethodCall { receiver, args, .. } => {
-                self.walk_operand(receiver);
-                for a in args {
-                    self.walk_operand(a.expr);
-                }
-                self.bump_call_effects(expr);
                 None
             }
             ExprKind::IndirectCall { callee, args } => {
@@ -2073,9 +2057,17 @@ fn record_loop_heap_write(
             },
             _ => eff.has_external_writes = true,
         },
-        ExprKind::Call { func_id, args, .. } => {
-            for arg in args {
-                if arg.is_mut
+        ExprKind::Call {
+            func_id,
+            args,
+            has_receiver,
+            ..
+        } => {
+            for (i, arg) in args.iter().enumerate() {
+                // A receiver is borrowed for the whole call whether or not the
+                // method declares `&mut self` — the callee reaches its storage.
+                let borrowed = arg.is_mut || (*has_receiver && i == 0);
+                if borrowed
                     && let Some(ExprKind::Local { index, .. }) =
                         arg.expr.as_expr().map(|ae| &body.exprs[ae].kind)
                 {
@@ -2085,22 +2077,6 @@ fn record_loop_heap_write(
             if !is_builtin_pure_call(pure_builtin_callees, *func_id) {
                 eff.has_external_writes = true;
             }
-        }
-        ExprKind::MethodCall { receiver, args, .. } => {
-            if let Some(ExprKind::Local { index, .. }) =
-                receiver.as_expr().map(|re| &body.exprs[re].kind)
-            {
-                eff.mut_borrowed.insert(*index);
-            }
-            for arg in args {
-                if arg.is_mut
-                    && let Some(ExprKind::Local { index, .. }) =
-                        arg.expr.as_expr().map(|ae| &body.exprs[ae].kind)
-                {
-                    eff.mut_borrowed.insert(*index);
-                }
-            }
-            eff.has_external_writes = true;
         }
         ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
             eff.has_external_writes = true;
@@ -2286,6 +2262,7 @@ mod tests {
                 func_id: FuncId::from_u32(0),
                 type_args: vec![],
                 args: vec![],
+                has_receiver: false,
             },
             type_id: TypeTable::I32,
             span,

@@ -13,9 +13,6 @@ use crate::hashmap::IndexMap;
 use crate::nir::NirFunction;
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, Operand};
 
-/// A method's receiver is its first parameter.
-pub(super) const RECEIVER: usize = 0;
-
 /// Identity of a callee in the [`CalleeMap`].
 pub type CalleeKey = crate::nir::FuncId;
 
@@ -82,48 +79,29 @@ impl Callee {
 /// A call site: who it names, and the operands its parameters bind.
 pub(super) struct CallSite<'a> {
     pub(super) func_id: CalleeKey,
-    receiver: Option<Operand>,
     args: &'a [ArenaCallArg],
 }
 
 impl<'a> CallSite<'a> {
     /// The call `e` spells, or `None` for a node that is not one.
     pub(super) fn of(body: &'a Body, e: ExprId) -> Option<Self> {
-        match &body.exprs[e].kind {
-            ExprKind::Call { func_id, args, .. } => Some(Self {
-                func_id: *func_id,
-                receiver: None,
-                args,
-            }),
-            ExprKind::MethodCall {
-                func_id,
-                receiver,
-                args,
-                ..
-            } => Some(Self {
-                func_id: *func_id,
-                receiver: Some(*receiver),
-                args,
-            }),
-            _ => None,
-        }
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+            return None;
+        };
+        Some(Self {
+            func_id: *func_id,
+            args,
+        })
     }
 
     /// How many parameters the site supplies.
     pub(super) fn arity(&self) -> usize {
-        usize::from(self.receiver.is_some()) + self.args.len()
+        self.args.len()
     }
 
     /// Each operand paired with the parameter index it binds.
     pub(super) fn operands(&self) -> impl Iterator<Item = (usize, Operand)> + '_ {
-        let first_arg = usize::from(self.receiver.is_some());
-        self.receiver
-            .map(|r| (RECEIVER, r))
-            .into_iter()
-            .chain(self.args.iter().enumerate().map(move |(i, a)| {
-                let index = first_arg + i;
-                (index, a.expr)
-            }))
+        self.args.iter().enumerate().map(|(i, a)| (i, a.expr))
     }
 
     /// [`Self::operands`], but only where the site matches `callee`'s

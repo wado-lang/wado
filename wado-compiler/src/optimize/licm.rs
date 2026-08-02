@@ -888,7 +888,7 @@ fn reloadable_pointee(root_type: TypeId, type_table: &TypeTable) -> Option<TypeI
     }
 }
 
-/// True when `e` is a `Call`/`MethodCall` that passes a `&mut T` argument whose
+/// True when `e` is a call that passes a `&mut T` argument whose
 /// pointee `T` is in `clobber_types` — i.e. the call may write that pointee's
 /// fields. Mirrors [`record_mut_ref_clobber`]'s `&mut` detection.
 fn expr_clobbers_types(
@@ -899,14 +899,6 @@ fn expr_clobbers_types(
 ) -> bool {
     let args: &[ArenaCallArg] = match &body.exprs[e].kind {
         ExprKind::Call { args, .. } => args,
-        ExprKind::MethodCall { receiver, args, .. } => {
-            if let Some(re) = receiver.as_expr()
-                && expr_type_clobbers(body, re, clobber_types, type_table)
-            {
-                return true;
-            }
-            args
-        }
         _ => return false,
     };
     args.iter().any(|a| {
@@ -982,14 +974,6 @@ fn collect_clobbered_types(
     if let NodeRef::Expr(e) = node {
         let operands: &[ArenaCallArg] = match &body.exprs[e].kind {
             ExprKind::Call { args, .. } => args,
-            ExprKind::MethodCall { receiver, args, .. } => {
-                if let Some(re) = receiver.as_expr()
-                    && let Some(t) = mut_ref_pointee(body, re, clobber_types, type_table)
-                {
-                    hit.insert(t);
-                }
-                args
-            }
             _ => &[],
         };
         for a in operands {
@@ -1352,17 +1336,6 @@ fn strip_references(type_id: TypeId, type_table: &TypeTable) -> TypeId {
     }
 }
 
-fn record_mut_ref_clobber_operand(
-    body: &Body,
-    op: Operand,
-    modified: &mut ModifiedVars,
-    type_table: &TypeTable,
-) {
-    if let Some(e) = op.as_expr() {
-        record_mut_ref_clobber(body, e, modified, type_table);
-    }
-}
-
 /// If `expr` is a `&mut`-reference to a heap object passed to a call, record its
 /// pointee as clobbered. Covers both plain structs and generic instances
 /// (`List<T>`, `String`, …) — a `&mut List<i32>` method like `push` mutates the
@@ -1616,18 +1589,6 @@ fn collect_modified_vars_in_expr(
         }
         ExprKind::Call { args, .. } => {
             let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-            for a in arg_ids {
-                mark_gc_local_as_fully_modified(body, a, modified, type_table);
-                record_mut_ref_clobber(body, a, modified, type_table);
-                collect_modified_vars_in_expr(body, a, modified, type_table);
-            }
-        }
-        ExprKind::MethodCall { receiver, args, .. } => {
-            let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-            mark_gc_local_as_fully_modified_operand(body, receiver, modified, type_table);
-            record_mut_ref_clobber_operand(body, receiver, modified, type_table);
-            collect_modified_vars_in_operand(body, receiver, modified, type_table);
             for a in arg_ids {
                 mark_gc_local_as_fully_modified(body, a, modified, type_table);
                 record_mut_ref_clobber(body, a, modified, type_table);
@@ -2051,7 +2012,6 @@ fn arith_structural_key(body: &Body, e: ExprId) -> ArithKey {
         ExprKind::Assign { .. }
         | ExprKind::Cast { .. }
         | ExprKind::Call { .. }
-        | ExprKind::MethodCall { .. }
         | ExprKind::CmRawCall { .. }
         | ExprKind::IndirectCall { .. }
         | ExprKind::ClosureToCanonical { .. }

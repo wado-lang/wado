@@ -99,7 +99,7 @@ impl TirRefVisitor for SeedWalker<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         self.record_array_clone_element(expr);
         match &expr.kind {
-            TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
+            TirExprKind::Call { args, .. } => {
                 // Every by-value argument is copied — value semantics: passing
                 // a value to a function deep-copies it. `should_wrap` already
                 // excludes references (`&T` / `&mut T`), fresh values, and
@@ -223,11 +223,6 @@ pub(crate) fn is_owned_value(
                     && args
                         .first()
                         .is_some_and(|a| is_owned_value(&a.expr, fresh_locals, oracle, type_table)))
-        }
-        TirExprKind::MethodCall { func, receiver, .. } => {
-            oracle.is_owned(func)
-                || (oracle.returns_self_projection(func)
-                    && is_owned_value(receiver, fresh_locals, oracle, type_table))
         }
         TirExprKind::CmRawCall { .. } => true,
         // Every callable value is a closure functor by lowering time, so an

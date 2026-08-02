@@ -665,7 +665,7 @@ fn run_optimization_passes(
         // `push_str` literals, elides write-only locals, and (post-inline only)
         // materializes array literals — all three rules over one shared
         // worklist; see `optimize/peephole.rs`. Runs *before* inline so
-        // `string_push` still sees the `buf.push_str("0.")` `MethodCall` shape:
+        // `string_push` still sees the `buf.push_str("0.")` call shape:
         // once the inliner expands `String::push_str`'s body that node is gone
         // and the literal-recognising rewrite can no longer match, leaving
         // short-string formatting paths (e.g. `fpfmt.wado`) paying full

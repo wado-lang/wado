@@ -473,13 +473,6 @@ impl ShareCollector<'_> {
             return Some(p);
         }
         match &value.kind {
-            TirExprKind::MethodCall { func, receiver, .. }
-                if self
-                    .returns_receiver_alias
-                    .contains(&func.module_source, &func.name) =>
-            {
-                place_path(receiver)
-            }
             TirExprKind::Call { func, args, .. }
                 if self
                     .returns_receiver_alias
@@ -577,12 +570,16 @@ impl ShareCollector<'_> {
                 }
                 self.walk_value(value);
             }
-            TirExprKind::MethodCall {
+            TirExprKind::Call {
                 func,
-                receiver,
                 args,
+                has_receiver: true,
                 ..
             } => {
+                let Some((receiver, rest)) = args.split_first() else {
+                    return;
+                };
+                let receiver = &receiver.expr;
                 if self
                     .mut_receiver_methods
                     .contains(&func.module_source, &func.name)
@@ -597,7 +594,7 @@ impl ShareCollector<'_> {
                 } else {
                     self.walk_value(receiver);
                 }
-                for a in args {
+                for a in rest {
                     self.walk_value(&a.expr);
                 }
             }
@@ -916,36 +913,6 @@ impl Analyzer<'_> {
             self.walk_expr(arg, live, record);
         }
     }
-
-    /// A method-call receiver at position 0. The auto-ref'd `&self` / `&mut self`
-    /// receiver is a transient borrow that escapes only if the callee stores its
-    /// receiver position — a method that stores only a value parameter (e.g.
-    /// `List::push`) does not retain `self`, so the receiver local stays
-    /// move-eligible. A by-value (consuming) receiver is an ordinary value read.
-    fn walk_method_receiver(
-        &mut self,
-        receiver: &TirExpr,
-        func: &FunctionRef,
-        live: &mut IndexSet<u32>,
-        record: bool,
-    ) {
-        match &receiver.kind {
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                expr: place,
-            } => {
-                let referent = self.borrow_read(place, live, record);
-                if record
-                    && let Some(r) = referent
-                    && self.callee_stores(func, 0)
-                {
-                    self.mark_escaped(r, borrow_top_field(place));
-                }
-            }
-            _ => self.walk_expr(receiver, live, record),
-        }
-    }
-
     /// Process a call's argument at position `pos`. An explicit `&`/`&mut`
     /// argument is a transient borrow unless the callee may store that position,
     /// in which case the referent escapes; every other argument is an ordinary
@@ -1142,18 +1109,22 @@ impl Analyzer<'_> {
                     self.scan_place_uses(inner, conflict);
                 }
             }
-            TirExprKind::MethodCall {
+            TirExprKind::Call {
                 func,
-                receiver,
                 args,
+                has_receiver: true,
                 ..
             } => {
+                let Some((receiver, rest)) = args.split_first() else {
+                    return;
+                };
+                let receiver = &receiver.expr;
                 let (recv_place, recv_ref) = match &receiver.kind {
                     TirExprKind::Unary {
                         op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
                         expr,
                     } => (expr.as_ref(), Some(*op)),
-                    _ => (receiver.as_ref(), None),
+                    _ => (receiver, None),
                 };
                 match clean_root(recv_place) {
                     Some(base) => {
@@ -1168,7 +1139,7 @@ impl Analyzer<'_> {
                     }
                     None => self.scan_place_uses(recv_place, conflict),
                 }
-                for (pos, a) in args.iter().enumerate() {
+                for (pos, a) in rest.iter().enumerate() {
                     self.scan_call_arg_place_use(&a.expr, Some(func), pos + 1, conflict);
                 }
             }
@@ -1432,34 +1403,36 @@ impl Analyzer<'_> {
             }
             // Calls classify each `&`/`&mut` argument as a transient borrow (see
             // `walk_call_arg`); the callee / receiver is an ordinary read.
-            TirExprKind::Call { func, args, .. } => {
-                if record {
-                    let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
-                    self.mark_sibling_mut_aliases(&exprs, None);
-                }
-                for (pos, arg) in args.iter().enumerate().rev() {
-                    self.walk_call_arg(&arg.expr, Some(func), pos, live, record);
-                }
-            }
-            TirExprKind::MethodCall {
+            TirExprKind::Call {
                 func,
-                receiver,
                 args,
+                has_receiver,
                 ..
             } => {
                 if record {
-                    let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
-                    let recv_mut_root = self
-                        .mut_receiver_methods
-                        .contains(&func.module_source, &func.name)
-                        .then(|| alias_root(receiver))
-                        .flatten();
+                    // A `&mut self` receiver mutates for the whole call, so its
+                    // root is the mut-alias the *other* arguments are checked
+                    // against — it is not itself one of the siblings.
+                    let (recv_mut_root, siblings) =
+                        match has_receiver.then(|| args.split_first()).flatten() {
+                            Some((receiver, rest)) => (
+                                self.mut_receiver_methods
+                                    .contains(&func.module_source, &func.name)
+                                    .then(|| alias_root(&receiver.expr))
+                                    .flatten(),
+                                rest,
+                            ),
+                            None => (None, args.as_slice()),
+                        };
+                    let exprs: Vec<&TirExpr> = siblings.iter().map(|a| &a.expr).collect();
                     self.mark_sibling_mut_aliases(&exprs, recv_mut_root);
                 }
+                // Reverse order leaves a receiver (position 0) for last, and
+                // `walk_call_arg` handles it exactly as `walk_method_receiver`
+                // used to — by asking `callee_stores(func, 0)`.
                 for (pos, arg) in args.iter().enumerate().rev() {
-                    self.walk_call_arg(&arg.expr, Some(func), pos + 1, live, record);
+                    self.walk_call_arg(&arg.expr, Some(func), pos, live, record);
                 }
-                self.walk_method_receiver(receiver, func, live, record);
             }
             TirExprKind::CmRawCall { args, .. } => {
                 for (pos, arg) in args.iter().enumerate().rev() {
@@ -1647,12 +1620,6 @@ fn collect_child_exprs<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirExpr>) {
         K::CmRawCall { args, .. } => {
             for a in args {
                 out.push(a);
-            }
-        }
-        K::MethodCall { receiver, args, .. } => {
-            out.push(receiver);
-            for a in args {
-                out.push(&a.expr);
             }
         }
         K::IndirectCall { callee, args } => {

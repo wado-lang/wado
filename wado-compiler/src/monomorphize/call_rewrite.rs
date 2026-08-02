@@ -294,7 +294,7 @@ impl Monomorphizer {
                 monomorph_info: Some(monomorph),
                 method_info: Some(info),
                 ..
-            } = func
+            } = &**func
                 && (!monomorph.impl_type_args.is_empty() || !monomorph.method_type_args.is_empty())
             {
                 let mut names_to_try = vec![MethodName::format_local(
@@ -362,15 +362,19 @@ impl Monomorphizer {
     }
 
     fn rewrite_method_call_expr(&self, expr: &mut TirExpr, type_table: &TypeTable) {
-        let TirExprKind::MethodCall {
-            receiver,
+        let TirExprKind::Call {
             func: method_func,
             type_args,
-            ..
+            args,
+            has_receiver: true,
         } = &mut expr.kind
         else {
             return;
         };
+        let Some((receiver, _)) = args.split_first() else {
+            return;
+        };
+        let receiver = &receiver.expr;
 
         // Extract method name from method_info or fall back to function name
         let method_name = method_func
@@ -680,7 +684,7 @@ impl Monomorphizer {
             let blanket_lookup = if let FunctionRef {
                 monomorph_info: Some(mono),
                 ..
-            } = &*method_func
+            } = &**method_func
                 && mono.is_blanket
             {
                 let info = method_func.method_info.as_ref();
@@ -845,10 +849,15 @@ impl TirMutVisitor for CallRewriter<'_> {
 
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         match &expr.kind {
-            TirExprKind::Call { .. } => {
+            TirExprKind::Call {
+                has_receiver: false,
+                ..
+            } => {
                 self.mono.rewrite_call_expr(expr, self.type_table);
             }
-            TirExprKind::MethodCall { .. } => {
+            TirExprKind::Call {
+                has_receiver: true, ..
+            } => {
                 self.mono.rewrite_method_call_expr(expr, self.type_table);
             }
             TirExprKind::FuncRef { .. } => {

@@ -354,7 +354,7 @@ impl TirMutVisitor for TypeReplacer<'_> {
             expr.type_id = self.new_type;
         }
         match &mut expr.kind {
-            TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => {
+            TirExprKind::Call { func, .. } => {
                 self.fix_func_ref(func);
             }
             TirExprKind::VariantConstruct { variant_type, .. } => {
@@ -897,7 +897,7 @@ fn rewrite_calls_in_expr(
             }
         }
         cast_args_to_adapter_params(&adapter_rc.borrow(), args, 0);
-        *func = FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone());
+        **func = FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone());
         *type_args = vec![];
         for arg in args {
             rewrite_calls_in_expr(
@@ -984,7 +984,7 @@ fn rewrite_calls_in_expr(
             }
 
             // Rewrite to call the binding function
-            *func = FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone());
+            **func = FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone());
             *type_args = vec![];
 
             // Recurse into args
@@ -1003,8 +1003,8 @@ fn rewrite_calls_in_expr(
         }
     }
 
-    // Check if this is a resource MethodCall that should be rewritten to target a binding
-    if let TirExprKind::MethodCall { receiver, func, .. } = &expr.kind
+    // Check if this is a resource method call that should be rewritten to target a binding
+    if let Some((receiver, func, _)) = expr.kind.as_method_call()
         && let Some(method_info) = func.method_info.clone()
     {
         // The adapter map is keyed by the declared `Resource::method`, the same
@@ -1035,18 +1035,18 @@ fn rewrite_calls_in_expr(
                 .is_some_and(|f| !f.is_async && f.has_streaming_param());
 
             // Extract receiver and args before replacing
-            let (taken_receiver, mut taken_args) =
-                if let TirExprKind::MethodCall { receiver, args, .. } = &mut expr.kind {
-                    (
-                        std::mem::replace(
-                            receiver.as_mut(),
-                            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
-                        ),
-                        std::mem::take(args),
-                    )
-                } else {
-                    unreachable!()
-                };
+            let (taken_receiver, mut taken_args) = if let TirExprKind::Call {
+                args,
+                has_receiver: true,
+                ..
+            } = &mut expr.kind
+            {
+                let mut taken = std::mem::take(args);
+                let receiver = taken.remove(0).expr;
+                (receiver, taken)
+            } else {
+                unreachable!()
+            };
 
             // Fix up binding function types from the call site
             // The binding params include self as the first param
@@ -1129,18 +1129,22 @@ fn rewrite_calls_in_expr(
                 None => taken_exprs,
             };
 
-            // Replace MethodCall with Call targeting the binding
+            // Retarget the call targeting the binding
             // Prepend receiver to args
             let mut all_args = vec![taken_receiver];
             all_args.extend(flat_taken_args);
 
             expr.kind = TirExprKind::Call {
-                func: FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone()),
+                func: Box::new(FunctionRef::from_resolved(
+                    &adapter_rc.borrow(),
+                    entry_source.clone(),
+                )),
                 args: all_args
                     .into_iter()
                     .map(|e| CallArg::new(e, false))
                     .collect(),
                 type_args: vec![],
+                has_receiver: false,
             };
 
             // Recurse into args of the new Call
@@ -1262,12 +1266,16 @@ fn rewrite_calls_in_expr(
 
             // Replace static Call with Call targeting the binding
             expr.kind = TirExprKind::Call {
-                func: FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone()),
+                func: Box::new(FunctionRef::from_resolved(
+                    &adapter_rc.borrow(),
+                    entry_source.clone(),
+                )),
                 args: flat_call_args
                     .into_iter()
                     .map(|e| CallArg::new(e, false))
                     .collect(),
                 type_args: vec![],
+                has_receiver: false,
             };
 
             // Recurse into args of the new Call
@@ -1318,7 +1326,7 @@ pub(super) fn collect_effect_calls_in_block(
 
 /// Discovery pass that records every used WASI effect call and resource
 /// method call so [`super::generate_adapters`] synthesizes a binding for
-/// each. Detection fires on `Call` / `MethodCall`; the exhaustive
+/// each. Detection fires on a call; the exhaustive
 /// `TirRefVisitor` walk reaches every other position (closures, `with`
 /// handler bodies, match arms, template interpolations, …) so an effect
 /// call nested anywhere still triggers adapter generation.
@@ -1379,7 +1387,10 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                         .insert(DeclPath::from_declared(func.name.clone()));
                 }
             }
-            TirExprKind::MethodCall { receiver, func, .. } => {
+            kind if kind.as_method_call().is_some() => {
+                let Some((receiver, func, _)) = kind.as_method_call() else {
+                    return;
+                };
                 if let Some(method_info) = func.method_info.clone() {
                     // The registry keys on the declared `Resource::method`, as
                     // the `Call` arm above does — a mangled head carries the

@@ -472,12 +472,6 @@ fn remap_locals_in_expr(expr: &mut TirExpr, remap: &IndexMap<u32, u32>) {
                 remap_locals_in_expr(arg, remap);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            remap_locals_in_expr(receiver, remap);
-            for arg in args {
-                remap_locals_in_expr(&mut arg.expr, remap);
-            }
-        }
         TirExprKind::IndirectCall { callee, args } => {
             remap_locals_in_expr(callee, remap);
             for arg in args {

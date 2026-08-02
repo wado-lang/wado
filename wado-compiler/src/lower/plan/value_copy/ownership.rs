@@ -168,11 +168,6 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool 
             args.first()
                 .is_some_and(|a| is_receiver_projection(&a.expr, param, set))
         }
-        TirExprKind::MethodCall { func, receiver, .. }
-            if set.contains(&func.module_source, &func.name) =>
-        {
-            is_receiver_projection(receiver, param, set)
-        }
         TirExprKind::Call { func, args, .. } if set.contains(&func.module_source, &func.name) => {
             args.first()
                 .is_some_and(|a| is_receiver_projection(&a.expr, param, set))

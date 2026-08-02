@@ -114,9 +114,7 @@ impl CallGraph {
             let mut seen: Vec<FuncId> = Vec::new();
             for node in body.exprs.values() {
                 let func_id = match &node.kind {
-                    ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => {
-                        func_id
-                    }
+                    ExprKind::Call { func_id, .. } => func_id,
                     _ => continue,
                 };
                 let callee = *func_id;

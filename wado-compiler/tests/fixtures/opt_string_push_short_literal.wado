@@ -6,7 +6,7 @@
 // `push_ascii(<byte>)`, skipping `encode_char`'s UTF-8 width dispatch; the
 // inliner folds `push_ascii` into `internal_reserve_uninit(buf, 1)` +
 // `array_set_u8(buf.repr, _, <byte>)`. Both passes run *before* `inline`;
-// once the inliner expands `push_str`'s body the `MethodCall` node is gone
+// once the inliner expands `push_str`'s body the call node is gone
 // and the literal-recognising rewrite cannot match.
 //
 // Background: at high inline thresholds (e.g. -O3 = 40, well above
