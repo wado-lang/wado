@@ -1403,7 +1403,7 @@ impl FunctionTranslator<'_, '_> {
         self.alloc_expr(kind, expr.type_id, expr.span)
     }
 
-    /// Convert a a call argument. When the argument is
+    /// Convert a call argument. When the argument is
     /// a specialized fn-param `Local` and the slot still expects
     /// `fn(...)`, wrap the converted `Local` in
     /// `ExprKind::ClosureToCanonical` so the callee sees the
@@ -2172,12 +2172,12 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Convert a method call's receiver. It occupies `args[0]` like any other
-    /// argument, but it is a *place*, not a value argument: wrapping it in
-    /// `$value_copy$T` would hand the callee a throwaway copy and discard the
-    /// mutation the call exists to perform (a `String` builder's `push_str`
-    /// would append to the copy). Nor may it be re-wrapped as a canonical
-    /// closure the way a specialized fn-param argument is — the method was
-    /// resolved against the receiver's own type, not `fn(...)`.
+    /// argument but is a *place*: wrapping it in `$value_copy$T` would hand the
+    /// callee a throwaway copy and discard the mutation the call exists to
+    /// perform (a `String` builder's `push_str` would append to the copy). Nor
+    /// may it be re-wrapped as a canonical closure the way a specialized
+    /// fn-param argument is — the method resolved against the receiver's own
+    /// type, not `fn(...)`.
     fn convert_receiver_arg(&self, receiver: &TirExpr, is_mut: bool) -> ArenaCallArg {
         ArenaCallArg {
             expr: self.convert_operand(receiver),
@@ -2187,8 +2187,7 @@ impl FunctionTranslator<'_, '_> {
 
     /// Convert one call argument, wrapping it in `$value_copy$T` unless
     /// `should_wrap_value_copy` says no or the callee parameter is confined.
-    /// `param_index` indexes the callee's full parameter list, so a method's
-    /// receiver is index 0 like any other argument.
+    /// `param_index` indexes the callee's full parameter list.
     fn convert_call_arg_at(
         &self,
         arg: &TirExpr,

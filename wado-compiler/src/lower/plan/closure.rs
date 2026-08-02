@@ -1297,9 +1297,8 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
 /// Phase 0 rewriter: turn `FuncRef` values into zero-capture `Closure`
 /// nodes so the rest of the closure pipeline handles them uniformly.
 ///
-/// `FuncRefs` in callee position of call are not
-/// `TirExprKind::FuncRef` (the call elaborator emits a a call
-/// directly), so they're left alone by the default walk. `&FuncRef` is
+/// A callee position holds no `TirExprKind::FuncRef` — the call elaborator
+/// emits the `Call` directly — so the default walk leaves it alone. `&FuncRef` is
 /// just `&` applied to a `fn(...)` value: the inner `FuncRef` becomes a
 /// zero-capture closure and the outer `Unary::Ref` stays put, producing a
 /// genuine `&fn(...)` reference value.
@@ -2007,7 +2006,7 @@ impl TirMutVisitor for ClosureBodyTransformer<'_> {
 }
 
 /// Phase 2.5 collector: scan function bodies and record every direct
-/// call (call) whose closure args want a specialised
+/// call whose closure args want a specialised
 /// callee. Closures embed their `functor_id` from Phase 1, so the key
 /// is reconstructible without any traversal-order counter.
 struct FnParamSpecCollector<'a> {

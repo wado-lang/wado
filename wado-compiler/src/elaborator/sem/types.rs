@@ -91,7 +91,7 @@ pub(crate) struct MethodDispatch {
     /// Per-parameter default expression ASTs (`None` for required).
     pub(crate) param_defaults: Vec<Option<crate::ast::Expr>>,
     /// The resolved method's return [`TypeId`] — the authoritative result
-    /// type of the call. Reify uses this for the the method call's
+    /// type of the call. Reify uses this for the call's
     /// `type_id` rather than the per-`AstId` `expression_types` entry,
     /// which can carry a stale/wrong type for the call site (a unit
     /// method whose `expression_types` slot was recorded as another

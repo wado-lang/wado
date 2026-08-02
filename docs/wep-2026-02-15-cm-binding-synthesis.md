@@ -79,7 +79,7 @@ Codegen resolves `local_name` to the imported function index. This node is also 
 
 ### Import Adapters — Complete
 
-All WASI interfaces (cli, clocks, random, http, sockets) use binding synthesis. Both instance method calls (e.g. `fields.append(name, value)`, whose receiver heads the call's `args`) and resource static method calls (e.g. `Response::new(headers, null, trailers)`) are rewritten to binding calls. The old codegen CM paths (`generate_cm_effect_call`, `generate_cm_resource_method_call`) and per-type converters (`cm_list_string_to_array`, `cm_option_string_to_option`, etc.) have been deleted.
+All WASI interfaces (cli, clocks, random, http, sockets) use binding synthesis. Both instance method calls (e.g. `fields.append(name, value)`) and resource static method calls (e.g. `Response::new(headers, null, trailers)`) are rewritten to binding calls. The old codegen CM paths (`generate_cm_effect_call`, `generate_cm_resource_method_call`) and per-type converters (`cm_list_string_to_array`, `cm_option_string_to_option`, etc.) have been deleted.
 
 ### Export Adapters — Async Only
 

@@ -7,8 +7,8 @@
 //! leaks a host resource-table slot. Under `wado serve`'s pooled instance
 //! reuse the table eventually exhausts (issue #1133).
 //!
-//! This pass runs pre-monomorphize, before CM-binding synthesis, while
-//! resource method calls are still a call nodes. For every
+//! This pass runs pre-monomorphize, before CM-binding synthesis rewrites
+//! resource method calls into canonical intrinsics. For every
 //! function body it tracks each owned resource value and inserts a
 //! `resource.drop` (emitted as a `CmRawCall` to the `resource-drop:<cm>`
 //! canonical intrinsic) on every control-flow path where the value is still

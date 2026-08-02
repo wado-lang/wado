@@ -2447,7 +2447,7 @@ fn rewrite_call_sites_to_wrappers(
     //     rewriter intercepts these via `(interface_name, op_name)` in
     //     `user_to_wrapper`.
     //   * resource methods (`Fields::new()`, `tx.write(payload)`,
-    //     `Stream::<u8>::new()`) resolve to a a call
+    //     `Stream::<u8>::new()`) resolve to a `Call`
     //     whose `func.module_source` is the resource's declaring
     //     module and whose `func.method_info.cm_name` is `Some(...)`.
     //     The rewriter intercepts these via
@@ -2528,8 +2528,8 @@ struct RewriteCtx<'a> {
     /// (e.g. `Counter::next()`).
     user_to_wrapper: &'a IndexMap<(String, String), String>,
     /// `(resource_module, base_name, cm_name) → [(type_args,
-    /// wrapper_name)]` for resource method calls / Calls with
-    /// `method_info.cm_name` set. Multiple instantiations live under
+    /// wrapper_name)]` for calls with `method_info.cm_name` set.
+    /// Multiple instantiations live under
     /// the same key; the rewriter narrows by the call's type args.
     cm_to_wrappers: &'a IndexMap<(ModuleSource, String, String), Vec<(Vec<TypeId>, String)>>,
     type_table: std::rc::Rc<std::cell::RefCell<TypeTable>>,

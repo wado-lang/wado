@@ -289,8 +289,7 @@ fn validate_call_sites(
 }
 
 /// Validate every call in a body: at each dead parameter position the supplied
-/// argument must be pure. A method's receiver is `args[0]`, so it validates
-/// under the same rule.
+/// argument must be pure.
 fn validate_in_body(
     body: &Body,
     candidates: &IndexMap<FnKey, Vec<bool>>,
@@ -323,7 +322,6 @@ fn validate_call(
     if rejected.contains(&key) {
         return;
     }
-    // Arguments map 1:1 to params, receiver included.
     for (i, dead_at_i) in dead.iter().enumerate() {
         if !*dead_at_i {
             continue;
@@ -351,8 +349,8 @@ fn validate_call(
 /// Applies the rewrites and returns the indices of every function whose body or
 /// signature changed (confirmed callees + callers whose call sites were
 /// rewritten), so the caller can mark exactly those dirty in the gate. The call
-/// graph is unaffected: dae drops arguments, including a method's receiver, on
-/// the *same* callee — never adding or removing an edge.
+/// graph is unaffected: dae drops arguments on the *same* callee — never
+/// adding or removing an edge.
 fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -> Vec<usize> {
     let mut touched: IndexSet<usize> = IndexSet::default();
     // Phase 3a: shrink the parameter list of every confirmed callee, then

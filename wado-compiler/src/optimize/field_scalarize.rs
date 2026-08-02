@@ -2409,7 +2409,6 @@ fn hoist_call_inputs(
         Callee,
         Arg(usize),
     }
-    // A method's receiver is `args[0]`, so it hoists as an ordinary argument.
     let slots: Vec<(Slot, Operand)> = match &body.exprs[call].kind {
         ExprKind::Call { args, .. } => args
             .iter()

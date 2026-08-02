@@ -101,9 +101,8 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
     let project = effect_dispatch::synthesize_pre_cm_binding(project)?;
 
     // Insert `resource.drop` for every owned Component Model resource that is
-    // never transferred. Runs before CM-binding synthesis so resource method
-    // calls are still a call nodes (their post-rewrite forms
-    // would obscure the borrow-vs-transfer distinction).
+    // never transferred. Runs before CM-binding synthesis, whose rewrite of
+    // resource method calls would obscure the borrow-vs-transfer distinction.
     let mut project = project;
     resource_cleanup::elaborate_resource_drops(&mut project);
 

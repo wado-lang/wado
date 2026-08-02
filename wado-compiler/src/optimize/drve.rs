@@ -209,7 +209,7 @@ fn validate_call_sites(project: &NirPackage, mut candidates: IndexSet<FnKey>) ->
 
 /// Arena walk that recognises the "top-level Expr(Call)" drop-position pattern.
 /// At a statement boundary, `Expr(Call(f, args))` observes `f` in drop
-/// position; its args (a method's receiver among them) are use-scanned.
+/// position; its args are use-scanned.
 /// Everything else (Let values, return values, nested expression trees) is
 /// use-scanned, where any candidate appearance rejects it.
 struct ValidateCtx<'a> {

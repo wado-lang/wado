@@ -1868,8 +1868,7 @@ fn inline_calls_in_expr(
         return;
     };
 
-    // Recurse into arguments first, then attempt to inline this call. A method's
-    // receiver is `args[0]`, so the same loop covers it.
+    // Recurse into arguments first, then attempt to inline this call.
     for a in args {
         let Some(a) = a.as_expr() else { continue };
         inline_calls_in_expr(

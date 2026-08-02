@@ -3955,9 +3955,8 @@ impl TirExprKind {
         }
     }
 
-    /// An instance-method call viewed as receiver plus the arguments after it —
-    /// the shape a pass matching `recv.m(a, b)` wants, without re-deriving that
-    /// the receiver is `args[0]`. `None` for a free call.
+    /// An instance-method call viewed as receiver plus the arguments after it.
+    /// `None` for a free call.
     ///
     /// The split is a view, not storage: the node keeps one argument list in the
     /// callee's parameter order, so a pass that treats every argument alike
@@ -4044,26 +4043,21 @@ pub enum TirExprKind {
     /// (`Type::method(args)`), and instance method (`recv.method(args)`), which
     /// all map to the same `WirInstr::Call` and share identical semantics.
     Call {
-        /// Function reference (resolved TIR function or external). Boxed to keep
-        /// the variant compact: with `MethodCall` merged in, `Call` is the only
-        /// `FunctionRef` holder, and unboxed it dominates the enum by ~290 bytes
-        /// (clippy's `large_enum_variant`).
+        /// Boxed: unboxed, it dominates the enum by ~290 bytes (clippy's
+        /// `large_enum_variant`).
         func: Box<FunctionRef>,
         /// Explicit type arguments for generic functions: `identity::<i32>(x)`
         type_args: Vec<TypeId>,
-        /// Arguments in the callee's parameter order. When [`Self::Call::has_receiver`],
-        /// `args[0]` is the method receiver, so `args[i]` maps to `params[i]` for
-        /// every call shape — there is no receiver slot outside this list.
+        /// Arguments in the callee's parameter order — a method's receiver is
+        /// `args[0]`, so `args[i]` maps to `params[i]` for every call shape.
         args: Vec<CallArg>,
-        /// Whether `args[0]` is the receiver of an instance method.
-        ///
-        /// Set only by [`TirExprKind::method_call`], so it marks a call written
-        /// with dot syntax. A trait-qualified (UFCS) call also carries its
-        /// receiver in `args[0]` but leaves this `false`: it spells the
-        /// receiver's mode itself (`Trait::m(&mut x, …)`), so the receiver is
-        /// already reference-typed and needs none of the treatment this flag
-        /// gates — notably `lower`'s never-value-copy-a-receiver rule.
-        /// Read back through [`TirExprKind::as_method_call`].
+        /// Whether `args[0]` is the receiver of an instance method, set by
+        /// [`TirExprKind::method_call`] alone — so it marks dot syntax. A
+        /// trait-qualified (UFCS) call carries its receiver in `args[0]` too but
+        /// leaves this `false`: it spells the receiver's mode itself
+        /// (`Trait::m(&mut x, …)`), so the receiver is already reference-typed
+        /// and needs none of the treatment this flag gates, notably `lower`'s
+        /// never-value-copy-a-receiver rule.
         has_receiver: bool,
     },
     /// Raw Component Model call to a lowered WASI import.

@@ -25,8 +25,8 @@ use crate::token::Span;
 /// promotion (WEP: The Live `ValueGraph`). It is either a pure value living in the
 /// function's [`ValuePool`] (literals, `Binary`, pure `Unary`, `Cast`, and the
 /// `Local` / `FieldAccess` reads the graph resolves to a value), or an effectful
-/// / control subtree kept in the skeleton (`Call`, allocation
-/// literals, `If` / `Match` / `Block` value positions). Pure values no longer
+/// / control subtree kept in the skeleton (`Call`, allocation literals,
+/// `If` / `Match` / `Block` value positions). Pure values no longer
 /// occupy `ExprId` slots; the slot holds their `ValueId` directly.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Operand {
@@ -199,14 +199,11 @@ pub enum ExprKind {
         /// call node carries no `FunctionRef`.
         func_id: crate::nir::FuncId,
         type_args: Vec<TypeId>,
-        /// Arguments in the callee's parameter order. When [`Self::Call::has_receiver`],
-        /// `args[0]` is the method receiver, so `args[i]` maps to `params[i]` for
-        /// every call shape — there is no receiver slot outside this list.
+        /// Arguments in the callee's parameter order — a method's receiver is
+        /// `args[0]`, so `args[i]` maps to `params[i]` for every call shape.
         args: Vec<ArenaCallArg>,
-        /// Whether `args[0]` is the receiver of an instance method. Carried
-        /// down from TIR, where only a dot-syntax call sets it; a
-        /// trait-qualified (UFCS) call keeps its receiver in `args[0]` with
-        /// this `false` (see [`crate::tir::TirExprKind::Call`]).
+        /// Whether `args[0]` is the receiver of an instance method, carried down
+        /// from [`crate::tir::TirExprKind::Call`] with its meaning intact.
         has_receiver: bool,
     },
     CmRawCall {
@@ -313,9 +310,8 @@ impl ExprKind {
         }
     }
 
-    /// An instance-method call viewed as receiver plus the arguments after it —
-    /// the shape a pass matching `recv.m(a, b)` wants, without re-deriving that
-    /// the receiver is `args[0]`. `None` for a free call.
+    /// An instance-method call viewed as receiver plus the arguments after it.
+    /// `None` for a free call.
     ///
     /// The split is a view, not storage: the node keeps one argument list in the
     /// callee's parameter order, so a pass that treats every argument alike

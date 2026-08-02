@@ -94,8 +94,7 @@ impl<'a> CallSite<'a> {
         })
     }
 
-    /// How many parameters the site supplies. A method's receiver is `args[0]`,
-    /// so it is counted like any other.
+    /// How many parameters the site supplies.
     pub(super) fn arity(&self) -> usize {
         self.args.len()
     }
