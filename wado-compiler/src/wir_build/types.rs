@@ -1405,7 +1405,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                             && wir_tid.index() == u32::try_from(wir_idx).unwrap_or(u32::MAX)
                         {
                             let elem_type_id = elements[field_idx];
-                            let wir_type = ctx.type_id_to_wir_type_pending(type_table, elem_type_id);
+                            let wir_type =
+                                ctx.type_id_to_wir_type_pending(type_table, elem_type_id);
                             if !is_abstract_ref(&wir_type) {
                                 // Make tuple fields non-nullable.
                                 resolved = Some(wir_type.as_nonnull());
@@ -1581,7 +1582,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         if tir_variant.name == v_base && case_idx < tir_variant.cases.len() {
                             let payload_type_id = tir_variant.cases[case_idx].payload;
                             if tt.get(payload_type_id) != &crate::tir::ResolvedType::Unit {
-                                let wir_type = ctx.type_id_to_wir_type_pending(&tt, payload_type_id);
+                                let wir_type =
+                                    ctx.type_id_to_wir_type_pending(&tt, payload_type_id);
                                 if !is_abstract_ref(&wir_type) {
                                     variant_fixups.push((wir_idx, case_idx, vec![wir_type]));
                                     break;

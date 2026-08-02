@@ -640,8 +640,7 @@ impl FunctionTranslator<'_, '_> {
                 type_args,
                 ..
             } => {
-                let mangled =
-                    super::types::generic_instance_name(self.type_table, name, type_args);
+                let mangled = super::types::generic_instance_name(self.type_table, name, type_args);
                 self.variant_case_indexer(&mangled, module_source)
             }
             ResolvedType::Enum {
@@ -696,8 +695,7 @@ impl FunctionTranslator<'_, '_> {
                 module_source,
                 type_args,
             } => {
-                let mangled =
-                    super::types::generic_instance_name(self.type_table, name, type_args);
+                let mangled = super::types::generic_instance_name(self.type_table, name, type_args);
                 crate::name::wir_type_key(module_source, &mangled)
             }
             other => panic!("[WIR] expected a variant type, got {other:?}"),
@@ -1175,12 +1173,7 @@ impl FunctionTranslator<'_, '_> {
                                 elem_wir_type,
                                 field_get,
                             ));
-                            self.emit_pattern_bindings(
-                                *sub_pattern,
-                                &temp_name,
-                                elem_type,
-                                instrs,
-                            );
+                            self.emit_pattern_bindings(*sub_pattern, &temp_name, elem_type, instrs);
                         }
                     }
                 }
@@ -1190,8 +1183,7 @@ impl FunctionTranslator<'_, '_> {
                 let wir_type = self.wir_type(scrut_type);
                 let type_id = &self.ref_type_id(scrut_type);
                 for field in fields {
-                    let field_result_ty =
-                        self.struct_field_wir_type(type_id, &field.field_name);
+                    let field_result_ty = self.struct_field_wir_type(type_id, &field.field_name);
                     let field_get = WirInstr::StructGet {
                         type_id: type_id.clone(),
                         field_name: field.field_name.clone(),
@@ -1456,7 +1448,8 @@ impl FunctionTranslator<'_, '_> {
             nullable: false,
             expr: Box::new(val),
         };
-        let payload_result_ty = self.struct_field_wir_type(&case_type_id, &crate::name::variant_payload_field(0));
+        let payload_result_ty =
+            self.struct_field_wir_type(&case_type_id, &crate::name::variant_payload_field(0));
         let get = WirInstr::StructGet {
             type_id: case_type_id,
             field_name: crate::name::variant_payload_field(0),

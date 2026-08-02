@@ -266,7 +266,7 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32And(left, right)
                 }
-            }
+            },
             NirBinaryOp::Or | NirBinaryOp::BitOr => match kind {
                 PrimitiveKind::F32 | PrimitiveKind::F64 => {
                     panic!("[WIR] `|` has no float lowering")
@@ -277,7 +277,7 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32Or(left, right)
                 }
-            }
+            },
             NirBinaryOp::BitXor => match kind {
                 PrimitiveKind::F32 | PrimitiveKind::F64 => {
                     panic!("[WIR] `^` has no float lowering")
@@ -288,7 +288,7 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32Xor(left, right)
                 }
-            }
+            },
             NirBinaryOp::Shl => match kind {
                 PrimitiveKind::F32 | PrimitiveKind::F64 => {
                     panic!("[WIR] `<<` has no float lowering")
@@ -299,7 +299,7 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32Shl(left, right)
                 }
-            }
+            },
             NirBinaryOp::Shr => match kind {
                 PrimitiveKind::F32 | PrimitiveKind::F64 => {
                     panic!("[WIR] `>>` has no float lowering")

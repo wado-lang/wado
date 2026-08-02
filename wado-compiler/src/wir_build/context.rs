@@ -736,7 +736,8 @@ impl<'a> WirContext<'a> {
             .find(|(key_elems, _)| {
                 key_elems.len() == elem_wir_types.len()
                     && key_elems.iter().zip(elem_wir_types.iter()).all(|(k, w)| {
-                        self.lookup_wir_type(type_table, *k).is_ok_and(|kw| kw == *w)
+                        self.lookup_wir_type(type_table, *k)
+                            .is_ok_and(|kw| kw == *w)
                     })
             })
             .map(|(_, type_id)| type_id.clone())
@@ -823,7 +824,9 @@ impl<'a> WirContext<'a> {
                 };
                 let lookup_name = StructName::new(lookup_module, name.clone());
                 let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
-                    return Err(UnregisteredType::struct_ref(format!("struct `{lookup_name}`")));
+                    return Err(UnregisteredType::struct_ref(format!(
+                        "struct `{lookup_name}`"
+                    )));
                 };
                 Self::ref_to(type_id)
             }
@@ -845,11 +848,10 @@ impl<'a> WirContext<'a> {
             } if TypeTable::is_tuple_type(name) => {
                 // CM binding synthesis interns its own `TypeId`s for the same
                 // elements, so a miss falls back to structural matching.
-                let found = self
-                    .tuple_type_map
-                    .get(elements)
-                    .cloned()
-                    .or_else(|| self.find_tuple_type_by_element_wir_types(type_table, elements));
+                let found =
+                    self.tuple_type_map.get(elements).cloned().or_else(|| {
+                        self.find_tuple_type_by_element_wir_types(type_table, elements)
+                    });
                 let Some(type_id) = found else {
                     return Err(UnregisteredType::struct_ref(format!(
                         "tuple `{}` (no registered tuple matches its element types either)",

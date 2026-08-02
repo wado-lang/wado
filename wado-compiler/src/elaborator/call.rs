@@ -2787,7 +2787,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],
                     param_defaults,
-                    param_types: method_info_result.param_types.clone(),
+                    param_types: method_info_result.param_types,
                     self_in_args: false,
                 },
             );

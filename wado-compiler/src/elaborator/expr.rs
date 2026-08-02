@@ -1227,7 +1227,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report an access to a field the struct does not declare. Answering
     /// `Unknown` instead lets the access reach codegen with no type to lower
     /// from, and silently turns any pattern matched against it irrefutable.
-    fn field_not_found(&mut self, struct_name: &str, field_name: &str, span: Span) -> (u32, TypeId) {
+    fn field_not_found(
+        &mut self,
+        struct_name: &str,
+        field_name: &str,
+        span: Span,
+    ) -> (u32, TypeId) {
         let _ = self.emit(TypeError::ExtraField {
             struct_name: struct_name.to_string(),
             field_name: field_name.to_string(),

@@ -308,9 +308,7 @@ pub fn cm_type_to_type_id(
                         .source_interface
                         .as_deref()
                         .and_then(cm_interface_module_name)
-                        .and_then(|m| {
-                            type_table.find_named_type_by_module_name(&named.name, &m)
-                        })
+                        .and_then(|m| type_table.find_named_type_by_module_name(&named.name, &m))
                 })
                 .or_else(|| {
                     type_table.find_named_type_by_cm_package(named.name.as_str(), wasi_package)
