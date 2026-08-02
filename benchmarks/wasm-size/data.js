@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785695461845,
+  "lastUpdate": 1785703726992,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45641,6 +45641,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/75030cdab4e25990b948042d2e1f39f0630fea09"
         },
         "date": 1785695460995,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16265,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273279,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eadfb2df9829cd4660b9eadd31a8fbc3ac185c1c",
+          "message": "Merge pull request #1738 from wado-lang/claude/methodcall-call-integration-anvo79\n\nrefactor(compiler): represent every call with a single Call node in TIR and NIR",
+          "timestamp": "2026-08-03T06:37:17+10:00",
+          "tree_id": "86544eddbf3ae1d48537617a5e0955d402fc1da7",
+          "url": "https://github.com/wado-lang/wado/commit/eadfb2df9829cd4660b9eadd31a8fbc3ac185c1c"
+        },
+        "date": 1785703726447,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
