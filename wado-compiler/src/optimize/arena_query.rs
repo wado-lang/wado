@@ -163,6 +163,23 @@ pub(super) fn strip_refs(body: &Body, id: ExprId) -> ExprId {
     }
 }
 
+/// Strip a single `$value_copy$T(inner)` wrapper, returning its inner
+/// expression, or `None` when `e` is not a one-argument value-copy call.
+pub(super) fn strip_one_value_copy(
+    body: &Body,
+    e: ExprId,
+    value_copy_ids: &IndexSet<crate::nir::FuncId>,
+) -> Option<ExprId> {
+    let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+        return None;
+    };
+    if value_copy_ids.contains(func_id) && args.len() == 1 {
+        args[0].expr.as_expr()
+    } else {
+        None
+    }
+}
+
 /// Collect every local index that is *read* — every `Local` mention except the
 /// bare-`Local` target of an `Assign` (a write). `&local` / `&mut local`,
 /// `local.field = …`, and every value-position `Local` count as reads. The

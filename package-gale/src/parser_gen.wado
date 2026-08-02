@@ -46,6 +46,8 @@ use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec, str_lit } from "./wad
 use { TreeSet } from "core:collections";
 use {
     PredictionNode,
+    PredictionDispatch,
+    ConsumeNode,
     AmbiguousNode,
     AmbiguityReason,
     build_group_prediction_tree,
@@ -1839,15 +1841,18 @@ fn gen_lr_suffix_dispatch_atn(
 ) {
     let valid = &lr_dispatch.valid_lr_alts;
     let pos_expr = if side.scan { "pos" } else { "p.pos" };
+    let decl = lr_atn_alt_decl(lr_dispatch);
     w.begin(&"loop");
     if side.scan {
         w.line(
-            &`let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, ${decision}, tokens, pos, TK_EOF, min_prec);`,
+            &`${decl} = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, ${decision}, tokens, pos, TK_EOF, min_prec);`,
         );
+        emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, &side.fn_name, &"tokens", &"pos", ctx);
     } else {
         w.line(
-            &`let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
+            &`${decl} = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
         );
+        emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, &side.scan_fn_name, &"&p.kinds", &"p.pos", ctx);
     }
     w.line(&`let _lr_pos0 = ${pos_expr};`);
     let mut is_first = true;
@@ -1885,6 +1890,69 @@ struct LrDispatchSide {
     fn_name: String,
     scan_fn_name: String,  // parse side only
     use_prec: bool,  // parse side only
+}
+
+fn lr_atn_has_overlap_group(lr_dispatch: &LrDispatchData) -> bool {
+    for let group of &lr_dispatch.groups {
+        if group.len() >= 2 {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// `let mut` only where `emit_lr_atn_group_repick` will overwrite `_atn_alt`,
+/// so a rule without an overlap group keeps its emit unchanged.
+fn lr_atn_alt_decl(lr_dispatch: &LrDispatchData) -> String {
+    return if lr_atn_has_overlap_group(lr_dispatch) { "let mut _atn_alt" } else { "let _atn_alt" };
+}
+
+/// Settle which member of an overlap group the LR loop enters.
+///
+/// `atn_lr_loop_decision` tests one token against each continuation's FIRST
+/// set and takes the first edge admitting it, so alternatives opening on the
+/// same token come back in grammar order rather than by which one matches
+/// (`expr 'not'? 'in' …` against `expr 'not'? 'like' …` on `not like`). Its
+/// enter-or-yield verdict needs the simulator and stands; the choice within
+/// the group does not, and is re-taken from the scan twins by longest match
+/// as the static LR dispatch does. Every scan failing leaves the simulator's
+/// answer, and with it its diagnostic path, untouched.
+fn emit_lr_atn_group_repick(
+    w: &mut CodeWriter,
+    lr_alts: &List<LrAlt>,
+    lr_dispatch: &LrDispatchData,
+    scan_fn: &String,
+    tokens_expr: &String,
+    pos_expr: &String,
+    ctx: &GenContext,
+) {
+    let fsep = follow_sep(ctx.emit_follow());
+    for let group of &lr_dispatch.groups {
+        if group.len() < 2 {
+            continue;
+        }
+        let mut cond = String::new();
+        for let mut k = 0; k < group.len(); k += 1 {
+            if k > 0 {
+                cond.push_str(&" || ");
+            }
+            cond.push_str(&`_atn_alt == ${group[k]}`);
+        }
+        w.begin(&`if ${cond}`);
+        w.line(&"let mut _lr_best: i32 = -1;");
+        for let gi of group {
+            let lr = &lr_alts[lr_dispatch.valid_lr_alts[*gi]];
+            w.line(&`let mut _lr_s_${*gi}: i32 = -1;`);
+            w.begin(&`if ${lr.own_prec} >= min_prec`);
+            w.line(&`_lr_s_${*gi} = ${*scan_fn}_lr_${lr.alt_index}(${*tokens_expr}, ${*pos_expr}${fsep});`);
+            w.end();
+        }
+        // Ascending order under a strict `>` gives ANTLR4's tie-break.
+        for let gi of group {
+            emit_argmax_update(w, &"_lr_best", &"_atn_alt", &`_lr_s_${*gi}`, *gi);
+        }
+        w.end();
+    }
 }
 
 fn gen_lr_branch_call(
@@ -5025,8 +5093,9 @@ fn gen_lr_fn_atn(
     w.begin(&"loop");
     w.line(&"if p.recovering { break; }");
     w.line(
-        &`let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
+        &`${lr_atn_alt_decl(lr_dispatch)} = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
     );
+    emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, &`scan_${rule.snake_name}`, &"&p.kinds", &"p.pos", ctx);
     w.line(&"let _lr_pos0 = p.pos;");
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {
@@ -8108,6 +8177,164 @@ fn emit_spec_alt_try(w: &mut CodeWriter, call: &String, idx: i32, ctx: &GenConte
     w.end();
 }
 
+/// Whether a `Consume` node's terminal really is every reachable alt's element
+/// at `skip`, and so whether emit advances the cursor past it. Read by both
+/// the emitter and `collect_referenced_scan_alts`, whose `skip` bookkeeping
+/// has to match it.
+fn consume_advances_cursor(c: &ConsumeNode, alts: &List<Alternative>, skip: i32) -> bool {
+    let mut node_alts: List<i32> = [];
+    prediction_collect_all_indices(&c.child, &mut node_alts);
+    if node_alts.is_empty() {
+        return false;
+    }
+    for let a of &node_alts {
+        if skip >= alts[*a].elements.len() || !elements_match(&c.element, &alts[*a].elements[skip]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Emit lowering's `Tournament` dispatch over the per-alt
+/// `<fn_name>_scan_<idx>` helpers: scan every alt from the current position,
+/// parse the one reaching furthest, ties to the first grammar alt. Requires
+/// `alts_all_scan_full`, so scan success implies parse success. Reached both
+/// where the prediction tree gives up (`Ambiguous`) and where its cascade
+/// turns out not to claim the lookahead (`Dispatch`'s fallback).
+///
+/// `fall_through_on_no_match` says what happens when nothing wins. As the
+/// whole decision there is nowhere else to go, so it commits to the last alt
+/// and lets that parse report the mismatch; as a fallback the rule's own error
+/// path is still ahead and names the rule, so the emit leaves the block.
+fn emit_scan_tournament(
+    w: &mut CodeWriter,
+    sorted_indices: &List<i32>,
+    fn_name: &String,
+    rule_display: &String,
+    ctx: &GenContext,
+    fall_through_on_no_match: bool = false,
+) {
+    let fsep = follow_sep(ctx.emit_follow());
+    w.line(&"let _sd_tokens = &p.kinds;");
+    w.line(&"let _sd_pos = p.pos;");
+    for let mut i = 0; i < sorted_indices.len(); i += 1 {
+        let idx = sorted_indices[i];
+        // Without the caller follow, a trailing token the helper's
+        // `follow_yields` gate rejects still counts toward the score.
+        w.line(&`let _sd_p_${idx} = ${*fn_name}_scan_${idx}(_sd_tokens, _sd_pos${fsep});`);
+    }
+    if ctx.is_trace() {
+        let rlit = str_lit(*rule_display);
+        for let mut i = 0; i < sorted_indices.len(); i += 1 {
+            let idx = sorted_indices[i];
+            w.line(&`trace_scan_alt(p, &${rlit}, ${idx}, _sd_p_${idx});`);
+        }
+    }
+    w.line(&"let mut _sd_best_i: i32 = -1;");
+    w.line(&"let mut _sd_best_p: i32 = -1;");
+    // Ascending alt-index order, not the sort's, so a scan-length tie goes to
+    // the first grammar alternative (ANTLR4's ambiguity resolution).
+    let best_i = "_sd_best_i";
+    let best_p = "_sd_best_p";
+    for let idx of sorted_indices.sorted() {
+        let end_expr = `_sd_p_${idx}`;
+        emit_argmax_update(w, &best_p, &best_i, &end_expr, idx);
+    }
+    if fall_through_on_no_match {
+        w.begin(&"if _sd_best_i >= 0");
+    }
+    emit_index_pick_dispatch(w, &"_sd_best_i", sorted_indices, fn_name, rule_display, ctx);
+    if fall_through_on_no_match {
+        w.end();
+    }
+}
+
+/// True when every alt in `indices` has a scan helper covering its whole body,
+/// so a successful scan guarantees the parse succeeds. The precondition for
+/// `emit_scan_tournament`.
+fn alts_all_scan_full(indices: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
+    for let idx of indices {
+        if !alt_has_scan(&alts[*idx].elements, ctx) || !alt_scan_is_full(&alts[*idx].elements, ctx) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The alts a `Dispatch` node's tournament fallback chooses between, in
+/// tournament order — empty when the node needs no fallback because its
+/// branches are provably complete or no tournament is available.
+fn dispatch_fallback_indices(
+    d: &PredictionDispatch,
+    alts: &List<Alternative>,
+    ctx: &mut GenContext,
+    skip: i32,
+) -> List<i32> {
+    let mut indices: List<i32> = [];
+    for let branch of &d.branches {
+        prediction_collect_all_indices(&branch.child, &mut indices);
+    }
+    let mut sorted_indices = indices.sorted();
+    sort_group_by_element_count(&mut sorted_indices, alts);
+    if sorted_indices.len() < 2 || !alts_all_scan_full(&sorted_indices, alts, ctx) {
+        return [];
+    }
+    if dispatch_claims_every_first_token(d, &sorted_indices, alts, ctx, skip) {
+        return [];
+    }
+    return sorted_indices;
+}
+
+/// Whether `d`'s branches name every token some alt in `indices` admits at
+/// element offset `skip`.
+///
+/// Provable only at depth 0, where no branching decision has been taken and
+/// the `Consume` steps crossed terminals every alt shares, so FIRST at `skip`
+/// is exact. It is not exact for an alt whose remainder there can match empty:
+/// that alt also admits whatever follows the rule at the call site, which no
+/// FIRST-derived branch set names (`a : X Y? | X Z` on `X`).
+fn dispatch_claims_every_first_token(
+    d: &PredictionDispatch,
+    indices: &List<i32>,
+    alts: &List<Alternative>,
+    ctx: &mut GenContext,
+    skip: i32,
+) -> bool {
+    if d.depth != 0 {
+        return false;
+    }
+    let mut claimed: List<String> = [];
+    for let branch of &d.branches {
+        for let tk of &branch.tokens {
+            if !claimed.contains(tk) {
+                claimed.push(*tk);
+            }
+        }
+    }
+    for let idx of indices {
+        if elements_from_are_nullable(&alts[*idx].elements, skip) {
+            return false;
+        }
+        for let tk of &ctx.first_of_elements_from(&alts[*idx].elements, skip) {
+            if !claimed.contains(tk) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/// Whether everything from `skip` on can match empty — including `skip` being
+/// past the last element.
+fn elements_from_are_nullable(elements: &List<Element>, skip: i32) -> bool {
+    for let mut i = skip; i < elements.len(); i += 1 {
+        if !is_nullable(&elements[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 fn gen_prediction_code_inner(
     w: &mut CodeWriter,
     node: &PredictionNode,
@@ -8134,16 +8361,7 @@ fn gen_prediction_code_inner(
             // match every alt below (the group need not contain alt 0; regression:
             // ll_consume_group.g4); on a mismatch leave `p.pos`/`skip` so the Leaf
             // rewinds exactly what was advanced.
-            let mut node_alts: List<i32> = [];
-            prediction_collect_all_indices(&c.child, &mut node_alts);
-            let mut elem_matches = !node_alts.is_empty();
-            for let a of &node_alts {
-                if skip >= alts[*a].elements.len() || !elements_match(&c.element, &alts[*a].elements[skip]) {
-                    elem_matches = false;
-                    break;
-                }
-            }
-            if elem_matches {
+            if consume_advances_cursor(c, alts, skip) {
                 w.line(&"p.pos += 1;");
                 gen_prediction_code_inner(
                     w,
@@ -8206,46 +8424,8 @@ fn gen_prediction_code_inner(
                     // Check if ALL scans are full (cover entire alternative) —
                     // including the last alt, which we need to scan for
                     // longest-match dispatch.
-                    let mut all_full = true;
-                    for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                        let idx = sorted_indices[i];
-                        if !alt_has_scan(&alts[idx].elements, ctx) || !alt_scan_is_full(&alts[idx].elements, ctx) {
-                            all_full = false;
-                            break;
-                        }
-                    }
-
-                    if all_full {
-                        // All scans cover entire alternatives — scan success
-                        // guarantees parse success. Use longest-match first-win
-                        // (ANTLR4-compatible): scan each alt, pick the one
-                        // advancing pos the furthest; ties go to the first alt
-                        // in grammar order.
-                        w.line(&"let _sd_tokens = &p.kinds;");
-                        w.line(&"let _sd_pos = p.pos;");
-                        for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                            let idx = sorted_indices[i];
-                            w.line(&`let _sd_p_${idx} = ${*fn_name}_scan_${idx}(_sd_tokens, _sd_pos);`);
-                        }
-                        if ctx.is_trace() {
-                            let rlit = str_lit(*rule_display);
-                            for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                                let idx = sorted_indices[i];
-                                w.line(&`trace_scan_alt(p, &${rlit}, ${idx}, _sd_p_${idx});`);
-                            }
-                        }
-                        w.line(&"let mut _sd_best_i: i32 = -1;");
-                        w.line(&"let mut _sd_best_p: i32 = -1;");
-                        // Iterate in ascending alt-index order so a scan-length
-                        // tie resolves to the first grammar alternative (ANTLR4's
-                        // ambiguity resolution), not to the sort's front-runner.
-                        let best_i = "_sd_best_i";
-                        let best_p = "_sd_best_p";
-                        for let idx of sorted_indices.sorted() {
-                            let end_expr = `_sd_p_${idx}`;
-                            emit_argmax_update(w, &best_p, &best_i, &end_expr, idx);
-                        }
-                        emit_index_pick_dispatch(w, &"_sd_best_i", &sorted_indices, fn_name, rule_display, ctx);
+                    if alts_all_scan_full(&sorted_indices, alts, ctx) {
+                        emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx);
                     } else {
                         // Some scans are partial — scan success is a hint,
                         // not a guarantee. Use save/restore with scan guards.
@@ -8355,6 +8535,25 @@ fn gen_prediction_code_inner(
                     rule_display,
                 );
             }
+            // The cascade names only what the SLL walk enumerated, and that
+            // walk approximates — a `Repeat` config is advanced past the repeat
+            // as if it iterated once, so a second iteration's token reaches no
+            // branch (`a : X+ Y | X Z` on `X X Y`). Falling through would
+            // reject valid input, so hand those tokens to the tournament
+            // lowering already chose for this overlap group.
+            let fallback = dispatch_fallback_indices(d, alts, ctx, skip);
+            if !fallback.is_empty() {
+                w.else_begin(&"else");
+                // The tournament scans each alt from its first element, as
+                // `Leaf` does; the rule's error path expects the cursor back.
+                if skip > 0 {
+                    w.line(&`p.pos -= ${skip};`);
+                }
+                emit_scan_tournament(w, &fallback, fn_name, rule_display, ctx, /*fall_through_on_no_match=*/ true);
+                if skip > 0 {
+                    w.line(&`p.pos += ${skip};`);
+                }
+            }
             w.end();
         },
     }
@@ -8373,23 +8572,35 @@ fn elements_match(consumed: &Element, expected: &Element) -> bool {
 }
 
 /// Collect the alt indices whose per-alt `_scan_<n>` helper the dispatch
-/// actually calls. Must mirror the `Ambiguous` arm of
-/// `gen_prediction_code_inner`: only an `Ambiguous` node (the longest-match
-/// tournament / hybrid path) references a scan helper, so a token-led
-/// `Dispatch`/`Leaf` tree leaves every per-alt helper dead.
+/// actually calls. Must mirror `gen_prediction_code_inner`: an `Ambiguous`
+/// node references a scan helper for its longest-match tournament / hybrid
+/// path, and a `Dispatch` node references one per alt of its tournament
+/// fallback. Only a pure `Leaf`/`Consume` tree leaves every helper dead.
 fn collect_referenced_scan_alts(
     node: &PredictionNode,
     alts: &List<Alternative>,
     ctx: &mut GenContext,
     out: &mut List<i32>,
+    skip: i32 = 0,
 ) {
     match *node {
         Leaf(_) => {
         },
-        Consume(c) => collect_referenced_scan_alts(&c.child, alts, ctx, out),
+        Consume(c) => {
+            let next_skip = if consume_advances_cursor(&c, alts, skip) { skip + 1 } else { skip };
+            collect_referenced_scan_alts(&c.child, alts, ctx, out, next_skip);
+        },
         Dispatch(d) => {
             for let branch of &d.branches {
-                collect_referenced_scan_alts(&branch.child, alts, ctx, out);
+                collect_referenced_scan_alts(&branch.child, alts, ctx, out, skip);
+            }
+            let fallback = dispatch_fallback_indices(&d, alts, ctx, skip);
+            if !fallback.is_empty() {
+                for let idx of &fallback {
+                    if !out.contains(idx) {
+                        out.push(*idx);
+                    }
+                }
             }
         },
         Ambiguous(a) => {

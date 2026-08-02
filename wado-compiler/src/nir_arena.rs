@@ -796,6 +796,202 @@ impl Body {
         }
     }
 
+<<<<<<< HEAD
+||||||| b07ac9e97
+    /// Read-only visit of every operand slot in the body — the `&self` mirror of
+    /// [`Body::map_operands`]. Visits all slots (including any orphaned subtree
+    /// not yet DCE'd), which over-approximates "live" but stays conservative for
+    /// liveness queries.
+    pub fn for_each_operand(&self, mut f: impl FnMut(Operand)) {
+        for id in self.exprs.keys() {
+            match &self.exprs[id].kind {
+                ExprKind::GlobalVarSet { value, .. } => f(*value),
+                ExprKind::Binary { left, right, .. } => {
+                    f(*left);
+                    f(*right);
+                }
+                ExprKind::Unary { expr, .. }
+                | ExprKind::Cast { expr, .. }
+                | ExprKind::FieldAccess { expr, .. }
+                | ExprKind::VariantTag { expr }
+                | ExprKind::VariantTest { expr, .. }
+                | ExprKind::VariantPayload { expr, .. } => f(*expr),
+                ExprKind::Assign { value, .. } => f(*value),
+                ExprKind::Index { expr, index } => {
+                    f(*expr);
+                    f(*index);
+                }
+                ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => {
+                    for a in args {
+                        f(a.expr);
+                    }
+                }
+                ExprKind::CmRawCall { args, .. } => {
+                    for a in args {
+                        f(*a);
+                    }
+                }
+                ExprKind::If { condition, .. } => f(*condition),
+                ExprKind::Match { expr, arms } => {
+                    f(*expr);
+                    for arm in arms {
+                        if let Some(g) = arm.guard {
+                            f(g);
+                        }
+                        f(arm.body);
+                    }
+                }
+                ExprKind::StructLiteral { fields, .. } => {
+                    for fld in fields {
+                        f(fld.value);
+                    }
+                }
+                ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                    for el in elements {
+                        f(*el);
+                    }
+                }
+                ExprKind::IndirectCall { callee, args } => {
+                    f(*callee);
+                    for a in args {
+                        f(*a);
+                    }
+                }
+                ExprKind::ClosureToCanonical { functor, .. } => f(*functor),
+                ExprKind::VariantConstruct { payload, .. } => {
+                    if let Some(p) = payload {
+                        f(*p);
+                    }
+                }
+                ExprKind::Switch { scrutinee, .. } => f(*scrutinee),
+                _ => {}
+            }
+        }
+        for id in self.stmts.keys() {
+            match &self.stmts[id].kind {
+                StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => f(*value),
+                StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+                    if let Some(v) = value {
+                        f(*v);
+                    }
+                }
+                StmtKind::If { condition, .. } => f(*condition),
+                _ => {}
+            }
+        }
+        for id in self.pats.keys() {
+            if let PatKind::ConstantValue { expr } = &self.pats[id].kind {
+                f(*expr);
+            }
+        }
+    }
+
+=======
+    /// Read-only visit of every operand slot in the body — the `&self` mirror of
+    /// [`Body::map_operands`]. Visits all slots (including any orphaned subtree
+    /// not yet DCE'd), which over-approximates "live" but stays conservative for
+    /// liveness queries.
+    pub fn for_each_operand(&self, mut f: impl FnMut(Operand)) {
+        for id in self.exprs.keys() {
+            match &self.exprs[id].kind {
+                ExprKind::GlobalVarSet { value, .. } => f(*value),
+                ExprKind::Binary { left, right, .. } => {
+                    f(*left);
+                    f(*right);
+                }
+                ExprKind::Unary { expr, .. }
+                | ExprKind::Cast { expr, .. }
+                | ExprKind::FieldAccess { expr, .. }
+                | ExprKind::VariantTag { expr }
+                | ExprKind::VariantTest { expr, .. }
+                | ExprKind::VariantPayload { expr, .. } => f(*expr),
+                ExprKind::Assign { value, .. } => f(*value),
+                ExprKind::Index { expr, index } => {
+                    f(*expr);
+                    f(*index);
+                }
+                ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => {
+                    for a in args {
+                        f(a.expr);
+                    }
+                }
+                ExprKind::CmRawCall { args, .. } => {
+                    for a in args {
+                        f(*a);
+                    }
+                }
+                ExprKind::If { condition, .. } => f(*condition),
+                ExprKind::Match { expr, arms } => {
+                    f(*expr);
+                    for arm in arms {
+                        if let Some(g) = arm.guard {
+                            f(g);
+                        }
+                        f(arm.body);
+                    }
+                }
+                ExprKind::StructLiteral { fields, .. } => {
+                    for fld in fields {
+                        f(fld.value);
+                    }
+                }
+                ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                    for el in elements {
+                        f(*el);
+                    }
+                }
+                ExprKind::IndirectCall { callee, args } => {
+                    f(*callee);
+                    for a in args {
+                        f(*a);
+                    }
+                }
+                ExprKind::ClosureToCanonical { functor, .. } => f(*functor),
+                ExprKind::VariantConstruct { payload, .. } => {
+                    if let Some(p) = payload {
+                        f(*p);
+                    }
+                }
+                ExprKind::Switch { scrutinee, .. } => f(*scrutinee),
+                _ => {}
+            }
+        }
+        for id in self.stmts.keys() {
+            match &self.stmts[id].kind {
+                StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => f(*value),
+                StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+                    if let Some(v) = value {
+                        f(*v);
+                    }
+                }
+                StmtKind::If { condition, .. } => f(*condition),
+                _ => {}
+            }
+        }
+        for id in self.pats.keys() {
+            if let PatKind::ConstantValue { expr } = &self.pats[id].kind {
+                f(*expr);
+            }
+        }
+    }
+
+    /// Take a node's content, leaving the slot `Dead` so every id pointing at it
+    /// stays valid. The arena half of a node move — a caller holding an index
+    /// (the rewrite engine's use index) layers its own bookkeeping on top.
+    pub fn take_expr(&mut self, id: ExprId) -> ExprNode {
+        let type_id = self.exprs[id].type_id;
+        let span = self.exprs[id].span;
+        std::mem::replace(
+            &mut self.exprs[id],
+            ExprNode {
+                kind: ExprKind::Dead,
+                type_id,
+                span,
+            },
+        )
+    }
+
+>>>>>>> origin/main
     /// Deep-copy an operand. A promoted pure value is shared (the same pool
     /// backs the clone, so its `ValueId` stays valid); an effectful subtree is
     /// cloned into fresh nodes.

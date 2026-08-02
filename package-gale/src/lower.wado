@@ -1613,8 +1613,12 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, atn_class: bool) -> LrDispatc
         // dispatches via the simulator (`_atn_alt == i`, no static gate), so it
         // keeps EVERY real suffix — the same set the ATN precedence-edge list
         // builds, so the simulator's edge index lines up with these branches
-        // and their `scan_X_lr_N` helpers. The `groups` field below is consumed
-        // only by the static path, so an empty `suffix_first` there is inert.
+        // and their `scan_X_lr_N` helpers. `groups` is read by both paths — the
+        // static dispatch branches on it, the ATN path re-picks within a
+        // multi-member one (`emit_lr_atn_group_repick`). An empty
+        // `suffix_first` overlaps nothing, so it always lands in a singleton
+        // and no re-pick applies: it has no static first set to compete on,
+        // which is why the rule is ATN-class at all.
         let skip = if atn_class { lr.suffix.ops.is_empty() } else { lr.suffix_first.is_empty() };
         if skip {
             continue;

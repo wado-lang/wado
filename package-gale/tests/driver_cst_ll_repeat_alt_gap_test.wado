@@ -1,0 +1,30 @@
+use g from "./grammars/ll_repeat_alt_gap.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_repeat_alt_gap" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// One `X` — the repeat alt and the `X Z` alt are separated by the second token.
+test "tree: X Y takes the repeat alt" {
+    assert_tree(&"X Y", &"(r (a X Y))");
+}
+
+test "tree: X Z takes the second alt" {
+    assert_tree(&"X Z", &"(r (a X Z))");
+}
+
+// The repeat iterating more than once: the second `X` belongs to `X+`,
+// so no first-token dispatch on a fixed depth can decide it.
+test "tree: X X Y iterates the repeat" {
+    assert_tree(&"X X Y", &"(r (a X X Y))");
+}
+
+test "tree: X X X Y iterates the repeat three times" {
+    assert_tree(&"X X X Y", &"(r (a X X X Y))");
+}
