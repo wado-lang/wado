@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785638718688,
+  "lastUpdate": 1785671591507,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45509,6 +45509,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c314b259e8dbb096002df3ec2d5934cc552ae633"
         },
         "date": 1785638717835,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16265,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272570,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b07ac9e9784712df7b42a8968ed57bf4afe1c44f",
+          "message": "Merge pull request #1735 from wado-lang/claude/wado-compiler-niri-smell-m57zut\n\nperf(niri): commit every fold through one memoizing gate",
+          "timestamp": "2026-08-02T21:41:37+10:00",
+          "tree_id": "211dca4c5491df1a123b9c733810044c3c7cac94",
+          "url": "https://github.com/wado-lang/wado/commit/b07ac9e9784712df7b42a8968ed57bf4afe1c44f"
+        },
+        "date": 1785671590713,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
