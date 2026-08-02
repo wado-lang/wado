@@ -154,6 +154,14 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
       `VariantConstruct`. The constant-scrutinee path runs through
       `const_eval::Value`, which is all-or-nothing constant, so "case known,
       payload opaque" is inexpressible there.
+- [ ] Elision of the element copy a by-value `for` binding takes.
+      `ArraySlice`'s `Iterator::next` returns an owned element, so iterating a
+      `List<T>` of aggregates deep-copies each one even when the loop variable
+      is only read. The copy is expanded before NIR, which puts `next` over the
+      inline threshold, so no caller-side pass ever sees that the copy is dead —
+      a single NIR node expanded at lowering would restore both the inlining and
+      the elision. It is ~20% of the json-canada deserialize benchmark, whose
+      `count_points` walks the parsed tree only to sum lengths.
 
 ## Tried and found ineffective
 

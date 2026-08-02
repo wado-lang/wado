@@ -534,6 +534,16 @@ test "deserialize f64 long integer part with fraction" {
     assert r matches { Ok(v) && 12000000000000000000000.0 < v < 13000000000000000000000.0 };
 }
 
+test "deserialize number with redundant leading zeros" {
+    // JSON's grammar allows only a lone `0`, but the scanner stays lenient.
+    // The zeros are skipped ahead of the accumulating run, so they must not
+    // reach the mantissa.
+    let i: Result<i32, DeserializeError> = from_string("00042");
+    assert i matches { Ok(v) && v == 42 };
+    let f: Result<f64, DeserializeError> = from_string("-0007.5");
+    assert f matches { Ok(v) && -7.51 < v < -7.49 };
+}
+
 test "deserialize f64 with many leading fraction zeros" {
     // Leading zeros must shift the scale, not consume the 19-digit mantissa
     // budget — otherwise the lone significant digit is lost and the value
