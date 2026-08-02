@@ -1582,26 +1582,37 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             ast::UseItem::InterfaceFunctions { .. } | ast::UseItem::Wildcard => {}
                         }
                     }
-                    for (local_name, source_name) in to_import {
-                        // Find the global declaration in the source module to
-                        // resolve its type and mutability.
-                        for src_item in &source_module.items {
-                            if let Item::Global(global_decl) = src_item
-                                && global_decl.name == source_name
-                            {
-                                let ty = self.resolve_type(&global_decl.ty);
-                                self.sem.decls.imported_globals.insert(
-                                    local_name,
-                                    (
-                                        source_module_source.clone(),
-                                        source_name,
-                                        ty,
-                                        global_decl.mutable,
-                                    ),
-                                );
-                                break;
-                            }
-                        }
+                    // Pair each import with the declaration it names, so the
+                    // borrow on `source_module` ends before resolution starts.
+                    let declared: Vec<(String, String, ast::Type, bool)> = to_import
+                        .into_iter()
+                        .filter_map(|(local_name, source_name)| {
+                            source_module
+                                .items
+                                .iter()
+                                .find_map(|src_item| match src_item {
+                                    Item::Global(g) if g.name == source_name => Some((
+                                        local_name.clone(),
+                                        source_name.clone(),
+                                        g.ty.clone(),
+                                        g.mutable,
+                                    )),
+                                    _ => None,
+                                })
+                        })
+                        .collect();
+                    for (local_name, source_name, ty_ast, mutable) in declared {
+                        // A declared type means what the *declaring* module
+                        // wrote: `global RK_PROG: NodeKind` names a newtype the
+                        // importer never brought into scope, and resolving it
+                        // here would type the global `unknown`.
+                        let ty = self.with_module_perspective_for(&source_module_source, |s| {
+                            s.resolve_type(&ty_ast)
+                        });
+                        self.sem.decls.imported_globals.insert(
+                            local_name,
+                            (source_module_source.clone(), source_name, ty, mutable),
+                        );
                     }
                 }
             }
