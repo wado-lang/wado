@@ -4428,10 +4428,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .compiler_trait_name(crate::compiler_item::CompilerItem::From)
             .to_string();
-        // `From<From>` for the target, read off the impl headers: the block's
-        // trait reference and its argument are header facts, so the impls are
-        // reached by the target's canonical key rather than by scanning every
-        // module for one whose written target name matches.
+        // Read off the impl headers: a block's trait reference and its
+        // argument are header facts, so the impls are reached by the target's
+        // canonical key rather than by scanning every module for one whose
+        // written target name matches.
         let declares_from = |key: &(ModuleSource, crate::ast::AstId)| -> bool {
             self.tysys
                 .trait_env

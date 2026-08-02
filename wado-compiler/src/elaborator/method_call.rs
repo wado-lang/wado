@@ -1226,8 +1226,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
-        // The method name is the second segment of `Trait::method`; the edge
-        // for jump-to-definition is recorded against it.
+        // The edge for jump-to-definition is recorded against the method name.
         let method_id = match &call.callee {
             ast::Expr::Ident(ident) => ident.segments.get(1).map(|seg| seg.id),
             _ => None,
@@ -2203,11 +2202,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_info.cm_name =
             self.lookup_resource_static_cm(&struct_name, &struct_module, &static_call.method);
 
-        // Record use->def for jump-to-definition on the method name token.
-        // The selection knows which impl answered — two conversion impls on
-        // one type declare the same `from`, so a name lookup cannot tell them
-        // apart. It covers trait impls only; an inherent static has no
-        // selection and reaches the index instead.
+        // The selection knows which impl answered, which a name lookup
+        // cannot when two conversion impls declare the same `from`. It covers
+        // trait impls only; an inherent static reaches the index instead.
         if let Some(method_ast_id) = selected.as_ref().and_then(|r| r.method_id).or_else(|| {
             self.static_method_decl_id(Some(&struct_module), &struct_name, &static_call.method)
         }) {
