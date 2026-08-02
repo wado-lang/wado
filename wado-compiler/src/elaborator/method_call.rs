@@ -2434,7 +2434,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         mangled_func_name: &str,
     ) -> TypeId {
         let struct_name = method_ref.type_name.as_str();
-        let struct_module = &method_ref.module;
         let method_name = method_ref.method_name.as_str();
         // First check locally registered function_return_types
         if let Some(&return_type) = self.sem.decls.function_return_types.get(mangled_func_name) {
@@ -2460,167 +2459,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             if let Some(&return_type) = self.sem.decls.function_return_types.get(&trait_mangled) {
                 return return_type;
-            }
-        }
-
-        // Try looking up in loaded modules
-        if !struct_module.is_entry_point()
-            && let Some(module) = self.loaded_modules.get(struct_module)
-        {
-            for item in &module.items {
-                // Check impl blocks
-                if let Item::Impl(impl_block) = item {
-                    let impl_struct_name = self.get_type_name(&impl_block.ty);
-                    if impl_struct_name == struct_name {
-                        for method in &impl_block.methods {
-                            // Static methods have no self parameter
-                            let has_self = method
-                                .params
-                                .iter()
-                                .any(|p| p.self_kind != ast::SelfKind::None);
-                            if method.name == method_name && !has_self {
-                                // Set up type parameters from impl block before resolving.
-                                // Inherited scope; only `type_params` is replaced.
-                                let mut scope = self.enter_inherited_type_param_scope();
-                                scope.annotate_ctx.trait_ctx.type_params.clear();
-
-                                // Extract type params from impl block type (e.g., impl List<T>)
-                                if let ast::Type::Generic(generic) = &impl_block.ty {
-                                    for (i, arg) in generic.args.iter().enumerate() {
-                                        if let ast::Type::Named(named) = arg {
-                                            let name = &named.name;
-                                            if !scope
-                                                .annotate_ctx
-                                                .trait_ctx
-                                                .type_params
-                                                .contains_key(name)
-                                            {
-                                                let type_id = scope
-                                                    .tysys
-                                                    .type_table
-                                                    .borrow_mut()
-                                                    .make_type_param(name.clone(), i as u32);
-                                                scope
-                                                    .annotate_ctx
-                                                    .trait_ctx
-                                                    .type_params
-                                                    .insert(name.clone(), (i as u32, type_id));
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Method-level type params (e.g. fn make<T>(...) -> T)
-                                let m_offset = scope.annotate_ctx.trait_ctx.type_params.len();
-                                for (i, tp) in method
-                                    .type_params
-                                    .iter()
-                                    .filter(|p| !p.is_effect)
-                                    .enumerate()
-                                {
-                                    if scope
-                                        .annotate_ctx
-                                        .trait_ctx
-                                        .type_params
-                                        .contains_key(&tp.name)
-                                    {
-                                        continue;
-                                    }
-                                    let idx = (m_offset + i) as u32;
-                                    let type_id = if tp.is_pack {
-                                        scope
-                                            .tysys
-                                            .type_table
-                                            .borrow_mut()
-                                            .make_type_pack(tp.name.clone(), idx)
-                                    } else {
-                                        scope
-                                            .tysys
-                                            .type_table
-                                            .borrow_mut()
-                                            .make_type_param(tp.name.clone(), idx)
-                                    };
-                                    scope
-                                        .annotate_ctx
-                                        .trait_ctx
-                                        .type_params
-                                        .insert(tp.name.clone(), (idx, type_id));
-                                }
-
-                                // Bind `Self` to the impl's concrete type so a
-                                // `-> Self` return resolves cross-module (here
-                                // `resolve_named_type` reads `Self` off
-                                // `trait_ctx.self_type`, the now-gone impl
-                                // context). Only when the return mentions `Self`,
-                                // to avoid the extra resolution otherwise.
-                                if method
-                                    .return_type
-                                    .as_ref()
-                                    .is_some_and(|t| Self::ast_type_mentions_self(t))
-                                {
-                                    scope.annotate_ctx.trait_ctx.self_type =
-                                        Some(scope.resolve_return_type_in_module(
-                                            struct_module,
-                                            Some(&impl_block.ty),
-                                        ));
-                                }
-                                let result = scope.resolve_return_type_in_module(
-                                    struct_module,
-                                    method.return_type.as_ref(),
-                                );
-
-                                drop(scope);
-
-                                return result;
-                            }
-                        }
-                    }
-                }
-
-                // Check resource declarations
-                if let Item::Resource(resource) = item
-                    && resource.name == struct_name
-                {
-                    for method in &resource.methods {
-                        // Static methods have no self parameter (no &TcpSocket or &Self)
-                        let has_self = method.params.iter().any(|p| {
-                                matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
-                                    if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name))
-                                    || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name)
-                            });
-                        if method.name == method_name && !has_self {
-                            // Set up type parameters from resource declaration before resolving.
-                            // Inherited scope; only `type_params` is replaced.
-                            let mut scope = self.enter_inherited_type_param_scope();
-                            scope.annotate_ctx.trait_ctx.type_params.clear();
-
-                            for (i, param) in resource.type_params.iter().enumerate() {
-                                let name = &param.name;
-                                if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
-                                    let type_id = scope
-                                        .tysys
-                                        .type_table
-                                        .borrow_mut()
-                                        .make_type_param(name.clone(), i as u32);
-                                    scope
-                                        .annotate_ctx
-                                        .trait_ctx
-                                        .type_params
-                                        .insert(name.clone(), (i as u32, type_id));
-                                }
-                            }
-
-                            let result = scope.resolve_return_type_in_module(
-                                struct_module,
-                                method.return_type.as_ref(),
-                            );
-
-                            drop(scope);
-
-                            return result;
-                        }
-                    }
-                }
             }
         }
 
@@ -3241,23 +3079,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(name)
             .cloned()
             .unwrap_or_else(fallback)
-    }
-
-    /// Whether an AST type syntactically mentions `Self`. Over-approximates
-    /// (returns `true` for the few forms it does not descend into) so a caller
-    /// using it to decide whether to bind `Self` never under-binds.
-    fn ast_type_mentions_self(ty: &ast::Type) -> bool {
-        match ty {
-            ast::Type::Named(n) => n.name == "Self",
-            ast::Type::Generic(g) => {
-                g.name == "Self" || g.args.iter().any(Self::ast_type_mentions_self)
-            }
-            ast::Type::Tuple(elems) => elems.iter().any(Self::ast_type_mentions_self),
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
-                Self::ast_type_mentions_self(inner)
-            }
-            _ => true,
-        }
     }
 
     pub(super) fn locate_static_method_impl(
