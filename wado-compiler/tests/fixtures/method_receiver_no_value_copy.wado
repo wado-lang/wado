@@ -1,0 +1,28 @@
+// A method call's receiver must never be wrapped in `$value_copy$T`.
+//
+// Regression: lowering routes every call argument through the value-copy wrap,
+// and once a method's receiver became `args[0]` (the `MethodCall` → `Call`
+// unification) it was wrapped too. A by-value receiver — the local a template
+// string accumulates into — then had each `push_str` push into a throwaway
+// copy, so every part but the last was lost, and `a${n}b${n}c` rendered as
+// `33`. The assert diagnostic it broke first collapsed the same way.
+//
+// The receiver is a place, not a value argument: copying it discards the
+// mutation the call exists to perform.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Template string: the builder's receiver is a compiler-synthesized local
+    // of bare `String` type, so nothing about its type declines the copy.
+    let n = 3;
+    println(`a${n}b${n}c`);
+
+    // The same accumulation spelled directly.
+    let mut buf = String::with_capacity(8);
+    buf.push_str(&"one");
+    buf.push_str(&"two");
+    println(buf);
+}
+
+__DATA__
+{"stdout": "a3b3c\nonetwo\n"}

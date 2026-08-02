@@ -1537,7 +1537,11 @@ impl FunctionTranslator<'_, '_> {
                         .iter()
                         .enumerate()
                         .map(|(i, (e, is_mut))| {
-                            self.convert_call_arg_at(e, *is_mut, Some(func), i, &mut_roots)
+                            if i == 0 {
+                                self.convert_receiver_arg(e, *is_mut)
+                            } else {
+                                self.convert_call_arg_at(e, *is_mut, Some(func), i, &mut_roots)
+                            }
                         })
                         .collect(),
                     has_receiver: true,
@@ -2180,6 +2184,20 @@ impl FunctionTranslator<'_, '_> {
                 }
             })
             .collect()
+    }
+
+    /// Convert a method call's receiver. It occupies `args[0]` like any other
+    /// argument, but it is a *place*, not a value argument: wrapping it in
+    /// `$value_copy$T` would hand the callee a throwaway copy and discard the
+    /// mutation the call exists to perform (a `String` builder's `push_str`
+    /// would append to the copy). Nor may it be re-wrapped as a canonical
+    /// closure the way a specialized fn-param argument is — the method was
+    /// resolved against the receiver's own type, not `fn(...)`.
+    fn convert_receiver_arg(&self, receiver: &TirExpr, is_mut: bool) -> ArenaCallArg {
+        ArenaCallArg {
+            expr: self.convert_operand(receiver),
+            is_mut,
+        }
     }
 
     /// Convert one call argument, wrapping it in `$value_copy$T` unless
