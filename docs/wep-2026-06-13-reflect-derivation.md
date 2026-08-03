@@ -93,7 +93,17 @@ discriminant index, matching the variant walk.)
 
 A generic derivation over a member walk binds a type pack, and both instance and
 `static` trait methods resolve through such a pack-bound blanket — a deserialize
-entry (`T::from_wire(…)`) dispatches the same way a walk does.
+entry (`T::from_wire(…)`) dispatches the same way a walk does. A variant is no
+exception: `Variant::Case` owns that namespace, but a name that is not a case
+falls through to the blanket.
+
+A derivation's method may carry type parameters of its own — serde's
+`serialize<S: Serializer>`. The instance keys on the receiver, the bound's pack,
+and the method's own arguments together, so one blanket body serves every
+(subject, format) pair. Inferring such a parameter from an argument needs the
+receiver to be a bound type parameter (`fn f<T: Serialize>(v: &T)`, the shape
+every serde entry point takes); a concrete subject reaching the derivation
+through the blanket needs the turbofish.
 
 Every kind spells its build direction `from_<channel>`. `from_discriminant` /
 `from_bits` return `Option` because an unknown raw input is a normal deserialize

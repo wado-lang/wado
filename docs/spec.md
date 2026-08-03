@@ -3439,6 +3439,8 @@ assert rw as u32 == 3;
 // They produce a compile error; use bitwise operators (|, &, ^) instead
 ```
 
+Flags auto-derive `Eq` and `Ord` over their raw bits, the same on-demand way enums derive theirs over the discriminant — see [Auto-derived Traits](#structs).
+
 Flags are implemented as newtypes over `u32`. Member names can carry `#[cm("...")]` attributes for Component Model name mapping:
 
 ```wado

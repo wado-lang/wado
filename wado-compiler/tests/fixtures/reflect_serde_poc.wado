@@ -1,0 +1,421 @@
+// Serde as library code over the reflection API (WEP 2026-06-13): a
+// format-agnostic wire tree, one derivation per reflect kind, and no compiler
+// support beyond `Reflect{Struct,Variant,Enum,Flags}`. The round-trip covers
+// both directions — the outbound walk over `members()` and the inbound build
+// through `from_fields` / `construct` / `make` / `from_bits`.
+
+use { wire_name } from "core:serde";
+
+struct Entry {
+    key: String,
+    value: Node,
+}
+
+variant Node {
+    Int(i32),
+    Text(String),
+    Flag(bool),
+    Obj(List<Entry>),
+    Arr(List<Node>),
+}
+
+struct WireError {
+    message: String,
+}
+
+/// Declaration-ordered field values, so a build derivation can map the field
+/// type pack over the reordered wire input.
+struct Cursor {
+    items: List<Node>,
+    pos: i32,
+}
+
+impl Cursor {
+    fn take(&mut self) -> Node {
+        let n = self.items[self.pos];
+        self.pos += 1;
+        return n;
+    }
+}
+
+trait ToWire {
+    fn to_wire(&self) -> Node;
+}
+
+trait FromWire {
+    fn from_wire(n: &Node) -> Result<Self, WireError>;
+
+    /// The pack-map entry point: one field of a struct, in declaration order.
+    fn from_wire_next(c: &mut Cursor) -> Result<Self, WireError> {
+        let n = c.take();
+        return Self::from_wire(&n);
+    }
+}
+
+fn mismatch<T>(what: &String) -> Result<T, WireError> {
+    return Result::Err(WireError { message: `expected ${what}` });
+}
+
+impl ToWire for i32 {
+    fn to_wire(&self) -> Node {
+        return Node::Int(*self);
+    }
+}
+
+impl FromWire for i32 {
+    fn from_wire(n: &Node) -> Result<i32, WireError> {
+        match n {
+            Node::Int(v) => {
+                return Result::Ok(*v);
+            },
+            _ => {
+                return mismatch(&"an int");
+            },
+        }
+    }
+}
+
+impl ToWire for bool {
+    fn to_wire(&self) -> Node {
+        return Node::Flag(*self);
+    }
+}
+
+impl FromWire for bool {
+    fn from_wire(n: &Node) -> Result<bool, WireError> {
+        match n {
+            Node::Flag(v) => {
+                return Result::Ok(*v);
+            },
+            _ => {
+                return mismatch(&"a flag");
+            },
+        }
+    }
+}
+
+impl ToWire for String {
+    fn to_wire(&self) -> Node {
+        return Node::Text(*self);
+    }
+}
+
+impl FromWire for String {
+    fn from_wire(n: &Node) -> Result<String, WireError> {
+        match n {
+            Node::Text(v) => {
+                return Result::Ok(*v);
+            },
+            _ => {
+                return mismatch(&"text");
+            },
+        }
+    }
+}
+
+// A unit case's payload: nothing on the wire, and nothing to read back.
+impl ToWire for () {
+    fn to_wire(&self) -> Node {
+        return Node::Arr([]);
+    }
+}
+
+impl FromWire for () {
+    fn from_wire(_n: &Node) -> Result<(), WireError> {
+        return Result::Ok(());
+    }
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: ToWire> ToWire for T {
+    fn to_wire(&self) -> Node {
+        let policy = ReflectStruct::<T>::wire_name_policy();
+        let mut entries: List<Entry> = [];
+        for let f of ReflectStruct::<T>::members() {
+            entries.push(Entry {
+                key: wire_name(&f, policy),
+                value: f.get(self).to_wire(),
+            });
+        }
+        return Node::Obj(entries);
+    }
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: FromWire> FromWire for T {
+    fn from_wire(n: &Node) -> Result<T, WireError> {
+        match n {
+            Node::Obj(entries) => {
+                let policy = ReflectStruct::<T>::wire_name_policy();
+                let mut ordered: List<Node> = [];
+                for let f of ReflectStruct::<T>::members() {
+                    let key = wire_name(&f, policy);
+                    let mut found = false;
+                    for let e of entries {
+                        if e.key == key {
+                            ordered.push(e.value);
+                            found = true;
+                        }
+                    }
+                    if !found {
+                        return Result::Err(WireError { message: `missing field ${key}` });
+                    }
+                }
+                let mut cursor = Cursor { items: ordered, pos: 0 };
+                return Result::Ok(ReflectStruct::<T>::from_fields([..F::from_wire_next(&mut cursor)?]));
+            },
+            _ => {
+                return mismatch(&`an object for ${ReflectStruct::<T>::type_name()}`);
+            },
+        }
+    }
+}
+
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: ToWire> ToWire for V {
+    fn to_wire(&self) -> Node {
+        let policy = ReflectVariant::<V>::wire_name_policy();
+        for let case of ReflectVariant::<V>::members() {
+            if case.holds(self) {
+                let payload = case.extract(self);
+                return Node::Obj([
+                    Entry {
+                        key: wire_name(&case, policy),
+                        value: payload.to_wire(),
+                    },
+                ]);
+            }
+        }
+        panic("a variant value always holds one of its cases");
+    }
+}
+
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: FromWire> FromWire for V {
+    fn from_wire(n: &Node) -> Result<V, WireError> {
+        match n {
+            Node::Obj(entries) => {
+                if entries.len() != 1 {
+                    return mismatch(&"a single-case object");
+                }
+                let policy = ReflectVariant::<V>::wire_name_policy();
+                for let case of ReflectVariant::<V>::members() {
+                    if wire_name(&case, policy) == entries[0].key {
+                        let payload = P::from_wire(&entries[0].value)?;
+                        return Result::Ok(case.construct(payload));
+                    }
+                }
+                return Result::Err(WireError {
+                    message: `unknown case ${entries[0].key} of ${ReflectVariant::<V>::type_name()}`,
+                });
+            },
+            _ => {
+                return mismatch(&`an object for ${ReflectVariant::<V>::type_name()}`);
+            },
+        }
+    }
+}
+
+impl<E: ReflectEnum<Members = [..M]>, ..M> ToWire for E {
+    fn to_wire(&self) -> Node {
+        let policy = ReflectEnum::<E>::wire_name_policy();
+        for let case of ReflectEnum::<E>::members() {
+            if case.holds(self) {
+                return Node::Text(wire_name(&case, policy));
+            }
+        }
+        panic("an enum value always holds one of its cases");
+    }
+}
+
+impl<E: ReflectEnum<Members = [..M]>, ..M> FromWire for E {
+    fn from_wire(n: &Node) -> Result<E, WireError> {
+        match n {
+            Node::Text(text) => {
+                let policy = ReflectEnum::<E>::wire_name_policy();
+                for let case of ReflectEnum::<E>::members() {
+                    if wire_name(&case, policy) == *text {
+                        return Result::Ok(case.make());
+                    }
+                }
+                return Result::Err(WireError {
+                    message: `unknown case ${text} of ${ReflectEnum::<E>::type_name()}`,
+                });
+            },
+            _ => {
+                return mismatch(&`text for ${ReflectEnum::<E>::type_name()}`);
+            },
+        }
+    }
+}
+
+impl<L: ReflectFlags<Members = [..M]>, ..M> ToWire for L {
+    fn to_wire(&self) -> Node {
+        let policy = ReflectFlags::<L>::wire_name_policy();
+        let mut set: List<Node> = [];
+        for let bit of ReflectFlags::<L>::members() {
+            if bit.is_set(self) {
+                set.push(Node::Text(wire_name(&bit, policy)));
+            }
+        }
+        return Node::Arr(set);
+    }
+}
+
+impl<L: ReflectFlags<Members = [..M]>, ..M> FromWire for L {
+    fn from_wire(n: &Node) -> Result<L, WireError> {
+        match n {
+            Node::Arr(items) => {
+                let policy = ReflectFlags::<L>::wire_name_policy();
+                let mut raw: u64 = 0;
+                for let item of items {
+                    let name = String::from_wire(&item)?;
+                    let mut found = false;
+                    for let bit of ReflectFlags::<L>::members() {
+                        if wire_name(&bit, policy) == name {
+                            raw = raw | bit.bit();
+                            found = true;
+                        }
+                    }
+                    if !found {
+                        return Result::Err(WireError {
+                            message: `unknown bit ${name} of ${ReflectFlags::<L>::type_name()}`,
+                        });
+                    }
+                }
+                match ReflectFlags::<L>::from_bits(raw) {
+                    Option::Some(v) => {
+                        return Result::Ok(v);
+                    },
+                    Option::None => {
+                        return mismatch(&`known bits of ${ReflectFlags::<L>::type_name()}`);
+                    },
+                }
+            },
+            _ => {
+                return mismatch(&`an array for ${ReflectFlags::<L>::type_name()}`);
+            },
+        }
+    }
+}
+
+#[wire(name_policy = "kebab-case")]
+enum Rank {
+    LowPriority,
+    HighPriority,
+}
+
+#[wire(name_policy = "SCREAMING_SNAKE_CASE")]
+flags Perms {
+    can_read,
+    can_write,
+}
+
+variant Payload {
+    Count(i32),
+    Label(String),
+    Nothing,
+}
+
+struct Inner {
+    depth: i32,
+    enabled: bool,
+}
+
+#[wire(name_policy = "camelCase")]
+struct Outer {
+    #[wire(name = "id")]
+    record_id: i32,
+    display_name: String,
+    inner: Inner,
+    rank: Rank,
+    perms: Perms,
+    payload: Payload,
+}
+
+fn sample() -> Outer {
+    return Outer {
+        record_id: 7,
+        display_name: "widget",
+        inner: Inner { depth: 2, enabled: true },
+        rank: Rank::HighPriority,
+        perms: Perms::can_read | Perms::can_write,
+        payload: Payload::Label("tagged"),
+    };
+}
+
+fn key_of(n: &Node, key: &String) -> Node {
+    match n {
+        Node::Obj(entries) => {
+            for let e of entries {
+                if e.key == *key {
+                    return e.value;
+                }
+            }
+            panic("no such key");
+        },
+        _ => {
+            panic("not an object");
+        },
+    }
+}
+
+test "the struct derivation resolves wire names from the member and the policy" {
+    let wire = sample().to_wire();
+    assert key_of(&wire, &"id") == Node::Int(7);
+    assert key_of(&wire, &"displayName") == Node::Text("widget");
+}
+
+test "the derivations nest through the trait, one level at a time" {
+    let wire = sample().to_wire();
+    let inner = key_of(&wire, &"inner");
+    assert key_of(&inner, &"depth") == Node::Int(2);
+    assert key_of(&inner, &"enabled") == Node::Flag(true);
+}
+
+test "each reflect kind writes its own shape" {
+    let wire = sample().to_wire();
+    assert key_of(&wire, &"rank") == Node::Text("high-priority");
+    assert key_of(&wire, &"perms") == Node::Arr([
+        Node::Text("CAN_READ"),
+        Node::Text("CAN_WRITE"),
+    ]);
+    assert key_of(&wire, &"payload") == Node::Obj([
+        Entry { key: "Label", value: Node::Text("tagged") },
+    ]);
+}
+
+test "a struct round-trips through the wire tree" {
+    let wire = sample().to_wire();
+    assert Outer::from_wire(&wire) == Result::Ok(sample());
+}
+
+test "the build direction is keyed by name, not by wire order" {
+    let shuffled = Node::Obj([
+        Entry { key: "enabled", value: Node::Flag(false) },
+        Entry { key: "depth", value: Node::Int(9) },
+    ]);
+    assert Inner::from_wire(&shuffled) == Result::Ok(Inner { depth: 9, enabled: false });
+}
+
+test "a unit case round-trips through construct" {
+    let wire = Payload::Nothing.to_wire();
+    assert wire == Node::Obj([
+        Entry { key: "Nothing", value: Node::Arr([]) },
+    ]);
+    assert Payload::from_wire(&wire) == Result::Ok(Payload::Nothing);
+}
+
+test "an unknown member is a wire error, not a trap" {
+    let missing = Node::Obj([
+        Entry { key: "depth", value: Node::Int(1) },
+    ]);
+    assert Inner::from_wire(&missing) matches { Result::Err(_) };
+
+    let unknown = Node::Obj([
+        Entry { key: "Missing", value: Node::Int(1) },
+    ]);
+    assert Payload::from_wire(&unknown) matches { Result::Err(_) };
+
+    assert Rank::from_wire(&Node::Text("mid")) matches { Result::Err(_) };
+    assert Perms::from_wire(&Node::Arr([Node::Text("CAN_FLY")])) matches { Result::Err(_) };
+}
+
+__DATA__
+{"test": {}}

@@ -930,13 +930,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             )
                             .type_id;
                     }
+                    if let Some(return_type) = self.resolve_named_type_blanket_static(
+                        prefix, suffix, call.id, &args, call.span,
+                    ) {
+                        return return_type;
+                    }
                     let _ = self.emit(TypeError::UnknownFunction {
                         name: format!("{prefix}::{suffix}"),
                         span: call.span,
                     });
                     return TypeTable::ERROR;
                 } else {
-                    // Unknown case name
+                    if let Some(return_type) = self.resolve_named_type_blanket_static(
+                        prefix, suffix, call.id, &args, call.span,
+                    ) {
+                        return return_type;
+                    }
                     let _ = self.emit(TypeError::UnknownFunction {
                         name: format!("{prefix}::{suffix}"),
                         span: call.span,
@@ -947,11 +956,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // If prefix is a known type (struct/enum/newtype/flags) with no matching
             // static method, emit a compile error.
             else if self.tysys.is_known_type_name(prefix) {
-                // A value blanket indexes statics under the receiver param
-                // name, so `prefix`'s own bucket never sees them.
-                let receiver_ty = self.resolve_named_type(prefix, call.span, false);
-                if let Some(return_type) =
-                    self.resolve_blanket_static_method(receiver_ty, suffix, call.id, &[], &[])
+                if let Some(return_type) = self
+                    .resolve_named_type_blanket_static(prefix, suffix, call.id, &args, call.span)
                 {
                     return return_type;
                 }
@@ -2561,6 +2567,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|&pt| self.substitute_type_params(pt, type_args))
             .collect()
+    }
+
+    /// `Type::method()` reaching a value blanket's static, which is indexed
+    /// under the blanket's receiver param and so misses `type_name`'s own
+    /// bucket. The variant-case branch owns the `Variant::Name` shape, so it
+    /// shares this entry rather than falling through to the known-type one.
+    pub(super) fn resolve_named_type_blanket_static(
+        &mut self,
+        type_name: &str,
+        method: &str,
+        call_id: crate::AstId,
+        args: &[TirExpr],
+        span: crate::Span,
+    ) -> Option<TypeId> {
+        let receiver_ty = self.resolve_named_type(type_name, span, false);
+        // The blanket would key on the argument-less head, which carries no
+        // layout (a generic variant never becomes its own declaration, WEP
+        // 2026-02-09) and reaches WIR build unregistered.
+        if let Some(expected) = self.bare_generic_type_arity(type_name)
+            && self
+                .find_blanket_static_method(receiver_ty, method)
+                .is_some()
+        {
+            let _ = self.emit(TypeError::MissingTypeArguments {
+                name: type_name.to_string(),
+                expected,
+                span,
+            });
+            return Some(TypeTable::ERROR);
+        }
+        self.resolve_blanket_static_method(receiver_ty, method, call_id, &[], &[], args, span)
     }
 }
 

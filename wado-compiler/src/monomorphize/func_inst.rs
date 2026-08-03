@@ -105,6 +105,9 @@ struct SubstitutedCall {
     receiver_is_assoc_projection: bool,
     /// Substituted impl type args, in param-index order.
     type_args: Vec<TypeId>,
+    /// Substituted method-level type args, in declaration order. Non-empty for
+    /// a method carrying type params of its own (`serialize<S: Serializer>`).
+    method_type_args: Vec<TypeId>,
     /// The call's current module source, used as the fallback home.
     module_source: ModuleSource,
 }
@@ -787,7 +790,23 @@ impl Monomorphizer {
                             Some((receiver.type_id, type_table)),
                         ) {
                             let generic_func = generic_func_rc.borrow();
-                            let impl_type_args = monomorph.impl_type_args.clone();
+                            // A pack-bound blanket declares one impl param per pack,
+                            // so the receiver alone underfills the key.
+                            let blanket_trait = info
+                                .base_trait_name
+                                .as_deref()
+                                .or(info.trait_name.as_deref());
+                            let impl_type_args = blanket_trait
+                                .and_then(|tn| {
+                                    blanket_pack_dispatch_args(
+                                        &monomorph.impl_type_args,
+                                        &self.functions.trait_env,
+                                        tn,
+                                        &method_func.module_source,
+                                        type_table,
+                                    )
+                                })
+                                .unwrap_or_else(|| monomorph.impl_type_args.clone());
                             let method_type_args = monomorph.method_type_args.clone();
                             if impl_type_args.len() + method_type_args.len()
                                 >= generic_func.impl_type_params.len()
@@ -2962,10 +2981,23 @@ impl Monomorphizer {
             .collect();
         let type_args: Vec<TypeId> = sorted_entries.iter().map(|(_, tid)| **tid).collect();
 
+        // Left unsubstituted, the instance keys on the template's abstract `S`.
+        let sub_method_type_args: Vec<TypeId> = match &*method_func {
+            FunctionRef {
+                monomorph_info: Some(mi),
+                ..
+            } => mi
+                .method_type_args
+                .iter()
+                .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                .collect(),
+            _ => Vec::new(),
+        };
+
         // Compute the new method info with concrete type names.
         // If the struct is a type param (e.g., T^Ord::cmp), substitute the struct
         // name directly instead of adding type args.
-        let new_info = if info.is_type_param_receiver && !type_names.is_empty() {
+        let mut new_info = if info.is_type_param_receiver && !type_names.is_empty() {
             // Use the (already-substituted) receiver type to find the concrete name.
             let inner = type_table.peel_refs(receiver_type_id);
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
@@ -2997,6 +3029,12 @@ impl Monomorphizer {
         } else {
             info.clone()
         };
+        if !sub_method_type_args.is_empty() {
+            new_info.method_type_args = sub_method_type_args
+                .iter()
+                .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
+                .collect();
+        }
         let new_func_name = new_info.to_mangled_name();
 
         if new_func_name == old_func_name {
@@ -3009,6 +3047,7 @@ impl Monomorphizer {
             original_name: old_func_name,
             receiver_is_assoc_projection: info.receiver_is_assoc_projection(),
             type_args,
+            method_type_args: sub_method_type_args,
             module_source,
         };
         if info.is_type_param_receiver {
@@ -3042,6 +3081,7 @@ impl Monomorphizer {
             original_name: old_func_name,
             receiver_is_assoc_projection,
             type_args,
+            method_type_args,
             module_source,
         } = call;
         let receiver_module = {
@@ -3198,7 +3238,15 @@ impl Monomorphizer {
             Some(MonomorphInfo {
                 generic_name: blanket_name,
                 impl_type_args: blanket_impl_args,
-                method_type_args: vec![],
+                // A pack-bound blanket's template is shared across every
+                // (subject, method arg) pair, so its instance needs both. A
+                // per-type impl already carries its method args in the mangled
+                // name; keying on them too mints a second instance under it.
+                method_type_args: if has_projected {
+                    method_type_args
+                } else {
+                    Vec::new()
+                },
                 is_blanket: true,
             })
         };
@@ -3228,6 +3276,7 @@ impl Monomorphizer {
             original_name: old_func_name,
             receiver_is_assoc_projection: _,
             type_args,
+            method_type_args: _,
             module_source,
         } = call;
         let (existing_generic_name, existing_impl_ta, existing_method_ta, existing_is_blanket) =

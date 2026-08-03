@@ -876,13 +876,8 @@ impl TypeSystem {
         };
         match resolved {
             ResolvedType::Enum { .. } => Some(true),
-            ResolvedType::Flags { .. } => {
-                if tr.is_serde() {
-                    Some(true)
-                } else {
-                    None
-                }
-            }
+            // A bitmask has no members to recurse into, like a plain `enum`.
+            ResolvedType::Flags { .. } => Some(true),
             ResolvedType::Struct {
                 decl_name: name,
                 module_source,
