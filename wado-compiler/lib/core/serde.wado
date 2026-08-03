@@ -1136,7 +1136,12 @@ fn join_words(words: &List<String>, sep: &String, upper: bool) -> String {
         }
         let w = words[i];
         if upper {
-            out.push_str(&w.to_ascii_uppercase());
+            // Char by char rather than `to_ascii_uppercase`, whose iterator
+            // adapter costs every serde program a closure allocation for a
+            // casing path most of them never take.
+            for let c of w.chars() {
+                out.push(c.to_ascii_uppercase());
+            }
         } else {
             out.push_str(&w);
         }

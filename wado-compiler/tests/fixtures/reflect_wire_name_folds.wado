@@ -1,0 +1,19 @@
+// A derived wire name is a compile-time fact: the member walk, the `#[wire]`
+// reads and the casing all fold, so the serializer writes a literal instead of
+// resolving the name on every call.
+use { to_string } from "core:json";
+
+struct Point {
+    x: i32,
+    y: String,
+}
+
+test "a struct's wire names reach the wire as literals" {
+    assert to_string(&Point { x: 1, y: "a" }) == Result::Ok(`\{"x":1,"y":"a"\}`);
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_not_expect:O2": ["core:serde/apply_case"]
+}

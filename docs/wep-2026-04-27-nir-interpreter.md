@@ -146,7 +146,7 @@ Calls:
 - A local the frame cannot track — one a mutable borrow, a mutable argument, a
   method receiver, a store through a projection, or an assignment buried inside
   a larger expression can write — carries no value, so a stale constant cannot
-  outlive the write.
+  outlive the write. A shared borrow is not one of those channels.
 - A string literal's `len()` folds, as a consequence of the generic
   struct-field projection rather than any string-specific rule.
 
@@ -185,9 +185,13 @@ Sequences:
   executor runs it. A place rooted anywhere else — a parameter, a global,
   anything the frame did not build — has no current value to update and
   abandons the evaluation rather than being stepped past.
-- A borrow handed to a sequence builtin does not make its root stale: the
-  executor performs the write itself, and a read cannot write at all. Every
-  other borrow still does.
+- A shared borrow never makes its root stale: nothing writes through one, which
+  is the same reading the aggregate-binding scan gives the node, where `&x`
+  counts as a read of `x`. A frame that refused it could not run a body whose
+  own parameter is borrowed — which every `&self` method's is, and which is what
+  a derivation walking member handles does at every step. A mutable borrow still
+  does, except where the executor performs the write itself (a sequence
+  builtin).
 - A byte-sequence container a compile-time call produced is written back as the
   literal the lower phase emits for a source string — a struct over a packed
   byte array and its length. The bytes are the container's first `used`, since

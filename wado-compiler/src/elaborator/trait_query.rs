@@ -1411,6 +1411,18 @@ impl TypeSystem {
         type_key: &Receiver,
         trait_name: &str,
     ) -> bool {
+        // A structural obligation is the member walk's to answer. A `Reflect*`
+        // blanket derives exactly those traits, and its receiver bound holds for
+        // every type of that kind — the bound that decides eligibility is the
+        // pack's (`..F: Serialize`), which this index does not carry. Letting
+        // the blanket answer would admit a type whose own members refuse the
+        // trait being asked for, and lose the reason chain that says which one.
+        if self
+            .classify_on_bound_trait(scope, trait_name)
+            .is_some_and(OnBoundTrait::is_field_recursive)
+        {
+            return false;
+        }
         let trait_env = self.trait_env.clone();
         for blanket in trait_env
             .blanket_impls
