@@ -100,12 +100,12 @@ The rule that resolves it uses only types NIR already has. It keys on the
 payload's _Wasm representation_, not its NIR shape, because that is what
 decides whether the wrapper costs anything:
 
-| payload type `T`                                                                       | slot type   | live value | pad          |
-| -------------------------------------------------------------------------------------- | ----------- | ---------- | ------------ |
+| payload type `T`                                                                                                                                      | slot type   | live value | pad          |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ---------- | ------------ |
 | scalar at Wasm level: primitive, `enum`, `flags`, `char`, `bool`, `v128`, and `resource` / `stream` / `future` (all `WirType::I32`, `context.rs:952`) | `T`         | `v`        | zero literal |
-| already null-representable: `Option<X>` for ref-represented `X`                        | `T`         | `v`        | `None`       |
-| any other ref: `struct`, `String`, `List<X>`, `variant`, `Option<scalar>`               | `Option<T>` | `Some(v)`  | `None`       |
-| `Unit`                                                                                 | (no slot)   | —          | —            |
+| already null-representable: `Option<X>` for ref-represented `X`                                                                                       | `T`         | `v`        | `None`       |
+| any other ref: `struct`, `String`, `List<X>`, `variant`, `Option<scalar>`                                                                             | `Option<T>` | `Some(v)`  | `None`       |
+| `Unit`                                                                                                                                                | (no slot)   | —          | —            |
 
 The `Option<T>` wrapper in row 3 is free. `wir_optimize::nullable_ref` lowers a
 2-case `{Unit, Payload(ref T)}` variant to a bare nullable ref, so `Option<T>`
@@ -229,10 +229,43 @@ Call sites: the bound temp's type becomes the tuple; `VariantTest` becomes
 `FieldAccess(t, "0") == k`; `VariantPayload` becomes the slot read (unwrapped
 through `VariantPayload(slot, Some)` for an `Option` slot); a `Match` over
 variant patterns becomes a `Match` / `Switch` over the tag with the payload
-binding prepended to each arm body.
+binding prepended to each arm body. `match f(x) { … }` is first normalized into
+`{ let t = f(x); match t { … } }`, so every site is the one `let`-bound shape.
 
-Global initializers are arena bodies too, and are rewritten by the same walk,
-as `sroa_param` does.
+A candidate reached from a global initializer is dropped: an initializer body
+has no locals list to mint the binding in.
+
+#### Every copy of a type has to move together
+
+A rewrite that changes what a function returns has to retype four things that
+each carry their own copy, and missing any one produces invalid Wasm rather
+than a missed optimization:
+
+- the function's `return_type`;
+- every `Call` node targeting it — its `type_id` is what `wir_build` reads;
+- the `let` binding: the `NirLocal`, the `StmtKind::Let`'s own `type_id`, and
+  every `ExprKind::Local` node reading it;
+- the merge points a return value passes through (`Block` / `If` / `Match` /
+  `Switch`), whose `type_id` still names the variant.
+
+The same applies to the `let t = Ok(v); … return t` shape: the initializer is
+rewritten in place, so the binding's declared type has to follow it.
+
+#### Constants must carry their type
+
+`ValuePool::intern` is type-erased and records no type; `ValuePool::alloc_unshared`
+records one. Every tag and pad this pass mints is a promoted operand the WIR
+extractor will ask the type of, so all of them go through `alloc_unshared` —
+`intern` compiles fine and panics in `wir_build`.
+
+#### `Option`'s declaration has to outlive its uses
+
+The pass mints `Option<T>` slots _after_ the early DCE run, and
+`wir_build::register_mono_variants` registers an instance off the declaration.
+A program that used no `Option` had the declaration dropped, so the minted slot
+type had no WIR registration and codegen panicked. `remove_unreachable_types`
+now keeps the `option` compiler-item declaration unconditionally; that costs
+nothing, since WIR registers instances, not declarations.
 
 ### Required changes to `optimize::multi_value_return`
 
@@ -305,10 +338,26 @@ exists to quantify this before any behavior changes.
 
 ### Termination and monotonicity
 
-The pass changes signatures inside a loop that runs to a fixed point. Each
-function is rewritten at most once, and a rewritten function is never a
-candidate again, so the pass is monotone and cannot keep the loop alive. That
-must be enforced by state, not inferred from the shape of the output.
+The pass changes signatures inside a loop that runs to a fixed point. It needs
+no "already rewritten" state to terminate: a rewritten function returns a
+tuple, and Phase 1 only admits a variant return, so it can never be a candidate
+again. The candidate set strictly shrinks and the pass cannot keep the loop
+alive.
+
+### Validation is a snapshot; `inline` runs after
+
+Validation sees the call sites that exist when it runs. `nir/inline` runs later
+in the same iteration and can plant new ones — a `let mut t = <block ending in
+a candidate call>` whose local still carries the variant the callee no longer
+returns. The signature is already committed by then, so this is invalid Wasm,
+not a missed optimization, and it is the reason the pass is staged off today
+(`serde_json_synth_variant.wado`).
+
+Two ways out, to be decided with measurements: place the pass _after_
+`nir/inline` in the iteration, so a site inline plants is validated on the next
+round before anything is committed; or make the call-site rewrite total —
+retype any `let` bound from a rewritten callee wherever it appears, rather than
+only the shapes validation admitted.
 
 ### `?` re-padding is free
 
@@ -321,31 +370,31 @@ variant type" is needed — which is what the tail-call rule already requires.
 
 Each step lands and is measured before the next.
 
--
-  1. [ ] The pass behind a flag, disabled by default. Instrument it and compare
-         its candidate set against the WIR pass's, per program. Gate: it reaches
-         the counts in the table above, or every gap is named.
--
-  2. [ ] Lift the `is_trait_method` gate and the arity cap in
-         `multi_value_return`, on their own. Gate: `mise run report-wasm-size` and
-         `mise run benchmark-all` do not regress. Independently valuable and
-         independently revertible.
--
-  3. [ ] Enable the pass, with `wir_optimize::sroa_variant_returns` still
-         running behind it. It should find nothing left to do on rewritten
-         functions — any function it still widens is one the NIR pass missed, and
-         that list is the worklist.
--
-  4. [ ] Retire `widen.rs`, `return_temp.rs`, and most of `wrapper.rs`; shrink
-         `layout.rs`. Gate: widened-function counts held, size and throughput not
-         regressed. If the WIR side does not shrink, keep it and stop here — a NIR
-         rewrite that duplicates a WIR rediscovery is worse than either alone.
--
-  5. [ ] `slot_flatten`, measured separately. Its job — splitting a `ref W`
-         result slot whose `W` is itself a small variant — has a NIR analogue:
-         applying the slot rule recursively to a tuple slot. Whether that is worth
-         doing, or whether the WIR pass should keep it, is a question for after
-         step 4's measurements.
+- [ ] Step 1 — the pass behind a flag, off by default
+      (`WADO_NIR_VARIANT_RETURN=1`). Instrument it and compare its candidate set
+      against the WIR pass's, per program. Gate: it reaches the counts in the
+      table above, or every gap is named. Blocked on the two shapes in the
+      module docs' "Not yet handled": the `inline`-plants-a-site race above, and
+      a `LabeledBlock` return value arriving via `break L: v`, rejected outright
+      for now.
+- [x] Step 2 — lift the `is_trait_method` gate and the arity cap in
+      `multi_value_return`, on their own. Landed: full E2E green, wasm size
+      neutral to -0.06%. `i128^Mul::mul` and its siblings now return
+      `[u64, i64]` instead of allocating an `i128` struct per operation.
+- [ ] Step 3 — enable the pass, with `wir_optimize::sroa_variant_returns` still
+      running behind it. It should find nothing left to do on rewritten
+      functions; any function it still widens is one the NIR pass missed, and
+      that list is the worklist.
+- [ ] Step 4 — retire `widen.rs`, `return_temp.rs`, and most of `wrapper.rs`;
+      shrink `layout.rs`. Gate: widened-function counts held, size and
+      throughput not regressed. If the WIR side does not shrink, keep it and
+      stop here — a NIR rewrite that duplicates a WIR rediscovery is worse than
+      either alone.
+- [ ] Step 5 — `slot_flatten`, measured separately. Its job (splitting a `ref W`
+      result slot whose `W` is itself a small variant) has a NIR analogue:
+      applying the slot rule recursively to a tuple slot. Whether that is worth
+      doing, or whether the WIR pass should keep it, is a question for after
+      step 4's measurements.
 
 ## Alternative considered: `ReturnAbi::Variant`
 

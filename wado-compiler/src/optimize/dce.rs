@@ -2010,11 +2010,26 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
                 || reachable_struct_id(&rendered, &s.module_source)
         }
     });
+    // `Option`'s declaration outlives its uses: `optimize::sroa_variant_return`
+    // mints `Option<T>` slots for a scalarized variant return *after* the early
+    // DCE run, and a dropped declaration can never be resurrected —
+    // `wir_build::register_mono_variants` needs it to register the instance.
+    // Keeping the declaration costs nothing: WIR registers instances, not
+    // declarations.
+    let option_decl = project
+        .type_table
+        .borrow()
+        .compiler_items()
+        .variant_module(crate::compiler_item::CompilerItem::Option)
+        .cloned();
     project.variants.retain(|v| {
         analysis
             .variant_exact
             .contains(&(v.name.clone(), v.module_source.clone()))
             || analysis.generic_instance_names.contains(v.name.as_str())
+            || option_decl
+                .as_ref()
+                .is_some_and(|ms| v.name == "Option" && v.module_source == *ms)
     });
     project.enums.retain(|e| {
         analysis

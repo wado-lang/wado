@@ -104,6 +104,7 @@ mod scalar_forward;
 mod select_lowering;
 mod sroa;
 mod sroa_param;
+mod sroa_variant_return;
 mod store_load_forward;
 mod string_push;
 mod tmpl_hoist;
@@ -129,6 +130,7 @@ use match_to_switch::{match_to_switch_all, match_to_switch_globals};
 use scalar_forward::forward_scalar_temps;
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
+use sroa_variant_return::scalarize_variant_returns;
 use store_load_forward::forward_stores_to_loads_all;
 use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
@@ -689,6 +691,13 @@ fn run_optimization_passes(
         // scalar through call chains. NIR analog of WIR's `sroa_param`; see
         // `optimize/sroa_param.rs`.
         gated!("nir/sroa_param", sroa_single_field_parameters);
+        // Variant returns become tuple returns: `Result<T, E>` -> `[tag, slots]`.
+        // Runs beside `sroa_param` and before `nir/inline` for the same reason —
+        // the inliner, and every value pass after it, then sees an integer tag
+        // and plain locals where a boxed variant used to be opaque. The Wasm ABI
+        // is left to `multi_value_return`, which already flattens a destructured
+        // tuple return.
+        gated!("nir/sroa_variant_return", scalarize_variant_returns);
         // `inline` self-reports the callers it modified to the gate (no
         // `bump_all`); it only mutates caller bodies, so the gated passes need
         // re-examine just those (and their neighbours).
