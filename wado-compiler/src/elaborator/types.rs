@@ -569,15 +569,6 @@ pub enum TypeError {
     /// `impl Trait for Type;` requested synthesis of a trait the compiler
     /// cannot generate. Only `From`, `Serialize`, `Deserialize`, `Eq`, and
     /// `Ord` are synthesizable through the bodyless-impl form.
-    /// `impl Eq`/`impl Ord` written by hand for a flags type. Its comparison is
-    /// the bitmask compare the operators emit directly, so the body is
-    /// unreachable.
-    ComparisonImplOnFlags {
-        trait_name: String,
-        type_name: String,
-        span: Span,
-    },
-
     UnsupportedSynthesisTrait {
         trait_name: String,
         type_name: String,
@@ -1272,20 +1263,6 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!("pattern mismatch: expected '{expected}', found '{found}'"),
-                *span,
-            ),
-            TypeError::ComparisonImplOnFlags {
-                trait_name,
-                type_name,
-                span,
-            } => (
-                Code::TypeMismatch,
-                format!(
-                    "cannot implement `{trait_name}` for the flags type `{type_name}`: a flags \
-                     value compares by its bits, and `==` / `<` compare them directly instead of \
-                     calling the trait, so this body would never run; drop the impl and rely on \
-                     the derived bit comparison"
-                ),
                 *span,
             ),
             TypeError::UnsupportedSynthesisTrait {

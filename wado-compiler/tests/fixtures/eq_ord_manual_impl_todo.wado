@@ -1,0 +1,157 @@
+// A hand-written `impl Eq` / `impl Ord` must win over the derived comparison
+// for every type kind — including the three whose values erase to a scalar
+// before the comparison is emitted: `enum` (to its discriminant), `flags` (to
+// its bitmask), and a newtype (to its base). A newtype in particular exists to
+// be a distinct type, so it must be able to compare differently from its base.
+//
+// Each impl below answers "always equal" / "always Equal", which no derived
+// comparison would, so a test asserting that answer distinguishes the two. The
+// `#[TODO]` blocks are the sites that still take the derived comparison; the
+// plain ones pin the sites that already dispatch, so a fix cannot silently
+// regress them.
+
+enum Color {
+    Red,
+    Green,
+}
+
+impl Eq for Color {
+    fn eq(&self, _other: &Color) -> bool {
+        return true;
+    }
+}
+
+enum Rank {
+    Low,
+    High,
+}
+
+impl Ord for Rank {
+    fn cmp(&self, _other: &Rank) -> Ordering {
+        return Ordering::Equal;
+    }
+}
+
+flags Perms {
+    can_read,
+    can_write,
+}
+
+impl Eq for Perms {
+    fn eq(&self, _other: &Perms) -> bool {
+        return true;
+    }
+}
+
+flags Modes {
+    quiet,
+    loud,
+}
+
+impl Ord for Modes {
+    fn cmp(&self, _other: &Modes) -> Ordering {
+        return Ordering::Equal;
+    }
+}
+
+type Meters = f64;
+
+impl Eq for Meters {
+    fn eq(&self, _other: &Meters) -> bool {
+        return true;
+    }
+}
+
+fn eq_operator<T: Eq>(a: T, b: T) -> bool {
+    return a == b;
+}
+
+fn eq_method<T: Eq>(a: &T, b: &T) -> bool {
+    return a.eq(b);
+}
+
+fn lt_operator<T: Ord>(a: T, b: T) -> bool {
+    return a < b;
+}
+
+// --- Already dispatching: pin them so a fix cannot regress them. ---
+
+test "a direct method call takes the enum's impl" {
+    assert Color::Red.eq(&Color::Green);
+}
+
+test "a direct method call takes the flags impl" {
+    assert Perms::can_read.eq(&Perms::can_write);
+}
+
+test "a direct method call takes the newtype's impl" {
+    assert (1.0 as Meters).eq(&(2.0 as Meters));
+}
+
+test "an Eq bound's operator takes the enum's impl" {
+    assert eq_operator(Color::Red, Color::Green);
+}
+
+test "an Eq bound's method call takes the enum's impl" {
+    assert eq_method(&Color::Red, &Color::Green);
+}
+
+test "an Ord bound's operator takes the enum's impl" {
+    assert !lt_operator(Rank::Low, Rank::High);
+}
+
+test "an Ord bound's operator takes the flags impl" {
+    assert !lt_operator(Modes::quiet, Modes::loud);
+}
+
+// --- Still taking the derived comparison. ---
+
+#[TODO]
+test "the operator should take the enum's Eq impl" {
+    assert Color::Red == Color::Green;
+}
+
+#[TODO]
+test "the operator should take the enum's Ord impl" {
+    assert !(Rank::Low < Rank::High);
+}
+
+#[TODO]
+test "the operator should take the flags Eq impl" {
+    assert Perms::can_read == Perms::can_write;
+}
+
+#[TODO]
+test "the operator should take the flags Ord impl" {
+    assert !(Modes::quiet < Modes::loud);
+}
+
+#[TODO]
+test "an Eq bound's operator should take the flags impl" {
+    assert eq_operator(Perms::can_read, Perms::can_write);
+}
+
+#[TODO]
+test "an Eq bound's method call should take the flags impl" {
+    assert eq_method(&Perms::can_read, &Perms::can_write);
+}
+
+#[TODO]
+test "the operator should take the newtype's Eq impl" {
+    let a: Meters = 1.0 as Meters;
+    let b: Meters = 2.0 as Meters;
+    assert a == b;
+}
+
+#[TODO]
+test "an Eq bound's operator should take the newtype's impl" {
+    assert eq_operator(1.0 as Meters, 2.0 as Meters);
+}
+
+#[TODO]
+test "an Eq bound's method call should take the newtype's impl" {
+    assert eq_method(&(1.0 as Meters), &(2.0 as Meters));
+}
+
+__DATA__
+{"test": {}}

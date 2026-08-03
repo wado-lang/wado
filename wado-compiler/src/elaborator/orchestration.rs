@@ -921,57 +921,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // A flags type's equality and ordering are the bitmask comparison the
-        // compiler emits: `==` and `<` never dispatch through the trait, and the
-        // erased `u32` is what a `T: Eq` bound's generic code compares. A
-        // hand-written body could not be honoured at either site, so reject it
-        // rather than let it sit there being ignored.
-        {
-            let comparison_traits: Vec<String> = [CompilerItem::Eq, CompilerItem::Ord]
-                .into_iter()
-                .filter_map(|item| {
-                    type_table
-                        .borrow()
-                        .compiler_items()
-                        .trait_name_opt(item)
-                        .map(str::to_string)
-                })
-                .collect();
-            let flags_names: crate::hashmap::IndexSet<&str> = modules
-                .iter()
-                .flat_map(|(_, m)| m.items.iter())
-                .filter_map(|it| match it {
-                    Item::Flags(decl) => Some(decl.name.as_str()),
-                    _ => None,
-                })
-                .collect();
-            for (module_source, module) in modules {
-                if !super::trait_env::is_user_local(module_source) {
-                    continue;
-                }
-                for item in &module.items {
-                    if let Item::Impl(impl_block) = item
-                        && !impl_block.methods.is_empty()
-                        && let Some(trait_type) = &impl_block.trait_type
-                        && comparison_traits
-                            .contains(&super::trait_env::get_type_name_static(trait_type))
-                        && flags_names.contains(
-                            super::trait_env::get_type_name_static(&impl_block.ty).as_str(),
-                        )
-                    {
-                        let _ = logger.error_in(
-                            module_source,
-                            TypeError::ComparisonImplOnFlags {
-                                trait_name: super::trait_env::get_type_name_static(trait_type),
-                                type_name: super::trait_env::get_type_name_static(&impl_block.ty),
-                                span: impl_block.span,
-                            },
-                        );
-                    }
-                }
-            }
-        }
-
         // An `impl` method whose parameter count differs from the trait's is
         // never rejected downstream — the call is built to the trait's arity
         // and only fails Wasm validation — so compare the two here, where every
