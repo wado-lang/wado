@@ -650,8 +650,12 @@ impl<'a> Builder<'a> {
             const_eval::Value::Char(c) => self.pool.char(c),
             // The pool models pure scalars; the arithmetic folds feeding this
             // never produce an aggregate or a sequence.
-            const_eval::Value::Aggregate { .. } | const_eval::Value::Seq { .. } => {
-                panic!("an aggregate or sequence constant cannot be interned as a pure value")
+            const_eval::Value::Aggregate { .. }
+            | const_eval::Value::Seq { .. }
+            | const_eval::Value::Variant { .. } => {
+                panic!(
+                    "an aggregate, sequence, or variant constant cannot be interned as a pure value"
+                )
             }
         }
     }

@@ -71,6 +71,14 @@ Value model:
   global, or a compile-time call result. An aggregate leaves the engine only
   where it has a literal shape to be written as; otherwise what reaches the IR
   is the scalars projected out of it.
+- An enum value, which is its discriminant, and a variant value, which is its
+  case plus the payload the case carries. Both construction forms fold and both
+  pattern kinds decide, so an `Option` / `Result` accessor exposed by inlining
+  collapses instead of leaving a residual match, and a policy enum passed to a
+  library helper — serde's `CaseStyle` — is a constant at the call it reaches. An
+  enum constant enters the pool under the enum's own type, which is an `i32` no
+  primitive names, so reading one back out is its own case; a variant has no
+  literal shape and stays inside the engine.
 - A three-state lattice — unevaluated, constant, non-constant — with a join,
   so an unreachable branch contributes nothing to the result and a trapping
   arm does not contaminate a fold.
@@ -166,6 +174,10 @@ Sequences:
   out of a global, whose container the engine recovers from the assignment that
   fills its slot. Only a scalar element reaches the IR; an aggregate one stays
   inside the engine, as every aggregate does.
+- A prefix clone folds: `array_clone_prefix(&src, len)` — what a value copy of a
+  sequence container lowers to — is the source's first `len` elements. Without
+  it, passing a constant `String` by value hands the callee a value the engine
+  cannot see, which is where a derivation's own field reads end up.
 - An element write lands. `array_set` through a `&mut` reaching a place the
   frame owns — a local it bound to a constant, plus the field path into it —
   updates that local's value, so a later read sees what was written. The write
@@ -243,9 +255,6 @@ Regions:
 
 ### Values the engine cannot represent
 
-- Enum and variant values with their payloads. Today an enum or variant
-  pattern cannot be decided, so an `Option` / `Result` accessor exposed by
-  inlining leaves a residual match the engine walks past.
 - A place-valued field, so an aggregate can carry a `&mut`. Today such an
   aggregate is simply not a constant, since a field holding the referent's
   value would take a write meant for the referent. What the field needs to

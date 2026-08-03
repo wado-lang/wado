@@ -276,7 +276,8 @@ impl Interpreter<'_> {
                         | Value::Float { .. }
                         | Value::Char(_)
                         | Value::Aggregate { .. }
-                        | Value::Seq { .. },
+                        | Value::Seq { .. }
+                        | Value::Variant { .. },
                     )
                     | Lattice::NonConst
                     | Lattice::Unevaluated => Flow::Bail,
@@ -437,6 +438,7 @@ impl Interpreter<'_> {
             CtfeBuiltin::ArrayGet
             | CtfeBuiltin::ArrayLen
             | CtfeBuiltin::ArrayNew
+            | CtfeBuiltin::ArrayClonePrefix
             | CtfeBuiltin::Select
             | CtfeBuiltin::I32AsChar => None,
         }

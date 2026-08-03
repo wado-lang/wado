@@ -46,6 +46,17 @@ pub enum Value {
         type_id: TypeId,
         elements: Rc<[Value]>,
     },
+    /// A variant value: which case it holds, and the payload that case carries.
+    ///
+    /// Keyed by case *name*, the identity a pattern spells — a case index would
+    /// have to be resolved through the type table on both sides. A unit case
+    /// carries no payload; a multi-field one carries the aggregate its
+    /// construction site built, so a binding reads it by field index.
+    Variant {
+        type_id: TypeId,
+        case_name: Rc<str>,
+        payload: Option<Rc<Value>>,
+    },
 }
 
 /// Longest literal the engine turns into a [`Value::Seq`]. Building one walks
@@ -198,7 +209,8 @@ impl Value {
             | Self::Float { .. }
             | Self::Bool(_)
             | Self::Char(_)
-            | Self::Aggregate { .. } => None,
+            | Self::Aggregate { .. }
+            | Self::Variant { .. } => None,
         }
     }
 
@@ -206,7 +218,10 @@ impl Value {
     /// and sequences cannot: the pool models scalars only.
     #[must_use]
     pub fn is_scalar(&self) -> bool {
-        !matches!(self, Self::Aggregate { .. } | Self::Seq { .. })
+        !matches!(
+            self,
+            Self::Aggregate { .. } | Self::Seq { .. } | Self::Variant { .. }
+        )
     }
 
     /// Whether one value may stand in for the other — the question a rewrite
@@ -266,7 +281,13 @@ impl Value {
                         .all(|(a, b)| a.denotes_same(b))
             }
             (Self::Int { .. } | Self::Bool(_) | Self::Char(_), _) => self == other,
-            (Self::Float { .. } | Self::Aggregate { .. } | Self::Seq { .. }, _) => false,
+            (
+                Self::Float { .. }
+                | Self::Aggregate { .. }
+                | Self::Seq { .. }
+                | Self::Variant { .. },
+                _,
+            ) => false,
         }
     }
 
@@ -317,9 +338,9 @@ impl Value {
             Self::Float { value, .. } => format_float_repr(*value),
             Self::Bool(b) => b.to_string(),
             Self::Char(c) => format_char_repr(*c),
-            Self::Aggregate { .. } | Self::Seq { .. } => {
+            Self::Aggregate { .. } | Self::Seq { .. } | Self::Variant { .. } => {
                 panic!(
-                    "an aggregate or sequence value has no NIR literal repr; neither enters the value pool"
+                    "an aggregate, sequence, or variant value has no NIR literal repr; none enters the value pool"
                 )
             }
         }
@@ -392,7 +413,11 @@ pub(crate) fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
                     prim,
                 })
             }
-            Value::Bool(_) | Value::Char(_) | Value::Aggregate { .. } | Value::Seq { .. } => None,
+            Value::Bool(_)
+            | Value::Char(_)
+            | Value::Aggregate { .. }
+            | Value::Seq { .. }
+            | Value::Variant { .. } => None,
         },
         NirUnaryOp::Not => match operand {
             Value::Bool(b) => Some(Value::Bool(!b)),

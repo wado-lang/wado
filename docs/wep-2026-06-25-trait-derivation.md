@@ -303,13 +303,13 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
 
 ### Relationship and prerequisites
 
-Ships directly against the existing bespoke synthesizers
-(`synthesis::serde_synth`, `synthesis::traits`), not against
-[`ReflectStruct`](./wep-2026-06-13-reflect-derivation.md), which remains unbuilt.
-The original plan was to land this after migrating serde onto a
-`ReflectStruct`-based impl, but the two turned out independent — this WEP only
-changes _when_ a request is created, not _how_ the body is written. A future
-`ReflectStruct`-based rewrite can land later against the same plumbing.
+Shipped against the bespoke synthesizers (`synthesis::serde_synth`,
+`synthesis::traits`), independently of
+[`ReflectStruct`](./wep-2026-06-13-reflect-derivation.md): this WEP only changes
+_when_ a request is created, not _how_ the body is written. The reflection-based
+rewrite then landed on top of the same plumbing — a demand request now selects a
+`Reflect*` blanket instead of emitting a per-type body, for every derivation
+except the struct deserializer.
 
 ## Alternatives Considered
 

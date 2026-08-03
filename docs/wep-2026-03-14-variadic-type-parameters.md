@@ -416,7 +416,13 @@ where T: ReflectStruct<FieldTypes = [..F]>
 - [ ] The `[for let v of tuple { expr }]` / `[for let [i, v] of tuple.enumerate() { expr }]`
       construction form: unparsed. Until it lands, a build derivation needing the
       member handle or index per element routes the work through a pack map
-      (`[..F::method(args)]`) over a pre-ordered cursor
+      (`[..F::method(args)]`) over a pre-ordered cursor. What waits on it:
+      [the struct build direction over a streaming format](./wep-2026-06-13-reflect-derivation.md#building-a-struct-from-a-streaming-format)
+- [ ] `.enumerate()` over a variadic `for-of`. The concrete-tuple form expands
+      it; the deferred (`VariadicForOf`) one rejects it outright
+- [ ] The `.enumerate()` index as a tuple subscript. It is a compile-time
+      constant by construction, but `slots[i]` is rejected as a non-constant
+      index
 - [x] Variadic `for let v of`: deferred expansion via `VariadicForOf` TIR node, expanded
       by the monomorphizer after type substitution resolves packs to concrete tuples
 - [x] Variadic trait bounds: `..T: Trait` checked via `type_param_bounds`; `TypePack`

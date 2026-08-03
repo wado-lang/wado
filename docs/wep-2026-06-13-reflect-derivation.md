@@ -124,10 +124,15 @@ internal trait Member {
 }
 
 struct StructField<T, F> { … }  // Member + index() has_default() is_secret() validate() get(&self, v: &T) -> F
-struct VariantCase<T, P> { … }  // Member + discriminant() is_unit() validate() holds(&v) extract(&v) -> P construct(P) -> T
+struct VariantCase<T, P> { … }  // Member + discriminant() is_unit() validate() holds(&v) extract(&v) -> P construct(P) -> T make() -> T
 struct EnumCase<T>       { … }  // Member + discriminant() holds(&v) make() -> T
 struct FlagsBit<T>        { … }  // Member + bit() is_set(&v) set() -> T
 ```
+
+`VariantCase::make()` builds a unit case, which `construct` cannot serve: a
+derivation walking the case members writes one body per case, and
+`construct(())` type-checks only where the payload is `()`. It traps on a case
+that is not unit, like every other value bridge over a mismatched member.
 
 Members are sealed to these four stdlib types and minted only by `members()`
 (their fields are private), so a program cannot forge one. `validate()` is only on
@@ -143,6 +148,67 @@ Reflection stops at these four handles: they are themselves generic structs, and
 a handle's own `Members` would mention `StructField<Self, …>`, growing `Self`
 without bound. They are not reflectable, by the same seal that rejects a user
 `impl`.
+
+## Building a struct from a streaming format
+
+A struct's build direction is `from_fields`, which takes the field values in
+declaration order — but a self-describing format delivers them in wire order,
+and a pack map (`[..F::method(args)]`) applies one expression per element with
+no per-element context beyond a mutable cursor. Neither side can reorder alone,
+so the derivation holds the values: a slot tuple `[..Option<F>]`, written by the
+wire loop at the index the format reports and read back in declaration order.
+
+```wado
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Deserialize> Deserialize for T {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<T, DeserializeError> {
+        let members = ReflectStruct::<T>::members();
+        let mut sd = d.begin_struct(&ReflectStruct::<T>::type_name(), members.len())?;
+        let mut slots = [..F::empty_slot()];              // [..Option<F>]
+        while let Some(index) = sd.next_field::<T>()? {
+            let mut taken = false;
+            for let [i, _] of slots.enumerate() {
+                if i == index {
+                    slots[i] = Option::Some(sd.value()?);
+                    taken = true;
+                }
+            }
+            if !taken {
+                sd.skip()?;
+            }
+        }
+        sd.end()?;
+        return Result::Ok(ReflectStruct::<T>::from_fields(
+            [for let [i, slot] of slots.enumerate() { resolve_field(slot, &members[i])? }],
+        ));
+    }
+}
+```
+
+`resolve_field` is ordinary library code: the slot's value where the wire
+carried one, else the field's declared default, else a `MissingField` error
+naming it.
+
+The wire protocol is unchanged — `next_field` over `FieldSchema`, one streaming
+pass — so no format implementation moves. Four things the language and the
+reflection API do not have yet are what it waits on:
+
+- `.enumerate()` over a variadic (pack-typed) `for-of`. The concrete-tuple form
+  exists; the deferred one rejects it.
+- The `[for let [i, v] of tuple.enumerate() { expr }]` collection form
+  (WEP 2026-03-14 §8b), which assembles `[..F]` out of `[..Option<F>]`. A pack
+  map cannot: it applies one expression to every element, with no index to pair
+  a slot with its member.
+- The `.enumerate()` index usable as a tuple subscript. It is a compile-time
+  constant by construction, but `slots[i]` is rejected today.
+- `StructField::default_value() -> Option<F>`, exposing a field's declared
+  default (`f: T = expr`) to a build derivation. It lowers to an index-keyed
+  bridge, as `get` does.
+
+The alternative — a `DeserializeStruct` serving fields in declaration order —
+moves the reordering into every format (JSON, CBOR, NSD, `core:args`), each
+buffering the whole object before the first field can be read. Rejected: it
+charges every format for what one derivation needs, and the single streaming
+pass is what the protocol is for.
 
 ## Visibility
 

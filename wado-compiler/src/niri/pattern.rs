@@ -123,8 +123,62 @@ impl Interpreter<'_> {
                     .map(|(i, p)| (u32::try_from(i).expect("tuple arity fits u32"), *p)),
                 binds,
             ),
-            PatKind::Tuple(_, _) | PatKind::Variant { .. } | PatKind::Enum { .. } => {
-                PatternMatch::Unknown
+            // An enum value is its discriminant, so the case the pattern names
+            // decides the arm outright.
+            PatKind::Enum { case_index, .. } => match value {
+                Value::Int { value: v, .. } => bool_to_match(*v == u64::from(*case_index)),
+                _ => PatternMatch::Unknown,
+            },
+            PatKind::Variant {
+                variant_name,
+                bindings,
+                ..
+            } => self.variant_matches(body, value, variant_name, bindings, binds),
+            PatKind::Tuple(_, _) => PatternMatch::Unknown,
+        }
+    }
+
+    /// Whether a variant value holds the case `variant_name` spells, binding
+    /// what its sub-patterns name.
+    ///
+    /// A payload the value does not carry where the pattern binds one is
+    /// `Unknown`, not `No`: the case matched, and committing the arm without
+    /// its bindings would drop what the body reads.
+    fn variant_matches(
+        &self,
+        body: &Body,
+        value: &Value,
+        variant_name: &str,
+        bindings: &[PatId],
+        binds: &mut PatBindings,
+    ) -> PatternMatch {
+        let Value::Variant {
+            case_name, payload, ..
+        } = value
+        else {
+            return PatternMatch::Unknown;
+        };
+        if &**case_name != variant_name {
+            return PatternMatch::No;
+        }
+        match bindings {
+            [] => PatternMatch::Yes,
+            [only] => match payload {
+                Some(p) => self.pattern_matches(body, p, *only, binds),
+                None => PatternMatch::Unknown,
+            },
+            many => {
+                let Some(payload) = payload else {
+                    return PatternMatch::Unknown;
+                };
+                self.all_fields_match(
+                    body,
+                    payload,
+                    many.iter()
+                        .enumerate()
+                        .map(|(i, p)| (u32::try_from(i).expect("payload arity fits u32"), *p)),
+                    binds,
+                )
             }
         }
     }
