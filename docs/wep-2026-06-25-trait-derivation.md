@@ -151,6 +151,12 @@ instead requires every field to carry a default expression). On failure, the
 error reason-chains from the bound site to the offending field/case
 ([Diagnostic Reason Chains](./wep-2026-06-02-diagnostic-reason-chains.md)).
 
+A plain `enum` and a `flags` type carry no members to recurse into, so both
+satisfy every structural obligation outright: `Eq` / `Ord` compare the
+discriminant and the bitmask respectively. Their bodies are generated the same
+way, which is what keeps a struct or variant carrying one from losing its own
+derive.
+
 A marker for any of the structurally-checkable traits (`Eq` / `Ord` /
 `Default` / `Serialize` / `Deserialize`) validates `T` at its own span and is
 a hard compile error if ineligible, then records the request exactly as a bare

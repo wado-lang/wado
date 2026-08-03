@@ -1,0 +1,77 @@
+// A derivation whose trait method carries its own type parameter — the
+// `Serialize::serialize<S: Serializer>` shape (WEP 2026-06-13). The blanket is
+// selected by the receiver's `ReflectStruct` bound while `S` is chosen at the
+// call site, so the instance is keyed by both the field-type pack and the
+// method type argument.
+
+trait Sink {
+    fn put(&mut self, s: &String);
+}
+
+struct Buf {
+    out: String,
+}
+
+impl Sink for Buf {
+    fn put(&mut self, s: &String) {
+        self.out = `${self.out}${s}`;
+    }
+}
+
+trait Emit {
+    fn emit<S: Sink>(&self, s: &mut S);
+}
+
+impl Emit for i32 {
+    fn emit<S: Sink>(&self, s: &mut S) {
+        s.put(&`${self}`);
+    }
+}
+
+impl Emit for bool {
+    fn emit<S: Sink>(&self, s: &mut S) {
+        s.put(&`${self}`);
+    }
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Emit> Emit for T {
+    fn emit<S: Sink>(&self, s: &mut S) {
+        s.put(&ReflectStruct::<T>::type_name());
+        s.put(&"(");
+        for let f of ReflectStruct::<T>::members() {
+            f.get(self).emit::<S>(s);
+            s.put(&",");
+        }
+        s.put(&")");
+    }
+}
+
+struct Point {
+    x: i32,
+    on: bool,
+}
+
+struct Nested {
+    p: Point,
+    n: i32,
+}
+
+test "a method type parameter survives blanket dispatch" {
+    let mut b = Buf { out: "" };
+    let p = Point { x: 1, on: true };
+    p.emit::<Buf>(&mut b);
+    assert b.out == "Point(1,true,)";
+}
+
+test "the nested derivation reuses the same method type argument" {
+    let mut b = Buf { out: "" };
+    let n = Nested {
+        p: Point { x: 2, on: false },
+        n: 3,
+    };
+    n.emit::<Buf>(&mut b);
+    assert b.out == "Nested(Point(2,false,),3,)";
+}
+
+__DATA__
+{"test": {}}

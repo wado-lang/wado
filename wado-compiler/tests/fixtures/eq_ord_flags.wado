@@ -1,0 +1,51 @@
+// A flags value is a bitmask, so `Eq` / `Ord` derive over its raw bits — the
+// same footing a plain `enum` has over its discriminant. Without the derive a
+// flags type satisfies no `T: Eq` bound, so any struct or variant carrying one
+// loses its own derive too.
+
+flags Perms {
+    can_read,
+    can_write,
+}
+
+struct Grant {
+    who: String,
+    perms: Perms,
+}
+
+variant Rule {
+    Allow(Perms),
+    Deny(Perms),
+}
+
+test "a flags type compares by its bits" {
+    assert Perms::can_read == Perms::can_read;
+    assert Perms::can_read != Perms::can_write;
+    assert Perms::can_read < Perms::can_write;
+
+    let both = Perms::can_read | Perms::can_write;
+    assert both > Perms::can_write;
+}
+
+test "a struct carrying flags keeps its own derive" {
+    assert Grant { who: "a", perms: Perms::can_read } == Grant { who: "a", perms: Perms::can_read };
+    assert Grant { who: "a", perms: Perms::can_read } != Grant { who: "a", perms: Perms::can_write };
+    assert Grant { who: "a", perms: Perms::can_read } < Grant { who: "b", perms: Perms::can_read };
+}
+
+test "a variant carrying flags keeps its own derive" {
+    assert Rule::Allow(Perms::can_read) == Rule::Allow(Perms::can_read);
+    assert Rule::Allow(Perms::can_read) != Rule::Allow(Perms::can_write);
+    assert Rule::Allow(Perms::can_read) != Rule::Deny(Perms::can_read);
+}
+
+test "flags order by bit value" {
+    let none = Perms::none();
+    let all = Perms::all();
+    assert none < all;
+    assert all >= all;
+    assert Perms::can_write > Perms::can_read;
+}
+
+__DATA__
+{"test": {}}

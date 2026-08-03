@@ -928,13 +928,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             )
                             .type_id;
                     }
+                    if let Some(return_type) =
+                        self.resolve_variant_blanket_static(prefix, suffix, call.id, call.span)
+                    {
+                        return return_type;
+                    }
                     let _ = self.emit(TypeError::UnknownFunction {
                         name: format!("{prefix}::{suffix}"),
                         span: call.span,
                     });
                     return TypeTable::ERROR;
                 } else {
-                    // Unknown case name
+                    // Not a case name: a `ReflectVariant` blanket carries the
+                    // variant's static trait methods under its own receiver
+                    // param, so `prefix`'s bucket never sees them.
+                    if let Some(return_type) =
+                        self.resolve_variant_blanket_static(prefix, suffix, call.id, call.span)
+                    {
+                        return return_type;
+                    }
                     let _ = self.emit(TypeError::UnknownFunction {
                         name: format!("{prefix}::{suffix}"),
                         span: call.span,
@@ -2546,6 +2558,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|&pt| self.substitute_type_params(pt, type_args))
             .collect()
+    }
+
+    /// `Variant::method()` reaching a value blanket's static — the variant-case
+    /// branch owns the `Variant::Name` shape, so a static that is not a case
+    /// name has to be offered the blanket resolver here rather than falling
+    /// through to the known-type branch below it.
+    fn resolve_variant_blanket_static(
+        &mut self,
+        variant_name: &str,
+        method: &str,
+        call_id: crate::AstId,
+        span: crate::Span,
+    ) -> Option<TypeId> {
+        let receiver_ty = self.resolve_named_type(variant_name, span, false);
+        self.resolve_blanket_static_method(receiver_ty, method, call_id, &[], &[])
     }
 }
 

@@ -1,0 +1,52 @@
+// `?` on an `Option<T>` inside a function returning `Option<U>`: the propagated
+// `None` belongs to the enclosing function's `Option`, not the operand's. The
+// two are distinct GC types, so building the operand's emits a struct the
+// return type does not accept.
+
+struct Sh {
+    v: i32,
+}
+
+variant Shape {
+    Circle(i32),
+}
+
+fn inner(n: i32) -> Option<i32> {
+    if n < 0 {
+        return Option::None;
+    }
+    return Option::Some(n);
+}
+
+fn to_struct(n: i32) -> Option<Sh> {
+    let v = inner(n)?;
+    return Option::Some(Sh { v: v });
+}
+
+fn to_variant(n: i32) -> Option<Shape> {
+    let v = inner(n)?;
+    return Option::Some(Shape::Circle(v));
+}
+
+fn to_string(n: i32) -> Option<String> {
+    let v = inner(n)?;
+    return Option::Some(`${v}`);
+}
+
+test "the payload type widens to a struct" {
+    assert to_struct(3) == Option::Some(Sh { v: 3 });
+    assert to_struct(-1) == Option::None;
+}
+
+test "the payload type widens to a variant" {
+    assert to_variant(3) == Option::Some(Shape::Circle(3));
+    assert to_variant(-1) == Option::None;
+}
+
+test "the payload type widens to a String" {
+    assert to_string(3) == Option::Some("3");
+    assert to_string(-1) == Option::None;
+}
+
+__DATA__
+{"test": {}}

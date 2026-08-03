@@ -1035,7 +1035,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(MonomorphInfo {
                 generic_name,
                 impl_type_args: vec![base_type_id],
-                method_type_args: vec![],
+                method_type_args: method_type_args.clone(),
                 is_blanket: true,
             })
         } else if receiver_type_args.is_some() || !method_type_args.is_empty() {
@@ -2336,14 +2336,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .flat_map(|(trait_name, impls)| impls.iter().map(move |b| (trait_name, b)))
             .filter(|(_, b)| b.receiver == super::trait_env::BlanketReceiver::Value)
-            // Reading the impl header instead would also match an instance
-            // method of the same name.
+            // The index is keyed by the receiver *param*, which several blankets
+            // in one module share (`impl<T: …> Serialize for T` beside
+            // `impl<T: …> Deserialize for T`). An entry therefore only speaks
+            // for this blanket when the method it names is one this impl block
+            // declares — matching on the name alone hands `T::deserialize` to
+            // whichever blanket was registered first. Reading the impl header
+            // alone would instead also match an instance method of that name,
+            // so both indices are consulted.
             .filter(|(_, b)| {
+                let Some(header) = self
+                    .tysys
+                    .trait_env
+                    .impl_headers
+                    .get(&(b.module.clone(), b.ast_id))
+                else {
+                    return false;
+                };
                 self.tysys
                     .trait_env
                     .static_method_index
                     .get(&(b.module.clone(), b.param.clone()))
-                    .is_some_and(|entries| entries.iter().any(|e| e.name == method_name))
+                    .is_some_and(|entries| {
+                        entries.iter().any(|e| {
+                            e.name == method_name
+                                && header.methods.iter().any(|m| m.ast_id == e.method_id)
+                        })
+                    })
             })
             .map(|(trait_name, b)| {
                 (

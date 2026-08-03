@@ -876,13 +876,9 @@ impl TypeSystem {
         };
         match resolved {
             ResolvedType::Enum { .. } => Some(true),
-            ResolvedType::Flags { .. } => {
-                if tr.is_serde() {
-                    Some(true)
-                } else {
-                    None
-                }
-            }
+            // A flags value is a bitmask, so every structural derive holds
+            // memberlessly — the same footing as a plain `enum`.
+            ResolvedType::Flags { .. } => Some(true),
             ResolvedType::Struct {
                 decl_name: name,
                 module_source,
