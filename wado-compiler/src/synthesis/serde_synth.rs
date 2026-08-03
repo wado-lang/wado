@@ -410,13 +410,6 @@ pub fn synthesize_serde(project: &mut Package) {
                     if existing.contains(&key) {
                         continue;
                     }
-                    let func = generate_struct_serialize(module, req, &names)
-                        .or_else(|| generate_enum_serialize(module, req, &names))
-                        .or_else(|| generate_variant_serialize(module, req, &names))
-                        .or_else(|| generate_flags_serialize(module, req, &names));
-                    if let Some(f) = func {
-                        generated.push(Rc::new(RefCell::new(f)));
-                    }
                 }
                 SynthTrait::Deserialize => {
                     let key = MethodName::format_local(
@@ -433,13 +426,6 @@ pub fn synthesize_serde(project: &mut Package) {
                         generated.push(Rc::new(RefCell::new(lookup_func)));
                         generated.push(Rc::new(RefCell::new(positional_at_func)));
                         generated.push(Rc::new(RefCell::new(deser_func)));
-                    } else {
-                        let func = generate_enum_deserialize(module, req, &names)
-                            .or_else(|| generate_variant_deserialize(module, req, &names))
-                            .or_else(|| generate_flags_deserialize(module, req, &names));
-                        if let Some(f) = func {
-                            generated.push(Rc::new(RefCell::new(f)));
-                        }
                     }
                 }
                 // `From` requests are drained by `from_synth`, which runs

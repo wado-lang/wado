@@ -1,0 +1,45 @@
+// `&()` is stackless: it has no Wasm representation, so a local or parameter
+// holding one is dropped. Every side of that rule must agree — a read of such a
+// local used to emit a `local.get` for a local the declaration side had already
+// dropped.
+
+fn take_ref<T>(v: &T) -> i32 {
+    return 2;
+}
+
+fn take_unit_ref(v: &()) -> i32 {
+    return 3;
+}
+
+trait Tag {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for () {
+    fn tag(&self) -> i32 {
+        return 4;
+    }
+}
+
+fn tag_of<T: Tag>(v: &T) -> i32 {
+    return v.tag();
+}
+
+test "a reference to a unit literal reaches a generic function" {
+    assert take_ref(&()) == 2;
+    assert take_unit_ref(&()) == 3;
+}
+
+test "a reference to a unit local reaches a generic function" {
+    let u = ();
+    assert take_ref(&u) == 2;
+    assert take_unit_ref(&u) == 3;
+}
+
+test "() satisfies a trait bound through its own impl" {
+    assert tag_of(&()) == 4;
+    assert ().tag() == 4;
+}
+
+__DATA__
+{"test": {}}

@@ -576,6 +576,15 @@ impl Serialize for String {
     }
 }
 
+/// A unit variant case carries `()` as its payload, so the derived variant
+/// serialization needs `(): Serialize` to satisfy its payload-pack bound. The
+/// value never reaches the wire — a unit case serializes as a bare tag.
+impl Serialize for () {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_null();
+    }
+}
+
 impl<T: Serialize> Serialize for Option<T> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         if let Some(v) = self {
@@ -821,6 +830,93 @@ impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
     }
 }
 
+// ── Derivations over the reflection API (WEP 2026-06-13) ──
+
+/// Struct serialization derived over `ReflectStruct`: walk the field members,
+/// writing each field under its resolved wire name.
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Serialize> Serialize for T {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let members = ReflectStruct::<T>::members();
+        let policy = ReflectStruct::<T>::wire_name_policy();
+        let mut st = s.begin_struct(&ReflectStruct::<T>::type_name(), members.len())?;
+        for let f of members {
+            let name = wire_name(&f, policy);
+            let value = f.get(self);
+            st.field(&name, &value)?;
+        }
+        return st.end();
+    }
+}
+
+/// Variant serialization derived over `ReflectVariant`: find the live case and
+/// write it as a unit tag, or as a tagged payload.
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Serialize> Serialize for V {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let policy = ReflectVariant::<V>::wire_name_policy();
+        let type_name = ReflectVariant::<V>::type_name();
+        for let case of ReflectVariant::<V>::members() {
+            if case.holds(self) {
+                let name = wire_name(&case, policy);
+                if case.is_unit() {
+                    return s.serialize_unit_variant(&type_name, &name, case.discriminant());
+                }
+                let mut var = s.begin_variant(&type_name, &name, case.discriminant())?;
+                let payload = case.extract(self);
+                var.payload(&payload)?;
+                return var.end();
+            }
+        }
+        return Result::Err(SerializeError {
+            kind: SerializeErrorKind::UnsupportedValue,
+            message: `unknown case of ${type_name}`,
+        });
+    }
+}
+
+/// Enum serialization derived over `ReflectEnum`: the live case as a unit tag.
+impl<E: ReflectEnum<Members = [..M]>, ..M> Serialize for E {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let policy = ReflectEnum::<E>::wire_name_policy();
+        for let case of ReflectEnum::<E>::members() {
+            if case.holds(self) {
+                let name = wire_name(&case, policy);
+                return s.serialize_unit_variant(
+                    &ReflectEnum::<E>::type_name(),
+                    &name,
+                    case.discriminant(),
+                );
+            }
+        }
+        return Result::Err(SerializeError {
+            kind: SerializeErrorKind::UnsupportedValue,
+            message: `unknown discriminant of ${ReflectEnum::<E>::type_name()}`,
+        });
+    }
+}
+
+/// Flags serialization derived over `ReflectFlags`: the set bits as an array of
+/// their wire names.
+impl<L: ReflectFlags<Members = [..M]>, ..M> Serialize for L {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let policy = ReflectFlags::<L>::wire_name_policy();
+        let members = ReflectFlags::<L>::members();
+        let mut count = 0;
+        for let bit of members {
+            if bit.is_set(self) {
+                count += 1;
+            }
+        }
+        let mut seq = s.begin_seq(count)?;
+        for let bit of members {
+            if bit.is_set(self) {
+                let name = wire_name(&bit, policy);
+                seq.element(&name)?;
+            }
+        }
+        return seq.end();
+    }
+}
+
 /// Serialize for tuples: `[1, "hello", true]` → `[1,"hello",true]`
 impl<..T: Serialize> Serialize for [..T] {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
@@ -829,6 +925,129 @@ impl<..T: Serialize> Serialize for [..T] {
             seq.element(v)?;
         }
         return seq.end();
+    }
+}
+
+/// The case a variant / enum deserialization landed on: by discriminant when
+/// the format carries one (NSD), else by wire name (SD).
+variant CaseKey {
+    Disc(i32),
+    Name(String),
+}
+
+/// Read the incoming case key: the discriminant path first, the name path as
+/// the fallback.
+fn case_key<A: DeserializeVariant>(va: &mut A) -> Result<CaseKey, DeserializeError> {
+    if let Ok(disc) = va.disc() {
+        return Result::Ok(CaseKey::Disc(disc));
+    }
+    let name = va.variant_name()?;
+    return Result::Ok(CaseKey::Name(name));
+}
+
+/// Whether `m` is the case `key` names, under `policy`.
+fn case_matches<M: Member>(m: &M, disc: i32, key: &CaseKey, policy: CaseStyle) -> bool {
+    return match key {
+        CaseKey::Disc(d) => *d == disc,
+        CaseKey::Name(n) => wire_name(m, policy) == *n,
+    };
+}
+
+fn unknown_case_error(key: &CaseKey) -> DeserializeError {
+    return DeserializeError {
+        kind: DeserializeErrorKind::UnknownVariant,
+        message: match key {
+            CaseKey::Disc(_) => "unknown variant discriminant",
+            CaseKey::Name(_) => "unknown variant",
+        },
+        offset: -1,
+    };
+}
+
+/// Variant deserialization derived over `ReflectVariant`: find the case the
+/// wire names, then read its payload.
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for V {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<V, DeserializeError> {
+        let members = ReflectVariant::<V>::members();
+        let mut va = d.begin_variant(&ReflectVariant::<V>::type_name(), members.len())?;
+        let policy = ReflectVariant::<V>::wire_name_policy();
+        let key = case_key(&mut va)?;
+        for let case of members {
+            if case_matches(&case, case.discriminant(), &key, policy) {
+                if case.is_unit() {
+                    va.end()?;
+                    return Result::Ok(case.make());
+                }
+                let payload: P = va.payload()?;
+                va.end()?;
+                return Result::Ok(case.construct(payload));
+            }
+        }
+        return Result::Err(unknown_case_error(&key));
+    }
+}
+
+/// Enum deserialization derived over `ReflectEnum`: the case the wire names.
+impl<E: ReflectEnum<Members = [..M]>, ..M> Deserialize for E {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<E, DeserializeError> {
+        let members = ReflectEnum::<E>::members();
+        let mut va = d.begin_variant(&ReflectEnum::<E>::type_name(), members.len())?;
+        let policy = ReflectEnum::<E>::wire_name_policy();
+        let key = case_key(&mut va)?;
+        for let case of members {
+            if case_matches(&case, case.discriminant(), &key, policy) {
+                va.end()?;
+                return Result::Ok(case.make());
+            }
+        }
+        return Result::Err(unknown_case_error(&key));
+    }
+}
+
+/// Flags deserialization derived over `ReflectFlags`: an array of the set bits'
+/// wire names.
+impl<L: ReflectFlags<Members = [..M]>, ..M> Deserialize for L {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<L, DeserializeError> {
+        let policy = ReflectFlags::<L>::wire_name_policy();
+        let mut seq = d.begin_seq()?;
+        let mut raw: u64 = 0;
+        loop {
+            let opt: Option<String> = seq.next_element()?;
+            if let Some(name) = opt {
+                let mut found = false;
+                for let bit of ReflectFlags::<L>::members() {
+                    if wire_name(&bit, policy) == name {
+                        raw = raw | bit.bit();
+                        found = true;
+                    }
+                }
+                if !found {
+                    return Result::Err(DeserializeError {
+                        kind: DeserializeErrorKind::UnknownVariant,
+                        message: `unknown flag: ${name}`,
+                        offset: -1,
+                    });
+                }
+            } else {
+                seq.end()?;
+                if let Some(v) = ReflectFlags::<L>::from_bits(raw) {
+                    return Result::Ok(v);
+                }
+                return Result::Err(DeserializeError::invalid_value(
+                    `unknown bits of ${ReflectFlags::<L>::type_name()}`,
+                    -1,
+                ));
+            }
+        }
+    }
+}
+
+/// A unit variant case carries `()`, so the derived variant deserialization
+/// needs `(): Deserialize` to satisfy its payload-pack bound. Nothing is read
+/// from the wire — a unit case is a bare tag.
+impl Deserialize for () {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<(), DeserializeError> {
+        return Result::Ok(());
     }
 }
 

@@ -2296,11 +2296,13 @@ impl FunctionTranslator<'_, '_> {
 
             ExprKind::Local { index, .. } => {
                 // Unit and Never locals have no Wasm representation. For Unit
-                // there is nothing to push. For Never the local declaration
-                // was skipped (its initializer diverges); the surrounding
-                // `translate_expr` wrapper appends `Unreachable` so the local
-                // value never materializes — emit a placeholder `Nop`.
-                if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
+                // there is nothing to push — `&()` included, matching the
+                // stackless rule the `let` side and the parameter list drop it
+                // by. For Never the local declaration was skipped (its
+                // initializer diverges); the surrounding `translate_expr`
+                // wrapper appends `Unreachable` so the local value never
+                // materializes — emit a placeholder `Nop`.
+                if self.is_stackless_type(expr.type_id) || expr.type_id == TypeTable::NEVER {
                     WirInstr::Nop
                 } else {
                     self.local_get(*index)

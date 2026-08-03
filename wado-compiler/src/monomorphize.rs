@@ -221,7 +221,10 @@ fn dispatch_receiver_name(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTyp
 /// to set the correct `module_source` so DCE can find the target function.
 fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Option<ModuleSource> {
     match type_table.get(type_id) {
-        ResolvedType::Primitive(_) => Some(ModuleSource::primitive()),
+        // `()` is a builtin like the primitives: it names no declaring module,
+        // and an `impl Trait for ()` is reached through the same hint-then-scan
+        // lookup they are.
+        ResolvedType::Primitive(_) | ResolvedType::Unit => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
         ResolvedType::Struct { module_source, .. }
         | ResolvedType::GenericInstance { module_source, .. }

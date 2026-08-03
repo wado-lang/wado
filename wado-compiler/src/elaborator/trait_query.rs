@@ -1305,6 +1305,9 @@ impl TypeSystem {
                 let base_id = *base_type;
                 return self.type_implements_trait(ctx, scope, base_id, trait_name);
             }
+            // `()` names no declaring module, so an `impl Trait for ()` is
+            // indexed under the builtin spelling the unit type mangles as.
+            ResolvedType::Unit => (FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME), None),
             ResolvedType::Flags {
                 name,
                 module_source,
