@@ -337,22 +337,48 @@ Counted at `-O2` with `WADO_TRACE=sroa_variant_return`. "WIR left over" is what
 `wir_optimize::sroa_variant_returns` still finds with the NIR pass enabled —
 the functions the NIR pass missed:
 
-| program            | WIR pass alone | NIR pass | WIR left over |
-| ------------------ | -------------- | -------- | ------------- |
-| `cbor_twitter`     | 150            | 186      | 0             |
-| `json_twitter`     | 81             | 103      | 0             |
-| `json_canada`      | 27             | 36       | 0             |
-| `syntax_highlight` | 2              | 0        | 2             |
-| `sqlite_parse`     | 67             | 0        | 1             |
+| program            | WIR alone | NIR | WIR left | total | wasm size |
+| ------------------ | --------- | --- | -------- | ----- | --------- |
+| `cbor_twitter`     | 150       | 73  | 88       | 161   | +0.91 %   |
+| `json_twitter`     | 81        | 46  | 45       | 91    | +0.26 %   |
+| `json_canada`      | 27        | 24  | 11       | 35    | +0.34 %   |
+| `syntax_highlight` | 2         | 0   | 2        | 2     | —         |
+| `sqlite_parse`     | 67        | 0   | 1        | 1     | 0.00 %    |
 
-On the serde workloads the NIR pass strictly dominates: more functions
-scalarized, and nothing left for the WIR pass to find. That is the
-`return match {…}`-is-a-tree effect the design predicted.
+The two passes together beat the WIR pass alone on every serde workload. The
+NIR pass takes the functions whose whole call graph it can scalarize, and the
+WIR pass — running behind it, on the shapes NIR declined — finds the rest.
 
-`syntax_highlight` is a straight two-function miss, small enough to diagnose
-directly. `sqlite_parse` is not a miss at all — its 67 dropped to 1 with the
-NIR pass still **off**, so the cause is elsewhere in this branch and is tracked
-as an open question below. Golden fixtures will churn either way.
+The size column is the cost of the NIR half, and it is the number to watch. It
+was +2.4 % / +4.4 % / +1.6 % before the tail-call cascade rule below; the
+residual is the padding and `Some(_)` / `None` nodes the NIR pass emits at
+return sites, which the WIR pass does not pay because it works in WIR directly.
+
+`syntax_highlight` scalarizes nothing here, which costs nothing while the WIR
+pass still runs. `sqlite_parse` is not a miss at all — its 67 dropped to 1 with
+the NIR pass still **off**, so the cause is elsewhere in this branch and is
+tracked as an open question below. Golden fixtures will churn either way.
+
+### Throughput
+
+`json_twitter`, four interleaved pairs on one machine (MB/s):
+
+| run | off ser | on ser | off de | on de  |
+| --- | ------- | ------ | ------ | ------ |
+| 1   | 271.35  | 287.02 | 109.16 | 112.58 |
+| 2   | 288.12  | 291.65 | 114.00 | 111.29 |
+| 3   | 284.09  | 294.94 | 110.61 | 137.40 |
+| 4   | 288.49  | 290.32 | 112.06 | 114.46 |
+
+Serialization is faster in all four pairs, by about 2 % on the medians, and the
+slowest `on` run still beats the median `off` run. Deserialization is not
+distinguishable from noise: the 137.40 is an outlier, and without it the two
+medians sit within 1 %.
+
+Read that as a floor, not a verdict. A first ad-hoc pair on this same container
+read +6.2 % and the next read −2.7 %, so a single run here is worthless and even
+four pairs only resolve a couple of percent. The number that decides step 4 has
+to come from `mise run benchmark-all` on a quiet machine.
 
 ### Termination and monotonicity
 
@@ -433,12 +459,14 @@ Each step lands and is measured before the next.
 
 - [x] Step 1 — the pass behind a flag, off by default
       (`WADO_NIR_VARIANT_RETURN=1`). The candidate-set comparison is done (see
-      above): the NIR pass strictly dominates on the serde workloads. With the
-      flag on the suite compiles every program correctly — 4117 passed, 7
-      failed, no invalid Wasm — and the 7 are expectation churn. Still open and
-      carried into step 3: a `LabeledBlock` return value arriving via
-      `break L: v`, rejected outright, and `syntax_highlight` scalarizing
-      nothing where the WIR pass widens two functions.
+      above): the two passes together scalarize more than the WIR pass alone on
+      every serde workload, at +0.26 % to +0.91 % of wasm size and about +2 % of
+      serialization throughput. With the flag on the suite compiles every
+      program correctly — 4117 passed, 7 failed, no invalid Wasm — and the 7 are
+      expectation churn. Still open and carried into step 3: a `LabeledBlock`
+      return value arriving via `break L: v`, rejected outright, and
+      `syntax_highlight` scalarizing nothing where the WIR pass widens two
+      functions.
 - [x] Step 2 — lift the `is_trait_method` gate and the arity cap in
       `multi_value_return`, on their own. Landed: full E2E green, wasm size
       neutral to -0.06%. `i128^Mul::mul` and its siblings now return
