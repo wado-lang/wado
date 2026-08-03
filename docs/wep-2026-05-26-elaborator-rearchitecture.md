@@ -134,8 +134,7 @@ sub-structs with explicit membership rules:
   elaboration: `function_return_types`, `imported_functions`,
   `current_module_globals`, `imported_globals`,
   `associated_constants`, `generic_function_*`,
-  `generic_method_*`, `generic_struct_names`,
-  `pending_anonymous_structs`.
+  `generic_method_*`, `pending_anonymous_structs`.
 
 Each sub-struct admits a new field only when "does this fit the
 sub-struct's responsibility?" has a clear yes/no answer. A field
@@ -407,8 +406,7 @@ Each recorded use-site becomes an edge `enclosing-item(use) → target`:
 - Dispatch facts in `TypeAnnotations` — `method_dispatch`,
   `static_method_dispatch`, `operator_dispatch`,
   `index_assign_dispatch`, `from_call_facts` — resolved through the
-  `FunctionRef → defining SymbolKey` resolver reify already uses
-  (`find_impl_method_ast_id`). These cover the paths that leave no
+  declaring node each dispatch records. These cover the paths that leave no
   `references` edge: operator overloading, the `?` / `From`
   conversion, `for`-of `into_iter` / `next`, index assignment.
 

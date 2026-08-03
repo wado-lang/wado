@@ -1068,10 +1068,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let trait_name = method_ref.trait_name.clone();
                     let struct_module = method_ref.module.clone();
 
-                    // Record use->def on the method segment, as the bare
-                    // `Type::method` branch does. `ns::Type::method` has three
-                    // segments, so the method is the third — the same position
-                    // `record_namespaced_case` reads for a namespaced variant.
+                    // The bare `Type::method` branch records this edge, but
+                    // `is_static_method("ns", "Type::method")` declines, so a
+                    // namespaced call lands here instead. `ident` is
+                    // `ns::Type::method`, so the method is its third segment —
+                    // the position `record_namespaced_case` also reads.
                     if let Some(method_seg) = ident.segments.get(2)
                         && let Some(method_ast_id) = method_ref.method_id.or_else(|| {
                             self.static_method_decl_id(Some(&struct_module), type_name, method_name)

@@ -29,8 +29,9 @@ open-coding a query.
 
 ### Queries re-resolve foreign declaration ASTs on demand
 
-Roughly 40 `loaded_modules` reads survive outside reify. Every one exists to
-fetch a declaration's AST and re-resolve its signature at the use site:
+The coupling this WEP set out to remove was roughly 40 `loaded_modules` reads
+outside reify, each fetching a declaration's AST to re-resolve its signature
+at the use site — see Progress metric for what remains:
 
 | Category                                                                          | Sites                                                                                                                       | Consumed                                                             |
 | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
@@ -253,8 +254,8 @@ pub struct Annotator<'a, H: CompilerHost> {
 ```
 
 - `loaded_modules` leaves the struct. The walker's last AST needs are covered
-  by `Signatures` (fallback-module idents, data sections, defining `AstId`s
-  for `find_impl_method_ast_id`) and the `Rc`'d trait default bodies.
+  by `Signatures` (fallback-module idents, data sections, the declaring node
+  each signature carries) and the `Rc`'d trait default bodies.
 - Side channels become data flow: `resolve_method_call_with` returns its
   dispatch outcome; the operator's source `AstId` becomes a parameter;
   `capture_tuple_overlays` is deleted.

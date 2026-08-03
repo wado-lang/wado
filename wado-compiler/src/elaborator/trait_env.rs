@@ -2181,22 +2181,18 @@ fn check_all_orphan_rules(
 /// Which declaration a type name means, read from the module that *wrote*
 /// the name — the vantage an `impl` header has and a use site does not.
 ///
-/// This is the rule [`TraitEnv::build`] keys its impl indexes by, so any
-/// later lookup holding the same vantage must reach it through here rather
-/// than re-deriving one: a lookup that canonicalises the bare name from the
-/// *call site* instead answers with the caller's same-named type
-/// (`helper::Pair::new` finding the caller's own `Pair`).
+/// This is the rule [`TraitEnv::build`] keys its impl indexes by, so any later
+/// lookup holding the same vantage reaches it through here rather than
+/// re-deriving one: canonicalising the bare name from the *call site* instead
+/// answers with the caller's same-named type.
 ///
-/// The call-site counterpart — which consults `use` declarations, and so
-/// cannot exist before the decl pass — is
+/// The call-site counterpart is
 /// [`super::trait_query::canonical_decl_key_with`], over
-/// [`super::trait_query::decl_identity_core`].
-///
-/// The two are disjoint, not a redundant pair: measured over every fixture,
-/// the core declines on every name asked at this vantage. Each branch it has
-/// past the builtin names is import-driven, and an `impl` header is read
-/// before any import scope exists. What answers here is the re-export
-/// resolution below, which the core has no branch for.
+/// [`super::trait_query::decl_identity_core`]. The two are disjoint, not a
+/// redundant pair: every branch the core has past the builtin names is
+/// import-driven, and an `impl` header is read before any import scope
+/// exists, so it declines at this vantage. What answers here is the re-export
+/// resolution below, which it has no branch for.
 ///
 /// `decl_keys` are the declaration identities to fall back to by bare name,
 /// in priority order, for a name the vantage module does not define.

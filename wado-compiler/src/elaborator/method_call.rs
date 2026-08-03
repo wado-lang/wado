@@ -2073,9 +2073,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             None
         };
-        // Keep the whole selection: its trait names the mangled function and
-        // its `method_id` is the declaration this call resolved to, which the
-        // use→def edge below is recorded against.
+        // Keep the whole selection: its trait names the mangled function, and
+        // its `method_id` is what the use→def edge below is recorded against.
+        // A name lookup cannot stand in — two conversion impls on one type
+        // declare the same `from`, and only the argument's type separates
+        // them.
         let selected = self.locate_static_method_impl(
             &struct_name,
             &static_call.method,
@@ -2202,9 +2204,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_info.cm_name =
             self.lookup_resource_static_cm(&struct_name, &struct_module, &static_call.method);
 
-        // The selection knows which impl answered, which a name lookup
-        // cannot when two conversion impls declare the same `from`. It covers
-        // trait impls only; an inherent static reaches the index instead.
+        // The selection covers trait impls only; an inherent static has none
+        // and reaches the index instead.
         if let Some(method_ast_id) = selected.as_ref().and_then(|r| r.method_id).or_else(|| {
             self.static_method_decl_id(Some(&struct_module), &struct_name, &static_call.method)
         }) {

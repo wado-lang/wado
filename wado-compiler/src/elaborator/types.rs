@@ -1517,8 +1517,8 @@ pub(super) struct MethodInfo {
     /// The declaring node of the method this lookup selected, taken from its
     /// [`crate::elaborator::sig::MethodSig`]. The use→def edge for a call is
     /// recorded from here, so it names the impl dispatch actually chose.
-    /// `None` only for a synthesised signature no declaration backs (the
-    /// tuple builtins).
+    /// `None` where no declaration backs the signature: the tuple builtins,
+    /// an auto-derived `Eq` / `Ord`, and the error-recovery placeholder.
     pub(super) method_ast_id: Option<ast::AstId>,
     pub(super) return_type: TypeId,
     pub(super) self_kind: ast::SelfKind,

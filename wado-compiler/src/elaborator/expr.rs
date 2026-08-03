@@ -4449,7 +4449,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .all_impl_keys(&self.impl_target(target_name));
-        // The current module wins a tie, as the scan's ordering did.
+        // The current module wins a tie.
         keys.iter()
             .find(|key| key.0 == self.current_module_source && declares_from(key))
             .or_else(|| keys.iter().find(|key| declares_from(key)))

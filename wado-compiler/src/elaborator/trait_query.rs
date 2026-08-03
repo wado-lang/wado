@@ -1550,8 +1550,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The declaration key of the trait `name` names in the current frame.
-    /// The symbol table does not track trait declarations, so
-    /// [`Elaborator::canonical_decl_key`] alone would fall through to
+    /// [`Elaborator::canonical_decl_key`] alone consults imports before the
+    /// current module, so a name the prelude also carries resolves away from
+    /// a local trait, and an unresolved one falls through to
     /// `TraitEnv::find_trait_decl_key`'s bare-name global scan — which
     /// answers with whichever module's same-named trait registered first.
     /// A trait declared in the current module answers first (unless the
@@ -1592,19 +1593,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether the trait named `trait_name` declares `method_name`. The cheap
     /// form of [`Self::find_trait_decl_method`], for counting candidates
     /// without cloning each one's declaration.
-    ///
-    /// Reaches the trait exactly as `find_trait_decl_method` does, so counting
-    /// candidates and resolving one cannot disagree. The digest cannot stand in
-    /// here: it is keyed by `canonical_decl_key`, which answers with the
-    /// prelude's type when a module declares a trait sharing one of its names
-    /// (`trait Left` against `core:prelude/format`'s `Left`), and the
-    /// current-module fallback below is what finds the local declaration.
     fn trait_declares_method(&self, trait_name: &str, method_name: &str) -> bool {
         self.find_trait_decl(trait_name)
             .is_some_and(|(decl, _)| decl.methods.iter().any(|m| m.name == method_name))
     }
 
     /// The trait `trait_name` names in this frame, with its declaring module.
+    ///
+    /// The one entry point for both counting candidates and resolving one, so
+    /// they cannot disagree. `TraitSig` cannot serve either: it is keyed by
+    /// `canonical_decl_key`, whose import branch runs before its
+    /// current-module one — and the prelude seeds that branch with enum case
+    /// names, so a local `trait Left` loses to `Alignment::Left`. Only the
+    /// current-module scan inside `find_trait_decl_with` finds it.
     fn find_trait_decl(&self, trait_name: &str) -> Option<(&ast::TraitDecl, ModuleSource)> {
         find_trait_decl_with(
             &self.declared_trait_name(trait_name),
@@ -1618,10 +1619,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The declaration of `method_name` in the trait named `trait_name`, with
-    /// the trait's associated types and declaring module. Reaches the trait
-    /// through the declaration index, the same route
-    /// [`Self::trait_declares_method`] takes through the digest, so counting
-    /// candidates and resolving one cannot disagree.
+    /// the trait's associated types and declaring module.
     fn find_trait_decl_method(
         &self,
         trait_name: &str,

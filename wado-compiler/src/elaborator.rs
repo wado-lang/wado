@@ -536,16 +536,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The receiver key the static-method index is built under.
     ///
-    /// `receiver_module` is the declaring module when the caller has already
-    /// resolved one; keying from the call site instead would answer with its
-    /// own same-named type (`helper::Pair::new` finding the caller's `Pair`).
-    ///
-    /// `written_name` may be an alias only the call site can undo
-    /// (`use { Counter as CounterA }`), so the alias table is consulted —
-    /// but only when the declaring module does not know the name already.
-    /// Undoing unconditionally would rewrite a name that *is* the
-    /// declaration's whenever the call site happens to alias something else
-    /// to it.
+    /// Both vantages are needed. `receiver_module`, when the caller resolved
+    /// one, decides the module: keying from the call site would answer with
+    /// its own same-named type. `written_name` may be an alias only the call
+    /// site can undo (`use { Counter as CounterA }`), but undoing it
+    /// unconditionally would rewrite a name that *is* the declaration's
+    /// whenever the call site aliases something else to it — so the table is
+    /// consulted only for a name the declaring module does not know.
     pub(super) fn static_receiver_key(
         &self,
         receiver_module: Option<&ModuleSource>,
