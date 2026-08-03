@@ -752,7 +752,7 @@ fn scanned_to_f64(n: &ScannedNumber) -> f64 {
 fn is_json_ws(b: i32) -> bool {
     let ws_set = 1 as u64 << b' ' as u64 | 1 as u64 << b'\t' as u64 | 1 as u64 << b'\n' as u64 | 1 as u64 << b'\r' as u64;
     // `b < 64` is load-bearing: Wasm masks a shift count mod 64.
-    return b < 64 && (ws_set >> b as u64 & 1) != 0;
+    return b < 64 && ws_set >> b as u64 & 1 != 0;
 }
 
 /// The decimal value of `b`, or a value above 9 when `b` is not a digit —
