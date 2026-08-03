@@ -123,6 +123,8 @@ covers leaves the bytes identical and does not belong. The exception is
 program reaches its bound: it is a JIT-pathology guard for >256-element
 literals, not an optimization.
 
+A `#![wasm_module(...)]` core module — the allocator — runs this same list as a package of its own, since codegen emits it verbatim. Its passes are named `wir/<module>:<pass>` so `WADO_SKIP_PASS` / `WADO_DUMP_PASS_*` address the two runs separately.
+
 Branch hints are transparent annotations on `if`/`br_if` conditions: a pass looks through a hint when matching, drops it when eliminating the branch, and flips it when negating the condition. wasmtime lays the cold side out of line; `-f no-branch-hinting` disables the feature for benchmarking.
 
 ## Shared facilities

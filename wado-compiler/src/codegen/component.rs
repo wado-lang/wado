@@ -72,12 +72,7 @@ pub fn build_component(
 
     // Core memory module
     let mem_info = wasm_modules.get("mem");
-    let mem_module = build_memory_module(
-        project.strip_names,
-        mem_info,
-        &imported_wasm_module_uses,
-        &project.wasm_assets,
-    );
+    let mem_module = build_memory_module(project.strip_names, mem_info);
     ctx.register_core_module("mem-mod");
     builder.core_module_raw(Some("mem-mod"), &mem_module);
 
@@ -828,48 +823,12 @@ fn wado_type_to_cm_val_type(
     }
 }
 
-fn build_memory_module(
-    strip_names: bool,
-    wasm_mod: Option<&crate::wir::WasmModuleInfo>,
-    imported_wasm_uses: &IndexMap<String, IndexSet<String>>,
-    wasm_assets: &IndexMap<String, crate::loader::WasmAsset>,
-) -> Vec<u8> {
-    let wasm_mod = wasm_mod.expect("core:allocator with #![wasm_module(\"mem\")] is required");
-
-    // Determine minimum pages: at least 1, but must satisfy any imported
-    // wasm module's data-section requirements (e.g. libm's 17 pages).
-    let mut min_pages: u32 = 1;
-    for namespace in imported_wasm_uses.keys() {
-        let asset = wasm_assets.get(namespace).unwrap_or_else(|| {
-            panic!(
-                "wasm asset for namespace {namespace:?} is referenced via #[canonical(...)] but \
-                 was not registered via `use ... from \"<path>\" with {{ type: \"wat\"|\"wasm\" }}`",
-            )
-        });
-        let pages = postprocess::extract_memory_min_pages(&asset.bytes);
-        min_pages = min_pages.max(u32::try_from(pages).unwrap_or(u32::MAX));
-    }
-
-    let memory = crate::wir::WirMemory {
-        min: min_pages,
-        max: None,
-    };
-    let mut wir = wasm_mod.to_wir_package(strip_names, memory);
-    // Memory-module DCE: BFS from exports/elements to mark unreachable
-    // defined functions, mirror those indices into `dead_type_indices`
-    // (the mem module has a 1:1 function/type correspondence — each
-    // function owns its own func type at the same array index — so any
-    // dead function's type is also dead), then run the generic
-    // compaction.
-    crate::wir_optimize::mark_unreachable_defined_functions(&mut wir);
-    for &i in &wir.dead_func_indices.clone() {
-        wir.dead_type_indices.insert(i);
-    }
-    crate::wir_optimize::compact_dead_items(&mut wir);
-    // The memory/allocator module is hand-built and contains no `array.copy`,
-    // so codegen feature flags do not apply here.
+/// Emit the memory/allocator core module. It contains no `array.copy`, so
+/// codegen feature flags do not apply here.
+fn build_memory_module(strip_names: bool, wasm_mod: Option<&crate::wir::WirPackage>) -> Vec<u8> {
+    let wir = wasm_mod.expect("core:allocator with #![wasm_module(\"mem\")] is required");
     super::emit::emit_core_module(
-        &wir,
+        wir,
         strip_names,
         crate::codegen_flags::CodegenFlags::default(),
     )

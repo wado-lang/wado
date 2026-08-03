@@ -8,7 +8,7 @@
     (export "realloc" (func $realloc))
     (export "memory" (memory 0))
     (func $grow_memory (;0;) (type 0) (param i32)
-      (local i32 i32 i32 i32 i32 i32)
+      (local i32 i32 i32 i32)
       (local.set 1
         (i32.mul
           (memory.size)
@@ -18,23 +18,17 @@
           (local.get 0)
           (local.get 1)))
       (local.set 3
-        (i32.mul
-          (i32.mul
-            (i32.const 16)
-            (i32.const 1024))
-          (i32.const 1024)))
-      (local.set 4
         (select (result i32)
           (local.get 1)
-          (local.get 3)
+          (i32.const 16777216)
           (i32.lt_s
             (local.get 1)
-            (local.get 3))))
-      (local.set 5
+            (i32.const 16777216))))
+      (local.set 4
         (if (result i32) ;; label = @1
           (i32.gt_s
             (local.get 2)
-            (local.get 4))
+            (local.get 3))
           (then
             (i32.shl
               (i32.const 1)
@@ -45,25 +39,25 @@
                     (local.get 2)
                     (i32.const 1))))))
           (else
-            (local.get 4))))
+            (local.get 3))))
       (if ;; label = @1
         (i32.lt_s
           (memory.grow
             (i32.div_s
               (i32.add
-                (local.get 5)
+                (local.get 4)
                 (i32.const 65535))
               (i32.const 65536)))
           (i32.const 0))
+        (@metadata.code.branch_hint "\00")
         (then
           (unreachable)))
     )
     (func $realloc (;1;) (type 1) (param i32 i32 i32 i32) (result i32)
       (local i32 i32)
       (if ;; label = @1
-        (i32.eq
-          (local.get 3)
-          (i32.const 0))
+        (i32.eqz
+          (local.get 3))
         (then
           (if ;; label = @2
             (i32.eq
@@ -76,19 +70,18 @@
                 (local.get 0))))
           (return
             (i32.const 0))))
-      (local.set 4
-        (i32.and
-          (i32.sub
-            (i32.add
-              (global.get 0)
-              (local.get 2))
-            (i32.const 1))
-          (i32.sub
-            (i32.const 0)
-            (local.get 2))))
       (local.set 5
         (i32.add
-          (local.get 4)
+          (local.tee 4
+            (i32.and
+              (i32.sub
+                (i32.add
+                  (global.get 0)
+                  (local.get 2))
+                (i32.const 1))
+              (i32.sub
+                (i32.const 0)
+                (local.get 2))))
           (local.get 3)))
       (if ;; label = @1
         (i32.gt_s

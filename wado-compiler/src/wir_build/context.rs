@@ -1064,16 +1064,44 @@ impl<'a> WirContext<'a> {
         Some(type_id)
     }
 
+    /// Minimum size, in pages, of the linear memory a `#![wasm_module]` module
+    /// defines.
+    ///
+    /// The component has one linear memory, and codegen rewrites each embedded
+    /// wasm asset to import it rather than define its own — so it must be at
+    /// least as large as the largest asset's own minimum, or that asset's data
+    /// segments land past the end of memory. libm wants 17 pages.
+    fn wasm_module_min_memory_pages(&self) -> u32 {
+        let assets = &self.package.wasm_assets;
+        let referenced: IndexSet<&str> = self
+            .package
+            .imports
+            .iter()
+            .map(|import| import.namespace.as_str())
+            .filter(|namespace| assets.contains_key(*namespace))
+            .collect();
+        referenced
+            .iter()
+            .map(|namespace| {
+                u32::try_from(assets[*namespace].min_memory_pages()).unwrap_or(u32::MAX)
+            })
+            .fold(1, u32::max)
+    }
+
     /// Consume this context and produce the final `WirPackage`.
     pub fn into_wir_package(self) -> WirPackage {
+        let memory = crate::wir::WirMemory {
+            min: self.wasm_module_min_memory_pages(),
+            max: None,
+        };
         let trait_bound_violations = self.trait_bound_violations;
         let functions = self.functions;
         let globals = self.globals;
         let global_map = &self.global_map;
 
         // Extract functions and globals from #![wasm_module("...")] sources
-        // into separate WasmModuleInfo structures.
-        let mut wasm_modules: IndexMap<String, crate::wir::WasmModuleInfo> = IndexMap::default();
+        // into separate standalone packages.
+        let mut wasm_modules: IndexMap<String, WirPackage> = IndexMap::default();
         let mut dead_type_indices: IndexSet<u32> = IndexSet::default();
         let mut dead_func_indices: IndexSet<u32> = IndexSet::default();
         let mut dead_global_indices: IndexSet<u32> = IndexSet::default();
@@ -1143,14 +1171,12 @@ impl<'a> WirContext<'a> {
                 });
             }
 
-            wasm_modules.insert(
-                wasm_mod_name.clone(),
-                crate::wir::WasmModuleInfo {
-                    functions: mod_functions,
-                    globals: mod_globals,
-                    global_name_to_index: mod_global_name_to_index,
-                },
-            );
+            let info = crate::wir::WasmModuleInfo {
+                functions: mod_functions,
+                globals: mod_globals,
+                global_name_to_index: mod_global_name_to_index,
+            };
+            wasm_modules.insert(wasm_mod_name.clone(), info.to_wir_package(memory.clone()));
         }
 
         let needed_canonicals: IndexSet<CanonicalIntrinsic> =
