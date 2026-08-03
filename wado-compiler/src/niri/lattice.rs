@@ -18,7 +18,7 @@ use crate::const_eval::{
     MAX_SEQ_ELEMENTS, Value, eval_binary, eval_cast, eval_unary, is_f32_type, is_int_prim, prim_of,
 };
 use crate::module_source::ModuleSource;
-use crate::nir::NirUnaryOp;
+use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind,
 };
@@ -388,6 +388,14 @@ impl Interpreter<'_> {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
+                // `&&` and `||` decide on the left alone when it is their
+                // absorbing element. The right operand is not evaluated at run
+                // time either, so what it would have done — including a read
+                // past the end, guarded by the very test that short-circuits —
+                // must not leave the whole test unknown.
+                if let Some(decided) = short_circuit_result(&l, *op) {
+                    return Lattice::Const(Value::Bool(decided));
+                }
                 let r = match self.operand_to_lattice(body, *right) {
                     Lattice::Const(v) => v,
                     other => return other,
@@ -738,5 +746,15 @@ pub(super) fn pattern_is_catch_all(body: &Body, pat: PatId) -> bool {
         PatKind::Wildcard | PatKind::Binding { .. } => true,
         PatKind::Or(alts) => alts.iter().any(|p| pattern_is_catch_all(body, *p)),
         _ => false,
+    }
+}
+
+/// What a short-circuit yields on its left operand alone: `false && _` and
+/// `true || _`. `None` where the right operand still decides.
+fn short_circuit_result(left: &Value, op: NirBinaryOp) -> Option<bool> {
+    match (left.as_bool()?, op) {
+        (false, NirBinaryOp::And) => Some(false),
+        (true, NirBinaryOp::Or) => Some(true),
+        _ => None,
     }
 }

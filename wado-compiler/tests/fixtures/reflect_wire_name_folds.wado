@@ -8,8 +8,26 @@ struct Point {
     y: String,
 }
 
+#[wire(name_policy = "camelCase")]
+struct Renamed {
+    record_id: i32,
+    #[wire(name = "X-Trace")]
+    trace_id: String,
+}
+
+enum Rank {
+    LowPriority,
+    HighPriority,
+}
+
 test "a struct's wire names reach the wire as literals" {
     assert to_string(&Point { x: 1, y: "a" }) == Result::Ok(`\{"x":1,"y":"a"\}`);
+}
+
+test "a naming policy is applied at compile time" {
+    assert to_string(&Renamed { record_id: 7, trace_id: "t" })
+        == Result::Ok(`\{"recordId":7,"X-Trace":"t"\}`);
+    assert to_string(&Rank::HighPriority) == Result::Ok(`"HighPriority"`);
 }
 
 __DATA__
