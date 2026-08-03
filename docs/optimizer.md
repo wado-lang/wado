@@ -150,8 +150,13 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
       `sroa_variant_return` already own the write-back ABI — so the missing
       piece is the N-field case, bounded by the same result-arity cap.
       `param_spec` covers only the constant case; a non-constant field still
-      costs a GC load per read. `core:json`'s number scanner wants both halves
-      at once and holds `#[inline(always)]` until they exist.
+      costs a GC load per read. `core:json`'s number scanner is the standing
+      case: `scan_number_into` writes its `out` only through the seven stores
+      that close the body and `scanned_to_f64` reads it only through field
+      access, so both halves would apply — until then the two carry
+      `#[inline(always)]`, which is all-or-nothing, since the scratch escapes
+      into whichever call is left behind. Inlining also buys caller-specific
+      dead-field elimination that promotion alone would not recover.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Variant return ABI decided at NIR, the way `multi_value_return` already

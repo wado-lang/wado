@@ -729,12 +729,6 @@ impl ScannedNumber {
 
 /// Reconstructs the f64 value of a scanned number token. Exponents outside
 /// fpfmt's domain clamp to ±infinity / ±zero.
-///
-/// Inlined together with `scan_number_into` — it takes both, since the scratch
-/// escapes into whichever call is left behind. Stands in for the argument
-/// promotion `docs/optimizer.md` lists as unimplemented: this reads `n` through
-/// nothing but field access, so passing the fields by value would leave the
-/// scratch scalarizable where it is allocated.
 #[inline(always)]
 fn scanned_to_f64(n: &ScannedNumber) -> f64 {
     if n.digits == 0 {
@@ -762,10 +756,9 @@ fn is_json_ws(b: i32) -> bool {
     return b < 64 && (ws_set >> b as u64 & 1) != 0;
 }
 
-/// The decimal value of `b`, or something above 9 when `b` is not a digit:
-/// subtracting `'0'` wraps every non-digit byte into the upper half of the u32
-/// range, so one unsigned compare replaces the two a `'0' <= b <= '9'` range
-/// test costs — measurably cheaper in the per-digit scan loops.
+/// The decimal value of `b`, or a value above 9 when `b` is not a digit:
+/// subtracting `'0'` wraps a non-digit into the upper half of the u32 range, so
+/// one unsigned compare decides the range test.
 fn digit_value(b: i32) -> u32 {
     return (b - '0' as i32) as u32;
 }
@@ -886,9 +879,6 @@ impl JsonDeserializer {
 
     /// Advances past any run of JSON whitespace at the current position.
     pub fn skip_whitespace(&mut self) {
-        // Every token boundary calls this, so the body is one byte test small
-        // enough to inline into the caller; the run is scanned out of line,
-        // from the byte after the one already tested.
         let pos = self.pos;
         if pos < self.input.len() && is_json_ws(self.input.get_unchecked(pos) as i32) {
             self.pos = self.whitespace_end(pos + 1);
@@ -916,8 +906,7 @@ impl JsonDeserializer {
         return Result::Err(self.expect_char_error(c));
     }
 
-    /// Out of line so `expect_char` stays a bounds check and a compare: the
-    /// template this builds is most of the expression count.
+    /// The error `expect_char` reports for the byte at the current position.
     #[inline(never)]
     fn expect_char_error(&self, c: i32) -> DeserializeError {
         if self.pos >= self.input.len() {
@@ -1218,16 +1207,8 @@ impl JsonDeserializer {
     /// the caller-provided `out`. Only the first `FPFMT_DIGITS_MAX` significant
     /// digits are accumulated; dropped fraction digits merely truncate
     /// precision, while dropped integer digits shift the scale via `int_digits`.
-    ///
-    /// The scratch struct keeps a `Result<ScannedNumber>` aggregate off the hot
-    /// decode path, and inlining turns it into the caller's scalar locals — the
-    /// allocation plus seven-field round trip through a GC object, per number
-    /// token, dominated the cost otherwise.
-    ///
-    /// The hint stands in for a pass, not for a judgement about this call: `out`
-    /// is written only by the seven stores that close the body, so returning
-    /// those fields by multi-value would leave nothing for the scratch to be.
-    /// See the write-back half of `docs/optimizer.md`'s argument promotion.
+    /// Writing into a scratch keeps a `Result<ScannedNumber>` aggregate off the
+    /// hot decode path.
     #[inline(always)]
     fn scan_number_into(&mut self, out: &mut ScannedNumber) -> Result<(), DeserializeError> {
         let input = self.input;
