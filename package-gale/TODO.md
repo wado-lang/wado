@@ -30,10 +30,6 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 
 - [ ] `\p{...}` covers what the UCD names: general categories, scripts, blocks, binary properties (including the emoji ones), and the `General_Category=` / `Script=` / `Block=` forms. What ANTLR4 takes from ICU on top of that is still rejected with "unsupported Unicode property" — the POSIX aliases (`\p{Alnum}`, `\p{Digit}`, `\p{Blank}`, `\p{Graph}`, `\p{Print}`, `\p{XDigit}`), any other enumerated property (`\p{Bidi_Class=L}`), the `LC` / `Cased_Letter` category group (the one group that is not a prefix of its members), and ANTLR4's own `\p{EmojiPresentation=EmojiDefault}`. No corpus grammar needs one — RustLexer's are in comments.
 
-Not a mis-parse since the tournament backs every incomplete cascade, but the same under-approximation, and what keeps that backstop load-bearing:
-
-- [ ] The SLL walk advances a `Repeat` config past the repeat as if it iterated exactly once, so a decision two tokens of lookahead would settle costs a scan. `a : X+ Y | X Z` on `X X Y`: `gale dump` reports `Dispatch[d=0] [TK_X] → Dispatch[d=1]` with branches `[TK_Y]→alt 0` and `[TK_Z]→alt 1` only, so the second `X` reaches the fallback tournament rather than a branch. `tests/grammars/ll_repeat_alt_gap.g4` is the acceptance half; any repair needs a rejection-case fixture too, and touches the `alt_index` keying `CLAUDE.md`'s first failed approach also names.
-
 ### Pipeline and tooling correctness
 
 - [ ] A rule-argument action whose host type contains `[]` (`r[int[] arr]`) ends early and its remainder leaks into the grammar text: the action stripper ends a `[...]` at the first unescaped `]`, which is right for the char sets the corpus does exercise. No corpus grammar hits this.
