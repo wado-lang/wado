@@ -49,6 +49,13 @@ pub(super) fn value_block_shape(body: &Body, e: ExprId) -> Option<(BlockId, Opti
     if body.exprs[e].type_id == TypeTable::UNIT {
         return None;
     }
+    block_shape(body, e)
+}
+
+/// The block a `Block` / `LabeledBlock` expression holds, whatever its type.
+/// What a statement-position block runs, where no value is wanted and a unit
+/// type is the ordinary case.
+pub(super) fn block_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&str>)> {
     match &body.exprs[e].kind {
         ExprKind::Block(b) => Some((*b, None)),
         ExprKind::LabeledBlock { block, label, .. } => Some((*block, Some(label.as_str()))),

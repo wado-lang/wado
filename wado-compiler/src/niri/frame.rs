@@ -20,7 +20,7 @@ use crate::tir::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
 use super::place::{borrowed_place_operand, place_aliased_by_another, place_of};
-use super::region::{region_free_reads, region_shape, value_block_shape};
+use super::region::{block_shape, region_free_reads, region_shape, value_block_shape};
 use super::trackability::Trackability;
 use super::{CallRun, CtfeBuiltin, FrameState, Interpreter, Lattice};
 
@@ -354,6 +354,21 @@ impl Interpreter<'_> {
             && let Some(flow) = self.exec_call_stmt(body, e)
         {
             return flow;
+        }
+        // A block at statement position is run for what it performs. Inlining
+        // leaves one where a call stood, and a unit-typed one — every `push`
+        // onto a string or list, once inlined — denotes nothing to evaluate, so
+        // the value path would abandon the frame over a statement whose whole
+        // purpose is its writes.
+        if let Some(e) = op.as_expr()
+            && let Some((block, label)) = block_shape(body, e)
+        {
+            let label = label.map(str::to_string);
+            let flow = self.exec_block(body, block);
+            return match value_of_block_flow(flow, label.as_deref()) {
+                Ok(value) => Flow::Fallthrough(value),
+                Err(other) => other,
+            };
         }
         match self.eval_operand(body, op) {
             lattice @ Lattice::Const(_) => Flow::Fallthrough(lattice),
