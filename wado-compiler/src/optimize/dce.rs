@@ -2010,12 +2010,39 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
                 || reachable_struct_id(&rendered, &s.module_source)
         }
     });
-    // `Option`'s declaration outlives its uses: `optimize::sroa_variant_return`
-    // mints `Option<T>` slots for a scalarized variant return *after* the early
-    // DCE run, and a dropped declaration can never be resurrected —
-    // `wir_build::register_mono_variants` needs it to register the instance.
-    // Keeping the declaration costs nothing: WIR registers instances, not
+    // Two variant declarations outlive their uses, both for
+    // `optimize::sroa_variant_return`:
+    //
+    // - `Option`, because the pass mints `Option<T>` slots *after* the early DCE
+    //   run and `wir_build::register_mono_variants` registers the instance off
+    //   the declaration.
+    // - Any variant a function was scalarized *from*. Scalarizing every use of a
+    //   variant away is exactly what makes its declaration look unreachable, and
+    //   the pass re-derives its layout from that declaration to recognise its own
+    //   earlier work in a later iteration.
+    //
+    // Keeping a declaration costs nothing: WIR registers instances, not
     // declarations.
+    let scalarized_from: crate::hashmap::IndexSet<(String, ModuleSource)> = {
+        let type_table = project.type_table.borrow();
+        project
+            .functions
+            .iter()
+            .filter_map(|f| f.borrow().scalarized_from)
+            .filter_map(|t| match type_table.get(t) {
+                ResolvedType::Variant {
+                    name,
+                    module_source,
+                } => Some((name.clone(), module_source.clone())),
+                ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    ..
+                } => Some((name.clone(), module_source.clone())),
+                _ => None,
+            })
+            .collect()
+    };
     let option_decl = project
         .type_table
         .borrow()
@@ -2030,6 +2057,7 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
             || option_decl
                 .as_ref()
                 .is_some_and(|ms| v.name == "Option" && v.module_source == *ms)
+            || scalarized_from.contains(&(v.name.clone(), v.module_source.clone()))
     });
     project.enums.retain(|e| {
         analysis
@@ -2040,7 +2068,16 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
     // Remove unreachable entries from the shared TypeTable.
     // This ensures that subsequent phases (WIR type registration, codegen) do not
     // emit types that are no longer referenced by any surviving function.
-    project.type_table.borrow_mut().retain(&analysis.types);
+    // Plus the variant every scalarized return came from: dropping its `TypeId`
+    // would make `optimize::sroa_variant_return` unable to resolve the layout it
+    // recognises its own earlier work by.
+    let mut keep = analysis.types.clone();
+    for func_rc in &project.functions {
+        if let Some(t) = func_rc.borrow().scalarized_from {
+            keep.insert(t);
+        }
+    }
+    project.type_table.borrow_mut().retain(&keep);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

@@ -384,10 +384,25 @@ rebox costs the allocation the scalarization was meant to avoid, so it is a
 backstop `const_fold` and `sroa` are expected to collapse once the tag is
 known — not a target.
 
-That mechanism is implemented and works on individual programs, but what it
-emits is not right in general: with the pass enabled the E2E suite fails 57
-fixtures, against 40 before the rebox ran after the rewrite as well as before
-it. Getting it right is the open work for step 1.
+Two rules make it work, and both were learned by getting them wrong:
+
+- The call-site rewrite must run over everything scalarized so far, not just
+  the round's candidates. Reboxing a site inlining just planted gives up the
+  optimization on exactly the sites inlining made hot; trying the fast path
+  first and reboxing only the remainder does not. The rewrite then has to
+  decline per binding, since a site inherited from an earlier round was never
+  validated.
+- The fast path, the repair, and the invariant check must agree on what counts
+  as a binding fed by a call, and all three have to look through a block tail —
+  by the time a later round sees a binding, `let_block_flatten` may have
+  wrapped its call in a block. A narrower rule in any one of them makes the
+  repair rebox the fast path's own work, which is what produced a tuple-typed
+  binding holding a variant.
+
+With those in place the E2E suite runs clean with the pass enabled: 4117
+passed, 7 failed, and no invalid Wasm anywhere. The 7 are `opt_sroa_variant_*`
+fixtures pinning WIR-pass local names this pass does not produce — expectation
+churn, which step 3 updates.
 
 ### `?` re-padding is free
 
@@ -400,13 +415,14 @@ variant type" is needed — which is what the tail-call rule already requires.
 
 Each step lands and is measured before the next.
 
-- [ ] Step 1 — the pass behind a flag, off by default
+- [x] Step 1 — the pass behind a flag, off by default
       (`WADO_NIR_VARIANT_RETURN=1`). The candidate-set comparison is done (see
-      above): the NIR pass strictly dominates on the serde workloads and misses
-      `syntax_highlight` entirely. What remains is correctness — with the flag
-      on, 57 E2E fixtures fail, nearly all of them invalid Wasm out of the
-      rebox. Also open: a `LabeledBlock` return value arriving via `break L: v`,
-      rejected outright for now.
+      above): the NIR pass strictly dominates on the serde workloads. With the
+      flag on the suite compiles every program correctly — 4117 passed, 7
+      failed, no invalid Wasm — and the 7 are expectation churn. Still open and
+      carried into step 3: a `LabeledBlock` return value arriving via
+      `break L: v`, rejected outright, and `syntax_highlight` scalarizing
+      nothing where the WIR pass widens two functions.
 - [x] Step 2 — lift the `is_trait_method` gate and the arity cap in
       `multi_value_return`, on their own. Landed: full E2E green, wasm size
       neutral to -0.06%. `i128^Mul::mul` and its siblings now return

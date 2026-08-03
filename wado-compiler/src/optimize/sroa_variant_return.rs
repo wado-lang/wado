@@ -52,10 +52,22 @@
 //! Validation is a snapshot of the call sites that exist when it runs, and
 //! `nir/inline` keeps planting new ones afterwards — so a callee rewritten in
 //! one iteration can acquire an unvalidated call site in the next, by which
-//! point its signature is committed. [`rebox_stragglers`] is what makes the
-//! rewrite sound regardless: any call the fast path did not bind is wrapped
-//! back into the variant it used to return. Validation is left as a
-//! profitability filter, not a correctness precondition.
+//! point its signature is committed. Two things close that:
+//!
+//! - The call-site rewrite runs over *everything scalarized so far*, not just
+//!   this round's candidates, so a site inlining just planted still gets the
+//!   fast path. It declines per temp ([`temp_uses_rewritable`]) rather than
+//!   assuming validation vouched for the shape.
+//! - [`rebox_stragglers`] takes what is left: any call the fast path did not
+//!   bind is wrapped back into the variant it used to return. Validation is a
+//!   profitability filter, not a correctness precondition.
+//!
+//! Three places have to agree on what "a binding fed by a call" means — the
+//! fast path, the repair, and the invariant check. They all go through
+//! [`tail_call_site`], which looks through a block tail, because by the time a
+//! later iteration sees a binding, `let_block_flatten` and friends may have
+//! wrapped its call in a block. A narrower rule in any one of them makes the
+//! repair rebox the fast path's own work.
 //!
 //! ## Not yet handled
 //!
@@ -66,25 +78,12 @@
 //!   ([`return_value_scalarizable`]), which is sound but gives up the
 //!   `?`-through-`unwrap` shape the WIR pass handles via
 //!   `all_br_variant_values_are_struct_new`.
-//! - [`rebox_stragglers`] fires on sites the fast path *did* bind, and then the
-//!   variant-typed expression it substitutes collides with the tuple-typed
-//!   binding above it. With the pass on the E2E suite fails 57 fixtures, up
-//!   from 40 before the repair also ran after the rewrite.
-//!
-//!   `http_fields_from_list_error.wado` is the small reproducer. Its `handle`
-//!   ends up with
-//!
-//!   ```text
-//!   let __vr_197: [i32, Option<String>] = match __rebox_232.0 { 0 => Ok(…), _ => Err(…) }
-//!   ```
-//!
-//!   — a tuple-typed binding holding a variant. `__vr_197` is this pass's own
-//!   hoisted temp, so [`handled_call_sites`] should have claimed its call.
-//!   Traced so far: the recomputed layout and the binding's declared type agree
-//!   (both `TypeId(1812)`), yet `handled_call_sites` returns nothing for
-//!   `handle` at the moment the rebox runs. So the binding is not in that body
-//!   *yet* — the next step is to dump `handle`'s `Let` statements at rebox time
-//!   and find which invocation creates it.
+//! - The `opt_sroa_variant_*` fixtures still pin WIR-pass local names
+//!   (`__sroa_result_discriminant`) that this pass does not produce. Seven of
+//!   them fail with the pass on; all are expectation churn, not miscompiles —
+//!   the suite reports no invalid Wasm.
+//! - `syntax_highlight` scalarizes nothing here where the WIR pass widens two
+//!   functions.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionKind, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal};
@@ -182,31 +181,37 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
     if !enabled() {
         return false;
     }
-    // A callee rewritten in an earlier iteration may have picked up new call
-    // sites since, because `nir/inline` runs after this pass and copies bodies
-    // wholesale. Those sites were never validated and the callee cannot be
-    // un-rewritten, so they are reboxed rather than left mistyped.
-    let mut changed = rebox_stragglers(project, gate);
     let candidates = collect_and_validate(project, gate);
-    if !candidates.is_empty() {
-        for &key in candidates.keys() {
-            crate::compiler_trace!(
-                "sroa_variant_return",
-                "scalarizing {}",
-                project.functions[key.index()].borrow().name
-            );
-        }
-        let mut touched: IndexSet<usize> = IndexSet::default();
-        rewrite_callees(project, &candidates, &mut touched);
-        rewrite_call_sites(project, &candidates, &mut touched);
-        for idx in touched {
-            gate.mark_changed(FuncId::new(idx));
-        }
-        changed = true;
+    let mut changed = !candidates.is_empty();
+    for &key in candidates.keys() {
+        crate::compiler_trace!(
+            "sroa_variant_return",
+            "scalarizing {}",
+            project.functions[key.index()].borrow().name
+        );
     }
-    // And again after the rewrite: a site the fast path declined is a straggler
-    // the moment its callee's signature changes, not one iteration later.
-    rebox_stragglers(project, gate);
+    let mut touched: IndexSet<usize> = IndexSet::default();
+    rewrite_callees(project, &candidates, &mut touched);
+    // Call sites are rewritten for everything scalarized so far, not just this
+    // round's candidates. `nir/inline` runs after this pass and keeps copying
+    // bodies, so a callee scalarized earlier acquires fresh call sites that no
+    // round would otherwise revisit — and those sites are usually perfectly
+    // handleable, just not yet bound. Reboxing them without trying would give
+    // up the optimization on the very sites inlining just made hot.
+    let mut all = candidates.clone();
+    for (key, (variant_type, layout)) in scalarized_returns(project) {
+        all.entry(key).or_insert(Candidate {
+            layout,
+            variant_type,
+        });
+    }
+    rewrite_call_sites(project, &all, &mut touched);
+    for idx in touched {
+        gate.mark_changed(FuncId::new(idx));
+    }
+    // Only now: whatever the rewrite above declined is a straggler, and it is
+    // one the moment its callee's signature changed — not an iteration later.
+    changed |= rebox_stragglers(project, gate);
     debug_assert_call_sites_rewritten(project);
     changed
 }
@@ -260,12 +265,7 @@ fn rebox_stragglers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             &mut targets,
         );
         for call in targets {
-            crate::compiler_trace!(
-                "sroa_variant_return",
-                "reboxing a call in {} ({} bound site(s) there)",
-                func.name,
-                bound.len()
-            );
+            crate::compiler_trace!("sroa_variant_return", "reboxing a call in {}", func.name);
             rebox_call(&mut body, &mut func, call, &scalarized, span);
             changed = true;
         }
@@ -309,15 +309,18 @@ fn handled_call_sites(
         let StmtKind::Let { type_id, value, .. } = &stmt.kind else {
             continue;
         };
-        let Some(e) = value.as_expr() else { continue };
-        let ExprKind::Call { func_id, .. } = &body.exprs[e].kind else {
+        // Through a block tail as well as bare: by the time a later iteration
+        // sees this binding, `let_block_flatten` and friends may have wrapped
+        // the call in a block, and a bare-only match would call its own earlier
+        // work a straggler and rebox it under a tuple-typed binding.
+        let Some((func_id, call)) = tail_call_site(body, *value) else {
             continue;
         };
         if scalarized
-            .get(func_id)
+            .get(&func_id)
             .is_some_and(|(_, l)| l.tuple_type == *type_id)
         {
-            out.insert(e);
+            out.insert(call);
         }
     }
     out
@@ -506,13 +509,18 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let Some(body) = &func.body else { continue };
-        for stmt in body.stmts.values() {
+        // Reachable statements only. The arena is never compacted, so a rewrite
+        // that replaces a node leaves the old one behind; checking those would
+        // report a violation in code that no longer runs.
+        let mut live = Vec::new();
+        collect_stmts(body, NodeRef::Block(body.root), &mut live);
+        for stmt_id in live {
             let StmtKind::Let {
                 name,
                 type_id,
                 value,
                 ..
-            } = &stmt.kind
+            } = &body.stmts[stmt_id].kind
             else {
                 continue;
             };
@@ -535,21 +543,26 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
 #[cfg(not(debug_assertions))]
 fn debug_assert_call_sites_rewritten(_: &NirPackage) {}
 
-/// The callee of a `let` initializer, looking through a block whose tail is the
-/// call — the shape `nir/inline` leaves when it expands a one-call wrapper.
-fn tail_call_callee(body: &Body, op: Operand) -> Option<FuncId> {
+/// The callee of a `let` initializer and the call node itself, looking through a
+/// block whose tail is the call — the shape `nir/inline` leaves when it expands
+/// a one-call wrapper, and `let_block_flatten` when it hoists a receiver.
+fn tail_call_site(body: &Body, op: Operand) -> Option<(FuncId, ExprId)> {
     let e = op.as_expr()?;
     match &body.exprs[e].kind {
-        ExprKind::Call { func_id, .. } => Some(*func_id),
+        ExprKind::Call { func_id, .. } => Some((*func_id, e)),
         ExprKind::Block(b) => {
             let last = *body.blocks[*b].stmts.last()?;
             match &body.stmts[last].kind {
-                StmtKind::Expr(inner) => tail_call_callee(body, *inner),
+                StmtKind::Expr(inner) => tail_call_site(body, *inner),
                 _ => None,
             }
         }
         _ => None,
     }
+}
+
+fn tail_call_callee(body: &Body, op: Operand) -> Option<FuncId> {
+    tail_call_site(body, op).map(|(f, _)| f)
 }
 
 // -----------------------------------------------------------------------
@@ -1134,7 +1147,11 @@ fn collect_bound_temps(
             ..
         } = &body.stmts[s].kind
         && !*is_mut
-        && let Some(f) = call_callee(body, *value)
+        // Through a block tail as well as bare, so this agrees with
+        // `handled_call_sites` and `debug_assert_call_sites_rewritten` on what
+        // counts as a binding fed by a call. A narrower rule here leaves the
+        // binding un-retyped and the two wider ones then disagree with it.
+        && let Some((f, _)) = tail_call_site(body, *value)
         && candidates.contains_key(&f)
     {
         out.insert(*local_index, f);
@@ -1541,7 +1558,11 @@ fn rewrite_call_sites(
         // to be hoisted into a `let`.
         let mut changed = retype_candidate_calls(&mut body, candidates);
         changed |= hoist_call_scrutinees(&mut body, &mut func, candidates, span);
-        let bound = bound_temps(&body, candidates);
+        let mut bound = bound_temps(&body, candidates);
+        // A site validated this round is known handleable; one inherited from an
+        // earlier round is not, so each temp is re-checked. A temp that fails is
+        // dropped here and reboxed instead of half-rewritten.
+        bound.retain(|&local, _| temp_uses_rewritable(&body, local));
         if !bound.is_empty() {
             for (&local, &f) in &bound {
                 let tuple_type = candidates[&f].layout.tuple_type;
@@ -1704,9 +1725,13 @@ fn collect_call_scrutinees(
     candidates: &IndexMap<FuncId, Candidate>,
     out: &mut Vec<ExprId>,
 ) {
+    // The arms have to be rewritable before a binding is minted for them: a
+    // hoist the use-rewrite then declines would leave a tuple-typed temp under
+    // variant patterns. Declining here leaves the site to `rebox_stragglers`.
     if let NodeRef::Expr(e) = node
-        && let ExprKind::Match { expr: scrut, .. } = &body.exprs[e].kind
+        && let ExprKind::Match { expr: scrut, arms } = &body.exprs[e].kind
         && call_callee(body, *scrut).is_some_and(|f| candidates.contains_key(&f))
+        && arms.iter().all(|a| arm_is_one_level(body, a))
     {
         out.push(e);
     }
@@ -1776,6 +1801,77 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
     for c in kids {
         rewrite_temp_uses(body, c, cx);
     }
+}
+
+/// Whether every mention of `local` is a destructure the rewrite lowers. A bare
+/// read escapes the tuple, and a `Match` arm deeper than one level has no tag
+/// form — either leaves the site to the rebox.
+fn temp_uses_rewritable(body: &Body, local: u32) -> bool {
+    let mut ok = true;
+    check_temp_uses(body, NodeRef::Block(body.root), local, &mut ok);
+    ok
+}
+
+fn check_temp_uses(body: &Body, node: NodeRef, local: u32, ok: &mut bool) {
+    if !*ok {
+        return;
+    }
+    if let NodeRef::Stmt(s) = node
+        && let StmtKind::Let {
+            local_index, value, ..
+        } = &body.stmts[s].kind
+        && *local_index == local
+    {
+        // The binding's own initializer is the call, not a use.
+        if let Some(e) = value.as_expr()
+            && matches!(&body.exprs[e].kind, ExprKind::Call { .. })
+        {
+            return;
+        }
+    }
+    if let NodeRef::Expr(e) = node {
+        match &body.exprs[e].kind {
+            ExprKind::VariantTag { expr }
+            | ExprKind::VariantTest { expr, .. }
+            | ExprKind::VariantPayload { expr, .. } => {
+                if is_local(body, *expr, local) {
+                    return;
+                }
+            }
+            ExprKind::Match { expr: scrut, arms } => {
+                if is_local(body, *scrut, local) {
+                    if !arms.iter().all(|a| arm_is_one_level(body, a)) {
+                        *ok = false;
+                        return;
+                    }
+                    let arms = arms.clone();
+                    for a in &arms {
+                        if let Some(g) = a.guard
+                            && let Some(ge) = g.as_expr()
+                        {
+                            check_temp_uses(body, NodeRef::Expr(ge), local, ok);
+                        }
+                        if let Some(be) = a.body.as_expr() {
+                            check_temp_uses(body, NodeRef::Expr(be), local, ok);
+                        }
+                    }
+                    return;
+                }
+            }
+            ExprKind::Local { index, .. } if *index == local => {
+                *ok = false;
+                return;
+            }
+            _ => {}
+        }
+    }
+    body.for_each_child(node, |c| check_temp_uses(body, c, local, ok));
+}
+
+fn is_local(body: &Body, op: Operand, local: u32) -> bool {
+    op.as_expr().is_some_and(
+        |e| matches!(&body.exprs[e].kind, ExprKind::Local { index, .. } if *index == local),
+    )
 }
 
 fn temp_local(body: &Body, op: Operand, bound: &IndexMap<u32, FuncId>) -> Option<u32> {
