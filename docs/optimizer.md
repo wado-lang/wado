@@ -142,8 +142,16 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 - [ ] `param_spec` profitability — specialize only when the constants can decide
       a branch, so a chain that never folds stops duplicating code.
 - [ ] Argument promotion — pass a by-reference parameter's fields by value when
-      the callee only reads them. `param_spec` covers the constant case; a
-      non-constant field still costs a GC load per read.
+      the callee only reads them, and return them by multi-value when it only
+      writes them. Together those retire a scratch aggregate at its allocation
+      site: `sroa` finishes the job once no call takes its address.
+      `sroa_param` is this rewrite for a single field, `stored_params` already
+      decides the escape precondition, and `multi_value_return` /
+      `sroa_variant_return` already own the write-back ABI — so the missing
+      piece is the N-field case, bounded by the same result-arity cap.
+      `param_spec` covers only the constant case; a non-constant field still
+      costs a GC load per read. `core:json`'s number scanner wants both halves
+      at once and holds `#[inline(always)]` until they exist.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Variant return ABI decided at NIR, the way `multi_value_return` already

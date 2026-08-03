@@ -728,8 +728,13 @@ impl ScannedNumber {
 }
 
 /// Reconstructs the f64 value of a scanned number token. Exponents outside
-/// fpfmt's domain clamp to ±infinity / ±zero. Inlined so the scratch struct
-/// scalarizes away instead of being read back out of a GC object.
+/// fpfmt's domain clamp to ±infinity / ±zero.
+///
+/// Inlined together with `scan_number_into` — it takes both, since the scratch
+/// escapes into whichever call is left behind. Stands in for the argument
+/// promotion `docs/optimizer.md` lists as unimplemented: this reads `n` through
+/// nothing but field access, so passing the fields by value would leave the
+/// scratch scalarizable where it is allocated.
 #[inline(always)]
 fn scanned_to_f64(n: &ScannedNumber) -> f64 {
     if n.digits == 0 {
@@ -1216,7 +1221,13 @@ impl JsonDeserializer {
     ///
     /// The scratch struct keeps a `Result<ScannedNumber>` aggregate off the hot
     /// decode path, and inlining turns it into the caller's scalar locals — the
-    /// seven-field round trip through a GC object dominated the per-token cost.
+    /// allocation plus seven-field round trip through a GC object, per number
+    /// token, dominated the cost otherwise.
+    ///
+    /// The hint stands in for a pass, not for a judgement about this call: `out`
+    /// is written only by the seven stores that close the body, so returning
+    /// those fields by multi-value would leave nothing for the scratch to be.
+    /// See the write-back half of `docs/optimizer.md`'s argument promotion.
     #[inline(always)]
     fn scan_number_into(&mut self, out: &mut ScannedNumber) -> Result<(), DeserializeError> {
         let input = self.input;
