@@ -28,8 +28,6 @@ The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that c
 
 Entries state the symptom, how to reproduce it, and anything already measured — not a diagnosis or a proposed fix. A diagnosis written here reads as an instruction later, and two have been wrong: one would have broken compatibility if implemented as written, the other described a difference that did not exist.
 
-- [ ] The opaque-rule expansion path drops at-end alternatives its template keeps: `try_expand_opaque` has none of the at-end handling `build_sll_node` grew, and its coverage check verifies only the opaque alts, so an at-end alt among the non-opaque configs leaves the emitted `Dispatch` with no branch of its own.
-- [ ] A lexer alternation with a suffix keeps the first-match emit when the suffix is not peekable — a `RuleRef`, a `Repeat` (`('a'|'ab') 'bc'?`), or an alternation whose arms are not single elements. `lexer_suffix_is_peekable` is the window; outside it the arm is chosen without consulting what follows, as `('a'|'ab') 'bc'` did before. No corpus grammar is known to hit it.
 - [ ] `\p{...}` covers the general categories only (generated from the UCD by `scripts/regen-unicode-tables.sh`). A script (`\p{Greek}`), block (`\p{InGreek}`) or binary property (`\p{Other_ID_Start}`, `\p{Pattern_Syntax}`) is rejected with "unsupported Unicode property", so a grammar ANTLR4 accepts is refused. No corpus grammar needs one — RustLexer's are in comments. The data for the rest is `Scripts.txt` / `PropList.txt` / `DerivedCoreProperties.txt`.
 
 Not a mis-parse since the tournament backs every incomplete cascade, but the same under-approximation, and what keeps that backstop load-bearing:

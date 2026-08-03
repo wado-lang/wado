@@ -1511,14 +1511,14 @@ fn gen_lexer_alt_seq(
             // inner stops matching we resume the cursor at that recorded
             // position and consume the suffix.
             //
-            // Shapes outside that window (RuleRef inner / suffix, nested
-            // Repeat, multi-element-alt Group) fall through to the
-            // unchanged greedy emit below. The standard lexer algorithm
-            // is correct there as long as the inner cannot consume the
-            // suffix's first character — a property the descriptor
-            // corpus does satisfy outside the simple window. If a future
-            // grammar needs lookahead through a complex shape, generalise
-            // the peek emitters instead of widening this trigger blindly.
+            // The plain greedy loop is wrong only where the inner can eat a
+            // char the suffix needs, so that is the trigger
+            // (`lexer_repeat_can_eat_suffix`); everywhere else the loop stops
+            // exactly where the suffix must start and the cheaper emit stands.
+            // Two more conditions: the inner must consume exactly one char per
+            // iteration, or the recorded position and the peek fall out of
+            // step, and the suffix must be peekable — which is about what it
+            // carries, not its shape.
             if rep.kind matches { Plus | Star }
                 && i + 1 < alt.elements.len()
                 && lexer_element_can_consume_simple(&rep.element) {
@@ -1526,7 +1526,8 @@ fn gen_lexer_alt_seq(
                 for let mut j = i + 1; j < alt.elements.len(); j += 1 {
                     suffix_elems.push(alt.elements[j]);
                 }
-                if lexer_suffix_is_peekable(&suffix_elems) {
+                if lexer_repeat_can_eat_suffix(&rep.element, &suffix_elems, all_rules, ci)
+                    && lexer_suffix_is_peekable(&suffix_elems, all_rules) {
                     // The peek/commit emitter carries no actions, so a predicate
                     // strictly after the repeat cannot be placed — fail loudly
                     // rather than drop it (the trailing one is still post-loop).
@@ -1541,18 +1542,22 @@ fn gen_lexer_alt_seq(
             }
         }
         // An alternation with something after it cannot be decided by which arm
-        // matches first. Same window as the repeat above; outside it the
-        // alternation keeps the first-match emit.
+        // matches first — unless no two arms can match at the same position
+        // (`lexer_alts_can_collide`), where first-match already is the answer.
+        // A suffix carrying a predicate also keeps the first-match emit, since
+        // scoring the arms would evaluate it once per arm
+        // (`lexer_suffix_is_peekable`).
         if let Group(g_alts) = elem {
             if g_alts.len() >= 2
                 && i + 1 < alt.elements.len()
                 && lexer_alts_prefer_longest(g_alts, all_rules)
+                && lexer_alts_can_collide(g_alts, all_rules, ci)
                 && !lexer_alt_has_predicate_after(alt, i) {
                 let mut suffix_elems: List<LexerElement> = [];
                 for let mut j = i + 1; j < alt.elements.len(); j += 1 {
                     suffix_elems.push(alt.elements[j]);
                 }
-                if lexer_suffix_is_peekable(&suffix_elems) {
+                if lexer_suffix_is_peekable(&suffix_elems, all_rules) {
                     gen_lexer_alts_lookahead_aware(
                         w,
                         g_alts,
@@ -1611,62 +1616,324 @@ fn lexer_alt_has_predicate_at(alt: &LexerAlternative, at: i32) -> bool {
     return false;
 }
 
-/// True for lexer elements safe to participate in the lookahead-aware
-/// `gen_lexer_repeat_lookahead_aware` emit. `single_char` forces the
-/// element to consume *exactly one char* — the constraint the
-/// lookahead-aware emitter places on the `Plus` / `Star` inner so the
-/// per-iteration peek records the right position. The same predicate
-/// without `single_char` is what the SUFFIX must satisfy: each element
-/// must be deterministic and side-effect-free when replayed inside the
-/// peek block (so the peek's verdict matches the eventual commit).
-/// Multi-char literals are accepted in the suffix because the peek
-/// replays the same byte-wise comparisons the commit will run.
-///
-/// Either way, non-simple shapes (RuleRef, nested Repeat, multi-element
-/// alts inside a Group) escape into a rule call, recurse into their
-/// own loop, or pick an alternation arm that could diverge between
-/// peek and commit, and are rejected.
-fn lexer_element_can_replay(elem: &LexerElement, single_char: bool) -> bool {
+/// Whether the greedy loop could eat a char the suffix needs — the one thing
+/// a plain greedy loop cannot recover from, since it never looks past the
+/// inner. Both sides are over-approximated (`compute_elem_first_chars`
+/// reports an unbounded set for `.`, a negated class or an opaque rule ref),
+/// and an unbounded set counts as an overlap, so the answer errs towards the
+/// emit that consults the suffix.
+fn lexer_repeat_can_eat_suffix(
+    inner: &LexerElement,
+    suffix: &List<LexerElement>,
+    all_rules: &List<LexerRule>,
+    ci: bool,
+) -> bool {
+    let mut inner_chars: List<[char, char]> = [];
+    if compute_elem_first_chars(&[
+        LexerAlternative {
+            elements: [*inner],
+        },
+    ], all_rules, &mut inner_chars, ci).0 {
+        return true;
+    }
+    let mut suffix_chars: List<[char, char]> = [];
+    if lexer_suffix_first_chars(suffix, all_rules, &mut suffix_chars, ci) {
+        return true;
+    }
+    for let a of &inner_chars {
+        for let b of &suffix_chars {
+            if a[0] <= b[1] && b[0] <= a[1] {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// The chars an alternative can begin with. `negated` inverts `ranges`, which
+/// is how `~[/!]` (and `.`, an empty negated set) is carried — the complement
+/// is what makes `('//' | ~[/!])`'s arms provably exclusive.
+struct FirstCharSet {
+    ranges: List<CharRange>,
+    negated: bool,
+}
+
+/// Whether two arms could both match at the same position — the only case
+/// where which arm wins is a decision at all. When no two can, the cheap
+/// first-match emit already gives ANTLR4's answer and the arms need not be
+/// scored against the suffix. Unknown leading shapes (a rule reference, a
+/// group, anything nullable) answer "yes".
+fn lexer_alts_can_collide(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, ci: bool) -> bool {
+    let mut sets: List<FirstCharSet> = [];
+    for let alt of alts {
+        let set = lexer_alt_first_char_set(alt, all_rules, ci);
+        if let Some(s) = set {
+            sets.push(s);
+        } else {
+            return true;
+        }
+    }
+    for let mut i = 0; i < sets.len(); i += 1 {
+        for let mut j = i + 1; j < sets.len(); j += 1 {
+            if first_char_sets_overlap(&sets[i], &sets[j]) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn lexer_alt_first_char_set(alt: &LexerAlternative, all_rules: &List<LexerRule>, ci: bool) -> Option<FirstCharSet> {
+    if alt.elements.is_empty() {
+        return null;
+    }
+    return lexer_elem_first_char_set(&alt.elements[0], all_rules, ci);
+}
+
+fn lexer_elem_first_char_set(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool) -> Option<FirstCharSet> {
     return match *elem {
-        Literal(text) => !single_char || text.chars().count() == 1,
+        Literal(text) => match text.chars().next() {
+            Some(c) => Option::<FirstCharSet>::Some(FirstCharSet { ranges: folded_ranges(c, c, ci), negated: false }),
+            None => null,
+        },
+        CharRange(pair) => Option::<FirstCharSet>::Some(
+            FirstCharSet { ranges: folded_ranges(pair.0, pair.1, ci), negated: false },
+        ),
+        CharClass(cc) => {
+            // A case-folded complement is not the complement of the folded
+            // ranges, so a negated class under `ci` stays unknown.
+            if cc.negated && ci {
+                return null;
+            }
+            let mut ranges: List<CharRange> = [];
+            for let r of &cc.ranges {
+                for let f of &folded_ranges(r.start, r.end, ci) {
+                    ranges.push(*f);
+                }
+            }
+            Option::<FirstCharSet>::Some(FirstCharSet { ranges, negated: cc.negated });
+        },
+        AnyChar => Option::<FirstCharSet>::Some(FirstCharSet { ranges: [], negated: true }),
+        Not(not_inner) => match lexer_elem_first_char_set(&not_inner.element, all_rules, ci) {
+            Some(inner) => if inner.negated {
+                null;
+            } else {
+                Option::<FirstCharSet>::Some(FirstCharSet { ranges: inner.ranges, negated: true });
+            },
+            None => null,
+        },
+        Group(alts) => {
+            // `~('b' | ' ')` nests its arms in a group, so a group of
+            // single-char arms is a plain union; anything else is unknown.
+            let mut ranges: List<CharRange> = [];
+            for let a of alts {
+                let set = lexer_alt_first_char_set(&a, all_rules, ci);
+                match set {
+                    Some(s) => {
+                        if s.negated {
+                            return null;
+                        }
+                        for let r of &s.ranges {
+                            ranges.push(*r);
+                        }
+                    },
+                    None => {
+                        return null;
+                    },
+                }
+            }
+            if ranges.is_empty() {
+                return null;
+            }
+            Option::<FirstCharSet>::Some(FirstCharSet { ranges, negated: false });
+        },
+        RuleRef(_) | Repeat(_) => null,
+    };
+}
+
+fn folded_ranges(start: char, end: char, ci: bool) -> List<CharRange> {
+    if !ci {
+        return [
+            CharRange { start, end },
+        ];
+    }
+    let mut folded: List<CharRange> = [];
+    fold_range_ci(start, end, &mut folded);
+    return folded;
+}
+
+/// Whether some char satisfies both sets. Two complements always can (no
+/// grammar's two negated classes cover the code space between them), a
+/// complement and a plain set do when the plain set is not contained in the
+/// complemented one.
+fn first_char_sets_overlap(a: &FirstCharSet, b: &FirstCharSet) -> bool {
+    if a.negated && b.negated {
+        return true;
+    }
+    if a.negated {
+        return !ranges_contain_all(&a.ranges, &b.ranges);
+    }
+    if b.negated {
+        return !ranges_contain_all(&b.ranges, &a.ranges);
+    }
+    for let x of &a.ranges {
+        for let y of &b.ranges {
+            if x.start <= y.end && y.start <= x.end {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// Whether every char of `inner` is in `outer`. `outer` ranges are not
+/// normalized, so a char split across two adjacent ranges reads as absent —
+/// an over-approximation of "not contained", which only ever keeps the
+/// lookahead-aware emit.
+fn ranges_contain_all(outer: &List<CharRange>, inner: &List<CharRange>) -> bool {
+    for let i of inner {
+        let mut covered = false;
+        for let o of outer {
+            if o.start <= i.start && i.end <= o.end {
+                covered = true;
+                break;
+            }
+        }
+        if !covered {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The chars the suffix can begin with, into `out`; true when that set is
+/// unbounded. Unlike the rule-dispatch walk this follows a non-fragment rule
+/// reference as well: there the reference is an opaque call the dispatch
+/// cannot see into, here it is the very code the loop is competing with.
+fn lexer_suffix_first_chars(
+    suffix: &List<LexerElement>,
+    all_rules: &List<LexerRule>,
+    out: &mut List<[char, char]>,
+    ci: bool,
+) -> bool {
+    for let elem of suffix {
+        let referenced = match *elem {
+            RuleRef(name) => find_lexer_rule(all_rules, &name),
+            Literal(_) | CharRange(_) | CharClass(_) | AnyChar | Group(_) | Repeat(_) | Not(_) => null,
+        };
+        let reach = match referenced {
+            Some(rule) => compute_elem_first_chars(&rule.body, all_rules, out, ci),
+            None => compute_elem_first_chars(&[
+                LexerAlternative {
+                    elements: [*elem],
+                },
+            ], all_rules, out, ci),
+        };
+        if reach.0 {
+            return true;
+        }
+        if !reach.1 {
+            return false;
+        }
+    }
+    return false;
+}
+
+/// The `Plus` / `Star` inner of a lookahead-aware repeat must consume
+/// exactly one char per iteration, so the loop's per-iteration peek records
+/// a position one char past the last successful inner. A RuleRef escapes
+/// into a rule call and a nested Repeat runs its own loop, so neither has a
+/// per-char iteration to record against.
+///
+/// `~('b')` parses as `Not(Group([Alt([Literal("b")])]))` and `~('b' | ' ')`
+/// as `Not(Group([Alt(['b']), Alt([' '])]))`; either consumes exactly one
+/// char as long as every alt body is a single one-char element.
+fn lexer_element_can_consume_simple(elem: &LexerElement) -> bool {
+    return match *elem {
+        Literal(text) => text.chars().count() == 1,
         CharRange(_) | CharClass(_) | AnyChar => true,
-        Not(not_inner) => lexer_element_can_replay(&not_inner.element, single_char),
-        // `~('b')` parses as `Not(Group([Alt([Literal("b")])]))`,
-        // `~('b' | ' ')` as `Not(Group([Alt(['b']), Alt([' '])]))`.
-        // Either shape consumes exactly one char as long as every alt
-        // body is itself a single replay-safe element.
+        Not(not_inner) => lexer_element_can_consume_simple(&not_inner.element),
         Group(alts) => {
             for let alt of alts {
                 if alt.elements.len() != 1 {
                     return false;
                 }
-                if !lexer_element_can_replay(&alt.elements[0], single_char) {
+                if !lexer_element_can_consume_simple(&alt.elements[0]) {
                     return false;
                 }
             }
             !alts.is_empty();
         },
-        _ => false,
+        RuleRef(_) | Repeat(_) => false,
     };
 }
 
-/// Convenience: the `Plus` / `Star` inner must consume exactly one
-/// char per iteration so the lookahead-aware loop's per-iteration peek
-/// records a position that is one char past the last successful inner.
-fn lexer_element_can_consume_simple(elem: &LexerElement) -> bool {
-    return lexer_element_can_replay(elem, /*single_char=*/ true);
-}
-
 /// True when every element in the suffix can be safely peeked via a
-/// `save-pos / try-elem / restore-pos` block. Multi-char literals are
-/// permitted: the peek replays the same byte-wise comparisons the
-/// post-loop commit will run.
-fn lexer_suffix_is_peekable(elements: &List<LexerElement>) -> bool {
+/// `save-pos / try-elem / restore-pos` block. The peek emits each element
+/// exactly as the commit will and restores `pos`, so the element's shape is
+/// not the constraint — purity is. A semantic predicate is what breaks it:
+/// the peek would evaluate it once per scored arm or repeat iteration and
+/// again on commit, changing how often the grammar sees it, and a
+/// state-dependent one could then answer differently in the two passes.
+fn lexer_suffix_is_peekable(elements: &List<LexerElement>, all_rules: &List<LexerRule>) -> bool {
     if elements.is_empty() {
         return false;
     }
     for let elem of elements {
-        if !lexer_element_can_replay(elem, /*single_char=*/ false) {
+        let mut visiting: List<String> = [];
+        if !lexer_elem_is_peek_pure(elem, all_rules, &mut visiting) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Whether peeking `elem` evaluates no semantic predicate. A rule reference
+/// is followed rather than treated as a boundary — unlike
+/// `lexer_elem_has_predicate_below`, where the callee runs once, the peek
+/// runs it twice. `visiting` breaks reference cycles; a rule already on the
+/// path contributes nothing new.
+fn lexer_elem_is_peek_pure(elem: &LexerElement, all_rules: &List<LexerRule>, visiting: &mut List<String>) -> bool {
+    return match *elem {
+        Literal(_) | CharRange(_) | CharClass(_) | AnyChar => true,
+        Not(not_inner) => lexer_elem_is_peek_pure(&not_inner.element, all_rules, visiting),
+        Repeat(rep) => lexer_elem_is_peek_pure(&rep.element, all_rules, visiting),
+        Group(alts) => {
+            for let a of alts {
+                if !lexer_alt_is_peek_pure(&a, all_rules, visiting) {
+                    return false;
+                }
+            }
+            !alts.is_empty();
+        },
+        RuleRef(name) => {
+            if name == "EOF" || visiting.contains(&name) {
+                return true;
+            }
+            visiting.push(name);
+            match find_lexer_rule(all_rules, &name) {
+                Some(r) => {
+                    for let a of &r.body {
+                        if !lexer_alt_is_peek_pure(a, all_rules, visiting) {
+                            return false;
+                        }
+                    }
+                    true;
+                },
+                None => false,
+            }
+        },
+    };
+}
+
+fn lexer_alt_is_peek_pure(alt: &LexerAlternative, all_rules: &List<LexerRule>, visiting: &mut List<String>) -> bool {
+    for let a of &alt.actions {
+        if a.kind matches { Predicate } {
+            return false;
+        }
+    }
+    for let e of &alt.elements {
+        if !lexer_elem_is_peek_pure(e, all_rules, visiting) {
             return false;
         }
     }
@@ -2079,6 +2346,15 @@ fn gen_lexer_not(
     w.line(&`pos = not_saved_${id};`);
     w.line(&`if not_matched_${id} \{ ${fail_action}; \}`);
     w.line(&"pos += 1;");
+}
+
+fn find_lexer_rule(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {
+    for let rule of all_rules {
+        if rule.name == *name {
+            return Option::<&LexerRule>::Some(rule);
+        }
+    }
+    return null;
 }
 
 fn find_fragment(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {

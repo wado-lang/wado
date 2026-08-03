@@ -371,12 +371,17 @@ alternative's next token.
 
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
-greedy `+`/`*` inner can also match the suffix's first char (`'a'
-~('b')+ 'c'`), the emitter peeks the suffix each iteration and rewinds
-once to the latest legal suffix start. This narrow lookahead-aware path
-fires only when inner and suffix are all single-char-consuming; other
-shapes fall through to the plain greedy loop (sound because the inner
-cannot consume the suffix's first char there).
+greedy `+`/`*` inner can also eat a char the suffix needs (`'a' ~('b')+
+'c'`), the emitter peeks the suffix each iteration and rewinds once to the
+latest legal suffix start. That overlap is the trigger: where the inner
+cannot eat into the suffix, the plain greedy loop already stops exactly
+where the suffix must start and keeps the cheaper emit. Two conditions bound
+the peek — the inner must consume exactly one char per iteration, or the
+recorded position and the peek fall out of step, and the suffix must carry
+no semantic predicate, which the peek would evaluate once per iteration and
+again on commit. The suffix's shape is otherwise free: a repeat, a rule
+reference or a nested alternation all peek fine, since the peek emits what
+the commit will run and restores the cursor.
 
 The first-character dispatch that picks which rules to try is a filter, not a
 decision: a rule admitted by its first character can still fail on the rest of
@@ -393,9 +398,11 @@ rule's. With a suffix after it neither first-match nor longest-arm is right —
 `xyz` needs the first — so each arm is scanned from the same start, its suffix
 peeked without consuming, and the arm whose arm-plus-suffix reaches furthest
 wins, ties to the first. Scoring on the suffix rather than the arm is what
-makes `('p' | 'pq') ('qrs' | 'r')` take the short arm on `pqrs`. Same window as
-the repeat path: outside it the alternation keeps the first-match emit.
-Fixture: `lexer_alt_suffix_longest.g4`.
+makes `('p' | 'pq') ('qrs' | 'r')` take the short arm on `pqrs`. Same peek as
+the repeat path, and the same predicate limit; the arms are scored only when
+two of them could match at the same position at all, since disjoint leading
+char sets force the choice and first-match is then already the answer.
+Fixtures: `lexer_alt_suffix_longest.g4`, `lexer_alt_suffix_shapes.g4`.
 
 ### Static LL prediction — the runtime FOLLOW gate
 
@@ -601,10 +608,14 @@ the compiled fast path:**
    no simulator. A rule reachable only past a `.` / `~X` (whose follow set
    can't be enumerated) routes conservatively. Every other multi-alt
    ambiguity keeps the tournament, whose longest-match matches ANTLR4
-   across the corpus. Regression fixtures:
-   `tests/grammars/ll_longest_vs_context.g4` and
-   `ll_at_end_nullable_gap.g4` (routed to the simulator),
-   `ll_at_end_follow_disjoint.g4` (stays on the tournament),
+   across the corpus. The conflict is reported the same way when the alts
+   share an opaque rule-ref prefix that expansion did separate: an alt that
+   ends there claims no token of its own, so the expansion reports the
+   conflict instead of dispatching on a token that may belong to the caller.
+   Regression fixtures: `tests/grammars/ll_longest_vs_context.g4`,
+   `ll_at_end_nullable_gap.g4` and `ll_opaque_at_end_context.g4` (routed to
+   the simulator), `ll_at_end_follow_disjoint.g4` and
+   `ll_opaque_at_end_gap.g4` (stay on the tournament),
    `ll_optional_non_greedy_multi.g4`.
 
 Two more sites _would_ belong here on correctness grounds and are left out on
