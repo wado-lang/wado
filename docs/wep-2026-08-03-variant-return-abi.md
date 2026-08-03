@@ -327,14 +327,32 @@ Retired: ≈ 2,560 lines. New: ≈ 900–1,100 for the NIR pass, by analogy with
 case). Net ≈ −1,500 — and the line count is the least interesting number here.
 This design is justified by pass interaction, not by size.
 
-### The candidate sets will not coincide
+### The candidate sets do not coincide — measured
 
-The two analyses look at different programs: the WIR pass sees post-`nullable_ref`,
-post-`propagate_trivial_copies` shapes; the NIR pass sees NIR, and sees it
-_before_ inlining rather than after everything. Functions will be gained (a
-`return match {…}` is a tree at NIR, a typed block with `Br` exits at WIR) and
-lost (nested arm patterns are rejected). Golden fixtures will churn. Step 1
-exists to quantify this before any behavior changes.
+The two analyses look at different programs: the WIR pass sees
+post-`nullable_ref`, post-`propagate_trivial_copies` shapes; the NIR pass sees
+NIR, and sees it _before_ inlining rather than after everything.
+
+Counted at `-O2` with `WADO_TRACE=sroa_variant_return`. "WIR left over" is what
+`wir_optimize::sroa_variant_returns` still finds with the NIR pass enabled —
+the functions the NIR pass missed:
+
+| program            | WIR pass alone | NIR pass | WIR left over |
+| ------------------ | -------------- | -------- | ------------- |
+| `cbor_twitter`     | 150            | 186      | 0             |
+| `json_twitter`     | 81             | 103      | 0             |
+| `json_canada`      | 27             | 36       | 0             |
+| `syntax_highlight` | 2              | 0        | 2             |
+| `sqlite_parse`     | 67             | 0        | 1             |
+
+On the serde workloads the NIR pass strictly dominates: more functions
+scalarized, and nothing left for the WIR pass to find. That is the
+`return match {…}`-is-a-tree effect the design predicted.
+
+`syntax_highlight` is a straight two-function miss, small enough to diagnose
+directly. `sqlite_parse` is not a miss at all — its 67 dropped to 1 with the
+NIR pass still **off**, so the cause is elsewhere in this branch and is tracked
+as an open question below. Golden fixtures will churn either way.
 
 ### Termination and monotonicity
 
@@ -353,11 +371,23 @@ returns. The signature is already committed by then, so this is invalid Wasm,
 not a missed optimization, and it is the reason the pass is staged off today
 (`serde_json_synth_variant.wado`).
 
-Two ways out, to be decided with measurements: place the pass _after_
-`nir/inline` in the iteration, so a site inline plants is validated on the next
-round before anything is committed; or make the call-site rewrite total —
-retype any `let` bound from a rewritten callee wherever it appears, rather than
-only the shapes validation admitted.
+Placing the pass _after_ `nir/inline` does not fix it: a callee rewritten in one
+iteration cannot be un-rewritten when the next iteration plants a site, whatever
+the order within an iteration. Soundness has to come from the rewrite itself.
+
+The mechanism is to rebox — wrap any call the fast path did not bind back into
+the variant it used to return, `f(x)` becoming
+`{ let t = f(x); match t.0 { 0 => Ok(t.1!), _ => Err(t.2!) } }`. The surrounding
+context then sees exactly the type it was written against, and validation
+becomes a profitability filter rather than a correctness precondition. The
+rebox costs the allocation the scalarization was meant to avoid, so it is a
+backstop `const_fold` and `sroa` are expected to collapse once the tag is
+known — not a target.
+
+That mechanism is implemented and works on individual programs, but what it
+emits is not right in general: with the pass enabled the E2E suite fails 57
+fixtures, against 40 before the rebox ran after the rewrite as well as before
+it. Getting it right is the open work for step 1.
 
 ### `?` re-padding is free
 
@@ -371,12 +401,12 @@ variant type" is needed — which is what the tail-call rule already requires.
 Each step lands and is measured before the next.
 
 - [ ] Step 1 — the pass behind a flag, off by default
-      (`WADO_NIR_VARIANT_RETURN=1`). Instrument it and compare its candidate set
-      against the WIR pass's, per program. Gate: it reaches the counts in the
-      table above, or every gap is named. Blocked on the two shapes in the
-      module docs' "Not yet handled": the `inline`-plants-a-site race above, and
-      a `LabeledBlock` return value arriving via `break L: v`, rejected outright
-      for now.
+      (`WADO_NIR_VARIANT_RETURN=1`). The candidate-set comparison is done (see
+      above): the NIR pass strictly dominates on the serde workloads and misses
+      `syntax_highlight` entirely. What remains is correctness — with the flag
+      on, 57 E2E fixtures fail, nearly all of them invalid Wasm out of the
+      rebox. Also open: a `LabeledBlock` return value arriving via `break L: v`,
+      rejected outright for now.
 - [x] Step 2 — lift the `is_trait_method` gate and the arity cap in
       `multi_value_return`, on their own. Landed: full E2E green, wasm size
       neutral to -0.06%. `i128^Mul::mul` and its siblings now return
@@ -395,6 +425,27 @@ Each step lands and is measured before the next.
       applying the slot rule recursively to a tuple slot. Whether that is worth
       doing, or whether the WIR pass should keep it, is a question for after
       step 4's measurements.
+
+## Open questions
+
+### Why did `sqlite_parse` drop from 67 widened functions to 1?
+
+Measured with the NIR pass **off**, so this is not the new pass: on this branch
+`wir_optimize::sroa_variant_returns` widens 1 function on `sqlite_parse` where
+it widened 67 before. `json_twitter` is unchanged at 81, so it is specific to
+that workload.
+
+The step-2 change (trait methods and the wider arity cap in
+`multi_value_return`) is the only candidate. Against it being a regression: the
+emitted module is byte-identical in size (584,940 both before and after), and
+the full E2E suite is green — so the work has most likely moved onto the
+tuple/struct multi-value path rather than been lost. That is a hypothesis, not
+a measurement. Settling it needs the two modules diffed, not their sizes
+compared, and it should be settled before step 4 uses widened-function counts
+as a gate.
+
+The lesson for the staging gates: a widened-function count is a proxy, and a
+proxy that moves when the bytes do not is telling you about the proxy.
 
 ## Alternative considered: `ReturnAbi::Variant`
 

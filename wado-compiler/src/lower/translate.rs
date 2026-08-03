@@ -576,6 +576,7 @@ impl Translator<'_> {
             export_name: func.export_name.clone(),
             allocator_tag: func.allocator_tag.clone(),
             kind: convert_function_kind(&func.kind),
+            scalarized_from: None,
             return_abi: convert_return_abi(&func.return_abi),
         }
     }

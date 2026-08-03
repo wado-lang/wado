@@ -47,22 +47,32 @@
 //! A rewritten function returns a tuple, so it can never be a candidate again.
 //! The candidate set strictly shrinks, and the pass cannot keep the loop alive.
 //!
+//! ## Soundness does not rest on validation
+//!
+//! Validation is a snapshot of the call sites that exist when it runs, and
+//! `nir/inline` keeps planting new ones afterwards — so a callee rewritten in
+//! one iteration can acquire an unvalidated call site in the next, by which
+//! point its signature is committed. [`rebox_stragglers`] is what makes the
+//! rewrite sound regardless: any call the fast path did not bind is wrapped
+//! back into the variant it used to return. Validation is left as a
+//! profitability filter, not a correctness precondition.
+//!
 //! ## Not yet handled
 //!
-//! The pass is staged off (see [`enabled`]) until these are closed. Both
-//! produce invalid Wasm today, so neither may be left to a later cleanup:
+//! The pass is staged off (see [`enabled`]) until these are closed:
 //!
-//! - A call site that only becomes ill-shaped *after* the candidate was
-//!   rewritten — `nir/inline` runs later in the same iteration and can plant a
-//!   `let mut t = <block ending in a candidate call>` whose local keeps the
-//!   variant type the callee no longer returns
-//!   (`tests/fixtures/serde_json_synth_variant.wado`). Validation only sees the
-//!   call sites that exist when it runs.
 //! - A `LabeledBlock` in return-value position, whose value also arrives via
-//!   `break L: v`. Those exits are currently rejected outright
-//!   (`return_value_scalarizable`), which is sound but gives up the
+//!   `break L: v`. Those exits are rejected outright
+//!   ([`return_value_scalarizable`]), which is sound but gives up the
 //!   `?`-through-`unwrap` shape the WIR pass handles via
 //!   `all_br_variant_values_are_struct_new`.
+//! - The rebox's own construction is not right yet. With the pass on, the E2E
+//!   suite fails 57 fixtures, up from 40 before [`rebox_stragglers`] was called
+//!   after the rewrite as well as before it — so the reboxed expression is
+//!   itself reaching codegen as invalid Wasm in more places than it repairs.
+//!   Spot-checks say the mechanism works (4 of 5 previously-failing programs
+//!   compile clean, and the invariant assert went from 2 hits to 1); what it
+//!   emits for some case shape does not.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionKind, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal};
@@ -160,24 +170,368 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
     if !enabled() {
         return false;
     }
+    // A callee rewritten in an earlier iteration may have picked up new call
+    // sites since, because `nir/inline` runs after this pass and copies bodies
+    // wholesale. Those sites were never validated and the callee cannot be
+    // un-rewritten, so they are reboxed rather than left mistyped.
+    let mut changed = rebox_stragglers(project, gate);
     let candidates = collect_and_validate(project, gate);
-    if candidates.is_empty() {
+    if !candidates.is_empty() {
+        for &key in candidates.keys() {
+            crate::compiler_trace!(
+                "sroa_variant_return",
+                "scalarizing {}",
+                project.functions[key.index()].borrow().name
+            );
+        }
+        let mut touched: IndexSet<usize> = IndexSet::default();
+        rewrite_callees(project, &candidates, &mut touched);
+        rewrite_call_sites(project, &candidates, &mut touched);
+        for idx in touched {
+            gate.mark_changed(FuncId::new(idx));
+        }
+        changed = true;
+    }
+    // And again after the rewrite: a site the fast path declined is a straggler
+    // the moment its callee's signature changes, not one iteration later.
+    rebox_stragglers(project, gate);
+    debug_assert_call_sites_rewritten(project);
+    changed
+}
+
+// -----------------------------------------------------------------------
+// Repair: reboxing a call site the scalarized form never reached
+// -----------------------------------------------------------------------
+
+/// What makes the rewrite unconditionally sound.
+///
+/// Validation is a snapshot: it sees the call sites that exist when it runs.
+/// `nir/inline` runs later in the same iteration and keeps running in later
+/// ones, and it copies bodies wholesale — so a callee rewritten in iteration N
+/// can acquire a brand-new call site in iteration N+1 that nothing validated.
+/// The signature is already committed by then, so leaving that site alone is
+/// invalid Wasm, not a missed optimization.
+///
+/// Rather than try to forbid such sites, any call this pass's fast path did not
+/// bind is wrapped back into the variant it used to return:
+///
+/// ```text
+/// f(x)  ⇒  { let __t = f(x); match __t.0 { 0 => Ok(__t.1!), _ => Err(__t.2!) } }
+/// ```
+///
+/// The surrounding context then sees the variant-typed expression it was
+/// written against and needs no analysis at all. The rebox costs the allocation
+/// the scalarization was meant to avoid, so it is a correctness backstop, not a
+/// target — `const_fold` and `sroa` collapse most of them once the tag is
+/// known. Validation is left as what it now is: a profitability filter.
+fn rebox_stragglers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let scalarized = scalarized_returns(project);
+    if scalarized.is_empty() {
         return false;
     }
-    for &key in candidates.keys() {
-        crate::compiler_trace!(
-            "sroa_variant_return",
-            "scalarizing {}",
-            project.functions[key.index()].borrow().name
+    let mut changed = false;
+    for i in 0..project.functions.len() {
+        let mut func = project.functions[i].borrow_mut();
+        let own_return = func.return_type;
+        let Some(mut body) = func.body.take() else {
+            continue;
+        };
+        let span = func.span;
+        let bound = handled_call_sites(&body, &scalarized);
+        let mut targets: Vec<ExprId> = Vec::new();
+        collect_straggler_calls(
+            &body,
+            NodeRef::Block(body.root),
+            &scalarized,
+            &bound,
+            own_return,
+            &mut targets,
         );
+        for call in targets {
+            rebox_call(&mut body, &mut func, call, &scalarized, span);
+            changed = true;
+        }
+        func.body = Some(body);
+        if changed {
+            gate.mark_changed(FuncId::new(i));
+        }
     }
-    let mut touched: IndexSet<usize> = IndexSet::default();
-    rewrite_callees(project, &candidates, &mut touched);
-    rewrite_call_sites(project, &candidates, &mut touched);
-    for idx in touched {
-        gate.mark_changed(FuncId::new(idx));
+    changed
+}
+
+/// Functions this pass has already rewritten, with the variant they used to
+/// return. Derived, not remembered: a tuple return whose shape is exactly some
+/// variant's layout is one of ours.
+fn scalarized_returns(project: &NirPackage) -> IndexMap<FuncId, (TypeId, Layout)> {
+    let mut out: IndexMap<FuncId, (TypeId, Layout)> = IndexMap::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        let Some(key) = func.id else { continue };
+        let Some(variant) = func.scalarized_from else {
+            continue;
+        };
+        let Some(layout) = compute_layout(project, variant) else {
+            continue;
+        };
+        if layout.tuple_type == func.return_type {
+            out.insert(key, (variant, layout));
+        }
     }
-    true
+    out
+}
+
+/// Call nodes the fast path bound: a `let` whose declared type is already the
+/// callee's tuple.
+fn handled_call_sites(
+    body: &Body,
+    scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
+) -> IndexSet<ExprId> {
+    let mut out: IndexSet<ExprId> = IndexSet::default();
+    for stmt in body.stmts.values() {
+        let StmtKind::Let { type_id, value, .. } = &stmt.kind else {
+            continue;
+        };
+        let Some(e) = value.as_expr() else { continue };
+        let ExprKind::Call { func_id, .. } = &body.exprs[e].kind else {
+            continue;
+        };
+        if scalarized
+            .get(func_id)
+            .is_some_and(|(_, l)| l.tuple_type == *type_id)
+        {
+            out.insert(e);
+        }
+    }
+    out
+}
+
+fn collect_straggler_calls(
+    body: &Body,
+    node: NodeRef,
+    scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
+    handled: &IndexSet<ExprId>,
+    own_return: TypeId,
+    out: &mut Vec<ExprId>,
+) {
+    if let NodeRef::Expr(e) = node
+        && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
+        && let Some((_, layout)) = scalarized.get(func_id)
+        && !handled.contains(&e)
+        // A tail call inside a co-scalarized function passes the tuple
+        // straight through; that is the tail-call rule, not a straggler.
+        && own_return != layout.tuple_type
+    {
+        out.push(e);
+    }
+    body.for_each_child(node, |c| {
+        collect_straggler_calls(body, c, scalarized, handled, own_return, out);
+    });
+}
+
+/// Wrap `call` into `{ let __t = call; match __t.0 { k => Case(__t.slot) … } }`,
+/// typed by the variant the callee used to return.
+fn rebox_call(
+    body: &mut Body,
+    func: &mut NirFunction,
+    call: ExprId,
+    scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
+    span: Span,
+) {
+    let ExprKind::Call { func_id, .. } = body.exprs[call].kind else {
+        return;
+    };
+    let (variant_type, layout) = scalarized[&func_id].clone();
+
+    let local_index = func.local_count();
+    let name = format!("__rebox_{local_index}");
+    func.locals.push(NirLocal {
+        name: name.clone(),
+        type_id: layout.tuple_type,
+        is_mut: false,
+    });
+    // The call moves to a fresh node so `call`'s id can host the wrapping
+    // block, keeping every parent operand valid.
+    let moved = body.take_expr(call);
+    let call_node = body.exprs.push(moved);
+    let let_stmt = body.stmts.push(StmtNode {
+        kind: StmtKind::Let {
+            name: name.clone(),
+            local_index,
+            is_mut: false,
+            is_reactive: false,
+            type_id: layout.tuple_type,
+            value: Operand::Expr(call_node),
+            skip_value_copy: true,
+        },
+        span,
+    });
+
+    let mut arms: Vec<ArmData> = Vec::with_capacity(layout.case_names.len());
+    for case_index in 0..layout.case_names.len() {
+        let case_index = u32::try_from(case_index).expect("variant case index overflow");
+        let payload = layout.case_slots[case_index as usize].map(|slot| {
+            let read = tuple_field(
+                body,
+                local_index,
+                &name,
+                layout.tuple_type,
+                slot.index + 1,
+                layout.slot_types[slot.index],
+                span,
+            );
+            if slot.wrap_in_some {
+                let payload_type = layout.case_payloads[case_index as usize];
+                Operand::Expr(body.exprs.push(ExprNode {
+                    kind: ExprKind::VariantPayload {
+                        expr: read,
+                        case_index: OPTION_SOME,
+                        payload_type,
+                    },
+                    type_id: payload_type,
+                    span,
+                }))
+            } else {
+                read
+            }
+        });
+        let construct = body.exprs.push(ExprNode {
+            kind: ExprKind::VariantConstruct {
+                variant_type,
+                case_index,
+                case_name: layout.case_names[case_index as usize].clone(),
+                payload,
+            },
+            type_id: variant_type,
+            span,
+        });
+        // The last case is the catch-all, so the match stays exhaustive
+        // whatever the tag holds.
+        let is_last = case_index as usize + 1 == layout.case_names.len();
+        let pattern = body.pats.push(PatNode {
+            kind: if is_last {
+                PatKind::Wildcard
+            } else {
+                PatKind::Literal(NirLiteralPattern::I128(i128::from(case_index)))
+            },
+            span,
+        });
+        arms.push(ArmData {
+            pattern,
+            guard: None,
+            body: Operand::Expr(construct),
+            span,
+        });
+    }
+
+    let tag = tuple_field(
+        body,
+        local_index,
+        &name,
+        layout.tuple_type,
+        0,
+        TypeTable::I32,
+        span,
+    );
+    let match_expr = body.exprs.push(ExprNode {
+        kind: ExprKind::Match { expr: tag, arms },
+        type_id: variant_type,
+        span,
+    });
+    let tail = body.stmts.push(StmtNode {
+        kind: StmtKind::Expr(Operand::Expr(match_expr)),
+        span,
+    });
+    let block = body.blocks.push(BlockNode {
+        stmts: vec![let_stmt, tail],
+        span,
+    });
+    body.exprs[call].kind = ExprKind::Block(block);
+    body.exprs[call].type_id = variant_type;
+}
+
+/// `t.<field>` on a named local.
+fn tuple_field(
+    body: &mut Body,
+    local_index: u32,
+    local_name: &str,
+    tuple_type: TypeId,
+    field: usize,
+    field_type: TypeId,
+    span: Span,
+) -> Operand {
+    let recv = body.exprs.push(ExprNode {
+        kind: ExprKind::Local {
+            index: local_index,
+            name: local_name.to_string(),
+        },
+        type_id: tuple_type,
+        span,
+    });
+    Operand::Expr(body.exprs.push(ExprNode {
+        kind: ExprKind::FieldAccess {
+            expr: Operand::Expr(recv),
+            field_index: u32::try_from(field).expect("slot index overflow"),
+            field_name: field.to_string(),
+        },
+        type_id: field_type,
+        span,
+    }))
+}
+
+/// Every binding fed by a rewritten callee must now be typed by the tuple. A
+/// survivor is a call site validation admitted but the rewrite did not reach,
+/// and it reaches codegen as invalid Wasm rather than as a missed optimization
+/// — so it is caught here, at the pass that caused it.
+#[cfg(debug_assertions)]
+fn debug_assert_call_sites_rewritten(project: &NirPackage) {
+    let scalarized = scalarized_returns(project);
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        let Some(body) = &func.body else { continue };
+        for stmt in body.stmts.values() {
+            let StmtKind::Let {
+                name,
+                type_id,
+                value,
+                ..
+            } = &stmt.kind
+            else {
+                continue;
+            };
+            let Some(callee) = tail_call_callee(body, *value) else {
+                continue;
+            };
+            let Some((_, layout)) = scalarized.get(&callee) else {
+                continue;
+            };
+            assert!(
+                *type_id == layout.tuple_type,
+                "variant-return SROA left `let {name}` in `{}` typed by the variant \
+                 its callee no longer returns",
+                func.name
+            );
+        }
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn debug_assert_call_sites_rewritten(_: &NirPackage) {}
+
+/// The callee of a `let` initializer, looking through a block whose tail is the
+/// call — the shape `nir/inline` leaves when it expands a one-call wrapper.
+fn tail_call_callee(body: &Body, op: Operand) -> Option<FuncId> {
+    let e = op.as_expr()?;
+    match &body.exprs[e].kind {
+        ExprKind::Call { func_id, .. } => Some(*func_id),
+        ExprKind::Block(b) => {
+            let last = *body.blocks[*b].stmts.last()?;
+            match &body.stmts[last].kind {
+                StmtKind::Expr(inner) => tail_call_callee(body, *inner),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
 }
 
 // -----------------------------------------------------------------------
@@ -929,6 +1283,7 @@ fn rewrite_callees(
 ) {
     for (&key, cand) in candidates {
         let mut func = project.functions[key.index()].borrow_mut();
+        func.scalarized_from = Some(cand.variant_type);
         func.return_type = cand.layout.tuple_type;
         let span = func.span;
         let Some(mut body) = func.body.take() else {
