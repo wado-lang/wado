@@ -63,7 +63,7 @@ Allocation and aggregate:
 - `array_literal` — fold an array-builder window into a single fixed-array literal.
 - `value_copy_demote` — demote a deep list value-copy to a shallow spine copy when its elements are provably never mutated through the binding.
 
-There is no value-copy _elision_ pass: defensive copies are inserted precisely at the lower phase by the ownership analysis, so none exist for an elider to recover (see [WEP: Ownership Analysis](./wep-2026-05-21-resource-ownership.md)).
+There is no value-copy _elision_ pass: defensive copies are chosen at the lower phase by the ownership analysis, before NIR exists, so none are reachable from here and an imprecise one is that analysis's to fix — see [WEP: Ownership Analysis](./wep-2026-05-21-resource-ownership.md), which records the standing case (a by-value `for` binding copies each element of a `List` of aggregates).
 
 Variant and reference:
 
@@ -143,21 +143,17 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
       a branch, so a chain that never folds stops duplicating code.
 - [ ] Argument promotion — pass a by-reference parameter's fields by value when
       the callee only reads them, and return them by multi-value when it only
-      writes them. Together those retire a scratch aggregate at its allocation
-      site: `sroa` finishes the job once no call takes its address.
-      `sroa_param` is this rewrite for a single field, `stored_params` already
-      decides the escape precondition, and `multi_value_return` /
-      `sroa_variant_return` already own the write-back ABI — so the missing
-      piece is the N-field case, bounded by the same result-arity cap.
+      writes them. Together they retire a scratch aggregate at its allocation
+      site, which `sroa` then finishes. `sroa_param` is the single-field
+      rewrite, `stored_params` decides the escape precondition, and
+      `multi_value_return` / `sroa_variant_return` own the write-back ABI, so
+      what is missing is the N-field case under the same arity cap.
       `param_spec` covers only the constant case; a non-constant field still
       costs a GC load per read. `core:json`'s number scanner is the standing
-      case, and is currently paying for the gap: `parse_f64_direct` allocates a
-      `ScannedNumber` per number token and hands it to two calls, one that
-      writes it only through the seven stores closing its body and one that
-      reads it only through field access — the shape both halves are for. Worth
-      ~5% of the json-canada deserialize phase, measured by force-inlining the
-      pair. That much and no more: inlining the pair also buys caller-specific
-      dead-field elimination, which promotion alone would not recover.
+      case: its `ScannedNumber` is written by one callee and read by another,
+      each through nothing but field access, and costs ~5% of the json-canada
+      deserialize phase. Inlining that pair also buys caller-specific dead-field
+      elimination, which promotion alone would not recover.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Variant return ABI decided at NIR, the way `multi_value_return` already
@@ -168,11 +164,6 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
       `VariantConstruct`. The constant-scrutinee path runs through
       `const_eval::Value`, which is all-or-nothing constant, so "case known,
       payload opaque" is inexpressible there.
-
-Not on this list, though a profile blames it here: the element copy a by-value
-`for` binding takes over a `List<T>` of aggregates. It is chosen before NIR
-exists, so no pass here can reach it — see the ownership WEP's
-["Known gap"](./wep-2026-05-21-resource-ownership.md#known-gap-a-borrowed-projection-behind-a-variant).
 
 ## Tried and found ineffective
 

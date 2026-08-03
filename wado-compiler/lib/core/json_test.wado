@@ -536,8 +536,7 @@ test "deserialize f64 long integer part with fraction" {
 
 test "deserialize number with redundant leading zeros" {
     // JSON's grammar allows only a lone `0`, but the scanner stays lenient.
-    // The zeros are skipped ahead of the accumulating run, so they must not
-    // reach the mantissa.
+    // The zeros must not reach the mantissa.
     let i: Result<i32, DeserializeError> = from_string("00042");
     assert i matches { Ok(v) && v == 42 };
     let f: Result<f64, DeserializeError> = from_string("-0007.5");

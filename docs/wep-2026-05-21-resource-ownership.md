@@ -254,8 +254,8 @@ it stands. Two things hide it: the projection is behind a `let` binding, and it
 is wrapped in a variant construction. So `next` returns owned, and the fold
 deep-copies the element into the payload — every `for x of list` over a `List` of
 aggregates pays a copy of each element even when the loop body only reads it.
-Writing the same loop as an index loop in one body costs nothing: the read-only
-share fires and the element is read in place.
+Nothing about the copy is required: the same walk written over `&list`, or as an
+index loop in one body, reads the element in place under the read-only share.
 
 Closing it needs both halves, in the same fixpoint: the recognizer must see the
 projection through the binding and the variant, _and_ the fold must then treat
@@ -345,9 +345,9 @@ Verified against the tree.
 - [x] A bytes literal counts as fresh, like a string literal.
 - [ ] Pin representative move / copy / share decisions as e2e fixtures.
 - [ ] Recognize a borrowed projection returned behind a variant construction, so
-      a by-value `for` binding stops copying each element. Worth ~37% of the
-      json-canada deserialize benchmark, whose `count_points` walks the parsed
-      tree only to sum lengths.
+      a by-value `for` binding stops copying each element. It cost the
+      json-canada deserialize benchmark ~37% before its tree walk was written
+      over `&`, which is the workaround this would retire.
 
 ## Deferred: the `move` and `unique` keywords
 

@@ -755,9 +755,8 @@ fn is_json_ws(b: i32) -> bool {
     return b < 64 && (ws_set >> b as u64 & 1) != 0;
 }
 
-/// The decimal value of `b`, or a value above 9 when `b` is not a digit:
-/// subtracting `'0'` wraps a non-digit into the upper half of the u32 range, so
-/// one unsigned compare decides the range test.
+/// The decimal value of `b`, or a value above 9 when `b` is not a digit —
+/// subtracting `'0'` wraps a non-digit into the upper half of the u32 range.
 fn digit_value(b: i32) -> u32 {
     return (b - '0' as i32) as u32;
 }
@@ -1206,8 +1205,8 @@ impl JsonDeserializer {
     /// the caller-provided `out`. Only the first `FPFMT_DIGITS_MAX` significant
     /// digits are accumulated; dropped fraction digits merely truncate
     /// precision, while dropped integer digits shift the scale via `int_digits`.
-    /// Writing into a scratch keeps a `Result<ScannedNumber>` aggregate off the
-    /// hot decode path.
+    /// Writing into a scratch struct keeps a `Result<ScannedNumber>` aggregate
+    /// off the hot decode path.
     fn scan_number_into(&mut self, out: &mut ScannedNumber) -> Result<(), DeserializeError> {
         let input = self.input;
         let len = input.len();
@@ -1235,11 +1234,9 @@ impl JsonDeserializer {
                 pos as i64,
             ));
         }
-        // Integer part, scanned in three runs so the accumulating loop carries
-        // neither a significance test nor a budget test per digit: the leading
-        // zeros (JSON allows only a lone `0`, but stay lenient), the digits that
-        // fit the mantissa budget, then the ones past it, which only shift the
-        // scale via `int_digits`.
+        // Integer part, in three runs so the accumulating loop carries neither
+        // a significance test nor a budget test per digit: leading zeros, the
+        // digits that fit the mantissa budget, then the ones past it.
         let mut digits: u64 = 0;
         let zeros_start = pos;
         if first == '0' as i32 {
