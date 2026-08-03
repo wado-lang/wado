@@ -387,7 +387,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn bare_generic_type_arity(&self, name: &str) -> Option<usize> {
+    pub(super) fn bare_generic_type_arity(&self, name: &str) -> Option<usize> {
         // `lookup_struct_fields` alone decides whether `name` is generic:
         // it already applies the correct precedence (a local struct —
         // `Stmt::Item`, see `resolve_local_struct` — shadows a same-named

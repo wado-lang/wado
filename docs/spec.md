@@ -3439,7 +3439,7 @@ assert rw as u32 == 3;
 // They produce a compile error; use bitwise operators (|, &, ^) instead
 ```
 
-Flags auto-derive `Eq` and `Ord` over their raw bits, the same on-demand way enums derive theirs over the discriminant — see [Auto-derived Traits](#structs).
+Flags auto-derive `Eq` and `Ord` over their raw bits, the same on-demand way enums derive theirs over the discriminant — see [Auto-derived Traits](#structs). A hand-written `impl Eq` / `impl Ord` for a flags type is a compile error: `==` and `<` compare the bits directly rather than calling the trait, and generic code behind a `T: Eq` bound sees the erased `u32`, so the body could never run.
 
 Flags are implemented as newtypes over `u32`. Member names can carry `#[cm("...")]` attributes for Component Model name mapping:
 

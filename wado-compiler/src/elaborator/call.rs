@@ -928,9 +928,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             )
                             .type_id;
                     }
-                    if let Some(return_type) =
-                        self.resolve_variant_blanket_static(prefix, suffix, call.id, call.span)
-                    {
+                    if let Some(return_type) = self.resolve_named_type_blanket_static(
+                        prefix, suffix, call.id, &args, call.span,
+                    ) {
                         return return_type;
                     }
                     let _ = self.emit(TypeError::UnknownFunction {
@@ -942,9 +942,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Not a case name: a `ReflectVariant` blanket carries the
                     // variant's static trait methods under its own receiver
                     // param, so `prefix`'s bucket never sees them.
-                    if let Some(return_type) =
-                        self.resolve_variant_blanket_static(prefix, suffix, call.id, call.span)
-                    {
+                    if let Some(return_type) = self.resolve_named_type_blanket_static(
+                        prefix, suffix, call.id, &args, call.span,
+                    ) {
                         return return_type;
                     }
                     let _ = self.emit(TypeError::UnknownFunction {
@@ -959,9 +959,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else if self.tysys.is_known_type_name(prefix) {
                 // A value blanket indexes statics under the receiver param
                 // name, so `prefix`'s own bucket never sees them.
-                let receiver_ty = self.resolve_named_type(prefix, call.span, false);
-                if let Some(return_type) =
-                    self.resolve_blanket_static_method(receiver_ty, suffix, call.id, &[], &[])
+                if let Some(return_type) = self
+                    .resolve_named_type_blanket_static(prefix, suffix, call.id, &args, call.span)
                 {
                     return return_type;
                 }
@@ -2560,19 +2559,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// `Variant::method()` reaching a value blanket's static — the variant-case
+    /// `Type::method()` reaching a value blanket's static. The variant-case
     /// branch owns the `Variant::Name` shape, so a static that is not a case
     /// name has to be offered the blanket resolver here rather than falling
-    /// through to the known-type branch below it.
-    fn resolve_variant_blanket_static(
+    /// through to the known-type branch; both branches share this entry.
+    pub(super) fn resolve_named_type_blanket_static(
         &mut self,
-        variant_name: &str,
+        type_name: &str,
         method: &str,
         call_id: crate::AstId,
+        args: &[TirExpr],
         span: crate::Span,
     ) -> Option<TypeId> {
-        let receiver_ty = self.resolve_named_type(variant_name, span, false);
-        self.resolve_blanket_static_method(receiver_ty, method, call_id, &[], &[])
+        let receiver_ty = self.resolve_named_type(type_name, span, false);
+        // A generic type named without its arguments has no instance to
+        // dispatch on: the blanket would key on the argument-less head, which
+        // carries no layout (a generic variant never becomes its own
+        // declaration, WEP 2026-02-09) and reaches WIR build unregistered.
+        if let Some(expected) = self.bare_generic_type_arity(type_name)
+            && self
+                .find_blanket_static_method(receiver_ty, method)
+                .is_some()
+        {
+            let _ = self.emit(TypeError::MissingTypeArguments {
+                name: type_name.to_string(),
+                expected,
+                span,
+            });
+            return Some(TypeTable::ERROR);
+        }
+        self.resolve_blanket_static_method(receiver_ty, method, call_id, &[], &[], args, span)
     }
 }
 

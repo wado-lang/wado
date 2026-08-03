@@ -2127,6 +2127,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 static_call.id,
                 &method_type_args,
                 &static_method_defaults,
+                &args,
+                static_call.span,
             )
         {
             return resolved;
@@ -2255,6 +2257,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         call_id: AstId,
         method_type_args: &[TypeId],
         static_method_defaults: &[(String, Option<ast::Expr>)],
+        args: &[TirExpr],
+        span: Span,
     ) -> Option<TypeId> {
         let (trait_name, blanket_param, blanket_module) =
             self.find_blanket_static_method(receiver_type_id, method)?;
@@ -2266,7 +2270,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let method_ref = StaticMethodRef::new(
             blanket_module.clone(),
-            blanket_param,
+            blanket_param.clone(),
             method.to_string(),
             Some(trait_name.clone()),
         );
@@ -2279,6 +2283,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let return_type = SubstitutionContext::new()
             .with_impl_args(&[receiver_type_id])
             .substitute(template_return, &mut self.tysys.type_table.borrow_mut());
+
+        // The blanket's own bucket holds the parameter list; without checking it
+        // a mis-arity or mis-typed call is handed straight to codegen, which
+        // fails Wasm validation instead of reporting anything.
+        let param_types = self.blanket_static_param_types(
+            &blanket_module,
+            &blanket_param,
+            method,
+            receiver_type_id,
+        );
+        if !self.check_blanket_static_args(&param_types, args, static_method_defaults, span) {
+            return Some(TypeTable::ERROR);
+        }
 
         let receiver_arg_name = self
             .tysys
@@ -2314,7 +2331,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut: Vec::new(),
                 type_args: method_type_args.to_vec(),
                 param_defaults: static_method_defaults.to_vec(),
-                param_types: Vec::new(),
+                param_types,
                 self_in_args: false,
             },
         );
@@ -2322,9 +2339,66 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(return_type)
     }
 
+    /// The blanket template's value-parameter types with its receiver param
+    /// bound to the concrete receiver, so the call site compares against the
+    /// types the instantiation will actually take.
+    fn blanket_static_param_types(
+        &mut self,
+        blanket_module: &ModuleSource,
+        blanket_param: &str,
+        method: &str,
+        receiver_type_id: TypeId,
+    ) -> Vec<TypeId> {
+        let key: super::trait_env::DeclKey = (blanket_module.clone(), blanket_param.to_string());
+        let template =
+            self.lookup_static_method_param_types_keyed(blanket_param, method, Some(&key));
+        let mut tt = self.tysys.type_table.borrow_mut();
+        template
+            .iter()
+            .map(|&pt| {
+                SubstitutionContext::new()
+                    .with_impl_args(&[receiver_type_id])
+                    .substitute(pt, &mut tt)
+            })
+            .collect()
+    }
+
+    /// Report an argument list the blanket template cannot accept. Returns
+    /// `false` once a diagnostic was emitted. A parameter still carrying a type
+    /// param after substitution belongs to the blanket's pack, which the call
+    /// site cannot pin — its arity still counts, its type is not compared.
+    fn check_blanket_static_args(
+        &mut self,
+        param_types: &[TypeId],
+        args: &[TirExpr],
+        static_method_defaults: &[(String, Option<ast::Expr>)],
+        span: Span,
+    ) -> bool {
+        let optional = static_method_defaults
+            .iter()
+            .filter(|(_, d)| d.is_some())
+            .count();
+        let required = param_types.len().saturating_sub(optional);
+        if args.len() < required || args.len() > param_types.len() {
+            let _ = self.emit(TypeError::ArgumentCountMismatch {
+                expected: param_types.len(),
+                found: args.len(),
+                span,
+            });
+            return false;
+        }
+        for (arg, &expected) in args.iter().zip(param_types) {
+            if self.tysys.type_table.borrow().contains_type_param(expected) {
+                continue;
+            }
+            self.typecheck(arg.type_id, expected, arg.span);
+        }
+        true
+    }
+
     /// The value blanket impl carrying a static `method_name` whose receiver
     /// bounds `receiver_type_id` satisfies, as `(trait, receiver param, module)`.
-    fn find_blanket_static_method(
+    pub(super) fn find_blanket_static_method(
         &mut self,
         receiver_type_id: TypeId,
         method_name: &str,
