@@ -122,9 +122,6 @@ pub(crate) struct ModuleDecls {
     /// instead of resolving the same methods a second time.
     pub(crate) effect_ops: IndexMap<crate::ast::AstId, Vec<crate::tir::TirEffectOp>>,
 
-    /// Names of generic structs declared in this module (used to decide
-    /// whether a struct reference needs generic-instance handling).
-    pub(crate) generic_struct_names: IndexSet<String>,
     /// `func_name → type_params` for generic functions in this module.
     pub(crate) generic_function_params: IndexMap<String, Vec<(String, TypeId)>>,
     /// `func_name → resolved param TypeIds` for generic functions. The

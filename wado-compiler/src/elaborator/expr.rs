@@ -3,7 +3,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Item, Literal, MatchArm};
+use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
@@ -2909,6 +2909,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let target_type = self.resolve_type(&cast.target_type);
+        // A cast names its own result type, so nothing downstream reports an
+        // unresolved target: reify's `ann_expression_types` filters the
+        // recorded `UNKNOWN` out and its `.expect` is what fails instead.
+        if target_type == TypeTable::UNKNOWN {
+            let _ = self.emit(TypeError::UnknownType {
+                name: self.get_type_name_full(&cast.target_type),
+                span: cast.target_type.span(),
+            });
+            return TypeTable::ERROR;
+        }
 
         // Special case: tuple literal cast to a type implementing SequenceLiteralBuilder
         // [1, 2, 3] as List<i32>, [1, 2, 3] as SeqVec<i32>
@@ -3479,10 +3489,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `resolve_local_struct`), or the bare declared name for a
         // module-level one — so a single `struct_fields_in` lookup on that
         // identity decides "is this generic" the same way it decides "which
-        // struct's info is this", instead of checking `generic_struct_names`
-        // (module-level only) and a local-struct table separately: two
-        // lookups that could name different structs if a local struct
-        // shadows a same-named module-level generic one.
+        // struct's info is this", instead of checking a module-level name set
+        // and a local-struct table separately: two lookups that could name
+        // different structs if a local struct shadows a same-named
+        // module-level generic one.
         let is_generic_struct = self
             .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .is_some_and(|info| !info.type_param_bounds.is_empty());
@@ -4453,48 +4463,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .compiler_trait_name(crate::compiler_item::CompilerItem::From)
             .to_string();
-        let check_impl = |impl_block: &ast::ImplBlock| -> bool {
-            let impl_target = Self::get_type_name_static(&impl_block.ty);
-            if impl_target != target_name {
-                return false;
-            }
-            if let Some(trait_type) = &impl_block.trait_type {
-                let base = Self::get_type_name_static(trait_type);
-                if base != from_trait_name {
-                    return false;
-                }
-                // Check the type arg matches from_name
-                if let ast::Type::Generic(g) = trait_type
-                    && let Some(arg) = g.args.first()
-                {
-                    return Self::get_type_name_static(arg) == from_name;
-                }
-            }
-            false
+        // Read off the impl headers: a block's trait reference and its
+        // argument are header facts, so the impls are reached by the target's
+        // canonical key rather than by scanning every module for one whose
+        // written target name matches.
+        let declares_from = |key: &(ModuleSource, crate::ast::AstId)| -> bool {
+            self.tysys
+                .trait_env
+                .impl_headers
+                .get(key)
+                .is_some_and(|header| {
+                    header.trait_name.as_deref() == Some(from_trait_name.as_str())
+                        && matches!(&header.trait_type, Some(ast::Type::Generic(g))
+                        if g.args.first().is_some_and(|arg| {
+                            Self::get_type_name_static(arg) == from_name
+                        }))
+                })
         };
-
-        // Search current module items
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && check_impl(impl_block)
-            {
-                return self.current_module_source.clone();
-            }
-        }
-
-        // Search loaded modules
-        for (source, module) in self.loaded_modules {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
-                    && check_impl(impl_block)
-                {
-                    return source.clone();
-                }
-            }
-        }
-
-        // Fallback: use current module (the From impl may be synthesized later)
-        self.current_module_source.clone()
+        let keys = self
+            .tysys
+            .trait_env
+            .all_impl_keys(&self.impl_target(target_name));
+        // The current module wins a tie.
+        keys.iter()
+            .find(|key| key.0 == self.current_module_source && declares_from(key))
+            .or_else(|| keys.iter().find(|key| declares_from(key)))
+            .map(|(module, _)| module.clone())
+            // The `From` impl may be synthesized later, so a miss is not an error.
+            .unwrap_or_else(|| self.current_module_source.clone())
     }
 }
 

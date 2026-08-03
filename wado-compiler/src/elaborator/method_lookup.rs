@@ -390,6 +390,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ModuleSource::primitive();
         }
 
+        // The name as written may be an alias (`use { Helper as Counter }`),
+        // and the bare-name index below is keyed by what a declaration calls
+        // itself. Ask which declaration the name resolves to first, so an
+        // alias answers with its target rather than with another module's
+        // type that happens to be spelled the same.
+        let (canonical_module, canonical_name) = self.canonical_decl_key(struct_name);
+        if canonical_name != struct_name
+            && self
+                .tysys
+                .trait_env
+                .struct_like_decl_modules
+                .get(&canonical_name)
+                .is_some_and(|modules| modules.contains(&canonical_module))
+        {
+            return canonical_module;
+        }
+
         // Struct / resource / variant / enum / builtin declarations from the
         // digest (covers every loaded module, incl. the current one). The
         // current module wins when it declares the type; else the first
@@ -492,6 +509,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if method_name == "len" {
                         return Some(MethodInfo {
                             impl_offset: None,
+                            method_ast_id: None,
                             return_type: TypeTable::I32,
                             self_kind: ast::SelfKind::Ref,
                             param_types: vec![],
@@ -533,6 +551,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let return_type = self.tysys.type_table.borrow_mut().make_tuple(transposed);
                         return Some(MethodInfo {
                             impl_offset: None,
+                            method_ast_id: None,
                             return_type,
                             self_kind: ast::SelfKind::Ref,
                             param_types: vec![],
@@ -785,6 +804,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         Some(MethodInfo {
             impl_offset: None,
+            method_ast_id: Some(sig.ast_id),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
@@ -836,6 +856,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         Some(MethodInfo {
             impl_offset: None,
+            method_ast_id: Some(sig.ast_id),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
@@ -2500,6 +2521,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
                     impl_offset: Some(impl_offset),
+                    method_ast_id: Some(method_sig.ast_id),
                     return_type,
                     self_kind,
                     param_types,
@@ -2551,6 +2573,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
                         impl_offset: Some(default_method.sig.declaring_slot_count),
+                        method_ast_id: Some(default_method.sig.ast_id),
                         return_type: instantiated.return_type,
                         self_kind,
                         param_types: instantiated.param_types[first_value_param..].to_vec(),
@@ -3626,6 +3649,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let MethodInfo {
             impl_offset: _,
+            method_ast_id: _,
             return_type,
             self_kind,
             param_types,

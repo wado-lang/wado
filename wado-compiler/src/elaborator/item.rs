@@ -1006,6 +1006,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             frame_scope.sem.decls.method_sigs.insert(
                 method.id,
                 MethodSig {
+                    ast_id: method.id,
                     decl: DeclSig {
                         type_params,
                         param_types,
@@ -1290,6 +1291,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method.name.clone(),
                 super::sig::TraitMethod {
                     sig: MethodSig {
+                        ast_id: method.id,
                         decl: DeclSig {
                             type_params,
                             param_types,
@@ -1493,6 +1495,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             scope.sem.decls.method_sigs.insert(
                 method.id,
                 MethodSig {
+                    ast_id: method.id,
                     decl: DeclSig {
                         type_params: decl_slots.clone(),
                         param_types: params.iter().map(|p| p.type_id).collect(),

@@ -373,15 +373,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         type_name: &str,
     ) -> Vec<(String, ModuleSource, Vec<TypeId>)> {
-        use crate::ast::Item;
         let mut out: Vec<(String, ModuleSource, Vec<TypeId>)> = Vec::new();
         let mut seen: crate::hashmap::IndexSet<(ModuleSource, String, Vec<TypeId>)> =
             crate::hashmap::IndexSet::default();
 
         // Collect the impl `trait_type` ASTs first so subsequent
         // `resolve_type` calls (which need `&mut self`) don't fight the
-        // borrows on `trait_env.impl_index` / `loaded_modules` /
-        // `current_module_items`.
+        // borrow on `trait_env.impl_headers`.
         let mut trait_types: Vec<ast::Type> = Vec::new();
         if let Some(entries) = self
             .tysys
@@ -399,18 +397,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     trait_types.push(trait_type.clone());
                 }
-            }
-        }
-        // Impls declared in the current module aren't always reachable
-        // via `impl_index` (the index is built before the current
-        // module is fully resolved in some pipelines), so walk them
-        // too. Mirrors `find_trait_impl_for_type`.
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && let Some(trait_type) = &impl_block.trait_type
-                && Self::get_type_name_static(&impl_block.ty) == type_name
-            {
-                trait_types.push(trait_type.clone());
             }
         }
 

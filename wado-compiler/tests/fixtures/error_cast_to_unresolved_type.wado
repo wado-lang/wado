@@ -1,0 +1,15 @@
+// A cast names its own result type, so nothing downstream reports an
+// unresolved target — reify's read of the node filters the recorded `UNKNOWN`
+// and finds nothing. The cast reports the target itself.
+use { Fields } from "wasi:http";
+
+export fn run() {
+    let name = "content-type";
+    // `FieldName` is declared by `wasi:http` but not imported here.
+    let field = name as FieldName;
+    let _ = Fields::new();
+    assert field == "content-type";
+}
+
+__DATA__
+{"compile_error": "unknown type 'FieldName'"}

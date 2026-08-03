@@ -472,6 +472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_found = method_info.is_some();
         let MethodInfo {
             impl_offset: sig_impl_offset,
+            method_ast_id: dispatched_method_ast_id,
             mut return_type,
             self_kind,
             param_types,
@@ -498,6 +499,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Default to Unknown type for error recovery
             MethodInfo {
                 impl_offset: None,
+                method_ast_id: None,
                 return_type: TypeTable::UNKNOWN,
                 self_kind: ast::SelfKind::Ref,
                 param_types: vec![],
@@ -1123,24 +1125,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Synthetic call sites (e.g. for-of's `.into_iter()` / `.next()`) pass
         // `method_id == None` so no edge is recorded — the call has no
         // source-level method name to navigate from.
-        // The impl-header scan compares against the name the header writes, so
-        // it needs the declaration name — read off the receiver's resolved type,
-        // never split out of the mangled head, which carries the declaring
-        // module and matches no header.
-        let receiver_key = self
-            .tysys
-            .type_table
-            .borrow()
-            .impl_receiver_key(method_impl_type_id);
-        let receiver_decl_name = receiver_key.decl_key().into_string();
-        if let Some(method_id) = method_id
-            && let Some(method_ast_id) = self.find_impl_method_ast_id(
-                &method_module_source,
-                &receiver_decl_name,
-                method_name,
-            )
-        {
-            self.record_reference_to_def(method_id, method_ast_id);
+        // The target is the declaration dispatch selected, carried on its
+        // signature. A name scan cannot stand in: two impls on one type can
+        // declare the same method, and only dispatch knows which answered.
+        if let (Some(method_id), Some(def_id)) = (method_id, dispatched_method_ast_id) {
+            self.record_reference_to_def(method_id, def_id);
         }
 
         let func = FunctionRef {
@@ -1237,12 +1226,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
+        // The edge for jump-to-definition is recorded against the method name.
+        let method_id = match &call.callee {
+            ast::Expr::Ident(ident) => ident.segments.get(1).map(|seg| seg.id),
+            _ => None,
+        };
         self.resolve_trait_qualified_call_parts(
             required,
             method_name,
             &call.args,
             type_args,
             call.id,
+            method_id,
             call.span,
             expected_type,
             ctx,
@@ -1261,6 +1256,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[ast::Expr],
         type_args: Vec<TypeId>,
         call_id: AstId,
+        // The method-name token, for the use→def edge.
+        method_id: Option<AstId>,
         span: Span,
         expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
@@ -1287,7 +1284,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver: placeholder(receiver_type, receiver_ast.span()),
                 receiver_ast: Some(receiver_ast),
                 method_name,
-                method_id: None,
+                method_id,
                 call_id: None,
                 type_args: type_args.clone(),
                 type_arg_holes: vec![],
@@ -1463,6 +1460,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &static_call.args,
                     method_type_args,
                     static_call.id,
+                    Some(static_call.method_id),
                     static_call.span,
                     None,
                     ctx,
@@ -2076,11 +2074,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             None
         };
-        let trait_name_opt = self.find_static_method_trait_with_arg(
+        // Keep the whole selection: its trait names the mangled function, and
+        // its `method_id` is what the use→def edge below is recorded against.
+        // A name lookup cannot stand in — two conversion impls on one type
+        // declare the same `from`, and only the argument's type separates
+        // them.
+        let selected = self.locate_static_method_impl(
             &struct_name,
             &static_call.method,
             arg_type_hint.as_deref(),
         );
+        let trait_name_opt = selected.as_ref().and_then(|r| r.trait_name.clone());
 
         // The expected type that shaped the argument came from
         // `lookup_static_method_param_types_keyed`, which keys on (receiver,
@@ -2112,6 +2116,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             struct_name.clone(),
             static_call.method.clone(),
             trait_name_opt.clone(),
+            selected.as_ref().and_then(|r| r.method_id),
         );
 
         // Look up return type
@@ -2200,10 +2205,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_info.cm_name =
             self.lookup_resource_static_cm(&struct_name, &struct_module, &static_call.method);
 
-        // Record use->def for jump-to-definition on the method name token.
-        if let Some(method_ast_id) =
-            self.find_impl_method_ast_id(&struct_module, &struct_name, &static_call.method)
-        {
+        // The selection covers trait impls only; an inherent static has none
+        // and reaches the index instead.
+        if let Some(method_ast_id) = selected.as_ref().and_then(|r| r.method_id).or_else(|| {
+            self.static_method_decl_id(Some(&struct_module), &struct_name, &static_call.method)
+        }) {
             self.record_reference_to_def(static_call.method_id, method_ast_id);
         }
 
@@ -2269,6 +2275,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_param,
             method.to_string(),
             Some(trait_name.clone()),
+            None,
         );
         let template_return = self.lookup_static_method_return_type(&method_ref, &template_name);
         if template_return == TypeTable::UNKNOWN {
@@ -2411,43 +2418,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return true;
             }
         }
-        // Check current module's impl blocks
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item {
-                let impl_struct_name = self.get_type_name(&impl_block.ty);
-                if impl_struct_name == struct_name {
-                    for method in &impl_block.methods {
-                        let has_self = method
-                            .params
-                            .iter()
-                            .any(|p| p.self_kind != ast::SelfKind::None);
-                        if method.name == method_name && !has_self {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-        // Check loaded modules' impl blocks
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item {
-                    let impl_struct_name = Self::get_type_name_static(&impl_block.ty);
-                    if impl_struct_name == struct_name {
-                        for method in &impl_block.methods {
-                            let has_self = method
-                                .params
-                                .iter()
-                                .any(|p| p.self_kind != ast::SelfKind::None);
-                            if method.name == method_name && !has_self {
-                                return true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        false
+        // Every impl block on the type, inherent and trait alike.
+        let keys = self
+            .tysys
+            .trait_env
+            .all_impl_keys(&self.impl_target(struct_name));
+        self.keys_declare_static_method(&keys, method_name)
     }
 
     /// Look up static method return type based on struct name and method name
@@ -2457,7 +2433,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         mangled_func_name: &str,
     ) -> TypeId {
         let struct_name = method_ref.type_name.as_str();
-        let struct_module = &method_ref.module;
         let method_name = method_ref.method_name.as_str();
         // First check locally registered function_return_types
         if let Some(&return_type) = self.sem.decls.function_return_types.get(mangled_func_name) {
@@ -2486,183 +2461,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Try looking up in loaded modules
-        if !struct_module.is_entry_point()
-            && let Some(module) = self.loaded_modules.get(struct_module)
-        {
-            for item in &module.items {
-                // Check impl blocks
-                if let Item::Impl(impl_block) = item {
-                    let impl_struct_name = self.get_type_name(&impl_block.ty);
-                    if impl_struct_name == struct_name {
-                        for method in &impl_block.methods {
-                            // Static methods have no self parameter
-                            let has_self = method
-                                .params
-                                .iter()
-                                .any(|p| p.self_kind != ast::SelfKind::None);
-                            if method.name == method_name && !has_self {
-                                // Set up type parameters from impl block before resolving.
-                                // Inherited scope; only `type_params` is replaced.
-                                let mut scope = self.enter_inherited_type_param_scope();
-                                scope.annotate_ctx.trait_ctx.type_params.clear();
-
-                                // Extract type params from impl block type (e.g., impl List<T>)
-                                if let ast::Type::Generic(generic) = &impl_block.ty {
-                                    for (i, arg) in generic.args.iter().enumerate() {
-                                        if let ast::Type::Named(named) = arg {
-                                            let name = &named.name;
-                                            if !scope
-                                                .annotate_ctx
-                                                .trait_ctx
-                                                .type_params
-                                                .contains_key(name)
-                                            {
-                                                let type_id = scope
-                                                    .tysys
-                                                    .type_table
-                                                    .borrow_mut()
-                                                    .make_type_param(name.clone(), i as u32);
-                                                scope
-                                                    .annotate_ctx
-                                                    .trait_ctx
-                                                    .type_params
-                                                    .insert(name.clone(), (i as u32, type_id));
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Method-level type params (e.g. fn make<T>(...) -> T)
-                                let m_offset = scope.annotate_ctx.trait_ctx.type_params.len();
-                                for (i, tp) in method
-                                    .type_params
-                                    .iter()
-                                    .filter(|p| !p.is_effect)
-                                    .enumerate()
-                                {
-                                    if scope
-                                        .annotate_ctx
-                                        .trait_ctx
-                                        .type_params
-                                        .contains_key(&tp.name)
-                                    {
-                                        continue;
-                                    }
-                                    let idx = (m_offset + i) as u32;
-                                    let type_id = if tp.is_pack {
-                                        scope
-                                            .tysys
-                                            .type_table
-                                            .borrow_mut()
-                                            .make_type_pack(tp.name.clone(), idx)
-                                    } else {
-                                        scope
-                                            .tysys
-                                            .type_table
-                                            .borrow_mut()
-                                            .make_type_param(tp.name.clone(), idx)
-                                    };
-                                    scope
-                                        .annotate_ctx
-                                        .trait_ctx
-                                        .type_params
-                                        .insert(tp.name.clone(), (idx, type_id));
-                                }
-
-                                // Bind `Self` to the impl's concrete type so a
-                                // `-> Self` return resolves cross-module (here
-                                // `resolve_named_type` reads `Self` off
-                                // `trait_ctx.self_type`, the now-gone impl
-                                // context). Only when the return mentions `Self`,
-                                // to avoid the extra resolution otherwise.
-                                if method
-                                    .return_type
-                                    .as_ref()
-                                    .is_some_and(|t| Self::ast_type_mentions_self(t))
-                                {
-                                    scope.annotate_ctx.trait_ctx.self_type =
-                                        Some(scope.resolve_return_type_in_module(
-                                            struct_module,
-                                            Some(&impl_block.ty),
-                                        ));
-                                }
-                                let result = scope.resolve_return_type_in_module(
-                                    struct_module,
-                                    method.return_type.as_ref(),
-                                );
-
-                                drop(scope);
-
-                                return result;
-                            }
-                        }
-                    }
-                }
-
-                // Check resource declarations
-                if let Item::Resource(resource) = item
-                    && resource.name == struct_name
-                {
-                    for method in &resource.methods {
-                        // Static methods have no self parameter (no &TcpSocket or &Self)
-                        let has_self = method.params.iter().any(|p| {
-                                matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
-                                    if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name))
-                                    || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name)
-                            });
-                        if method.name == method_name && !has_self {
-                            // Set up type parameters from resource declaration before resolving.
-                            // Inherited scope; only `type_params` is replaced.
-                            let mut scope = self.enter_inherited_type_param_scope();
-                            scope.annotate_ctx.trait_ctx.type_params.clear();
-
-                            for (i, param) in resource.type_params.iter().enumerate() {
-                                let name = &param.name;
-                                if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
-                                    let type_id = scope
-                                        .tysys
-                                        .type_table
-                                        .borrow_mut()
-                                        .make_type_param(name.clone(), i as u32);
-                                    scope
-                                        .annotate_ctx
-                                        .trait_ctx
-                                        .type_params
-                                        .insert(name.clone(), (i as u32, type_id));
-                                }
-                            }
-
-                            let result = scope.resolve_return_type_in_module(
-                                struct_module,
-                                method.return_type.as_ref(),
-                            );
-
-                            drop(scope);
-
-                            return result;
-                        }
-                    }
-                }
-            }
-        }
-
         // Search via pre-built index (handles impls defined outside the struct's defining module).
-        // Canonicalise the bare `struct_name` through the call site's import context so the
-        // canonical decl key disambiguates two modules' same-named static methods.
-        let static_key = self.canonical_decl_key(struct_name);
+        let static_keys = self.static_receiver_keys(Some(&method_ref.module), struct_name);
         // The decl pass already resolved this signature in the impl's own
         // frame — impl and method type params interned, `Self` bound to the
         // impl target, the impl module's imports in scope. Re-deriving all of
         // that here is what the digest exists to avoid.
-        let indexed_return = self
-            .tysys
-            .trait_env
-            .static_method_index
-            .get(&static_key)
-            .and_then(|methods| methods.iter().find(|e| e.name == method_name))
-            .and_then(|e| self.tysys.signatures.method_sig(e.method_id))
-            .map(|sig| sig.decl.return_type.unwrap_or(TypeTable::UNIT));
+        let indexed_return = static_keys.iter().find_map(|key| {
+            self.tysys
+                .trait_env
+                .static_method_index
+                .get(key)?
+                .iter()
+                .find(|e| e.name == method_name)
+                .and_then(|e| self.tysys.signatures.method_sig(e.method_id))
+                .map(|sig| sig.decl.return_type.unwrap_or(TypeTable::UNIT))
+        });
         if let Some(return_type) = indexed_return {
             return return_type;
         }
@@ -2671,20 +2485,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // key disambiguation as the inherent-impl path above. The decl pass
         // resolved these in the resource's own frame, so a generic resource's
         // `Option<T>` is already a `TypeParam` here.
-        let indexed_resource_return = self
-            .tysys
-            .trait_env
-            .resource_static_method_index
-            .get(&static_key)
-            .and_then(|methods| {
-                methods
-                    .iter()
-                    .find(|(name, ..)| name == method_name)
-                    .and_then(|(name, _, item_id, _)| {
-                        let sig = self.tysys.signatures.resource_method_sig(*item_id, name)?;
-                        Some(sig.decl.return_type.unwrap_or(TypeTable::UNIT))
-                    })
-            });
+        let indexed_resource_return = static_keys.iter().find_map(|key| {
+            self.tysys
+                .trait_env
+                .resource_static_method_index
+                .get(key)?
+                .iter()
+                .find(|(name, ..)| name == method_name)
+                .and_then(|(name, _, item_id, _)| {
+                    let sig = self.tysys.signatures.resource_method_sig(*item_id, name)?;
+                    Some(sig.decl.return_type.unwrap_or(TypeTable::UNIT))
+                })
+        });
         if let Some(return_type) = indexed_resource_return {
             return return_type;
         }
@@ -2961,16 +2773,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .and_then(|r| r.trait_name)
     }
 
-    pub(super) fn find_static_method_trait_with_arg(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-        arg_type_name: Option<&str>,
-    ) -> Option<String> {
-        self.locate_static_method_impl(struct_name, method_name, arg_type_name)
-            .and_then(|r| r.trait_name)
-    }
-
     /// Which conversion trait a static `from` / `try_from` call names.
     pub(super) fn conversion_trait_name(&self, method_name: &str) -> String {
         if method_name == "try_from" {
@@ -3060,42 +2862,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Whether any impl block among `keys` declares `method_name` taking no
+    /// receiver. Headers name the methods and the signature digest says
+    /// whether each takes `self`, so the question is answered without an
+    /// impl-block AST — and keyed canonically, so two modules' same-named
+    /// types cannot answer for each other.
+    fn keys_declare_static_method(
+        &self,
+        keys: &[(ModuleSource, crate::ast::AstId)],
+        method_name: &str,
+    ) -> bool {
+        keys.iter().any(|key| {
+            self.tysys
+                .trait_env
+                .impl_headers
+                .get(key)
+                .into_iter()
+                .flat_map(|header| header.methods.iter())
+                .any(|m| {
+                    m.name == method_name
+                        && self
+                            .tysys
+                            .signatures
+                            .method_sig(m.ast_id)
+                            .is_some_and(|sig| sig.self_kind == ast::SelfKind::None)
+                })
+        })
+    }
+
     /// Whether an inherent impl (`impl Type { … }`) declares a no-self method
     /// of this name. A conversion-call guard needs the distinction: a trait
     /// lookup returning `None` is a failure only when no inherent static can
     /// answer instead.
     pub(super) fn has_inherent_static_method(&self, struct_name: &str, method_name: &str) -> bool {
-        let declares = |impl_block: &ast::ImplBlock| -> bool {
-            impl_block.trait_type.is_none()
-                && Self::get_type_name_static(&impl_block.ty) == struct_name
-                && impl_block.methods.iter().any(|m| {
-                    m.name == method_name
-                        && !m.params.iter().any(|p| p.self_kind != ast::SelfKind::None)
-                })
-        };
-        if self
-            .current_module_items
-            .iter()
-            .any(|item| matches!(item, Item::Impl(b) if declares(b)))
-        {
-            return true;
-        }
-        if let Some(entries) = self
+        let keys = self
             .tysys
             .trait_env
-            .impl_index
-            .get(&self.impl_target(struct_name))
-        {
-            for (module_source, item_id) in entries {
-                if let Some(module) = self.loaded_modules.get(module_source)
-                    && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
-                    && declares(impl_block)
-                {
-                    return true;
-                }
-            }
-        }
-        false
+            .inherent_impl_keys(&self.impl_target(struct_name));
+        self.keys_declare_static_method(&keys, method_name)
     }
 
     /// The literal preselect over a receiver's conversion impls
@@ -3274,23 +3078,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_else(fallback)
     }
 
-    /// Whether an AST type syntactically mentions `Self`. Over-approximates
-    /// (returns `true` for the few forms it does not descend into) so a caller
-    /// using it to decide whether to bind `Self` never under-binds.
-    fn ast_type_mentions_self(ty: &ast::Type) -> bool {
-        match ty {
-            ast::Type::Named(n) => n.name == "Self",
-            ast::Type::Generic(g) => {
-                g.name == "Self" || g.args.iter().any(Self::ast_type_mentions_self)
-            }
-            ast::Type::Tuple(elems) => elems.iter().any(Self::ast_type_mentions_self),
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
-                Self::ast_type_mentions_self(inner)
-            }
-            _ => true,
-        }
-    }
-
     pub(super) fn locate_static_method_impl(
         &self,
         struct_name: &str,
@@ -3372,8 +3159,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             !is_from_or_try_from(&base)
         };
 
+        // Returns the trait the impl names and the node declaring the method
+        // there — the identity of what this selection picked, so a caller
+        // recording a use→def edge names the impl the argument chose rather
+        // than the receiver's first same-named method.
         let check_impl =
-            |impl_block: &ast::ImplBlock, impl_module: &ModuleSource| -> Option<String> {
+            |impl_block: &ast::ImplBlock, impl_module: &ModuleSource| -> Option<(String, AstId)> {
                 let trait_type = impl_block.trait_type.as_ref()?;
                 if Self::get_type_name_static(&impl_block.ty) != struct_name
                     || !matches_arg_type(trait_type, impl_module, &impl_block.type_params)
@@ -3386,7 +3177,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .any(|p| p.self_kind != ast::SelfKind::None);
                     if method.name == method_name && !has_self {
-                        return Some(resolve_trait_name(trait_type));
+                        return Some((resolve_trait_name(trait_type), method.id));
                     }
                 }
                 // Fall back to the trait declaration's default methods: when
@@ -3403,20 +3194,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && method.default_body.is_some()
                     && method.sig.self_kind == ast::SelfKind::None
                 {
-                    return Some(resolve_trait_name(trait_type));
+                    return Some((resolve_trait_name(trait_type), method.sig.ast_id));
                 }
                 None
             };
 
         for item in self.current_module_items {
             if let Item::Impl(impl_block) = item
-                && let Some(trait_name) = check_impl(impl_block, &self.current_module_source)
+                && let Some((trait_name, method_id)) =
+                    check_impl(impl_block, &self.current_module_source)
             {
                 return Some(StaticMethodRef::new(
                     self.current_module_source.clone(),
                     struct_name,
                     method_name,
                     Some(trait_name),
+                    Some(method_id),
                 ));
             }
         }
@@ -3431,13 +3224,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (module_source, item_id) in entries {
                 if let Some(module) = self.loaded_modules.get(module_source)
                     && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
-                    && let Some(trait_name) = check_impl(impl_block, module_source)
+                    && let Some((trait_name, method_id)) = check_impl(impl_block, module_source)
                 {
                     return Some(StaticMethodRef::new(
                         module_source.clone(),
                         struct_name,
                         method_name,
                         Some(trait_name),
+                        Some(method_id),
                     ));
                 }
             }
@@ -3469,6 +3263,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 struct_name,
                 method_name,
                 Some(default_trait_name),
+                None,
             ));
         }
 
@@ -3503,22 +3298,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
 
-        // Check current module's impl blocks (not in the pre-built index)
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item {
-                let impl_struct_name = self.get_type_name(&impl_block.ty);
-                if impl_struct_name == struct_name {
-                    for method in &impl_block.methods {
-                        let has_self = method
-                            .params
-                            .iter()
-                            .any(|p| p.self_kind != ast::SelfKind::None);
-                        if method.name == method_name && !has_self {
-                            return true;
-                        }
-                    }
-                }
-            }
+        // The index holds only what `TraitEnv::build` classified as a static
+        // method; ask the headers directly for the rest.
+        if self.keys_declare_static_method(
+            &self
+                .tysys
+                .trait_env
+                .all_impl_keys(&self.impl_target(struct_name)),
+            method_name,
+        ) {
+            return true;
         }
 
         // O(1) lookup via pre-built resource static method index.
@@ -3706,6 +3495,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.find_struct_module_source(&actual_struct_name),
                 &actual_struct_name,
                 method_name,
+                None,
                 None,
             )
         });

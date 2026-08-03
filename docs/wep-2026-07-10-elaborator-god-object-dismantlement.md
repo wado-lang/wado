@@ -29,8 +29,9 @@ open-coding a query.
 
 ### Queries re-resolve foreign declaration ASTs on demand
 
-Roughly 40 `loaded_modules` reads survive outside reify. Every one exists to
-fetch a declaration's AST and re-resolve its signature at the use site:
+The coupling this WEP set out to remove was roughly 40 `loaded_modules` reads
+outside reify, each fetching a declaration's AST to re-resolve its signature
+at the use site — see Progress metric for what remains:
 
 | Category                                                                          | Sites                                                                                                                       | Consumed                                                             |
 | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
@@ -190,6 +191,28 @@ other eight resolved an impl block's **associated-type bindings**
 declaration facts too, so they became the impl's own digest entry
 ([`ImplSig`], S5c) rather than method signatures, and both helpers are gone.
 
+### One place per question
+
+The digest only holds if each question it answers has a single implementation.
+Every convergence below was forced by a defect where two of them disagreed:
+
+- Which declaration a name means — `canonical_decl_key` from a use site,
+  `declaring_side_decl_key` from the module that wrote the name. A name as
+  written and the name a declaration calls itself differ exactly when an alias
+  is in play, so a lookup keyed by the wrong one answers with another module's
+  same-named type.
+- Which target arguments are slots — `TypeSystem::is_impl_target_param`.
+- Where a method's own slots start — `MethodSig::method_param_offset`, carried
+  on `MethodInfo` rather than recounted from receiver arguments.
+- How a frame is entered — `enter_impl_frame` for a block,
+  `enter_impl_method_frame` for a method within it.
+- How a frame is left — `DeclSig::instantiate` positionally,
+  `instantiate_slots` by slot index (a generic, `&`-target, blanket or
+  variadic-tuple impl numbers its slots differently and a partially-concrete
+  target leaves gaps), `instantiate_call` for a call site that spells the
+  declaring block's arguments and the method's own separately, and
+  `ImplSig::instantiate` for a block's own bindings.
+
 ### Scope — transient walk state with RAII-only mutation
 
 One `Scope` struct (`elaborator/scope.rs`) absorbs `annotate_ctx` and
@@ -231,8 +254,8 @@ pub struct Annotator<'a, H: CompilerHost> {
 ```
 
 - `loaded_modules` leaves the struct. The walker's last AST needs are covered
-  by `Signatures` (fallback-module idents, data sections, defining `AstId`s
-  for `find_impl_method_ast_id`) and the `Rc`'d trait default bodies.
+  by `Signatures` (fallback-module idents, data sections, the declaring node
+  each signature carries) and the `Rc`'d trait default bodies.
 - Side channels become data flow: `resolve_method_call_with` returns its
   dispatch outcome; the operator's source `AstId` becomes a parameter;
   `capture_tuple_overlays` is deleted.
@@ -281,194 +304,39 @@ completeness test: the body walk visits every impl block in every module and
 `.expect`s the entry, so the suite already fails deterministically at the
 declaration rather than at whichever use site reaches it first.
 
-- [x] S1 `Scope` + guards (subsumes the parent WEP's Track B Stage E).
-- [x] S2 Side channels: `resolve_method_call_with` returns
-      `MethodCallOutcome`; the operator dispatcher takes `origin`;
-      `capture_tuple_overlays` deleted.
-- [x] S3 Decl work → decl pass: `resolve_module` split into
-      `annotate_module_decls` / `annotate_module_bodies`, every decl pass
-      running before any body walk.
-- [x] S4 Signatures stage A: `FunctionSig`, globals, effect-op signatures,
-      data sections. `clone_digests_from` is the one snapshot-seeding field
-      list, and `Signatures` is the one program-wide struct they assemble
-      into. Associated-type _bounds_ stayed on `TraitEnv`: they are
-      `ast::TraitBound`s indexed by name, which is `TraitEnv`'s alphabet,
-      not a resolved declaration fact.
-- [x] S4.5 Header-only consumers → `ImplHeader`. `impl_header` borrows
-      through an `Arc<TraitEnv>` handle, so a header outlives the
-      `&mut self` calls a lookup makes.
-- [x] S4.6 One frame exit: `DeclSig` (`elaborator/sig.rs`) and
-      `DeclSig::instantiate`, the single positional substitution.
-- [x] S5a Impl-method signatures resolved in the decl pass, keyed by the
-      method's `AstId`. `enter_impl_method_frame` is the one definition of
-      the frame and its slot numbering.
+### What the remaining `loaded_modules` reads are waiting on
 
-      Trait default methods are excluded *in the type*: `resolve_method`
-      takes the recorded signature as an argument and the synthesis path
-      passes `None`. The same trait method `AstId` resolves in a different
-      frame for every impl that inherits it, so a declaration-keyed digest
-      cannot represent it — that is S6's job, not a licence to re-resolve.
-- [x] S5b-1/2 Dispatch instantiates the recorded signature and
-      `get_impl_block` is deleted, so it cannot reach an impl AST.
-      `instantiate_slots` fills slots by index because generic, ref,
-      blanket and variadic-tuple impls number them differently and a
-      positional list cannot express a non-contiguous subset.
-- [x] S5b-3 `StaticMethodEntry` carries the method's own `AstId`; four of
-      five consumers collapse.
-- [x] S5b-4 Resource operations move to the decl pass and merge across
-      modules. Their signatures were already digested as `effect_ops`;
-      building a second digest would have added the duplicate mechanism
-      this WEP exists to remove.
-- [x] S5b-5 The canonically-keyed current-module scans are removed. The
-      rest are not redundant: `impl_index` was keyed by bare name, so the
-      scan _was_ the disambiguator.
-- [x] S5d Identity convergence. `impl_index` is re-keyed by
-      `ImplTargetKey`; `canonical_decl_key` is the single place a module is
-      decided; a blanket impl's bare type parameter gets its own variant
-      instead of a fabricated `DeclKey`. Builtin types are declared in
-      `primitive.wado` / `array.wado` / `types.wado` and `type_decl_key`
-      delegates to the name path rather than declining.
-
-      The measured shape of the defect: three functions answered "which
-      type is this name?" and disagreed. `is_primitive_type_name` listed 12
-      of the 15 names `resolve_named_type` treats as builtin, so
-      `impl Inspect for v128` in `core:simd` keyed to `core:simd` while
-      lookups asked `core:prelude/primitive`.
-
-      Adding `module_source` to `ResolvedType::Primitive`/`Unit` was
-      considered and rejected: it adds a *second* place that decides a
-      builtin's module. Instrumenting the fallback showed the fix was four
-      lines of delegation, not ~200 match sites.
-
-      Making `type_decl_key` answer for builtins exposed a latent bug in
-      operator dispatch: it peeled the receiver to its newtype base and
-      keyed the call off that. While a primitive base had no key the peel
-      was masked by a by-name fallback; once it had one, `impl Add for
-      Counter` on `type Counter = i32` routed the call to
-      `core:prelude/primitive` while the body stayed in the newtype's
-      module. Dispatch now keys off the chain link the impl was found on
-      (`Elaborator::impl_target_decl_key`), which is what "the module that
-      owns this impl" always meant.
-- [x] S5e Numbering convergence. A method's own type parameters start past
-      the impl's slots, and five places derived where that is. They
-      disagreed whenever a concrete argument sat among the free ones.
-      `TypeSystem::is_impl_target_param` is now the one predicate for which
-      target arguments are slots; associated-type bindings resolve in the
-      method's own frame rather than one scope out; `MethodInfo` carries
-      the offset the digest used instead of letting consumers count
-      receiver arguments.
-- [x] S5b-6a One `MethodSig` for both kinds of method declaration.
-      `resolve_effect_ops` already resolved an `interface` / `resource`
-      operation in its canonical frame — the declaration's type parameters
-      in slots 0.., `Self` built over them, the receiver synthesised as
-      parameter 0 — but recorded only a `TirEffectOp`, which drops
-      `self_kind`, per-parameter defaults, and the method's own `AstId`.
-      Dispatch therefore re-resolved the same declaration from AST under a
-      scope fabricated from the receiver's arguments.
-
-      Now the one resolution records both: `MethodSig` (grown a `cm_name`
-      and an `is_async`) keyed by the operation's `AstId`, plus the
-      `TirEffectOp` the effect system reads. `impl_method_sigs` becomes
-      `method_sigs` because both kinds live in it, and
-      `resource_method_ids` is the name-keyed index over it for callers
-      holding an operation name.
-
-      The `has_self` check the old path used — does any parameter's written
-      type name `Self` or the resource — is gone with it. The parser
-      rejects `self: T`, so a receiver is always `self` / `&self` /
-      `&mut self` and `self_kind` is the whole answer.
-- [x] S5b-6b `StaticMethodSig`, `find_static_method_def` and
-      `find_resource_decl` are deleted: a static-method lookup goes
-      index → `MethodSig` for both kinds of declaration.
-
-      A call site spells the declaring block's type arguments and the
-      method's own separately (`Type<A>::method<B>()`), so `MethodSig`
-      records `declaring_slot_count` — where the first list stops and the
-      second begins — and `instantiate_call` is the one operation that
-      fills both. It fills each slot by the slot's *own* index rather than
-      by position, because a generic, `&`-target, blanket or
-      variadic-tuple impl numbers its slots differently and a
-      partially-concrete target leaves gaps.
-
-      Inference reads the canonical types directly, as the WEP reserves for
-      it: `infer_static_method_type_args` no longer rebuilds the slot scope
-      and re-resolves the parameter AST inside it, it feeds
-      `decl.param_types` to `InferCtx` and splits the solution at
-      `declaring_slot_count`.
-
-      `StaticMethodEntry` loses `module` and `impl_id`. They existed to
-      re-resolve the method under the impl's module; the signature already
-      is that resolution, so the method's own `AstId` is the whole entry.
-- [x] S5b-6c Inherent-method dispatch instantiates the recorded signature.
-      Its two branches — receiver module known, and the prelude case where
-      it is not — each fetched the impl AST, rebuilt the block's slot scope
-      from the receiver's type arguments, seeded the method's own slots
-      after it, and re-resolved the signature under the impl module's
-      perspective. They now share `inherent_method_info`, which reads the
-      digest, and `inherent_impl_applies`, which asks `ImplHeader` the two
-      applicability questions.
-
-      With that, `method_lookup.rs` holds no `loaded_modules` read at all —
-      the file that was the God Object's whole reason for carrying the
-      module map.
-
-      The branches also numbered the method's own slots from
-      `receiver_type_args.len()`. `MethodSig` numbers them from
-      `method_param_offset`, the single predicate S5e converged on, which
-      differs precisely when a concrete argument sits among the free ones.
-
-      The `MethodInfo` producers that remain are not signature lookups: the
-      tuple builtins (`len` / `zip`) synthesise a signature no declaration
-      has, and the trait-bound path is S6's.
-
-**What the remaining `loaded_modules` reads are waiting on.** The
-trait-bound path (`find_method_in_trait_bounds`) is the one place a
+The trait-bound path (`find_method_in_trait_bounds`) is the one place a
 declaration-keyed digest genuinely cannot answer alone, and it splits three
 ways:
 
 - The trait method's `DeclSig`, with `Self` as slot 0 and the method's own
-  parameters after it. A declaration fact — S6.
+  parameters after it. A declaration fact — S6. The decl pass already records
+  it in exactly that frame.
 - The associated-type projections' `assoc_type_bindings`, computed from the
   _caller's_ where clause (`I: IntoIterator<Item = u8>` gives
   `[("Item", u8)]`). Use-site data, so it becomes an explicit substitution
-  input, never a re-resolution.
+  input, never a re-resolution. Instantiating the recorded signature carries
+  the trait frame's bindings through unchanged, so the caller's have to
+  replace them after the fact — the one piece of machinery S6 still needs.
 - The `ast::TraitBound` lists those projections are built from. Declaration
   facts, but name-keyed and AST-shaped — `TraitEnv`'s alphabet, where
   `assoc_type_bound_index` already keeps them.
 
-Binding `Self` to a slot needs one fix first:
-`TypeTable::substitute_type_params` returns an `AssocTypeProjection`
-unchanged when the substituted base is still a type parameter, so
-`Self::Item` with `Self := I` stays `Self::Item` instead of becoming
-`I::Item`. It must re-intern the projection over the new base.
+Reaching the digest by trait _name_ is what blocks the last read. Traits have
+no symbol-table entry, so `canonical_decl_key` answers with the prelude's
+type whenever a module declares a trait sharing one of its names — a local
+`trait Left` against `core:prelude/format`'s `Left`. The AST route survives
+because it falls back to scanning the current module's items. Keying the
+digest by the declaration's `AstId` sidesteps it; removing the read outright
+needs trait-name resolution to become frame-aware, which is its own slice.
 
-- [x] S5c `ImplSig` — a block's target and trait type arguments and its
-      associated-type bindings, resolved once in the block's own frame and
-      keyed by the block's `AstId`. `ImplSig::instantiate` is its one frame
-      exit, mirroring `DeclSig::instantiate`.
-      `resolve_type_with_param_mapping` / `build_type_param_mapping` are
-      deleted, so no query resolves an impl's AST.
-
-      `enter_impl_frame` splits out of `enter_impl_method_frame`: the impl's
-      slot numbering had no name of its own, and the bindings are numbered
-      against it, not against any one method's frame.
-
-      Two things fell out of removing the name-keyed mapping. A binding
-      naming `Self` needs no substitution key — the impl frame resolved
-      `Self` to the target, so instantiation yields the receiver. And the
-      mapping's "no declared params, so treat every `Named` argument as a
-      parameter" fallback is gone: whether a target position is a slot is
-      decided once, by the decl pass.
-
-      `is_synthesize_request` stays on `ImplHeader`. It is a syntactic
-      property of the block, readable before any type is interned, which is
-      exactly `TraitEnv`'s alphabet. An `ImplSig` *is* recorded for such a
-      block, so the digest is total over `impl_headers` and dispatch reads
-      it with `.expect` rather than a fallback.
-- [ ] S6 `Signatures` stage C — trait decls: method signatures + `has_body` +
-      `Rc` bodies; convert `find_trait_decl_methods_with_module` /
-      `find_method_in_trait_bounds`; reify reads default bodies from the
-      digest; the walker drops `loaded_modules`.
+- [ ] S6 `Signatures` stage C — trait decls. `TraitSig` / `TraitMethod` are
+      recorded and reify reads default bodies from them. What remains is
+      `find_method_in_trait_bounds`: its two whole-module scans are gone, but
+      it still re-resolves the method's parameter and return types from AST,
+      which needs the caller's associated-type bindings substituted into the
+      recorded signature.
 - [ ] S7 Query migration: `lookup_method_info` cluster and remaining
       callee-signature queries → `impl TypeSystem (ctx, scope)`; delete
       `suppress_reference_recording` / `with_reference_recording_suppressed`;
@@ -478,32 +346,28 @@ unchanged when the substituted base is still a type parameter, so
 - [ ] S9 Rename `Elaborator` → `Annotator`; update `docs/compiler.md` and
       `wado-compiler/AGENTS.md`.
 
-Ordering: S1–S3 are mutually independent and independent of S4–S6. S4.5 is
-independent of everything. S4.6 gates S5. S5a–S5c build one digest each and
-can land per consumer category, but S5b follows S5a directly: between them
-both passes resolve method parameter types, and that duplication is exactly
-what the digest exists to remove. S7 requires S4–S6, and converts one query at
-a time rather than as a single cut. S8–S9 are last.
+Ordering: S7 requires S6, and converts one query at a time rather than as a
+single cut. S8–S9 are last and depend on neither.
 
 Progress metric:
 
-| Metric                                           | S4 | S5b-6 | Target |
-| ------------------------------------------------ | -- | ----- | ------ |
-| `loaded_modules` reads outside reify / decl pass | 25 | 8     | 0      |
-| AST-level type-param substitution helpers        | 2  | 0     | 0      |
-| `get_impl_block` + callers                       | 15 | 0     | 0      |
-| `with_module_perspective` call sites             | 16 | 5     | 1      |
-| `suppress_reference_recording` call sites        | 7  | 2     | 0      |
-| Manual scope save/restore clusters               | 0  | 0     | 0      |
-| `Elaborator` fields                              | 13 | 13    | 6      |
+| Metric                                           | Now | Target |
+| ------------------------------------------------ | --- | ------ |
+| `loaded_modules` reads outside reify / decl pass | 4   | 0      |
+| Whole-module AST scans                           | 0   | 0      |
+| Name-keyed AST predicates                        | 0   | 0      |
+| AST-level type-param substitution helpers        | 0   | 0      |
+| `with_module_perspective` call sites             | 9   | 1      |
+| `suppress_reference_recording` call sites        | 3   | 0      |
+| Manual scope save/restore clusters               | 0   | 0      |
+| `Elaborator` fields                              | 13  | 6      |
 
-The eight that remain are three `method_call.rs` name-scan fallbacks, the
-three trait-declaration sites S6 takes, `expr.rs`'s scan for the module
-declaring a `From` impl, and `find_impl_method_ast_id`.
-
-Compile-time is a stated benefit (one signature resolution per declaration
-instead of per use site), so the baseline is captured before S5 rather than
-inferred after it.
+Every surviving `loaded_modules` read is an indexed fetch of one declaration,
+not a scan: three in `method_call.rs` reached through `impl_index` /
+`all_impl_index`, and `find_trait_decl_with`, which S6 is waiting on. S7 owns
+the two scope-swapping counts; one perspective swap is the walker's own —
+typing an imported global in its declaring module, which is the callee-scope
+use the target of 1 reserves.
 
 ## Consequences
 
@@ -514,8 +378,7 @@ inferred after it.
   gone.
 - Each signature is resolved once, not once per use site (the old
   `method_info_cache` was removed, so the dispatch path re-resolves today).
-  Associated-const collection drops from O(N²) to O(N). Expected
-  compile-time win; measure after S5.
+  Associated-const collection drops from O(N²) to O(N).
 - One recorded truth for use→def edges — the suppression machinery is deleted
   rather than maintained, removing the "query clobbers the owning module's
   edge" bug class at the root.
@@ -533,13 +396,6 @@ inferred after it.
 - Diagnostic timing shifts: a broken signature errors once at its
   declaration, not at each use. Same-or-better, but golden fixtures need
   review during S4–S5.
-- **Compile time is ~8% worse than before this work, and the cause is not
-  yet known.** `wado compile -O2 benchmark/fts/fts.wado`, same machine,
-  fresh builds both sides: main 716/722/724 ms, branch 736…835 ms over
-  seven runs — the branch's minimum exceeds main's maximum, so this is not
-  noise. Indexing `entries_by_receiver` by receiver did not close it.
-  Profile before guessing again; the eager per-impl digesting over the
-  whole stdlib is the first suspect, not a conclusion.
 
 ### Risks and mitigations
 
