@@ -197,6 +197,8 @@ _Fields are private._
 
 #### `pub fn skip_whitespace(&mut self)`
 
+Advances past any run of JSON whitespace at the current position.
+
 #### `pub fn expect_char(&mut self, c: i32) -> Result<(), DeserializeError>`
 
 #### `pub fn read_json_string(&mut self) -> Result<String, DeserializeError>`
