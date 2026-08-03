@@ -441,7 +441,7 @@ type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128^Sub::sub"
 
 type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128^Shl::shl" = fn(ref "core:prelude/int128.wado//u128", u32) -> ref "core:prelude/int128.wado//u128";  // TypeId(124)
 
-type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(125)
+type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> [u64, i64];  // TypeId(125)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(126)
 
@@ -1830,14 +1830,15 @@ fn "core:json/write_json_i128"(buf, v) {
     let start_4: i32;
     let f_13: ref "core:prelude/format.wado//Formatter";
     let start_25: i32;
-    let val_34: ref "core:prelude/int128.wado//i128";
     start_4 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(buf, 1);
     builtin::array_set_u8(buf.repr, start_4, 34);
     f_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
     "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0"(__inline_core_prelude_int128_wado_i128__abs_u128_8: block -> ref "core:prelude/int128.wado//u128" {
         if v.high < 0_i64 {
-            val_34 = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:core:json::__const_obj_166, v);
-            struct.new "core:prelude/int128.wado//u128" { low: val_34.low, high: val_34.high };
+            let val_34_mv_low: u64;
+            let val_34_mv_high: i64;
+            multivalue_bind [val_34_mv_low, val_34_mv_high] = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:core:json::__const_obj_166, v);
+            struct.new "core:prelude/int128.wado//u128" { low: val_34_mv_low, high: val_34_mv_high };
             break __inline_core_prelude_int128_wado_i128__abs_u128_8;
         }
         struct.new "core:prelude/int128.wado//u128" { low: v.low, high: v.high };
@@ -2132,7 +2133,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(self, other
     let lo: i64;
     let hi: i64;
     multivalue_bind [lo, hi] = i64.sub128(self.low, self.high, other.low, other.high);
-    return struct.new "core:prelude/int128.wado//i128" { low: lo, high: hi };
+    return lo, hi;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {

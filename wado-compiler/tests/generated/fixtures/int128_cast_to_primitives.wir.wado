@@ -228,7 +228,7 @@ type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128^Shl::shl"
 
 type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128::abs_u128" = fn(ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//u128";  // TypeId(90)
 
-type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(91)
+type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> [u64, i64];  // TypeId(91)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(92)
 
@@ -2060,9 +2060,8 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128^Shl::shl"(self, rhs) 
 }
 
 fn "core:prelude/int128.wado/core:prelude/int128.wado/i128::abs_u128"(self) {
-    let val_2: ref "core:prelude/int128.wado//i128";
     if self.high < 0_i64 {
-        return val_2 = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:core:prelude/int128.wado::__const_obj_61, self), struct.new "core:prelude/int128.wado//u128" { low: val_2.low, high: val_2.high };
+        return let val_2_mv_low: u64; let val_2_mv_high: i64; multivalue_bind [val_2_mv_low, val_2_mv_high] = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:core:prelude/int128.wado::__const_obj_61, self), struct.new "core:prelude/int128.wado//u128" { low: val_2_mv_low, high: val_2_mv_high };
     }
     return struct.new "core:prelude/int128.wado//u128" { low: self.low, high: self.high };
 }
@@ -2071,7 +2070,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(self, other
     let lo: i64;
     let hi: i64;
     multivalue_bind [lo, hi] = i64.sub128(self.low, self.high, other.low, other.high);
-    return struct.new "core:prelude/int128.wado//i128" { low: lo, high: hi };
+    return lo, hi;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {

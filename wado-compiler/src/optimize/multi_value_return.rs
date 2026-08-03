@@ -7,11 +7,12 @@
 //!
 //! ## Eligibility
 //!
-//! A function `f` is a candidate when its return type is a 2..=4-arity tuple
-//! or user struct (all field types eligible), every `Return` produces a fresh
-//! aggregate literal of that shape, and every call site is `let __tmp =
-//! Call(f); …` whose only uses of `__tmp` are `FieldAccess(Local(__tmp),
-//! name)`. See the per-function comments below for the exact gates.
+//! A function `f` is a candidate when its return type is a tuple or user
+//! struct of 2..=[`MAX_RESULTS`] fields (all field types eligible), every
+//! `Return` produces a fresh aggregate literal of that shape, and every call
+//! site is `let __tmp = Call(f); …` whose only uses of `__tmp` are
+//! `FieldAccess(Local(__tmp), name)`. See the per-function comments below for
+//! the exact gates.
 //!
 //! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
 //! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): a pure classification
@@ -23,6 +24,12 @@ use crate::nir::{FuncId, FunctionKind, NirFunction, NirStruct, ReturnAbi};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
+
+/// Widest result vector the ABI is applied to. Matches
+/// `wir_optimize::sroa_variant_return::layout::MAX_PER_CASE_RESULT_FIELDS`, so
+/// a variant scalarized into `[tag, per-case slots…]` is never rejected here by
+/// an arity bound the layout that produced it does not share.
+const MAX_RESULTS: usize = 8;
 
 /// Per-candidate body-only info: the per-field NIR types and field names.
 #[derive(Clone, Debug)]
@@ -168,7 +175,10 @@ fn candidate_info(
     if func.has_real_type_params() || !func.impl_type_params.is_empty() {
         return None;
     }
-    if func.is_trait_method() || func.is_closure_call() {
+    // A trait method is not excluded: after monomorphization it is an ordinary
+    // direct-call target, and the gates above already cover every way a
+    // function's address escapes a direct call.
+    if func.is_closure_call() {
         return None;
     }
 
@@ -177,7 +187,7 @@ fn candidate_info(
 
     let (result_types, field_names, is_struct_shape) =
         aggregate_field_info(return_type, type_table, structs)?;
-    if !(2..=4).contains(&result_types.len()) {
+    if !(2..=MAX_RESULTS).contains(&result_types.len()) {
         return None;
     }
     for &t in &result_types {

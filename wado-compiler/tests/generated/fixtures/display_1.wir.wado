@@ -331,7 +331,7 @@ type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128^Sub::sub"
 
 type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128^Shl::shl" = fn(ref "core:prelude/int128.wado//u128", u32) -> ref "core:prelude/int128.wado//u128";  // TypeId(98)
 
-type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(99)
+type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> [u64, i64];  // TypeId(99)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(100)
 
@@ -1951,10 +1951,6 @@ fn "display_1.wado/test_template_specifiers_i128"() with Stdout {
     let __local_553: ref "core:prelude/format.wado//Formatter";
     let __local_554: ref "core:prelude/string.wado//String";
     let __local_555: ref "core:prelude/format.wado//Formatter";
-    let val_1096: ref "core:prelude/int128.wado//i128";
-    let val_1098: ref "core:prelude/int128.wado//i128";
-    let val_1101: ref "core:prelude/int128.wado//i128";
-    let val_1111: ref "core:prelude/int128.wado//i128";
     neg = struct.new "core:prelude/int128.wado//i128" { low: -42_i64, high: -1_i64 };
     __local_192 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_193 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 10, precision: -2, indent: 0, buf: __local_192 };
@@ -2021,7 +2017,7 @@ fn "display_1.wado/test_template_specifiers_i128"() with Stdout {
     }
     __local_220 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_221 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_220 };
-    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude"(val_1096 = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:display_1.wado::__const_obj_335, neg); struct.new "core:prelude/int128.wado//u128" { low: val_1096.low, high: val_1096.high }, __local_221, 1);
+    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude"(let val_1096_mv_low: u64; let val_1096_mv_high: i64; multivalue_bind [val_1096_mv_low, val_1096_mv_high] = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:display_1.wado::__const_obj_335, neg); struct.new "core:prelude/int128.wado//u128" { low: val_1096_mv_low, high: val_1096_mv_high }, __local_221, 1);
     __cond_17 = "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(__local_220, global:display_1.wado::__const_obj_821);
     if @unlikely(__cond_17 == 0) {
         cold_path;
@@ -2030,7 +2026,7 @@ fn "display_1.wado/test_template_specifiers_i128"() with Stdout {
     }
     __local_224 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_225 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_224 };
-    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude"(val_1098 = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:display_1.wado::__const_obj_335, neg); struct.new "core:prelude/int128.wado//u128" { low: val_1098.low, high: val_1098.high }, __local_225, 1);
+    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude"(let val_1098_mv_low: u64; let val_1098_mv_high: i64; multivalue_bind [val_1098_mv_low, val_1098_mv_high] = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:display_1.wado::__const_obj_335, neg); struct.new "core:prelude/int128.wado//u128" { low: val_1098_mv_low, high: val_1098_mv_high }, __local_225, 1);
     __cond_19 = "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(__local_224, global:display_1.wado::__const_obj_821);
     if @unlikely(__cond_19 == 0) {
         cold_path;
@@ -2048,7 +2044,7 @@ fn "display_1.wado/test_template_specifiers_i128"() with Stdout {
     }
     __local_232 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_233 = struct.new "core:prelude/format.wado//Formatter" { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 8, precision: -2, indent: 0, buf: __local_232 };
-    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec1"(val_1101 = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:display_1.wado::__const_obj_335, neg); struct.new "core:prelude/int128.wado//u128" { low: val_1101.low, high: val_1101.high }, __local_233, 1);
+    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec1"(let val_1101_mv_low: u64; let val_1101_mv_high: i64; multivalue_bind [val_1101_mv_low, val_1101_mv_high] = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:display_1.wado::__const_obj_335, neg); struct.new "core:prelude/int128.wado//u128" { low: val_1101_mv_low, high: val_1101_mv_high }, __local_233, 1);
     __cond_23 = "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(__local_232, global:display_1.wado::__const_obj_806);
     if @unlikely(__cond_23 == 0) {
         cold_path;
@@ -2688,7 +2684,7 @@ condition: `${i128_max:#x}` == \"0x7fffffffffffffffffffffffffffffff\"
     i128_min = struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: -9223372036854775808_i64 };
     __local_500 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_501 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_500 };
-    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude"(val_1111 = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:display_1.wado::__const_obj_335, i128_min); struct.new "core:prelude/int128.wado//u128" { low: val_1111.low, high: val_1111.high }, __local_501, 1);
+    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude"(let val_1111_mv_low: u64; let val_1111_mv_high: i64; multivalue_bind [val_1111_mv_low, val_1111_mv_high] = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:display_1.wado::__const_obj_335, i128_min); struct.new "core:prelude/int128.wado//u128" { low: val_1111_mv_low, high: val_1111_mv_high }, __local_501, 1);
     __cond_162 = "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(__local_500, global:display_1.wado::__const_obj_334);
     if @unlikely(__cond_162 == 0) {
         cold_path;
@@ -3107,7 +3103,6 @@ fn "display_1.wado/test_template_specifiers_inspect"() with Stdout {
     let __local_346: ref "core:prelude/format.wado//Formatter";
     let __local_347: ref "core:prelude/string.wado//String";
     let __local_348: ref "core:prelude/format.wado//Formatter";
-    let val_566: ref "core:prelude/int128.wado//i128";
     let __sroa_empty_repr: ref Array<u8>;
     let __sroa_s_repr: ref Array<u8>;
     let start_633: i32;
@@ -3173,7 +3168,7 @@ fn "display_1.wado/test_template_specifiers_inspect"() with Stdout {
     i128_val = struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: -9223372036854775808_i64 };
     __local_169 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_170 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_169 };
-    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude"(val_566 = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:display_1.wado::__const_obj_335, i128_val); struct.new "core:prelude/int128.wado//u128" { low: val_566.low, high: val_566.high }, __local_170, 1);
+    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude"(let val_566_mv_low: u64; let val_566_mv_high: i64; multivalue_bind [val_566_mv_low, val_566_mv_high] = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:display_1.wado::__const_obj_335, i128_val); struct.new "core:prelude/int128.wado//u128" { low: val_566_mv_low, high: val_566_mv_high }, __local_170, 1);
     __cond_20 = "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(__local_169, global:display_1.wado::__const_obj_334);
     if @unlikely(__cond_20 == 0) {
         cold_path;
@@ -4858,7 +4853,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(self, other
     let lo: i64;
     let hi: i64;
     multivalue_bind [lo, hi] = i64.sub128(self.low, self.high, other.low, other.high);
-    return struct.new "core:prelude/int128.wado//i128" { low: lo, high: hi };
+    return lo, hi;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
