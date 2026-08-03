@@ -62,6 +62,12 @@
 //!   bind is wrapped back into the variant it used to return. Validation is a
 //!   profitability filter, not a correctness precondition.
 //!
+//! A rebox is sound but reinstates the allocation the pass exists to remove, so
+//! one firing in steady state means the candidate should not have been taken —
+//! it is a bug in the candidate set, not a cost to absorb. The tail-call rule
+//! in [`check_uses`] is what keeps the count at zero: a `return g(x)` is only a
+//! reason to keep `g` when the caller has a tuple to pass it through.
+//!
 //! Three places have to agree on what "a binding fed by a call" means — the
 //! fast path, the repair, and the invariant check. They all go through
 //! [`tail_call_site`], which looks through a block tail, because by the time a
@@ -860,7 +866,25 @@ fn collect_and_validate(
     // The tail-call rule couples caller and callee candidacy in both
     // directions, so refute to a fix-point: optimistic (assume-then-refute), so
     // a mutually tail-recursive group survives.
+    // A tail call is fine when its callee already returns this variant's tuple,
+    // whether it was scalarized in this round or an earlier one. Refusing the
+    // earlier ones reboxed every tail call inlining exposed after its callee
+    // was done — 50 of them on `cbor_twitter`, each an allocation the pass
+    // exists to remove.
+    let already: IndexMap<FuncId, TypeId> = project
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            Some((f.id?, f.scalarized_from?))
+        })
+        .collect();
+
     while !candidates.is_empty() {
+        let mut tail_ok = already.clone();
+        for (&key, cand) in &candidates {
+            tail_ok.insert(key, cand.variant_type);
+        }
         let mut invalid: IndexSet<FuncId> = IndexSet::default();
         for (&key, cand) in &candidates {
             let func = project.functions[key.index()].borrow();
@@ -868,14 +892,17 @@ fn collect_and_validate(
                 .body
                 .as_ref()
                 .expect("is_eligible rejects a body-less function");
-            if !returns_are_scalarizable(body, body.root, cand, &candidates) {
+            if !returns_are_scalarizable(body, body.root, cand, &tail_ok) {
                 invalid.insert(key);
             }
         }
         for func_rc in &project.functions {
             let func = func_rc.borrow();
             if let Some(body) = &func.body {
-                invalidate_bad_call_sites(body, &func, &candidates, &mut invalid);
+                let caller_ok = func
+                    .id
+                    .is_some_and(|id| candidates.contains_key(&id) || already.contains_key(&id));
+                invalidate_bad_call_sites(body, &func, &candidates, caller_ok, &mut invalid);
             }
         }
         if invalid.is_empty() {
@@ -914,42 +941,40 @@ fn returns_are_scalarizable(
     body: &Body,
     block: BlockId,
     cand: &Candidate,
-    candidates: &IndexMap<FuncId, Candidate>,
+    tail_ok: &IndexMap<FuncId, TypeId>,
 ) -> bool {
     body.blocks[block]
         .stmts
         .iter()
-        .all(|&s| stmt_returns_scalarizable(body, s, cand, candidates))
+        .all(|&s| stmt_returns_scalarizable(body, s, cand, tail_ok))
 }
 
 fn stmt_returns_scalarizable(
     body: &Body,
     stmt: StmtId,
     cand: &Candidate,
-    candidates: &IndexMap<FuncId, Candidate>,
+    tail_ok: &IndexMap<FuncId, TypeId>,
 ) -> bool {
     match &body.stmts[stmt].kind {
         StmtKind::Return { value: None } => false,
-        StmtKind::Return { value: Some(v) } => {
-            return_value_scalarizable(body, *v, cand, candidates)
-        }
+        StmtKind::Return { value: Some(v) } => return_value_scalarizable(body, *v, cand, tail_ok),
         StmtKind::If {
             then_block,
             else_block,
             ..
         } => {
-            returns_are_scalarizable(body, *then_block, cand, candidates)
-                && else_block.is_none_or(|b| returns_are_scalarizable(body, b, cand, candidates))
+            returns_are_scalarizable(body, *then_block, cand, tail_ok)
+                && else_block.is_none_or(|b| returns_are_scalarizable(body, b, cand, tail_ok))
         }
         StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            returns_are_scalarizable(body, *b, cand, candidates)
+            returns_are_scalarizable(body, *b, cand, tail_ok)
         }
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            nested_returns_scalarizable(body, *value, cand, candidates)
+            nested_returns_scalarizable(body, *value, cand, tail_ok)
         }
-        StmtKind::Expr(e) => nested_returns_scalarizable(body, *e, cand, candidates),
+        StmtKind::Expr(e) => nested_returns_scalarizable(body, *e, cand, tail_ok),
         StmtKind::Break { value, .. } => {
-            value.is_none_or(|v| nested_returns_scalarizable(body, v, cand, candidates))
+            value.is_none_or(|v| nested_returns_scalarizable(body, v, cand, tail_ok))
         }
         StmtKind::Continue => true,
     }
@@ -961,7 +986,7 @@ fn nested_returns_scalarizable(
     body: &Body,
     op: Operand,
     cand: &Candidate,
-    candidates: &IndexMap<FuncId, Candidate>,
+    tail_ok: &IndexMap<FuncId, TypeId>,
 ) -> bool {
     let Some(expr) = op.as_expr() else {
         return true;
@@ -970,7 +995,7 @@ fn nested_returns_scalarizable(
     collect_stmts(body, NodeRef::Expr(expr), &mut stmts);
     stmts
         .iter()
-        .all(|&s| stmt_returns_scalarizable(body, s, cand, candidates))
+        .all(|&s| stmt_returns_scalarizable(body, s, cand, tail_ok))
 }
 
 fn collect_stmts(body: &Body, node: NodeRef, out: &mut Vec<StmtId>) {
@@ -985,7 +1010,7 @@ fn return_value_scalarizable(
     body: &Body,
     op: Operand,
     cand: &Candidate,
-    candidates: &IndexMap<FuncId, Candidate>,
+    tail_ok: &IndexMap<FuncId, TypeId>,
 ) -> bool {
     let Some(expr) = op.as_expr() else {
         return false;
@@ -995,11 +1020,9 @@ fn return_value_scalarizable(
     }
     match &body.exprs[expr].kind {
         ExprKind::VariantConstruct { variant_type, .. } => *variant_type == cand.variant_type,
-        // `return g(x)` where `g` shares the variant, hence the layout: the
-        // rewritten callee already returns this function's tuple.
-        ExprKind::Call { func_id, .. } => candidates
-            .get(func_id)
-            .is_some_and(|c| c.variant_type == cand.variant_type),
+        // `return g(x)` where `g` shares the variant, hence the layout: `g`
+        // already returns this function's tuple, whichever round rewrote it.
+        ExprKind::Call { func_id, .. } => tail_ok.get(func_id) == Some(&cand.variant_type),
         ExprKind::Local { index, .. } => single_def_variant_construct(body, *index, cand).is_some(),
         // A plain block's value is its tail statement. A `LabeledBlock`'s is
         // not: a `break L: v` anywhere inside also produces it, and those exits
@@ -1007,8 +1030,8 @@ fn return_value_scalarizable(
         // rejected rather than half-handled.
         ExprKind::Block(b) => {
             let b = *b;
-            returns_are_scalarizable(body, b, cand, candidates)
-                && block_tail_scalarizable(body, b, cand, candidates)
+            returns_are_scalarizable(body, b, cand, tail_ok)
+                && block_tail_scalarizable(body, b, cand, tail_ok)
         }
         ExprKind::If {
             then_branch,
@@ -1016,18 +1039,18 @@ fn return_value_scalarizable(
             ..
         } => {
             let (then_branch, else_branch) = (*then_branch, *else_branch);
-            returns_are_scalarizable(body, then_branch, cand, candidates)
-                && block_tail_scalarizable(body, then_branch, cand, candidates)
+            returns_are_scalarizable(body, then_branch, cand, tail_ok)
+                && block_tail_scalarizable(body, then_branch, cand, tail_ok)
                 && else_branch.is_some_and(|b| {
-                    returns_are_scalarizable(body, b, cand, candidates)
-                        && block_tail_scalarizable(body, b, cand, candidates)
+                    returns_are_scalarizable(body, b, cand, tail_ok)
+                        && block_tail_scalarizable(body, b, cand, tail_ok)
                 })
         }
         ExprKind::Match { arms, .. } => {
             let bodies: Vec<Operand> = arms.iter().map(|a| a.body).collect();
             bodies
                 .iter()
-                .all(|&b| return_value_scalarizable(body, b, cand, candidates))
+                .all(|&b| return_value_scalarizable(body, b, cand, tail_ok))
         }
         ExprKind::Switch { arms, default, .. } => {
             let blocks: Vec<BlockId> = arms
@@ -1036,8 +1059,8 @@ fn return_value_scalarizable(
                 .chain(std::iter::once(*default))
                 .collect();
             blocks.iter().all(|&b| {
-                returns_are_scalarizable(body, b, cand, candidates)
-                    && block_tail_scalarizable(body, b, cand, candidates)
+                returns_are_scalarizable(body, b, cand, tail_ok)
+                    && block_tail_scalarizable(body, b, cand, tail_ok)
             })
         }
         _ => false,
@@ -1048,13 +1071,13 @@ fn block_tail_scalarizable(
     body: &Body,
     block: BlockId,
     cand: &Candidate,
-    candidates: &IndexMap<FuncId, Candidate>,
+    tail_ok: &IndexMap<FuncId, TypeId>,
 ) -> bool {
     let Some(&last) = body.blocks[block].stmts.last() else {
         return false;
     };
     match &body.stmts[last].kind {
-        StmtKind::Expr(e) => return_value_scalarizable(body, *e, cand, candidates),
+        StmtKind::Expr(e) => return_value_scalarizable(body, *e, cand, tail_ok),
         StmtKind::Return { .. } => true,
         _ => false,
     }
@@ -1165,6 +1188,7 @@ fn invalidate_bad_call_sites(
     body: &Body,
     func: &NirFunction,
     candidates: &IndexMap<FuncId, Candidate>,
+    caller_ok: bool,
     invalid: &mut IndexSet<FuncId>,
 ) {
     let bound = bound_temps(body, candidates);
@@ -1176,7 +1200,14 @@ fn invalidate_bad_call_sites(
             invalid.insert(f);
         }
     }
-    check_uses(body, NodeRef::Block(body.root), candidates, &bound, invalid);
+    check_uses(
+        body,
+        NodeRef::Block(body.root),
+        candidates,
+        &bound,
+        caller_ok,
+        invalid,
+    );
 }
 
 fn check_uses(
@@ -1184,6 +1215,7 @@ fn check_uses(
     node: NodeRef,
     candidates: &IndexMap<FuncId, Candidate>,
     bound: &IndexMap<u32, FuncId>,
+    caller_ok: bool,
     invalid: &mut IndexSet<FuncId>,
 ) {
     match node {
@@ -1197,8 +1229,18 @@ fn check_uses(
                         return;
                     }
                 }
+                // A tail call passes the callee's tuple straight through — but
+                // only if this function has a tuple to pass it through. When it
+                // does not, the site needs a rebox, and a rebox is the
+                // allocation the pass exists to remove: refuse the callee
+                // instead. The fix-point loop propagates the refusal.
                 StmtKind::Return { value: Some(v) } => {
-                    if call_callee(body, *v).is_some_and(|f| candidates.contains_key(&f)) {
+                    if let Some(f) = call_callee(body, *v)
+                        && candidates.contains_key(&f)
+                    {
+                        if !caller_ok {
+                            invalid.insert(f);
+                        }
                         return;
                     }
                 }
@@ -1226,9 +1268,9 @@ fn check_uses(
                         }
                         for a in &arms {
                             if let Some(g) = a.guard {
-                                check_uses_operand(body, g, candidates, bound, invalid);
+                                check_uses_operand(body, g, candidates, bound, caller_ok, invalid);
                             }
-                            check_uses_operand(body, a.body, candidates, bound, invalid);
+                            check_uses_operand(body, a.body, candidates, bound, caller_ok, invalid);
                         }
                         return;
                     }
@@ -1251,7 +1293,9 @@ fn check_uses(
         }
         NodeRef::Block(_) | NodeRef::Pat(_) => {}
     }
-    body.for_each_child(node, |c| check_uses(body, c, candidates, bound, invalid));
+    body.for_each_child(node, |c| {
+        check_uses(body, c, candidates, bound, caller_ok, invalid);
+    });
 }
 
 fn check_uses_operand(
@@ -1259,10 +1303,18 @@ fn check_uses_operand(
     op: Operand,
     candidates: &IndexMap<FuncId, Candidate>,
     bound: &IndexMap<u32, FuncId>,
+    caller_ok: bool,
     invalid: &mut IndexSet<FuncId>,
 ) {
     if let Some(e) = op.as_expr() {
-        check_uses(body, NodeRef::Expr(e), candidates, bound, invalid);
+        check_uses(
+            body,
+            NodeRef::Expr(e),
+            candidates,
+            bound,
+            caller_ok,
+            invalid,
+        );
     }
 }
 

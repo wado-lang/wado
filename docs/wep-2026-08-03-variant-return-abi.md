@@ -399,10 +399,26 @@ Two rules make it work, and both were learned by getting them wrong:
   repair rebox the fast path's own work, which is what produced a tuple-typed
   binding holding a variant.
 
-With those in place the E2E suite runs clean with the pass enabled: 4117
-passed, 7 failed, and no invalid Wasm anywhere. The 7 are `opt_sroa_variant_*`
-fixtures pinning WIR-pass local names this pass does not produce — expectation
-churn, which step 3 updates.
+With those in place the E2E suite runs clean with the pass enabled, and emits
+no invalid Wasm anywhere. The failures left are `opt_sroa_variant_*` fixtures
+pinning WIR-pass local names this pass does not produce — expectation churn,
+which step 3 updates.
+
+### A rebox is a signal, not a cost to absorb
+
+Reboxing is sound but it reinstates the very allocation the pass removes, so a
+rebox firing in steady state means the candidate should not have been taken. On
+`cbor_twitter` fifty of them fired, every one a `return g(x)` in a caller that
+still returned the variant: `invalidate_bad_call_sites` accepted a
+tail-position call without checking that the _caller_ had a tuple to pass it
+through. Refusing the callee in that case — and letting the fix-point propagate
+the refusal, which is what `widen.rs`'s cascade does — took the reboxes to zero
+and the size cost from +4.4 % to +0.91 %.
+
+The rule that follows: the repair exists for sites that appear after the fact,
+not for sites validation could have refused. A non-zero steady-state rebox
+count is a bug in the candidate set, and worth asserting on once the fixture
+churn is settled.
 
 ### `?` re-padding is free
 
