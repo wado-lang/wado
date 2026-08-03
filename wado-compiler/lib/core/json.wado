@@ -883,7 +883,6 @@ impl JsonDeserializer {
         }
     }
 
-    #[inline(never)]
     fn whitespace_end(&self, from: i32) -> i32 {
         let len = self.input.len();
         let mut pos = from;
@@ -905,7 +904,6 @@ impl JsonDeserializer {
     }
 
     /// The error `expect_char` reports for the byte at the current position.
-    #[inline(never)]
     fn expect_char_error(&self, c: i32) -> DeserializeError {
         if self.pos >= self.input.len() {
             return DeserializeError::eof(self.pos as i64);
