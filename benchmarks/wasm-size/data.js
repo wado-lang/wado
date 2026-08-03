@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785758652538,
+  "lastUpdate": 1785766693657,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45817,6 +45817,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/61f109b25b22dd358f3e444125cb3095affae693"
         },
         "date": 1785758651731,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6034,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16249,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273270,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a8451192b457ea86c4df6014b48b4b1ba7e2e185",
+          "message": "Merge pull request #1743 from wado-lang/claude/benchmark-json-canada-de-perf-n02rzc\n\nperf(json): cut the per-token cost out of the deserializer",
+          "timestamp": "2026-08-04T00:06:29+10:00",
+          "tree_id": "dc82452e2594ba60910d966643bfe3e55211fa3d",
+          "url": "https://github.com/wado-lang/wado/commit/a8451192b457ea86c4df6014b48b4b1ba7e2e185"
+        },
+        "date": 1785766692807,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
