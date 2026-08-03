@@ -302,11 +302,11 @@ impl<'a> Engine<'a> {
         self.body.value_graph.as_ref()?;
         let kind = self.body.exprs[expr].kind.clone();
         let result_ty = self.body.exprs[expr].type_id;
+        let tt = self.vg_type_table;
         let v = match kind {
             ExprKind::Binary { left, op, right } => {
                 let lhs = self.operand_value(left)?;
                 let rhs = self.operand_value(right)?;
-                let tt = self.vg_type_table;
                 self.body.values.binary_folded(op, lhs, rhs, result_ty, tt)
             }
             ExprKind::Unary { op, expr: inner } => {
@@ -315,7 +315,6 @@ impl<'a> Engine<'a> {
                     return None;
                 }
                 let operand = self.operand_value(inner)?;
-                let tt = self.vg_type_table;
                 self.body.values.unary_folded(op, operand, result_ty, tt)
             }
             ExprKind::Cast {
@@ -323,7 +322,6 @@ impl<'a> Engine<'a> {
                 target_type,
             } => {
                 let operand = self.operand_value(inner)?;
-                let tt = self.vg_type_table;
                 self.body.values.cast_folded(operand, target_type, tt)
             }
             _ => return None,

@@ -281,10 +281,8 @@ pub struct WasmAsset {
 }
 
 impl WasmAsset {
-    /// The asset's own memory section minimum, in pages. The component shares
-    /// one memory, defined by the `mem` core module, so that module has to be
-    /// at least as large as every asset embedded alongside it (libm wants 17).
-    /// Defaults to 1 for an asset that defines no memory.
+    /// The asset's own memory section minimum, in pages; 1 when it defines no
+    /// memory. Read by `wir_build` to size the memory the component shares.
     pub fn min_memory_pages(&self) -> u64 {
         for payload in wasmparser::Parser::new(0).parse_all(&self.bytes) {
             if let Ok(wasmparser::Payload::MemorySection(mems)) = payload

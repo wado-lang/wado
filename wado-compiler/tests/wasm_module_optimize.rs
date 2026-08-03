@@ -1,12 +1,7 @@
-//! The `#![wasm_module("mem")]` core module — the allocator — is emitted from a
-//! standalone `WirPackage` of its own. It used to be snapshotted at `wir_build`
-//! time and shipped with nothing but DCE, so every `wir_optimize` pass ran past
-//! it: the allocator was the one part of the program the WIR optimizer never saw.
-//!
-//! These pin that it now goes through the same pipeline as the main module, via
-//! two rewrites only `wir_optimize::peephole` performs (`wir_build` emits neither
-//! shape): `i32.eq x, 0` → `i32.eqz`, and `local.set n; …; local.get n` →
-//! `local.tee n`.
+//! The `#![wasm_module("mem")]` core module — the allocator — goes through
+//! `wir_optimize` as a package of its own. These pin that, via two rewrites only
+//! `wir_optimize::peephole` performs (`wir_build` emits neither shape):
+//! `i32.eq x, 0` → `i32.eqz`, and `local.set n; …; local.get n` → `local.tee n`.
 
 mod common;
 
@@ -14,8 +9,8 @@ use std::path::Path;
 
 use wado_compiler::{CompilerOptions, OptLevel};
 
-/// Any program pulls in the allocator, so the body under test is the bundled
-/// `bump_realloc` / `grow_memory` pair rather than anything this source writes.
+/// Any program pulls in the allocator, so the bodies under test are the bundled
+/// `bump_realloc` / `grow_memory`, not anything this source writes.
 const SOURCE: &str = r#"
 use { println, Stdout } from "core:cli";
 
@@ -24,9 +19,8 @@ export fn run() with Stdout {
 }
 "#;
 
-/// Disassemble a compile of [`SOURCE`] and return just the `$mem-mod` core
-/// module — asserting on the whole component would also match the main module,
-/// where these rewrites have always run.
+/// Just the `$mem-mod` core module: asserting on the whole component would also
+/// match the main module, where these rewrites have always run.
 fn mem_module_wat(opt_level: OptLevel) -> String {
     mem_module_wat_with_allocator(opt_level, None)
 }

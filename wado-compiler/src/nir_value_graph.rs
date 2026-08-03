@@ -582,14 +582,16 @@ impl ValuePool {
     }
 
     /// [`ValuePool::binary`], collapsed to a literal when both operands are
-    /// already constants. Interning is the one place every producer meets — the
-    /// builder, the engine's maintenance re-derivation, and the scratch-pool
-    /// reintern inlining runs — so folding here is what keeps a constant
-    /// operation from surviving as a node. A producer that interned raw left
-    /// `16 * 1024 * 1024` in the emitted Wasm as two `i32.mul`s, because the
-    /// outer multiply's constant operand *was* the inner multiply's node.
+    /// already constants.
     ///
-    /// Without a `TypeTable` (no operand widths) nothing folds.
+    /// Interning is where every producer meets — the builder, the engine's
+    /// maintenance re-derivation, and the scratch-pool reintern inlining runs —
+    /// so folding here is what holds the invariant that no node in the pool is
+    /// a foldable operation. A nested constant depends on it: the outer
+    /// operation's operand is the inner operation's node, so a node interned
+    /// raw is one no later reader can fold.
+    ///
+    /// Folding needs operand widths; without a `TypeTable` nothing folds.
     pub fn binary_folded(
         &mut self,
         op: NirBinaryOp,
@@ -648,7 +650,11 @@ impl ValuePool {
 
     /// The constant a value denotes, reading its width from its own recorded
     /// type. `None` for a non-literal kind or an untyped / non-primitive value.
-    pub fn const_of(&self, id: ValueId, type_table: &TypeTable) -> Option<crate::const_eval::Value> {
+    pub fn const_of(
+        &self,
+        id: ValueId,
+        type_table: &TypeTable,
+    ) -> Option<crate::const_eval::Value> {
         let ty = self.type_of(id)?;
         value_kind_to_const(self.kind(id), crate::const_eval::prim_of(ty, type_table))
     }

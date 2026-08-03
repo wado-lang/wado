@@ -26,9 +26,8 @@
 //! for TIR locals, `elide_local` here for `wir_build`-synthesised locals TIR
 //! can't see.
 //!
-//! Every `#![wasm_module(...)]` core module — the allocator — runs through this
-//! same pipeline as a package of its own ([`optimize_wasm_modules`]), since
-//! codegen emits those packages verbatim.
+//! A `#![wasm_module(...)]` core module — the allocator — runs this same list as
+//! a package of its own ([`optimize_wasm_modules`]), under its own pass names.
 
 pub(crate) mod array;
 mod branch_hint;
@@ -68,13 +67,12 @@ use peephole::run_peephole;
 use prune_dead_data::prune_dead_data;
 use sroa_variant_return::{flatten_variant_slots, sroa_variant_returns};
 
-/// Which package a pass run belongs to, and thus what its passes are called.
+/// What a pass run's passes are called: `wir/<pass>` for the main package,
+/// `wir/<module>:<pass>` for a `#![wasm_module]` package's.
 ///
-/// The main package keeps the plain `wir/<pass>` names; a `#![wasm_module]`
-/// package's run takes `wir/<module>:<pass>`. `WADO_SKIP_PASS` and
-/// `WADO_DUMP_PASS_*` match on those names and count occurrences per name, so
-/// sharing them would make the allocator occurrence #1 of every pass and
-/// silently bisect the wrong module.
+/// `WADO_SKIP_PASS` and `WADO_DUMP_PASS_*` match on those names and count
+/// occurrences per name, so sharing them across the two runs would make the
+/// allocator occurrence #1 of every pass and bisect the wrong module.
 #[derive(Clone, Copy)]
 struct PassScope<'a>(Option<&'a str>);
 
@@ -100,16 +98,15 @@ fn wir_pass(
 ) {
     use crate::optimize::pass_dump::{self, Phase};
     let name = scope.name(pass);
-    let name = name.as_str();
-    pass_dump::list_pass(name);
-    if pass_dump::should_skip_pass(name) {
+    pass_dump::list_pass(&name);
+    if pass_dump::should_skip_pass(&name) {
         return;
     }
-    pass_dump::dump_wir(name, module, Phase::Before);
-    profiler.span_start(name);
+    pass_dump::dump_wir(&name, module, Phase::Before);
+    profiler.span_start(&name);
     f(module);
-    profiler.span_end(name);
-    pass_dump::dump_wir(name, module, Phase::After);
+    profiler.span_end(&name);
+    pass_dump::dump_wir(&name, module, Phase::After);
 }
 
 /// Run the WIR-level optimizations on the module (in-place).
@@ -176,7 +173,9 @@ fn optimize_scoped(
     // `StructNew List<T> { repr: array.new_fixed, used: N }`, so bounds-check
     // elimination keys on that shape.
     profiler.span_start(&scope.name("phase3_data_flow"));
-    wir_pass(scope, "forward_struct_field_constants",
+    wir_pass(
+        scope,
+        "forward_struct_field_constants",
         module,
         profiler,
         |m| {
@@ -187,7 +186,9 @@ fn optimize_scoped(
 
     // Phase 4: rewrite library call patterns into tighter instruction sequences.
     profiler.span_start(&scope.name("phase4_lib_rewrites"));
-    wir_pass(scope, "promote_constant_arrays_to_data",
+    wir_pass(
+        scope,
+        "promote_constant_arrays_to_data",
         module,
         profiler,
         |m| {
@@ -197,7 +198,9 @@ fn optimize_scoped(
     wir_pass(scope, "split_large_array_literals", module, profiler, |m| {
         split_large_array_literals(m);
     });
-    wir_pass(scope, "elide_zero_fill_of_fresh_arrays",
+    wir_pass(
+        scope,
+        "elide_zero_fill_of_fresh_arrays",
         module,
         profiler,
         |m| {
@@ -225,7 +228,9 @@ fn optimize_scoped(
     });
     // Re-run copy propagation: `flatten_seq_assignments` exposes fresh
     // `LocalSet alias = LocalGet temp` copies the phase-1 run never saw.
-    wir_pass(scope, "propagate_trivial_copies_post_sroa",
+    wir_pass(
+        scope,
+        "propagate_trivial_copies_post_sroa",
         module,
         profiler,
         |m| {
@@ -301,15 +306,14 @@ fn optimize_scoped(
     finalize_locals(module);
 }
 
-/// Run this same pipeline over each `#![wasm_module(...)]` core module.
+/// Run this same list over each `#![wasm_module(...)]` core module.
 ///
-/// Codegen emits those packages verbatim, so this is the only WIR-level pass
-/// they get — without it the allocator ships unoptimized. Reachability is seeded
-/// from the module's own exports first so an unused allocator variant is dropped
-/// at every `-O`, matching what the memory module has always had.
+/// Codegen emits those packages verbatim, so this is the only WIR-level
+/// optimization they get. Reachability is seeded from the module's own exports
+/// first, so an unused allocator variant is dropped at every `-O`.
 ///
-/// Recursion terminates at one level: a wasm module's own package carries no
-/// nested `wasm_modules`.
+/// Recursion terminates at one level: such a package has no nested
+/// `wasm_modules` of its own.
 fn optimize_wasm_modules(
     module: &mut WirPackage,
     opt_level: OptLevel,

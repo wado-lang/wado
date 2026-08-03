@@ -1067,15 +1067,10 @@ impl<'a> WirContext<'a> {
     /// Minimum size, in pages, of the linear memory a `#![wasm_module]` module
     /// defines.
     ///
-    /// The component has one linear memory, defined by that module. An embedded
-    /// wasm asset (libm, a user `.wat`) has its own memory section, and codegen
-    /// rewrites it to import the shared one instead — so the shared memory has
-    /// to be at least as large as the largest asset's own minimum, or the
-    /// asset's data segments land past the end of memory. libm wants 17 pages;
-    /// the allocator's own floor is 1.
-    ///
-    /// An import belongs to an asset exactly when its namespace keys one, so
-    /// the registry answers that; the namespace's spelling stays `loader`'s.
+    /// The component has one linear memory, and codegen rewrites each embedded
+    /// wasm asset to import it rather than define its own — so it must be at
+    /// least as large as the largest asset's own minimum, or that asset's data
+    /// segments land past the end of memory. libm wants 17 pages.
     fn wasm_module_min_memory_pages(&self) -> u32 {
         let assets = &self.package.wasm_assets;
         let referenced: IndexSet<&str> = self
@@ -1181,10 +1176,7 @@ impl<'a> WirContext<'a> {
                 globals: mod_globals,
                 global_name_to_index: mod_global_name_to_index,
             };
-            wasm_modules.insert(
-                wasm_mod_name.clone(),
-                info.to_wir_package(memory.clone()),
-            );
+            wasm_modules.insert(wasm_mod_name.clone(), info.to_wir_package(memory.clone()));
         }
 
         let needed_canonicals: IndexSet<CanonicalIntrinsic> =

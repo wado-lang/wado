@@ -641,9 +641,8 @@ impl<'a> Builder<'a> {
         super::value_kind_to_const(self.pool.kind(vn), prim)
     }
 
-    /// Intern niri's folded [`crate::const_eval::Value`] back as a literal
-    /// `ValueId`, carrying `result_type` as the width-bearing type for `Int` /
-    /// `Float` (the folded expr's NIR type).
+    /// Intern a folded constant, carrying the folded expr's NIR type as the
+    /// width-bearing type.
     fn const_to_value(&mut self, v: const_eval::Value, result_type: crate::tir::TypeId) -> ValueId {
         self.pool.intern_const(v, result_type)
     }

@@ -823,9 +823,8 @@ fn wado_type_to_cm_val_type(
     }
 }
 
-/// Emit the memory/allocator core module, which `wir_build` handed over as a
-/// standalone package and `wir_optimize` has already optimized. It contains no
-/// `array.copy`, so codegen feature flags do not apply here.
+/// Emit the memory/allocator core module. It contains no `array.copy`, so
+/// codegen feature flags do not apply here.
 fn build_memory_module(strip_names: bool, wasm_mod: Option<&crate::wir::WirPackage>) -> Vec<u8> {
     let wir = wasm_mod.expect("core:allocator with #![wasm_module(\"mem\")] is required");
     super::emit::emit_core_module(

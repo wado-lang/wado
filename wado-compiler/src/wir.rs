@@ -99,12 +99,9 @@ pub struct WirPackage {
     /// Used by emitter to resolve case-specific struct types within variant rec groups.
     pub variant_case_info: IndexMap<u32, (u32, u32)>,
     /// Separate Wasm core modules extracted from `#![wasm_module("name")]`
-    /// sources, each a standalone package `codegen` emits verbatim.
-    /// Key: wasm module name (e.g., "mem").
-    ///
-    /// Built by `wir_build` — which owns the index bookkeeping the extraction
-    /// needs — and optimized by `wir_optimize` alongside the main package, so
-    /// the allocator is not the one part of the program the WIR passes skip.
+    /// sources, keyed by module name (e.g. "mem"). `wir_build` extracts them,
+    /// `wir_optimize` optimizes each as a package of its own, and codegen emits
+    /// them verbatim.
     pub wasm_modules: IndexMap<String, WirPackage>,
     /// Type indices that were extracted into `wasm_modules` and should be skipped by the emitter.
     pub dead_type_indices: IndexSet<u32>,
@@ -152,9 +149,9 @@ pub struct TraitBoundViolation {
     pub span: crate::token::Span,
 }
 
-/// Functions and globals extracted from a `#![wasm_module("name")]` source
-/// module — the intermediate `wir_build` collects before handing the module
-/// over as a standalone [`WirPackage`] via [`WasmModuleInfo::to_wir_package`].
+/// What `wir_build` collects out of a `#![wasm_module("name")]` source module,
+/// before [`WasmModuleInfo::to_wir_package`] turns it into a standalone
+/// [`WirPackage`].
 #[derive(Debug)]
 pub struct WasmModuleInfo {
     /// Extracted functions with their export names and bodies.
@@ -183,8 +180,7 @@ pub struct WasmModuleFunc {
 }
 
 impl WasmModuleInfo {
-    /// Convert this extracted module info into a standalone `WirPackage` that
-    /// `wir_optimize` can optimize and `emit_core_module` can emit.
+    /// Build the standalone `WirPackage` for this module.
     pub fn to_wir_package(&self, memory: WirMemory) -> WirPackage {
         let mut wir = WirPackage::empty();
 

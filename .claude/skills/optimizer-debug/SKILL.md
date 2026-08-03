@@ -140,6 +140,10 @@ Walk the pass pipeline like this:
 | `nir/<name>` | NIR-level pass (`optimize.rs`)     |
 | `wir/<name>` | WIR-level pass (`wir_optimize.rs`) |
 
+A `#![wasm_module]` core module (the allocator, `mem`) runs the WIR list as a
+package of its own, under `wir/<module>:<name>` — so `wir/run_peephole` stays
+the main module's and `wir/mem:run_peephole` targets the allocator.
+
 `WADO_LIST_PASSES=1` is the source of truth — names there match exactly
 the strings the env vars want.
 
