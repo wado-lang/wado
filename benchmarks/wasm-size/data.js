@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785703726992,
+  "lastUpdate": 1785747356177,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45685,6 +45685,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/eadfb2df9829cd4660b9eadd31a8fbc3ac185c1c"
         },
         "date": 1785703726447,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16265,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273279,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3da9ff42690eacf133b99d1304bcd33309269717",
+          "message": "Merge pull request #1739 from wado-lang/claude/elaborator-refactoring-tasks-at16da\n\nfix(elaborator): key declaration lookups by the vantage that resolved them",
+          "timestamp": "2026-08-03T18:42:39+10:00",
+          "tree_id": "31106678524cc6bd9104c5bc28c4ca5e052ce583",
+          "url": "https://github.com/wado-lang/wado/commit/3da9ff42690eacf133b99d1304bcd33309269717"
+        },
+        "date": 1785747355562,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
