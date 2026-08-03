@@ -1480,64 +1480,6 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Compute `assoc_type_bindings` for an `AssocTypeProjection` by resolving `Self::X`
-    /// references in the trait bound's associated type constraints.
-    ///
-    /// Example: `IntoIterator::Iter` has bound `Iterator<Item = Self::Item>`.
-    /// With `I: IntoIterator<Item = u8>` and `self_type = I`, `Self::Item = I::Item = u8`.
-    /// Result: `[("Item", u8_typeid)]`, stored in the `I::Iter` projection.
-    ///
-    /// This enables `I::Iter::Item` to resolve to `u8` when `Iterator::next` is called.
-    fn compute_assoc_type_bindings_from_trait_bounds(
-        &mut self,
-        self_type_id: TypeId,
-        self_type_param_name: Option<&str>,
-        assoc_bounds: &[crate::ast::TraitBound],
-    ) -> Vec<(String, TypeId)> {
-        let mut bindings = Vec::new();
-        let Some(type_param_name) = self_type_param_name else {
-            // Also handle AssocTypeProjection self_type: propagate bindings from its bindings
-            let resolved = self.tysys.type_table.borrow().get(self_type_id).clone();
-            if let ResolvedType::AssocTypeProjection {
-                assoc_type_bindings,
-                ..
-            } = resolved
-            {
-                // Reuse existing bindings from the source projection
-                return assoc_type_bindings;
-            }
-            return bindings;
-        };
-        // For each bound, check its associated type constraints and resolve Self::X
-        for bound in assoc_bounds {
-            for assoc in &bound.assoc_types.clone() {
-                if let crate::ast::Type::NamespacedGeneric(ns) = &assoc.ty
-                    && ns.namespace == "Self"
-                {
-                    // Self::ns.name → type_param_name::ns.name
-                    // Look in current_type_param_bounds[type_param_name] for direct binding
-                    if let Some(param_bounds) = self
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_param_bounds
-                        .get(type_param_name)
-                        .cloned()
-                    {
-                        for pb in &param_bounds {
-                            for ab in &pb.assoc_types {
-                                if ab.name == ns.name {
-                                    let resolved_ty = self.resolve_type(&ab.ty.clone());
-                                    bindings.push((assoc.name.clone(), resolved_ty));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        bindings
-    }
-
     /// The name a trait was declared under, undoing a `use ... as` alias — a
     /// declaration only ever carries its own name.
     pub(super) fn declared_trait_name(&self, trait_name: &str) -> String {
@@ -1678,35 +1620,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         None
                     }
                 };
+                let self_name = self_type_param_name.as_deref().unwrap_or_default();
                 for assoc_decl in &trait_assoc_types {
-                    // Check if self_type has a direct assoc_type_binding for this name.
-                    // This handles the case: self_type = I::Iter which has ("Item", u8_typeid).
-                    let directly_bound = {
-                        let resolved = scope.tysys.type_table.borrow().get(self_type_id).clone();
-                        if let ResolvedType::AssocTypeProjection {
-                            assoc_type_bindings,
-                            ..
-                        } = resolved
-                        {
-                            assoc_type_bindings
-                                .iter()
-                                .find(|(name, _)| *name == assoc_decl.name)
-                                .map(|(_, type_id)| *type_id)
-                        } else {
-                            None
-                        }
-                    };
-                    let projection = directly_bound.unwrap_or_else(|| {
+                    let known = scope.frame_projection(self_type_id, self_name, &assoc_decl.name);
+                    let projection = known.unwrap_or_else(|| {
                         let bound_names: Vec<String> =
                             assoc_decl.bounds.iter().map(|b| b.name.clone()).collect();
                         // Compute assoc_type_bindings by resolving Self::X references in the
                         // assoc type's bounds. e.g., Iterator<Item = Self::Item> with Self = I
                         // and I: IntoIterator<Item = u8> gives [("Item", u8)].
-                        let atb = scope.compute_assoc_type_bindings_from_trait_bounds(
-                            self_type_id,
-                            self_type_param_name.as_deref(),
-                            &assoc_decl.bounds,
-                        );
+                        let atb =
+                            scope.frame_assoc_bindings(self_type_id, self_name, &assoc_decl.bounds);
                         scope
                             .tysys
                             .type_table
