@@ -1,0 +1,33 @@
+// A constant that reaches its use through a copy is still a constant. The
+// copy's source folds, so the container is written as a byte literal instead of
+// allocating a second array and copying into it on every call.
+struct Field {
+    field_name: String,
+}
+
+#[inline(never)]
+fn sink(name: &String, v: i32) -> i32 {
+    return name.len() + v;
+}
+
+// The branch keeps the result out of syntactic-constant reach: only the
+// interpreter knows `pick` yields `f.field_name`.
+fn pick(f: &Field) -> String {
+    if f.field_name.len() > 100 {
+        return "too long";
+    }
+    return f.field_name;
+}
+
+export fn run() {
+    let f = Field { field_name: "id_str" };
+    let name = pick(&f);
+    assert sink(&name, builtin::black_box(1)) == 7;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["array.new_data<u8>(\"id_str\")"],
+    "wir_not_expect:O2": ["__array_clone_dst"]
+}

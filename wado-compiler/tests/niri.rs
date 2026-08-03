@@ -3632,12 +3632,11 @@ fn array_literal_reduces_to_the_container_it_denotes() {
     );
 }
 
-/// The shape the lower phase emits for a source string: a container struct
-/// over a packed byte array plus its length.
-fn seq_lit(type_id: TypeId, bytes: Vec<u8>) -> Build {
+/// A container struct over `backing` and the length it holds.
+fn container_lit(type_id: TypeId, backing: Build, used: u64) -> Build {
     Rc::new(move |b| {
-        let backing = packed_array(bytes.clone(), type_id)(b);
-        let used = int_lit(bytes.len() as u64, TypeTable::I32, "len")(b);
+        let backing = backing(b);
+        let used = int_lit(used, TypeTable::I32, "len")(b);
         Operand::Expr(pe(
             b,
             ExprKind::StructLiteral {
@@ -3659,6 +3658,13 @@ fn seq_lit(type_id: TypeId, bytes: Vec<u8>) -> Build {
             type_id,
         ))
     })
+}
+
+/// The shape the lower phase emits for a source string: a container struct
+/// over a packed byte array plus its length.
+fn seq_lit(type_id: TypeId, bytes: Vec<u8>) -> Build {
+    let used = bytes.len() as u64;
+    container_lit(type_id, packed_array(bytes, type_id), used)
 }
 
 /// Register the container items `materialize_seq_via` identifies by, and the
@@ -3719,6 +3725,54 @@ fn a_constant_string_call_result_becomes_a_literal() {
             .find(|f| f.field_index == SeqField::Len.index())
             .map(|f| op_int(&body, f.value)),
         Some(2),
+    );
+}
+
+#[test]
+fn a_container_still_copying_its_contents_becomes_a_literal_once() {
+    // `String { repr: array_clone_prefix(&"hi", 2), used: 2 }` — the shape a
+    // copy of a constant leaves behind. Writing the literal over it drops an
+    // allocation and a copy per evaluation.
+    //
+    // And it must happen exactly once: the rewrite produces a container
+    // literal, which is the same node kind it admits, so a second pass finding
+    // more to do would keep the fixed-point loop reporting changes forever.
+    let mut table = TypeTable::new();
+    register_seq_containers(&mut table);
+    let string_ty = table.make_struct("String".to_string(), ModuleSource::default());
+    let array_ty = table.make_builtin_array(TypeTable::U8);
+    let clone_id = next_test_func_id();
+    let builtins = ctfe_builtin_map(clone_id, CtfeBuiltin::ArrayClonePrefix);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_ctfe_builtins(&builtins);
+
+    let copied = container_lit(
+        string_ty,
+        ctfe_builtin_call(
+            clone_id,
+            vec![
+                shared_ref(packed_array(b"hi".to_vec(), array_ty), array_ty),
+                int_lit(2, TypeTable::I32, "2"),
+            ],
+            array_ty,
+        ),
+        2,
+    );
+    let (changed, mut body, e) = reduce_local_into(&mut interp, &copied);
+    assert!(changed, "the copy folds into the container literal");
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[e].kind else {
+        panic!("the container survives as a literal");
+    };
+    let backing = fields
+        .iter()
+        .find(|f| f.field_index == SeqField::Backing.index())
+        .and_then(|f| f.value.as_expr())
+        .expect("a backing operand");
+    assert!(matches!(&body.exprs[backing].kind, ExprKind::PackedArray(b) if b == b"hi"));
+    assert!(
+        !interp.reduce_local_in_body(&mut body, e),
+        "the literal it wrote is left alone",
     );
 }
 

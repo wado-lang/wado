@@ -103,11 +103,14 @@ impl Interpreter<'_> {
     /// the two apart.
     ///
     /// A declined scalar is always memoized — the scratch backend promotes
-    /// nothing, so the memo is where its folds live. An aggregate is
-    /// materialized or memoized only over a shape that consumed its source
-    /// ([`consumes_its_source`]): a revisit would re-run a body to recompute
-    /// those, while everywhere else the tree still derives the value, so
-    /// nothing needs recording.
+    /// nothing, so the memo is where its folds live.
+    ///
+    /// An aggregate is written back over a shape that consumed its source
+    /// ([`consumes_its_source`]) or over a container still holding the work the
+    /// literal replaces ([`Self::is_unmaterialized_seq_literal`]). Only the
+    /// first is memoized: a revisit would re-run a body to recompute it, while
+    /// a materialized container still derives its own value from the literal
+    /// left in its place.
     fn commit_fold<S: EditSink>(&mut self, sink: &mut S, e: ExprId, value: Value) -> bool {
         let node_type = sink.body().exprs[e].type_id;
         if RefKind::from_resolved(self.type_table.get(node_type)).is_some() {
@@ -120,12 +123,53 @@ impl Interpreter<'_> {
             self.frame.scratch_folds.insert(e, value);
             return false;
         }
-        if !consumes_its_source(&sink.body().exprs[e].kind) {
+        let consumes = consumes_its_source(&sink.body().exprs[e].kind);
+        if !consumes && !self.is_unmaterialized_seq_literal(sink.body(), e) {
             return false;
         }
         let committed = self.materialize_seq_via(sink, e, &value);
-        self.frame.scratch_folds.insert(e, value);
+        if consumes {
+            self.frame.scratch_folds.insert(e, value);
+        }
         committed
+    }
+
+    /// A sequence container whose backing is not yet a packed literal.
+    ///
+    /// Writing the constant over one removes what the program would otherwise
+    /// do at run time — allocate a second array and copy into it — for a
+    /// container that derives a value the engine already knows. The
+    /// [`consumes_its_source`] shapes cannot express that: the copy sits under
+    /// a `StructLiteral`, which is also what [`Self::materialize_seq_via`]
+    /// writes.
+    ///
+    /// Which is why the test is for the *un*materialized form rather than for
+    /// the container alone. The literal this admits is refused on the next
+    /// visit, so the rewrite happens once and the fixed-point loop still
+    /// converges — the property [`consumes_its_source`] gets from its shapes
+    /// by accident, stated and checked.
+    fn is_unmaterialized_seq_literal(&self, body: &Body, e: ExprId) -> bool {
+        let ExprKind::StructLiteral {
+            struct_type,
+            fields,
+            ..
+        } = &body.exprs[e].kind
+        else {
+            return false;
+        };
+        if !self.type_table.is_seq_container(*struct_type) {
+            return false;
+        }
+        let Some(backing) = fields
+            .iter()
+            .find(|f| f.field_index == SeqField::Backing.index())
+        else {
+            return false;
+        };
+        !matches!(
+            backing.value.as_expr().map(|b| &body.exprs[b].kind),
+            Some(ExprKind::PackedArray(_))
+        )
     }
 
     /// Write `value` back over `e` as the container literal the lower phase
@@ -226,7 +270,21 @@ impl Interpreter<'_> {
         if let Lattice::Const(v) = self.try_call_fold(body, e) {
             return Some(v);
         }
+        if let Some(v) = self.seq_literal_value(body, e) {
+            return Some(v);
+        }
         None
+    }
+
+    /// The constant a sequence container still computing its own contents
+    /// denotes. The sources above answer for operators, projections and calls;
+    /// a container literal's value comes from the projection alone, and is
+    /// worth asking for only where [`Self::commit_fold`] can write it back.
+    fn seq_literal_value(&self, body: &Body, e: ExprId) -> Option<Value> {
+        if !self.is_unmaterialized_seq_literal(body, e) {
+            return None;
+        }
+        self.expr_to_lattice(body, e).as_const()
     }
 
     /// The constant a `receiver.field` node reads, when the receiver is a
