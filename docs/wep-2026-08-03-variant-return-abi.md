@@ -280,8 +280,8 @@ Confirmed SROA candidates at `-O2` (`WADO_TRACE=sroa_variant_return`):
 | ----------------------------- | ----------------- | ---------------------- |
 | `benchmark/cbor/cbor_twitter` | 150               | 123                    |
 | `benchmark/json_twitter`      | 81                | 66                     |
-| `benchmark/sqlite_parse`      | 67                | 1                      |
 | `benchmark/json_canada`       | 27                | 21                     |
+| `benchmark/sqlite_parse`      | 1                 | 1                      |
 | `benchmark/syntax_highlight`  | 2                 | 2                      |
 | `benchmark/http_routing`      | 0                 | 0                      |
 | `benchmark/fts`               | 0                 | 0                      |
@@ -342,8 +342,8 @@ the functions the NIR pass missed:
 | `cbor_twitter`     | 150       | 73  | 88       | 161   | +0.91 %   |
 | `json_twitter`     | 81        | 46  | 45       | 91    | +0.26 %   |
 | `json_canada`      | 27        | 24  | 11       | 35    | +0.34 %   |
-| `syntax_highlight` | 2         | 0   | 2        | 2     | —         |
-| `sqlite_parse`     | 67        | 0   | 1        | 1     | 0.00 %    |
+| `syntax_highlight` | 2         | 0   | 2        | 2     | 0.00 %    |
+| `sqlite_parse`     | 1         | 0   | 1        | 1     | 0.00 %    |
 
 The two passes together beat the WIR pass alone on every serde workload. The
 NIR pass takes the functions whose whole call graph it can scalarize, and the
@@ -354,10 +354,11 @@ was +2.4 % / +4.4 % / +1.6 % before the tail-call cascade rule below; the
 residual is the padding and `Some(_)` / `None` nodes the NIR pass emits at
 return sites, which the WIR pass does not pay because it works in WIR directly.
 
-`syntax_highlight` scalarizes nothing here, which costs nothing while the WIR
-pass still runs. `sqlite_parse` is not a miss at all — its 67 dropped to 1 with
-the NIR pass still **off**, so the cause is elsewhere in this branch and is
-tracked as an open question below. Golden fixtures will churn either way.
+The two parser workloads barely use the shape at all — one and two functions
+respectively, before and after — so they measure nothing here beyond confirming
+the pass is inert where it has no candidates. `syntax_highlight` scalarizing
+zero of its two is a real miss, tracked as an open question below; it costs
+nothing while the WIR pass still runs. Golden fixtures will churn either way.
 
 ### Throughput
 
@@ -488,24 +489,36 @@ Each step lands and is measured before the next.
 
 ## Open questions
 
-### Why did `sqlite_parse` drop from 67 widened functions to 1?
+### `syntax_highlight` scalarizes nothing where the WIR pass widens two
 
-Measured with the NIR pass **off**, so this is not the new pass: on this branch
-`wir_optimize::sroa_variant_returns` widens 1 function on `sqlite_parse` where
-it widened 67 before. `json_twitter` is unchanged at 81, so it is specific to
-that workload.
+Undiagnosed. It costs nothing today — the WIR pass still runs and still widens
+both — but it is the one program where the NIR pass covers strictly less, so it
+is the worked example for whatever Phase 1 gate is too strict.
 
-The step-2 change (trait methods and the wider arity cap in
-`multi_value_return`) is the only candidate. Against it being a regression: the
-emitted module is byte-identical in size (584,940 both before and after), and
-the full E2E suite is green — so the work has most likely moved onto the
-tuple/struct multi-value path rather than been lost. That is a hypothesis, not
-a measurement. Settling it needs the two modules diffed, not their sizes
-compared, and it should be settled before step 4 uses widened-function counts
-as a gate.
+### A `LabeledBlock` return value arriving via `break L: v`
 
-The lesson for the staging gates: a widened-function count is a proxy, and a
-proxy that moves when the bytes do not is telling you about the proxy.
+Rejected outright. The return-value rewrite walks the block tail; a value
+reaching the return through `break L: v` is not in the tail, so the candidate is
+declined rather than mis-rewritten. Sound, but it gives up functions whose
+returns pass through a labeled block.
+
+## Resolved
+
+### `sqlite_parse` was never widening 67 functions
+
+An earlier draft recorded `wir_optimize::sroa_variant_returns` widening 67
+functions on `sqlite_parse` before this branch and 1 after, and blamed step 2.
+Neither half holds. A build at the merge-base widens 1 (candidates 3), and
+emits a module byte-identical to this branch's. Restoring the two step-2 gates
+independently on this branch — `is_trait_method` and the 2..=4 arity cap — also
+leaves the count and the bytes unchanged in all four configurations, at `-O1`,
+`-O2`, and `-Os` alike. The restored gates are not inert: the same build shows
+`coerce_i128_u128` changing when the trait-method gate goes back.
+
+So the 67 was a bad number, not a regression, and step 4 can use widened-function
+counts as a gate. The lesson is about the measurement, not the pass: a count
+read off one trace line, from one program, without a paired control run is worth
+nothing.
 
 ## Alternative considered: `ReturnAbi::Variant`
 
