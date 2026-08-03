@@ -2459,19 +2459,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Search via pre-built index (handles impls defined outside the struct's defining module).
-        let static_key = self.static_receiver_key(Some(&method_ref.module), struct_name);
+        let static_keys = self.static_receiver_keys(Some(&method_ref.module), struct_name);
         // The decl pass already resolved this signature in the impl's own
         // frame — impl and method type params interned, `Self` bound to the
         // impl target, the impl module's imports in scope. Re-deriving all of
         // that here is what the digest exists to avoid.
-        let indexed_return = self
-            .tysys
-            .trait_env
-            .static_method_index
-            .get(&static_key)
-            .and_then(|methods| methods.iter().find(|e| e.name == method_name))
-            .and_then(|e| self.tysys.signatures.method_sig(e.method_id))
-            .map(|sig| sig.decl.return_type.unwrap_or(TypeTable::UNIT));
+        let indexed_return = static_keys.iter().find_map(|key| {
+            self.tysys
+                .trait_env
+                .static_method_index
+                .get(key)?
+                .iter()
+                .find(|e| e.name == method_name)
+                .and_then(|e| self.tysys.signatures.method_sig(e.method_id))
+                .map(|sig| sig.decl.return_type.unwrap_or(TypeTable::UNIT))
+        });
         if let Some(return_type) = indexed_return {
             return return_type;
         }
@@ -2480,20 +2482,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // key disambiguation as the inherent-impl path above. The decl pass
         // resolved these in the resource's own frame, so a generic resource's
         // `Option<T>` is already a `TypeParam` here.
-        let indexed_resource_return = self
-            .tysys
-            .trait_env
-            .resource_static_method_index
-            .get(&static_key)
-            .and_then(|methods| {
-                methods
-                    .iter()
-                    .find(|(name, ..)| name == method_name)
-                    .and_then(|(name, _, item_id, _)| {
-                        let sig = self.tysys.signatures.resource_method_sig(*item_id, name)?;
-                        Some(sig.decl.return_type.unwrap_or(TypeTable::UNIT))
-                    })
-            });
+        let indexed_resource_return = static_keys.iter().find_map(|key| {
+            self.tysys
+                .trait_env
+                .resource_static_method_index
+                .get(key)?
+                .iter()
+                .find(|(name, ..)| name == method_name)
+                .and_then(|(name, _, item_id, _)| {
+                    let sig = self.tysys.signatures.resource_method_sig(*item_id, name)?;
+                    Some(sig.decl.return_type.unwrap_or(TypeTable::UNIT))
+                })
+        });
         if let Some(return_type) = indexed_resource_return {
             return return_type;
         }

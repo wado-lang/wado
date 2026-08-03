@@ -534,35 +534,33 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// The receiver key the static-method index is built under.
+    /// The receiver keys a static-method lookup may be filed under, in the
+    /// order a consumer should try them.
     ///
-    /// Both vantages are needed. `receiver_module`, when the caller resolved
-    /// one, decides the module: keying from the call site would answer with
-    /// its own same-named type. `written_name` may be an alias only the call
-    /// site can undo (`use { Counter as CounterA }`), but undoing it
-    /// unconditionally would rewrite a name that *is* the declaration's
-    /// whenever the call site aliases something else to it — so the table is
-    /// consulted only for a name the declaring module does not know.
-    pub(super) fn static_receiver_key(
+    /// Neither vantage answers alone. The call site's own scope resolves a
+    /// name it declares or imports, and an alias
+    /// (`use { Instant as ClockInstant }`) is reachable no other way. But a
+    /// name that arrived through a namespace prefix lost its qualifier before
+    /// reaching here, and canonicalising *that* from the call site answers
+    /// with the caller's own same-named type — `helper::Pair::new` finding
+    /// the caller's `Pair`. So a consumer tries both and takes the one the
+    /// index answers for.
+    pub(super) fn static_receiver_keys(
         &self,
         receiver_module: Option<&ModuleSource>,
         written_name: &str,
-    ) -> trait_env::DeclKey {
-        let Some(module) = receiver_module else {
-            return self.canonical_decl_key(written_name);
-        };
-        let declared = if self.symbols.is_defined_in_module(module, written_name) {
-            written_name
-        } else {
-            self.sem
-                .imports
-                .import_original_names
-                .get(written_name)
-                .map_or(written_name, String::as_str)
-        };
-        self.tysys
-            .trait_env
-            .declaring_side_key(self.symbols, module, declared)
+    ) -> Vec<trait_env::DeclKey> {
+        let mut keys = vec![self.canonical_decl_key(written_name)];
+        if let Some(module) = receiver_module {
+            let by_receiver =
+                self.tysys
+                    .trait_env
+                    .declaring_side_key(self.symbols, module, written_name);
+            if by_receiver != keys[0] {
+                keys.push(by_receiver);
+            }
+        }
+        keys
     }
 
     /// The declaring node of the static method `Type::method`, from the
@@ -573,14 +571,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_name: &str,
         method_name: &str,
     ) -> Option<crate::ast::AstId> {
-        let key = self.static_receiver_key(receiver_module, type_name);
-        self.tysys
-            .trait_env
-            .static_method_index
-            .get(&key)?
+        self.static_receiver_keys(receiver_module, type_name)
             .iter()
-            .find(|e| e.name == method_name)
-            .map(|e| e.method_id)
+            .find_map(|key| {
+                self.tysys
+                    .trait_env
+                    .static_method_index
+                    .get(key)?
+                    .iter()
+                    .find(|e| e.name == method_name)
+                    .map(|e| e.method_id)
+            })
     }
 
     /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active
