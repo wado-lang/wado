@@ -13,8 +13,7 @@ global mut __modules_initialized: bool = false;
 fn grow_memory(new_offset: i32) {
     let current_bytes: i32 = (core::builtin::memory_size() * 65536);
     let deficit: i32 = (new_offset - current_bytes);
-    let sixteen_mb: i32 = (%22 * 1024);
-    let normal_grow: i32 = core::builtin::select::<i32>((current_bytes < sixteen_mb), current_bytes, sixteen_mb);
+    let normal_grow: i32 = core::builtin::select::<i32>((current_bytes < 16777216), current_bytes, 16777216);
     let grow_bytes: i32 = if (deficit > normal_grow) {
         (1 << (32 - core::builtin::i32_clz((deficit - 1))));
     } else {

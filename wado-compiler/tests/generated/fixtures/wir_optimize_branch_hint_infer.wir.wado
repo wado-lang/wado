@@ -162,8 +162,6 @@ fn "wir_optimize_branch_hint_infer.wado/count_to"(n) {
     i = 0;
     b2: block {
         l3: loop {
-            block {
-            };
             break_if b2 i == n;
             i = i + 1;
             continue l3;
@@ -243,12 +241,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b11: block {
-        l12: loop {
-            break_if b11 t <= 0_i64;
+    b10: block {
+        l11: loop {
+            break_if b10 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l12;
+            continue l11;
         };
     };
     return n;
@@ -262,13 +260,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b14: block {
-            l15: loop {
-                break_if b14 temp <= 0_i64;
+        b13: block {
+            l14: loop {
+                break_if b13 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l15;
+                continue l14;
             };
         };
     }
@@ -300,12 +298,12 @@ fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b19: block {
-        l20: loop {
-            break_if b19 i >= len;
+    b18: block {
+        l19: loop {
+            break_if b18 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l20;
+            continue l19;
         };
     };
 }
@@ -384,20 +382,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b22: block {
-        l23: loop {
-            break_if b22 offset >= count;
+    b21: block {
+        l22: loop {
+            break_if b21 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b22 (if (result >> 4) == 0 -> i32 {
+            break_if b21 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l23;
+            continue l22;
         };
     };
 }
@@ -502,12 +500,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n"(s
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b31: block {
-        l32: loop {
-            break_if b31 i >= n;
+    b30: block {
+        l31: loop {
+            break_if b30 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l32;
+            continue l31;
         };
     };
 }
