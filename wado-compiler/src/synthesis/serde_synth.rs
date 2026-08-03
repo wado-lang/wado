@@ -1788,5 +1788,4 @@ mod tests {
         assert_eq!(apply_name_policy("AddRemote", "camelCase"), "addRemote");
         assert_eq!(apply_name_policy("List", "kebab-case"), "list");
     }
-
 }
