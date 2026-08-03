@@ -666,6 +666,15 @@ impl Interpreter<'_> {
             return None;
         }
         let returns_unit = callee.return_type == TypeTable::UNIT;
+        // A callee returning a reference yields an alias into the caller's
+        // storage, not a value. Binding what it points at would snapshot the
+        // referent, and a later write through the place — or through the
+        // reference — would leave the snapshot standing for a value the program
+        // no longer holds. The writes it performs are still applied; only its
+        // result is refused. `Interpreter::commit_fold` refuses a
+        // reference-typed node for the same reason.
+        let returns_reference =
+            RefKind::from_resolved(self.type_table.get(callee.return_type)).is_some();
 
         let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());
         let mut targets: Vec<(u32, u32, Vec<u32>)> = Vec::new();
@@ -695,7 +704,13 @@ impl Interpreter<'_> {
         let run = self.exec_frame(&mut scratch, targets, returns_unit);
         self.swap_frame(caller);
         self.call_stack.pop();
-        run
+        run.map(|run| match returns_reference {
+            true => CallRun {
+                result: Lattice::Unevaluated,
+                ..run
+            },
+            false => run,
+        })
     }
 
     /// Run the scratch body already installed as the current frame, reporting
