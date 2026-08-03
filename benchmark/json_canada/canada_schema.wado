@@ -39,10 +39,14 @@ pub struct FeatureCollection {
 impl Serialize for FeatureCollection;
 impl Deserialize for FeatureCollection;
 
+/// Sums the coordinate count, to consume the decoded value so the decode is not
+/// optimized away. It walks by reference: a by-value `for` binding materializes
+/// an owned copy of each element, which for this tree is a deep copy of every
+/// ring — decode-phase time spent on the harness rather than on the codec.
 pub fn count_points(fc: &FeatureCollection) -> i32 {
     let mut total = 0;
-    for let feat of fc.features {
-        for let ring of feat.geometry.coordinates {
+    for let feat of &fc.features {
+        for let ring of &feat.geometry.coordinates {
             total = total + ring.len();
         }
     }
