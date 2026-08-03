@@ -237,6 +237,33 @@ A recursive type's `$value_copy$T` is a true deep copy (a mutually-recursive
 helper), replacing an identity fallback that silently shared storage.
 `optimize::escape` and `optimize::value_copy_elide` are deleted.
 
+### Known gap: a borrowed projection behind a variant
+
+`is_projection_of_param` matches a syntactic deref / field / index / payload /
+cast chain rooted at the first parameter, so `build(&self) -> List { return
+*self }` is self-projecting but `ArrayIter<T>::next` is not:
+
+```wado
+let item = builtin::array_get(self.repr, self.index);
+return Option::Some(item);
+```
+
+`array_get` is already a container alias read, and `Option<T>` over a reference
+type lowers to a bare nullable ref, so the borrowed element could be returned as
+it stands. Two things hide it: the projection is behind a `let` binding, and it
+is wrapped in a variant construction. So `next` returns owned, and the fold
+deep-copies the element into the payload — every `for x of list` over a `List` of
+aggregates pays a copy of each element even when the loop body only reads it.
+Writing the same loop as an index loop in one body costs nothing: the read-only
+share fires and the element is read in place.
+
+Closing it needs both halves, in the same fixpoint: the recognizer must see the
+projection through the binding and the variant, _and_ the fold must then treat
+the materialization into that payload as a share rather than a copy. Neither the
+inliner nor any NIR pass can substitute — the copy is chosen before NIR exists,
+and `#[inline(always)]` on `next` leaves the expanded clone in the caller's loop
+untouched even with the cloned array provably unread.
+
 ## Amendments to earlier WEPs
 
 - WEP 2026-04-28 (Resource Inheritance): its "value semantics, no borrow
@@ -317,6 +344,10 @@ Verified against the tree.
       side already read through.
 - [x] A bytes literal counts as fresh, like a string literal.
 - [ ] Pin representative move / copy / share decisions as e2e fixtures.
+- [ ] Recognize a borrowed projection returned behind a variant construction, so
+      a by-value `for` binding stops copying each element. Worth ~37% of the
+      json-canada deserialize benchmark, whose `count_points` walks the parsed
+      tree only to sum lengths.
 
 ## Deferred: the `move` and `unique` keywords
 
