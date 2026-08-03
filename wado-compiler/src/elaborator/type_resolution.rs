@@ -394,10 +394,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // module-level one), so basing this on `info.type_param_bounds`
         // directly keeps the "is this generic" question and "which struct's
         // info is this" question about the *same* struct. A separate
-        // `generic_struct_names.contains(name)` gate here previously let
-        // the two disagree: dispatch entered on the module-level struct's
-        // registration while `lookup_struct_fields` had already returned a
-        // same-named local, non-generic shadow's info.
+        // name-keyed gate lets the two disagree: dispatch enters on the
+        // module-level struct's registration while `lookup_struct_fields`
+        // returns a same-named local, non-generic shadow's info.
         if let Some(info) = self.lookup_struct_fields(name)
             && !info.type_param_bounds.is_empty()
         {
@@ -504,10 +503,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => {
                 // Check if it's a user-defined generic struct.
                 // `lookup_struct_fields` alone decides this (see
-                // `bare_generic_type_arity` for why a separate
-                // `generic_struct_names.contains(name)` gate is wrong: it
-                // can name a different struct than the one this lookup
-                // returns when a local struct — `Stmt::Item`, see
+                // `bare_generic_type_arity` for why a separate name-keyed
+                // gate is wrong: it can name a different struct than the one
+                // this lookup returns when a local struct — `Stmt::Item`, see
                 // `resolve_local_struct` — shadows a same-named
                 // module-level generic one).
                 let struct_info = self.lookup_struct_fields(name).cloned();
