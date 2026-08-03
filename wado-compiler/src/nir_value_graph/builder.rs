@@ -337,7 +337,8 @@ pub(crate) fn build_scoped(
     // remapped callee local) is dropped — it has no caller-pool identity.
     let mut out = IndexMap::default();
     for (e, sv) in scoped {
-        if let Some(lv) = reintern_live_rooted(scratch, &mut body.values, sv, live_base) {
+        if let Some(lv) = reintern_live_rooted(scratch, &mut body.values, sv, live_base, type_table)
+        {
             out.insert(e, lv);
         }
     }
@@ -395,6 +396,7 @@ fn reintern_live_rooted(
     live: &mut ValuePool,
     id: ValueId,
     live_base: u32,
+    type_table: Option<&crate::tir::TypeTable>,
 ) -> Option<ValueId> {
     if id.index() < live_base {
         return Some(id);
@@ -408,30 +410,30 @@ fn reintern_live_rooted(
         | ValueKind::Null
         | ValueKind::Unit => reintern_const(live, kind),
         ValueKind::Binary { op, lhs, rhs, ty } => {
-            let l = reintern_live_rooted(scratch, live, lhs, live_base)?;
-            let r = reintern_live_rooted(scratch, live, rhs, live_base)?;
-            live.binary(op, l, r, ty)
+            let l = reintern_live_rooted(scratch, live, lhs, live_base, type_table)?;
+            let r = reintern_live_rooted(scratch, live, rhs, live_base, type_table)?;
+            live.binary_folded(op, l, r, ty, type_table)
         }
         ValueKind::Unary { op, operand, ty } => {
-            let o = reintern_live_rooted(scratch, live, operand, live_base)?;
-            live.unary(op, o, ty)
+            let o = reintern_live_rooted(scratch, live, operand, live_base, type_table)?;
+            live.unary_folded(op, o, ty, type_table)
         }
         ValueKind::Cast { operand, target } => {
-            let o = reintern_live_rooted(scratch, live, operand, live_base)?;
-            live.cast(o, target)
+            let o = reintern_live_rooted(scratch, live, operand, live_base, type_table)?;
+            live.cast_folded(o, target, type_table)
         }
         ValueKind::FieldAccess {
             receiver,
             field_index,
             heap_ver,
         } => {
-            let r = reintern_live_rooted(scratch, live, receiver, live_base)?;
+            let r = reintern_live_rooted(scratch, live, receiver, live_base, type_table)?;
             live.field_access(r, field_index, heap_ver)
         }
         ValueKind::Select { cond, then, else_ } => {
-            let c = reintern_live_rooted(scratch, live, cond, live_base)?;
-            let t = reintern_live_rooted(scratch, live, then, live_base)?;
-            let e = reintern_live_rooted(scratch, live, else_, live_base)?;
+            let c = reintern_live_rooted(scratch, live, cond, live_base, type_table)?;
+            let t = reintern_live_rooted(scratch, live, then, live_base, type_table)?;
+            let e = reintern_live_rooted(scratch, live, else_, live_base, type_table)?;
             live.select(c, t, e)
         }
         ValueKind::Opaque(_) | ValueKind::LoopPhi { .. } => return None,
@@ -643,17 +645,7 @@ impl<'a> Builder<'a> {
     /// `ValueId`, carrying `result_type` as the width-bearing type for `Int` /
     /// `Float` (the folded expr's NIR type).
     fn const_to_value(&mut self, v: const_eval::Value, result_type: crate::tir::TypeId) -> ValueId {
-        match v {
-            const_eval::Value::Int { value, .. } => self.pool.int_typed(value, result_type),
-            const_eval::Value::Float { value, .. } => self.pool.float(value, result_type),
-            const_eval::Value::Bool(b) => self.pool.bool(b),
-            const_eval::Value::Char(c) => self.pool.char(c),
-            // The pool models pure scalars; the arithmetic folds feeding this
-            // never produce an aggregate or a sequence.
-            const_eval::Value::Aggregate { .. } | const_eval::Value::Seq { .. } => {
-                panic!("an aggregate or sequence constant cannot be interned as a pure value")
-            }
-        }
+        self.pool.intern_const(v, result_type)
     }
 
     /// Record / clear `local`'s reference target from its new RHS. `let r = &v`

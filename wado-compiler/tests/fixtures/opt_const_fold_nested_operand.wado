@@ -1,0 +1,21 @@
+// A constant operand that is itself an operation. `(1000 + 7) * 3` sits in
+// operand position, so folding it needs the lattice to evaluate an operand
+// node rather than only the node it was asked to fold — otherwise the whole
+// chain reaches Wasm as three unfolded instructions.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn scale(n: i32) -> i32 {
+    return n * ((1000 + 7) * 3)
+}
+
+export fn run() with Stdout {
+    println(`${scale(builtin::black_box(2))}`);
+}
+
+__DATA__
+{
+    "stdout": "6042\n",
+    "wir_expect:O2": ["* 3021"],
+    "wir_not_expect:O2": ["1000 + 7"]
+}

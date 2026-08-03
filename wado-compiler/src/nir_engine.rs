@@ -306,7 +306,8 @@ impl<'a> Engine<'a> {
             ExprKind::Binary { left, op, right } => {
                 let lhs = self.operand_value(left)?;
                 let rhs = self.operand_value(right)?;
-                self.body.values.binary(op, lhs, rhs, result_ty)
+                let tt = self.vg_type_table;
+                self.body.values.binary_folded(op, lhs, rhs, result_ty, tt)
             }
             ExprKind::Unary { op, expr: inner } => {
                 use crate::nir::NirUnaryOp;
@@ -314,14 +315,16 @@ impl<'a> Engine<'a> {
                     return None;
                 }
                 let operand = self.operand_value(inner)?;
-                self.body.values.unary(op, operand, result_ty)
+                let tt = self.vg_type_table;
+                self.body.values.unary_folded(op, operand, result_ty, tt)
             }
             ExprKind::Cast {
                 expr: inner,
                 target_type,
             } => {
                 let operand = self.operand_value(inner)?;
-                self.body.values.cast(operand, target_type)
+                let tt = self.vg_type_table;
+                self.body.values.cast_folded(operand, target_type, tt)
             }
             _ => return None,
         };
