@@ -1,0 +1,33 @@
+//! The suffix peek may only claim a suffix it reproduces exactly, and only
+//! once it knows what that suffix can start with. Expectations oracle-checked
+//! against the published jar.
+
+use g from "./grammars/lexer_suffix_peek_limits.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_suffix_peek_limits" },
+    };
+use { TK_EOF } from "./grammars/lexer_suffix_peek_limits.g4";
+
+fn assert_tokens(input: &String, expected: &String) {
+    let actual = g::to_lexer_string(&g::tokenize(input), TK_EOF);
+    assert actual == *expected, `\ninput: ${*input}\nactual:\n${actual}\nexpected:\n${*expected}`;
+}
+
+// A non-greedy suffix under a greedy repeat: peeked greedily, `.*` would eat
+// the `'b'` the commit needs.
+test "non-greedy suffix after a repeat keeps its min-match" {
+    assert_tokens(&"aaQb", &"[@0,0:3='aaQb',<1>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n");
+    assert_tokens(&"aab", &"[@0,0:2='aab',<1>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+}
+
+// The same suffix behind an alternation, which scores each arm against it.
+test "non-greedy suffix after an alternation keeps its min-match" {
+    assert_tokens(&"--qz", &"[@0,0:3='--qz',<2>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n");
+    assert_tokens(&"-z", &"[@0,0:1='-z',<2>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n");
+}
+
+// `D` is case-insensitive on its own, so `[a-z]+` can eat the `x` it needs.
+test "a case-insensitive suffix rule is read with its own folding" {
+    assert_tokens(&"abcx", &"[@0,0:3='abcx',<3>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n");
+    assert_tokens(&"X", &"[@0,0:0='X',<4>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
+}
