@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785747356177,
+  "lastUpdate": 1785755751694,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45729,6 +45729,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3da9ff42690eacf133b99d1304bcd33309269717"
         },
         "date": 1785747355562,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16265,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273279,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6e810ba6884f797ad756f884e94f0bc1c772ea77",
+          "message": "Merge pull request #1740 from wado-lang/claude/reflection-api-serde-poc-renwpj\n\nfeat(reflect): carry serde's dispatch shapes through the reflection blankets",
+          "timestamp": "2026-08-03T21:06:22+10:00",
+          "tree_id": "9b82dcbff2d718f1d906f1e74db1b36120d83ff7",
+          "url": "https://github.com/wado-lang/wado/commit/6e810ba6884f797ad756f884e94f0bc1c772ea77"
+        },
+        "date": 1785755751023,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
