@@ -939,9 +939,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                     return TypeTable::ERROR;
                 } else {
-                    // Not a case name: a `ReflectVariant` blanket carries the
-                    // variant's static trait methods under its own receiver
-                    // param, so `prefix`'s bucket never sees them.
                     if let Some(return_type) = self.resolve_named_type_blanket_static(
                         prefix, suffix, call.id, &args, call.span,
                     ) {
@@ -957,8 +954,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // If prefix is a known type (struct/enum/newtype/flags) with no matching
             // static method, emit a compile error.
             else if self.tysys.is_known_type_name(prefix) {
-                // A value blanket indexes statics under the receiver param
-                // name, so `prefix`'s own bucket never sees them.
                 if let Some(return_type) = self
                     .resolve_named_type_blanket_static(prefix, suffix, call.id, &args, call.span)
                 {
@@ -2559,10 +2554,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// `Type::method()` reaching a value blanket's static. The variant-case
-    /// branch owns the `Variant::Name` shape, so a static that is not a case
-    /// name has to be offered the blanket resolver here rather than falling
-    /// through to the known-type branch; both branches share this entry.
+    /// `Type::method()` reaching a value blanket's static, which is indexed
+    /// under the blanket's receiver param and so misses `type_name`'s own
+    /// bucket. The variant-case branch owns the `Variant::Name` shape, so it
+    /// shares this entry rather than falling through to the known-type one.
     pub(super) fn resolve_named_type_blanket_static(
         &mut self,
         type_name: &str,
@@ -2572,10 +2567,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: crate::Span,
     ) -> Option<TypeId> {
         let receiver_ty = self.resolve_named_type(type_name, span, false);
-        // A generic type named without its arguments has no instance to
-        // dispatch on: the blanket would key on the argument-less head, which
-        // carries no layout (a generic variant never becomes its own
-        // declaration, WEP 2026-02-09) and reaches WIR build unregistered.
+        // The blanket would key on the argument-less head, which carries no
+        // layout (a generic variant never becomes its own declaration, WEP
+        // 2026-02-09) and reaches WIR build unregistered.
         if let Some(expected) = self.bare_generic_type_arity(type_name)
             && self
                 .find_blanket_static_method(receiver_ty, method)

@@ -1,14 +1,12 @@
 // A hand-written `impl Eq` / `impl Ord` must win over the derived comparison
-// for every type kind — including the three whose values erase to a scalar
-// before the comparison is emitted: `enum` (to its discriminant), `flags` (to
-// its bitmask), and a newtype (to its base). A newtype in particular exists to
-// be a distinct type, so it must be able to compare differently from its base.
+// for every type kind, including the three whose values erase to a scalar
+// first: `enum` to its discriminant, `flags` to its bitmask, a newtype to its
+// base. A newtype most of all — it exists to be a type distinct from its base.
 //
-// Each impl below answers "always equal" / "always Equal", which no derived
-// comparison would, so a test asserting that answer distinguishes the two. The
-// `#[TODO]` blocks are the sites that still take the derived comparison; the
-// plain ones pin the sites that already dispatch, so a fix cannot silently
-// regress them.
+// Each impl below answers "always equal", which no derived comparison would, so
+// asserting that answer tells the two apart. The `#[TODO]` blocks are the sites
+// still taking the derived comparison; the plain ones pin those that already
+// dispatch, so a fix cannot regress them.
 
 enum Color {
     Red,

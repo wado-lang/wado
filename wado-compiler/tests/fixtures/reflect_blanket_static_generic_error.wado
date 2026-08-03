@@ -1,8 +1,7 @@
 // A generic type named without its arguments has no instance for a blanket's
-// static to dispatch on: the blanket would key on the argument-less head, which
-// carries no GC layout (a generic variant never becomes its own declaration,
-// WEP 2026-02-09) and reaches WIR build unregistered. Report the missing
-// arguments at the call instead.
+// static to dispatch on. The argument-less head carries no GC layout (a generic
+// variant never becomes its own declaration, WEP 2026-02-09) and reaches WIR
+// build unregistered, so the missing arguments are reported at the call.
 
 struct Wire {
     n: i32,
@@ -19,7 +18,7 @@ impl FromWire for i32 {
 }
 
 impl FromWire for () {
-    fn from_wire(_w: &Wire) -> () {
+    fn from_wire(_w: &Wire) {
         return ();
     }
 }

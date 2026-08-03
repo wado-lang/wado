@@ -414,10 +414,9 @@ where T: ReflectStruct<FieldTypes = [..F]>
 - [x] Prelude: add `pub type [...T]` declaration; register tuples' owning module
 - [x] Elaborator: at monomorphization, substitute concrete types for packs
 - [ ] The `[for let v of tuple { expr }]` / `[for let [i, v] of tuple.enumerate() { expr }]`
-      construction form: unparsed today. A build derivation that needs the member
-      handle or its index per element (deserializing a struct field by its wire
-      name) has to route the per-element work through a pack map
-      (`[..F::method(args)]`) over a pre-ordered cursor instead
+      construction form: unparsed. Until it lands, a build derivation needing the
+      member handle or index per element routes the work through a pack map
+      (`[..F::method(args)]`) over a pre-ordered cursor
 - [x] Variadic `for let v of`: deferred expansion via `VariadicForOf` TIR node, expanded
       by the monomorphizer after type substitution resolves packs to concrete tuples
 - [x] Variadic trait bounds: `..T: Trait` checked via `type_param_bounds`; `TypePack`

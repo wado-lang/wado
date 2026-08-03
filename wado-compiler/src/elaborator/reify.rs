@@ -5442,11 +5442,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         self.make_cold_path_stmt(span),
                         TirStmt::new(
                             TirStmtKind::Return {
-                                // The propagated `None` is the *enclosing*
-                                // function's `Option`, not the operand's:
-                                // `Option<Sh>` and `Option<i32>` are distinct
-                                // GC types, and returning the operand's builds
-                                // an unrelated struct.
+                                // `Option<U>` and the operand's `Option<T>`
+                                // are distinct GC types, so the propagated
+                                // `None` is the enclosing function's.
                                 value: Some(TirExpr::new(TirExprKind::Null, ctx.return_type, span)),
                             },
                             span,

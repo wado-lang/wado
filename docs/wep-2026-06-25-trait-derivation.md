@@ -153,18 +153,18 @@ error reason-chains from the bound site to the offending field/case
 
 A plain `enum` and a `flags` type carry no members to recurse into, so both
 satisfy every structural obligation outright: `Eq` / `Ord` compare the
-discriminant and the bitmask respectively. Their bodies are generated the same
-way, which is what keeps a struct or variant carrying one from losing its own
-derive.
+discriminant and the bitmask respectively. Generating their bodies is what keeps
+a struct or variant carrying one from losing its own derive.
 
-Open: a hand-written `impl Eq` / `impl Ord` does not yet win everywhere for the
-three kinds whose values erase to a scalar before the comparison is emitted —
-`enum`, `flags`, and a newtype. The comparison operators lower to the scalar
-compare directly rather than dispatching, and a `T: Eq` bound sees the erased
-base for `flags` and newtypes. A manual impl must win over the derived
-comparison at every site, a newtype most of all: it exists to be a distinct
-type. `tests/fixtures/eq_ord_manual_impl_todo.wado` pins the sites that already
-dispatch and marks the rest `#[TODO]`.
+A hand-written impl always wins over a derived one — a newtype most of all,
+since it exists to be a type distinct from its base. Three kinds do not honour
+that yet, the ones whose values erase to a scalar before the comparison is
+emitted:
+
+- [ ] `enum`, `flags`, and newtype: the comparison operators lower to the scalar
+      compare instead of dispatching, and a `T: Eq` bound sees the erased base
+      for `flags` and newtypes. `tests/fixtures/eq_ord_manual_impl_todo.wado`
+      pins the sites that already dispatch and marks the rest `#[TODO]`.
 
 A marker for any of the structurally-checkable traits (`Eq` / `Ord` /
 `Default` / `Serialize` / `Deserialize`) validates `T` at its own span and is

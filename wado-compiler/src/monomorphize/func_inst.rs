@@ -105,8 +105,8 @@ struct SubstitutedCall {
     receiver_is_assoc_projection: bool,
     /// Substituted impl type args, in param-index order.
     type_args: Vec<TypeId>,
-    /// Substituted method-level type args, in declaration order. Non-empty for a
-    /// method carrying type params of its own (serde's `serialize<S: Serializer>`).
+    /// Substituted method-level type args, in declaration order. Non-empty for
+    /// a method carrying type params of its own (`serialize<S: Serializer>`).
     method_type_args: Vec<TypeId>,
     /// The call's current module source, used as the fallback home.
     module_source: ModuleSource,
@@ -790,10 +790,8 @@ impl Monomorphizer {
                             Some((receiver.type_id, type_table)),
                         ) {
                             let generic_func = generic_func_rc.borrow();
-                            // A pack-bound blanket (`impl<T: ReflectStruct<FieldTypes =
-                            // [..F]>, ..F: Trait>`) declares one impl param per pack, so
-                            // the receiver alone underfills the key — project the bound's
-                            // pack assoc the same way the static path does.
+                            // A pack-bound blanket declares one impl param per pack,
+                            // so the receiver alone underfills the key.
                             let blanket_trait = info
                                 .base_trait_name
                                 .as_deref()
@@ -2983,12 +2981,7 @@ impl Monomorphizer {
             .collect();
         let type_args: Vec<TypeId> = sorted_entries.iter().map(|(_, tid)| **tid).collect();
 
-        // Compute the new method info with concrete type names.
-        // If the struct is a type param (e.g., T^Ord::cmp), substitute the struct
-        // name directly instead of adding type args.
-        // A method carrying type params of its own (`emit<S: Sink>`) keeps them
-        // in the call's `monomorph_info`; substitution has to reach them too, or
-        // the instance is keyed by the template's abstract `S`.
+        // Left unsubstituted, the instance keys on the template's abstract `S`.
         let sub_method_type_args: Vec<TypeId> = match &*method_func {
             FunctionRef {
                 monomorph_info: Some(mi),
@@ -3001,6 +2994,9 @@ impl Monomorphizer {
             _ => Vec::new(),
         };
 
+        // Compute the new method info with concrete type names.
+        // If the struct is a type param (e.g., T^Ord::cmp), substitute the struct
+        // name directly instead of adding type args.
         let mut new_info = if info.is_type_param_receiver && !type_names.is_empty() {
             // Use the (already-substituted) receiver type to find the concrete name.
             let inner = type_table.peel_refs(receiver_type_id);
@@ -3242,12 +3238,10 @@ impl Monomorphizer {
             Some(MonomorphInfo {
                 generic_name: blanket_name,
                 impl_type_args: blanket_impl_args,
-                // Only a pack-bound blanket keys on the method's own args: its
-                // template is shared across every (subject, method arg) pair, so
-                // the instance needs both. A per-type impl reached through this
-                // path already encodes its method args in the mangled name, and
-                // adding them to the key would mint a second instance under that
-                // same name.
+                // A pack-bound blanket's template is shared across every
+                // (subject, method arg) pair, so its instance needs both. A
+                // per-type impl already carries its method args in the mangled
+                // name; keying on them too mints a second instance under it.
                 method_type_args: if has_projected {
                     method_type_args
                 } else {

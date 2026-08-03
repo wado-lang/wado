@@ -1,8 +1,7 @@
 // A derivation whose trait method carries its own type parameter — the
-// `Serialize::serialize<S: Serializer>` shape (WEP 2026-06-13). The blanket is
-// selected by the receiver's `ReflectStruct` bound while `S` is chosen at the
-// call site, so the instance is keyed by both the field-type pack and the
-// method type argument.
+// `Serialize::serialize<S: Serializer>` shape (WEP 2026-06-13). The receiver's
+// `ReflectStruct` bound selects the blanket while the call site chooses `S`, so
+// the instance keys on the field-type pack and the method type argument alike.
 
 trait Sink {
     fn put(&mut self, s: &String);

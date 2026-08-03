@@ -1,6 +1,5 @@
-// A blanket's static is checked against the template's parameter list. Without
-// it a mis-arity call reaches codegen and fails Wasm validation instead of
-// reporting anything.
+// A blanket's static is checked against the template's parameter list.
+// Unchecked, a mis-arity call reaches codegen and fails Wasm validation.
 
 struct Wire {
     n: i32,
@@ -17,7 +16,7 @@ impl FromWire for i32 {
 }
 
 impl FromWire for () {
-    fn from_wire(_w: &Wire) -> () {
+    fn from_wire(_w: &Wire) {
         return ();
     }
 }

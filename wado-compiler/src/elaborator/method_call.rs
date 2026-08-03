@@ -2284,9 +2284,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .with_impl_args(&[receiver_type_id])
             .substitute(template_return, &mut self.tysys.type_table.borrow_mut());
 
-        // The blanket's own bucket holds the parameter list; without checking it
-        // a mis-arity or mis-typed call is handed straight to codegen, which
-        // fails Wasm validation instead of reporting anything.
+        // Unchecked, a mis-arity or mis-typed call reaches codegen and surfaces
+        // as a Wasm validation failure.
         let param_types = self.blanket_static_param_types(
             &blanket_module,
             &blanket_param,
@@ -2363,10 +2362,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// Report an argument list the blanket template cannot accept. Returns
+    /// Report an argument list the blanket template cannot accept, returning
     /// `false` once a diagnostic was emitted. A parameter still carrying a type
-    /// param after substitution belongs to the blanket's pack, which the call
-    /// site cannot pin — its arity still counts, its type is not compared.
+    /// param belongs to the blanket's pack, which the call site cannot pin: it
+    /// counts toward arity but its type is not compared.
     fn check_blanket_static_args(
         &mut self,
         param_types: &[TypeId],
@@ -2410,14 +2409,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .flat_map(|(trait_name, impls)| impls.iter().map(move |b| (trait_name, b)))
             .filter(|(_, b)| b.receiver == super::trait_env::BlanketReceiver::Value)
-            // The index is keyed by the receiver *param*, which several blankets
-            // in one module share (`impl<T: …> Serialize for T` beside
-            // `impl<T: …> Deserialize for T`). An entry therefore only speaks
-            // for this blanket when the method it names is one this impl block
-            // declares — matching on the name alone hands `T::deserialize` to
-            // whichever blanket was registered first. Reading the impl header
-            // alone would instead also match an instance method of that name,
-            // so both indices are consulted.
+            // The index is keyed by the receiver *param*, which every blanket in
+            // a module shares (`Serialize` beside `Deserialize`, both over `T`),
+            // so an entry speaks for this blanket only if this impl block
+            // declares the method. The header alone would match an instance
+            // method of the same name; both indices together will not.
             .filter(|(_, b)| {
                 let Some(header) = self
                     .tysys
