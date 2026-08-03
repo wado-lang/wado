@@ -323,7 +323,7 @@ ways:
   facts, but name-keyed and AST-shaped — `TraitEnv`'s alphabet, where
   `assoc_type_bound_index` already keeps them.
 
-Reaching the digest by trait *name* is what blocks the last read. Traits have
+Reaching the digest by trait _name_ is what blocks the last read. Traits have
 no symbol-table entry, so `canonical_decl_key` answers with the prelude's
 type whenever a module declares a trait sharing one of its names — a local
 `trait Left` against `core:prelude/format`'s `Left`. The AST route survives
