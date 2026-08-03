@@ -68,17 +68,39 @@ use peephole::run_peephole;
 use prune_dead_data::prune_dead_data;
 use sroa_variant_return::{flatten_variant_slots, sroa_variant_returns};
 
+/// Which package a pass run belongs to, and thus what its passes are called.
+///
+/// The main package keeps the plain `wir/<pass>` names; a `#![wasm_module]`
+/// package's run takes `wir/<module>:<pass>`. `WADO_SKIP_PASS` and
+/// `WADO_DUMP_PASS_*` match on those names and count occurrences per name, so
+/// sharing them would make the allocator occurrence #1 of every pass and
+/// silently bisect the wrong module.
+#[derive(Clone, Copy)]
+struct PassScope<'a>(Option<&'a str>);
+
+impl PassScope<'_> {
+    fn name(self, pass: &str) -> String {
+        match self.0 {
+            None => format!("wir/{pass}"),
+            Some(module) => format!("wir/{module}:{pass}"),
+        }
+    }
+}
+
 /// Run a single WIR optimization pass with profiling.
 ///
 /// Honours `WADO_LIST_PASSES`, `WADO_DUMP_PASS_BEFORE`, and
 /// `WADO_DUMP_PASS_AFTER` — see `crate::optimize::pass_dump`.
 fn wir_pass(
-    name: &str,
+    scope: PassScope,
+    pass: &str,
     module: &mut WirPackage,
     profiler: &dyn SpanEmitter,
     f: impl FnOnce(&mut WirPackage),
 ) {
     use crate::optimize::pass_dump::{self, Phase};
+    let name = scope.name(pass);
+    let name = name.as_str();
     pass_dump::list_pass(name);
     if pass_dump::should_skip_pass(name) {
         return;
@@ -106,6 +128,16 @@ pub fn optimize_wir(
     flags: CodegenFlags,
     profiler: &dyn SpanEmitter,
 ) {
+    optimize_scoped(module, opt_level, flags, profiler, PassScope(None));
+}
+
+fn optimize_scoped(
+    module: &mut WirPackage,
+    opt_level: OptLevel,
+    flags: CodegenFlags,
+    profiler: &dyn SpanEmitter,
+    scope: PassScope,
+) {
     optimize_wasm_modules(module, opt_level, flags, profiler);
 
     // Mandatory representation lowering — runs before the `-O0` gate. See above.
@@ -114,7 +146,7 @@ pub fn optimize_wir(
     if opt_level == OptLevel::O0 {
         // Branch hints are independent of `-O`, like build-time cold-path hints.
         if flags.branch_hinting {
-            wir_pass("wir/infer_branch_hints", module, profiler, |m| {
+            wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
                 infer_branch_hints(m);
             });
         }
@@ -124,64 +156,61 @@ pub fn optimize_wir(
     }
 
     // Phase 1: type representation, before any value-level pass sees it.
-    profiler.span_start("wir/phase1_type_repr");
+    profiler.span_start(&scope.name("phase1_type_repr"));
     // Inline trivial `alias = source` copies so SROA sees RefTest/RefCast on source.
-    wir_pass("wir/propagate_trivial_copies", module, profiler, |m| {
+    wir_pass(scope, "propagate_trivial_copies", module, profiler, |m| {
         peephole::propagate_trivial_copies(m);
     });
-    wir_pass("wir/sroa_variant_returns", module, profiler, |m| {
+    wir_pass(scope, "sroa_variant_returns", module, profiler, |m| {
         sroa_variant_returns(m);
     });
-    profiler.span_end("wir/phase1_type_repr");
+    profiler.span_end(&scope.name("phase1_type_repr"));
 
     // Phase 2: box-local elimination — substitute `inner` at the single
     // `StructGet` use of a `Box<T>` local `lower::plan::boxing` minted.
-    wir_pass("wir/elide_adjacent_box_locals", module, profiler, |m| {
+    wir_pass(scope, "elide_adjacent_box_locals", module, profiler, |m| {
         elide_adjacent_box_locals(m);
     });
 
     // Phase 3: forward constant struct fields. List literals arrive as
     // `StructNew List<T> { repr: array.new_fixed, used: N }`, so bounds-check
     // elimination keys on that shape.
-    profiler.span_start("wir/phase3_data_flow");
-    wir_pass(
-        "wir/forward_struct_field_constants",
+    profiler.span_start(&scope.name("phase3_data_flow"));
+    wir_pass(scope, "forward_struct_field_constants",
         module,
         profiler,
         |m| {
             forward_struct_field_constants(m);
         },
     );
-    profiler.span_end("wir/phase3_data_flow");
+    profiler.span_end(&scope.name("phase3_data_flow"));
 
     // Phase 4: rewrite library call patterns into tighter instruction sequences.
-    profiler.span_start("wir/phase4_lib_rewrites");
-    wir_pass(
-        "wir/promote_constant_arrays_to_data",
+    profiler.span_start(&scope.name("phase4_lib_rewrites"));
+    wir_pass(scope, "promote_constant_arrays_to_data",
         module,
         profiler,
         |m| {
             promote_constant_arrays_to_data(m);
         },
     );
-    wir_pass("wir/split_large_array_literals", module, profiler, |m| {
+    wir_pass(scope, "split_large_array_literals", module, profiler, |m| {
         split_large_array_literals(m);
     });
-    wir_pass(
-        "wir/elide_zero_fill_of_fresh_arrays",
+    wir_pass(scope, "elide_zero_fill_of_fresh_arrays",
         module,
         profiler,
         |m| {
             elide_zero_fill_of_fresh_arrays(m);
         },
     );
-    profiler.span_end("wir/phase4_lib_rewrites");
+    profiler.span_end(&scope.name("phase4_lib_rewrites"));
 
     // Phase 5: peephole (instruction selection, const fold, copy elision), then
     // flatten seq assignments so the copy propagation below sees the
     // destructures they hide. Leftover Nops/dead locals are cleaned in phase 7.
-    profiler.span_start("wir/phase5_peephole");
-    wir_pass("wir/run_peephole", module, profiler, |m| {
+    profiler.span_start(&scope.name("phase5_peephole"));
+    wir_pass(scope, "run_peephole", module, profiler, |m| {
         let types = &m.types;
         for func in &mut m.functions {
             let locals = func.declared_locals();
@@ -191,13 +220,12 @@ pub fn optimize_wir(
             }
         }
     });
-    wir_pass("wir/flatten_seq_assignments", module, profiler, |m| {
+    wir_pass(scope, "flatten_seq_assignments", module, profiler, |m| {
         flatten_seq_assignments(m);
     });
     // Re-run copy propagation: `flatten_seq_assignments` exposes fresh
     // `LocalSet alias = LocalGet temp` copies the phase-1 run never saw.
-    wir_pass(
-        "wir/propagate_trivial_copies_post_sroa",
+    wir_pass(scope, "propagate_trivial_copies_post_sroa",
         module,
         profiler,
         |m| {
@@ -211,62 +239,62 @@ pub fn optimize_wir(
     // engine single-level SROA uses), removing the per-element inner box that
     // single-level variant-return SROA leaves boxed. Runs to a fix-point, so
     // nested-in-nested slots peel one level per round.
-    wir_pass("wir/flatten_variant_slots", module, profiler, |m| {
+    wir_pass(scope, "flatten_variant_slots", module, profiler, |m| {
         flatten_variant_slots(m);
     });
-    profiler.span_end("wir/phase5_peephole");
+    profiler.span_end(&scope.name("phase5_peephole"));
 
     // Phase 6: strip write-only WIR-synthesised locals (`__match_scrut_N`,
     // multi-value temps, `__pair_temp_N`) that no TIR pass can reach, so codegen
     // doesn't emit dead locals.
-    wir_pass("wir/elide_write_only_locals", module, profiler, |m| {
+    wir_pass(scope, "elide_write_only_locals", module, profiler, |m| {
         elide_write_only_locals(m);
     });
 
     // Phase 7: global cleanup, then final body cleanup (Nops, dead
     // `DeclareLocal`s, dead code after `Unreachable`) before codegen.
-    profiler.span_start("wir/phase7_global_cleanup");
+    profiler.span_start(&scope.name("phase7_global_cleanup"));
     // Promote now-constant global inits to eager Wasm constants first, so the
     // emptied `__initialize_module` and its guard become reclaimable here.
-    wir_pass("wir/promote_const_global_inits", module, profiler, |m| {
+    wir_pass(scope, "promote_const_global_inits", module, profiler, |m| {
         promote_const_global_inits(m);
     });
-    wir_pass("wir/cleanup_global_inits", module, profiler, |m| {
+    wir_pass(scope, "cleanup_global_inits", module, profiler, |m| {
         cleanup_global_inits(m);
     });
     // Merge identical immutable const globals now that they are immutable.
-    wir_pass("wir/dedupe_const_globals", module, profiler, |m| {
+    wir_pass(scope, "dedupe_const_globals", module, profiler, |m| {
         dedupe_const_globals(m);
     });
-    wir_pass("wir/cleanup", module, profiler, |m| {
+    wir_pass(scope, "cleanup", module, profiler, |m| {
         cleanup(m);
     });
     // Drop data segments `register_literal_data` registered speculatively
     // but no surviving `array.new_data` ended up reading (a bounded
     // force-eager global promoted to `array.new_fixed` instead).
-    wir_pass("wir/prune_dead_data", module, profiler, |m| {
+    wir_pass(scope, "prune_dead_data", module, profiler, |m| {
         prune_dead_data(m);
     });
     // Collapse `if cond { br N }` guards into `br_if`, then infer trap-based hints.
-    wir_pass("wir/select_br_if", module, profiler, |m| {
+    wir_pass(scope, "select_br_if", module, profiler, |m| {
         select_br_ifs(m);
     });
     if flags.branch_hinting {
-        wir_pass("wir/infer_branch_hints", module, profiler, |m| {
+        wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
             infer_branch_hints(m);
         });
     }
-    profiler.span_end("wir/phase7_global_cleanup");
+    profiler.span_end(&scope.name("phase7_global_cleanup"));
 
     // Phase 8: mark functions/types/globals orphaned by earlier passes dead,
     // then compact. Globals are marked after functions so a global read only by
     // an already-dead function is itself pruned.
-    profiler.span_start("wir/phase8_dce_compact");
+    profiler.span_start(&scope.name("phase8_dce_compact"));
     dce::mark_unreachable_defined_functions(module);
     dce::mark_unreferenced_globals(module);
     dce_unreachable_types(module);
     dce::compact_dead_items(module);
-    profiler.span_end("wir/phase8_dce_compact");
+    profiler.span_end(&scope.name("phase8_dce_compact"));
 
     // Phase 9: finalize the declared-local SSoT now that no pass adds or removes
     // a `DeclareLocal`.
@@ -289,7 +317,7 @@ fn optimize_wasm_modules(
     profiler: &dyn SpanEmitter,
 ) {
     let mut wasm_modules = std::mem::take(&mut module.wasm_modules);
-    for wasm_module in wasm_modules.values_mut() {
+    for (name, wasm_module) in &mut wasm_modules {
         dce::mark_unreachable_defined_functions(wasm_module);
         // A wasm module has a 1:1 function/type correspondence — each function
         // owns the func type at its own index — so a dead function's type is
@@ -297,7 +325,13 @@ fn optimize_wasm_modules(
         for i in wasm_module.dead_func_indices.clone() {
             wasm_module.dead_type_indices.insert(i);
         }
-        optimize_wir(wasm_module, opt_level, flags, profiler);
+        optimize_scoped(
+            wasm_module,
+            opt_level,
+            flags,
+            profiler,
+            PassScope(Some(name)),
+        );
     }
     module.wasm_modules = wasm_modules;
 }

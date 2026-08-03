@@ -1065,29 +1065,32 @@ impl<'a> WirContext<'a> {
     }
 
     /// Minimum size, in pages, of the linear memory a `#![wasm_module]` module
-    /// defines. The component shares one memory, so it must satisfy every
-    /// embedded wasm asset's own memory section (libm wants 17 pages) as well
-    /// as the allocator's own floor of 1.
+    /// defines.
+    ///
+    /// The component has one linear memory, defined by that module. An embedded
+    /// wasm asset (libm, a user `.wat`) has its own memory section, and codegen
+    /// rewrites it to import the shared one instead — so the shared memory has
+    /// to be at least as large as the largest asset's own minimum, or the
+    /// asset's data segments land past the end of memory. libm wants 17 pages;
+    /// the allocator's own floor is 1.
+    ///
+    /// An import belongs to an asset exactly when its namespace keys one, so
+    /// the registry answers that; the namespace's spelling stays `loader`'s.
     fn wasm_module_min_memory_pages(&self) -> u32 {
-        let mut min_pages: u32 = 1;
-        for namespace in self
+        let assets = &self.package.wasm_assets;
+        let referenced: IndexSet<&str> = self
             .package
             .imports
             .iter()
-            .map(|import| &import.namespace)
-            .filter(|namespace| namespace.starts_with("wasm:"))
-        {
-            let asset = self.package.wasm_assets.get(namespace).unwrap_or_else(|| {
-                panic!(
-                    "wasm asset for namespace {namespace:?} is referenced via #[canonical(...)] \
-                     but was not registered via `use ... from \"<path>\" with \
-                     {{ type: \"wat\"|\"wasm\" }}`",
-                )
-            });
-            let pages = u32::try_from(asset.min_memory_pages()).unwrap_or(u32::MAX);
-            min_pages = min_pages.max(pages);
-        }
-        min_pages
+            .map(|import| import.namespace.as_str())
+            .filter(|namespace| assets.contains_key(*namespace))
+            .collect();
+        referenced
+            .iter()
+            .map(|namespace| {
+                u32::try_from(assets[*namespace].min_memory_pages()).unwrap_or(u32::MAX)
+            })
+            .fold(1, u32::max)
     }
 
     /// Consume this context and produce the final `WirPackage`.

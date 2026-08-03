@@ -1,7 +1,7 @@
 // A constant operand that is itself an operation. `(1000 + 7) * 3` sits in
-// operand position, so folding it needs the lattice to evaluate an operand
-// node rather than only the node it was asked to fold — otherwise the whole
-// chain reaches Wasm as three unfolded instructions.
+// operand position, so folding it needs the value pool to collapse a constant
+// operation as it interns it — otherwise the outer multiply's operand is the
+// inner multiply's node, and the whole chain reaches Wasm unfolded.
 use { println, Stdout } from "core:cli";
 
 #[inline(never)]
