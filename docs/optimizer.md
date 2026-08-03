@@ -151,12 +151,13 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
       piece is the N-field case, bounded by the same result-arity cap.
       `param_spec` covers only the constant case; a non-constant field still
       costs a GC load per read. `core:json`'s number scanner is the standing
-      case: `scan_number_into` writes its `out` only through the seven stores
-      that close the body and `scanned_to_f64` reads it only through field
-      access, so both halves would apply — until then the two carry
-      `#[inline(always)]`, which is all-or-nothing, since the scratch escapes
-      into whichever call is left behind. Inlining also buys caller-specific
-      dead-field elimination that promotion alone would not recover.
+      case, and is currently paying for the gap: `parse_f64_direct` allocates a
+      `ScannedNumber` per number token and hands it to two calls, one that
+      writes it only through the seven stores closing its body and one that
+      reads it only through field access — the shape both halves are for. Worth
+      ~5% of the json-canada deserialize phase, measured by force-inlining the
+      pair. That much and no more: inlining the pair also buys caller-specific
+      dead-field elimination, which promotion alone would not recover.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Variant return ABI decided at NIR, the way `multi_value_return` already

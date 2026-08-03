@@ -729,7 +729,6 @@ impl ScannedNumber {
 
 /// Reconstructs the f64 value of a scanned number token. Exponents outside
 /// fpfmt's domain clamp to ±infinity / ±zero.
-#[inline(always)]
 fn scanned_to_f64(n: &ScannedNumber) -> f64 {
     if n.digits == 0 {
         return if n.neg { -0.0 } else { 0.0 };
@@ -1209,7 +1208,6 @@ impl JsonDeserializer {
     /// precision, while dropped integer digits shift the scale via `int_digits`.
     /// Writing into a scratch keeps a `Result<ScannedNumber>` aggregate off the
     /// hot decode path.
-    #[inline(always)]
     fn scan_number_into(&mut self, out: &mut ScannedNumber) -> Result<(), DeserializeError> {
         let input = self.input;
         let len = input.len();
