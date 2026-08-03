@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785755751694,
+  "lastUpdate": 1785758652538,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45793,6 +45793,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 273279,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "61f109b25b22dd358f3e444125cb3095affae693",
+          "message": "Merge pull request #1741 from wado-lang/claude/wado-compiler-nir-optimize-r8xmp3\n\nperf(optimizer): fold constants at intern time, and optimize `#![wasm_module]` core modules",
+          "timestamp": "2026-08-03T21:52:49+10:00",
+          "tree_id": "430ebbb1fd1e9190182b9b10f987afecdb22ae8c",
+          "url": "https://github.com/wado-lang/wado/commit/61f109b25b22dd358f3e444125cb3095affae693"
+        },
+        "date": 1785758651731,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6034,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16249,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 273270,
             "unit": "bytes"
           }
         ]
