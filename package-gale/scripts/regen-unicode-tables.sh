@@ -4,8 +4,8 @@
 # Gale expands `\p{...}` / `\P{...}` into code-point ranges at grammar-parse
 # time. `\P` is the complement of `\p`, so an approximate table does not merely
 # miss characters — it admits them. The table is therefore generated from the
-# UCD rather than hand-maintained, and only the general categories are covered
-# (scripts, blocks and binary properties are rejected loudly; see TODO.md).
+# UCD rather than hand-maintained. General categories, scripts, blocks and
+# binary properties are covered; anything else is rejected loudly.
 #
 # Usage: scripts/regen-unicode-tables.sh [version]   (default: latest)
 # Needs network access to unicode.org and a built `wado` (WADO env, default
@@ -22,8 +22,12 @@ fi
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-curl -fsS -o "$WORK/UnicodeData.txt" "$BASE/UnicodeData.txt"
-curl -fsS -o "$WORK/ReadMe.txt" "$BASE/ReadMe.txt"
+for f in UnicodeData.txt Scripts.txt Blocks.txt PropList.txt DerivedCoreProperties.txt \
+    PropertyAliases.txt PropertyValueAliases.txt ReadMe.txt; do
+    curl -fsS -o "$WORK/$f" "$BASE/$f"
+done
+# Emoji properties (`Extended_Pictographic`, `Emoji`, …) ship in their own file.
+curl -fsS -o "$WORK/emoji-data.txt" "$BASE/emoji/emoji-data.txt"
 
 # "for Version 17.0.0 of the Unicode Standard."
 RESOLVED="$(grep -oE 'Version [0-9]+\.[0-9]+\.[0-9]+ of the Unicode Standard' "$WORK/ReadMe.txt" |
@@ -34,6 +38,6 @@ if [ -z "$RESOLVED" ]; then
 fi
 
 WADO="${WADO:-../target/debug/wado}"
-"$WADO" run --dir "$WORK" -- scripts/gen_unicode_tables.wado UnicodeData.txt "$RESOLVED" \
+"$WADO" run --dir "$WORK" -- scripts/gen_unicode_tables.wado "$RESOLVED" \
     > src/g4/unicode_tables.wado
 echo "regenerated src/g4/unicode_tables.wado from UCD $RESOLVED"
