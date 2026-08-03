@@ -66,13 +66,25 @@
 //!   ([`return_value_scalarizable`]), which is sound but gives up the
 //!   `?`-through-`unwrap` shape the WIR pass handles via
 //!   `all_br_variant_values_are_struct_new`.
-//! - The rebox's own construction is not right yet. With the pass on, the E2E
-//!   suite fails 57 fixtures, up from 40 before [`rebox_stragglers`] was called
-//!   after the rewrite as well as before it — so the reboxed expression is
-//!   itself reaching codegen as invalid Wasm in more places than it repairs.
-//!   Spot-checks say the mechanism works (4 of 5 previously-failing programs
-//!   compile clean, and the invariant assert went from 2 hits to 1); what it
-//!   emits for some case shape does not.
+//! - [`rebox_stragglers`] fires on sites the fast path *did* bind, and then the
+//!   variant-typed expression it substitutes collides with the tuple-typed
+//!   binding above it. With the pass on the E2E suite fails 57 fixtures, up
+//!   from 40 before the repair also ran after the rewrite.
+//!
+//!   `http_fields_from_list_error.wado` is the small reproducer. Its `handle`
+//!   ends up with
+//!
+//!   ```text
+//!   let __vr_197: [i32, Option<String>] = match __rebox_232.0 { 0 => Ok(…), _ => Err(…) }
+//!   ```
+//!
+//!   — a tuple-typed binding holding a variant. `__vr_197` is this pass's own
+//!   hoisted temp, so [`handled_call_sites`] should have claimed its call.
+//!   Traced so far: the recomputed layout and the binding's declared type agree
+//!   (both `TypeId(1812)`), yet `handled_call_sites` returns nothing for
+//!   `handle` at the moment the rebox runs. So the binding is not in that body
+//!   *yet* — the next step is to dump `handle`'s `Let` statements at rebox time
+//!   and find which invocation creates it.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionKind, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal};
@@ -248,6 +260,12 @@ fn rebox_stragglers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             &mut targets,
         );
         for call in targets {
+            crate::compiler_trace!(
+                "sroa_variant_return",
+                "reboxing a call in {} ({} bound site(s) there)",
+                func.name,
+                bound.len()
+            );
             rebox_call(&mut body, &mut func, call, &scalarized, span);
             changed = true;
         }
