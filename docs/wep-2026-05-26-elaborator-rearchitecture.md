@@ -134,8 +134,7 @@ sub-structs with explicit membership rules:
   elaboration: `function_return_types`, `imported_functions`,
   `current_module_globals`, `imported_globals`,
   `associated_constants`, `generic_function_*`,
-  `generic_method_*`, `generic_struct_names`,
-  `pending_anonymous_structs`.
+  `generic_method_*`, `pending_anonymous_structs`.
 
 Each sub-struct admits a new field only when "does this fit the
 sub-struct's responsibility?" has a clear yes/no answer. A field
@@ -407,8 +406,7 @@ Each recorded use-site becomes an edge `enclosing-item(use) → target`:
 - Dispatch facts in `TypeAnnotations` — `method_dispatch`,
   `static_method_dispatch`, `operator_dispatch`,
   `index_assign_dispatch`, `from_call_facts` — resolved through the
-  `FunctionRef → defining SymbolKey` resolver reify already uses
-  (`find_impl_method_ast_id`). These cover the paths that leave no
+  declaring node each dispatch records. These cover the paths that leave no
   `references` edge: operator overloading, the `?` / `From`
   conversion, `for`-of `into_iter` / `next`, index assignment.
 
@@ -497,7 +495,7 @@ diagnostic; (2) the cross-module graph resolves the dispatch facts that leave
 no `references` edge. Independent of Phase 2.
 
 Each stage keeps `mise run test`, the WIR golden fixtures, and the LSP query
-tests green. Performance is not tracked during migration; see Trade-offs.
+tests green.
 
 ### Stage 7-B execution plan (done)
 
@@ -588,9 +586,8 @@ the remaining `loaded_modules` consumers, the `Scope` guard unification
 - Batch compilation walks bodies twice. Once in
   `annotate_bodies` (the heavy walk that does inference,
   resolution, and dispatch) and once in `reify` (the mechanical
-  walk that reads the annotations). Performance is not optimised
-  during the migration; if a workload regresses unacceptably, the
-  remedy is to specialise `reify` over the recorded annotations,
+  walk that reads the annotations). The remedy, should one be
+  wanted, is to specialise `reify` over the recorded annotations,
   not to merge the phases back. The clean phase boundary is
   the load-bearing decision.
 - Bigger up-front design surface. The four sub-structs and

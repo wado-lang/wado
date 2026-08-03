@@ -534,34 +534,54 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Look up the `AstId` of an impl-block method by its defining module, the
-    /// receiving type name, and the method name. Returns `None` if the module
-    /// is not loaded or no matching method exists. Searches all impl blocks in
-    /// the module; for trait methods prefers the most specific match (struct +
-    /// method; trait name is not disambiguated here).
-    pub(super) fn find_impl_method_ast_id(
+    /// The receiver keys a static-method lookup may be filed under, in the
+    /// order a consumer should try them.
+    ///
+    /// Neither vantage answers alone. The call site's own scope resolves a
+    /// name it declares or imports, and an alias
+    /// (`use { Instant as ClockInstant }`) is reachable no other way. But a
+    /// name that arrived through a namespace prefix lost its qualifier before
+    /// reaching here, and canonicalising *that* from the call site answers
+    /// with the caller's own same-named type — `helper::Pair::new` finding
+    /// the caller's `Pair`. So a consumer tries both and takes the one the
+    /// index answers for.
+    pub(super) fn static_receiver_keys(
         &self,
-        module_source: &ModuleSource,
-        struct_name: &str,
-        method_name: &str,
-    ) -> Option<crate::ast::AstId> {
-        let items: &[Item] = if module_source == &self.current_module_source {
-            self.current_module_items
-        } else {
-            self.loaded_modules.get(module_source)?.items.as_slice()
-        };
-        for item in items {
-            if let Item::Impl(impl_block) = item
-                && Self::get_type_name_static(&impl_block.ty) == struct_name
-            {
-                for method in &impl_block.methods {
-                    if method.name == method_name {
-                        return Some(method.id);
-                    }
-                }
+        receiver_module: Option<&ModuleSource>,
+        written_name: &str,
+    ) -> Vec<trait_env::DeclKey> {
+        let mut keys = vec![self.canonical_decl_key(written_name)];
+        if let Some(module) = receiver_module {
+            let by_receiver =
+                self.tysys
+                    .trait_env
+                    .declaring_side_key(self.symbols, module, written_name);
+            if by_receiver != keys[0] {
+                keys.push(by_receiver);
             }
         }
-        None
+        keys
+    }
+
+    /// The declaring node of the static method `Type::method`, from the
+    /// static-method index.
+    pub(super) fn static_method_decl_id(
+        &self,
+        receiver_module: Option<&ModuleSource>,
+        type_name: &str,
+        method_name: &str,
+    ) -> Option<crate::ast::AstId> {
+        self.static_receiver_keys(receiver_module, type_name)
+            .iter()
+            .find_map(|key| {
+                self.tysys
+                    .trait_env
+                    .static_method_index
+                    .get(key)?
+                    .iter()
+                    .find(|e| e.name == method_name)
+                    .map(|e| e.method_id)
+            })
     }
 
     /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active
@@ -1593,26 +1613,37 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             ast::UseItem::InterfaceFunctions { .. } | ast::UseItem::Wildcard => {}
                         }
                     }
-                    for (local_name, source_name) in to_import {
-                        // Find the global declaration in the source module to
-                        // resolve its type and mutability.
-                        for src_item in &source_module.items {
-                            if let Item::Global(global_decl) = src_item
-                                && global_decl.name == source_name
-                            {
-                                let ty = self.resolve_type(&global_decl.ty);
-                                self.sem.decls.imported_globals.insert(
-                                    local_name,
-                                    (
-                                        source_module_source.clone(),
-                                        source_name,
-                                        ty,
-                                        global_decl.mutable,
-                                    ),
-                                );
-                                break;
-                            }
-                        }
+                    // Pair each import with the declaration it names, so the
+                    // borrow on `source_module` ends before resolution starts.
+                    let declared: Vec<(String, String, ast::Type, bool)> = to_import
+                        .into_iter()
+                        .filter_map(|(local_name, source_name)| {
+                            source_module
+                                .items
+                                .iter()
+                                .find_map(|src_item| match src_item {
+                                    Item::Global(g) if g.name == source_name => Some((
+                                        local_name.clone(),
+                                        source_name.clone(),
+                                        g.ty.clone(),
+                                        g.mutable,
+                                    )),
+                                    _ => None,
+                                })
+                        })
+                        .collect();
+                    for (local_name, source_name, ty_ast, mutable) in declared {
+                        // A declared type means what the *declaring* module
+                        // wrote: `global RK_PROG: NodeKind` names a newtype the
+                        // importer never brought into scope, and resolving it
+                        // here would type the global `unknown`.
+                        let ty = self.with_module_perspective_for(&source_module_source, |s| {
+                            s.resolve_type(&ty_ast)
+                        });
+                        self.sem.decls.imported_globals.insert(
+                            local_name,
+                            (source_module_source.clone(), source_name, ty, mutable),
+                        );
                     }
                 }
             }

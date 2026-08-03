@@ -841,3 +841,102 @@ fn use_from_filename_definition() {
         assert_eq!(result.range.start.character, 0);
     });
 }
+
+#[test]
+fn trait_qualified_call_definition() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "struct Node { v: i32 }\n",
+            "trait Marker {\n",
+            "    fn tag(&self) -> i32;\n",
+            "}\n",
+            "trait Signal {\n",
+            "    fn tag(&self) -> i32;\n",
+            "}\n",
+            "impl Marker for Node {\n",
+            "    fn tag(&self) -> i32 {\n",
+            "        return self.v;\n",
+            "    }\n",
+            "}\n",
+            "impl Signal for Node {\n",
+            "    fn tag(&self) -> i32 {\n",
+            "        return self.v * 100;\n",
+            "    }\n",
+            "}\n",
+            "fn f(n: Node) -> i32 {\n",
+            "    return Marker::tag(&n) + Signal::tag(&n);\n",
+            "}\n",
+        );
+        // Both impls target `Node` and declare `tag`, so only the trait the
+        // call names distinguishes them: each edge must land on the impl
+        // dispatch selected, not on whichever block comes first.
+        let marker = def_at(source, 18, 20).await.expect("Marker::tag call");
+        assert_range(&marker, 8, 7, 10);
+        let signal = def_at(source, 18, 39).await.expect("Signal::tag call");
+        assert_range(&signal, 13, 7, 10);
+    });
+}
+
+#[test]
+fn conversion_overload_definition_follows_the_argument() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "struct Wrapper { v: i32 }\n",
+            "impl From<i32> for Wrapper {\n",
+            "    fn from(x: i32) -> Wrapper {\n",
+            "        return Wrapper { v: x };\n",
+            "    }\n",
+            "}\n",
+            "impl From<bool> for Wrapper {\n",
+            "    fn from(b: bool) -> Wrapper {\n",
+            "        return Wrapper { v: 0 };\n",
+            "    }\n",
+            "}\n",
+            "fn f() -> i32 {\n",
+            "    let a = Wrapper::from(true);\n",
+            "    let b = Wrapper::from(7);\n",
+            "    return a.v + b.v;\n",
+            "}\n",
+        );
+        // Both impls declare `from` on `Wrapper`; only the argument's type
+        // says which one a call resolves to.
+        let from_bool = def_at(source, 12, 22).await.expect("Wrapper::from(true)");
+        assert_range(&from_bool, 7, 7, 11);
+        let from_i32 = def_at(source, 13, 22).await.expect("Wrapper::from(7)");
+        assert_range(&from_i32, 2, 7, 11);
+    });
+}
+
+#[test]
+fn namespaced_static_call_definition() {
+    futures::executor::block_on(async {
+        let helper = concat!(
+            "pub struct Pair { pub x: i32 }\n",
+            "impl Pair {\n",
+            "    pub fn make() -> Pair {\n",
+            "        return Pair { x: 1 };\n",
+            "    }\n",
+            "}\n",
+        );
+        // `ns::Type::method` is three segments, so the namespace prefix is
+        // never stripped and the bare `Type::method` branch — the one that
+        // records the edge — is not reached.
+        let entry = concat!(
+            "use helper from \"./helper.wado\";\n",
+            "fn f() -> i32 {\n",
+            "    let p = helper::Pair::make();\n",
+            "    return p.x;\n",
+            "}\n",
+        );
+        let result = def_at_in(
+            &[("./helper.wado", helper), ("/test.wado", entry)],
+            "/test.wado",
+            2,
+            27,
+        )
+        .await
+        .expect("helper::Pair::make");
+        assert_eq!(result.uri, "file:///helper.wado");
+        assert_range(&result, 2, 11, 15);
+    });
+}

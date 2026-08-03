@@ -876,13 +876,8 @@ impl TypeSystem {
         };
         match resolved {
             ResolvedType::Enum { .. } => Some(true),
-            ResolvedType::Flags { .. } => {
-                if tr.is_serde() {
-                    Some(true)
-                } else {
-                    None
-                }
-            }
+            // A bitmask has no members to recurse into, like a plain `enum`.
+            ResolvedType::Flags { .. } => Some(true),
             ResolvedType::Struct {
                 decl_name: name,
                 module_source,
@@ -1550,8 +1545,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The declaration key of the trait `name` names in the current frame.
-    /// The symbol table does not track trait declarations, so
-    /// [`Elaborator::canonical_decl_key`] alone would fall through to
+    /// [`Elaborator::canonical_decl_key`] alone consults imports before the
+    /// current module, so a name the prelude also carries resolves away from
+    /// a local trait, and an unresolved one falls through to
     /// `TraitEnv::find_trait_decl_key`'s bare-name global scan — which
     /// answers with whichever module's same-named trait registered first.
     /// A trait declared in the current module answers first (unless the
@@ -1593,54 +1589,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// form of [`Self::find_trait_decl_method`], for counting candidates
     /// without cloning each one's declaration.
     fn trait_declares_method(&self, trait_name: &str, method_name: &str) -> bool {
-        let trait_name = &self.declared_trait_name(trait_name);
-        let declares = |items: &[Item]| {
-            items.iter().any(|item| {
-                matches!(item, Item::Trait(t)
-                    if t.name == *trait_name && t.methods.iter().any(|m| m.name == method_name))
-            })
-        };
-        self.loaded_modules
-            .iter()
-            .any(|(_, module)| declares(&module.items))
-            || declares(self.current_module_items)
+        self.find_trait_decl(trait_name)
+            .is_some_and(|(decl, _)| decl.methods.iter().any(|m| m.name == method_name))
+    }
+
+    /// The trait `trait_name` names in this frame, with its declaring module.
+    ///
+    /// The one entry point for both counting candidates and resolving one, so
+    /// they cannot disagree. `TraitSig` cannot serve either: it is keyed by
+    /// `canonical_decl_key`, whose import branch runs before its
+    /// current-module one — and the prelude seeds that branch with enum case
+    /// names, so a local `trait Left` loses to `Alignment::Left`. Only the
+    /// current-module scan inside `find_trait_decl_with` finds it.
+    fn find_trait_decl(&self, trait_name: &str) -> Option<(&ast::TraitDecl, ModuleSource)> {
+        find_trait_decl_with(
+            &self.declared_trait_name(trait_name),
+            &self.current_module_source,
+            self.current_module_items,
+            &self.sem.imports,
+            self.symbols,
+            &self.tysys.trait_env,
+            self.loaded_modules,
+        )
     }
 
     /// The declaration of `method_name` in the trait named `trait_name`, with
-    /// the trait's associated types and declaring module. Shares its search
-    /// order with [`Self::trait_declares_method`], so counting candidates and
-    /// resolving one cannot disagree.
+    /// the trait's associated types and declaring module.
     fn find_trait_decl_method(
         &self,
         trait_name: &str,
         method_name: &str,
     ) -> Option<(ast::Function, Vec<ast::AssociatedTypeDecl>, ModuleSource)> {
-        let trait_name = self.declared_trait_name(trait_name);
-        let search = |items: &[Item], module: &ModuleSource| {
-            items.iter().find_map(|item| {
-                let Item::Trait(trait_decl) = item else {
-                    return None;
-                };
-                if trait_decl.name != trait_name {
-                    return None;
-                }
-                trait_decl
-                    .methods
-                    .iter()
-                    .find(|m| m.name == method_name)
-                    .map(|m| {
-                        (
-                            m.clone(),
-                            trait_decl.associated_types.clone(),
-                            module.clone(),
-                        )
-                    })
-            })
-        };
-        self.loaded_modules
-            .iter()
-            .find_map(|(module_src, module)| search(&module.items, module_src))
-            .or_else(|| search(self.current_module_items, &self.current_module_source))
+        let (trait_decl, module) = self.find_trait_decl(trait_name)?;
+        let method = trait_decl.methods.iter().find(|m| m.name == method_name)?;
+        Some((method.clone(), trait_decl.associated_types.clone(), module))
     }
 
     /// Find a method in the trait declarations the bound names give, read in
@@ -1810,6 +1792,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_name,
                     MethodInfo {
                         impl_offset: None,
+                        method_ast_id: Some(method.id),
                         return_type,
                         self_kind,
                         param_types,
@@ -2458,6 +2441,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .intern(ResolvedType::Ref(base_type_id));
         let method_info = MethodInfo {
             impl_offset: None,
+            method_ast_id: None,
             return_type,
             self_kind: ast::SelfKind::Ref,
             param_types: vec![ref_self_ty],

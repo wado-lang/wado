@@ -377,6 +377,7 @@ pub fn synthesize_traits(project: Package) -> Package {
             names: &names,
         };
         generate_enum_trait_impls(module, &mut ctx);
+        generate_flags_trait_impls(module, &mut ctx);
         generate_struct_eq_ord_impls(module, &mut ctx);
         generate_variant_eq_impls(module, &mut ctx);
         generate_inspect_impls(module, &mut ctx);
@@ -3221,6 +3222,75 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
             );
             generated_functions.push(Rc::new(RefCell::new(func)));
             ctx.record_impl(enum_name, &ord_trait_name);
+        }
+    }
+
+    module.functions.extend(generated_functions);
+}
+
+/// Generate auto-derived `Eq` / `Ord` implementations for flags types in a
+/// module. A flags value is a bitmask, so both compare the raw bits — the same
+/// bodies a plain `enum` gets over its discriminant.
+fn generate_flags_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
+    if module.flags.is_empty() {
+        return;
+    }
+
+    let module_source = module.module_source.clone();
+    let (eq_trait_name, ord_trait_name) = {
+        let tt = module.type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Eq)
+                .to_string(),
+            items
+                .trait_name(crate::compiler_item::CompilerItem::Ord)
+                .to_string(),
+        )
+    };
+
+    let flags_infos: Vec<_> = module
+        .flags
+        .iter()
+        .map(|f| (f.name.clone(), f.span))
+        .collect();
+
+    let mut generated_functions = Vec::new();
+
+    for (flags_name, span) in &flags_infos {
+        let mut type_table = module.type_table.borrow_mut();
+        let flags_type = type_table.make_flags(flags_name.clone(), module_source.clone());
+        let ref_flags_type = type_table.make_ref(flags_type);
+
+        if ctx.should_synthesize(flags_name, &eq_trait_name) {
+            let func = generate_enum_eq_fn(
+                &module_source,
+                flags_name,
+                flags_type,
+                ref_flags_type,
+                &eq_trait_name,
+                *span,
+            );
+            generated_functions.push(Rc::new(RefCell::new(func)));
+            ctx.record_impl(flags_name, &eq_trait_name);
+        }
+
+        if ctx.should_synthesize(flags_name, &ord_trait_name) {
+            let ordering_type =
+                type_table.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
+            let func = generate_enum_ord_fn(
+                &module_source,
+                flags_name,
+                flags_type,
+                ref_flags_type,
+                ordering_type,
+                &ord_trait_name,
+                *span,
+                ctx.names,
+            );
+            generated_functions.push(Rc::new(RefCell::new(func)));
+            ctx.record_impl(flags_name, &ord_trait_name);
         }
     }
 

@@ -1,0 +1,67 @@
+// A `static` trait method reached on a variant through a `ReflectVariant`
+// blanket — the `Deserialize::deserialize` entry point (WEP 2026-06-13). The
+// variant's own namespace owns `Variant::Case`, so `Variant::method()` has to
+// fall through to the blanket instead of reporting an unknown case.
+
+struct Wire {
+    case_name: String,
+    payload: i32,
+}
+
+trait FromWire {
+    fn from_wire(w: &Wire) -> Option<Self>;
+}
+
+impl FromWire for i32 {
+    fn from_wire(w: &Wire) -> Option<i32> {
+        return Option::Some(w.payload);
+    }
+}
+
+impl FromWire for bool {
+    fn from_wire(w: &Wire) -> Option<bool> {
+        return Option::Some(w.payload != 0);
+    }
+}
+
+impl FromWire for () {
+    fn from_wire(_w: &Wire) -> Option<()> {
+        return Option::Some(());
+    }
+}
+
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: FromWire> FromWire for V {
+    fn from_wire(w: &Wire) -> Option<V> {
+        for let case of ReflectVariant::<V>::members() {
+            if case.name() == w.case_name {
+                let payload = P::from_wire(w)?;
+                return Option::Some(case.construct(payload));
+            }
+        }
+        return Option::None;
+    }
+}
+
+variant Shape {
+    Circle(i32),
+    Visible(bool),
+    Empty,
+}
+
+test "a payload case builds through the blanket static" {
+    let w = Wire { case_name: "Circle", payload: 5 };
+    assert Shape::from_wire(&w) == Option::Some(Shape::Circle(5));
+}
+
+test "a unit case builds through the blanket static" {
+    let w = Wire { case_name: "Empty", payload: 0 };
+    assert Shape::from_wire(&w) == Option::Some(Shape::Empty);
+}
+
+test "an unknown case name is not a case-constructor error" {
+    let w = Wire { case_name: "Square", payload: 0 };
+    assert Shape::from_wire(&w) == Option::None;
+}
+
+__DATA__
+{"test": {}}

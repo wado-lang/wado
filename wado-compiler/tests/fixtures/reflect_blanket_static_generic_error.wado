@@ -1,0 +1,47 @@
+// A generic type named without its arguments has no instance for a blanket's
+// static to dispatch on. The argument-less head carries no GC layout (a generic
+// variant never becomes its own declaration, WEP 2026-02-09) and reaches WIR
+// build unregistered, so the missing arguments are reported at the call.
+
+struct Wire {
+    n: i32,
+}
+
+trait FromWire {
+    fn from_wire(w: &Wire) -> Self;
+}
+
+impl FromWire for i32 {
+    fn from_wire(w: &Wire) -> i32 {
+        return w.n;
+    }
+}
+
+impl FromWire for () {
+    fn from_wire(_w: &Wire) {
+        return ();
+    }
+}
+
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: FromWire> FromWire for V {
+    fn from_wire(w: &Wire) -> V {
+        for let case of ReflectVariant::<V>::members() {
+            return case.construct(P::from_wire(w));
+        }
+        panic("a variant always has a case");
+    }
+}
+
+variant Boxed<T> {
+    Held(T),
+    Empty,
+}
+
+test "a bare generic head is not a dispatch target" {
+    let w = Wire { n: 1 };
+    let b = Boxed::from_wire(&w);
+    assert b matches { Boxed::Held(_) };
+}
+
+__DATA__
+{"compile_error": "missing type arguments for `Boxed`"}

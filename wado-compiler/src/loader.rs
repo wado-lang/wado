@@ -280,6 +280,21 @@ pub struct WasmAsset {
     pub component_world_func_names: Vec<String>,
 }
 
+impl WasmAsset {
+    /// The asset's own memory section minimum, in pages; 1 when it defines no
+    /// memory. Read by `wir_build` to size the memory the component shares.
+    pub fn min_memory_pages(&self) -> u64 {
+        for payload in wasmparser::Parser::new(0).parse_all(&self.bytes) {
+            if let Ok(wasmparser::Payload::MemorySection(mems)) = payload
+                && let Some(mem) = mems.into_iter().flatten().next()
+            {
+                return mem.initial;
+            }
+        }
+        1
+    }
+}
+
 /// Resolve a `use` declaration's import source to its `ModuleSource`, mapping
 /// the `with { type: "wat" | "wasm" }` form to `ModuleSource::Wasm`. Mirrors
 /// `analyze::resolve_use_decl_module_source`.

@@ -1,0 +1,44 @@
+// A blanket's static is checked against the template's parameter list.
+// Unchecked, a mis-arity call reaches codegen and fails Wasm validation.
+
+struct Wire {
+    n: i32,
+}
+
+trait FromWire {
+    fn from_wire(w: &Wire) -> Self;
+}
+
+impl FromWire for i32 {
+    fn from_wire(w: &Wire) -> i32 {
+        return w.n;
+    }
+}
+
+impl FromWire for () {
+    fn from_wire(_w: &Wire) {
+        return ();
+    }
+}
+
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: FromWire> FromWire for V {
+    fn from_wire(w: &Wire) -> V {
+        for let case of ReflectVariant::<V>::members() {
+            return case.construct(P::from_wire(w));
+        }
+        panic("a variant always has a case");
+    }
+}
+
+variant Shape {
+    Circle(i32),
+    Empty,
+}
+
+test "a blanket static rejects an extra argument" {
+    let w = Wire { n: 1 };
+    assert Shape::from_wire(&w, 1, 2) == Shape::Circle(1);
+}
+
+__DATA__
+{"compile_error": "expected 1 arguments, found 3"}

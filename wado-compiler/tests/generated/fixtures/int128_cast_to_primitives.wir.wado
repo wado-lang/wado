@@ -1867,7 +1867,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::as_f64"(self) {
     let __pattern_temp_0_mv_0: u64;
     let __pattern_temp_0_mv_1: i64;
     multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa"(self, 53);
-    return builtin::f64_reinterpret_i64(((__pattern_temp_0_mv_1 + 1023_i64) << 52_i64) | (__pattern_temp_0_mv_0 & ((1_i64 << 52_i64) - 1_i64)));
+    return builtin::f64_reinterpret_i64(((__pattern_temp_0_mv_1 + 1023_i64) << 52_i64) | (__pattern_temp_0_mv_0 & 4503599627370495_i64));
 }
 
 fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::as_f32"(self) {
@@ -1877,7 +1877,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::as_f32"(self) {
     let __pattern_temp_0_mv_0: u64;
     let __pattern_temp_0_mv_1: i64;
     multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa"(self, 24);
-    return builtin::f32_reinterpret_i32((builtin::i32_wrap_i64(__pattern_temp_0_mv_1 + 127_i64) << 23) | (builtin::i32_wrap_i64(__pattern_temp_0_mv_0) & ((1 << 23) - 1)));
+    return builtin::f32_reinterpret_i32((builtin::i32_wrap_i64(__pattern_temp_0_mv_1 + 127_i64) << 23) | (builtin::i32_wrap_i64(__pattern_temp_0_mv_0) & 8388607));
 }
 
 fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self, divisor) {

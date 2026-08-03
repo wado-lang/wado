@@ -1,0 +1,14 @@
+// `Counter` is an alias for another module's `Helper`, while a *different*
+// module declares a real `Counter`. Resolving the receiver by the written
+// name picked the real `Counter`, so `Counter::make(1)` dispatched to a
+// `String` factory: the return type collapsed and lowering minted an extern
+// stub for a function the package defines.
+use { Helper as Counter } from "./sub/alias_shadows_same_name_a.wado";
+use { Counter as Real } from "./sub/alias_shadows_same_name_b.wado";
+
+test "an alias resolves to its target, not a same-named declaration" {
+    let aliased = Counter::make(1);
+    assert aliased.h == 1;
+    let real = Real::make("x");
+    assert real.label == "x";
+}

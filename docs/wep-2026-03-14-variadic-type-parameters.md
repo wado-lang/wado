@@ -412,8 +412,11 @@ where T: ReflectStruct<FieldTypes = [..F]>
 - [x] Parser: recognize `..T` in generic parameter lists and `[..T]` in type position
 - [x] AST/TIR: add `TypePackSpread`, `TupleSpread` nodes; track pack bounds
 - [x] Prelude: add `pub type [...T]` declaration; register tuples' owning module
-- [x] Elaborator: at monomorphization, substitute concrete types for packs; extend existing
-      tuple-enumeration unrolling to handle `[for let v of tuple { }]` construction form
+- [x] Elaborator: at monomorphization, substitute concrete types for packs
+- [ ] The `[for let v of tuple { expr }]` / `[for let [i, v] of tuple.enumerate() { expr }]`
+      construction form: unparsed. Until it lands, a build derivation needing the
+      member handle or index per element routes the work through a pack map
+      (`[..F::method(args)]`) over a pre-ordered cursor
 - [x] Variadic `for let v of`: deferred expansion via `VariadicForOf` TIR node, expanded
       by the monomorphizer after type substitution resolves packs to concrete tuples
 - [x] Variadic trait bounds: `..T: Trait` checked via `type_param_bounds`; `TypePack`

@@ -16,7 +16,7 @@ pub mod builder;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::tir::{PrimitiveType, TypeId};
+use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
 /// Bridge a literal [`ValueKind`] to niri's [`crate::const_eval::Value`] for
 /// constant folding, applying the same prim-consistency filter niri's own
@@ -579,6 +579,98 @@ impl ValuePool {
     #[inline]
     pub fn cast(&mut self, operand: ValueId, target: TypeId) -> ValueId {
         self.intern(ValueKind::Cast { operand, target })
+    }
+
+    /// [`ValuePool::binary`], collapsed to a literal when both operands are
+    /// already constants.
+    ///
+    /// Interning is where every producer meets — the builder, the engine's
+    /// maintenance re-derivation, and the scratch-pool reintern inlining runs —
+    /// so folding here is what holds the invariant that no node in the pool is
+    /// a foldable operation. A nested constant depends on it: the outer
+    /// operation's operand is the inner operation's node, so a node interned
+    /// raw is one no later reader can fold.
+    ///
+    /// Folding needs operand widths; without a `TypeTable` nothing folds.
+    pub fn binary_folded(
+        &mut self,
+        op: NirBinaryOp,
+        lhs: ValueId,
+        rhs: ValueId,
+        ty: TypeId,
+        type_table: Option<&TypeTable>,
+    ) -> ValueId {
+        let folded = type_table.and_then(|tt| {
+            let l = self.const_of(lhs, tt)?;
+            let r = self.const_of(rhs, tt)?;
+            crate::const_eval::eval_binary(l, op, r)
+        });
+        match folded {
+            Some(v) => self.intern_const(v, ty),
+            None => self.binary(op, lhs, rhs, ty),
+        }
+    }
+
+    /// [`ValuePool::unary`] with the same constant collapse as
+    /// [`ValuePool::binary_folded`].
+    pub fn unary_folded(
+        &mut self,
+        op: NirUnaryOp,
+        operand: ValueId,
+        ty: TypeId,
+        type_table: Option<&TypeTable>,
+    ) -> ValueId {
+        let folded = type_table.and_then(|tt| {
+            let v = self.const_of(operand, tt)?;
+            crate::const_eval::eval_unary(op, v)
+        });
+        match folded {
+            Some(v) => self.intern_const(v, ty),
+            None => self.unary(op, operand, ty),
+        }
+    }
+
+    /// [`ValuePool::cast`] with the same constant collapse as
+    /// [`ValuePool::binary_folded`].
+    pub fn cast_folded(
+        &mut self,
+        operand: ValueId,
+        target: TypeId,
+        type_table: Option<&TypeTable>,
+    ) -> ValueId {
+        let folded = type_table.and_then(|tt| {
+            let v = self.const_of(operand, tt)?;
+            crate::const_eval::eval_cast(v, crate::const_eval::prim_of(target, tt)?)
+        });
+        match folded {
+            Some(v) => self.intern_const(v, target),
+            None => self.cast(operand, target),
+        }
+    }
+
+    /// The constant a value denotes, reading its width from its own recorded
+    /// type. `None` for a non-literal kind or an untyped / non-primitive value.
+    pub fn const_of(
+        &self,
+        id: ValueId,
+        type_table: &TypeTable,
+    ) -> Option<crate::const_eval::Value> {
+        let ty = self.type_of(id)?;
+        value_kind_to_const(self.kind(id), crate::const_eval::prim_of(ty, type_table))
+    }
+
+    /// Intern a folded constant under `ty`. Arithmetic never yields an
+    /// aggregate or a sequence, which have no pure-value form.
+    pub fn intern_const(&mut self, value: crate::const_eval::Value, ty: TypeId) -> ValueId {
+        match value {
+            crate::const_eval::Value::Int { value, .. } => self.int_typed(value, ty),
+            crate::const_eval::Value::Float { value, .. } => self.float(value, ty),
+            crate::const_eval::Value::Bool(b) => self.bool(b),
+            crate::const_eval::Value::Char(c) => self.char(c),
+            crate::const_eval::Value::Aggregate { .. } | crate::const_eval::Value::Seq { .. } => {
+                panic!("an aggregate or sequence constant cannot be interned as a pure value")
+            }
+        }
     }
 
     pub fn select(&mut self, cond: ValueId, then: ValueId, else_: ValueId) -> ValueId {

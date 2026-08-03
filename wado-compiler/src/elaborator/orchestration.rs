@@ -1806,25 +1806,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
-    /// Resolve an optional AST return type using the source module's type context.
-    ///
-    /// Temporarily swaps the elaborator's "current module" perspective to
-    /// `module_source` so that same-named types from different modules are
-    /// resolved correctly. The shared `all_*` tables stay intact; only the
-    /// import context (and locals) is swapped.
-    pub(super) fn resolve_return_type_in_module(
-        &mut self,
-        module_source: &ModuleSource,
-        return_type: Option<&crate::ast::Type>,
-    ) -> crate::tir::TypeId {
-        let scope = self.tysys.trait_env.import_scope(module_source);
-        self.with_module_perspective(module_source.clone(), scope, |s| {
-            return_type
-                .map(|t| s.resolve_type(t))
-                .unwrap_or(crate::tir::TypeTable::UNIT)
-        })
-    }
-
     /// Topologically sort modules based on struct field type dependencies.
     ///
     /// Recursively collect cross-module struct/variant dependencies from a type.

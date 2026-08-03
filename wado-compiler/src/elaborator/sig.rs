@@ -146,6 +146,10 @@ pub(crate) struct DeclSig {
 /// declaration's — because dispatch asks them the same questions.
 #[derive(Clone, Debug)]
 pub(crate) struct MethodSig {
+    /// The declaring node — the key this signature is filed under, carried
+    /// inside so a consumer holding the signature holds the identity too.
+    /// A use→def edge is recorded from here, never from a name re-scan.
+    pub(crate) ast_id: AstId,
     pub(crate) decl: DeclSig,
     pub(crate) self_kind: crate::ast::SelfKind,
     /// The non-receiver parameters, in order. `decl.param_types` includes
