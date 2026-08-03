@@ -751,7 +751,6 @@ fn scanned_to_f64(n: &ScannedNumber) -> f64 {
 }
 
 /// True when `b` is one of JSON's four whitespace bytes.
-#[inline(always)]
 fn is_json_ws(b: i32) -> bool {
     let ws_set = 1 as u64 << b' ' as u64 | 1 as u64 << b'\t' as u64 | 1 as u64 << b'\n' as u64 | 1 as u64 << b'\r' as u64;
     // `b < 64` is load-bearing: Wasm masks a shift count mod 64.
@@ -762,7 +761,6 @@ fn is_json_ws(b: i32) -> bool {
 /// subtracting `'0'` wraps every non-digit byte into the upper half of the u32
 /// range, so one unsigned compare replaces the two a `'0' <= b <= '9'` range
 /// test costs — measurably cheaper in the per-digit scan loops.
-#[inline(always)]
 fn digit_value(b: i32) -> u32 {
     return (b - '0' as i32) as u32;
 }
