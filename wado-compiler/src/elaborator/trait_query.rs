@@ -3,7 +3,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, Item, Type};
+use crate::ast::{self, Type};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
@@ -219,40 +219,6 @@ pub(crate) fn canonical_decl_key_with(
         return key;
     }
     (current_module_source.clone(), name.to_string())
-}
-
-/// Resolve a trait declaration by name to its `TraitDecl` and owning module,
-/// local-first (a local trait shadows a same-named one elsewhere, issue #1298).
-fn find_trait_decl_with<'a>(
-    trait_name: &str,
-    current_module_source: &ModuleSource,
-    current_module_items: &'a [ast::Item],
-    imports: &super::sem::ModuleImports,
-    symbols: &crate::symbol::SymbolTable,
-    trait_env: &super::trait_env::TraitEnv,
-    loaded_modules: &'a IndexMap<ModuleSource, ast::Module>,
-) -> Option<(&'a ast::TraitDecl, ModuleSource)> {
-    let canonical_key = canonical_decl_key_with(
-        trait_name,
-        current_module_source,
-        imports,
-        symbols,
-        trait_env,
-    );
-    if let Some((module_src, item_id)) = trait_env.decl_index.get(&canonical_key)
-        && let Some(module) = loaded_modules.get(module_src)
-        && let Some(Item::Trait(trait_decl)) = module.item_by_id(*item_id)
-    {
-        return Some((trait_decl, module_src.clone()));
-    }
-    for item in current_module_items {
-        if let Item::Trait(trait_decl) = item
-            && trait_decl.name == trait_name
-        {
-            return Some((trait_decl, current_module_source.clone()));
-        }
-    }
-    None
 }
 
 /// The recorded declaration facts of the trait named `trait_name`, for a
@@ -1518,40 +1484,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// form of [`Self::find_trait_decl_method`], for counting candidates
     /// without cloning each one's declaration.
     fn trait_declares_method(&self, trait_name: &str, method_name: &str) -> bool {
-        self.find_trait_decl(trait_name)
-            .is_some_and(|(decl, _)| decl.methods.iter().any(|m| m.name == method_name))
+        self.trait_decl_header_in_frame(trait_name)
+            .is_some_and(|header| header.methods.iter().any(|m| m.name == method_name))
     }
 
-    /// The trait `trait_name` names in this frame, with its declaring module.
+    /// The recorded signature of `method_name` on the trait `trait_name` names
+    /// in this frame, together with that trait's associated-type declarations.
     ///
-    /// The one entry point for both counting candidates and resolving one, so
-    /// they cannot disagree. `TraitSig` cannot serve either: it is keyed by
-    /// `canonical_decl_key`, whose import branch runs before its
-    /// current-module one — and the prelude seeds that branch with enum case
-    /// names, so a local `trait Left` loses to `Alignment::Left`. Only the
-    /// current-module scan inside `find_trait_decl_with` finds it.
-    fn find_trait_decl(&self, trait_name: &str) -> Option<(&ast::TraitDecl, ModuleSource)> {
-        find_trait_decl_with(
-            &self.declared_trait_name(trait_name),
-            &self.current_module_source,
-            self.current_module_items,
-            &self.sem.imports,
-            self.symbols,
-            &self.tysys.trait_env,
-            self.loaded_modules,
-        )
-    }
-
-    /// The declaration of `method_name` in the trait named `trait_name`, with
-    /// the trait's associated types and declaring module.
-    fn find_trait_decl_method(
+    /// The header answers whether the method exists — a name-level fact — and
+    /// the digest answers what it says. A method the header lists but the
+    /// digest has not recorded is a decl-pass bug, so it panics rather than
+    /// reading as "no such method".
+    fn trait_method_in_frame(
         &self,
         trait_name: &str,
         method_name: &str,
-    ) -> Option<(ast::Function, Vec<ast::AssociatedTypeDecl>, ModuleSource)> {
-        let (trait_decl, module) = self.find_trait_decl(trait_name)?;
-        let method = trait_decl.methods.iter().find(|m| m.name == method_name)?;
-        Some((method.clone(), trait_decl.associated_types.clone(), module))
+    ) -> Option<(super::sig::MethodSig, Vec<ast::AssociatedTypeDecl>)> {
+        let header = self.trait_decl_header_in_frame(trait_name)?;
+        if !header.methods.iter().any(|m| m.name == method_name) {
+            return None;
+        }
+        let assoc_types = header.assoc_types.clone();
+        let sig = self
+            .trait_sig_in_frame(trait_name)
+            .and_then(|sig| sig.method(method_name))
+            .expect("the decl pass records every trait method's signature")
+            .sig
+            .clone();
+        Some((sig, assoc_types))
+    }
+
+    /// The recorded declaration facts of the trait `trait_name` names in this
+    /// frame. Companion to [`Self::trait_decl_header_in_frame`], reaching the
+    /// `TypeId`-level digest rather than the name-level header, so it is only
+    /// answerable once the decl pass has run.
+    fn trait_sig_in_frame(&self, trait_name: &str) -> Option<&super::sig::TraitSig> {
+        let key = self.trait_decl_key_in_frame(&self.declared_trait_name(trait_name));
+        let (_, decl_id) = self.tysys.trait_env.decl_index.get(&key)?;
+        self.tysys.signatures.trait_sig(*decl_id)
     }
 
     /// Find a method in the trait declarations the bound names give, read in
@@ -1574,7 +1544,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .cloned()
             .collect();
         let resolved = candidates.first().and_then(|trait_name| {
-            self.find_trait_decl_method(trait_name, method_name)
+            self.trait_method_in_frame(trait_name, method_name)
                 .map(|found| (trait_name.clone(), found))
         });
         if candidates.len() > 1 {
@@ -1586,143 +1556,57 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
-        {
-            if let Some((trait_name, (method, trait_assoc_types, _module_source))) = resolved {
-                // Save the entire trait context; we'll modify self_type, assoc_type_bindings,
-                // type_params, and type_param_bounds during this resolution scope.
-                let mut scope = self.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.self_type = Some(self_type_id);
-                scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
+        let (trait_name, (sig, trait_assoc_types)) = resolved?;
 
-                // Set up associated type bindings as projections so that
-                // Self::AssocType resolves to AssocTypeProjection(self_type_id, "AssocType").
-                // We also compute assoc_type_bindings to propagate concrete types through
-                // associated type chains.
-                // Determine the TypeParam name for Self, if self_type is a TypeParam.
-                let self_type_param_name = {
-                    let resolved = scope.tysys.type_table.borrow().get(self_type_id).clone();
-                    if let ResolvedType::TypeParam { name, .. } = resolved {
-                        Some(name)
-                    } else {
-                        None
-                    }
-                };
-                let self_name = self_type_param_name.as_deref().unwrap_or_default();
-                for assoc_decl in &trait_assoc_types {
-                    let known = scope.frame_projection(self_type_id, self_name, &assoc_decl.name);
-                    let projection = known.unwrap_or_else(|| {
-                        let bound_names: Vec<String> =
-                            assoc_decl.bounds.iter().map(|b| b.name.clone()).collect();
-                        // Compute assoc_type_bindings by resolving Self::X references in the
-                        // assoc type's bounds. e.g., Iterator<Item = Self::Item> with Self = I
-                        // and I: IntoIterator<Item = u8> gives [("Item", u8)].
-                        let atb =
-                            scope.frame_assoc_bindings(self_type_id, self_name, &assoc_decl.bounds);
-                        scope
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_assoc_type_projection_of_trait(
-                                self_type_id,
-                                Some(trait_name.clone()),
-                                assoc_decl.name.clone(),
-                                bound_names,
-                                atb,
-                            )
-                    });
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .assoc_type_bindings
-                        .insert(assoc_decl.name.clone(), projection);
-                }
-
-                // Register the method's own type parameters so that they resolve to
-                // TypeParam{index: N} instead of UNKNOWN. This is needed for generic methods
-                // like `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, ...>`
-                // where `T` must be a proper TypeParam to allow substitution at the call site.
-                // We use index 0, 1, ... because find_method_in_trait_bounds is only called
-                // for TypeParam/AssocTypeProjection receivers, where impl_offset = 0.
-                let mut method_type_param_ids: Vec<TypeId> = Vec::new();
-                for (index, param) in method.type_params.iter().enumerate() {
-                    let type_id = scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_param(param.name.clone(), index as u32);
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_params
-                        .insert(param.name.clone(), (index as u32, type_id));
-                    if !param.bounds.is_empty() {
-                        scope
-                            .annotate_ctx
-                            .trait_ctx
-                            .type_param_bounds
-                            .insert(param.name.clone(), param.bounds.clone());
-                    }
-                    if !param.is_effect {
-                        method_type_param_ids.push(type_id);
-                    }
-                }
-
-                let return_type = method
-                    .return_type
-                    .as_ref()
-                    .map(|t| scope.resolve_type(t))
-                    .unwrap_or(TypeTable::UNIT);
-                let self_kind = method
-                    .params
-                    .first()
-                    .map(|p| p.self_kind)
-                    .unwrap_or(ast::SelfKind::None);
-                let param_types = scope.extract_param_types(&method.params);
-                let param_is_mut: Vec<bool> = method
-                    .params
-                    .iter()
-                    .filter(|p| p.name != "self")
-                    .map(|p| p.is_mut)
-                    .collect();
-                let param_defaults: Vec<Option<ast::Expr>> = method
-                    .params
-                    .iter()
-                    .filter(|p| p.name != "self")
-                    .map(|p| p.default.clone())
-                    .collect();
-                let param_names: Vec<String> = method
-                    .params
-                    .iter()
-                    .filter(|p| p.name != "self")
-                    .map(|p| p.name.clone())
-                    .collect();
-
-                drop(scope);
-
-                return Some((
-                    trait_name,
-                    MethodInfo {
-                        impl_offset: None,
-                        method_ast_id: Some(method.id),
-                        return_type,
-                        self_kind,
-                        param_types,
-                        param_is_mut,
-                        owner: MethodOwner::Receiver,
-                        cm_name: None,
-                        is_ref_impl: false,
-                        method_type_param_ids,
-                        impl_module: None,
-                        from_concrete_impl: false,
-                        param_defaults,
-                        param_names,
-                        consumes_self: super::method_lookup::takes_self_by_value(&method.params),
-                    },
-                ));
+        // The trait's frame numbers `Self` as slot 0, so instantiating the
+        // recorded signature against the receiver is the whole substitution.
+        // What it cannot carry is what `Self::X` means *here*: that is written
+        // in the caller's `where` clause, or held by a projection receiver.
+        // Only the answers go in — a name the frame cannot answer is left for
+        // the substitution to rebuild over the receiver, which reproduces the
+        // recorded projection's owning trait and bounds.
+        let self_name = match self.tysys.type_table.borrow().get(self_type_id) {
+            ResolvedType::TypeParam { name, .. } => name.clone(),
+            _ => String::new(),
+        };
+        let mut answers: Vec<(String, TypeId)> = Vec::new();
+        for assoc_decl in &trait_assoc_types {
+            if let Some(known) = self.frame_projection(self_type_id, &self_name, &assoc_decl.name) {
+                answers.push((assoc_decl.name.clone(), known));
             }
         }
 
-        None
+        let instantiated = sig.decl.instantiate_slots_with(
+            &self.tysys.type_table,
+            &IndexMap::from_iter([(0, self_type_id)]),
+            &crate::tir::SlotProjections::from_iter([(0, answers)]),
+        );
+        let first_value_param = sig.first_value_param().min(instantiated.param_types.len());
+        let declaring_slots = (sig.declaring_slot_count as usize).min(sig.decl.type_params.len());
+
+        Some((
+            trait_name,
+            MethodInfo {
+                impl_offset: Some(sig.declaring_slot_count),
+                method_ast_id: Some(sig.ast_id),
+                return_type: instantiated.return_type,
+                self_kind: sig.self_kind,
+                param_types: instantiated.param_types[first_value_param..].to_vec(),
+                param_is_mut: super::sig::Param::is_mut_flags(&sig.params),
+                owner: MethodOwner::Receiver,
+                cm_name: None,
+                is_ref_impl: false,
+                method_type_param_ids: sig.decl.type_params[declaring_slots..]
+                    .iter()
+                    .map(|(_, id)| *id)
+                    .collect(),
+                impl_module: None,
+                from_concrete_impl: false,
+                param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
+                param_names: super::sig::Param::names(&sig.params),
+                consumes_self: sig.self_kind == ast::SelfKind::Value,
+            },
+        ))
     }
 }
 

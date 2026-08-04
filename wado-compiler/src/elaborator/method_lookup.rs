@@ -28,14 +28,6 @@ use super::tysys::TypeSystem;
 
 use super::util::placeholder;
 
-/// A method takes its receiver `self` by value — transferring ownership —
-/// when the first parameter is a bare `self` (`SelfKind::Value`). `&self` /
-/// `&mut self` borrow; a `self: &T` annotation borrows; a static method has no
-/// receiver.
-pub(crate) fn takes_self_by_value(params: &[ast::Param]) -> bool {
-    matches!(params.first(), Some(p) if p.self_kind == ast::SelfKind::Value)
-}
-
 /// Lightweight reference to an impl block. Stores `(module_source,
 /// item_id)` and resolves to the block's digested [`ImplHeader`] via
 /// [`impl_header`]; the impl AST itself is no longer reachable from
@@ -871,15 +863,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_names: super::sig::Param::names(&sig.params),
             consumes_self: sig.self_kind == ast::SelfKind::Value,
         })
-    }
-
-    /// Extract parameter types (excluding self) from method parameters
-    pub(super) fn extract_param_types(&mut self, params: &[ast::Param]) -> Vec<TypeId> {
-        params
-            .iter()
-            .filter(|p| p.name != "self")
-            .map(|p| self.resolve_type(&p.ty))
-            .collect()
     }
 
     /// Bind a still-unbound method type param to its declared default, resolving
