@@ -324,16 +324,33 @@ returning tuples — a separate win, to measure on its own.
 the classifier that is supposed to serve this pass rejects every per-case
 variant layout. This also affects source-level tuples; measure the size effect.
 
+#### The tail-call rule, again
+
+The classifier required every return to build a fresh aggregate and every call
+site to bind one, so `return g(x)` disqualified both functions at once: `g` had
+an unbound call site, and its caller returned nothing it had built. That is the
+same rule this pass applies to variants, and without it a scalarized
+`return g(x)` chain lands a boxed tuple where `widen.rs` used to emit
+multi-value. Accepting it couples caller and callee candidacy, so
+classification became a refute-to-fix-point loop like this pass's own.
+
+Both halves of the rule must read the _assumed_ set, not the candidate set as
+it stands mid-round. Reading the latter let a caller spare its callee and then
+be invalidated later in the same round: the callee took the ABI, the caller did
+not, and the caller's `return g(x)` pushed N results through a one-ref
+signature — 239 fixtures of invalid Wasm, at `-O0` as well as `-O2`.
+
 ## Consequences
 
 ### What retires in WIR
 
 `widen.rs`'s entire job — rediscovering the pattern from WIR shapes, the two
 fix-points, the return rewriting, the call-site rewriting — is subsumed.
-`return_temp.rs` exists only to normalize temps `field_scalarize` leaves and
-`wir_build` materializes; Phase 2's `Return(Local(t))` rule covers the same
-shape on structured NIR, where "single-def, single-use" replaces a WIR scan
-with a 32-instruction relocation budget and a trap-safety analysis.
+`return_temp.rs` normalizes temps `field_scalarize` leaves and `wir_build`
+materializes. Phase 2's `Return(Local(t))` rule covers the single-def /
+single-use case; it does **not** cover the one `field_scalarize` actually
+produces — see [the open question](#the-return-temp-is-not-this-passs-to-sink)
+— so this file retires only once that is closed.
 
 | file                     | lines | fate                                                      |
 | ------------------------ | ----- | --------------------------------------------------------- |
@@ -530,6 +547,35 @@ Each step lands and is measured before the next.
       step 4's measurements.
 
 ## Open questions
+
+### The return temp is not this pass's to sink
+
+`return_temp.rs`'s job was supposed to be covered here by a `Return(Local(t))`
+rule over single-def / single-use temps. It is not, and the reason is ordering:
+the temp does not exist when this pass runs. `field_scalarize` hoists a field
+store _after_ the returns are already tuple literals, leaving
+
+```text
+let t: [i32, i32, Option<Fail>] = [1, 0, Some(fail_at(pos))];
+self.pos = pos;
+return t;
+```
+
+one such `let` per branch, so the local carries two defs and two reads and no
+single-def rule reaches it. `multi_value_return` then declines — its returns
+build no fresh aggregate — and the tuple stays boxed
+(`opt_sroa_variant_return_hfs_call`, and `CborDeserializer::is_null`, the one
+boxed tuple this pass leaves on `cbor_twitter`).
+
+Sinking only the `VariantConstruct` wrapper at this pass's own rewrite site —
+binding the payload where it was and building the tuple at the `return` — was
+tried and is inert: byte-identical on every benchmark, because the shape it
+targets does not exist yet at that point.
+
+Closing it needs the per-def dominance reasoning `return_temp.rs` does with a
+WIR scan and a relocation budget, plus `multi_value_return` accepting
+`Return(Local(t))` and `wir_build` emitting the fields from it. That is the
+work step 4 gates on, not a rule this pass can carry.
 
 ### A `LabeledBlock` return value arriving via `break L: v`
 

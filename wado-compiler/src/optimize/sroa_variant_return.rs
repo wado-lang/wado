@@ -85,10 +85,14 @@
 //!   ([`return_value_scalarizable`]), which is sound but gives up the
 //!   `?`-through-`unwrap` shape the WIR pass handles via
 //!   `all_br_variant_values_are_struct_new`.
-//! - Seven `opt_sroa_variant_*` fixtures still pin WIR-pass local names
-//!   (`__sroa_result_discriminant`) this pass does not produce. They are the
-//!   worklist for the shapes it declines, and they are expectation churn, not
-//!   miscompiles — the suite reports no invalid Wasm anywhere.
+//! - The return temp `field_scalarize` leaves — `let t = [...]; <store>;
+//!   return t` — which it hoists *after* this pass has run, one `let` per
+//!   branch, so no single-def rule reaches it. `multi_value_return` then
+//!   declines and the tuple stays boxed. `wir_optimize`'s `return_temp.rs`
+//!   still handles it; see the WEP's open questions.
+//! - Three `opt_sroa_variant_*` fixtures stay red on the two shapes above.
+//!   They are the worklist, not miscompiles — the suite reports no invalid
+//!   Wasm anywhere.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionKind, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal};
