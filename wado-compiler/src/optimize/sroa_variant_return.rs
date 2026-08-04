@@ -135,6 +135,25 @@ struct CaseSlot {
     wrap_in_some: bool,
 }
 
+/// Where one case's payload lives in the result tuple.
+#[derive(Clone, Copy)]
+enum CaseSlots {
+    /// A unit case: the tag alone carries it.
+    Absent,
+    /// One slot, unwrapped through `Some` when the slot is an `Option` wrapper.
+    Flat(CaseSlot),
+}
+
+impl CaseSlots {
+    /// The single slot, or `None` for a unit case.
+    fn flat(self) -> Option<CaseSlot> {
+        match self {
+            CaseSlots::Absent => None,
+            CaseSlots::Flat(slot) => Some(slot),
+        }
+    }
+}
+
 /// The tuple a variant return is scalarized into. Derived from the variant type
 /// alone, so every function returning that variant gets the same layout — which
 /// is what lets `return g(x)` stay a bare tail call.
@@ -146,8 +165,8 @@ struct Layout {
     slot_types: Vec<TypeId>,
     /// Pad per slot, positionally.
     slot_pads: Vec<Pad>,
-    /// Per case index: where its payload lives, or `None` for a unit case.
-    case_slots: Vec<Option<CaseSlot>>,
+    /// Per case index: where its payload lives.
+    case_slots: Vec<CaseSlots>,
     /// Case names in declaration order, for resolving a pattern's case name.
     case_names: Vec<String>,
     /// Payload type per case, for typing a pattern binding.
@@ -429,7 +448,7 @@ fn rebox_call(
     let mut arms: Vec<ArmData> = Vec::with_capacity(layout.case_names.len());
     for case_index in 0..layout.case_names.len() {
         let case_index = u32::try_from(case_index).expect("variant case index overflow");
-        let payload = layout.case_slots[case_index as usize].map(|slot| {
+        let payload = layout.case_slots[case_index as usize].flat().map(|slot| {
             let read = tuple_field(
                 body,
                 local_index,
@@ -765,11 +784,11 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
 
     let mut slot_types: Vec<TypeId> = Vec::new();
     let mut slot_pads: Vec<Pad> = Vec::new();
-    let mut case_slots: Vec<Option<CaseSlot>> = Vec::with_capacity(shapes.len());
+    let mut case_slots: Vec<CaseSlots> = Vec::with_capacity(shapes.len());
     for (payload, shape) in case_payloads.iter().zip(&shapes) {
         let (slot_type, pad, wrap_in_some) = match shape {
             SlotShape::Absent => {
-                case_slots.push(None);
+                case_slots.push(CaseSlots::Absent);
                 continue;
             }
             SlotShape::Direct(pad) => (*payload, *pad, false),
@@ -791,7 +810,7 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
             slot_pads.push(pad);
             slot_types.len() - 1
         };
-        case_slots.push(Some(CaseSlot {
+        case_slots.push(CaseSlots::Flat(CaseSlot {
             index,
             wrap_in_some,
         }));
@@ -1735,7 +1754,7 @@ fn build_result_tuple(
         .case_slots
         .get(case_index as usize)
         .copied()
-        .flatten();
+        .and_then(CaseSlots::flat);
     for i in 0..layout.slot_types.len() {
         let live = slot.filter(|s| s.index == i).and_then(|s| {
             payload.map(|p| {
@@ -2176,6 +2195,7 @@ fn tag_read(body: &mut Body, local: u32, tuple_type: TypeId, cx: &SiteCx) -> Exp
 /// hole in that check, not an input the rewrite may silently drop.
 fn slot_read(body: &mut Body, local: u32, layout: &Layout, case_index: u32, cx: &SiteCx) -> ExprId {
     let slot = layout.case_slots[case_index as usize]
+        .flat()
         .unwrap_or_else(|| panic!("variant-return SROA: payload read on unit case {case_index}"));
     let slot_type = layout.slot_types[slot.index];
     let field = slot.index + 1;
