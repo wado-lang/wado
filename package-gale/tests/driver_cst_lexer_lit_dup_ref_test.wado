@@ -1,0 +1,28 @@
+//! A lexer rule deduped against a parser literal still gets its own matcher
+//! when another lexer rule references it.
+
+use g from "./grammars/lexer_lit_dup_ref.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_lit_dup_ref" },
+    };
+use { TK_EOF } from "./grammars/lexer_lit_dup_ref.g4";
+
+fn dump(input: &String) -> String {
+    return g::to_lexer_string(&g::tokenize(input), TK_EOF);
+}
+
+test "the referencing rule matches through the deduped rule" {
+    assert dump(&"zzkw") == "[@0,0:3='zzkw',<2>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n", dump(&"zzkw");
+}
+
+// The parser literal wins the dedup and emits its own anonymous token, where
+// ANTLR4 treats the literal as an alias for `K` and emits `K` — issue #1752.
+#[TODO]
+test "the deduped rule still tokenizes as itself" {
+    assert dump(&"kw") == "[@0,0:1='kw',<1>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n", dump(&"kw");
+}
+
+test "both alternatives parse" {
+    assert g::parse(&"kw").ok(), "the literal alternative";
+    assert g::parse(&"zzkw").ok(), "the rule-reference alternative";
+}

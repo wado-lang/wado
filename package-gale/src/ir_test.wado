@@ -249,6 +249,16 @@ test "synthesize_implicit_tokens: undefined parser-rule TokenRef becomes a virtu
     assert check_references(&g) matches { Ok(_) };
 }
 
+test "check_references: a lexer rule cannot reference a tokens { } declaration" {
+    let g = parsed("grammar T; tokens { VIRT } s : A ; A : VIRT ; WS : ' ' -> skip;");
+    assert check_references(&g) matches { Err(_) }, "a declaration has no text for a lexer rule to match";
+}
+
+test "check_references: a parser rule may reference a tokens { } declaration" {
+    let g = parsed("grammar T; tokens { VIRT } s : VIRT ; WS : ' ' -> skip;");
+    assert check_references(&g) matches { Ok(_) }, "declaring a token is what tokens { } is for";
+}
+
 test "synthesize_implicit_tokens: dedups repeated references" {
     let mut g = parsed("grammar T; prog : K_IN K_IN EOF;");
     synthesize_implicit_tokens(&mut g);
