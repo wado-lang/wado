@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785855119887,
+  "lastUpdate": 1785881901705,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46081,6 +46081,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5df7f8af6b2fe5102044b2064fd4062274ac9a36"
         },
         "date": 1785855119020,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6034,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16249,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272423,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ff3f8dda0f36539ecc254a2f2478c4488113c086",
+          "message": "Merge pull request #1758 from wado-lang/claude/fma-wado-check-mnagd6\n\nfeat(stdlib)!: round breaks ties away from zero; add round_ties_even and exp10",
+          "timestamp": "2026-08-05T08:06:43+10:00",
+          "tree_id": "cf1c6eebb54a8f6970e1edea4d875f552e44447c",
+          "url": "https://github.com/wado-lang/wado/commit/ff3f8dda0f36539ecc254a2f2478c4488113c086"
+        },
+        "date": 1785881901038,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
