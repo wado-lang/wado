@@ -29,8 +29,35 @@ struct LocalDefInfo {
     tees: u32,
 }
 
-/// Propagate trivial copies (`alias = source`) across a function: every use of
-/// `alias` is replaced with `source`, then the now-dead copy is deleted.
+/// What a propagated local's uses are replaced by.
+#[derive(Clone)]
+enum CopySource {
+    /// `alias = source`, another local.
+    Local(String),
+    /// `alias = <immediate constant>`. Terminal: nothing can invalidate it, so
+    /// it needs no invariance check and ends any chain reaching it.
+    Const(Box<WirInstr>),
+}
+
+/// An `i32.const` / `ref.null` and friends: no operands, no allocation, and no
+/// larger than the `local.get` it replaces, so substituting one at every use
+/// costs nothing in size or evaluation. `struct.new` is deliberately excluded
+/// even though it is const-expressible — duplicating it would allocate once per
+/// use.
+fn is_immediate_const(instr: &WirInstr) -> bool {
+    matches!(
+        instr,
+        WirInstr::I32Const(_)
+            | WirInstr::I64Const(_)
+            | WirInstr::F32Const(_)
+            | WirInstr::F64Const(_)
+            | WirInstr::RefNull { .. }
+    )
+}
+
+/// Propagate trivial copies (`alias = source`) and constant bindings
+/// (`alias = 0`) across a function: every use of `alias` is replaced, then the
+/// now-dead definition is deleted.
 ///
 /// A copy `LocalSet { alias, LocalGet { source } }` is propagated when:
 /// - `alias` is single-def: this copy is its only `LocalSet`, it is never
@@ -66,7 +93,7 @@ fn propagate_copies_in_function(body: &mut [WirInstr], params: &IndexSet<String>
     counter.visit_body(body);
 
     // 2. Collect candidate copies `alias -> source`.
-    let mut candidates: IndexMap<String, String> = IndexMap::default();
+    let mut candidates: IndexMap<String, CopySource> = IndexMap::default();
     let mut collector = CopyCollector {
         counts: &counts,
         params,
@@ -127,31 +154,39 @@ impl WirRefVisitor for DefCounter<'_> {
 struct CopyCollector<'a> {
     counts: &'a IndexMap<String, LocalDefInfo>,
     params: &'a IndexSet<String>,
-    candidates: &'a mut IndexMap<String, String>,
+    candidates: &'a mut IndexMap<String, CopySource>,
 }
 
 impl WirRefVisitor for CopyCollector<'_> {
     fn visit_instr(&mut self, instr: &WirInstr) {
         if let WirInstr::LocalSet { name: alias, value } = instr
-            && let WirInstr::LocalGet { name: source, .. } = value.as_ref()
-            && alias != source
             && !self.params.contains(alias)
-        {
-            // `alias` must be single-def (this copy) and never tee'd, so every
-            // read of it observes this copy.
-            let alias_single_def = self
+            // `alias` must be single-def (this definition) and never tee'd, so
+            // every read of it observes this value.
+            && self
                 .counts
                 .get(alias)
-                .is_some_and(|i| i.defs == 1 && i.tees == 0);
-            // `source` must be single-assignment and never tee'd, so its value
-            // is invariant across the function. A parameter with no definition
-            // qualifies (`defs == 0`).
-            let source_invariant = self
-                .counts
-                .get(source)
-                .is_none_or(|i| i.defs <= 1 && i.tees == 0);
-            if alias_single_def && source_invariant {
-                self.candidates.insert(alias.clone(), source.clone());
+                .is_some_and(|i| i.defs == 1 && i.tees == 0)
+        {
+            match value.as_ref() {
+                WirInstr::LocalGet { name: source, .. } if alias != source => {
+                    // `source` must be single-assignment and never tee'd, so
+                    // its value is invariant across the function. A parameter
+                    // with no definition qualifies (`defs == 0`).
+                    if self
+                        .counts
+                        .get(source)
+                        .is_none_or(|i| i.defs <= 1 && i.tees == 0)
+                    {
+                        self.candidates
+                            .insert(alias.clone(), CopySource::Local(source.clone()));
+                    }
+                }
+                konst if is_immediate_const(konst) => {
+                    self.candidates
+                        .insert(alias.clone(), CopySource::Const(Box::new(konst.clone())));
+                }
+                _ => {}
             }
         }
         self.walk_instr(instr);
@@ -177,7 +212,7 @@ impl WirRefVisitor for CopyCollector<'_> {
 /// straight-line code, so definitions inside it leak to the enclosing scope.
 fn check_dominance_in_body(
     body: &[WirInstr],
-    candidates: &IndexMap<String, String>,
+    candidates: &IndexMap<String, CopySource>,
     params: &IndexSet<String>,
     defined: &mut IndexSet<String>,
     disqualified: &mut IndexSet<String>,
@@ -189,7 +224,7 @@ fn check_dominance_in_body(
 
 fn check_dominance_in_instr(
     instr: &WirInstr,
-    candidates: &IndexMap<String, String>,
+    candidates: &IndexMap<String, CopySource>,
     params: &IndexSet<String>,
     defined: &mut IndexSet<String>,
     disqualified: &mut IndexSet<String>,
@@ -206,7 +241,7 @@ fn check_dominance_in_instr(
             // its definition must dominate the copy (or it is a parameter).
             // Otherwise the copy could capture an earlier value while `source`
             // is still rewritten before the alias is read.
-            if let Some(source) = candidates.get(name)
+            if let Some(CopySource::Local(source)) = candidates.get(name)
                 && !params.contains(source)
                 && !defined.contains(source)
             {
@@ -276,12 +311,13 @@ fn check_dominance_in_instr(
 }
 
 /// Collapse `a -> b -> c` chains so every alias maps to its ultimate source.
-fn resolve_chains(candidates: &IndexMap<String, String>) -> IndexMap<String, String> {
+/// A constant ends a chain, so `a = b; b = 0` resolves both to `0`.
+fn resolve_chains(candidates: &IndexMap<String, CopySource>) -> IndexMap<String, CopySource> {
     // Path-compress each alias to its ultimate source, memoizing into `subst` so
     // each chain node is walked once across all aliases. A naive per-alias walk
     // is O(N²) on a long copy chain (e.g. a large sequence-literal builder),
     // which makes large generated parsers time out at -O3 (#1472 follow-up).
-    let mut subst: IndexMap<String, String> = IndexMap::default();
+    let mut subst: IndexMap<String, CopySource> = IndexMap::default();
     for alias in candidates.keys() {
         if subst.contains_key(alias) {
             continue;
@@ -291,7 +327,7 @@ fn resolve_chains(candidates: &IndexMap<String, String>) -> IndexMap<String, Str
         let mut current = alias.clone();
         // Resolve to: an already-memoized target, a non-candidate (ultimate
         // source), or a cycle (`None` — leave the path unpropagated, sound).
-        let end: Option<String> = loop {
+        let end: Option<CopySource> = loop {
             if let Some(t) = subst.get(&current) {
                 break Some(t.clone());
             }
@@ -299,12 +335,16 @@ fn resolve_chains(candidates: &IndexMap<String, String>) -> IndexMap<String, Str
                 break None;
             }
             match candidates.get(&current) {
-                Some(next) => {
+                Some(CopySource::Local(next)) => {
                     on_path.insert(current.clone());
                     path.push(current.clone());
                     current = next.clone();
                 }
-                None => break Some(current.clone()),
+                Some(konst @ CopySource::Const(_)) => {
+                    path.push(current.clone());
+                    break Some(konst.clone());
+                }
+                None => break Some(CopySource::Local(current.clone())),
             }
         };
         if let Some(end) = end {
@@ -316,23 +356,23 @@ fn resolve_chains(candidates: &IndexMap<String, String>) -> IndexMap<String, Str
     subst
 }
 
-fn apply_in_body(body: &mut [WirInstr], subst: &IndexMap<String, String>) {
+fn apply_in_body(body: &mut [WirInstr], subst: &IndexMap<String, CopySource>) {
     for instr in body.iter_mut() {
         apply_in_instr(instr, subst);
     }
 }
 
-fn apply_in_instr(instr: &mut WirInstr, subst: &IndexMap<String, String>) {
+fn apply_in_instr(instr: &mut WirInstr, subst: &IndexMap<String, CopySource>) {
     match instr {
         // The single, trivial copy that defined this alias — now dead.
         WirInstr::LocalSet { name, .. } if subst.contains_key(name) => {
             *instr = WirInstr::Nop;
         }
-        WirInstr::LocalGet { name, .. } => {
-            if let Some(source) = subst.get(name) {
-                *name = source.clone();
-            }
-        }
+        WirInstr::LocalGet { name, .. } => match subst.get(name) {
+            Some(CopySource::Local(source)) => *name = source.clone(),
+            Some(CopySource::Const(konst)) => *instr = (**konst).clone(),
+            None => {}
+        },
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
             apply_in_body(body, subst);
         }
