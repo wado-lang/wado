@@ -489,24 +489,109 @@ fn gen_lexer_match_fns(
 ) {
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
+    check_lexer_calls_resolve(lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
     for let rule of lexer_rules {
-        if rule.is_virtual {
-            // Virtual token (from `tokens { }` block): no match function
-            // needed — the tokenizer can never produce it directly. Only
-            // `type(X)` rewrites or actions can emit one.
-        } else if !rule.is_fragment {
-            if !is_keyword_rule_name(&rule.name, keywords)
-                && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
-                gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class, ea, hm, sc_name);
-            }
-        } else if fragment_is_recursive(rule, lexer_rules) {
-            // A recursive fragment needs its own `try_*` matcher (non-
-            // recursive fragments are inlined at each use site). `gen_lexer_match_fn`
-            // resolves case-insensitivity from `resolve_ci(grammar_opts,
-            // &rule.options)`, so a rule-level `options { caseInsensitive=... }`
-            // on the fragment overrides the grammar-level flag.
+        if lexer_rule_has_match_fn(rule, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci) {
+            // `gen_lexer_match_fn` resolves case-insensitivity from
+            // `resolve_ci(grammar_opts, &rule.options)`, so a rule-level
+            // `options { caseInsensitive=... }` overrides the grammar flag.
             gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class, ea, hm, sc_name);
         }
+    }
+}
+
+/// Whether `rule` gets its own `try_` matcher.
+///
+/// Two independent demands. The dispatch path needs one unless another matcher
+/// already covers the rule's text — a keyword rides its carrier's
+/// reclassification, a fixed literal rides the shared literal matcher — and a
+/// virtual token has no text to match at all. A rule another lexer rule
+/// references is called by name, so it needs one whatever dispatch decided; a
+/// non-recursive fragment is the exception, being inlined at each use site.
+fn lexer_rule_has_match_fn(
+    rule: &LexerRule,
+    lexer_rules: &List<LexerRule>,
+    keywords: &List<KeywordInfo>,
+    lit_tokens: &List<LitToken>,
+    grammar_opts: &List<GrammarOption>,
+    grammar_ci: bool,
+) -> bool {
+    if rule.is_virtual {
+        return false;
+    }
+    if rule.is_fragment {
+        return fragment_is_recursive(rule, lexer_rules);
+    }
+    if !is_keyword_rule_name(&rule.name, keywords) && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
+        return true;
+    }
+    return lexer_rule_is_called(rule, lexer_rules);
+}
+
+/// Every `try_` call the emitter is about to make resolves to a matcher.
+///
+/// A rule reference lowers to a call by name, while which rules get a matcher
+/// is decided separately (keyword reclassification, literal dedup, virtual
+/// tokens). A mismatch would otherwise reach the user as `unknown function
+/// 'try_X'` against generated source, with no way back to the rule that asked
+/// for it — so it is caught here, where the names are still in hand.
+fn check_lexer_calls_resolve(
+    lexer_rules: &List<LexerRule>,
+    keywords: &List<KeywordInfo>,
+    lit_tokens: &List<LitToken>,
+    grammar_opts: &List<GrammarOption>,
+    grammar_ci: bool,
+) {
+    for let caller of lexer_rules {
+        let mut called: List<String> = [];
+        for let alt of &caller.body {
+            for let elem of &alt.elements {
+                collect_lexer_calls(elem, lexer_rules, &mut called);
+            }
+        }
+        for let name of &called {
+            let target = find_lexer_rule(lexer_rules, name);
+            let ok = if let Some(t) = target {
+                lexer_rule_has_match_fn(t, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
+            } else {
+                false;
+            };
+            if !ok {
+                panic(
+                    `lexer rule '${caller.name}' calls ${lexer_try_fn_name(name)}, but '${*name}' has no matcher`,
+                );
+            }
+        }
+    }
+}
+
+/// Names `elem` reaches through a generated call rather than inlining, matching
+/// the `RuleRef` arm of `gen_lexer_elem`.
+fn collect_lexer_calls(elem: &LexerElement, all_rules: &List<LexerRule>, out: &mut List<String>) {
+    match *elem {
+        RuleRef(name) => {
+            if name == "EOF" {
+                return;
+            }
+            let frag = find_fragment(all_rules, &name);
+            if let Some(f) = frag {
+                if !fragment_is_recursive(f, all_rules) {
+                    return;
+                }
+            }
+            out.push(name);
+        },
+        Group(alts) => {
+            for let alt of &alts {
+                for let e of &alt.elements {
+                    collect_lexer_calls(e, all_rules, out);
+                }
+            }
+        },
+        Repeat(rep) => collect_lexer_calls(&rep.element, all_rules, out),
+        Not(not_elem) => collect_lexer_calls(&not_elem.element, all_rules, out),
+        _ => {
+        },
     }
 }
 
