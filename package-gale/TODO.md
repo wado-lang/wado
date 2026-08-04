@@ -28,7 +28,7 @@ The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that c
 
 Entries state the symptom, how to reproduce it, and anything already measured — not a diagnosis or a proposed fix. A diagnosis written here reads as an instruction later, and two have been wrong: one would have broken compatibility if implemented as written, the other described a difference that did not exist.
 
-- [ ] `\p{...}` covers what the UCD names: general categories, scripts, blocks, binary properties (including the emoji ones), and the `General_Category=` / `Script=` / `Block=` forms. What ANTLR4 takes from ICU on top of that is still rejected with "unsupported Unicode property" — the POSIX aliases (`\p{Alnum}`, `\p{Digit}`, `\p{Blank}`, `\p{Graph}`, `\p{Print}`, `\p{XDigit}`), any other enumerated property (`\p{Bidi_Class=L}`), the `LC` / `Cased_Letter` category group (the one group that is not a prefix of its members), and ANTLR4's own `\p{EmojiPresentation=EmojiDefault}`. No corpus grammar needs one — RustLexer's are in comments.
+- [ ] `\p{...}` reaches what the UCD names, not the ICU surface ANTLR4 adds on top of it. Rejected with "unsupported Unicode property": the POSIX aliases (`\p{Alnum}`, `\p{Digit}`, `\p{Blank}`, `\p{Graph}`, `\p{Print}`, `\p{XDigit}`), enumerated properties beyond `General_Category=` / `Script=` / `Block=` (`\p{Bidi_Class=L}`), the `LC` / `Cased_Letter` category group (the one group that is not a prefix of its members), and ANTLR4's own `\p{EmojiPresentation=EmojiDefault}`. No corpus grammar needs one — RustLexer's are in comments.
 
 ### Pipeline and tooling correctness
 

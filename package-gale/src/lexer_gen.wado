@@ -1496,30 +1496,16 @@ fn gen_lexer_alt_seq(
                 gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action, ci, ea, hm);
                 return;
             }
-            // Greedy Plus / Star whose inner is a single-char-consuming
-            // shape (Literal of one char / CharRange / CharClass /
-            // AnyChar / Not over any of those / Group of single-element
-            // alts) and whose entire suffix is also single-char-consuming:
-            // a naive greedy loop can over-shoot and strand the suffix at
-            // end-of-input (`'a' ~('b')+ 'c'` over `abc` is the canonical
-            // ANTLR4 descriptor — `Sets/UnicodeNegated*`). ANTLR4's lexer
-            // obtains the longest match via NFA→DFA simulation; we
-            // replicate that here in a single forward pass with explicit
-            // accept-state tracking (no backtracking). At every iteration
-            // we peek whether the suffix could start at the current
-            // position and record the latest such position; once the
-            // inner stops matching we resume the cursor at that recorded
-            // position and consume the suffix.
-            //
-            // The plain greedy loop is wrong only where the inner can eat a
-            // char the suffix needs, so that is the trigger
-            // (`lexer_repeat_can_eat_suffix`); everywhere else the loop stops
-            // exactly where the suffix must start and the cheaper emit stands.
-            // Three more conditions: the inner must consume exactly one char
-            // per iteration, or the recorded position and the peek fall out of
-            // step; the suffix must be peekable — which is about what it
-            // carries, not its shape; and no predicate may sit after the
-            // repeat, since the peek/commit emitter has nowhere to place one.
+            // A naive greedy loop can over-shoot and strand the suffix at
+            // end-of-input (`'a' ~('b')+ 'c'` over `abc`, the canonical
+            // `Sets/UnicodeNegated*` descriptor). ANTLR4's lexer gets the
+            // longest match by NFA→DFA simulation; the same answer comes out
+            // of a single forward pass with explicit accept-state tracking —
+            // each iteration peeks whether the suffix could start here and
+            // records the latest such position, and once the inner stops
+            // matching the cursor resumes there. Only an inner that can eat a
+            // char the suffix needs has that problem; everywhere else the loop
+            // already stops where the suffix must start.
             if rep.kind matches { Plus | Star }
                 && i + 1 < alt.elements.len()
                 && lexer_element_can_consume_simple(&rep.element)
@@ -1546,11 +1532,8 @@ fn gen_lexer_alt_seq(
             }
         }
         // An alternation with something after it cannot be decided by which arm
-        // matches first — unless no two arms can match at the same position
-        // (`lexer_alts_can_collide`), where first-match already is the answer.
-        // A suffix carrying a predicate also keeps the first-match emit, since
-        // scoring the arms would evaluate it once per arm
-        // (`lexer_suffix_is_peekable`).
+        // matches first — unless no two arms can match at the same position,
+        // where first-match already is the answer.
         if let Group(g_alts) = elem {
             if g_alts.len() >= 2
                 && i + 1 < alt.elements.len()
@@ -1952,12 +1935,12 @@ fn lexer_element_can_consume_simple(elem: &LexerElement) -> bool {
     };
 }
 
-/// True when the suffix can be safely peeked via a `save-pos / try-suffix /
-/// restore-pos` block. `gen_lexer_suffix_seq` lowers it exactly as the commit
-/// will and `pos` is restored, so shape is not the constraint — a semantic
-/// predicate is. The peek would evaluate it once per scored arm or repeat
-/// iteration and again on commit, changing how often the grammar sees it and
-/// letting a state-dependent one answer differently in the two passes.
+/// True when the suffix can be safely peeked. Shape is not the constraint —
+/// `gen_lexer_suffix_seq` lowers it as the commit will and `pos` is restored
+/// — but a semantic predicate is: the peek would evaluate it once per scored
+/// arm or repeat iteration and again on commit, changing how often the
+/// grammar sees it and letting a state-dependent one answer differently in
+/// the two passes.
 fn lexer_suffix_is_peekable(elements: &List<LexerElement>, all_rules: &List<LexerRule>) -> bool {
     if elements.is_empty() {
         return false;
@@ -2161,8 +2144,10 @@ fn gen_lexer_alts_lookahead_aware(
 }
 
 /// Lower a suffix the way the alternative it was cut from would have: one
-/// `gen_lexer_alt_seq` over its elements. Both the peek and the commit go
-/// through here, so what a peek proves is what the commit then runs.
+/// `gen_lexer_alt_seq` over its elements, so a repeat under it min-matches or
+/// gets its own lookahead-aware loop and a tail alternation takes maximal
+/// munch. Both the peek and the commit go through here, so what a peek proves
+/// is what the commit then runs.
 fn gen_lexer_suffix_seq(
     w: &mut CodeWriter,
     suffix: &List<LexerElement>,
@@ -2183,13 +2168,6 @@ fn gen_lexer_suffix_seq(
 /// `accept_var` iff the suffix would match starting here. Pos is restored
 /// unconditionally so the surrounding forward scan continues without
 /// committing the peeked suffix.
-///
-/// The suffix goes through `gen_lexer_alt_seq`, not element by element: a
-/// repeat under it is the caller's own shape one level down (a non-greedy one
-/// min-matches, a greedy one gets its own lookahead-aware loop), and an
-/// alternation in tail position takes maximal munch. Peeking a weaker
-/// lowering than the commit runs is how a peek comes back "no match" for
-/// input the commit would have matched.
 ///
 /// `record_end` picks which position: a repeat wants where the suffix would
 /// START, to resume its cursor there; an alternation wants where it would END,

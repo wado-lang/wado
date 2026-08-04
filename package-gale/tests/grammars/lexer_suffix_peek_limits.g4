@@ -12,7 +12,7 @@
 // `C` / `D`: a non-greedy repeat under the suffix needs its min-match; peeked
 // greedily, `.*?` swallows the terminator.
 // `E`: `F` resolves its own `caseInsensitive`, so its first char set is `X`
-// *and* `x`, which `[a-z]` overlaps.
+// *and* `x`, which `[e-h]` overlaps.
 // `G`: a complement behind a rule reference cannot be read case-folded —
 // folding narrows it, and `~'a'` does overlap `'A'+`.
 lexer grammar LexerSuffixPeekLimits;

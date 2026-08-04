@@ -1,18 +1,18 @@
-// Soundness gap: an at-end alternative dropped by the opaque-rule
-// expansion path.
+// An alternative that ends where the others continue, behind a shared opaque
+// prefix.
 //
-// `e`'s three alts all open on `X`. Alts 0 and 1 enter multi-token rules
-// (`a`, `b`), so the SLL walk marks them opaque and hands the token to
-// `try_expand_opaque`, which expands `a` / `b` one token deep and finds
-// `Y` and `Z` separate them. Alt 2 is complete after `X`: its FIRST set
-// at that depth is empty, so the token loop never sees it, and the
-// coverage check only verifies the opaque alts:
+// `e`'s three alts all open on `X`. Alts 0 and 1 enter multi-token rules, so
+// the SLL walk expands them one token deep and finds `Y` / `Z` separate them.
+// Alt 2 is complete after `X`, so it claims no token of its own at that depth
+// and a dispatch on `Y` / `Z` would leave it unreachable:
 //
 //   Dispatch[d=0] [TK_X] -> Dispatch[d=1] [TK_Y] -> alt 0
 //                                         [TK_Z] -> alt 1
 //
-// Nothing claims a bare `X`, and the fallback tournament is seeded from
-// the branches, so alt 2 is unreachable and a valid input is rejected.
+// Nothing there claims a bare `X`, and the fallback tournament is seeded from
+// the branches. `r : e EOF` is the half where no caller continues on `Y` / `Z`,
+// so the decision belongs to the tournament; `ll_opaque_at_end_context.g4` is
+// the half that needs the simulator.
 
 grammar LlOpaqueAtEndGap;
 

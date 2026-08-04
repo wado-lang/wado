@@ -2,14 +2,11 @@
 // char sequence)
 // License: same as the Gale package
 //
-// The arm of an alternation followed by a suffix must be chosen by how far
-// the WHOLE rule reaches (`lexer_alt_suffix_longest.g4`). That choice used to
-// need a suffix built from single-char-consuming elements; a suffix holding a
-// repeat, a fragment reference, or an alternation with a multi-element arm
-// fell back to first-match and mis-lexed input ANTLR4 accepts.
-//
-// Each rule below is a shape outside the old window, on input where the first
-// arm reaches less far than the second.
+// The arm of an alternation followed by a suffix is chosen by how far the
+// WHOLE rule reaches (`lexer_alt_suffix_longest.g4`), whatever the suffix is
+// built from. Each rule below is a suffix shape beyond a plain char sequence
+// — a repeat, a fragment reference, an alternation with a multi-element arm —
+// on input where the first arm reaches less far than the second.
 lexer grammar LexerAltSuffixShapes;
 
 // Repeat suffix: `'a'` + no `'c'` reaches 1 char, `'ab'` + `'c'` reaches 3.

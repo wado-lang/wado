@@ -374,11 +374,9 @@ explicit accept-state tracking, never a remembered-position retry. When a
 greedy `+`/`*` inner can eat a char the suffix needs (`'a' ~('b')+ 'c'`),
 the emitter peeks the suffix each iteration and rewinds once to the latest
 legal suffix start. The peek lowers the suffix through the same path the
-commit will run, so what it proves is what then happens — peeking a weaker
-lowering is how a peek comes back "no match" for input the commit would have
-matched. A suffix carrying a semantic predicate keeps the plain greedy loop
-instead: the peek would evaluate the predicate once per iteration and again
-on commit.
+commit will run, so what it proves is what then happens. A suffix carrying a
+semantic predicate keeps the plain greedy loop instead: the peek would
+evaluate the predicate once per iteration and again on commit.
 
 The first-character dispatch that picks which rules to try is a filter, not a
 decision: a rule admitted by its first character can still fail on the rest of

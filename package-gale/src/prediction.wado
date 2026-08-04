@@ -784,11 +784,8 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
     return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
 }
 
-/// The alts alive at an expansion point, ordered as the caller's own
-/// fallback orders them: the surviving non-opaque configs first, then the
-/// opaque alts. Keeping both sites on one order keeps the alt list — which
-/// `find_merge_branch` compares element-wise — independent of which of them
-/// produced the node.
+/// The alts alive at an expansion point, ordered as the caller's own fallback
+/// orders them: the surviving non-opaque configs first, then the opaque alts.
 fn expansion_alts(configs: &List<SllConfig>, opaque_alts: &List<i32>) -> List<i32> {
     let mut alts = sll_unique_alts(configs);
     for let oa of opaque_alts {
@@ -883,13 +880,12 @@ fn try_expand_opaque(
     let mut all_tokens: List<i32> = [];
     let mut config_firsts: List<List<i32>> = [];
     collect_config_first_tokens(&all_configs, ctx, &mut all_tokens, &mut config_firsts);
-    // A config with an empty FIRST set claims no token here, so every branch
-    // below is built without it — and the coverage check only inspects the
-    // opaque alts, so it does not notice. An at-end config is the expected
-    // shape: its alt is complete and the next token belongs to the calling
-    // context, which is what `build_sll_node` reports as `AtEndConflict`.
-    // Anything else with an empty FIRST is outside what this walk models, so
-    // the expansion is abandoned and the tournament takes the decision.
+    // A config with an empty FIRST set claims no token here, so no branch
+    // below can carry it and the coverage check — opaque alts only — does not
+    // notice. At-end is the expected shape: the alt is complete and the next
+    // token belongs to the calling context, which is what `build_sll_node`
+    // reports as `AtEndConflict`. Any other empty FIRST is outside what this
+    // walk models, so the expansion is abandoned to the tournament.
     let mut has_at_end = false;
     for let mut i = 0; i < all_configs.len(); i += 1 {
         if !config_firsts[i].is_empty() {
