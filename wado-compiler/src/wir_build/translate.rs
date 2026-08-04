@@ -2470,7 +2470,6 @@ impl FunctionTranslator<'_, '_> {
                 let val = self.translate_operand(value);
                 match &arena.exprs[target].kind {
                     ExprKind::Local { index, .. } => {
-                        // A stackless local has no Wasm representation
                         if self.is_stackless_type(arena.exprs[target].type_id) {
                             return val;
                         }
@@ -2497,10 +2496,8 @@ impl FunctionTranslator<'_, '_> {
                     ExprKind::FieldAccess { expr: receiver, .. }
                         if self.is_stackless_type(arena.exprs[target].type_id) =>
                     {
-                        // Stackless field assignment: the field has no Wasm
-                        // representation. Emit the receiver for side effects (then
-                        // drop the ref), and emit val for side effects (it produces
-                        // nothing because a stackless type has no representation).
+                        // Neither side leaves a value, so both run for their
+                        // effects alone and the receiver's reference is dropped.
                         let recv = self.translate_operand(*receiver);
                         WirInstr::Seq(vec![val, WirInstr::Drop(Box::new(recv))])
                     }

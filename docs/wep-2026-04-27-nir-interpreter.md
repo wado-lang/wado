@@ -199,13 +199,14 @@ Sequences:
   observable. A container the frame never filled stays as the source wrote it:
   an empty one is a reservation rather than a result, and a literal cannot
   carry the capacity it asked for.
-- Written back over a node that consumed its source — a call, a self-contained
-  region — or over a container still computing contents the engine already
-  knows, which is what a value copy of a constant leaves behind and what a
-  derived wire name costs on every call otherwise. The second admits the very
-  kind the rewrite produces, so it asks for the *un*materialized form: refusing
-  what was already written is what keeps the worklist settling, which the first
-  gets from its kinds for free.
+- Written back wherever the write buys something, which is everywhere but two
+  shapes already holding the answer. One is the literal the rewrite itself
+  produces: refusing what was already written is what keeps the worklist
+  settling. The other is a read of a globalized constant, whose value is in a
+  shared slot precisely so it is built once — a literal in its place is that
+  constant copied back to every site. Anything else is written, including the
+  field read and the borrow operand a derived wire name would otherwise cost on
+  every call.
 
 Regions:
 
@@ -275,8 +276,8 @@ Regions:
 - An aggregate that is not a byte sequence has no way back into the IR. A
   `List<T>` of scalars would want the `ArrayLiteral` shape, and a plain struct
   a `StructLiteral` over its materialized fields; both are exits to add beside
-  the byte-sequence one, and both inherit its `Call`-only restriction until
-  something establishes the value did not come from the node being rewritten.
+  the byte-sequence one, each needing its own answer to "is this already the
+  literal the rewrite writes" so the worklist still settles.
 - Comparing two literal strings. A string pattern reaches the engine as a
   guard, and deciding it means running the comparison — which is a method call
   taking references, so it waits on the two entries below rather than on the

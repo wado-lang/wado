@@ -2227,6 +2227,9 @@ fn dead_pure_binding(
 /// - a read bound to a local nothing mentions, which is what folding a member's
 ///   facts out of the walk leaves behind.
 ///
+/// Both are conditional on the value being one this pass may delete
+/// ([`deletable_value`]) — a trap is observed like any other effect.
+///
 /// A global with no observation left loses its guard, its store, and those
 /// bindings. It then has no reads at all, which the reachability census below
 /// already answers, and its initializer goes with it.

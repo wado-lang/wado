@@ -444,7 +444,7 @@ A user `impl Inspect for Element { ... }` (or `Display`, etc.) shadows the auto-
 
 #### `serde` is a compile error on resources
 
-Wado's `Serialize` / `Deserialize` are synthesized via the body-less `impl Trait for Type;` form (see [WEP: Serde](./wep-2026-02-28-serde.md)). For a resource type — or any struct or variant that transitively contains one — the synthesis **fails at compile time**:
+Wado derives `Serialize` / `Deserialize` where a use or bound asks for them (see [WEP: Serde](./wep-2026-02-28-serde.md)). For a resource type — or any struct or variant that transitively contains one — the derivation **fails at compile time**:
 
 ```wado
 pub resource Element extends Node { ... }

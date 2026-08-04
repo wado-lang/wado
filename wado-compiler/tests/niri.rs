@@ -3632,7 +3632,6 @@ fn array_literal_reduces_to_the_container_it_denotes() {
     );
 }
 
-/// A container struct over `backing` and the length it holds.
 fn container_lit(type_id: TypeId, backing: Build, used: u64) -> Build {
     Rc::new(move |b| {
         let backing = backing(b);
