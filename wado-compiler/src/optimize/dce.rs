@@ -96,6 +96,36 @@ pub struct DceAnalysis {
     pub enum_exact: IndexSet<(String, ModuleSource)>,
 }
 
+impl DceAnalysis {
+    /// Whether `s` survives the sweep.
+    ///
+    /// The one predicate: the closure that pulls a struct's field types into
+    /// the reachable set reads it, and so does the retain that drops the rest.
+    /// Two spellings would let a struct be kept whose fields were never
+    /// walked, and it would outlive the ids its own fields name.
+    ///
+    /// A struct's stored `name` predates newtype / flags erasure while the
+    /// reachable set renders after it, so one type spells two ways
+    /// (`FlagsBit<Perms>` against `FlagsBit<u32>`). Both spellings count.
+    fn keeps_struct(&self, s: &crate::nir::NirStruct, type_table: &TypeTable) -> bool {
+        let Some(mono) = &s.monomorph_info else {
+            return self
+                .struct_exact
+                .contains(&(s.name.clone(), s.module_source.clone()))
+                || self.generic_instance_names.contains(s.name.as_str())
+                || self.struct_monomorph_bases.contains(s.name.as_str());
+        };
+        if self.struct_monomorph_names.contains(s.name.as_str()) {
+            return true;
+        }
+        let rendered = type_table.struct_rendered_name(&mono.generic_name, &mono.impl_type_args);
+        self.struct_monomorph_names.contains(rendered.as_str())
+            || type_table
+                .find_struct_by_name(&rendered, &s.module_source)
+                .is_some_and(|id| self.types.contains(&id))
+    }
+}
+
 /// Compute every DCE input from the unpruned `project` in dependency
 /// order: function reachability → global reachability → type
 /// reachability. Each downstream step (`remove_unreachable_functions`,
@@ -1816,27 +1846,9 @@ fn populate_type_reachability(
         // Gale-generated parser, dominating the whole DCE pass.
         analysis.refresh_indexes(&type_table);
 
-        // A struct's fields are kept iff its Struct type, any
-        // `GenericInstance` of its name, or any monomorphized variant
-        // sharing its base name is reachable.
+        // A struct that survives the sweep keeps its field types.
         for tir_struct in &project.structs {
-            let struct_reachable = if tir_struct.monomorph_info.is_none() {
-                analysis
-                    .struct_exact
-                    .contains(&(tir_struct.name.clone(), tir_struct.module_source.clone()))
-                    || analysis
-                        .generic_instance_names
-                        .contains(tir_struct.name.as_str())
-                    || analysis
-                        .struct_monomorph_bases
-                        .contains(tir_struct.name.as_str())
-            } else {
-                analysis
-                    .struct_monomorph_names
-                    .contains(tir_struct.name.as_str())
-            };
-
-            if struct_reachable {
+            if analysis.keeps_struct(tir_struct, &type_table) {
                 for field in &tir_struct.fields {
                     collect_type_transitive(field.type_id, &type_table, &mut analysis.types);
                 }
@@ -1974,42 +1986,12 @@ fn collect_type_dependencies(
 /// `analysis` is precomputed by [`analyze_dce`] — this function only
 /// retains entries matching its precomputed indexes.
 pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis) {
-    // A struct is kept if:
-    // 1. Its Struct type is reachable, OR
-    // 2. Any GenericInstance with its base name is reachable (e.g., Box<i32> for Box)
-    // 3. Any monomorphized Struct with its base name is reachable
-    // A struct's stored `name` predates newtype / flags erasure while the
-    // reachability set renders after it, so one type spells two ways
-    // (`FlagsBit<Perms>` against `FlagsBit<u32>`). Render both the same way.
-    let monomorph_render = |s: &crate::nir::NirStruct| {
-        let mono = s.monomorph_info.as_ref()?;
-        Some(
-            project
-                .type_table
-                .borrow()
-                .struct_rendered_name(&mono.generic_name, &mono.impl_type_args),
-        )
-    };
-    let reachable_struct_id = |rendered: &str, module_source: &ModuleSource| {
+    {
         let type_table = project.type_table.borrow();
-        type_table
-            .find_struct_by_name(rendered, module_source)
-            .is_some_and(|id| analysis.types.contains(&id))
-    };
-    project.structs.retain(|s| {
-        if s.monomorph_info.is_none() {
-            analysis
-                .struct_exact
-                .contains(&(s.name.clone(), s.module_source.clone()))
-                || analysis.generic_instance_names.contains(s.name.as_str())
-                || analysis.struct_monomorph_bases.contains(s.name.as_str())
-        } else {
-            let rendered = monomorph_render(s).unwrap_or_else(|| s.name.clone());
-            analysis.struct_monomorph_names.contains(s.name.as_str())
-                || analysis.struct_monomorph_names.contains(rendered.as_str())
-                || reachable_struct_id(&rendered, &s.module_source)
-        }
-    });
+        project
+            .structs
+            .retain(|s| analysis.keeps_struct(s, &type_table));
+    }
     project.variants.retain(|v| {
         analysis
             .variant_exact

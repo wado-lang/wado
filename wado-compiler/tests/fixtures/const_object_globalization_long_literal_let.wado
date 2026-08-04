@@ -7,19 +7,23 @@
 // inline threshold keeps the `array.new_data` repr, which is not
 // Wasm-const-expressible, so the assignment survives — and an unguarded one
 // re-runs where the `let` stood, here once per loop iteration.
+//
+// The list is what keeps the binding standing: a plain `let msg = "..."` is
+// folded into its use, and globalization then hoists the in-place literal
+// under the `&`-shape's wider eager bound instead.
 
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
     for let mut i = 0; i < 2; i += 1 {
-        let msg = "hello world";
-        println(`${i}:${msg}`);
+        let names: List<String> = ["alpha", "bravo"];
+        println(`${i}:${names[i % 2]}`);
     }
 }
 
 __DATA__
 {
-    "stdout": "0:hello world\n1:hello world\n",
+    "stdout": "0:alpha\n1:bravo\n",
     "wir_expect:O2": [
         "if ref.is_null(global:const_object_globalization_long_literal_let.wado::__const_obj_"
     ]

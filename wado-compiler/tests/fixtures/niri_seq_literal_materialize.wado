@@ -1,6 +1,7 @@
 // A constant that reaches its use through a copy is still a constant. The
-// copy's source folds, so the container is written as a byte literal instead of
-// allocating a second array and copying into it on every call.
+// copy's source folds, so the container is written as a byte literal — one
+// hoisted to an eager global — instead of allocating a second array and
+// copying into it on every call.
 struct Field {
     field_name: String,
 }
@@ -28,6 +29,6 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_expect:O2": ["array.new_data<u8>(\"id_str\")"],
+    "wir_expect:O2": ["array.new_fixed<u8>(105, 100, 95, 115, 116, 114)"],
     "wir_not_expect:O2": ["__array_clone_dst"]
 }

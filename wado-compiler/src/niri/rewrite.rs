@@ -104,12 +104,12 @@ impl Interpreter<'_> {
     /// A declined scalar is always memoized — the scratch backend promotes
     /// nothing, so the memo is where its folds live.
     ///
-    /// An aggregate is written back over a shape that consumed its source
-    /// ([`consumes_its_source`]) or over a container still holding the work the
-    /// literal replaces ([`Self::is_unmaterialized_seq_literal`]). Only the
-    /// first is memoized: a revisit would re-run a body to recompute it, while
-    /// a materialized container still derives its own value from the literal
-    /// left in its place.
+    /// An aggregate is written back wherever the write buys something
+    /// ([`Self::is_worth_materializing`]), and over a shape that consumed its
+    /// source ([`consumes_its_source`]) regardless. Only the latter is
+    /// memoized: a revisit would re-run a body to recompute it, while every
+    /// other shape still derives its own value from the literal left in its
+    /// place.
     fn commit_fold<S: EditSink>(&mut self, sink: &mut S, e: ExprId, value: Value) -> bool {
         let node_type = sink.body().exprs[e].type_id;
         if self.type_table.is_reference_shaped(node_type) {
@@ -123,7 +123,7 @@ impl Interpreter<'_> {
             return false;
         }
         let consumes = consumes_its_source(&sink.body().exprs[e].kind);
-        if !consumes && !self.is_unmaterialized_seq_literal(sink.body(), e) {
+        if !consumes && !self.is_worth_materializing(sink.body(), e) {
             return false;
         }
         let committed = self.materialize_seq_via(sink, e, &value);
@@ -133,36 +133,56 @@ impl Interpreter<'_> {
         committed
     }
 
-    /// A sequence container whose backing is not yet a packed literal. Writing
-    /// the constant over one drops an allocation and a copy the program would
-    /// otherwise make for a value the engine already knows.
+    /// Whether writing the value over `e` buys anything.
     ///
-    /// The test is for the *un*materialized form because
-    /// [`Self::materialize_seq_via`] writes a container literal too: refusing
-    /// what it wrote is what makes the rewrite happen once, which the
-    /// [`consumes_its_source`] shapes get from their kinds for free.
+    /// It does everywhere but two shapes that already hold the answer. One is
+    /// the literal [`Self::materialize_seq_via`] writes — refusing it is what
+    /// makes the rewrite happen once, which the [`consumes_its_source`] shapes
+    /// get from their kinds for free.
+    ///
+    /// The other is a read of a global. Const-object globalization put the
+    /// value there so it is built once and shared; a literal in its place is
+    /// that constant copied back to every site, and the store left behind
+    /// outlives the slot the reachability census then drops.
+    fn is_worth_materializing(&self, body: &Body, e: ExprId) -> bool {
+        !matches!(body.exprs[e].kind, ExprKind::GlobalVarGet { .. })
+            && !self.is_materialized_seq_literal(body, e)
+    }
+
+    /// A sequence container still computing its contents: the shape whose
+    /// value is worth asking the lattice for, because writing the constant
+    /// over one drops an allocation and a copy.
     fn is_unmaterialized_seq_literal(&self, body: &Body, e: ExprId) -> bool {
+        self.seq_literal_backing(body, e)
+            .is_some_and(|b| !matches!(b, ExprKind::PackedArray(_)))
+    }
+
+    /// Whether `e` already holds the literal [`Self::materialize_seq_via`]
+    /// writes.
+    fn is_materialized_seq_literal(&self, body: &Body, e: ExprId) -> bool {
+        self.seq_literal_backing(body, e)
+            .is_some_and(|b| matches!(b, ExprKind::PackedArray(_)))
+    }
+
+    /// The backing array a sequence container literal is built over.
+    fn seq_literal_backing<'b>(&self, body: &'b Body, e: ExprId) -> Option<&'b ExprKind> {
         let ExprKind::StructLiteral {
             struct_type,
             fields,
             ..
         } = &body.exprs[e].kind
         else {
-            return false;
+            return None;
         };
         if !self.type_table.is_seq_container(*struct_type) {
-            return false;
+            return None;
         }
-        let Some(backing) = fields
+        fields
             .iter()
-            .find(|f| f.field_index == SeqField::Backing.index())
-        else {
-            return false;
-        };
-        !matches!(
-            backing.value.as_expr().map(|b| &body.exprs[b].kind),
-            Some(ExprKind::PackedArray(_))
-        )
+            .find(|f| f.field_index == SeqField::Backing.index())?
+            .value
+            .as_expr()
+            .map(|b| &body.exprs[b].kind)
     }
 
     /// Write `value` back over `e` as the container literal the lower phase
