@@ -100,12 +100,12 @@ The rule that resolves it uses only types NIR already has. It keys on the
 payload's _Wasm representation_, not its NIR shape, because that is what
 decides whether the wrapper costs anything:
 
-| payload type `T`                                                                                                                                      | slot type   | live value | pad          |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ---------- | ------------ |
-| scalar at Wasm level: primitive, `enum`, `flags`, `char`, `bool`, `v128`, and `resource` / `stream` / `future` (all `WirType::I32`, `context.rs:952`) | `T`         | `v`        | zero literal |
-| already null-representable: `Option<X>` for ref-represented `X`                                                                                       | `T`         | `v`        | `None`       |
-| any other ref: `struct`, `String`, `List<X>`, `variant`, `Option<scalar>`                                                                             | `Option<T>` | `Some(v)`  | `None`       |
-| `Unit`                                                                                                                                                | (no slot)   | —          | —            |
+| payload type `T`                                                                                                                              | slot type   | live value | pad          |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ---------- | ------------ |
+| scalar at Wasm level: primitive, `enum`, `flags`, `char`, `bool`, and `resource` / `stream` / `future` (all `WirType::I32`, `context.rs:952`) | `T`         | `v`        | zero literal |
+| already null-representable: `Option<X>` for ref-represented `X`                                                                               | `T`         | `v`        | `None`       |
+| any other ref: `struct`, `String`, `List<X>`, `variant`, `Option<scalar>`                                                                     | `Option<T>` | `Some(v)`  | `None`       |
+| `Unit`                                                                                                                                        | (no slot)   | —          | —            |
 
 The `Option<T>` wrapper in row 3 is free. `wir_optimize::nullable_ref` lowers a
 2-case `{Unit, Payload(ref T)}` variant to a bare nullable ref, so `Option<T>`
@@ -128,8 +128,16 @@ not in this row — it is an ordinary boxed variant struct, so row 3 applies and
 A pad is never read — the reader tests the tag first. If a future pass gets
 that wrong, an `Option` slot unwraps through `RefAsNonNull` and traps, rather
 than silently producing a mistyped value. A zero-padded `resource` slot has no
-such guard, which matches what the WIR pass already emits today
+such guard, which matches what the WIR pass emitted
 (`default_value_for_type` → `I32Const(0)`).
+
+`v128`, `i128` and `u128` are declined outright. The pad is what decides it:
+every row above needs a zero the pass can mint as a promoted value, and
+`ValueKind` has no `v128` literal — while `i128` / `u128` occupy two Wasm
+results, which the slot count does not model. The WIR pass could pad all three,
+because `default_value_for_type` works on `WirType` after lowering; retiring it
+gives the shapes up. Nothing measured exercises them
+(`tests/fixtures/opt_variant_return_v128_payload.wado` pins the decline).
 
 ### Layout: shared and per-case
 

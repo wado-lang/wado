@@ -627,6 +627,20 @@ fn tail_call_callee(body: &Body, op: Operand) -> Option<FuncId> {
     tail_call_site(body, op).map(|(f, _)| f)
 }
 
+/// Every callee this body tail-calls — the functions whose candidacy it is
+/// tied to.
+fn tail_call_callees(body: &Body) -> Vec<FuncId> {
+    let mut out = Vec::new();
+    for stmt in body.stmts.values() {
+        if let StmtKind::Return { value: Some(v) } = &stmt.kind
+            && let Some(f) = tail_call_callee(body, *v)
+        {
+            out.push(f);
+        }
+    }
+    out
+}
+
 // -----------------------------------------------------------------------
 // Phase 1: layout
 // -----------------------------------------------------------------------
@@ -926,9 +940,6 @@ fn collect_and_validate(
         );
     }
 
-    // The tail-call rule couples caller and callee candidacy in both
-    // directions, so refute to a fix-point: optimistic (assume-then-refute), so
-    // a mutually tail-recursive group survives.
     // A tail call is fine when its callee already returns this variant's tuple,
     // whether it was scalarized in this round or an earlier one. Refusing the
     // earlier ones reboxed every tail call inlining exposed after its callee
@@ -943,6 +954,49 @@ fn collect_and_validate(
         })
         .collect();
 
+    // `return g(x)` ties the two signatures together: neither can take the
+    // tuple unless both do. The gate offers only what changed, so a mutually
+    // tail-recursive pair can arrive one at a time — and each is then refused
+    // for the other's absence, in every round, forever. Pull in the tail-call
+    // closure so the group is decided as the unit it is.
+    let mut frontier: Vec<FuncId> = candidates.keys().copied().collect();
+    while let Some(key) = frontier.pop() {
+        let variant_type = candidates[&key].variant_type;
+        let callees = {
+            let func = project.functions[key.index()].borrow();
+            let body = func
+                .body
+                .as_ref()
+                .expect("is_eligible rejects a body-less function");
+            tail_call_callees(body)
+        };
+        for callee in callees {
+            if candidates.contains_key(&callee) || already.contains_key(&callee) {
+                continue;
+            }
+            let func = project.functions[callee.index()].borrow();
+            if !is_eligible(&func) || func.return_type != variant_type {
+                continue;
+            }
+            let layout = layout_cache
+                .entry(variant_type)
+                .or_insert_with(|| compute_layout(project, variant_type))
+                .clone();
+            let Some(layout) = layout else { continue };
+            candidates.insert(
+                callee,
+                Candidate {
+                    layout,
+                    variant_type,
+                },
+            );
+            frontier.push(callee);
+        }
+    }
+
+    // The tail-call rule couples caller and callee candidacy in both
+    // directions, so refute to a fix-point: optimistic (assume-then-refute), so
+    // a mutually tail-recursive group survives.
     while !candidates.is_empty() {
         let mut tail_ok = already.clone();
         for (&key, cand) in &candidates {
