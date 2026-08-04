@@ -139,7 +139,7 @@ fn first_run_compiles_second_run_hits_cache() {
         );
     }
 
-    // Second call: same source, same stable-id → must hit the cache,
+    // Second call: same sources, same identity → must hit the cache,
     // return identical bytes, and leave the compile counter untouched.
     // No sleep needed — `compile_count` is the direct observation
     // point, not filesystem mtime.
@@ -147,7 +147,7 @@ fn first_run_compiles_second_run_hits_cache() {
         .block_on(async { provider.resolve(&module).await })
         .expect("second compile should succeed from cache");
     // Wasm bytes and source hash must round-trip. Descriptor `span`
-    // info is intentionally not persisted through the JSON sidecar, so
+    // info is intentionally not persisted through the index, so
     // descriptor equality is checked field-by-field where it matters.
     assert_eq!(
         first.wasm, second.wasm,
@@ -183,9 +183,9 @@ fn source_edit_invalidates_cache() {
         .expect("first compile should succeed");
     assert_eq!(provider.compile_count(), 1);
 
-    // Rewrite the source. The stable-id is `sha256(path || content)`,
-    // so a content change picks a different cache key and must force
-    // a fresh compile.
+    // Rewrite the source. The identity is the hash of the source
+    // closure, so a content change picks a different cache key and must
+    // force a fresh compile.
     let edited = format!("{MINIMAL_GENERATOR}\nfn __touched() -> bool {{ return true; }}\n");
     std::fs::write(&gen_path, edited).unwrap();
 
@@ -398,7 +398,7 @@ fn transitive_dep_edit_invalidates_cache() {
     // `wado test` would happily reuse the previous WASM.
     //
     // The fix records every `.wado` file the inner compile loaded
-    // into a `<stable_id>.sources.json` sidecar; cache hits re-hash
+    // into the index's source list; cache hits re-hash
     // those entries and miss when any drift.
     let tmp = unique_tmp("kiln-compile-transitive");
     let _ = std::fs::remove_dir_all(&tmp);
@@ -440,7 +440,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     assert_eq!(provider.compile_count(), 1);
 
     // Cache hit on the entry file alone — the entry's SHA-256 is
-    // unchanged, so the v1 stable-id keeps pointing at the same WASM.
+    // unchanged, so an entry-file-only key kept pointing at the same WASM.
     let _second = runtime()
         .block_on(async { provider.resolve(&module).await })
         .expect("second compile should succeed");
@@ -450,9 +450,9 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         "cache hit when no source drifted"
     );
 
-    // Now edit the transitive helper. Without sidecar validation the
+    // Now edit the transitive helper. Without closure validation the
     // cache would hit again (entry SHA-256 unchanged); with the fix the
-    // sidecar's recorded hash for `helper.wado` no longer matches the
+    // index's recorded hash for `helper.wado` no longer matches the
     // file on disk and the provider falls back to a fresh compile.
     std::fs::write(
         &helper_path,
@@ -470,7 +470,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         "transitive dep edit must invalidate the WASM cache"
     );
 
-    // After the rebuild the new sidecar should reflect the latest
+    // After the rebuild the new index should reflect the latest
     // helper hash, so a fourth call hits cache cleanly.
     let _fourth = runtime()
         .block_on(async { provider.resolve(&module).await })

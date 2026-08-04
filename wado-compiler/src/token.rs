@@ -261,10 +261,10 @@ impl Span {
 ///
 /// **Stability constraint:** any change to `TokenKind` (rename a variant,
 /// add a keyword, tweak a payload) alters this encoding and therefore
-/// invalidates every cached `<stable_id>.sources.json` sidecar and the
+/// invalidates every cached generator component and the
 /// `generator_source_hash` field of every committed `*.kiln.json`. Bump
 /// the magic in `wado-cli/src/kiln_provider.rs::combined_sources_hash`
-/// (and `SIDECAR_VERSION`) in lockstep, and expect a single noisy diff
+/// (and `INDEX_VERSION`) in lockstep, and expect a single noisy diff
 /// against committed kiln json after the bump lands.
 pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
     use TokenKind::{

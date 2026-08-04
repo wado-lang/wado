@@ -88,6 +88,11 @@ static BUILDS: LazyLock<Mutex<IndexMap<(PathBuf, String), Arc<tokio::sync::Mutex
 
 /// Serializes read-modify-write of any project index. Held only across a small
 /// JSON round-trip, never across a build, so one global costs nothing.
+///
+/// Process-local, so two `wado` processes writing different generators of one
+/// project can still drop each other's entry. The cost is a rebuild — the
+/// component is content-addressed and stays valid, and the next run rewrites
+/// the entry — which is not worth a lock file to avoid.
 static INDEX_WRITES: Mutex<()> = Mutex::new(());
 
 /// The build lock for one generator. The map guard is released before the
@@ -160,22 +165,23 @@ impl CliGeneratorProvider {
         self.compile_count.load(Ordering::SeqCst)
     }
 
-    /// The generator's absolute path, with `.`/`..` folded away.
+    /// The generator's real, absolute path.
     ///
-    /// Absolute and normalized because the compiler embeds this string in the
-    /// component it produces, while the cache names that component after its
-    /// *sources*. Left as given, `wado test` run from inside the package and
-    /// from the repo root would compile the same generator to different bytes
-    /// and file both under one name. Folding is lexical rather than
-    /// `canonicalize`, which would also resolve symlinks.
+    /// The compiler embeds this string in the component it produces, while the
+    /// cache names that component after its *sources* — so it has to be one
+    /// canonical spelling per file, or the same generator compiles to different
+    /// bytes depending on which project addressed it or which directory the
+    /// command ran from, and both land under a single name.
+    ///
+    /// `canonicalize` rather than lexical folding, because a package reached
+    /// through a symlink resolves its `../` differently than text does: folding
+    /// `link/../shared-gen` textually names a directory that may not exist.
+    /// It needs the file to be there, which is the normal case; when it is not,
+    /// fall back to the lexical form so the caller's not-found error names the
+    /// path the user wrote rather than an io error.
     fn resolve_path(&self, rel: &str) -> PathBuf {
         let joined = self.manifest_root.join(Path::new(rel));
-        let absolute = if joined.is_absolute() {
-            joined
-        } else {
-            std::env::current_dir().unwrap_or_default().join(joined)
-        };
-        normalize_path(&absolute)
+        std::fs::canonicalize(&joined).unwrap_or_else(|_| normalize_path(&joined))
     }
 
     fn index_path(&self) -> PathBuf {
@@ -227,13 +233,25 @@ impl CliGeneratorProvider {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut index = GeneratorIndex::load(&path).unwrap_or_default();
         index.version = INDEX_VERSION;
-        index
+        let superseded = index
             .generators
-            .insert(module_path.to_string(), identity.clone());
+            .insert(module_path.to_string(), identity.clone())
+            .map(|previous| previous.source_hash);
         index.generators.sort_keys();
         if let Ok(mut bytes) = serde_json::to_vec_pretty(&index) {
             bytes.push(b'\n');
             let _ = crate::cache::write_atomic(&path, &bytes);
+        }
+        // Content-addressed names are never reused, so without this every edit
+        // to any of the generator's sources would leave another component
+        // behind for good — the scheme it replaced at least overwrote in place.
+        // Only drop one nothing still points at: two modules with identical
+        // sources legitimately share a component.
+        if let Some(orphan) = superseded.filter(|hash| {
+            hash != &identity.source_hash
+                && !index.generators.values().any(|g| &g.source_hash == hash)
+        }) {
+            let _ = std::fs::remove_file(self.component_path(&orphan));
         }
     }
 
@@ -368,8 +386,7 @@ impl CliGeneratorProvider {
         let mut artifacts = artifacts?;
 
         // Drain the recorded sources, dedup paths (the compiler can request
-        // the same module more than once), and persist the closure sidecar
-        // alongside the cached WASM. The combined hash is what the kiln
+        // the same module more than once). The combined hash is what the kiln
         // driver records in `Metadata::generator_source_hash`.
         let mut recorded = loaded
             .lock()
@@ -528,8 +545,7 @@ const KILN_GENERATOR_ABI_TAG: &[u8] = b"kiln-generator-v3\n";
 /// 2. Record every `load_source` call into `loaded` (path + content
 ///    hash) so the transitive *load closure* — `.wado` modules **and**
 ///    raw assets pulled via `#include_bytes` — is persisted into the
-///    sidecar, letting an edit to either kind invalidate the wasm
-///    cache. The recording is best-effort: duplicate paths from the
+///    index, letting an edit to either kind invalidate the cache. The recording is best-effort: duplicate paths from the
 ///    compiler are collapsed by the dedup step in `compile_local`.
 struct SilentHost {
     inner: FilesystemCompilerHost,
@@ -603,7 +619,7 @@ fn is_wado_source(path: &str) -> bool {
 /// back to a plain content hash.
 ///
 /// On lex failure we deliberately fall back to the byte hash: the file
-/// might be a `.wado` shaped sidecar that is not actually parseable
+/// might be `.wado` shaped but not actually parseable
 /// (broken on disk between the cache write and validate), and the
 /// downstream cache check will still detect drift via byte-hash
 /// inequality.
@@ -910,7 +926,7 @@ impl CliGeneratorProvider {
     /// shared `~/wado/` cache and rebuild its `ResolvedGenerator`. The descriptor
     /// is recovered from the component WIT every time rather than cached
     /// separately, so a component written by `wado fetch` (which does not persist
-    /// a descriptor sidecar) is a full cache hit. `None` on a cache miss or an
+    /// no descriptor) is a full cache hit. `None` on a cache miss or an
     /// unreadable component.
     fn try_read_spec_cache(
         &self,
@@ -1198,8 +1214,8 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
             "first resolve runs the inner compiler exactly once"
         );
 
-        // The compile-and-write path persists wasm + sources sidecar
-        // (+ descriptor); assert they all landed so the next resolve
+        // The compile-and-write path persists the component and the index
+        // entry; assert they landed so the next resolve
         // exercises the on-disk cache.
         // The compile publishes two things: the component, under its source
         // hash, and the index recording that identity.
@@ -1218,7 +1234,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
         // Second resolve must hit the on-disk cache and skip the compile.
         // The wasm and source-hash must match byte-for-byte; the
         // descriptor's `span` info is intentionally not persisted
-        // through the JSON sidecar (it would drift across edits), so
+        // through the index (it would drift across edits), so
         // compare descriptor facets rather than the whole struct.
         let resolved2 = runtime()
             .block_on(async { provider.resolve(&module).await })
@@ -1249,7 +1265,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
 
     #[test]
     fn resolve_after_source_edit_recompiles() {
-        // Regression: keying purely off the entry-file `stable_id`
+        // Regression: keying the cache off the entry file alone
         // must invalidate when the source changes. Combined with the
         // index's transitive-file hash list, an edit to either the
         // entry or a dep must trigger exactly one fresh compile.
