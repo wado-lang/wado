@@ -92,6 +92,19 @@
 //! A case payload that is itself a variant is *not* declined — it takes a
 //! [`SlotShape::Wrapped`] slot, and `flatten_variant_slots` splits that slot
 //! further if the WIR shapes allow.
+//!
+//! # Where a call's result is read
+//!
+//! [`call_sites`] is the only answer. Validation, the call-site rewrite, the
+//! repair and the invariant check all read it, so they differ in what they do
+//! with a site and never in which sites exist.
+//!
+//! That is not a tidiness rule. Each of the four used to derive the answer for
+//! itself, and every gap between them was a defect — a binding the rewrite bound
+//! and validation refused; a call the rewrite retyped and the repair wrapped
+//! back into a variant; a `let` the assertion never looked at; a position one
+//! reached through a block tail and another only bare. Add a consumer by reading
+//! [`call_sites`], never by writing a fifth traversal.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionKind, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal};
@@ -334,15 +347,39 @@ fn scalarized_returns(project: &NirPackage) -> IndexMap<FuncId, (TypeId, Layout)
 /// behind — a scalarized callee inlined into a rewritten call site becomes a
 /// labeled block typed by the tuple, and its own tail calls now exit through
 /// `break L: f(x)`.
-fn handled_call_sites(
-    body: &Body,
-    scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
-    own_return: TypeId,
-) -> IndexSet<ExprId> {
-    let mut out: IndexSet<ExprId> = IndexSet::default();
+/// One place a call's result is consumed at a type the consumer declares.
+#[derive(Clone, Copy)]
+struct CallSite {
+    call: ExprId,
+    callee: FuncId,
+    /// The type the consumer reads the result at. For a `let` that is the
+    /// binding's declared type; for a `return`, the function's own return type;
+    /// for a labeled-block exit or tail, the block's result type.
+    expected: TypeId,
+    /// The local, when the consumer is a `let`.
+    bound_local: Option<u32>,
+}
+
+/// Every call site in `body` — the single definition of where this pass
+/// considers a call's result to be read.
+///
+/// Validation ([`invalidate_bad_call_sites`]), the call-site rewrite
+/// ([`bound_temps`]), the repair ([`handled_call_sites`]) and the invariant
+/// check ([`debug_assert_call_sites_rewritten`]) all read this and nothing
+/// else, so they differ in what they do with a site and never in which sites
+/// exist. Four subtly different rules used to live in those four places, and
+/// every gap between them was a defect: a binding the rewrite bound and
+/// validation refused, a call the rewrite retyped and the repair wrapped back
+/// into a variant, a `let` the assertion never looked at.
+///
+/// A `return` reaches further than the others on purpose — through an `If`
+/// branch or a `Match` / `Switch` arm, because [`rewrite_return_value`] rewrites
+/// those in place. That asymmetry is deliberate and now visible in one place
+/// instead of implied by four traversals.
+fn call_sites(body: &Body, own_return: TypeId) -> Vec<CallSite> {
     // A label reused at two different result types tells us nothing about which
     // block a `break` exits, so it is dropped rather than guessed at: guessing
-    // wrong here skips a rebox that was needed.
+    // wrong skips a rebox that was needed.
     let mut label_types: IndexMap<&str, Option<TypeId>> = IndexMap::default();
     for expr in body.exprs.values() {
         if let ExprKind::LabeledBlock {
@@ -359,50 +396,141 @@ fn handled_call_sites(
                 .or_insert(Some(*result_type));
         }
     }
-    let accept = |value: Operand, expected: TypeId, out: &mut IndexSet<ExprId>| {
-        // Through a block tail as well as bare: by the time a later iteration
-        // sees this binding, `let_block_flatten` and friends may have wrapped
-        // the call in a block, and a bare-only match would call its own earlier
-        // work a straggler and rebox it under a tuple-typed binding.
-        if let Some((func_id, call)) = tail_call_site(body, value)
-            && scalarized
-                .get(&func_id)
-                .is_some_and(|(_, l)| l.tuple_type == expected)
-        {
-            out.insert(call);
+    let mut out = Vec::new();
+    collect_call_sites(
+        body,
+        NodeRef::Block(body.root),
+        own_return,
+        &label_types,
+        &mut out,
+    );
+    out
+}
+
+fn collect_call_sites(
+    body: &Body,
+    node: NodeRef,
+    own_return: TypeId,
+    label_types: &IndexMap<&str, Option<TypeId>>,
+    out: &mut Vec<CallSite>,
+) {
+    let mut direct = |value: Operand, expected: TypeId, bound_local: Option<u32>| {
+        // Through a block tail as well as bare: by the time a later round sees
+        // this site, `let_block_flatten` and friends may have wrapped the call
+        // in a block, and a bare-only match would call the pass's own earlier
+        // work a straggler.
+        if let Some((callee, call)) = tail_call_site(body, value) {
+            out.push(CallSite {
+                call,
+                callee,
+                expected,
+                bound_local,
+            });
         }
     };
-    for stmt in body.stmts.values() {
-        match &stmt.kind {
-            StmtKind::Let { type_id, value, .. } => accept(*value, *type_id, &mut out),
-            // The tail-call rule: `return g(x)` passes the callee's tuple
-            // straight through, but only from a function that returns that
-            // tuple, and only from a tail position.
+    match node {
+        NodeRef::Stmt(s) => match &body.stmts[s].kind {
+            StmtKind::Let {
+                type_id,
+                value,
+                local_index,
+                ..
+            } => direct(*value, *type_id, Some(*local_index)),
             StmtKind::Return { value: Some(value) } => {
-                collect_return_tail_calls(body, *value, own_return, scalarized, &mut out);
+                collect_return_tail_calls(body, *value, own_return, out);
             }
             StmtKind::Break {
                 label: Some(label),
                 value: Some(value),
             } => {
                 if let Some(&Some(expected)) = label_types.get(label.as_str()) {
-                    accept(*value, expected, &mut out);
+                    direct(*value, expected, None);
                 }
             }
             _ => {}
+        },
+        NodeRef::Expr(e) => {
+            if let ExprKind::LabeledBlock {
+                block, result_type, ..
+            } = &body.exprs[e].kind
+                && let Some(&last) = body.blocks[*block].stmts.last()
+                && let StmtKind::Expr(value) = body.stmts[last].kind
+            {
+                direct(value, *result_type, None);
+            }
         }
+        NodeRef::Block(_) | NodeRef::Pat(_) => {}
     }
-    for expr in body.exprs.values() {
-        if let ExprKind::LabeledBlock {
-            block, result_type, ..
-        } = &expr.kind
-            && let Some(&last) = body.blocks[*block].stmts.last()
-            && let StmtKind::Expr(value) = body.stmts[last].kind
+    body.for_each_child(node, |c| {
+        collect_call_sites(body, c, own_return, label_types, out);
+    });
+}
+
+/// Every call a `return`'s value reaches in tail position: bare, through a block
+/// tail, an `If` branch, or a `Match` / `Switch` arm — exactly the positions
+/// [`return_value_scalarizable`] accepts and [`rewrite_return_value`] rewrites.
+fn collect_return_tail_calls(
+    body: &Body,
+    op: Operand,
+    own_return: TypeId,
+    out: &mut Vec<CallSite>,
+) {
+    let Some(e) = op.as_expr() else { return };
+    let tail_of = |block: BlockId, out: &mut Vec<CallSite>| {
+        if let Some(&last) = body.blocks[block].stmts.last()
+            && let StmtKind::Expr(inner) = body.stmts[last].kind
         {
-            accept(value, *result_type, &mut out);
+            collect_return_tail_calls(body, inner, own_return, out);
         }
+    };
+    match &body.exprs[e].kind {
+        ExprKind::Call { func_id, .. } => out.push(CallSite {
+            call: e,
+            callee: *func_id,
+            expected: own_return,
+            bound_local: None,
+        }),
+        ExprKind::Block(b) => tail_of(*b, out),
+        ExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            tail_of(*then_branch, out);
+            if let Some(b) = *else_branch {
+                tail_of(b, out);
+            }
+        }
+        ExprKind::Match { arms, .. } => {
+            for arm in arms.clone() {
+                collect_return_tail_calls(body, arm.body, own_return, out);
+            }
+        }
+        ExprKind::Switch { arms, default, .. } => {
+            for b in arms.clone().into_iter().chain(std::iter::once(*default)) {
+                tail_of(b, out);
+            }
+        }
+        _ => {}
     }
-    out
+}
+
+/// The call nodes a consumer already reads as the callee's tuple — the repair's
+/// "leave this one alone" set, derived from [`call_sites`].
+fn handled_call_sites(
+    body: &Body,
+    scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
+    own_return: TypeId,
+) -> IndexSet<ExprId> {
+    call_sites(body, own_return)
+        .into_iter()
+        .filter(|s| {
+            scalarized
+                .get(&s.callee)
+                .is_some_and(|(_, l)| l.tuple_type == s.expected)
+        })
+        .map(|s| s.call)
+        .collect()
 }
 
 fn collect_straggler_calls(
@@ -422,62 +550,6 @@ fn collect_straggler_calls(
     body.for_each_child(node, |c| {
         collect_straggler_calls(body, c, scalarized, handled, out);
     });
-}
-
-/// Every call a `return`'s value reaches in tail position: bare, through a block
-/// tail, an `If` branch, or a `Match` / `Switch` arm.
-///
-/// This mirrors [`return_value_scalarizable`], which accepts all of those and
-/// which [`rewrite_return_value`] then rewrites in place. A narrower rule here
-/// makes the repair wrap the pass's own work back into the variant, handing a
-/// `ref Variant` to a position the tuple is required in.
-fn collect_return_tail_calls(
-    body: &Body,
-    op: Operand,
-    expected: TypeId,
-    scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
-    out: &mut IndexSet<ExprId>,
-) {
-    let Some(e) = op.as_expr() else { return };
-    let tail_of = |block: BlockId, out: &mut IndexSet<ExprId>| {
-        if let Some(&last) = body.blocks[block].stmts.last()
-            && let StmtKind::Expr(inner) = body.stmts[last].kind
-        {
-            collect_return_tail_calls(body, inner, expected, scalarized, out);
-        }
-    };
-    match &body.exprs[e].kind {
-        ExprKind::Call { func_id, .. } => {
-            if scalarized
-                .get(func_id)
-                .is_some_and(|(_, l)| l.tuple_type == expected)
-            {
-                out.insert(e);
-            }
-        }
-        ExprKind::Block(b) => tail_of(*b, out),
-        ExprKind::If {
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            tail_of(*then_branch, out);
-            if let Some(b) = *else_branch {
-                tail_of(b, out);
-            }
-        }
-        ExprKind::Match { arms, .. } => {
-            for arm in arms.clone() {
-                collect_return_tail_calls(body, arm.body, expected, scalarized, out);
-            }
-        }
-        ExprKind::Switch { arms, default, .. } => {
-            for b in arms.clone().into_iter().chain(std::iter::once(*default)) {
-                tail_of(b, out);
-            }
-        }
-        _ => {}
-    }
 }
 
 /// Wrap `call` into `{ let __t = call; match __t.0 { k => Case(__t.slot) … } }`,
@@ -668,30 +740,19 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
             stragglers.len(),
             func.name
         );
-        // Reachable statements only. The arena is never compacted, so a rewrite
-        // that replaces a node leaves the old one behind; checking those would
-        // report a violation in code that no longer runs.
-        let mut live = Vec::new();
-        collect_stmts(body, NodeRef::Block(body.root), &mut live);
-        for stmt_id in live {
-            let StmtKind::Let {
-                name,
-                type_id,
-                value,
-                ..
-            } = &body.stmts[stmt_id].kind
-            else {
+        // Every `let` fed by a scalarized callee reads it as the tuple. Read off
+        // the same site list as everything above, so this cannot be checking a
+        // different set of bindings than the rewrite bound.
+        for site in call_sites(body, func.return_type) {
+            let Some(local) = site.bound_local else {
                 continue;
             };
-            let Some(callee) = tail_call_callee(body, *value) else {
-                continue;
-            };
-            let Some((_, layout)) = scalarized.get(&callee) else {
+            let Some((_, layout)) = scalarized.get(&site.callee) else {
                 continue;
             };
             assert!(
-                *type_id == layout.tuple_type,
-                "variant-return SROA left `let {name}` in `{}` typed by the variant \
+                site.expected == layout.tuple_type,
+                "variant-return SROA left local {local} in `{}` typed by the variant \
                  its callee no longer returns",
                 func.name
             );
@@ -1391,17 +1452,24 @@ fn count_local_def_use(
 // -----------------------------------------------------------------------
 
 /// Locals bound directly from a candidate call, and the callee they came from.
-fn bound_temps(body: &Body, candidates: &IndexMap<FuncId, Candidate>) -> IndexMap<u32, FuncId> {
-    let mut out: IndexMap<u32, FuncId> = IndexMap::default();
+fn bound_temps(
+    body: &Body,
+    candidates: &IndexMap<FuncId, Candidate>,
+    own_return: TypeId,
+) -> IndexMap<u32, FuncId> {
     let settled = settled_locals(body);
-    collect_bound_temps(
-        body,
-        NodeRef::Block(body.root),
-        candidates,
-        &settled,
-        &mut out,
-    );
-    out
+    call_sites(body, own_return)
+        .into_iter()
+        .filter_map(|site| {
+            let local = site.bound_local?;
+            // `settled` is required whatever `is_mut` says: `alloc_temp` pools
+            // local indices, so two bindings can share one — and `retype_let`
+            // retypes every `Let` and every read carrying that index, which
+            // would retype the other binding too.
+            (settled.contains(&local) && candidates.contains_key(&site.callee))
+                .then_some((local, site.callee))
+        })
+        .collect()
 }
 
 /// Locals bound exactly once and never assigned again. A `let mut` over one of
@@ -1456,36 +1524,6 @@ fn mark_locals(body: &Body, node: NodeRef, out: &mut IndexSet<u32>) {
     body.for_each_child(node, |c| mark_locals(body, c, out));
 }
 
-fn collect_bound_temps(
-    body: &Body,
-    node: NodeRef,
-    candidates: &IndexMap<FuncId, Candidate>,
-    settled: &IndexSet<u32>,
-    out: &mut IndexMap<u32, FuncId>,
-) {
-    if let NodeRef::Stmt(s) = node
-        && let StmtKind::Let {
-            local_index, value, ..
-        } = &body.stmts[s].kind
-        // `settled` is required whatever `is_mut` says: `alloc_temp` pools
-        // local indices, so two non-`mut` bindings can share one — and
-        // `retype_let` retypes every `Let` and every read carrying that index,
-        // which would retype the other binding too.
-        && settled.contains(local_index)
-        // Through a block tail as well as bare, so this agrees with
-        // `handled_call_sites` and `debug_assert_call_sites_rewritten` on what
-        // counts as a binding fed by a call. A narrower rule here leaves the
-        // binding un-retyped and the two wider ones then disagree with it.
-        && let Some((f, _)) = tail_call_site(body, *value)
-        && candidates.contains_key(&f)
-    {
-        out.insert(*local_index, f);
-    }
-    body.for_each_child(node, |c| {
-        collect_bound_temps(body, c, candidates, settled, out)
-    });
-}
-
 /// Invalidate any candidate whose result is consumed by something other than an
 /// immediate destructure.
 fn invalidate_bad_call_sites(
@@ -1496,7 +1534,16 @@ fn invalidate_bad_call_sites(
     caller_ok: bool,
     invalid: &mut IndexSet<FuncId>,
 ) {
-    let bound = bound_temps(body, candidates);
+    let settled = settled_locals(body);
+    let sites = call_sites(body, func.return_type);
+    let bound: IndexMap<u32, FuncId> = sites
+        .iter()
+        .filter_map(|site| {
+            let local = site.bound_local?;
+            (settled.contains(&local) && candidates.contains_key(&site.callee))
+                .then_some((local, site.callee))
+        })
+        .collect();
     // A bound temp whose address is taken, or which a `stores` parameter
     // aliases, is not a pure destructure target.
     for (&local, &f) in &bound {
@@ -1505,14 +1552,42 @@ fn invalidate_bad_call_sites(
             invalid.insert(f);
         }
     }
+    // Call nodes the rewrite handles where they stand, so the node itself is
+    // not an escape. Derived from the same site list the rewrite and the repair
+    // read — the four used to decide this independently.
+    //
+    // Signatures are still un-rewritten here, so a `return g(x)` site reads its
+    // result at *this* function's variant, never at `g`'s tuple. What makes it
+    // a pass-through is `caller_ok`: the enclosing function is itself becoming a
+    // tuple-returning one. When it is not, the site would need a rebox — the
+    // allocation this pass exists to remove — so the callee is refused instead
+    // and the fix-point propagates it. A `break` or labeled-block exit is not
+    // accepted at all: only the repair handles those.
+    let mut accepted: IndexSet<ExprId> = IndexSet::default();
+    for site in &sites {
+        if !candidates.contains_key(&site.callee) {
+            continue;
+        }
+        match site.bound_local {
+            Some(local) if settled.contains(&local) => {
+                accepted.insert(site.call);
+            }
+            Some(_) => {}
+            None => {
+                if !caller_ok {
+                    invalid.insert(site.callee);
+                }
+                accepted.insert(site.call);
+            }
+        }
+    }
     check_uses(
         body,
         NodeRef::Block(body.root),
         candidates,
         &bound,
         rebind,
-        &settled_locals(body),
-        caller_ok,
+        &accepted,
         invalid,
     );
 }
@@ -1523,47 +1598,11 @@ fn check_uses(
     candidates: &IndexMap<FuncId, Candidate>,
     bound: &IndexMap<u32, FuncId>,
     rebind: &Rebind,
-    settled: &IndexSet<u32>,
-    caller_ok: bool,
+    accepted: &IndexSet<ExprId>,
     invalid: &mut IndexSet<FuncId>,
 ) {
     match node {
-        NodeRef::Stmt(s) => {
-            // The two accepted call positions: a `let` initializer that binds
-            // the result, and a tail `return` inside a co-candidate. Both are
-            // handled by the rewrite, so the call node itself is not an escape.
-            match &body.stmts[s].kind {
-                // Accepted when the binding is the local's sole definition,
-                // `mut` or not: the rewrite retypes the local and every read,
-                // which is exact only then. Looked up through a block tail, as
-                // `collect_bound_temps` does — a bare-`Call` rule here refuses
-                // the `let t = { …; f(r) }` that `let_block_flatten` produces
-                // and that the rewrite binds perfectly well.
-                StmtKind::Let {
-                    value, local_index, ..
-                } if settled.contains(local_index) => {
-                    if tail_call_callee(body, *value).is_some_and(|f| candidates.contains_key(&f)) {
-                        return;
-                    }
-                }
-                // A tail call passes the callee's tuple straight through — but
-                // only if this function has a tuple to pass it through. When it
-                // does not, the site needs a rebox, and a rebox is the
-                // allocation the pass exists to remove: refuse the callee
-                // instead. The fix-point loop propagates the refusal.
-                StmtKind::Return { value: Some(v) } => {
-                    if let Some(f) = tail_call_callee(body, *v)
-                        && candidates.contains_key(&f)
-                    {
-                        if !caller_ok {
-                            invalid.insert(f);
-                        }
-                        return;
-                    }
-                }
-                _ => {}
-            }
-        }
+        NodeRef::Stmt(_) => {}
         NodeRef::Expr(e) => {
             match &body.exprs[e].kind {
                 // A destructuring read of a bound temp; its `Local` child must
@@ -1586,12 +1625,11 @@ fn check_uses(
                         for a in &arms {
                             if let Some(g) = a.guard {
                                 check_uses_operand(
-                                    body, g, candidates, bound, rebind, settled, caller_ok, invalid,
+                                    body, g, candidates, bound, rebind, accepted, invalid,
                                 );
                             }
                             check_uses_operand(
-                                body, a.body, candidates, bound, rebind, settled, caller_ok,
-                                invalid,
+                                body, a.body, candidates, bound, rebind, accepted, invalid,
                             );
                         }
                         return;
@@ -1604,9 +1642,12 @@ fn check_uses(
                     }
                     return;
                 }
-                // A candidate call anywhere else has no place to bind results.
+                // A candidate call at a position `accepted` does not list has
+                // no place to bind its results. Descending into an accepted
+                // call's arguments is deliberate: an argument that mentions
+                // another bound temp bare is still an escape.
                 ExprKind::Call { func_id, .. } => {
-                    if candidates.contains_key(func_id) {
+                    if candidates.contains_key(func_id) && !accepted.contains(&e) {
                         invalid.insert(*func_id);
                     }
                 }
@@ -1616,9 +1657,7 @@ fn check_uses(
         NodeRef::Block(_) | NodeRef::Pat(_) => {}
     }
     body.for_each_child(node, |c| {
-        check_uses(
-            body, c, candidates, bound, rebind, settled, caller_ok, invalid,
-        );
+        check_uses(body, c, candidates, bound, rebind, accepted, invalid);
     });
 }
 
@@ -1628,8 +1667,7 @@ fn check_uses_operand(
     candidates: &IndexMap<FuncId, Candidate>,
     bound: &IndexMap<u32, FuncId>,
     rebind: &Rebind,
-    settled: &IndexSet<u32>,
-    caller_ok: bool,
+    accepted: &IndexSet<ExprId>,
     invalid: &mut IndexSet<FuncId>,
 ) {
     if let Some(e) = op.as_expr() {
@@ -1639,8 +1677,7 @@ fn check_uses_operand(
             candidates,
             bound,
             rebind,
-            settled,
-            caller_ok,
+            accepted,
             invalid,
         );
     }
@@ -2042,7 +2079,7 @@ fn rewrite_call_sites(
         // local, so a `Rebind` taken here still describes every payload binding.
         let rebind = Rebind::new(&func, &project.type_table.borrow());
         changed |= hoist_call_scrutinees(&mut body, &mut func, candidates, &rebind, span);
-        let mut bound = bound_temps(&body, candidates);
+        let mut bound = bound_temps(&body, candidates, func.return_type);
         // A site validated this round is known handleable; one inherited from an
         // earlier round is not, so each temp is re-checked. A temp that fails is
         // dropped here and reboxed instead of half-rewritten.
