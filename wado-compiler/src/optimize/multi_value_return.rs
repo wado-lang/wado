@@ -607,19 +607,19 @@ fn validate_stmt(
 ) {
     match &body.stmts[stmt].kind {
         StmtKind::Let {
-            local_index,
-            value,
-            is_mut,
-            ..
+            local_index, value, ..
         } => {
-            let (local_index, value, is_mut) = (*local_index, *value, *is_mut);
-            // A `mut` binding nothing ever assigns is an immutable one wearing a
-            // `mut`, and splitting the call's results into it is as sound as for
-            // a plain `let`. `sroa_variant_return` draws the same line, and the
-            // two have to agree: it hands this pass tuple-returning functions,
-            // and a call site only one of them accepts leaves the tuple boxed —
-            // an allocation worse than the variant it replaced.
-            if (!is_mut || cx.settled.contains(&local_index))
+            let (local_index, value) = (*local_index, *value);
+            // The binding must be the local's sole definition. A `mut` one that
+            // nothing ever assigns qualifies — it is an immutable binding
+            // wearing a `mut` — and a non-`mut` one does not automatically,
+            // because `alloc_temp` pools local indices and the split rewrites
+            // every read of the index. `sroa_variant_return` draws the same
+            // line, and the two have to agree: it hands this pass
+            // tuple-returning functions, and a call site only one of them
+            // accepts leaves the tuple boxed — an allocation worse than the
+            // variant it replaced.
+            if cx.settled.contains(&local_index)
                 && let Some(candidate_idx) =
                     candidate_call_idx_operand(body, value, cx.candidate_ids)
             {

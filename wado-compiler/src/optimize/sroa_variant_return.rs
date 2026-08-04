@@ -275,24 +275,24 @@ fn rebox_stragglers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             continue;
         };
         let span = func.span;
-        let bound = handled_call_sites(&body, &scalarized);
+        let bound = handled_call_sites(&body, &scalarized, own_return);
         let mut targets: Vec<ExprId> = Vec::new();
         collect_straggler_calls(
             &body,
             NodeRef::Block(body.root),
             &scalarized,
             &bound,
-            own_return,
             &mut targets,
         );
+        let reboxed = !targets.is_empty();
         for call in targets {
             crate::compiler_trace!("sroa_variant_return", "reboxing a call in {}", func.name);
             rebox_call(&mut body, &mut func, call, &scalarized, span);
-            changed = true;
         }
         func.body = Some(body);
-        if changed {
+        if reboxed {
             gate.mark_changed(FuncId::new(i));
+            changed = true;
         }
     }
     changed
@@ -320,13 +320,15 @@ fn scalarized_returns(project: &NirPackage) -> IndexMap<FuncId, (TypeId, Layout)
 }
 
 /// Call nodes whose consumer already reads a tuple: a `let` whose declared type
-/// is the callee's tuple, or an exit from a labeled block of that type. The
-/// second is what `nir/inline` leaves behind — a scalarized callee inlined into
-/// a rewritten call site becomes a labeled block typed by the tuple, and its
-/// own tail calls now exit through `break L: f(x)`.
+/// is the callee's tuple, a `return` from a function returning that tuple, or an
+/// exit from a labeled block of that type. The last is what `nir/inline` leaves
+/// behind — a scalarized callee inlined into a rewritten call site becomes a
+/// labeled block typed by the tuple, and its own tail calls now exit through
+/// `break L: f(x)`.
 fn handled_call_sites(
     body: &Body,
     scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
+    own_return: TypeId,
 ) -> IndexSet<ExprId> {
     let mut out: IndexSet<ExprId> = IndexSet::default();
     // A label reused at two different result types tells us nothing about which
@@ -364,6 +366,10 @@ fn handled_call_sites(
     for stmt in body.stmts.values() {
         match &stmt.kind {
             StmtKind::Let { type_id, value, .. } => accept(*value, *type_id, &mut out),
+            // The tail-call rule: `return g(x)` passes the callee's tuple
+            // straight through, but only from a function that returns that
+            // tuple, and only from the tail position itself.
+            StmtKind::Return { value: Some(value) } => accept(*value, own_return, &mut out),
             StmtKind::Break {
                 label: Some(label),
                 value: Some(value),
@@ -393,21 +399,17 @@ fn collect_straggler_calls(
     node: NodeRef,
     scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
     handled: &IndexSet<ExprId>,
-    own_return: TypeId,
     out: &mut Vec<ExprId>,
 ) {
     if let NodeRef::Expr(e) = node
         && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
-        && let Some((_, layout)) = scalarized.get(func_id)
+        && scalarized.contains_key(func_id)
         && !handled.contains(&e)
-        // A tail call inside a co-scalarized function passes the tuple
-        // straight through; that is the tail-call rule, not a straggler.
-        && own_return != layout.tuple_type
     {
         out.push(e);
     }
     body.for_each_child(node, |c| {
-        collect_straggler_calls(body, c, scalarized, handled, own_return, out);
+        collect_straggler_calls(body, c, scalarized, handled, out);
     });
 }
 
@@ -994,6 +996,19 @@ fn collect_and_validate(
         }
     }
 
+    // A candidate reached from a global initializer has no `let`-bound temp to
+    // destructure there, and the initializer bodies carry no locals list to
+    // mint one; drop any candidate a global mentions at all. This runs *before*
+    // the fix-point, not after: a caller admitted only because `tail_ok` held
+    // one of these would otherwise survive a refusal it depends on, and
+    // `rewrite_return_value` retypes a tail call without rechecking its callee.
+    let mut used_in_globals: IndexSet<FuncId> = IndexSet::default();
+    for global in &project.globals {
+        let body = global.init.slot_expr().body();
+        collect_called(body, NodeRef::Block(body.root), &mut used_in_globals);
+    }
+    candidates.retain(|k, _| !used_in_globals.contains(k));
+
     // The tail-call rule couples caller and callee candidacy in both
     // directions, so refute to a fix-point: optimistic (assume-then-refute), so
     // a mutually tail-recursive group survives.
@@ -1037,16 +1052,6 @@ fn collect_and_validate(
             candidates.swap_remove(k);
         }
     }
-
-    // A candidate reached from a global initializer has no `let`-bound temp to
-    // destructure there, and the initializer bodies carry no locals list to
-    // mint one; drop any candidate a global mentions at all.
-    let mut used_in_globals: IndexSet<FuncId> = IndexSet::default();
-    for global in &project.globals {
-        let body = global.init.slot_expr().body();
-        collect_called(body, NodeRef::Block(body.root), &mut used_in_globals);
-    }
-    candidates.retain(|k, _| !used_in_globals.contains(k));
 
     candidates
 }
@@ -1360,12 +1365,13 @@ fn collect_bound_temps(
 ) {
     if let NodeRef::Stmt(s) = node
         && let StmtKind::Let {
-            local_index,
-            value,
-            is_mut,
-            ..
+            local_index, value, ..
         } = &body.stmts[s].kind
-        && (!*is_mut || settled.contains(local_index))
+        // `settled` is required whatever `is_mut` says: `alloc_temp` pools
+        // local indices, so two non-`mut` bindings can share one — and
+        // `retype_let` retypes every `Let` and every read carrying that index,
+        // which would retype the other binding too.
+        && settled.contains(local_index)
         // Through a block tail as well as bare, so this agrees with
         // `handled_call_sites` and `debug_assert_call_sites_rewritten` on what
         // counts as a binding fed by a call. A narrower rule here leaves the
@@ -1427,16 +1433,16 @@ fn check_uses(
             // the result, and a tail `return` inside a co-candidate. Both are
             // handled by the rewrite, so the call node itself is not an escape.
             match &body.stmts[s].kind {
-                // A `mut` binding is accepted when nothing ever assigns it:
-                // the rewrite retypes the local and every read, which is exact
-                // only while the binding is the local's sole definition.
+                // Accepted when the binding is the local's sole definition,
+                // `mut` or not: the rewrite retypes the local and every read,
+                // which is exact only then. Looked up through a block tail, as
+                // `collect_bound_temps` does — a bare-`Call` rule here refuses
+                // the `let t = { …; f(r) }` that `let_block_flatten` produces
+                // and that the rewrite binds perfectly well.
                 StmtKind::Let {
-                    value,
-                    is_mut,
-                    local_index,
-                    ..
-                } if !*is_mut || settled.contains(local_index) => {
-                    if call_callee(body, *value).is_some_and(|f| candidates.contains_key(&f)) {
+                    value, local_index, ..
+                } if settled.contains(local_index) => {
+                    if tail_call_callee(body, *value).is_some_and(|f| candidates.contains_key(&f)) {
                         return;
                     }
                 }
@@ -1446,7 +1452,7 @@ fn check_uses(
                 // allocation the pass exists to remove: refuse the callee
                 // instead. The fix-point loop propagates the refusal.
                 StmtKind::Return { value: Some(v) } => {
-                    if let Some(f) = call_callee(body, *v)
+                    if let Some(f) = tail_call_callee(body, *v)
                         && candidates.contains_key(&f)
                     {
                         if !caller_ok {
@@ -1969,11 +1975,15 @@ fn rewrite_call_sites(
 /// Retype every call to a rewritten callee. The node's own `type_id` is what
 /// downstream passes and `wir_build` read; leaving the variant there would make
 /// a tuple-returning call claim to produce a boxed variant.
+/// Reports `changed` only when a type actually moved. Reporting the write
+/// itself re-dirties every caller of every scalarized function on each round,
+/// and the gate then never quiesces.
 fn retype_candidate_calls(body: &mut Body, candidates: &IndexMap<FuncId, Candidate>) -> bool {
     let mut changed = false;
     for node in body.exprs.values_mut() {
         if let ExprKind::Call { func_id, .. } = &node.kind
             && let Some(cand) = candidates.get(func_id)
+            && node.type_id != cand.layout.tuple_type
         {
             node.type_id = cand.layout.tuple_type;
             changed = true;

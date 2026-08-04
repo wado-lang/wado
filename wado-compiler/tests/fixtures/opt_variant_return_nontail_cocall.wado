@@ -1,0 +1,46 @@
+// A non-tail call to a co-scalarized callee, from a function returning the
+// same tuple.
+//
+// The rebox backstop exempts a tail `return g(x)` — that is the tail-call rule,
+// not a straggler. Keying the exemption on the caller's return type alone
+// exempts *every* call to `g` in such a function, including one the fast path
+// declined: it is then neither bound nor reboxed, and reaches codegen retyped
+// to a tuple where a variant is expected.
+//
+// `combine` returns the same `Result<i32, String>` as `lookup`, and calls it
+// twice in argument position rather than tail position.
+internal fn lookup(k: i32) -> Result<i32, String> {
+    if k < 0 {
+        return Result::<i32, String>::Err("neg");
+    }
+    return Result::<i32, String>::Ok(k * 2);
+}
+
+internal fn pick(a: Result<i32, String>, b: Result<i32, String>) -> Result<i32, String> {
+    if let Ok(v) = a {
+        if v > 4 {
+            return Result::<i32, String>::Ok(v);
+        }
+    }
+    return b;
+}
+
+internal fn combine(x: i32, y: i32) -> Result<i32, String> {
+    return pick(lookup(x), lookup(y));
+}
+
+export fn run() {
+    let hit = combine(3, 1);
+    assert hit matches { Result::Ok(6) };
+
+    let low = combine(1, 4);
+    assert low matches { Result::Ok(8) };
+
+    let bad = combine(1, -1);
+    assert bad matches { Result::Err(_) };
+}
+
+__DATA__
+{
+    "stdout": ""
+}

@@ -1850,6 +1850,11 @@ fn populate_type_reachability(
     }
 
     // Phase 2: Transitive closure - include struct fields, variant payloads, and type dependencies
+    // Loop-invariant: it reads `project` and the type table, neither of which
+    // the loop mutates. Recomputing it per round put a whole-program walk inside
+    // the pass's hot spot. `remove_unreachable_types` hoists it the same way.
+    let kept_past_use = variant_decls_kept_past_use(project, &project.type_table.borrow());
+
     let mut changed = true;
     while changed {
         changed = false;
@@ -1904,7 +1909,6 @@ fn populate_type_reachability(
         // `GenericInstance` of the variant's name, or a declaration kept past
         // its last use keeps payloads alive. The same predicate gates the
         // `project.variants` retain in `remove_unreachable_types`.
-        let kept_past_use = variant_decls_kept_past_use(project, &type_table);
         for variant in &project.variants {
             let base_reachable = analysis
                 .variant_exact
