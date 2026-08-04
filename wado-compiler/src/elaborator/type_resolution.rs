@@ -138,10 +138,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .flatten()
             .map(|bound| bound.name.clone())
-            .find(|trait_name| {
-                self.find_trait_decl_assoc_type_decls(trait_name)
-                    .is_some_and(|decls| decls.iter().any(|d| d.name == assoc_name))
-            })
+            .find(|trait_name| self.trait_assoc_type_decl(trait_name, assoc_name).is_some())
     }
 
     /// Resolve a namespaced generic type like `ns::Type<T>` or `Self::Output`
@@ -193,7 +190,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let assoc_bounds = self.find_assoc_type_bounds(self_type, &namespaced.name);
                 let bound_names: Vec<String> =
                     assoc_bounds.iter().map(|b| b.name.clone()).collect();
-                let assoc_type_bindings = self.compute_assoc_type_bindings("Self", &assoc_bounds);
+                let assoc_type_bindings =
+                    self.frame_assoc_bindings(self_type, "Self", &assoc_bounds);
                 let owning_trait = self.bound_declaring_assoc_type("Self", &namespaced.name);
                 return self
                     .tysys
@@ -260,7 +258,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // First, check if the current bounds directly specify this assoc type.
             // e.g., I: IntoIterator<Item = u8> → I::Item resolves directly to u8.
             if let Some(direct_type) =
-                self.find_direct_assoc_type_binding(&namespaced.namespace, &namespaced.name)
+                self.frame_projection(param_type_id, &namespaced.namespace, &namespaced.name)
             {
                 return direct_type;
             }
@@ -273,8 +271,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // e.g., IntoIterator::Iter has bound Iterator<Item = Self::Item>.
             // With I: IntoIterator<Item = u8>, Self::Item = I::Item = u8,
             // so I::Iter.assoc_type_bindings = [("Item", u8_typeid)].
-            let assoc_type_bindings =
-                self.compute_assoc_type_bindings(&namespaced.namespace.clone(), &assoc_bounds);
+            let assoc_type_bindings = self.frame_assoc_bindings(
+                param_type_id,
+                &namespaced.namespace.clone(),
+                &assoc_bounds,
+            );
 
             let owning_trait =
                 self.bound_declaring_assoc_type(&namespaced.namespace, &namespaced.name);
@@ -642,51 +643,81 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_default()
     }
 
-    /// Check if type parameter `param_name` has a bound that directly specifies `assoc_name`.
-    /// e.g., I: `IntoIterator`<Item = u8> → `find_direct_assoc_type_binding("I`", "Item") = Some(u8)
-    fn find_direct_assoc_type_binding(
+    /// What this frame knows the projection `base::assoc` to be, where
+    /// `base_name` is the name the frame files `base`'s bounds under.
+    ///
+    /// Two sources answer, in order: the bindings a projection carries
+    /// (`S::SeqSerializer` knowing its `Ok`), then the enclosing `where` clause
+    /// (`I: IntoIterator<Item = u8>` answers `I::Item`).
+    pub(super) fn frame_projection(
         &mut self,
-        param_name: &str,
-        assoc_name: &str,
+        base: TypeId,
+        base_name: &str,
+        assoc: &str,
     ) -> Option<TypeId> {
+        let carried = {
+            let table = self.tysys.type_table.borrow();
+            match table.get(base) {
+                ResolvedType::AssocTypeProjection {
+                    assoc_type_bindings,
+                    ..
+                } => assoc_type_bindings
+                    .iter()
+                    .find(|(name, _)| name == assoc)
+                    .map(|(_, type_id)| *type_id),
+                _ => None,
+            }
+        };
+        if carried.is_some() {
+            return carried;
+        }
         let bounds = self
             .annotate_ctx
             .trait_ctx
             .type_param_bounds
-            .get(param_name)?
+            .get(base_name)?
             .clone();
-        for bound in &bounds {
-            for assoc in &bound.assoc_types {
-                if assoc.name == assoc_name {
-                    return Some(self.resolve_type(&assoc.ty));
-                }
-            }
-        }
-        None
+        bounds
+            .iter()
+            .flat_map(|bound| &bound.assoc_types)
+            .find(|binding| binding.name == assoc)
+            .map(|binding| self.resolve_type(&binding.ty.clone()))
     }
 
-    /// Compute `assoc_type_bindings` for an `AssocTypeProjection` by resolving `Self::X` references.
-    /// e.g., `IntoIterator::Iter` has bound Iterator<Item = `Self::Item`>.
-    /// With I: `IntoIterator`<Item = u8>, Self = I, so `Self::Item` = `I::Item` = u8.
-    /// Result: [("Item", `u8_typeid`)].
-    fn compute_assoc_type_bindings(
+    /// What `bounds` say the bounded type's own associated types are, as this
+    /// frame knows them: `type Iter: Iterator<Item = Self::Item>` on a receiver
+    /// `I` asks what `I::Item` is, and `I: IntoIterator<Item = u8>` answers.
+    ///
+    /// `Self` inside a bound names the bounded type, so a `Self::X` right-hand
+    /// side asks about `base`, not about the frame's own `Self`. Only a
+    /// right-hand side the frame can answer produces a binding; the rest stay
+    /// abstract. Resolving one instead — rebinding `Self` to `base` and
+    /// resolving what it denotes — reintroduces two defects: the frame's
+    /// `assoc_type_bindings` shadow the rebound `Self`, so an unrelated
+    /// `impl`'s `type Item = …` answers for a type parameter's, and recursion
+    /// through a bound's own right-hand side has no fixpoint
+    /// (`type A: Iterator<Item = Self::B>` against `type B: Iterator<Item = Self::A>`).
+    pub(super) fn frame_assoc_bindings(
         &mut self,
-        source_param_name: &str,
-        assoc_bounds: &[crate::ast::TraitBound],
+        base: TypeId,
+        base_name: &str,
+        bounds: &[crate::ast::TraitBound],
     ) -> Vec<(String, TypeId)> {
-        let mut bindings = Vec::new();
-        for bound in assoc_bounds {
-            for assoc in &bound.assoc_types.clone() {
-                // Resolve Self::X in the context of source_param: Self = source_param
-                if let crate::ast::Type::NamespacedGeneric(ns) = &assoc.ty
-                    && ns.namespace == "Self"
-                    && let Some(direct) =
-                        self.find_direct_assoc_type_binding(source_param_name, &ns.name)
-                {
-                    bindings.push((assoc.name.clone(), direct));
+        let projections: Vec<(String, String)> = bounds
+            .iter()
+            .flat_map(|bound| &bound.assoc_types)
+            .filter_map(|binding| match &binding.ty {
+                crate::ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => {
+                    Some((binding.name.clone(), ns.name.clone()))
                 }
-            }
-        }
-        bindings
+                _ => None,
+            })
+            .collect();
+        projections
+            .into_iter()
+            .filter_map(|(name, assoc)| {
+                Some((name, self.frame_projection(base, base_name, &assoc)?))
+            })
+            .collect()
     }
 }

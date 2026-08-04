@@ -1,0 +1,36 @@
+// `Self` inside a trait's associated-type bound names the bounded type, not
+// the enclosing frame's `Self`. A method on an `impl` block that implements
+// `Iterator` must not let that block's `type Item = String` answer for an
+// unrelated type parameter's `I::Iter::Item` — the receiver here yields `u32`.
+//
+// Rebinding `Self` around the resolution is not enough to keep them apart:
+// `assoc_type_bindings` is consulted before the `Self` type, so the impl
+// block's binding wins anyway and a `List<u32>` types as yielding `String`.
+
+struct Counter {
+    n: u32,
+}
+
+impl Iterator for Counter {
+    type Item = String;
+    fn next(&mut self) -> Option<String> {
+        return null;
+    }
+}
+
+impl Counter {
+    fn count_of<I: IntoIterator>(&self, xs: I) -> u32 {
+        let mut it = xs.into_iter();
+        let mut n: u32 = 0;
+        while let Some(_) = it.next() {
+            n += 1;
+        }
+        return n;
+    }
+}
+
+test "an impl's associated type does not answer for a type parameter's" {
+    let c = Counter { n: 0 };
+    let xs: List<u32> = [1, 2, 3];
+    assert c.count_of(xs) == 3;
+}

@@ -2467,7 +2467,8 @@ impl TypeTable {
         Some(self.substitute_type_params(def_type_id, &subst))
     }
 
-    /// Substitute `TypeParam` and `TypePack` indices in `type_id` using `substitution`.
+    /// Substitute `TypeParam` and `TypePack` indices in `type_id` using `substitution`,
+    /// leaving the projections rooted at those slots abstract.
     ///
     /// Returns a new `TypeId` with the substitutions applied. Missing indices
     /// are permissive: unmatched `TypeParam`s remain in place so callers can
@@ -2484,7 +2485,22 @@ impl TypeTable {
         type_id: TypeId,
         substitution: &IndexMap<u32, TypeId>,
     ) -> TypeId {
-        if substitution.is_empty() {
+        self.substitute_type_params_with(type_id, substitution, &SlotProjections::default())
+    }
+
+    /// [`Self::substitute_type_params`], additionally answering the
+    /// projections rooted at a slot.
+    ///
+    /// A declaration frame is abstract over its slots *and* over what
+    /// `Self::X` means. Only the use site knows the second — it is written at
+    /// the caller — so it supplies the answers here.
+    pub fn substitute_type_params_with(
+        &mut self,
+        type_id: TypeId,
+        substitution: &IndexMap<u32, TypeId>,
+        projections: &SlotProjections,
+    ) -> TypeId {
+        if substitution.is_empty() && projections.is_empty() {
             return type_id;
         }
         match self.get(type_id).clone() {
@@ -2492,7 +2508,7 @@ impl TypeTable {
                 substitution.get(&index).copied().unwrap_or(type_id)
             }
             ResolvedType::BuiltinArray(elem) => {
-                let new_elem = self.substitute_type_params(elem, substitution);
+                let new_elem = self.substitute_type_params_with(elem, substitution, projections);
                 if new_elem == elem {
                     type_id
                 } else {
@@ -2500,7 +2516,7 @@ impl TypeTable {
                 }
             }
             ResolvedType::Ref(inner) => {
-                let new_inner = self.substitute_type_params(inner, substitution);
+                let new_inner = self.substitute_type_params_with(inner, substitution, projections);
                 if new_inner == inner {
                     type_id
                 } else {
@@ -2508,7 +2524,7 @@ impl TypeTable {
                 }
             }
             ResolvedType::MutRef(inner) => {
-                let new_inner = self.substitute_type_params(inner, substitution);
+                let new_inner = self.substitute_type_params_with(inner, substitution, projections);
                 if new_inner == inner {
                     type_id
                 } else {
@@ -2524,9 +2540,10 @@ impl TypeTable {
             } => {
                 let new_params: Vec<TypeId> = params
                     .iter()
-                    .map(|&p| self.substitute_type_params(p, substitution))
+                    .map(|&p| self.substitute_type_params_with(p, substitution, projections))
                     .collect();
-                let new_return_type = self.substitute_type_params(return_type, substitution);
+                let new_return_type =
+                    self.substitute_type_params_with(return_type, substitution, projections);
                 if new_params == params && new_return_type == return_type {
                     type_id
                 } else {
@@ -2546,7 +2563,7 @@ impl TypeTable {
             } => {
                 let new_args: Vec<TypeId> = type_args
                     .iter()
-                    .map(|&a| self.substitute_type_params(a, substitution))
+                    .map(|&a| self.substitute_type_params_with(a, substitution, projections))
                     .collect();
                 if new_args == type_args {
                     type_id
@@ -2588,9 +2605,10 @@ impl TypeTable {
                                             for pe in pack_elems {
                                                 let mut elem_substitution = substitution.clone();
                                                 elem_substitution.insert(index, pe);
-                                                new_elems.push(self.substitute_type_params(
+                                                new_elems.push(self.substitute_type_params_with(
                                                     elem,
                                                     &elem_substitution,
+                                                    projections,
                                                 ));
                                             }
                                         }
@@ -2607,7 +2625,11 @@ impl TypeTable {
                                 }
                             }
                             _ => {
-                                new_elems.push(self.substitute_type_params(e, substitution));
+                                new_elems.push(self.substitute_type_params_with(
+                                    e,
+                                    substitution,
+                                    projections,
+                                ));
                             }
                         }
                     }
@@ -2619,7 +2641,7 @@ impl TypeTable {
                 } else {
                     let new_args: Vec<TypeId> = type_args
                         .iter()
-                        .map(|&a| self.substitute_type_params(a, substitution))
+                        .map(|&a| self.substitute_type_params_with(a, substitution, projections))
                         .collect();
                     if new_args == type_args {
                         type_id
@@ -2635,9 +2657,27 @@ impl TypeTable {
                 bounds,
                 assoc_type_bindings,
             } => {
+                // The use site's answer wins: a rebuilt projection cannot
+                // re-derive what `Self::X` means there.
+                let base_slot = match self.get(param_id) {
+                    ResolvedType::TypeParam { index, .. }
+                    | ResolvedType::TypePack { index, .. } => Some(*index),
+                    _ => None,
+                };
+                if let Some(slot) = base_slot
+                    && let Some(answer) = projections.get(&slot).and_then(|answers| {
+                        answers
+                            .iter()
+                            .find(|(name, _)| *name == assoc_name)
+                            .map(|(_, type_id)| *type_id)
+                    })
+                {
+                    return answer;
+                }
                 // Substitute the parameter first; only attempt projection
                 // resolution once the underlying type is fully concrete.
-                let substituted_base = self.substitute_type_params(param_id, substitution);
+                let substituted_base =
+                    self.substitute_type_params_with(param_id, substitution, projections);
                 if !self.contains_type_param(substituted_base) {
                     // Associated types are inherited through references (mirrors
                     // method-call auto-deref), so peel `&`/`&mut` before
@@ -2655,7 +2695,16 @@ impl TypeTable {
                         return resolved;
                     }
                 }
-                if substituted_base == param_id {
+                // Bindings are resolved in the same frame as the rest of the
+                // signature, so they carry its slots too.
+                let mut new_bindings: Vec<(String, TypeId)> =
+                    Vec::with_capacity(assoc_type_bindings.len());
+                for (name, bound) in &assoc_type_bindings {
+                    let substituted =
+                        self.substitute_type_params_with(*bound, substitution, projections);
+                    new_bindings.push((name.clone(), substituted));
+                }
+                if substituted_base == param_id && new_bindings == assoc_type_bindings {
                     type_id
                 } else {
                     self.make_assoc_type_projection_of_trait(
@@ -2663,7 +2712,7 @@ impl TypeTable {
                         owning_trait,
                         assoc_name,
                         bounds,
-                        assoc_type_bindings,
+                        new_bindings,
                     )
                 }
             }
@@ -2672,7 +2721,7 @@ impl TypeTable {
             // type today, so the wrapper never reaches monomorphize — but the
             // contract is "rewrite every embedded parameter", and it embeds one.
             ResolvedType::Reactive(inner) => {
-                let new_inner = self.substitute_type_params(inner, substitution);
+                let new_inner = self.substitute_type_params_with(inner, substitution, projections);
                 if new_inner == inner {
                     type_id
                 } else {
@@ -4654,6 +4703,16 @@ pub struct TirTypeParam {
     pub projected_from: Option<(u32, String)>,
 }
 
+/// What a use site knows about the associated types projected from a slot,
+/// beyond the type filling it: slot index → `[(associated-type name, what it
+/// means here)]`.
+///
+/// The companion of the slot substitution in
+/// [`TypeTable::substitute_type_params_with`]. A declaration resolves
+/// `Self::Item` in its own frame, where it can only be a projection; what it
+/// stands for is written at the use site (`I: IntoIterator<Item = u8>`).
+pub type SlotProjections = IndexMap<u32, Vec<(String, TypeId)>>;
+
 /// Substitution-key base for method-level type params: past the highest
 /// impl-param *index*, not the count. A concrete type in a receiver slot
 /// (`String` in `impl<V> ... for TreeMap<String, V>`) is not a param, so a later
@@ -5699,6 +5758,108 @@ mod tests {
         };
         assert_eq!(param_id, receiver);
         assert_eq!(assoc_name, "Item");
+    }
+
+    /// A frame is abstract over what `Self::X` means as well as over its
+    /// slots, and only the use site can say. Given the answer, the projection
+    /// is replaced by it rather than rebuilt over the substituted base.
+    #[test]
+    fn a_projection_answer_replaces_the_projection() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let projection = table.make_assoc_type_projection_simple(self_param, "Item".to_string());
+
+        let receiver = table.make_type_param("I".to_string(), 1);
+        let projections =
+            SlotProjections::from_iter([(0, vec![("Item".to_string(), TypeTable::U8)])]);
+        let substituted = table.substitute_type_params_with(
+            projection,
+            &IndexMap::from_iter([(0, receiver)]),
+            &projections,
+        );
+
+        assert_eq!(substituted, TypeTable::U8);
+    }
+
+    /// The answer reaches projections nested inside containers, which is
+    /// where a signature actually spells them (`Option<Self::Item>`).
+    #[test]
+    fn a_projection_answer_applies_inside_a_container() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let projection = table.make_assoc_type_projection_simple(self_param, "Item".to_string());
+        let list_of_projection = table.make_list(projection);
+
+        let receiver = table.make_type_param("I".to_string(), 1);
+        let substituted = table.substitute_type_params_with(
+            list_of_projection,
+            &IndexMap::from_iter([(0, receiver)]),
+            &SlotProjections::from_iter([(0, vec![("Item".to_string(), TypeTable::U8)])]),
+        );
+
+        let expected = table.make_list(TypeTable::U8);
+        assert_eq!(substituted, expected);
+    }
+
+    /// An unanswered name leaves the projection abstract over the substituted
+    /// base — the frame simply does not know, and inventing an answer would
+    /// be worse than deferring to monomorphization.
+    #[test]
+    fn an_unanswered_projection_stays_abstract() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let projection = table.make_assoc_type_projection_simple(self_param, "Iter".to_string());
+
+        let receiver = table.make_type_param("I".to_string(), 1);
+        let substituted = table.substitute_type_params_with(
+            projection,
+            &IndexMap::from_iter([(0, receiver)]),
+            &SlotProjections::from_iter([(0, vec![("Item".to_string(), TypeTable::U8)])]),
+        );
+
+        let ResolvedType::AssocTypeProjection { param_id, .. } = table.get(substituted).clone()
+        else {
+            panic!("expected a projection");
+        };
+        assert_eq!(param_id, receiver);
+    }
+
+    /// A projection's bindings are types resolved in the same frame, so they
+    /// carry the frame's slots and must be substituted with everything else.
+    /// `IntoIterator::Iter` records `[("Item", Self::Item)]`; under `Self := I`
+    /// that binding is `I::Item`, not the trait frame's `Self::Item`.
+    #[test]
+    fn substituting_rewrites_a_projections_own_bindings() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let item = table.make_assoc_type_projection_simple(self_param, "Item".to_string());
+        let iter = table.make_assoc_type_projection(
+            self_param,
+            "Iter".to_string(),
+            vec!["Iterator".to_string()],
+            vec![("Item".to_string(), item)],
+        );
+
+        let receiver = table.make_type_param("I".to_string(), 1);
+        let substituted = table.substitute_type_params(iter, &IndexMap::from_iter([(0, receiver)]));
+
+        let ResolvedType::AssocTypeProjection {
+            assoc_type_bindings,
+            ..
+        } = table.get(substituted).clone()
+        else {
+            panic!("expected a projection");
+        };
+        let bound_item = assoc_type_bindings
+            .iter()
+            .find(|(name, _)| name == "Item")
+            .map(|(_, id)| *id)
+            .expect("the Item binding survives substitution");
+        let ResolvedType::AssocTypeProjection { param_id, .. } = table.get(bound_item).clone()
+        else {
+            panic!("expected the binding to stay a projection");
+        };
+        assert_eq!(param_id, receiver);
     }
 
     /// The projection's own metadata survives a base rewrite: bounds and
