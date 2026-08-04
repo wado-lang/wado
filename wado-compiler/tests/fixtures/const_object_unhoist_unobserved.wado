@@ -1,0 +1,25 @@
+// Globalization hoists the member tuple a derived `Serialize` walks, and the
+// folds that follow resolve every member's facts into literals — leaving the
+// slot holding a value nothing observes, and the walk that builds it in the
+// binary. The hoist is taken back: no guard, no store, no `members`.
+//
+// A CLI world on purpose. Under the test world `assert` renders the struct
+// through `Inspect`, which reads a member's `field_name` at run time — a real
+// observation, and the tuple rightly stays.
+use { println, Stdout } from "core:cli";
+use { to_string } from "core:json";
+
+struct Pair {
+    left: i32,
+    right: String,
+}
+
+export fn run() with Stdout {
+    println(`${to_string(&Pair { left: 1, right: "a" }).unwrap()}`);
+}
+
+__DATA__
+{
+    "stdout": "{\"left\":1,\"right\":\"a\"}\n",
+    "wir_not_expect:O2": ["Pair^ReflectStruct::members"]
+}

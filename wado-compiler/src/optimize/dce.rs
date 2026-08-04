@@ -2047,6 +2047,236 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
 // Global variable DCE
 // ──────────────────────────────────────────────────────────────────────────────
 
+/// Every statement id reachable from the body root. The arena keeps the nodes an
+/// in-place rewrite displaced, and one nothing refers to never runs.
+fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
+    struct Collect(Vec<StmtId>);
+    impl crate::nir_visitor::NirRefVisitor for Collect {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Stmt(s) = node {
+                self.0.push(s);
+            }
+            self.walk_node(body, node);
+        }
+    }
+    if body.blocks.is_empty() {
+        return Vec::new();
+    }
+    let mut collect = Collect(Vec::new());
+    crate::nir_visitor::NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root));
+    collect.0
+}
+
+/// Locals some reachable expression mentions. A binding absent here is never
+/// read: an assignment target, a borrow and a capture all mention their local,
+/// so the census over-approximates and only ever keeps a statement alive.
+fn mentioned_locals(body: &Body) -> IndexSet<u32> {
+    let mut out = IndexSet::default();
+    for e in crate::nir_visitor::reachable_exprs(body) {
+        if let ExprKind::Local { index, .. } = &body.exprs[e].kind {
+            out.insert(*index);
+        }
+    }
+    out
+}
+
+/// The `GlobalVarGet`s in `expr`'s subtree, and the ids that read them.
+fn global_reads_in(body: &Body, expr: ExprId) -> Vec<(ExprId, (String, String))> {
+    struct Collect(Vec<(ExprId, (String, String))>);
+    impl crate::nir_visitor::NirRefVisitor for Collect {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Expr(e) = node
+                && let ExprKind::GlobalVarGet {
+                    module_source,
+                    name,
+                } = &body.exprs[e].kind
+            {
+                self.0
+                    .push((e, (module_source.to_path().join("::"), name.clone())));
+            }
+            self.walk_node(body, node);
+        }
+    }
+    let mut collect = Collect(Vec::new());
+    crate::nir_visitor::NirRefVisitor::visit_node(&mut collect, body, NodeRef::Expr(expr));
+    collect.0
+}
+
+/// The global a lazy-init guard covers: `if is_uninitialized(G) { G = v }`, the
+/// shape const-object globalization mints for an initializer Wasm cannot build
+/// eagerly. `None` for anything else.
+fn lazy_guard_global(
+    body: &Body,
+    stmt: StmtId,
+    descriptors: &[FunctionRef],
+) -> Option<(ExprId, (String, String), Operand)> {
+    let StmtKind::If {
+        condition,
+        then_block,
+        else_block: None,
+    } = &body.stmts[stmt].kind
+    else {
+        return None;
+    };
+    let ExprKind::Call { func_id, args, .. } = &body.exprs[condition.as_expr()?].kind else {
+        return None;
+    };
+    let callee = callee_descriptor(descriptors, *func_id);
+    if !(callee.module_source.is_core_builtin() && callee.name == "is_uninitialized") {
+        return None;
+    }
+    let [arg] = args.as_slice() else {
+        return None;
+    };
+    let read = arg.expr.as_expr()?;
+    let ExprKind::GlobalVarGet {
+        module_source,
+        name,
+    } = &body.exprs[read].kind
+    else {
+        return None;
+    };
+    let [only] = body.blocks[*then_block].stmts.as_slice() else {
+        return None;
+    };
+    let StmtKind::Expr(Operand::Expr(set)) = &body.stmts[*only].kind else {
+        return None;
+    };
+    let ExprKind::GlobalVarSet {
+        module_source: set_module,
+        name: set_name,
+        value,
+    } = &body.exprs[*set].kind
+    else {
+        return None;
+    };
+    if set_module != module_source || set_name != name {
+        return None;
+    }
+    Some((
+        read,
+        (module_source.to_path().join("::"), name.clone()),
+        *value,
+    ))
+}
+
+/// Whether `stmt` binds a local nothing mentions to a side-effect-free value —
+/// a binding that computes something and drops it.
+fn dead_pure_binding(body: &Body, stmt: StmtId, mentioned: &IndexSet<u32>) -> Option<ExprId> {
+    let StmtKind::Let {
+        local_index, value, ..
+    } = &body.stmts[stmt].kind
+    else {
+        return None;
+    };
+    if mentioned.contains(local_index) {
+        return None;
+    }
+    let value = value.as_expr()?;
+    super::arena_query::is_pure_expr(body, value).then_some(value)
+}
+
+/// Un-hoist a constant globalization hoisted for nobody.
+///
+/// Globalization moves a constant aggregate into a shared slot and guards the
+/// store; the folds that run after it can take every reader with them. What is
+/// left computes a value nothing observes, and holds whatever the initializer
+/// builds — a reflect member walk and the strings it names — in the binary to
+/// do it.
+///
+/// Two reads do not count as observing the value:
+///
+/// - the global's own `is_uninitialized` guard, which exists to decide the
+///   store rather than to use what it holds;
+/// - a read bound to a local nothing mentions, which is what folding a member's
+///   facts out of the walk leaves behind.
+///
+/// A global with no observation left loses its guard, its store, and those
+/// bindings. It then has no reads at all, which the reachability census below
+/// already answers, and its initializer goes with it.
+pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
+    let descriptors = build_callee_descriptors(project);
+    let mut guarded: IndexSet<(String, String)> = IndexSet::default();
+    let mut observed: IndexSet<(String, String)> = IndexSet::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        let Some(body) = func.body.as_ref() else {
+            continue;
+        };
+        let mentioned = mentioned_locals(body);
+        let mut unobserving: IndexSet<ExprId> = IndexSet::default();
+        for stmt in reachable_stmt_ids(body) {
+            if let Some((read, key, _)) = lazy_guard_global(body, stmt, &descriptors) {
+                guarded.insert(key);
+                unobserving.insert(read);
+            }
+            if let Some(value) = dead_pure_binding(body, stmt, &mentioned) {
+                unobserving.extend(global_reads_in(body, value).into_iter().map(|(e, _)| e));
+            }
+        }
+        for e in crate::nir_visitor::reachable_exprs(body) {
+            if let ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } = &body.exprs[e].kind
+                && !unobserving.contains(&e)
+            {
+                observed.insert((module_source.to_path().join("::"), name.clone()));
+            }
+        }
+    }
+    let unobserved: IndexSet<(String, String)> = guarded.difference(&observed).cloned().collect();
+    if unobserved.is_empty() {
+        return;
+    }
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        if let Some(body) = func.body.as_mut() {
+            let root = body.root;
+            let mentioned = mentioned_locals(body);
+            drop_unobserved_block(body, root, &unobserved, &mentioned, &descriptors);
+        }
+    }
+}
+
+fn drop_unobserved_block(
+    body: &mut Body,
+    block: BlockId,
+    unobserved: &IndexSet<(String, String)>,
+    mentioned: &IndexSet<u32>,
+    descriptors: &[FunctionRef],
+) {
+    for s in body.blocks[block].stmts.clone() {
+        let nested = match &body.stmts[s].kind {
+            StmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => vec![Some(*then_block), *else_block],
+            StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => vec![Some(*b)],
+            _ => Vec::new(),
+        };
+        for inner in nested.into_iter().flatten() {
+            drop_unobserved_block(body, inner, unobserved, mentioned, descriptors);
+        }
+    }
+    let old = std::mem::take(&mut body.blocks[block].stmts);
+    let mut kept: Vec<StmtId> = Vec::with_capacity(old.len());
+    for s in old {
+        let is_guard = lazy_guard_global(body, s, descriptors)
+            .is_some_and(|(_, key, _)| unobserved.contains(&key));
+        let is_dead_read = dead_pure_binding(body, s, mentioned).is_some_and(|value| {
+            global_reads_in(body, value)
+                .iter()
+                .any(|(_, key)| unobserved.contains(key))
+        });
+        if !is_guard && !is_dead_read {
+            kept.push(s);
+        }
+    }
+    body.blocks[block].stmts = kept;
+}
+
 /// Union every `(module_key, global_name)` pair read by some reachable
 /// function. Reads come from the per-function index built once by
 /// [`build_analysis_graph`]'s [`DceWalker`] walk; functions not in
