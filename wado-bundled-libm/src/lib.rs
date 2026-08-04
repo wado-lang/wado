@@ -93,6 +93,11 @@ pub extern "C" fn libm_exp2(x: f64) -> f64 {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn libm_exp10(x: f64) -> f64 {
+    libm::exp10(x)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn libm_expm1(x: f64) -> f64 {
     libm::expm1(x)
 }
@@ -146,6 +151,13 @@ pub extern "C" fn libm_fmod(x: f64, y: f64) -> f64 {
 #[unsafe(no_mangle)]
 pub extern "C" fn libm_fma(x: f64, y: f64, z: f64) -> f64 {
     libm::fma(x, y, z)
+}
+
+// Rounding (f64)
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_round(x: f64) -> f64 {
+    libm::round(x)
 }
 
 // Trigonometric functions (f32)
@@ -230,6 +242,11 @@ pub extern "C" fn libm_exp2f(x: f32) -> f32 {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn libm_exp10f(x: f32) -> f32 {
+    libm::exp10f(x)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn libm_expm1f(x: f32) -> f32 {
     libm::expm1f(x)
 }
@@ -283,6 +300,13 @@ pub extern "C" fn libm_fmodf(x: f32, y: f32) -> f32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn libm_fmaf(x: f32, y: f32, z: f32) -> f32 {
     libm::fmaf(x, y, z)
+}
+
+// Rounding (f32)
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_roundf(x: f32) -> f32 {
+    libm::roundf(x)
 }
 
 #[cfg(target_arch = "wasm32")]

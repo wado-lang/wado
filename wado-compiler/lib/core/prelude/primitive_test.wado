@@ -181,13 +181,31 @@ test "f64 wasm instruction math" {
     assert f64::floor(-2.7) == -3.0;
     assert f64::trunc(2.9) == 2.0;
     assert f64::trunc(-2.9) == -2.0;
-    assert f64::round(2.5) == 2.0;
-    assert f64::round(3.5) == 4.0;
+    assert f64::round_ties_even(2.5) == 2.0;
+    assert f64::round_ties_even(3.5) == 4.0;
     assert f64::sqrt(4.0) == 2.0;
     assert f64::min(3.0, 5.0) == 3.0;
     assert f64::max(3.0, 5.0) == 5.0;
     assert f64::copysign(5.0, -1.0) == -5.0;
     assert f64::copysign(-5.0, 1.0) == 5.0;
+}
+
+test "f64 round breaks ties away from zero" {
+    assert f64::round(2.5) == 3.0;
+    assert f64::round(-2.5) == -3.0;
+    assert f64::round(0.5) == 1.0;
+    assert f64::round(-0.5) == -1.0;
+
+    // round_ties_even breaks the same ties toward the even neighbour.
+    assert f64::round_ties_even(2.5) == 2.0;
+    assert f64::round_ties_even(-2.5) == -2.0;
+    assert f64::round_ties_even(0.5) == 0.0;
+
+    // Away from a tie the two agree.
+    assert f64::round(2.4) == 2.0;
+    assert f64::round_ties_even(2.4) == 2.0;
+    assert f64::round(2.6) == 3.0;
+    assert f64::round_ties_even(2.6) == 3.0;
 }
 
 test "f64 trigonometric" {
@@ -226,6 +244,10 @@ test "f64 exponential and logarithmic" {
 
     assert f64::exp2(0.0) == 1.0;
     assert f64::exp2(3.0) == 8.0;
+
+    assert f64::exp10(0.0) == 1.0;
+    assert f64::exp10(3.0) == 1000.0;
+    assert f64::exp10(-2.0) == 0.01;
 
     assert f64::expm1(0.0) == 0.0;
 
@@ -276,13 +298,24 @@ test "f32 wasm instruction math" {
     assert f32::floor(-2.7) == -3.0;
     assert f32::trunc(2.9) == 2.0;
     assert f32::trunc(-2.9) == -2.0;
-    assert f32::round(2.5) == 2.0;
-    assert f32::round(3.5) == 4.0;
+    assert f32::round_ties_even(2.5) == 2.0;
+    assert f32::round_ties_even(3.5) == 4.0;
     assert f32::sqrt(4.0) == 2.0;
     assert f32::min(3.0, 5.0) == 3.0;
     assert f32::max(3.0, 5.0) == 5.0;
     assert f32::copysign(5.0, -1.0) == -5.0;
     assert f32::copysign(-5.0, 1.0) == 5.0;
+}
+
+test "f32 round breaks ties away from zero" {
+    assert f32::round(2.5) == 3.0;
+    assert f32::round(-2.5) == -3.0;
+    assert f32::round(0.5) == 1.0;
+
+    // round_ties_even breaks the same ties toward the even neighbour.
+    assert f32::round_ties_even(2.5) == 2.0;
+    assert f32::round_ties_even(-2.5) == -2.0;
+    assert f32::round_ties_even(0.5) == 0.0;
 }
 
 test "f32 trigonometric" {
@@ -305,6 +338,7 @@ test "f32 hyperbolic" {
 test "f32 exponential and logarithmic" {
     assert f32::exp(0.0) == 1.0;
     assert f32::exp2(3.0) == 8.0;
+    assert f32::exp10(3.0) == 1000.0;
     assert f32::expm1(0.0) == 0.0;
     assert f32::ln(1.0) == 0.0;
     assert f32::log2(8.0) == 3.0;
