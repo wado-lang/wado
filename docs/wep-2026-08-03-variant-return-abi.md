@@ -584,9 +584,10 @@ Each step lands and is measured before the next.
       [closing it](#how-the-87-function-gap-closed) took it to zero.
 - [x] Step 4 — `widen.rs` and `return_temp.rs` are deleted, `wrapper.rs` is
       down to `unwrap_to_inner_call`, `layout.rs` shrank: 4,188 lines to 1,735.
-      The gate held on counts (`widen = 0` everywhere) and on size — −231 bytes
-      against the pre-deletion baseline, after closing the two shapes the
-      deletion exposed. Throughput is unmeasured; it needs a quiet machine.
+      The gate held on counts (`widen = 0` everywhere) and on size — −251 bytes
+      against the pre-deletion baseline, with every benchmark at or below it,
+      after closing the four shapes the deletion exposed. Throughput is
+      unmeasured; it needs a quiet machine.
 - [x] Step 5 — `slot_flatten` stays in WIR, and the measurement is why. It
       splits a `ref W` result slot whose `W` is itself a small variant, and it
       fires 1–2 times per benchmark — once across `gale_gen`, twice on
@@ -656,9 +657,14 @@ sync evaluates the same effects in the same order and leaves no aggregate local.
 `field_scalarize::capture_for_sync` states that once for the three sites that
 used to hand-roll it. Two details it has to get right:
 
-- Only a literal constant is re-emitted after the sync without a binding. A
-  promoted `ValueKind::FieldAccess` is re-emitted at its use, and the sync may
+- A literal constant is re-emitted after the sync without a binding. A promoted
+  `ValueKind::FieldAccess` is not — it is re-emitted at its use, and the sync may
   have written the field it reads.
+- So is a local the sync does not assign, which is decided by reading the sync
+  statements: a re-read (`__hfs_F = local.F`) assigns its scalar local, a
+  write-back (`local.F = __hfs_F`) only reads one. This is sound for a
+  ref-typed local too — the binding copies the reference, not the pointee, so a
+  field the sync writes is visible either way.
 - Each operand holds its pooled temp until the whole literal is built, or
   `alloc_temp`'s free list hands one index to two live slots.
 
@@ -666,9 +672,14 @@ used to hand-roll it. Two details it has to get right:
 and `CborDeserializer::is_null` — the last boxed tuple this pass left on
 `cbor_twitter` — flattens with it, for -94 bytes.
 
-The generalisation for step 4: `return_temp.rs` covers this shape in WIR with a
-scan and a relocation budget. Removing the shape at its source is cheaper than
-recognising it afterwards, and it is what lets that file retire.
+The aggregate rule alone was not enough to retire `return_temp.rs`. It removed
+the shape for a literal, and left it for a bare local — `__hfs_call_N = hit;
+self.pos = __hfs_pos; return __hfs_call_N` survived on `sqlite_parse` and
+`syntax_highlight`, which the WIR pass had been cleaning up unnoticed. That is
+what the deletion's +4 bytes on each were, and the local rule above is what
+closed them. Removing a shape at its source is still cheaper than recognising it
+afterwards; the caution is that "removed" has to be measured, not assumed from
+the case that motivated the rule.
 
 ### A `LabeledBlock` return value arriving via `break L: v`
 
