@@ -138,10 +138,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .flatten()
             .map(|bound| bound.name.clone())
-            .find(|trait_name| {
-                self.find_trait_decl_assoc_type_decls(trait_name)
-                    .is_some_and(|decls| decls.iter().any(|d| d.name == assoc_name))
-            })
+            .find(|trait_name| self.trait_assoc_type_decl(trait_name, assoc_name).is_some())
     }
 
     /// Resolve a namespaced generic type like `ns::Type<T>` or `Self::Output`
@@ -693,29 +690,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// receiver `I` asks the frame what `I::Item` is, and `I: IntoIterator<Item
     /// = u8>` answers `u8`, giving `[("Item", u8)]`.
     ///
-    /// `Self` inside a bound names the bounded type, so it is `base` that the
-    /// projections are rooted at, not the frame's own `Self`.
+    /// `Self` inside a bound names the bounded type, so a `Self::X` right-hand
+    /// side is read with `Self := base` rather than against the enclosing
+    /// frame's own `Self`. Where the frame has no answer the binding is
+    /// whatever the right-hand side denotes there, which in a trait's own
+    /// frame is the canonical `Self::X` projection — that is how
+    /// `IntoIterator::Iter` comes to record `[("Item", Self::Item)]` for an
+    /// instantiation to substitute into.
     pub(super) fn frame_assoc_bindings(
         &mut self,
         base: TypeId,
         base_name: &str,
         bounds: &[crate::ast::TraitBound],
     ) -> Vec<(String, TypeId)> {
-        let projections: Vec<(String, String)> = bounds
+        let declared: Vec<(String, crate::ast::Type)> = bounds
             .iter()
             .flat_map(|bound| &bound.assoc_types)
-            .filter_map(|binding| match &binding.ty {
+            .map(|binding| (binding.name.clone(), binding.ty.clone()))
+            .collect();
+        let mut bindings = Vec::with_capacity(declared.len());
+        for (name, rhs) in declared {
+            let known = match &rhs {
                 crate::ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => {
-                    Some((binding.name.clone(), ns.name.clone()))
+                    self.frame_projection(base, base_name, &ns.name)
                 }
                 _ => None,
-            })
-            .collect();
-        projections
-            .into_iter()
-            .filter_map(|(name, assoc)| {
-                Some((name, self.frame_projection(base, base_name, &assoc)?))
-            })
-            .collect()
+            };
+            let type_id =
+                known.unwrap_or_else(|| self.with_self_type(base, |s| s.resolve_type(&rhs)));
+            bindings.push((name, type_id));
+        }
+        bindings
     }
 }

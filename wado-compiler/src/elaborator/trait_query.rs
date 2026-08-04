@@ -278,28 +278,6 @@ pub(crate) fn trait_sig_by_name_with<'a>(
     signatures.trait_sig(*decl_id)
 }
 
-/// A trait declaration's associated-type declarations, resolved by name.
-pub(crate) fn find_trait_decl_assoc_types_with(
-    trait_name: &str,
-    current_module_source: &ModuleSource,
-    current_module_items: &[ast::Item],
-    imports: &super::sem::ModuleImports,
-    symbols: &crate::symbol::SymbolTable,
-    trait_env: &super::trait_env::TraitEnv,
-    loaded_modules: &IndexMap<ModuleSource, ast::Module>,
-) -> Option<Vec<ast::AssociatedTypeDecl>> {
-    find_trait_decl_with(
-        trait_name,
-        current_module_source,
-        current_module_items,
-        imports,
-        symbols,
-        trait_env,
-        loaded_modules,
-    )
-    .map(|(decl, _)| decl.associated_types.clone())
-}
-
 impl TypeSystem {
     /// The traits the compiler auto-derives for eligible aggregate types
     /// (`struct` / `variant` / `enum` / generic instance) and exposes through
@@ -450,20 +428,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// A trait declaration's associated-type declarations, with their bounds.
-    pub(super) fn find_trait_decl_assoc_type_decls(
+    /// The declaration header of the trait `trait_name` names *in this frame*.
+    ///
+    /// The frame matters: canonicalising imports-first loses a module's own
+    /// declaration whenever the prelude carries the same name, which is what
+    /// kept this lookup on the declaring module's AST.
+    pub(super) fn trait_decl_header_in_frame(
         &self,
         trait_name: &str,
-    ) -> Option<Vec<ast::AssociatedTypeDecl>> {
-        find_trait_decl_assoc_types_with(
-            trait_name,
-            &self.current_module_source,
-            self.current_module_items,
-            &self.sem.imports,
-            self.symbols,
-            &self.tysys.trait_env,
-            self.loaded_modules,
-        )
+    ) -> Option<&super::trait_env::TraitDeclHeader> {
+        let key = self.trait_decl_key_in_frame(&self.declared_trait_name(trait_name));
+        let loc = self.tysys.trait_env.decl_index.get(&key)?;
+        self.tysys.trait_env.trait_decl_headers.get(loc)
+    }
+
+    /// The trait's declaration of the associated type `assoc_name`, or `None`
+    /// when it declares no such type.
+    pub(super) fn trait_assoc_type_decl(
+        &self,
+        trait_name: &str,
+        assoc_name: &str,
+    ) -> Option<&ast::AssociatedTypeDecl> {
+        self.trait_decl_header_in_frame(trait_name)?
+            .assoc_types
+            .iter()
+            .find(|decl| decl.name == assoc_name)
     }
 
     /// Enforce a trait's associated-type bounds (`type X: Bound`) against an
@@ -475,14 +464,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         let trait_name = self.get_type_name(trait_type);
-        let Some(decls) = self.find_trait_decl_assoc_type_decls(&trait_name) else {
-            return;
-        };
         for binding in &impl_block.associated_types {
-            let Some(decl) = decls.iter().find(|d| d.name == binding.name) else {
-                continue;
-            };
-            if decl.bounds.is_empty() {
+            let bound_names: Vec<String> = self
+                .trait_assoc_type_decl(&trait_name, &binding.name)
+                .into_iter()
+                .flat_map(|decl| &decl.bounds)
+                .filter(|bound| bound.fn_signature.is_none())
+                .map(|bound| bound.name.clone())
+                .collect();
+            if bound_names.is_empty() {
                 continue;
             }
             let type_id = self
@@ -495,26 +485,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.tysys.type_table.borrow().contains_type_param(type_id) {
                 continue;
             }
-            for bound in &decl.bounds {
-                if bound.fn_signature.is_some() {
-                    continue;
-                }
+            for bound_name in &bound_names {
                 if !self.tysys.type_implements_trait(
                     &self.annotate_ctx,
                     &self.type_lookup(),
                     type_id,
-                    &bound.name,
+                    bound_name,
                 ) {
                     let type_name = self.tysys.type_id_to_string(type_id);
                     let reason = self.tysys.trait_unimpl_reason_chain(
                         &self.annotate_ctx,
                         &self.type_lookup(),
                         type_id,
-                        &bound.name,
+                        bound_name,
                     );
                     let _ = self.emit(TypeError::TraitBoundNotSatisfied {
                         type_name,
-                        trait_name: bound.name.clone(),
+                        trait_name: bound_name.clone(),
                         param_name: binding.name.clone(),
                         reason,
                         span: binding.span,
