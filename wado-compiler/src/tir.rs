@@ -2492,10 +2492,7 @@ impl TypeTable {
     /// projections rooted at a slot.
     ///
     /// A declaration frame is abstract over its slots *and* over what
-    /// `Self::X` means; a use site that fills the first without the second
-    /// gets back a projection it cannot resolve, which is why a signature
-    /// read through a trait bound used to be re-resolved from AST instead.
-    /// Only the use site knows — `I: IntoIterator<Item = u8>` is written at
+    /// `Self::X` means. Only the use site knows the second — it is written at
     /// the caller — so it supplies the answers here.
     pub fn substitute_type_params_with(
         &mut self,
@@ -2660,9 +2657,8 @@ impl TypeTable {
                 bounds,
                 assoc_type_bindings,
             } => {
-                // The frame being left is the only one that can say what
-                // `Self::X` means at the use site, so its answer wins over
-                // anything a rebuilt projection could re-derive.
+                // The use site's answer wins: a rebuilt projection cannot
+                // re-derive what `Self::X` means there.
                 let base_slot = match self.get(param_id) {
                     ResolvedType::TypeParam { index, .. }
                     | ResolvedType::TypePack { index, .. } => Some(*index),
@@ -2699,10 +2695,8 @@ impl TypeTable {
                         return resolved;
                     }
                 }
-                // The bindings were resolved in the same frame as the rest of
-                // the signature, so they carry its slots too: `Self::Iter`
-                // recording `[("Item", Self::Item)]` means `[("Item",
-                // I::Item)]` once `Self` is `I`.
+                // Bindings are resolved in the same frame as the rest of the
+                // signature, so they carry its slots too.
                 let mut new_bindings: Vec<(String, TypeId)> =
                     Vec::with_capacity(assoc_type_bindings.len());
                 for (name, bound) in &assoc_type_bindings {
@@ -4716,9 +4710,7 @@ pub struct TirTypeParam {
 /// The companion of the slot substitution in
 /// [`TypeTable::substitute_type_params_with`]. A declaration resolves
 /// `Self::Item` in its own frame, where it can only be a projection; what it
-/// stands for is written at the use site (`I: IntoIterator<Item = u8>`), so
-/// the use site carries it in. A slot declares few associated types, so the
-/// inner list is scanned rather than mapped.
+/// stands for is written at the use site (`I: IntoIterator<Item = u8>`).
 pub type SlotProjections = IndexMap<u32, Vec<(String, TypeId)>>;
 
 /// Substitution-key base for method-level type params: past the highest

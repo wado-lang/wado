@@ -203,13 +203,26 @@ callee's AST under a doctored scope instead of instantiating.
 So the substitution carries both: `SlotProjections` maps a slot to what the
 projections rooted at it stand for, and `TypeTable::substitute_type_params_with`
 is the one implementation, with the slot-only `substitute_type_params` as its
-empty case. Only the _answers_ go in. A projection the use site cannot answer
-is rebuilt over the substituted base, inheriting the recorded projection's
-owning trait and bounds, so a caller supplies what it knows and nothing more.
+empty case.
+
+The use site answers for _every_ associated type the trait declares, not only
+the ones its `where` clause names. Rebuilding the recorded projection over the
+substituted base recovers its owning trait and bounds but not its bindings, and
+those bindings are use-site data — `I::Iter` knowing `Item = u8` comes from the
+caller. Leaving the rest to the rebuild produces a projection that differs from
+the one the same name resolves to when written in source, and two spellings of
+one type that do not intern together are a type error at the use site.
 
 A projection's own `assoc_type_bindings` are types resolved in the same frame,
 so they carry its slots and are substituted with everything else — the rule
 every other arm follows.
+
+What a bound's right-hand side denotes is deliberately not resolved to fill a
+gap. `Self` there names the bounded type, so answering would mean rebinding
+`Self` for the duration — but a frame's `assoc_type_bindings` shadow it, so an
+unrelated `impl`'s `type Item = …` answers for a type parameter's, and
+recursion through the right-hand side has no fixpoint. An unanswered name stays
+abstract.
 
 ### Name-keyed facts belong to `TraitEnv`, `TypeId`-level facts to `Signatures`
 

@@ -402,9 +402,8 @@ impl DeclSig {
     }
 
     /// [`Self::instantiate_slots`] for a use site that also knows what the
-    /// projections rooted at a slot mean — `Self::Item` where its own `where`
-    /// clause binds it. A signature written against `Self::X` is abstract over
-    /// that too, and only the use site can fill it.
+    /// projections rooted at a slot mean. A signature written against
+    /// `Self::X` is abstract over that too, and only the use site can fill it.
     pub(crate) fn instantiate_slots_with(
         &self,
         type_table: &RefCell<TypeTable>,

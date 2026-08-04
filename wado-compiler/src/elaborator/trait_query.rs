@@ -394,11 +394,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// The declaration header of the trait `trait_name` names *in this frame*.
-    ///
-    /// The frame matters: canonicalising imports-first loses a module's own
-    /// declaration whenever the prelude carries the same name, which is what
-    /// kept this lookup on the declaring module's AST.
+    /// The declaration header of the trait `trait_name` names in this frame.
     pub(super) fn trait_decl_header_in_frame(
         &self,
         trait_name: &str,
@@ -1441,13 +1437,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The declaration key of the trait `name` names in the current frame.
     ///
-    /// The name sits in trait position, so only trait declarations are
-    /// candidates and a non-trait sharing the name is not a competitor. That
-    /// distinction is load-bearing: traits have no symbol-table entry of their
-    /// own, so [`Elaborator::canonical_decl_key`] resolves `Left` to
+    /// Only trait declarations are candidates. Traits have no symbol-table
+    /// entry, so [`Elaborator::canonical_decl_key`] answers `Left` with
     /// `core:prelude/format`'s enum case and would displace a module's own
-    /// `trait Left`. A locally declared trait therefore answers unless an
-    /// import names a trait of that name, which shadows it as any import does.
+    /// `trait Left`. A local trait wins unless an import names a trait too.
     pub(super) fn trait_decl_key_in_frame(&self, name: &str) -> super::trait_env::DeclKey {
         let canonical = self.canonical_decl_key(name);
         let names_a_trait =
@@ -1494,12 +1487,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The recorded signature of `method_name` on the trait `trait_name` names
-    /// in this frame, together with that trait's associated-type declarations.
+    /// in this frame, with that trait's associated-type declarations.
     ///
-    /// The header answers whether the method exists — a name-level fact — and
-    /// the digest answers what it says. A method the header lists but the
-    /// digest has not recorded is a decl-pass bug, so it panics rather than
-    /// reading as "no such method".
+    /// The header answers whether the method exists, the digest what it says.
+    /// A method the header lists but the digest lacks is a decl-pass bug, so it
+    /// panics rather than reading as "no such method".
     fn trait_method_in_frame(
         &self,
         trait_name: &str,
@@ -1520,13 +1512,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The recorded declaration facts of the trait `trait_name` names in this
-    /// frame. Companion to [`Self::trait_decl_header_in_frame`], reaching the
-    /// `TypeId`-level digest rather than the name-level header, so it is only
-    /// answerable once the decl pass has run.
+    /// frame — the digest counterpart of [`Self::trait_decl_header_in_frame`],
+    /// answerable only once the decl pass has run.
     fn trait_sig_in_frame(&self, trait_name: &str) -> Option<&super::sig::TraitSig> {
         let key = self.trait_decl_key_in_frame(trait_name);
         let (_, decl_id) = self.tysys.trait_env.decl_index.get(&key)?;
         self.tysys.signatures.trait_sig(*decl_id)
+    }
+
+    /// What `Self::X` means for a receiver reached through a trait bound, for
+    /// each associated type `X` the trait declares.
+    ///
+    /// The declaration cannot say: `I: IntoIterator<Item = u8>` is written at
+    /// the caller. Every name gets an answer, because the projection over the
+    /// receiver carries the caller's bindings and instantiating the recorded
+    /// one would not.
+    fn trait_assoc_answers(
+        &mut self,
+        trait_name: &str,
+        assoc_types: &[ast::AssociatedTypeDecl],
+        self_type_id: TypeId,
+    ) -> Vec<(String, TypeId)> {
+        let self_name = match self.tysys.type_table.borrow().get(self_type_id) {
+            ResolvedType::TypeParam { name, .. } => name.clone(),
+            _ => String::new(),
+        };
+        let mut answers = Vec::with_capacity(assoc_types.len());
+        for decl in assoc_types {
+            let known = self.frame_projection(self_type_id, &self_name, &decl.name);
+            let answer = known.unwrap_or_else(|| {
+                let bound_names: Vec<String> =
+                    decl.bounds.iter().map(|b| b.name.clone()).collect();
+                let bindings = self.frame_assoc_bindings(self_type_id, &self_name, &decl.bounds);
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_assoc_type_projection_of_trait(
+                        self_type_id,
+                        Some(trait_name.to_string()),
+                        decl.name.clone(),
+                        bound_names,
+                        bindings,
+                    )
+            });
+            answers.push((decl.name.clone(), answer));
+        }
+        answers
     }
 
     /// Find a method in the trait declarations the bound names give, read in
@@ -1563,43 +1594,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let (trait_name, (sig, trait_assoc_types)) = resolved?;
 
-        // The trait's frame numbers `Self` as slot 0, so instantiating the
-        // recorded signature against the receiver is the whole substitution.
-        // What it cannot carry is what `Self::X` means *here*, which the
-        // declaration cannot know: `I: IntoIterator<Item = u8>` is written at
-        // the caller.
-        //
-        // Every associated type gets an answer, because the projection over
-        // the receiver is itself use-site data — its bindings say what the
-        // caller's `where` clause makes of the projected type
-        // (`I::Iter` knowing `Item = u8`), which no rebuild of the recorded
-        // projection could recover.
-        let self_name = match self.tysys.type_table.borrow().get(self_type_id) {
-            ResolvedType::TypeParam { name, .. } => name.clone(),
-            _ => String::new(),
-        };
-        let mut answers: Vec<(String, TypeId)> = Vec::new();
-        for assoc_decl in &trait_assoc_types {
-            let known = self.frame_projection(self_type_id, &self_name, &assoc_decl.name);
-            let answer = known.unwrap_or_else(|| {
-                let bound_names: Vec<String> =
-                    assoc_decl.bounds.iter().map(|b| b.name.clone()).collect();
-                let bindings =
-                    self.frame_assoc_bindings(self_type_id, &self_name, &assoc_decl.bounds);
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_assoc_type_projection_of_trait(
-                        self_type_id,
-                        Some(trait_name.clone()),
-                        assoc_decl.name.clone(),
-                        bound_names,
-                        bindings,
-                    )
-            });
-            answers.push((assoc_decl.name.clone(), answer));
-        }
-
+        let answers = self.trait_assoc_answers(&trait_name, &trait_assoc_types, self_type_id);
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
             &IndexMap::from_iter([(0, self_type_id)]),

@@ -401,10 +401,10 @@ pub(super) struct TraitDeclHeader {
     /// lives in [`TraitEnv::supertrait_closure`].
     pub(super) supertraits: Vec<ast::TraitBound>,
     pub(super) methods: Vec<ImplMethodHeader>,
-    /// The trait's `type X: Bounds;` declarations, in order. Name-keyed and
-    /// AST-shaped, so it belongs here rather than in the `TypeId`-level
-    /// digest: the decl pass itself asks which trait declares `Self::X` while
-    /// resolving that trait's own method signatures, before any digest exists.
+    /// The trait's `type X: Bounds;` declarations, in order. Here rather than
+    /// in the `TypeId`-level digest because the decl pass asks which trait
+    /// declares `Self::X` while resolving that trait's own method signatures,
+    /// before any digest exists.
     pub(super) assoc_types: Vec<ast::AssociatedTypeDecl>,
     pub(super) span: Span,
 }

@@ -646,10 +646,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// What this frame knows the projection `base::assoc` to be, where
     /// `base_name` is the name the frame files `base`'s bounds under.
     ///
-    /// Two sources answer, in order: a projection carries the bindings it was
-    /// built with (`S::SeqSerializer` knowing its `Ok`), and the enclosing
-    /// `where` clause names them directly (`I: IntoIterator<Item = u8>`
-    /// answers `I::Item`). Neither answering leaves the projection abstract.
+    /// Two sources answer, in order: the bindings a projection carries
+    /// (`S::SeqSerializer` knowing its `Ok`), then the enclosing `where` clause
+    /// (`I: IntoIterator<Item = u8>` answers `I::Item`).
     pub(super) fn frame_projection(
         &mut self,
         base: TypeId,
@@ -686,21 +685,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// What `bounds` say the bounded type's own associated types are, as this
-    /// frame knows them: `type Iter: Iterator<Item = Self::Item>` on a
-    /// receiver `I` asks the frame what `I::Item` is, and `I: IntoIterator<Item
-    /// = u8>` answers `u8`, giving `[("Item", u8)]`.
+    /// frame knows them: `type Iter: Iterator<Item = Self::Item>` on a receiver
+    /// `I` asks what `I::Item` is, and `I: IntoIterator<Item = u8>` answers.
     ///
     /// `Self` inside a bound names the bounded type, so a `Self::X` right-hand
-    /// side asks the frame about `base`, not about the frame's own `Self`.
-    ///
-    /// Only a right-hand side the frame can answer produces a binding. The
-    /// alternative — resolving the right-hand side to whatever it denotes —
-    /// cannot be done here: `Self` would have to be rebound to `base` for the
-    /// duration, and the enclosing frame's `assoc_type_bindings` still shadow
-    /// it, so an unrelated `impl`'s `type Item = …` answers for a type
-    /// parameter's. Recursion through a bound's own right-hand side has no
-    /// fixpoint either (`type A: Iterator<Item = Self::B>` against
-    /// `type B: Iterator<Item = Self::A>`). An unanswered name stays abstract.
+    /// side asks about `base`, not about the frame's own `Self`. Only a
+    /// right-hand side the frame can answer produces a binding; the rest stay
+    /// abstract. Resolving one instead — rebinding `Self` to `base` and
+    /// resolving what it denotes — reintroduces two defects: the frame's
+    /// `assoc_type_bindings` shadow the rebound `Self`, so an unrelated
+    /// `impl`'s `type Item = …` answers for a type parameter's, and recursion
+    /// through a bound's own right-hand side has no fixpoint
+    /// (`type A: Iterator<Item = Self::B>` against `type B: Iterator<Item = Self::A>`).
     pub(super) fn frame_assoc_bindings(
         &mut self,
         base: TypeId,
