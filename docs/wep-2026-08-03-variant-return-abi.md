@@ -539,7 +539,9 @@ Each step lands and is measured before the next.
       shrink `layout.rs`. Gate: widened-function counts held, size and
       throughput not regressed. If the WIR side does not shrink, keep it and
       stop here — a NIR rewrite that duplicates a WIR rediscovery is worse than
-      either alone.
+      either alone. **Not reachable yet**, and
+      [the worklist](#why-widenrs-cannot-retire-yet) says why: the WIR pass
+      still widens 87 functions on `cbor_twitter`, more than this pass takes.
 - [x] Step 5 — `slot_flatten` stays in WIR, and the measurement is why. It
       splits a `ref W` result slot whose `W` is itself a small variant, and it
       fires 1–2 times per benchmark — once across `gale_gen`, twice on
@@ -548,6 +550,38 @@ Each step lands and is measured before the next.
       the arity cap, for those one or two functions. Instead this pass
       _declines_ the shape (`slot_flatten_would_split`), which restores the
       WIR splits it had been displacing and is worth -155 / -76 / -48 bytes.
+
+## Why `widen.rs` cannot retire yet
+
+`widen.rs` is not subsumed. On `cbor_twitter` it still widens 87 functions —
+more than the 74 this pass takes. Every one is a shape this pass declines, and
+they fall into three groups, measured by joining the WIR pass's applied list
+against this pass's decline reasons:
+
+| group                          | count | shape                                     |
+| ------------------------------ | ----- | ----------------------------------------- |
+| no layout                      | 30    | all of one type: `Result<Option<i32>, E>` |
+| refuted at a call site         | 32    | the returns are fine; a use is not        |
+| never reached this pass at all | 25    | e.g. `core:json/parse_i64_from`           |
+
+The 30 are one shape, not thirty problems: `Option<i32>` as a payload trips
+`slot_flatten_would_split`, so this pass hands them to the WIR side by design.
+That is the right call today — declining them is what restored the WIR splits
+and paid -155 bytes — but `slot_flatten` only fires twice on this program,
+so 28 of the 30 decline for a split that never happens. A `slot_flatten_would_split`
+that asked "will it _actually_ be split" rather than "could it be" would take
+most of them back.
+
+The 32 are the largest genuine gap and the least understood: the returns
+validate, and a call site refutes. Which use kinds those are is the first thing
+to measure.
+
+The 25 are not visible to this pass at all — worth finding out whether they are
+minted after it runs, or named differently in the two IRs.
+
+Nothing here argues the design is wrong; it argues the retire table is premature.
+`return_temp.rs` is the one file whose shape is genuinely gone (see
+[the return temp](#the-return-temp--resolved-in-field_scalarize)).
 
 ## Open questions
 
