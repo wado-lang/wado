@@ -566,11 +566,14 @@ against this pass's decline reasons:
 
 The 30 are one shape, not thirty problems: `Option<i32>` as a payload trips
 `slot_flatten_would_split`, so this pass hands them to the WIR side by design.
-That is the right call today — declining them is what restored the WIR splits
-and paid -155 bytes — but `slot_flatten` only fires twice on this program,
-so 28 of the 30 decline for a split that never happens. A `slot_flatten_would_split`
-that asked "will it _actually_ be split" rather than "could it be" would take
-most of them back.
+`slot_flatten` fires only twice on this program, so most of the 30 decline for
+a split that never happens — but that is not obviously a bug to fix. Declining
+them is what restored the WIR splits and paid -155 bytes, so taking them back
+gives those bytes up again, and it is not yet known why the WIR path is better
+here. Nor is the question decidable from NIR: `slot_flatten_candidates` gates on
+`all_returns_decompose` and on how each call site consumes the slot, both
+WIR-shape facts. Its one predictable gate, the arity cap, does not reject this
+shape (3 - 1 + 2 = 4). Understand the -155 bytes before loosening the rule.
 
 The 32 are the largest genuine gap and the least understood: the returns
 validate, and a call site refutes. Which use kinds those are is the first thing
