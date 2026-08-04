@@ -403,7 +403,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         trait_name: &str,
     ) -> Option<&super::trait_env::TraitDeclHeader> {
-        let key = self.trait_decl_key_in_frame(&self.declared_trait_name(trait_name));
+        let key = self.trait_decl_key_in_frame(trait_name);
         let loc = self.tysys.trait_env.decl_index.get(&key)?;
         self.tysys.trait_env.trait_decl_headers.get(loc)
     }
@@ -1440,21 +1440,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The declaration key of the trait `name` names in the current frame.
-    /// [`Elaborator::canonical_decl_key`] alone consults imports before the
-    /// current module, so a name the prelude also carries resolves away from
-    /// a local trait, and an unresolved one falls through to
-    /// `TraitEnv::find_trait_decl_key`'s bare-name global scan — which
-    /// answers with whichever module's same-named trait registered first.
-    /// A trait declared in the current module answers first (unless the
-    /// name is an import, which shadows it); only then the generic chain.
+    ///
+    /// The name sits in trait position, so only trait declarations are
+    /// candidates and a non-trait sharing the name is not a competitor. That
+    /// distinction is load-bearing: traits have no symbol-table entry of their
+    /// own, so [`Elaborator::canonical_decl_key`] resolves `Left` to
+    /// `core:prelude/format`'s enum case and would displace a module's own
+    /// `trait Left`. A locally declared trait therefore answers unless an
+    /// import names a trait of that name, which shadows it as any import does.
     pub(super) fn trait_decl_key_in_frame(&self, name: &str) -> super::trait_env::DeclKey {
-        if !self.sem.imports.imported_type_sources.contains_key(name) {
-            let local = (self.current_module_source.clone(), name.to_string());
-            if self.tysys.trait_env.decl_index.contains_key(&local) {
-                return local;
-            }
+        let canonical = self.canonical_decl_key(name);
+        let names_a_trait =
+            |key: &super::trait_env::DeclKey| self.tysys.trait_env.decl_index.contains_key(key);
+        if self.sem.imports.imported_type_sources.contains_key(name) && names_a_trait(&canonical) {
+            return canonical;
         }
-        self.canonical_decl_key(name)
+        let local = (self.current_module_source.clone(), name.to_string());
+        if names_a_trait(&local) {
+            return local;
+        }
+        canonical
     }
 
     /// Whether the trait declaration `decl` is in scope in the current frame:
@@ -1519,7 +1524,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `TypeId`-level digest rather than the name-level header, so it is only
     /// answerable once the decl pass has run.
     fn trait_sig_in_frame(&self, trait_name: &str) -> Option<&super::sig::TraitSig> {
-        let key = self.trait_decl_key_in_frame(&self.declared_trait_name(trait_name));
+        let key = self.trait_decl_key_in_frame(trait_name);
         let (_, decl_id) = self.tysys.trait_env.decl_index.get(&key)?;
         self.tysys.signatures.trait_sig(*decl_id)
     }
