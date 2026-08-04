@@ -1541,8 +1541,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for decl in assoc_types {
             let known = self.frame_projection(self_type_id, &self_name, &decl.name);
             let answer = known.unwrap_or_else(|| {
-                let bound_names: Vec<String> =
-                    decl.bounds.iter().map(|b| b.name.clone()).collect();
+                let bound_names: Vec<String> = decl.bounds.iter().map(|b| b.name.clone()).collect();
                 let bindings = self.frame_assoc_bindings(self_type_id, &self_name, &decl.bounds);
                 self.tysys
                     .type_table
