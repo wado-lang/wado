@@ -19,12 +19,21 @@
 //!   [`resolve_spec`] and [`crate::kiln_wit`]). A spec with neither a matching
 //!   build-dependency nor an inline registry surfaces [`ProviderError::Unsupported`].
 //!
-//! For `LocalPath`, `resolve` reads the generator source, consults the
-//! on-disk cache at `build/kiln/{generators,metadata}/<stable-id>.*`
-//! (gated by `no_cache`), and falls back to a fresh
-//! [`wado_compiler::compile_with_options`] run on miss. The compile
-//! path always rewrites both the wasm and descriptor caches so a
-//! subsequent run sees a warm tree.
+//! For `LocalPath`, `resolve` consults the cache (gated by `no_cache`) and
+//! falls back to a fresh [`wado_compiler::compile_with_options`] run on miss,
+//! always rewriting the cache so a subsequent run sees a warm tree.
+//!
+//! That cache is two halves. A generator's identity is the hash of the sources
+//! it is built from, and its component is stored under that hash — so the file
+//! is immutable, a hit needs no validation, and a changed generator writes a
+//! new name instead of overwriting one whose name no longer describes it. What
+//! the project last built is recorded in [`INDEX_FILE`][`GeneratorIndex`],
+//! which is how a later run finds the component without recompiling to learn
+//! its hash.
+//!
+//! The old scheme keyed the component on *where* the generator lived, plus its
+//! entry file only — so the cached file was rewritten in place whenever a
+//! transitive source changed, and its name promised nothing about its content.
 //!
 //! The driver is responsible for not calling `resolve` more than once
 //! per unique module per pipeline run — this provider holds no
@@ -32,9 +41,10 @@
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
+
+use indexmap::IndexMap;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -48,17 +58,47 @@ use crate::compiler_host::FilesystemCompilerHost;
 use crate::kiln_driver::{GeneratorProvider, ProviderError, ResolvedGenerator};
 use crate::oci;
 
-/// Directory under the project root where source-compiled (`LocalPath`)
-/// generator components are cached: `build/kiln/generators/`. A registry
-/// (`Spec`) generator is a prebuilt, immutable artifact and caches in the shared
-/// `~/wado/` tree (see [`crate::cache`]) instead. See WEP 2026-04-12
-/// §"`build/kiln/` directory layout".
+/// Directory under the project root holding compiled generator components, each
+/// named by the hash of the sources it was built from: `build/kiln/generators/`,
+/// and therefore gitignored. A registry (`Spec`) generator is a prebuilt,
+/// immutable artifact and caches in the shared `~/wado/` tree (see
+/// [`crate::cache`]) instead.
 pub const CACHE_DIR: &str = "build/kiln/generators";
 
-/// Directory under the project root for generator metadata extracted
-/// by the compiler (e.g. serialized `OptionsDescriptor`):
-/// `build/kiln/metadata/`. Reserved for the descriptor-cache follow-up.
-pub const METADATA_DIR: &str = "build/kiln/metadata";
+/// Where a project records what it knows about the generators it builds, so it
+/// can find their components again without recompiling. Beside them under
+/// `build/kiln/`, and therefore gitignored. See [`GeneratorIndex`].
+pub const INDEX_FILE: &str = "build/kiln/generators.json";
+
+/// One in-flight build per generator, keyed by project index path and module
+/// path.
+///
+/// `wado test` builds a fresh [`CliGeneratorProvider`] per fixture and compiles
+/// fixtures in parallel, so there is no provider-level state that could hold
+/// this — the lock has to outlive any one provider, hence a process global.
+/// Async, because it is held across the build: a fixture waiting on someone
+/// else's build yields its thread instead of pinning one.
+///
+/// Deliberately not a file lock. The component is content-addressed, so two
+/// racing `wado` processes write identical bytes to the same name; the
+/// duplication is wasted work, not a hazard, and guarding it across processes
+/// would cost a lock file, `libc`, and a non-unix fallback.
+static BUILDS: LazyLock<Mutex<IndexMap<(PathBuf, String), Arc<tokio::sync::Mutex<()>>>>> =
+    LazyLock::new(|| Mutex::new(IndexMap::new()));
+
+/// Serializes read-modify-write of any project index. Held only across a small
+/// JSON round-trip, never across a build, so one global costs nothing.
+static INDEX_WRITES: Mutex<()> = Mutex::new(());
+
+/// The build lock for one generator. The map guard is released before the
+/// caller ever awaits, so registering a new generator never blocks a build.
+fn build_lock(index_path: &Path, module_path: &str) -> Arc<tokio::sync::Mutex<()>> {
+    let mut builds = BUILDS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let key = (index_path.to_path_buf(), module_path.to_string());
+    Arc::clone(builds.entry(key).or_default())
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct RegistryContext {
@@ -120,60 +160,87 @@ impl CliGeneratorProvider {
         self.compile_count.load(Ordering::SeqCst)
     }
 
+    /// The generator's absolute path, with `.`/`..` folded away.
+    ///
+    /// Absolute and normalized because the compiler embeds this string in the
+    /// component it produces, while the cache names that component after its
+    /// *sources*. Left as given, `wado test` run from inside the package and
+    /// from the repo root would compile the same generator to different bytes
+    /// and file both under one name. Folding is lexical rather than
+    /// `canonicalize`, which would also resolve symlinks.
     fn resolve_path(&self, rel: &str) -> PathBuf {
-        self.manifest_root.join(Path::new(rel))
+        let joined = self.manifest_root.join(Path::new(rel));
+        let absolute = if joined.is_absolute() {
+            joined
+        } else {
+            std::env::current_dir().unwrap_or_default().join(joined)
+        };
+        normalize_path(&absolute)
     }
 
-    fn cache_path(&self, stable_id: &str) -> PathBuf {
+    fn index_path(&self) -> PathBuf {
+        self.manifest_root.join(INDEX_FILE)
+    }
+
+    /// Where the component built from `source_hash` is cached. Named after what
+    /// it was built from, so the file is immutable: a changed generator writes
+    /// a new name instead of overwriting, which is what lets a hit skip
+    /// validation entirely.
+    fn component_path(&self, source_hash: &str) -> PathBuf {
         self.manifest_root
             .join(CACHE_DIR)
-            .join(format!("{stable_id}.wasm"))
+            .join(format!("{source_hash}.wasm"))
     }
 
-    fn descriptor_cache_path(&self, stable_id: &str) -> PathBuf {
-        self.manifest_root
-            .join(METADATA_DIR)
-            .join(format!("{stable_id}.descriptor"))
-    }
-
-    fn sources_sidecar_path(&self, stable_id: &str) -> PathBuf {
-        self.manifest_root
-            .join(CACHE_DIR)
-            .join(format!("{stable_id}.sources.json"))
-    }
-
-    /// Re-validate the cached generator artefacts at `stable_id`
-    /// against the on-disk sources captured by the previous compile,
-    /// returning the freshly recomputed `combined_hash` on success and
-    /// `None` (= treat as cache miss) on any drift. The hash is
-    /// recomputed from the validated entries rather than trusted
-    /// verbatim from the sidecar, so a hand-edited sidecar cannot pin
-    /// metadata to a value that disagrees with its own `sources` list.
-    fn validate_sources_sidecar(&self, stable_id: &str, base: &Path) -> Option<String> {
-        let sidecar_path = self.sources_sidecar_path(stable_id);
-        let bytes = std::fs::read(&sidecar_path).ok()?;
-        let sidecar: GeneratorSourcesSidecar = serde_json::from_slice(&bytes).ok()?;
-        if sidecar.version != SIDECAR_VERSION {
-            return None;
-        }
-        let mut validated: Vec<(String, [u8; 32])> = Vec::with_capacity(sidecar.sources.len());
-        for entry in &sidecar.sources {
-            let abs = base.join(&entry.path);
-            let bytes = std::fs::read(&abs).ok()?;
-            let recorded = hex32_to_array(&entry.hash)?;
+    /// The indexed identity of the generator at `module_path`, but only while
+    /// the sources it records still hash to what they did when it was written.
+    /// `None` on a missing or stale index — the caller rebuilds and rewrites.
+    ///
+    /// The source hash is recomputed from the validated entries rather than
+    /// read back, so a hand-edited index cannot pin an identity that disagrees
+    /// with its own source list.
+    fn indexed_identity(&self, module_path: &str, base: &Path) -> Option<IndexedGenerator> {
+        let index = GeneratorIndex::load(&self.index_path())?;
+        let recorded = index.generators.get(module_path)?;
+        let mut validated: Vec<(String, [u8; 32])> = Vec::with_capacity(recorded.sources.len());
+        for entry in &recorded.sources {
+            let bytes = std::fs::read(base.join(&entry.path)).ok()?;
             let actual = hash_source(&entry.path, &bytes);
-            if actual != recorded {
+            if actual != hex32_to_array(&entry.hash)? {
                 return None;
             }
             validated.push((entry.path.clone(), actual));
         }
-        Some(combined_sources_hash(&validated))
+        (combined_sources_hash(&validated) == recorded.source_hash).then(|| recorded.clone())
+    }
+
+    /// Record `identity` for `module_path`, merging with whatever the index
+    /// already holds for the project's other generators. Best-effort: a refusal
+    /// only costs the next run a rebuild.
+    fn write_index(&self, module_path: &str, identity: &IndexedGenerator) {
+        // The build lock is per generator, so two generators in one project can
+        // reach this together; read-modify-write under a lock keyed on the file
+        // keeps one from dropping the other's entry.
+        let path = self.index_path();
+        let _writing = INDEX_WRITES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut index = GeneratorIndex::load(&path).unwrap_or_default();
+        index.version = INDEX_VERSION;
+        index
+            .generators
+            .insert(module_path.to_string(), identity.clone());
+        index.generators.sort_keys();
+        if let Ok(mut bytes) = serde_json::to_vec_pretty(&index) {
+            bytes.push(b'\n');
+            let _ = crate::cache::write_atomic(&path, &bytes);
+        }
     }
 
     fn read_local_source(
         &self,
         path: &wado_compiler::kiln::InvocationPath,
-    ) -> Result<(PathBuf, Vec<u8>, String, String), ProviderError> {
+    ) -> Result<(PathBuf, Vec<u8>, String), ProviderError> {
         let abs = self.resolve_path(path.as_str());
         if !abs.exists() {
             return Err(ProviderError::Internal {
@@ -216,26 +283,30 @@ impl CliGeneratorProvider {
                 });
             }
         };
-        let stable_id = stable_id_for_local(path.as_str(), &source);
-        Ok((abs, source, source_str, stable_id))
+        Ok((abs, source, source_str))
     }
 
-    /// Run the inner wado-compiler pipeline on the given source and
-    /// persist both on-disk artefacts (`<id>.wasm` and, when the
-    /// compile produces one, `<id>.descriptor`) plus the sources
-    /// sidecar that [`Self::try_read_cache`] needs for freshness
-    /// checks on later runs.
+    /// Run the inner wado-compiler pipeline on the given source, publish the
+    /// component to the shared cache under its source hash, and record that
+    /// identity in the project index for later runs.
     async fn compile_local(
         &self,
         path_str: String,
         abs: PathBuf,
         source_str: String,
-        stable_id: String,
     ) -> Result<CompileArtifacts, ProviderError> {
         self.compile_count.fetch_add(1, Ordering::SeqCst);
 
         let base_path = abs.parent().map(Path::to_path_buf).unwrap_or_default();
         let abs_str = abs.to_string_lossy().to_string();
+        let path_str_for_index = path_str.clone();
+        // Relative to `recording_base`, which is this file's own directory, the
+        // entry is just its name.
+        let entry_name = abs
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| abs_str.clone());
+        let entry_bytes = source_str.clone().into_bytes();
         let recording_base = base_path.clone();
         let loaded = Arc::new(Mutex::new(Vec::<(String, [u8; 32])>::new()));
         let loaded_for_task = loaded.clone();
@@ -300,76 +371,134 @@ impl CliGeneratorProvider {
         // the same module more than once), and persist the closure sidecar
         // alongside the cached WASM. The combined hash is what the kiln
         // driver records in `Metadata::generator_source_hash`.
-        let recorded = loaded
+        let mut recorded = loaded
             .lock()
             .map(|mut g| std::mem::take(&mut *g))
             .unwrap_or_default();
+        // The entry file is handed to the compiler as a string rather than
+        // fetched through `CompilerHost::load_source`, so the recording host
+        // never sees it. The source list is the generator's whole identity now,
+        // so seed it — without this an edit to the entry file would not change
+        // the hash and the stale component would be reused.
+        recorded.push((entry_name.clone(), hash_source(&entry_name, &entry_bytes)));
         let sources = dedup_sort_sources(make_relative_sources(&recording_base, recorded));
         let combined_hash = combined_sources_hash(&sources);
         artifacts.source_hash.clone_from(&combined_hash);
 
-        // Cache writes are best-effort: if the filesystem refuses we
-        // still return the fresh bytes. The next invocation just repeats
-        // the compile instead of observing a broken cache state.
-        let wasm_path = self.cache_path(&stable_id);
-        if let Some(parent) = wasm_path.parent()
-            && !parent.exists()
-        {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        let _ = std::fs::write(&wasm_path, &artifacts.wasm);
-
-        let sidecar = GeneratorSourcesSidecar {
-            version: SIDECAR_VERSION,
-            sources: sources
-                .iter()
-                .map(|(path, hash)| SourceEntry {
-                    path: path.clone(),
-                    hash: hex32(hash),
-                })
-                .collect(),
-            combined_hash,
-        };
-        let sidecar_path = self.sources_sidecar_path(&stable_id);
-        if let Ok(bytes) = serde_json::to_vec_pretty(&sidecar) {
-            let _ = std::fs::write(&sidecar_path, &bytes);
-        }
-
-        if let Some(ref descriptor) = artifacts.descriptor {
-            let desc_path = self.descriptor_cache_path(&stable_id);
-            if let Some(parent) = desc_path.parent()
-                && !parent.exists()
-            {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            if let Ok(bytes) = serde_json::to_vec_pretty(descriptor) {
-                let _ = std::fs::write(&desc_path, &bytes);
-            }
-        }
+        // The component is addressed by the hash of what it was built from, so
+        // its name changes with its content and the file is never overwritten
+        // in place. Writes are best-effort: the caller holds the fresh bytes,
+        // so a filesystem refusal only costs the next run a rebuild.
+        let _ = crate::cache::write_atomic(&self.component_path(&combined_hash), &artifacts.wasm);
+        self.write_index(
+            &path_str_for_index,
+            &IndexedGenerator {
+                source_hash: combined_hash,
+                descriptor: artifacts.descriptor.clone(),
+                sources: sources
+                    .iter()
+                    .map(|(path, hash)| SourceEntry {
+                        path: path.clone(),
+                        hash: hex32(hash),
+                    })
+                    .collect(),
+            },
+        );
 
         Ok(artifacts)
     }
 }
 
-/// Convert the absolute paths the recording host captured into project-
-/// relative paths anchored at `base`. Stdlib modules (`core:*`, `wasi:*`)
-/// never reach `CompilerHost::load_source`, so the only paths that show
-/// up here are filesystem sources the inner compiler asked for. Anything
-/// outside `base` (e.g. `../shared/foo.wado` if the project layout puts
-/// the generator under a sibling directory, or a remote URL the host
-/// happens to fetch) is kept verbatim — its hash still pins content, so
-/// invalidation stays correct, but the relative-path layout is lost.
+/// Convert the paths the recording host captured into paths relative to
+/// `base`, walking up with `..` for anything outside it (e.g.
+/// `../shared/foo.wado` when the project layout puts the generator under a
+/// sibling directory). Stdlib modules (`core:*`, `wasi:*`) never reach
+/// `CompilerHost::load_source`, so the only paths here are filesystem sources
+/// the inner compiler asked for.
+///
+/// A recorded path has to resolve back to the file it names — it is re-hashed
+/// on every read — and it feeds the identity hash, so it must carry nothing
+/// machine-specific. A path that cannot be expressed relative to `base` (a
+/// different drive, a remote URL the host happens to fetch) is kept verbatim:
+/// its hash still pins content, so invalidation stays correct where it was
+/// written and simply misses elsewhere.
 fn make_relative_sources(base: &Path, raw: Vec<(String, [u8; 32])>) -> Vec<(String, [u8; 32])> {
+    let base = normalize_path(base);
     raw.into_iter()
         .map(|(path, hash)| {
-            let p = Path::new(&path);
-            let rel = p
-                .strip_prefix(base)
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or(path);
-            (rel, hash)
+            // The host resolves a relative request against `base`, and `join`
+            // with an absolute path just replaces — so this lands both kinds on
+            // the same footing. Both sides are normalized first: diffing
+            // components of paths that still carry `.`/`..` produces nonsense
+            // like `.././foo.wado`, which resolves to nothing and quietly turns
+            // every later run into a miss.
+            let target = normalize_path(&base.join(&path));
+            (relative_to(&base, &target).unwrap_or(path), hash)
         })
         .collect()
+}
+
+/// Fold `.` and `..` out of `path` without touching the filesystem. A `..` at
+/// the root, or leading a relative path, has nothing to pop and is kept.
+fn normalize_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                // Only a real directory name can be popped. `PathBuf::pop`
+                // would happily remove a `..` this loop just pushed, turning
+                // `../../pkg` into `pkg` — a different directory entirely.
+                // Above the root there is nowhere to go, so `/..` is just `/`.
+                match out.components().next_back() {
+                    Some(Component::Normal(_)) => {
+                        out.pop();
+                    }
+                    Some(Component::RootDir | Component::Prefix(_)) => {}
+                    Some(Component::CurDir | Component::ParentDir) | None => {
+                        out.push(component);
+                    }
+                }
+            }
+            Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                out.push(component);
+            }
+        }
+    }
+    out
+}
+
+/// `target` expressed relative to `base`, with `..` for each level `target`
+/// sits above it. Both must already be normalized. `None` when the two share no
+/// root to walk between.
+fn relative_to(base: &Path, target: &Path) -> Option<String> {
+    use std::path::Component;
+
+    if base.is_absolute() != target.is_absolute() {
+        return None;
+    }
+    let mut base_parts = base.components().peekable();
+    let mut target_parts = target.components().peekable();
+    while base_parts.peek().is_some() && base_parts.peek() == target_parts.peek() {
+        base_parts.next();
+        target_parts.next();
+    }
+    let mut out = String::new();
+    for _ in base_parts.filter(|c| !matches!(c, Component::CurDir)) {
+        out.push_str("../");
+    }
+    // Always `/`-separated: the path is part of a hash, so its spelling must
+    // not depend on the platform that wrote it.
+    let mut rest = target_parts.peekable();
+    while let Some(part) = rest.next() {
+        out.push_str(&part.as_os_str().to_string_lossy());
+        if rest.peek().is_some() {
+            out.push('/');
+        }
+    }
+    (!out.is_empty()).then_some(out)
 }
 
 /// Provider-internal twin of [`ResolvedGenerator`]. Kept distinct so
@@ -382,15 +511,6 @@ struct CompileArtifacts {
     source_hash: String,
 }
 
-/// Compute the stable id (per WEP 2026-04-12 §"`build/kiln/` directory
-/// layout"): first 16 hex chars of `SHA-256(path || entry-content)`.
-///
-/// Intentionally hashes only the entry file — it is the cache *lookup*
-/// key, not the freshness key. Freshness comes from
-/// [`CliGeneratorProvider::validate_sources_sidecar`], which rehashes
-/// every transitively imported `.wado`. Without that sidecar an edit
-/// to a dep (e.g. `parser_gen.wado` behind a `generator.wado` entry)
-/// would silently keep returning stale wasm.
 /// Generator-component ABI generation. The compiled component embeds the
 /// `core:kiln` world types, so bump this on any `core:kiln/generator.wit` /
 /// `emit_kiln_world_types` change to invalidate caches built against the old
@@ -399,21 +519,6 @@ struct CompileArtifacts {
 /// `raw-request` is gone, and `generate` takes typed `(primary, inputs,
 /// options)` parameters.
 const KILN_GENERATOR_ABI_TAG: &[u8] = b"kiln-generator-v3\n";
-
-fn stable_id_for_local(path_str: &str, content: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(KILN_GENERATOR_ABI_TAG);
-    hasher.update(path_str.as_bytes());
-    hasher.update(b"\n");
-    hasher.update(content);
-    let digest = hasher.finalize();
-    let mut out = String::with_capacity(32);
-    for byte in &digest[..16] {
-        use std::fmt::Write;
-        let _ = write!(out, "{byte:02x}");
-    }
-    out
-}
 
 /// `CompilerHost` wrapper used by `compile_local` for two reasons:
 ///
@@ -538,28 +643,49 @@ fn hash_source(path: &str, bytes: &[u8]) -> [u8; 32] {
     sha256_of(&buf)
 }
 
-/// Sidecar file persisted next to a cached generator WASM, listing every
-/// file the inner compiler loaded while building the component — both
-/// `.wado` modules and binary assets routed through
-/// `CompilerHost::load_source` (e.g. `#include_bytes` payloads). Stdlib
-/// modules (`core:*`, `wasi:*`) are bypassed by the compiler and never
-/// appear here. Each entry is a project-relative path + the SHA-256 of
-/// the file's bytes when the WASM was produced. The provider re-hashes
-/// these files on the next call and rebuilds the WASM if any drift, so
-/// an edit to a transitive import (e.g. `parser_gen.wado` for a generator
-/// entry at `generator.wado`) correctly invalidates the cache.
+/// What a project knows about the generators it has built: for each, the
+/// identity of the last build, the options shape extracted from it, and the
+/// sources that say whether that identity is still current.
 ///
-/// `combined_hash` is the SHA-256 of the canonical encoding of `sources`
-/// (sorted lex by path, hex-encoded). It is the value stored in
-/// `Metadata::generator_source_hash` so the kiln-output cache check in
-/// the driver can reuse the same identity.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct GeneratorSourcesSidecar {
-    /// Schema version for forward compatibility. Bump on incompatible
-    /// changes; mismatched versions are treated as cache-miss.
+/// Purely a lookup aid for the content-addressed component cache — it lives
+/// under `build/` and is gitignored, so deleting it costs a rebuild and nothing
+/// else. It deliberately carries no claim about the *generated outputs*; that
+/// is `<primary>.kiln.json`'s job, per invocation, and keeping the two apart is
+/// what keeps this file free of correctness weight.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct GeneratorIndex {
+    /// Schema version. A mismatch is a cache miss, so a bump needs no
+    /// migration: the next build rewrites the file.
     version: u32,
+    /// Keyed by the generator's manifest-root-relative module path.
+    generators: IndexMap<String, IndexedGenerator>,
+}
+
+impl GeneratorIndex {
+    /// `None` when the file is absent, unreadable, malformed, or a version this
+    /// build does not speak — all of which mean "rebuild and rewrite".
+    fn load(path: &Path) -> Option<Self> {
+        let index: Self = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+        (index.version == INDEX_VERSION).then_some(index)
+    }
+}
+
+/// One generator's last known build.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct IndexedGenerator {
+    /// Hash of `sources`, and the name the component is cached under. Also the
+    /// identity the driver records in `Metadata::generator_source_hash`.
+    source_hash: String,
+    /// The options shape extracted from the generator's `pub struct Options`,
+    /// `null` for a generator that declares none.
+    descriptor: Option<OptionsDescriptor>,
+    /// Every file the inner compiler loaded while building the component —
+    /// `.wado` modules and binary assets routed through
+    /// `CompilerHost::load_source` (e.g. `#include_bytes` payloads). Stdlib
+    /// modules (`core:*`, `wasi:*`) bypass the host and never appear. Re-hashed
+    /// on read, so an edit to a transitive import (e.g. `parser_gen.wado`
+    /// behind a `generator.wado` entry) invalidates the entry.
     sources: Vec<SourceEntry>,
-    combined_hash: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -569,12 +695,10 @@ struct SourceEntry {
     hash: String,
 }
 
-/// Bumped together with the `combined_sources_hash` magic below
-/// whenever the source-hash inputs change. v2 introduced the canonical
-/// token-stream encoding for `.wado` files (see [`hash_source`]) so
-/// docstring/whitespace edits no longer perturb the hash; pre-existing
-/// v1 sidecars are silently treated as cache misses on read.
-const SIDECAR_VERSION: u32 = 2;
+/// Bumped together with the `combined_sources_hash` magic below whenever the
+/// source-hash inputs change, so a downgrade or a rebuild against an older
+/// compiler is a miss rather than a silent mix.
+const INDEX_VERSION: u32 = 3;
 
 fn dedup_sort_sources(mut sources: Vec<(String, [u8; 32])>) -> Vec<(String, [u8; 32])> {
     sources.sort_by(|a, b| a.0.cmp(&b.0));
@@ -584,11 +708,13 @@ fn dedup_sort_sources(mut sources: Vec<(String, [u8; 32])>) -> Vec<(String, [u8;
 
 fn combined_sources_hash(sources: &[(String, [u8; 32])]) -> String {
     let mut hasher = Sha256::new();
-    // v2: per-file hashes for `.wado` sources are now token-stream
-    // hashes (see `hash_source`); the magic moves in lockstep with the
-    // sidecar version so a downgrade or rebuild against an older
-    // compiler cannot silently mix v1 and v2 inputs.
-    hasher.update(b"kiln-generator-sources-v2\n");
+    // v3: per-file hashes for `.wado` sources are token-stream hashes (see
+    // `hash_source`), and the generator ABI generation folds in here — this is
+    // the only identity a generator has now, so an ABI bump has to move it.
+    // The magic tracks `INDEX_VERSION` so a downgrade or a rebuild against an
+    // older compiler is a miss rather than a silent mix.
+    hasher.update(b"kiln-generator-sources-v3\n");
+    hasher.update(KILN_GENERATOR_ABI_TAG);
     for (path, hash) in sources {
         hasher.update(path.as_bytes());
         hasher.update(b"\n");
@@ -811,15 +937,34 @@ impl CliGeneratorProvider {
         &self,
         path: &InvocationPath,
     ) -> Result<ResolvedGenerator, ProviderError> {
-        let (abs, _source, source_str, stable_id) = self.read_local_source(path)?;
+        let (abs, _source, source_str) = self.read_local_source(path)?;
         let base = abs.parent().map(Path::to_path_buf).unwrap_or_default();
         if !self.no_cache
-            && let Some(resolved) = self.try_read_cache(&stable_id, &base)
+            && let Some(resolved) = self.try_read_cache(path.as_str(), &base)
+        {
+            return Ok(resolved);
+        }
+        // Single-flight the build. A parallel `wado test` resolves the same
+        // generator once per fixture, so on a cold cache every in-flight
+        // fixture used to run its own full O2 build of one component — N times
+        // the cpu for no extra progress. The winner builds and publishes; the
+        // rest re-check behind the lock and hit.
+        //
+        // `--no-cache` stays unlocked: it exists to force a rebuild, so
+        // serializing rebuilds that each discard the previous result would only
+        // add wall time.
+        let entry_lock = (!self.no_cache).then(|| build_lock(&self.index_path(), path.as_str()));
+        let _building = match entry_lock.as_ref() {
+            Some(lock) => Some(lock.lock().await),
+            None => None,
+        };
+        if !self.no_cache
+            && let Some(resolved) = self.try_read_cache(path.as_str(), &base)
         {
             return Ok(resolved);
         }
         let artifacts = self
-            .compile_local(path.as_str().to_string(), abs, source_str, stable_id)
+            .compile_local(path.as_str().to_string(), abs, source_str)
             .await?;
         Ok(ResolvedGenerator {
             wasm: artifacts.wasm,
@@ -842,24 +987,20 @@ impl GeneratorProvider for CliGeneratorProvider {
 }
 
 impl CliGeneratorProvider {
-    /// Returns `None` on any cache miss or staleness — the caller
-    /// recompiles. The descriptor sidecar is *optional* (generators
-    /// without `pub struct Options` never write one), so its absence
-    /// is `descriptor: None`, not a miss.
-    fn try_read_cache(&self, stable_id: &str, base: &Path) -> Option<ResolvedGenerator> {
-        let cache_path = self.cache_path(stable_id);
-        if !cache_path.is_file() {
-            return None;
-        }
-        let source_hash = self.validate_sources_sidecar(stable_id, base)?;
-        let wasm = std::fs::read(&cache_path).ok()?;
-        let descriptor = std::fs::read(self.descriptor_cache_path(stable_id))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<OptionsDescriptor>(&bytes).ok());
+    /// Returns `None` on any cache miss or staleness — the caller recompiles.
+    ///
+    /// Two steps, both required: the index says which generator this project
+    /// last built (and is only believed while its recorded sources still hash
+    /// the same), and the shared cache holds that generator's component under
+    /// its source hash. The component is content-addressed, so its presence
+    /// alone makes it the right bytes — nothing further to validate, and no
+    /// state that could be a stale hit.
+    fn try_read_cache(&self, module_path: &str, base: &Path) -> Option<ResolvedGenerator> {
+        let identity = self.indexed_identity(module_path, base)?;
         Some(ResolvedGenerator {
-            wasm,
-            descriptor,
-            source_hash,
+            wasm: std::fs::read(self.component_path(&identity.source_hash)).ok()?,
+            descriptor: identity.descriptor,
+            source_hash: identity.source_hash,
         })
     }
 }
@@ -874,6 +1015,63 @@ mod tests {
             .enable_all()
             .build()
             .unwrap()
+    }
+
+    #[test]
+    fn normalize_path_keeps_a_parent_chain_it_cannot_pop() {
+        let cases = [
+            ("./../../pkg/gen.wado", "../../pkg/gen.wado"),
+            ("a/b/../c", "a/c"),
+            ("../a/..", ".."),
+            ("/a/b/../c", "/a/c"),
+            ("/../a", "/a"),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(
+                super::normalize_path(Path::new(input)),
+                Path::new(expected),
+                "normalizing {input:?}"
+            );
+        }
+    }
+
+    /// A recorded source path has to resolve back to the file it names — it is
+    /// re-hashed on every read. A relative manifest root used to produce
+    /// entries like `.././atn.wado`, which resolved to nothing, so validation
+    /// failed and *every* run rebuilt the generator: a total cache miss that
+    /// still looked like a hit.
+    #[test]
+    fn recorded_sources_round_trip_from_a_relative_base() {
+        let cases = [
+            // (base, recorded path as the host reports it, expected entry)
+            ("./src", "./atn.wado", "atn.wado"),
+            ("./src", "atn.wado", "atn.wado"),
+            ("src", "./nested/atn.wado", "nested/atn.wado"),
+            ("/pkg/src", "/pkg/src/atn.wado", "atn.wado"),
+            ("/pkg/src", "/pkg/shared/atn.wado", "../shared/atn.wado"),
+            ("/pkg/./src", "/pkg/src/./atn.wado", "atn.wado"),
+            // A `..` chain must survive: popping one would name another
+            // directory outright.
+            ("../../pkg/src", "../../pkg/src/atn.wado", "atn.wado"),
+            (
+                "./../pkg/src",
+                "./../pkg/shared/atn.wado",
+                "../pkg/shared/atn.wado",
+            ),
+        ];
+        for (base, recorded, expected) in cases {
+            let base = Path::new(base);
+            let out = super::make_relative_sources(base, vec![(recorded.to_string(), [0u8; 32])]);
+            assert_eq!(
+                out[0].0, expected,
+                "base {base:?} + recorded {recorded:?} must record {expected:?}"
+            );
+            assert_eq!(
+                super::normalize_path(&base.join(&out[0].0)),
+                super::normalize_path(&base.join(recorded)),
+                "the entry must resolve back to the recorded file"
+            );
+        }
     }
 
     #[test]
@@ -954,17 +1152,6 @@ mod tests {
     }
 
     #[test]
-    fn stable_id_is_deterministic_and_depends_on_content() {
-        let a = stable_id_for_local("./gen.wado", b"hello");
-        let b = stable_id_for_local("./gen.wado", b"hello");
-        assert_eq!(a, b, "stable-id must be deterministic");
-        let c = stable_id_for_local("./gen.wado", b"world");
-        assert_ne!(a, c, "content change must change stable-id");
-        let d = stable_id_for_local("./other.wado", b"hello");
-        assert_ne!(a, d, "path change must change stable-id");
-    }
-
-    #[test]
     fn local_path_compiles_and_caches_resolved_generator() {
         let tmp =
             std::env::temp_dir().join(format!("wado-kiln-provider-compile-{}", std::process::id()));
@@ -1014,33 +1201,18 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
         // The compile-and-write path persists wasm + sources sidecar
         // (+ descriptor); assert they all landed so the next resolve
         // exercises the on-disk cache.
-        let cache_dir = tmp.join(CACHE_DIR);
-        let entries: Vec<_> = std::fs::read_dir(&cache_dir)
-            .map(|it| it.filter_map(Result::ok).collect())
-            .unwrap_or_default();
-        assert_eq!(
-            entries
-                .iter()
-                .filter(|e| e.path().extension().is_some_and(|ext| ext == "wasm"))
-                .count(),
-            1,
-            "exactly one cached component .wasm expected"
+        // The compile publishes two things: the component, under its source
+        // hash, and the index recording that identity.
+        assert!(
+            tmp.join(CACHE_DIR)
+                .join(format!("{}.wasm", resolved.source_hash))
+                .is_file(),
+            "the component must be cached under its source hash"
         );
-        assert_eq!(
-            entries
-                .iter()
-                .filter(|e| e.path().to_string_lossy().ends_with(".sources.json"))
-                .count(),
-            1,
-            "exactly one cached sources sidecar expected"
-        );
-        let metadata_dir = tmp.join(METADATA_DIR);
-        assert_eq!(
-            std::fs::read_dir(&metadata_dir)
-                .map(|it| it.filter_map(Result::ok).count())
-                .unwrap_or(0),
-            1,
-            "exactly one cached descriptor expected"
+        let index = std::fs::read_to_string(tmp.join(INDEX_FILE)).expect("index must be written");
+        assert!(
+            index.contains(&resolved.source_hash),
+            "the index must record the generator identity: {index}"
         );
 
         // Second resolve must hit the on-disk cache and skip the compile.
@@ -1079,7 +1251,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
     fn resolve_after_source_edit_recompiles() {
         // Regression: keying purely off the entry-file `stable_id`
         // must invalidate when the source changes. Combined with the
-        // sidecar's transitive-file hash list, an edit to either the
+        // index's transitive-file hash list, an edit to either the
         // entry or a dep must trigger exactly one fresh compile.
         let tmp = std::env::temp_dir().join(format!(
             "wado-kiln-provider-resolve-edit-{}",

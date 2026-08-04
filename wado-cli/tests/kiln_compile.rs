@@ -3,7 +3,7 @@
 //! pipeline and verifies:
 //!
 //! 1. First run emits a component (`\0asm` magic) to
-//!    `build/kiln/generators/<stable-id>.wasm`.
+//!    `build/kiln/generators/`, under the hash of its sources.
 //! 2. Second run returns identical bytes and does **not** re-invoke the
 //!    inner compiler. Observed via `CliGeneratorProvider::compile_count`
 //!    rather than filesystem mtime, which avoids sleep + tmpfs/nfs
@@ -18,7 +18,7 @@ use std::path::PathBuf;
 
 use wado_cli::compiler_host::{FilesystemCompilerHost, KilnComponentCache};
 use wado_cli::kiln_driver::{GeneratorProvider, ProviderError};
-use wado_cli::kiln_provider::{CACHE_DIR, CliGeneratorProvider};
+use wado_cli::kiln_provider::{CACHE_DIR, CliGeneratorProvider, INDEX_FILE};
 use wado_compiler::kiln::{GeneratorModule, InvocationPath};
 use wado_compiler::{CompilerHost, GeneratorInputFile, GeneratorRequest, LogLevel};
 
@@ -68,6 +68,16 @@ export fn generate(req: Request) -> Result<Response, Error> {
 }
 "#;
 
+/// The `sources[].path` values in a serialized generator index.
+fn recorded_source_paths(index_json: &str) -> Vec<String> {
+    index_json
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("\"path\": \""))
+        .filter_map(|rest| rest.strip_suffix("\","))
+        .map(|p| p.trim_end_matches('"').to_string())
+        .collect()
+}
+
 fn unique_tmp(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!("wado-{label}-{}", std::process::id()))
 }
@@ -104,29 +114,30 @@ fn first_run_compiles_second_run_hits_cache() {
         "first call should have run the inner compiler exactly once"
     );
 
-    // Verify the cache artifact landed where the stable-id scheme
-    // expects.
-    let cache_dir = tmp.join(CACHE_DIR);
-    let cache_files: Vec<PathBuf> = std::fs::read_dir(&cache_dir)
-        .expect("cache dir should exist after first compile")
-        .filter_map(|r| r.ok().map(|e| e.path()))
-        .collect();
-    let wasm_files: Vec<&PathBuf> = cache_files
-        .iter()
-        .filter(|p| p.extension().is_some_and(|ext| ext == "wasm"))
-        .collect();
-    assert_eq!(wasm_files.len(), 1, "exactly one cached component expected");
-    // The compile path also persists a `.sources.json` sidecar listing
-    // the transitive `.wado` closure for cache invalidation.
-    let sidecar_files: Vec<&PathBuf> = cache_files
-        .iter()
-        .filter(|p| p.to_string_lossy().ends_with(".sources.json"))
-        .collect();
-    assert_eq!(
-        sidecar_files.len(),
-        1,
-        "exactly one cached sources sidecar expected"
+    // A build publishes exactly two things: the component, under its source
+    // hash, and the index recording that identity.
+    let component = tmp
+        .join(CACHE_DIR)
+        .join(format!("{}.wasm", first.source_hash));
+    assert!(
+        component.is_file(),
+        "the component must be cached under its source hash: {component:?}"
     );
+    let index = std::fs::read_to_string(tmp.join(INDEX_FILE)).expect("index must be written");
+    assert!(
+        index.contains(&first.source_hash),
+        "the index must record the generator identity: {index}"
+    );
+    // Every recorded source has to resolve back to the file it names. A path
+    // that resolves to nothing makes the freshness check fail forever, which
+    // reads as a permanent cache miss and is otherwise invisible — the build
+    // just silently stops caching.
+    for path in recorded_source_paths(&index) {
+        assert!(
+            tmp.join(&path).is_file(),
+            "recorded source {path:?} must resolve under the generator's directory"
+        );
+    }
 
     // Second call: same source, same stable-id → must hit the cache,
     // return identical bytes, and leave the compile counter untouched.
@@ -260,6 +271,101 @@ fn no_options_generator_compiles_and_runs() {
     runtime()
         .block_on(async { host.run_generator(&resolved.wasm, request).await })
         .expect("no-options generator must run");
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// One generator has one identity however the project that uses it spells the
+/// path to it. Five projects in this workspace take `package-gale`'s generator
+/// as a path build-dependency, each reaching it by a different relative path,
+/// and the old key hashed that path — so the same generator had as many
+/// identities as it had consumers, and each consumer's `<primary>.kiln.json`
+/// recorded a different one for the same build.
+#[test]
+fn one_generator_has_one_identity_however_it_is_addressed() {
+    let tmp = unique_tmp("kiln-compile-identity-across-projects");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(tmp.join("generator_pkg")).unwrap();
+    std::fs::write(
+        tmp.join("generator_pkg/my_generator.wado"),
+        MINIMAL_GENERATOR,
+    )
+    .unwrap();
+
+    let resolve_from = |consumer: &str, module: &str| {
+        let root = tmp.join(consumer);
+        std::fs::create_dir_all(&root).unwrap();
+        let provider = CliGeneratorProvider::new(root);
+        let module = GeneratorModule::LocalPath(InvocationPath::normalize(module));
+        runtime()
+            .block_on(async { provider.resolve(&module).await })
+            .expect("resolve should succeed")
+    };
+
+    let a = resolve_from("consumer_a", "../generator_pkg/my_generator.wado");
+    let b = resolve_from("consumer_b/nested", "../../generator_pkg/my_generator.wado");
+
+    assert_eq!(
+        a.source_hash, b.source_hash,
+        "one generator has one identity regardless of who addresses it"
+    );
+    // And one set of bytes: the compiler embeds the path it is given, so the
+    // identity would name two different components if that path varied with
+    // the consumer.
+    assert_eq!(a.wasm, b.wasm, "and one component under that identity");
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// Concurrent resolves of the same generator must build it once. `wado test`
+/// builds a fresh provider per fixture and compiles fixtures in parallel, so
+/// on a cold cache every in-flight fixture ran its own full O2 build.
+#[test]
+fn concurrent_resolves_build_the_generator_once() {
+    const RESOLVERS: usize = 4;
+
+    let tmp = unique_tmp("kiln-compile-single-flight");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+    std::fs::write(tmp.join("my_generator.wado"), MINIMAL_GENERATOR).unwrap();
+
+    // One provider per resolver, as the per-fixture pipeline builds them: the
+    // compile counter is shared only across `Clone`s, so the total across
+    // independent providers is the true number of inner-compiler runs.
+    let providers: Vec<CliGeneratorProvider> = (0..RESOLVERS)
+        .map(|_| CliGeneratorProvider::new(tmp.clone()))
+        .collect();
+    let barrier = std::sync::Barrier::new(RESOLVERS);
+
+    std::thread::scope(|scope| {
+        for provider in &providers {
+            scope.spawn(|| {
+                let module =
+                    GeneratorModule::LocalPath(InvocationPath::normalize("./my_generator.wado"));
+                barrier.wait();
+                let resolved = runtime()
+                    .block_on(async { provider.resolve(&module).await })
+                    .expect("concurrent resolve should succeed");
+                assert!(
+                    resolved.wasm.starts_with(b"\0asm"),
+                    "every concurrent resolve must return a valid component"
+                );
+                assert!(
+                    resolved.descriptor.is_some(),
+                    "every concurrent resolve must return the options descriptor"
+                );
+            });
+        }
+    });
+
+    let total: usize = providers
+        .iter()
+        .map(CliGeneratorProvider::compile_count)
+        .sum();
+    assert_eq!(
+        total, 1,
+        "concurrent resolves of one generator must run the inner compiler once"
+    );
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
@@ -421,8 +527,8 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         "source hash must be recorded"
     );
 
-    // Wipe the build cache (WASM + sidecar + descriptor) so the next
-    // call is a true cold compile, not a sidecar-revalidate fast path.
+    // Wipe the cache so the next call is a true cold compile, not a
+    // revalidate-the-closure fast path.
     let _ = std::fs::remove_dir_all(tmp.join("build"));
 
     // Run 2: same source bytes, fresh compile.
@@ -763,6 +869,69 @@ fn shared_kiln_cache_compiles_generator_once_across_hosts() {
     );
     assert_eq!(host_a.kiln_component_compile_count(), 1);
     assert_eq!(host_b.kiln_component_compile_count(), 1);
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// The shared cache must also collapse *concurrent* first runs. `wado test`
+/// compiles fixtures in parallel, so the hosts reach a cold cache together and
+/// a lookup-then-compile-then-insert sequence lets every one of them pay the
+/// full Cranelift AOT for the same component.
+#[test]
+fn shared_kiln_cache_compiles_generator_once_under_concurrency() {
+    const HOSTS: usize = 4;
+
+    let tmp = unique_tmp("kiln-shared-component-cache-concurrent");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+    std::fs::write(tmp.join("my_generator.wado"), MINIMAL_GENERATOR).unwrap();
+
+    let provider = CliGeneratorProvider::new(tmp.clone());
+    let module = GeneratorModule::LocalPath(InvocationPath::normalize("./my_generator.wado"));
+    let resolved = runtime()
+        .block_on(async { provider.resolve(&module).await })
+        .expect("generator compiles");
+
+    let cache = std::sync::Arc::new(KilnComponentCache::new());
+    let hosts: Vec<FilesystemCompilerHost> = (0..HOSTS)
+        .map(|_| {
+            FilesystemCompilerHost::with_log_level(tmp.clone(), LogLevel::Off)
+                .with_shared_kiln_cache(cache.clone())
+        })
+        .collect();
+    let barrier = std::sync::Barrier::new(HOSTS);
+
+    std::thread::scope(|scope| {
+        for host in &hosts {
+            let wasm = &resolved.wasm;
+            scope.spawn(|| {
+                let request = GeneratorRequest {
+                    primary: GeneratorInputFile {
+                        path: "schema.proto".to_string(),
+                        content: "syntax = \"proto3\";".to_string(),
+                    },
+                    inputs: vec![],
+                    options: wado_compiler::kiln::CanonicalOptions {
+                        descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
+                        values: vec![(
+                            "verbose".to_string(),
+                            wado_compiler::kiln::CanonicalValue::Bool(false),
+                        )],
+                    },
+                };
+                barrier.wait();
+                runtime()
+                    .block_on(async { host.run_generator(wasm, request).await })
+                    .expect("concurrent generator run");
+            });
+        }
+    });
+
+    assert_eq!(
+        cache.compile_count(),
+        1,
+        "concurrent first runs must AOT-compile the generator once"
+    );
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
