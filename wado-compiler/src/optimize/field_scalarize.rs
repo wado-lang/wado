@@ -1713,13 +1713,15 @@ fn insert_convergence_at_block_end(
 /// a fresh aggregate, so capturing the whole aggregate here costs the
 /// allocation the multi-value ABI exists to avoid.
 ///
-/// Only a literal constant is re-emitted after the sync without a binding. A
-/// promoted heap read (`ValueKind::FieldAccess`) is re-emitted at its use, and
+/// Two things are re-emitted after the sync without a binding: a literal
+/// constant, and a local `assigned` says the sync leaves alone. A promoted heap
+/// read (`ValueKind::FieldAccess`) is neither — it is re-emitted at its use, and
 /// the sync may have written the field it reads.
 fn capture_for_sync(
     body: &mut Body,
     ctx: &mut WalkCtx,
     value: Operand,
+    assigned: &IndexSet<u32>,
     span: crate::token::Span,
 ) -> (Vec<StmtId>, Operand, Vec<(u32, TypeId)>) {
     if let Some(e) = value.as_expr() {
@@ -1737,7 +1739,7 @@ fn capture_for_sync(
             for op in operands {
                 // Each operand holds its temp until the whole literal is built,
                 // so the pool cannot hand the same index to two live slots.
-                let (mut s, o, mut t) = bind_for_sync(body, ctx, op, span);
+                let (mut s, o, mut t) = bind_for_sync(body, ctx, op, assigned, span);
                 stmts.append(&mut s);
                 temps.append(&mut t);
                 rebuilt.push(o);
@@ -1754,15 +1756,33 @@ fn capture_for_sync(
             return (stmts, Operand::Expr(e), temps);
         }
     }
-    bind_for_sync(body, ctx, value, span)
+    bind_for_sync(body, ctx, value, assigned, span)
 }
 
-/// One operand of [`capture_for_sync`]: a literal constant needs no binding,
-/// anything else gets a pooled temp.
+/// Locals the sync sequence assigns. A re-read (`__hfs_F = local.F`) refreshes
+/// its scalar local, so an operand naming that local must be captured before the
+/// sync; a write-back (`local.F = __hfs_F`) only reads one.
+fn sync_assigned_locals(body: &Body, sync_stmts: &[StmtId]) -> IndexSet<u32> {
+    let mut out = IndexSet::default();
+    for &s in sync_stmts {
+        if let StmtKind::Expr(op) = &body.stmts[s].kind
+            && let Some(e) = op.as_expr()
+            && let ExprKind::Assign { target, .. } = &body.exprs[e].kind
+            && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+        {
+            out.insert(*index);
+        }
+    }
+    out
+}
+
+/// One operand of [`capture_for_sync`]: a literal constant and a local the sync
+/// leaves alone need no binding, anything else gets a pooled temp.
 fn bind_for_sync(
     body: &mut Body,
     ctx: &mut WalkCtx,
     value: Operand,
+    assigned: &IndexSet<u32>,
     span: crate::token::Span,
 ) -> (Vec<StmtId>, Operand, Vec<(u32, TypeId)>) {
     use crate::nir_value_graph::ValueKind;
@@ -1776,6 +1796,17 @@ fn bind_for_sync(
                 | ValueKind::Null
                 | ValueKind::Unit
         )
+    {
+        return (Vec::new(), value, Vec::new());
+    }
+    // Reading the local after the sync yields what reading it before would.
+    // Binding it anyway left the `__hfs_call_N = hit; self.pos = __hfs_pos_M;
+    // return __hfs_call_N` the retired WIR pass had to clean up. Sound for a
+    // ref-typed local too: the binding copies the reference, not the pointee, so
+    // a field the sync writes is visible either way.
+    if let Some(e) = value.as_expr()
+        && let ExprKind::Local { index, .. } = &body.exprs[e].kind
+        && !assigned.contains(index)
     {
         return (Vec::new(), value, Vec::new());
     }
@@ -1840,7 +1871,9 @@ fn append_sync_preserving_block_value(
     let StmtKind::Expr(value_op) = body.stmts[last_sid].kind else {
         unreachable!("checked Expr above")
     };
-    let (bindings, value_after, temps) = capture_for_sync(body, ctx, value_op, last_span);
+    let assigned = sync_assigned_locals(body, &sync_stmts);
+    let (bindings, value_after, temps) =
+        capture_for_sync(body, ctx, value_op, &assigned, last_span);
     body.blocks[block].stmts.extend(bindings);
     body.blocks[block].stmts.extend(sync_stmts);
     let trailing_sid = push_stmt(body, StmtKind::Expr(value_after), last_span);
@@ -1960,9 +1993,17 @@ fn walk_stmt(
             // value into a temp local so the writeback can run between
             // the expression's evaluation and the return jump.
             if let Some(return_value) = value.filter(|_| states.contains(&CanonState::ScalarOnly)) {
-                let (bindings, new_value, temps) = capture_for_sync(body, ctx, return_value, span);
+                // Build the sync first so what it assigns is read off the
+                // statements themselves, as at the other two capture sites,
+                // rather than assumed from what `commit_scalar_for_escape`
+                // happens to emit today.
+                let mut sync = Vec::new();
+                commit_scalar_for_escape(body, states, &mut sync, ctx, span);
+                let assigned = sync_assigned_locals(body, &sync);
+                let (bindings, new_value, temps) =
+                    capture_for_sync(body, ctx, return_value, &assigned, span);
                 out.extend(bindings);
-                commit_scalar_for_escape(body, states, out, ctx, span);
+                out.extend(sync);
                 body.stmts[sid].kind = StmtKind::Return {
                     value: Some(new_value),
                 };
@@ -3134,7 +3175,9 @@ fn emit_convergence_at_expr_end(
     // Non-unit body: bind the value so the Block evaluates to it after sync.
     let original_kind = std::mem::replace(&mut body.exprs[arm_e].kind, ExprKind::Dead);
     let original = push_expr(body, original_kind, body_type, body_span);
-    let (bindings, value_after, temps) = capture_for_sync(body, ctx, original.into(), body_span);
+    let assigned = sync_assigned_locals(body, &sync_stmts);
+    let (bindings, value_after, temps) =
+        capture_for_sync(body, ctx, original.into(), &assigned, body_span);
     let mut stmts = Vec::with_capacity(1 + bindings.len() + sync_stmts.len());
     stmts.extend(bindings);
     stmts.extend(sync_stmts);
