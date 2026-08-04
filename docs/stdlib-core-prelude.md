@@ -2076,7 +2076,7 @@ Floating-point remainder of x/y
 
 #### `pub fn mul_add(x: f32, y: f32, z: f32) -> f32`
 
-x _ y + z, rounded once instead of twice.
+`x * y + z`, rounded once instead of twice.
 
 Wasm has no scalar FMA instruction, so this is a software
 implementation — slower than `x * y + z`.
@@ -2325,7 +2325,7 @@ Floating-point remainder of x/y
 
 #### `pub fn mul_add(x: f64, y: f64, z: f64) -> f64`
 
-x _ y + z, rounded once instead of twice.
+`x * y + z`, rounded once instead of twice.
 
 Wasm has no scalar FMA instruction, so this is a software
 implementation — slower than `x * y + z`.
