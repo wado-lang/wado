@@ -65,15 +65,29 @@ fn candidate_call_idx(
 
 /// A `return`ed direct call: its callee, the call's own type, and the node.
 /// Looks through a block tail, the shape `let_block_flatten` leaves when it
-/// hoists a receiver in front of the call.
-fn tail_return_call(body: &Body, op: Operand) -> Option<(FuncId, TypeId, ExprId)> {
+/// hoists a receiver in front of the call — and hands back the statements the
+/// block runs first.
+///
+/// Those statements are ordinary code and the caller has to validate them. The
+/// tail-call rule exempts the call from needing a `let` to bind; it says nothing
+/// about what the block does before it. Skipping them let a whole-aggregate use
+/// in the prefix pass unseen, so its callee took the multi-value ABI while the
+/// use still read a local the split had left unassigned.
+fn tail_return_call(
+    body: &Body,
+    op: Operand,
+    prefix: &mut Vec<StmtId>,
+) -> Option<(FuncId, TypeId, ExprId)> {
     let e = op.as_expr()?;
     match &body.exprs[e].kind {
         ExprKind::Call { func_id, .. } => Some((*func_id, body.exprs[e].type_id, e)),
         ExprKind::Block(b) => {
-            let last = *body.blocks[*b].stmts.last()?;
+            let (&last, lead) = body.blocks[*b].stmts.split_last()?;
             match &body.stmts[last].kind {
-                StmtKind::Expr(inner) => tail_return_call(body, *inner),
+                StmtKind::Expr(inner) => {
+                    prefix.extend_from_slice(lead);
+                    tail_return_call(body, *inner, prefix)
+                }
                 _ => None,
             }
         }
@@ -637,14 +651,18 @@ fn validate_stmt(
             // `return g(x)` in a function that returns the same aggregate: `g`
             // leaves its N results on the stack and they are ours, so the call
             // needs no `let` to bind. Its arguments are still ordinary uses.
+            let mut prefix: Vec<StmtId> = Vec::new();
             if let Some(ours) = cx.passes_through
-                && let Some(call) = tail_return_call(body, e)
+                && let Some(call) = tail_return_call(body, e, &mut prefix)
                 && cx
                     .candidate_ids
                     .get(&call.0)
                     .and_then(|idx| cx.candidates.get(idx))
                     .is_some_and(|_| call.1 == ours)
             {
+                for s in prefix {
+                    validate_stmt(body, s, cx, invalid, tracked);
+                }
                 walk_call_args_for_uses(body, call.2, cx, invalid, tracked);
                 return;
             }
