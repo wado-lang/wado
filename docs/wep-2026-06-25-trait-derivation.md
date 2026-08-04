@@ -303,13 +303,10 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
 
 ### Relationship and prerequisites
 
-Shipped against the bespoke synthesizers (`synthesis::serde_synth`,
-`synthesis::traits`), independently of
-[`ReflectStruct`](./wep-2026-06-13-reflect-derivation.md): this WEP only changes
-_when_ a request is created, not _how_ the body is written. The reflection-based
-rewrite then landed on top of the same plumbing — a demand request now selects a
-`Reflect*` blanket instead of emitting a per-type body, for every derivation
-except the struct deserializer.
+Independent of [`ReflectStruct`](./wep-2026-06-13-reflect-derivation.md): this
+WEP decides _when_ a request is created, not _how_ the body is written. What
+answers the request is that WEP's concern — today a `Reflect*` blanket for every
+derivation but the struct deserializer.
 
 ## Alternatives Considered
 
