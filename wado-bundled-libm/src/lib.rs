@@ -93,6 +93,11 @@ pub extern "C" fn libm_exp2(x: f64) -> f64 {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn libm_exp10(x: f64) -> f64 {
+    libm::exp10(x)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn libm_expm1(x: f64) -> f64 {
     libm::expm1(x)
 }
@@ -234,6 +239,11 @@ pub extern "C" fn libm_expf(x: f32) -> f32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn libm_exp2f(x: f32) -> f32 {
     libm::exp2f(x)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_exp10f(x: f32) -> f32 {
+    libm::exp10f(x)
 }
 
 #[unsafe(no_mangle)]
