@@ -1,0 +1,17 @@
+// A value of universally-quantified type cannot satisfy a concrete return
+// type: inside the body `T` is opaque, whatever the caller instantiates it to.
+//
+// The return check deferred every comparison involving a type parameter, so
+// this compiled and monomorphization then emitted a `u32` where the signature
+// promised a `String` — invalid Wasm rather than a diagnostic.
+
+fn ret<T>(x: T) -> String {
+    return x;
+}
+
+export fn run() {
+    let s: String = ret::<u32>(1);
+}
+
+__DATA__
+{ "compile_error": "type mismatch" }

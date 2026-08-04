@@ -78,10 +78,22 @@ pub(super) fn check_assignable(
         return TypeCheckResult::Compatible;
     }
 
-    // Rule 3: Type params -- defer until monomorphization.
-    // Note: We can't reject TypeParam-vs-concrete here because trait impls
-    // legitimately pass concrete types where type params are expected
-    // (e.g., `I` -> `ListIter<T>` in Iterator blanket impls).
+    // Rule 3: Type params -- defer until monomorphization, except where
+    // substitution cannot rescue the comparison.
+    //
+    // A bare parameter is opaque inside the body that declares it: whatever a
+    // caller instantiates `T` to, a `T` in hand is not a `String`. Deferring
+    // that never revisits it, so a `-> String` body returning its `T` reached
+    // monomorphization and emitted a `u32` against the declared signature.
+    //
+    // Only this direction is decidable. Concrete-where-a-parameter-is-expected
+    // is instantiation, which trait impls rely on (`ListIter<T>` for `I` in the
+    // `Iterator` blanket impl), so it still defers.
+    if matches!(type_table.get(actual), ResolvedType::TypeParam { .. })
+        && !type_table.contains_type_param(expected)
+    {
+        return TypeCheckResult::Incompatible;
+    }
     if type_table.contains_type_param(actual) || type_table.contains_type_param(expected) {
         return TypeCheckResult::Deferred;
     }

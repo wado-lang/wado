@@ -301,6 +301,26 @@ test "render_dump annotates an Ambiguous leaf with its halt reason" {
     assert str_contains(&report, &"at-end vs branch conflict"), report;
 }
 
+test "render_dump keeps an at-end alt out of an expanded opaque dispatch" {
+    // `e : a | b | X ;` over `a : X Y ; b : X Z ;` — alts 0 and 1 enter
+    // multi-token rules the opaque expansion can separate on the second
+    // token, while alt 2 is complete after `X`. Dispatching on that second
+    // token would drop alt 2: what follows it belongs to `e`'s caller, so
+    // no branch at this depth can claim it — the halt is an at-end conflict,
+    // exactly as it is when no opaque rule ref is in the way.
+    let g = "grammar O;
+e : a | b | X ;
+a : X Y ;
+b : X Z ;
+X : 'X' ;
+Y : 'Y' ;
+Z : 'Z' ;";
+    let report = dump_source(&g);
+
+    assert str_contains(&report, &"Ambiguous([alt 2, alt 0, alt 1]) — at-end vs branch conflict"), report;
+    assert !str_contains(&report, &"Leaf(alt "), report;
+}
+
 test "render_dump shows LR loop-entry dispatch with conflict-min" {
     // `e : e '.' ID | e '.' ID '(' ')' | ID ;` — both LR suffixes start
     // with '.', so the precedence loop's entry decision is NOT token-led:

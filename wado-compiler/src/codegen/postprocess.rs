@@ -40,19 +40,6 @@ pub fn eliminate_dead_code(wasm_bytes: &[u8], keep_exports: &IndexSet<String>) -
     module.emit_wasm()
 }
 
-/// Extract the minimum memory pages from a Wasm module's memory section.
-pub fn extract_memory_min_pages(wasm_bytes: &[u8]) -> u64 {
-    let parser = Parser::new(0);
-    for payload in parser.parse_all(wasm_bytes) {
-        if let Ok(Payload::MemorySection(mems)) = payload
-            && let Some(mem) = mems.into_iter().flatten().next()
-        {
-            return mem.initial;
-        }
-    }
-    1
-}
-
 /// Convert a Wasm module that defines memory to one that imports memory
 /// This allows the module to share memory with other modules in a component
 pub fn convert_memory_to_import(

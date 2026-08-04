@@ -3884,7 +3884,7 @@ fn "core:prelude/fpfmt.wado/parse_text_range"(s, start, end) {
             0;
         }) {
             if remaining == 3 {
-                return 0, f64.copysign(1 / 0, sign);
+                return 0, f64.copysign(inf, sign);
             }
             if remaining == 8 {
                 c3 = "core:prelude/string.wado/core:prelude/string.wado/String::get_byte_unchecked"(s, i + 3);
@@ -3929,7 +3929,7 @@ fn "core:prelude/fpfmt.wado/parse_text_range"(s, start, end) {
                 } else {
                     0;
                 }) {
-                    return 0, f64.copysign(1 / 0, sign);
+                    return 0, f64.copysign(inf, sign);
                 }
             }
         }
@@ -4082,7 +4082,7 @@ fn "core:prelude/fpfmt.wado/parse_text_range"(s, start, end) {
     }
     eff_p = p - frac;
     if eff_p > 350 {
-        return 0, f64.copysign(1 / 0, sign);
+        return 0, f64.copysign(inf, sign);
     }
     if eff_p < -351 {
         return 0, f64.copysign(0, sign);
@@ -4754,7 +4754,7 @@ fn "core:json/write_json_bytes"(buf, v) {
     let start_15: i32;
     start_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(buf, 1);
     builtin::array_set_u8(buf.repr, start_6, 34);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(buf, "core:base64/core/base64/encode_with<core:prelude/bytes.wado/ByteSlice>"(v, 1 | 2));
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(buf, "core:base64/core/base64/encode_with<core:prelude/bytes.wado/ByteSlice>"(v, 3));
     start_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(buf, 1);
     builtin::array_set_u8(buf.repr, start_15, 34);
     return ref.null none;

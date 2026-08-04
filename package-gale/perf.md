@@ -434,9 +434,10 @@ ATN literal is a measured problem.)
 
 ## Correctness items with a performance flavor
 
-These are ATN-class prediction gaps tracked for compatibility, but each is
-"Gale's static predictor commits where ANTLR4 defers" — relevant when reasoning
-about the scan/predict hot path. Full context in `TODO.md` ("Soundness and compatibility divergence") and
+These are ATN-class prediction gaps tracked for compatibility — Gale's static
+predictor committing where ANTLR4 defers, or deferring where the lookahead
+would have settled it — relevant when reasoning about the scan/predict hot
+path. Full context in `TODO.md` ("Soundness and compatibility divergence") and
 `antlr4-compatibility.md` (prediction design, soundness invariants).
 
 **A memoised ATN / lookahead DFA is a last resort.** It was the named lever for
@@ -480,3 +481,23 @@ this grammar and input at 216.991 ms/iter against Gale's 2.535
 - **Recursive lexer rule with `.+?` / `.*?`**
   (`RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`): the static single-pass
   emitter over-consumes nested `/* … */` comments.
+- **A `Repeat` config is walked as a single iteration, so a decision the
+  lookahead could settle buys a scan instead — probably not worth acting on
+  (2026-08).** `sll_advance` moves a `Repeat` config past the repeat and never
+  emits the "still looping" reading, so `a : X+ Y | X Z` on `X X Y` has no
+  branch for the second `X` and drops into the dispatch's fallback tournament,
+  which scans each alt from the decision point
+  (`tests/grammars/ll_repeat_alt_gap.g4`). The tree is right either way: the
+  tournament picks the alt whose body parses, and the `else` is always there
+  for a well-formed grammar — `dispatch_fallback_indices` withholds it only
+  where the cascade provably claims every first token, or where an alt is not
+  fully scannable, which needs a reference to a name that is not a parser rule.
+  What makes it hard to price: the fallback tournament is emitted at 32 sites
+  across TypeScript (20), css3 (7), Rust (3) and ANTLRv4 (2) and at **none** in
+  `sqlite` or `json`, so nothing in the benchmark set pays for it, and those
+  sites are not all this shape (`typeParameter : identifier constraint? | …` is
+  an at-end gap, not a repeat one). Worth revisiting only if a profile puts one
+  of them on top; the repair is not cheap either, since a second config per alt
+  collides with the `alt_index` dedup key — the failed approach `AGENTS.md`
+  names first — so it wants dedup keyed by position, which is walk work the
+  runtime simulator is the complete form of.

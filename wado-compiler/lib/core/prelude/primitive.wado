@@ -78,6 +78,7 @@ use {
     libm_atanh as f64_atanh,
     libm_exp as f64_exp,
     libm_exp2 as f64_exp2,
+    libm_exp10 as f64_exp10,
     libm_expm1 as f64_expm1,
     libm_log as f64_ln,
     libm_log2 as f64_log2,
@@ -87,6 +88,8 @@ use {
     libm_cbrt as f64_cbrt,
     libm_hypot as f64_hypot,
     libm_fmod as f64_fmod,
+    libm_fma as f64_mul_add,
+    libm_round as f64_round,
     libm_sinf as f32_sin,
     libm_cosf as f32_cos,
     libm_tanf as f32_tan,
@@ -102,6 +105,7 @@ use {
     libm_atanhf as f32_atanh,
     libm_expf as f32_exp,
     libm_exp2f as f32_exp2,
+    libm_exp10f as f32_exp10,
     libm_expm1f as f32_expm1,
     libm_logf as f32_ln,
     libm_log2f as f32_log2,
@@ -111,6 +115,8 @@ use {
     libm_cbrtf as f32_cbrt,
     libm_hypotf as f32_hypot,
     libm_fmodf as f32_fmod,
+    libm_fmaf as f32_mul_add,
+    libm_roundf as f32_round,
 } from "../libm.wat" with { type: "wat" };
 
 use {
@@ -1254,8 +1260,16 @@ impl f32 {
         return builtin::f32_trunc(x);
     }
 
-    /// Round to nearest even
+    /// Round to nearest, breaking ties away from zero
+    ///
+    /// Wasm rounds the other way, so this is a software implementation —
+    /// slower than `round_ties_even`.
     pub fn round(x: f32) -> f32 {
+        return f32_round(x);
+    }
+
+    /// Round to nearest, breaking ties toward the even neighbour
+    pub fn round_ties_even(x: f32) -> f32 {
         return builtin::f32_nearest(x);
     }
 
@@ -1354,6 +1368,11 @@ impl f32 {
         return f32_exp2(x);
     }
 
+    /// 10 raised to the power x
+    pub fn exp10(x: f32) -> f32 {
+        return f32_exp10(x);
+    }
+
     /// e^x - 1 (more accurate for small x)
     pub fn expm1(x: f32) -> f32 {
         return f32_expm1(x);
@@ -1397,6 +1416,14 @@ impl f32 {
     /// Floating-point remainder of x/y
     pub fn fmod(x: f32, y: f32) -> f32 {
         return f32_fmod(x, y);
+    }
+
+    /// `x * y + z`, rounded once instead of twice.
+    ///
+    /// Wasm has no scalar FMA instruction, so this is a software
+    /// implementation — slower than `x * y + z`.
+    pub fn mul_add(x: f32, y: f32, z: f32) -> f32 {
+        return f32_mul_add(x, y, z);
     }
 
     pub fn is_nan(&self) -> bool {
@@ -1619,8 +1646,16 @@ impl f64 {
         return builtin::f64_trunc(x);
     }
 
-    /// Round to nearest even
+    /// Round to nearest, breaking ties away from zero
+    ///
+    /// Wasm rounds the other way, so this is a software implementation —
+    /// slower than `round_ties_even`.
     pub fn round(x: f64) -> f64 {
+        return f64_round(x);
+    }
+
+    /// Round to nearest, breaking ties toward the even neighbour
+    pub fn round_ties_even(x: f64) -> f64 {
         return builtin::f64_nearest(x);
     }
 
@@ -1719,6 +1754,11 @@ impl f64 {
         return f64_exp2(x);
     }
 
+    /// 10 raised to the power x
+    pub fn exp10(x: f64) -> f64 {
+        return f64_exp10(x);
+    }
+
     /// e^x - 1 (more accurate for small x)
     pub fn expm1(x: f64) -> f64 {
         return f64_expm1(x);
@@ -1762,6 +1802,14 @@ impl f64 {
     /// Floating-point remainder of x/y
     pub fn fmod(x: f64, y: f64) -> f64 {
         return f64_fmod(x, y);
+    }
+
+    /// `x * y + z`, rounded once instead of twice.
+    ///
+    /// Wasm has no scalar FMA instruction, so this is a software
+    /// implementation — slower than `x * y + z`.
+    pub fn mul_add(x: f64, y: f64, z: f64) -> f64 {
+        return f64_mul_add(x, y, z);
     }
 
     pub fn is_nan(&self) -> bool {

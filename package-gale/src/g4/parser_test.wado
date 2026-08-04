@@ -377,6 +377,88 @@ X : [\\p{Cs}] ;");
     assert cc.ranges.is_empty(), "no input character can be a surrogate";
 }
 
+test "a script property resolves to its own code points" {
+    let cc = class_of(&"grammar Test;
+X : [\\p{Greek}] ;");
+    assert class_admits(&cc, 'α'), "U+03B1 is Script=Greek";
+    assert class_admits(&cc, 'ᾰ'), "U+1FB0 is Script=Greek too — the script spans blocks";
+    assert !class_admits(&cc, 'a');
+    assert !class_admits(&cc, 'а'), "U+0430 is Cyrillic";
+}
+
+test "a script resolves through its four-letter alias" {
+    let cc = class_of(&"grammar Test;
+X : [\\p{Grek}] ;");
+    assert class_admits(&cc, 'α');
+    assert !class_admits(&cc, 'a');
+}
+
+test "an In-prefixed name is a block, not a script" {
+    // The `Greek` block is `Greek_And_Coptic` (U+0370..U+03FF), so it stops
+    // where Greek Extended begins — which the script does not.
+    let cc = class_of(&"grammar Test;
+X : [\\p{InGreek}] ;");
+    assert class_admits(&cc, 'α');
+    assert !class_admits(&cc, 'ᾰ'), "U+1FB0 is in Greek Extended, a different block";
+}
+
+test "binary properties resolve" {
+    let syntax = class_of(&"grammar Test;
+X : [\\p{Pattern_Syntax}] ;");
+    assert class_admits(&syntax, '+');
+    assert !class_admits(&syntax, 'a');
+    let id_start = class_of(&"grammar Test;
+X : [\\p{Other_ID_Start}] ;");
+    assert class_admits(&id_start, '\u{2118}'), "SCRIPT CAPITAL P is Other_ID_Start";
+    assert !class_admits(&id_start, 'a');
+    let ws = class_of(&"grammar Test;
+X : [\\p{White_Space}] ;");
+    assert class_admits(&ws, '\t');
+    assert class_admits(&ws, '\u{00A0}');
+    assert !class_admits(&ws, 'a');
+}
+
+test "property names ignore case, underscores and hyphens" {
+    let lower = class_of(&"grammar Test;
+X : [\\p{lu}] ;");
+    assert class_admits(&lower, 'A');
+    assert !class_admits(&lower, 'a');
+    let long = class_of(&"grammar Test;
+X : [\\p{uppercase-letter}] ;");
+    assert class_admits(&long, 'A');
+    assert !class_admits(&long, 'a');
+    let script = class_of(&"grammar Test;
+X : [\\p{GREEK}] ;");
+    assert class_admits(&script, 'α');
+}
+
+test "an enumerated property picks its table by name" {
+    let gc = class_of(&"grammar Test;
+X : [\\p{General_Category=Lu}] ;");
+    assert class_admits(&gc, 'A');
+    assert !class_admits(&gc, 'a');
+    let sc = class_of(&"grammar Test;
+X : [\\p{Script=Greek}] ;");
+    assert class_admits(&sc, 'ᾰ');
+    assert !class_admits(&sc, 'a');
+    let blk = class_of(&"grammar Test;
+X : [\\p{Block=Greek_And_Coptic}] ;");
+    assert class_admits(&blk, 'α');
+    assert !class_admits(&blk, 'ᾰ');
+}
+
+test "a script property complements like a category" {
+    let cc = class_of(&"grammar Test;
+X : [\\P{Greek}] ;");
+    assert !class_admits(&cc, 'α');
+    assert class_admits(&cc, 'a');
+}
+
+test "an enumerated property with an unknown table or value is rejected" {
+    assert parse("grammar Test;\nX : [\\p{Bogus=Lu}] ;") matches { Err(_) };
+    assert parse("grammar Test;\nX : [\\p{Script=Bogus}] ;") matches { Err(_) };
+}
+
 test "unsupported unicode property is rejected, not silently empty" {
     assert parse("grammar Test;\nX : [\\p{Bogus}] ;") matches { Err(_) }, "an unknown \\p{...} must not expand to a set that matches nothing";
     assert parse("grammar Test;\nX : [\\P{Bogus}] ;") matches { Err(_) };

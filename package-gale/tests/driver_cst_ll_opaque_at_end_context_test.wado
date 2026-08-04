@@ -1,0 +1,26 @@
+use g from "./grammars/ll_opaque_at_end_context.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_opaque_at_end_context" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The caller's `Y` is available, so `e` takes the opaque alt that consumes one.
+test "tree: X Y Y enters the opaque alt" {
+    assert_tree(&"X Y Y", &"(r (e (a X Y)) Y)");
+}
+
+test "tree: X Z Y enters the second opaque alt" {
+    assert_tree(&"X Z Y", &"(r (e (b X Z)) Y)");
+}
+
+// Only one `Y`, and the caller needs it: `e` must stop at the at-end alt even
+// though the longer alt matches the lookahead.
+test "tree: X Y leaves the Y to the caller" {
+    assert_tree(&"X Y", &"(r (e X) Y)");
+}

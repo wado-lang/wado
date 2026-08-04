@@ -63,7 +63,7 @@ Allocation and aggregate:
 - `array_literal` — fold an array-builder window into a single fixed-array literal.
 - `value_copy_demote` — demote a deep list value-copy to a shallow spine copy when its elements are provably never mutated through the binding.
 
-There is no value-copy _elision_ pass: defensive copies are inserted precisely at the lower phase by the ownership analysis, so none exist for an elider to recover (see [WEP: Ownership Analysis](./wep-2026-05-21-resource-ownership.md)).
+There is no value-copy _elision_ pass: defensive copies are chosen at the lower phase by the ownership analysis, before NIR exists, so none are reachable from here and an imprecise one is that analysis's to fix — see [WEP: Ownership Analysis](./wep-2026-05-21-resource-ownership.md), which records the standing case (a by-value `for` binding copies each element of a `List` of aggregates).
 
 Variant and reference:
 
@@ -123,6 +123,8 @@ covers leaves the bytes identical and does not belong. The exception is
 program reaches its bound: it is a JIT-pathology guard for >256-element
 literals, not an optimization.
 
+A `#![wasm_module(...)]` core module — the allocator — runs this same list as a package of its own, since codegen emits it verbatim. Its passes are named `wir/<module>:<pass>` so `WADO_SKIP_PASS` / `WADO_DUMP_PASS_*` address the two runs separately.
+
 Branch hints are transparent annotations on `if`/`br_if` conditions: a pass looks through a hint when matching, drops it when eliminating the branch, and flips it when negating the condition. wasmtime lays the cold side out of line; `-f no-branch-hinting` disables the feature for benchmarking.
 
 ## Shared facilities
@@ -142,8 +144,18 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 - [ ] `param_spec` profitability — specialize only when the constants can decide
       a branch, so a chain that never folds stops duplicating code.
 - [ ] Argument promotion — pass a by-reference parameter's fields by value when
-      the callee only reads them. `param_spec` covers the constant case; a
-      non-constant field still costs a GC load per read.
+      the callee only reads them, and return them by multi-value when it only
+      writes them. Together they retire a scratch aggregate at its allocation
+      site, which `sroa` then finishes. `sroa_param` is the single-field
+      rewrite, `stored_params` decides the escape precondition, and
+      `multi_value_return` / `sroa_variant_return` own the write-back ABI, so
+      what is missing is the N-field case under the same arity cap.
+      `param_spec` covers only the constant case; a non-constant field still
+      costs a GC load per read. `core:json`'s number scanner is the standing
+      case: its `ScannedNumber` is written by one callee and read by another,
+      each through nothing but field access, and costs ~5% of the json-canada
+      deserialize phase. Inlining that pair also buys caller-specific dead-field
+      elimination, which promotion alone would not recover.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Variant return ABI decided at NIR, the way `multi_value_return` already

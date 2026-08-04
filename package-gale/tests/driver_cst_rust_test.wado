@@ -118,6 +118,18 @@ test "tokenize closure" {
     assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
 }
 
+// `INTEGER_LITERAL: (DEC_LITERAL | BIN_LITERAL | OCT_LITERAL | HEX_LITERAL)
+// INTEGER_SUFFIX?` — the `HEX_LITERAL` arm is what lets the whole rule reach
+// the end of `0x1f`, so `INTEGER_LITERAL` ties with the `HEX_LITERAL` rule on
+// length and wins by being declared first. Taking the first arm that matches
+// on its own would leave `INTEGER_LITERAL` one char long and hand the token
+// to `HEX_LITERAL` (oracle-checked against the published jar).
+test "tokenize hex literal" {
+    let tokens = rlex_tok(&"0x1f");
+    let first = rust::token_kind_name(tokens.kinds[0]);
+    assert first == "INTEGER_LITERAL", `expected INTEGER_LITERAL, got ${first}`;
+}
+
 test "tokenize macro invocation" {
     let tokens = rlex_tok(&"println!(\"hello {}\", name);");
     assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;

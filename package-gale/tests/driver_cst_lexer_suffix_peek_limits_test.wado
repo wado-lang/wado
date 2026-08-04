@@ -1,0 +1,46 @@
+//! The suffix peek has to lower the suffix exactly as the commit will, and it
+//! has to know what that suffix can start with. Expectations oracle-checked
+//! against the published jar.
+
+use g from "./grammars/lexer_suffix_peek_limits.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_suffix_peek_limits" },
+    };
+use { TK_EOF } from "./grammars/lexer_suffix_peek_limits.g4";
+
+fn assert_tokens(input: &String, expected: &String) {
+    let actual = g::to_lexer_string(&g::tokenize(input), TK_EOF);
+    assert actual == *expected, `\ninput: ${*input}\nactual:\n${actual}\nexpected:\n${*expected}`;
+}
+
+// `[a-b]+` can eat the `'b'` that follows it, so the suffix needs a
+// lookahead-aware loop of its own inside the peek.
+test "a greedy repeat under the suffix keeps its own lookahead" {
+    assert_tokens(&"aab", &"[@0,0:2='aab',<1>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+    assert_tokens(&"aaab", &"[@0,0:3='aaab',<1>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n");
+}
+
+test "the same suffix behind an alternation" {
+    assert_tokens(&"mnno", &"[@0,0:3='mnno',<2>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n");
+    assert_tokens(&"mno", &"[@0,0:2='mno',<2>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+}
+
+// Peeked greedily, `.*?` would swallow the terminator the commit needs.
+test "a non-greedy repeat under the suffix keeps its min-match" {
+    assert_tokens(&"cQz", &"[@0,0:2='cQz',<3>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+    assert_tokens(&"cz", &"[@0,0:1='cz',<3>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n");
+    assert_tokens(&"--Wq", &"[@0,0:3='--Wq',<4>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n");
+    assert_tokens(&"-q", &"[@0,0:1='-q',<4>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n");
+}
+
+// `F` is case-insensitive on its own, so `[e-h]+` can eat the `x` it needs.
+test "a case-insensitive suffix rule is read with its own folding" {
+    assert_tokens(&"efgx", &"[@0,0:3='efgx',<5>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n");
+}
+
+// `H` is `~'a'`, which overlaps `'A'`: folding it would narrow the complement
+// and make the two look disjoint.
+test "a complement behind a rule reference is not read case-folded" {
+    assert_tokens(&"AAA", &"[@0,0:2='AAA',<6>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+    assert_tokens(&"AA", &"[@0,0:1='AA',<6>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n");
+}
