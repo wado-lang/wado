@@ -675,10 +675,16 @@ impl<'a> WirEmitter<'a> {
         }
     }
 
+    /// The Wasm index of a global. A name with no slot is a bug upstream, not a
+    /// case to recover from: index 0 is some other global, so falling back to it
+    /// retargets the access — a store lands in a slot of another type, and a
+    /// read returns a value the program never wrote.
     fn resolve_global(&self, name: &str) -> u32 {
         self.global_name_map.get(name).copied().unwrap_or_else(|| {
-            eprintln!("[WIR emit] Warning: global '{name}' not found, using index 0");
-            0
+            panic!(
+                "[WIR emit] global '{name}' has no slot — an access to it outlived the \
+                 declaration, so a pass dropped the global while leaving the access behind"
+            )
         })
     }
 
