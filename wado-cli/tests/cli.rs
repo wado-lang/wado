@@ -347,6 +347,20 @@ fn test_help() {
 }
 
 #[test]
+fn test_run_propagates_a_guest_exit_code() {
+    // `wasi:cli/exit` reaches wasmtime as `Err(I32Exit)`, indistinguishable
+    // from a trap unless it is classified. A program that exits on purpose
+    // must leave its own diagnostic as the only output.
+    wado()
+        .args(["run", "wado-cli/tests/fixtures/run_exit_code.wado"])
+        .assert()
+        .code(3)
+        .stderr(predicate::str::contains("run_exit_code: bad input"))
+        .stderr(predicate::str::contains("Runtime error").not())
+        .stderr(predicate::str::contains("wasm backtrace").not());
+}
+
+#[test]
 fn test_version() {
     wado()
         .arg("--version")

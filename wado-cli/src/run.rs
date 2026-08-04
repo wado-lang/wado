@@ -408,5 +408,15 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
         opts.collector,
     )
     .await
-    .map_err(|e| CliExit::error(format!("Runtime error: {e:?}")))
+    .map_err(classify_run_error)
+}
+
+/// wasmtime reports `wasi:cli/exit` as `Err(I32Exit(code))`, so a program that
+/// exits on purpose looks identical to a trap. Propagate the code and leave the
+/// program's own diagnostics as the only output; a backtrace belongs to a trap.
+fn classify_run_error(e: anyhow::Error) -> CliExit {
+    match e.downcast_ref::<wasmtime_wasi::I32Exit>() {
+        Some(wasmtime_wasi::I32Exit(code)) => CliExit::silent_failure(*code),
+        None => CliExit::error(format!("Runtime error: {e:?}")),
+    }
 }
