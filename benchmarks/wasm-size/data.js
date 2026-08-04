@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785832695659,
+  "lastUpdate": 1785846158413,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45949,6 +45949,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5b38e3d57db1dbf4c05921862cbc246ab0c5130a"
         },
         "date": 1785832695247,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6034,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16249,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272423,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5ba6365d73ce09a3482fe54ed32c812ff880ba5c",
+          "message": "Merge pull request #1754 from wado-lang/claude/soundness-compatibility-divergence-g4bko6\n\nfix: Gale matcher emission and directory grants, plus guest exit-code propagation",
+          "timestamp": "2026-08-04T22:08:41+10:00",
+          "tree_id": "f2e242e173966013ab7602c9b727e332271cada9",
+          "url": "https://github.com/wado-lang/wado/commit/5ba6365d73ce09a3482fe54ed32c812ff880ba5c"
+        },
+        "date": 1785846157659,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
