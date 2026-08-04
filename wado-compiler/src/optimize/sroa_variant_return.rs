@@ -764,15 +764,6 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
     if is_nullable_ref_shape(&case_payloads, project) {
         return None;
     }
-    // Likewise where the WIR pass does strictly better: a payload that is itself
-    // a boxed variant is a slot `slot_flatten` splits into that variant's own
-    // `[tag, payload…]`, and this pass would hand it one boxed slot instead.
-    if case_payloads
-        .iter()
-        .any(|&p| slot_flatten_would_split(project, p))
-    {
-        return None;
-    }
 
     let shapes = {
         let type_table = project.type_table.borrow();
@@ -854,29 +845,6 @@ fn option_module(project: &NirPackage) -> Option<crate::module_source::ModuleSou
         .compiler_items()
         .variant_module(crate::compiler_item::CompilerItem::Option)
         .cloned()
-}
-
-/// Whether `wir_optimize`'s `slot_flatten` would split a slot holding `payload`
-/// into the inner variant's own `[tag, payload…]`.
-///
-/// This pass gives such a payload one boxed slot, so taking the function would
-/// *replace* a split the WIR pass already performs with a worse layout. The WIR
-/// pass flattens both levels; leave those functions to it.
-///
-/// There has to be something to split: a single-case or all-unit variant is an
-/// enum in all but name, and a `{Unit, GC ref}` variant is erased to a bare
-/// `ref null T`. Neither carries a payload beside its tag.
-fn slot_flatten_would_split(project: &NirPackage, payload: TypeId) -> bool {
-    let Some((case_names, inner_payloads)) = variant_cases(project, payload) else {
-        return false;
-    };
-    if case_names.len() < 2 || is_nullable_ref_shape(&inner_payloads, project) {
-        return false;
-    }
-    let type_table = project.type_table.borrow();
-    inner_payloads
-        .iter()
-        .any(|&p| !matches!(type_table.get(p), ResolvedType::Unit))
 }
 
 /// The `{Unit, Payload(GC ref)}` shape `wir_optimize::nullable_ref` erases.
