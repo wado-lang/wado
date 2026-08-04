@@ -644,37 +644,7 @@ impl<'a> Builder<'a> {
     /// Intern a folded constant, carrying the folded expr's NIR type as the
     /// width-bearing type.
     fn const_to_value(&mut self, v: const_eval::Value, result_type: crate::tir::TypeId) -> ValueId {
-<<<<<<< HEAD
-        match v {
-            const_eval::Value::Int { value, .. } => self.pool.int_typed(value, result_type),
-            const_eval::Value::Float { value, .. } => self.pool.float(value, result_type),
-            const_eval::Value::Bool(b) => self.pool.bool(b),
-            const_eval::Value::Char(c) => self.pool.char(c),
-            // The pool models pure scalars; the arithmetic folds feeding this
-            // never produce an aggregate or a sequence.
-            const_eval::Value::Aggregate { .. }
-            | const_eval::Value::Seq { .. }
-            | const_eval::Value::Variant { .. } => {
-                panic!(
-                    "an aggregate, sequence, or variant constant cannot be interned as a pure value"
-                )
-            }
-        }
-||||||| 6e810ba68
-        match v {
-            const_eval::Value::Int { value, .. } => self.pool.int_typed(value, result_type),
-            const_eval::Value::Float { value, .. } => self.pool.float(value, result_type),
-            const_eval::Value::Bool(b) => self.pool.bool(b),
-            const_eval::Value::Char(c) => self.pool.char(c),
-            // The pool models pure scalars; the arithmetic folds feeding this
-            // never produce an aggregate or a sequence.
-            const_eval::Value::Aggregate { .. } | const_eval::Value::Seq { .. } => {
-                panic!("an aggregate or sequence constant cannot be interned as a pure value")
-            }
-        }
-=======
         self.pool.intern_const(v, result_type)
->>>>>>> origin/main
     }
 
     /// Record / clear `local`'s reference target from its new RHS. `let r = &v`
