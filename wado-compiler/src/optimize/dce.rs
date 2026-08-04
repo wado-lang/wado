@@ -2419,59 +2419,28 @@ fn remove_dead_global_sets_stmt(
 }
 
 /// Recursively remove dead `GlobalVarSet` from expressions that contain blocks.
+/// Strip dead-global stores from `e`'s subtree.
+///
+/// Every child, not a hand-listed few. A dead store can sit under any
+/// operand-carrying kind — globalization's inline-reference shape puts one
+/// under a borrow, `&{ GLOBAL = v; GLOBAL }` — and a kind missing from such a
+/// list keeps the store while the global itself goes, leaving an access to a
+/// slot that no longer exists.
 fn remove_dead_global_sets_expr(
     body: &mut Body,
     e: ExprId,
     used: &IndexSet<(String, String)>,
     type_table: &TypeTable,
 ) {
-    enum W {
-        Block(BlockId),
-        If(Option<ExprId>, BlockId, Option<BlockId>),
-        Match(Option<ExprId>, Vec<ExprId>),
-        Switch(Vec<BlockId>, BlockId),
-        None,
-    }
-    let w = match &body.exprs[e].kind {
-        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => W::Block(*block),
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => W::If(condition.as_expr(), *then_branch, *else_branch),
-        ExprKind::Match { expr, arms } => W::Match(
-            expr.as_expr(),
-            arms.iter().filter_map(|a| a.body.as_expr()).collect(),
-        ),
-        ExprKind::Switch { arms, default, .. } => W::Switch(arms.clone(), *default),
-        _ => W::None,
-    };
-    match w {
-        W::Block(b) => remove_dead_global_sets_block(body, b, used, type_table),
-        W::If(cond, then_b, else_b) => {
-            if let Some(cond) = cond {
-                remove_dead_global_sets_expr(body, cond, used, type_table);
-            }
-            remove_dead_global_sets_block(body, then_b, used, type_table);
-            if let Some(eb) = else_b {
-                remove_dead_global_sets_block(body, eb, used, type_table);
-            }
+    let mut children: Vec<NodeRef> = Vec::new();
+    body.for_each_child(NodeRef::Expr(e), |c| children.push(c));
+    for child in children {
+        match child {
+            NodeRef::Block(b) => remove_dead_global_sets_block(body, b, used, type_table),
+            NodeRef::Stmt(s) => remove_dead_global_sets_stmt(body, s, used, type_table),
+            NodeRef::Expr(x) => remove_dead_global_sets_expr(body, x, used, type_table),
+            NodeRef::Pat(_) => {}
         }
-        W::Match(scrutinee, bodies) => {
-            if let Some(scrutinee) = scrutinee {
-                remove_dead_global_sets_expr(body, scrutinee, used, type_table);
-            }
-            for b in bodies {
-                remove_dead_global_sets_expr(body, b, used, type_table);
-            }
-        }
-        W::Switch(arms, default) => {
-            for a in arms {
-                remove_dead_global_sets_block(body, a, used, type_table);
-            }
-            remove_dead_global_sets_block(body, default, used, type_table);
-        }
-        W::None => {}
     }
 }
 
