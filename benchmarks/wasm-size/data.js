@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785766693657,
+  "lastUpdate": 1785813258893,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45881,6 +45881,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 273270,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "45852a8a96b32ed7132ab31fe4b72e52ed164d03",
+          "message": "Merge pull request #1745 from wado-lang/claude/soundness-compatibility-divergence-g4bko6\n\nfix(gale): lexer suffix scoring, opaque at-end prediction, and the `\\p{...}` property surface",
+          "timestamp": "2026-08-04T13:02:36+10:00",
+          "tree_id": "ba39f35efddd2f614040a225a5ec2629c8972676",
+          "url": "https://github.com/wado-lang/wado/commit/45852a8a96b32ed7132ab31fe4b72e52ed164d03"
+        },
+        "date": 1785813258031,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6034,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16249,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272423,
             "unit": "bytes"
           }
         ]
