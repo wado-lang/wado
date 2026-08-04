@@ -945,14 +945,6 @@ fn case_key<A: DeserializeVariant>(va: &mut A) -> Result<CaseKey, DeserializeErr
     return Result::Ok(CaseKey::Name(name));
 }
 
-/// Whether `m` is the case `key` names, under `policy`.
-fn case_matches<M: Member>(m: &M, disc: i32, key: &CaseKey, policy: CaseStyle) -> bool {
-    return match key {
-        CaseKey::Disc(d) => *d == disc,
-        CaseKey::Name(n) => wire_name(m, policy) == *n,
-    };
-}
-
 fn unknown_case_error(key: &CaseKey) -> DeserializeError {
     return DeserializeError {
         kind: DeserializeErrorKind::UnknownVariant,
@@ -973,7 +965,14 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for 
         let policy = ReflectVariant::<V>::wire_name_policy();
         let key = case_key(&mut va)?;
         for let case of members {
-            if case_matches(&case, case.discriminant(), &key, policy) {
+            // `wire_name` resolves at the use site, where the member and the
+            // policy are both compile-time facts and it folds to a literal.
+            // Behind a helper taking the run-time key it would not.
+            let matched = match &key {
+                CaseKey::Disc(d) => *d == case.discriminant(),
+                CaseKey::Name(n) => wire_name(&case, policy) == *n,
+            };
+            if matched {
                 if case.is_unit() {
                     va.end()?;
                     return Result::Ok(case.make());
@@ -995,7 +994,14 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Deserialize for E {
         let policy = ReflectEnum::<E>::wire_name_policy();
         let key = case_key(&mut va)?;
         for let case of members {
-            if case_matches(&case, case.discriminant(), &key, policy) {
+            // `wire_name` resolves at the use site, where the member and the
+            // policy are both compile-time facts and it folds to a literal.
+            // Behind a helper taking the run-time key it would not.
+            let matched = match &key {
+                CaseKey::Disc(d) => *d == case.discriminant(),
+                CaseKey::Name(n) => wire_name(&case, policy) == *n,
+            };
+            if matched {
                 va.end()?;
                 return Result::Ok(case.make());
             }

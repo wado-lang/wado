@@ -1,7 +1,7 @@
 // A derived wire name is a compile-time fact: the member walk, the `#[wire]`
 // reads and the casing all fold, so the serializer writes a literal instead of
 // resolving the name on every call.
-use { to_string } from "core:json";
+use { to_string, from_string } from "core:json";
 
 struct Point {
     x: i32,
@@ -39,6 +39,12 @@ test "a naming policy is applied at compile time" {
 
 test "a single-field struct's name folds like any other" {
     assert to_string(&Single { only_one: 3 }) == Result::Ok(`\{"only_one":3\}`);
+}
+
+// The read side resolves the same names, so it folds or it does not — the
+// `apply_case` pin below covers both directions only if both are here.
+test "a naming policy is applied at compile time when reading" {
+    assert from_string::<Rank>(`"HighPriority"`) == Result::Ok(Rank::HighPriority);
 }
 
 __DATA__
