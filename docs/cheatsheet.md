@@ -977,7 +977,7 @@ See [`core:prelude`](./stdlib-core-prelude.md) for the full API.
 f64::sin(x)    f64::cos(x)    f64::sqrt(x)
 f64::abs(x)    f64::ceil(x)   f64::floor(x)
 f64::pow(x, y) f64::ln(x)     f64::exp(x)
-f64::mul_add(x, y, z)          // x * y + z, rounded once
+f64::mul_add(x, y, z)          // x * y + z, rounded once (software FMA)
 
 x.is_nan()     x.is_finite()    // where x is f64 or f32
 

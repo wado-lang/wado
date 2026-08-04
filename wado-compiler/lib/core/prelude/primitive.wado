@@ -1401,7 +1401,10 @@ impl f32 {
         return f32_fmod(x, y);
     }
 
-    /// x * y + z, rounded once instead of twice
+    /// x * y + z, rounded once instead of twice.
+    ///
+    /// Wasm has no scalar FMA instruction, so this runs a software
+    /// implementation — accurate, but slower than `x * y + z`.
     pub fn mul_add(x: f32, y: f32, z: f32) -> f32 {
         return f32_mul_add(x, y, z);
     }
@@ -1771,7 +1774,10 @@ impl f64 {
         return f64_fmod(x, y);
     }
 
-    /// x * y + z, rounded once instead of twice
+    /// x * y + z, rounded once instead of twice.
+    ///
+    /// Wasm has no scalar FMA instruction, so this runs a software
+    /// implementation — accurate, but slower than `x * y + z`.
     pub fn mul_add(x: f64, y: f64, z: f64) -> f64 {
         return f64_mul_add(x, y, z);
     }
