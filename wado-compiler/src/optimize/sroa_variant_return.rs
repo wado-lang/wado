@@ -1235,14 +1235,62 @@ fn count_local_def_use(
 /// Locals bound directly from a candidate call, and the callee they came from.
 fn bound_temps(body: &Body, candidates: &IndexMap<FuncId, Candidate>) -> IndexMap<u32, FuncId> {
     let mut out: IndexMap<u32, FuncId> = IndexMap::default();
-    collect_bound_temps(body, NodeRef::Block(body.root), candidates, &mut out);
+    let settled = settled_locals(body);
+    collect_bound_temps(
+        body,
+        NodeRef::Block(body.root),
+        candidates,
+        &settled,
+        &mut out,
+    );
     out
+}
+
+/// Locals bound exactly once and never assigned again. A `let mut` over one of
+/// them is an immutable binding wearing a `mut` — the residue of a `?`-desugar
+/// or an inlining that `elide_local` did not tidy — and the rewrite, which
+/// retypes the local and every read of it, is exact on it. A local with a
+/// second definition is not: the pooled `__hfs_call_*` temps take one index for
+/// two live bindings, and retyping the index would retype both.
+fn settled_locals(body: &Body) -> IndexSet<u32> {
+    let mut defs: IndexMap<u32, u32> = IndexMap::default();
+    let mut reassigned: IndexSet<u32> = IndexSet::default();
+    collect_defs(body, NodeRef::Block(body.root), &mut defs, &mut reassigned);
+    defs.into_iter()
+        .filter(|&(local, count)| count == 1 && !reassigned.contains(&local))
+        .map(|(local, _)| local)
+        .collect()
+}
+
+fn collect_defs(
+    body: &Body,
+    node: NodeRef,
+    defs: &mut IndexMap<u32, u32>,
+    reassigned: &mut IndexSet<u32>,
+) {
+    match node {
+        NodeRef::Stmt(s) => {
+            if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind {
+                *defs.entry(*local_index).or_insert(0) += 1;
+            }
+        }
+        NodeRef::Expr(e) => {
+            if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
+                && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+            {
+                reassigned.insert(*index);
+            }
+        }
+        NodeRef::Block(_) | NodeRef::Pat(_) => {}
+    }
+    body.for_each_child(node, |c| collect_defs(body, c, defs, reassigned));
 }
 
 fn collect_bound_temps(
     body: &Body,
     node: NodeRef,
     candidates: &IndexMap<FuncId, Candidate>,
+    settled: &IndexSet<u32>,
     out: &mut IndexMap<u32, FuncId>,
 ) {
     if let NodeRef::Stmt(s) = node
@@ -1252,7 +1300,7 @@ fn collect_bound_temps(
             is_mut,
             ..
         } = &body.stmts[s].kind
-        && !*is_mut
+        && (!*is_mut || settled.contains(local_index))
         // Through a block tail as well as bare, so this agrees with
         // `handled_call_sites` and `debug_assert_call_sites_rewritten` on what
         // counts as a binding fed by a call. A narrower rule here leaves the
@@ -1262,7 +1310,9 @@ fn collect_bound_temps(
     {
         out.insert(*local_index, f);
     }
-    body.for_each_child(node, |c| collect_bound_temps(body, c, candidates, out));
+    body.for_each_child(node, |c| {
+        collect_bound_temps(body, c, candidates, settled, out)
+    });
 }
 
 /// Invalidate any candidate whose result is consumed by something other than an
@@ -1289,6 +1339,7 @@ fn invalidate_bad_call_sites(
         candidates,
         &bound,
         &cell_locals(func),
+        &settled_locals(body),
         caller_ok,
         invalid,
     );
@@ -1300,6 +1351,7 @@ fn check_uses(
     candidates: &IndexMap<FuncId, Candidate>,
     bound: &IndexMap<u32, FuncId>,
     cells: &IndexSet<u32>,
+    settled: &IndexSet<u32>,
     caller_ok: bool,
     invalid: &mut IndexSet<FuncId>,
 ) {
@@ -1309,7 +1361,15 @@ fn check_uses(
             // the result, and a tail `return` inside a co-candidate. Both are
             // handled by the rewrite, so the call node itself is not an escape.
             match &body.stmts[s].kind {
-                StmtKind::Let { value, is_mut, .. } if !*is_mut => {
+                // A `mut` binding is accepted when nothing ever assigns it:
+                // the rewrite retypes the local and every read, which is exact
+                // only while the binding is the local's sole definition.
+                StmtKind::Let {
+                    value,
+                    is_mut,
+                    local_index,
+                    ..
+                } if !*is_mut || settled.contains(local_index) => {
                     if call_callee(body, *value).is_some_and(|f| candidates.contains_key(&f)) {
                         return;
                     }
@@ -1354,11 +1414,11 @@ fn check_uses(
                         for a in &arms {
                             if let Some(g) = a.guard {
                                 check_uses_operand(
-                                    body, g, candidates, bound, cells, caller_ok, invalid,
+                                    body, g, candidates, bound, cells, settled, caller_ok, invalid,
                                 );
                             }
                             check_uses_operand(
-                                body, a.body, candidates, bound, cells, caller_ok, invalid,
+                                body, a.body, candidates, bound, cells, settled, caller_ok, invalid,
                             );
                         }
                         return;
@@ -1383,7 +1443,9 @@ fn check_uses(
         NodeRef::Block(_) | NodeRef::Pat(_) => {}
     }
     body.for_each_child(node, |c| {
-        check_uses(body, c, candidates, bound, cells, caller_ok, invalid);
+        check_uses(
+            body, c, candidates, bound, cells, settled, caller_ok, invalid,
+        );
     });
 }
 
@@ -1393,6 +1455,7 @@ fn check_uses_operand(
     candidates: &IndexMap<FuncId, Candidate>,
     bound: &IndexMap<u32, FuncId>,
     cells: &IndexSet<u32>,
+    settled: &IndexSet<u32>,
     caller_ok: bool,
     invalid: &mut IndexSet<FuncId>,
 ) {
@@ -1403,6 +1466,7 @@ fn check_uses_operand(
             candidates,
             bound,
             cells,
+            settled,
             caller_ok,
             invalid,
         );
