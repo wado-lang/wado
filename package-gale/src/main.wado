@@ -127,26 +127,15 @@ fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with Stdou
     }
 }
 
-/// Write the generated parser source to `path`, relative to the first
-/// preopened directory (mirrors `load_and_merge`'s read side).
+/// Write the generated parser source to `path`, under a granted directory
+/// (mirrors `load_and_merge`'s read side).
 fn write_output(path: &String, source: &String) with Stderr, Preopens, Exit {
-    let dirs = Preopens::get_directories();
-    if dirs.len() == 0 {
-        eprintln("gale: no preopened directories available");
-        exit(1);
-    }
-    let root = dirs[0].0;
-    let open_result = root.open_at(
-        PathFlags::none(),
-        *path,
+    let file = open_granted(
+        path,
+        &"cannot open for writing",
         OpenFlags::Create | OpenFlags::Truncate,
         DescriptorFlags::Read | DescriptorFlags::Write,
-    ).wait();
-    if let Err(_) = open_result {
-        eprintln(`gale: ${*path}: cannot open for writing`);
-        exit(1);
-    }
-    let file = open_result.unwrap();
+    );
     let bytes: List<u8> = source.bytes().collect();
     let [rx, tx] = Stream::<u8>::new();
     let sub = file.write_via_stream(rx, 0 as Filesize);
@@ -200,26 +189,9 @@ fn cmd_dump(paths: List<String>, atn: bool) with Stdout, Stderr, Preopens, Exit 
 /// rule-reference check (deferred until post-merge so cross-grammar refs
 /// resolve). Any failure prints a message and exits with code 1.
 fn load_and_merge(paths: &List<String>) -> Grammar with Stdout, Stderr, Preopens, Exit {
-    let dirs = Preopens::get_directories();
-    if dirs.len() == 0 {
-        eprintln("gale: no preopened directories available (try without --no-dir)");
-        exit(1);
-    }
-    let root = dirs[0].0;
-
     let mut inputs: List<[String, String]> = [];
     for let path of paths {
-        let open_result = root.open_at(
-            PathFlags::none(),
-            *path,
-            OpenFlags::none(),
-            DescriptorFlags::Read,
-        ).wait();
-        if let Err(_) = open_result {
-            eprintln(`gale: ${*path}: cannot open file`);
-            exit(1);
-        }
-        let file = open_result.unwrap();
+        let file = open_granted(path, &"cannot open file", OpenFlags::none(), DescriptorFlags::Read);
         let bytes = match read_all(&file) {
             Ok(b) => b,
             Err(_) => {
@@ -250,22 +222,11 @@ fn load_and_merge(paths: &List<String>) -> Grammar with Stdout, Stderr, Preopens
     };
 }
 
-/// Read one source file to a UTF-8 string, relative to the first preopened
-/// directory. Any failure prints a message and exits with code 1 (mirrors
-/// `load_and_merge`'s per-file read).
+/// Read one source file to a UTF-8 string from a granted directory. Any failure
+/// prints a message and exits with code 1 (mirrors `load_and_merge`'s per-file
+/// read).
 fn read_source_file(path: &String) -> String with Stderr, Preopens, Exit {
-    let dirs = Preopens::get_directories();
-    if dirs.len() == 0 {
-        eprintln("gale: no preopened directories available");
-        exit(1);
-    }
-    let root = dirs[0].0;
-    let open_result = root.open_at(PathFlags::none(), *path, OpenFlags::none(), DescriptorFlags::Read).wait();
-    if let Err(_) = open_result {
-        eprintln(`gale: ${*path}: cannot open file`);
-        exit(1);
-    }
-    let file = open_result.unwrap();
+    let file = open_granted(path, &"cannot open file", OpenFlags::none(), DescriptorFlags::Read);
     let bytes = match read_all(&file) {
         Ok(b) => b,
         Err(_) => {
@@ -280,6 +241,43 @@ fn read_source_file(path: &String) -> String with Stderr, Preopens, Exit {
             exit(1);
         },
     };
+}
+
+/// Open `path` under a granted directory, or report why no grant reaches it
+/// and exit with code 1.
+///
+/// A path is resolved inside a preopened directory, so what `--dir` grants is
+/// all the program can reach. Every grant is tried, not just the first, and a
+/// failure names the rule the path broke rather than reading as "no such file".
+fn open_granted(
+    path: &String,
+    what: &String,
+    flags: OpenFlags,
+    rights: DescriptorFlags,
+) -> Descriptor with Stderr, Preopens, Exit {
+    let dirs = Preopens::get_directories();
+    let mut grants: List<String> = [];
+    for let mut i = 0; i < dirs.len(); i += 1 {
+        let root = dirs[i].0;
+        if let Ok(file) = root.open_at(PathFlags::none(), *path, flags, rights).wait() {
+            return file;
+        }
+        grants.push(dirs[i].1);
+    }
+    eprintln(`gale: ${*path}: ${*what}`);
+    if grants.is_empty() {
+        eprintln("gale: no directory was granted to this program (try without --no-dir)");
+    } else if path.starts_with("/") {
+        let cut = path.rfind("/").unwrap();
+        let dir = if cut == 0 { "/" } else { path.substr_bytes(0, cut) };
+        let name = path.substr_bytes(cut + 1, path.len());
+        eprintln(
+            `gale: a path opens inside a granted directory, so an absolute path never does: wado run --dir ${dir} ... ${name}`,
+        );
+    } else {
+        eprintln(`gale: granted: ${grants.join(", ")} — grant the directory holding it with wado run --dir <dir> ...`);
+    }
+    exit(1);
 }
 
 /// Read a file to EOF. The stream's completion future is consumed so a
