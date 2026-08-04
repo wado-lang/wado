@@ -99,6 +99,9 @@ test "flags deserialize unknown flag" {
     let r = from_string::<Perms>(`["Read","Delete"]`);
     if let Err(e) = r {
         assert e.message == "unknown flag: Delete";
+        // A name no member answers to is a case not recognized, which is what
+        // `UnknownVariant` names; `InvalidValue` is for a value out of range.
+        assert e.kind matches { UnknownVariant };
     } else {
         panic("expected error for unknown flag");
     }
