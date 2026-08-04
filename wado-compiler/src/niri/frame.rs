@@ -576,14 +576,23 @@ impl Interpreter<'_> {
     /// a deref — so the RHS is matched as a local written out, not through
     /// [`place_of`], which peels a deref precisely because a write target
     /// wants the storage behind it.
+    ///
+    /// A borrow does not always arrive spelled as one: the boxing pass rewrites
+    /// `&x` over an address-taken local into a bare read of the `Box<T>` the
+    /// local became, which is why the reference-shaped type is asked for too. A
+    /// value copy of that same local is a projection (`x.value`), so the
+    /// whole-local read is the borrow and nothing else answers here.
     fn aliased_operand(&self, body: &Body, value: Operand) -> Option<Operand> {
         if let Some((_, borrowed)) = borrowed_place_operand(body, value) {
             return Some(borrowed);
         }
         let index = named_local(body, value)?;
-        self.frame
-            .place_aliases
-            .contains_key(&index)
+        if self.frame.place_aliases.contains_key(&index) {
+            return Some(value);
+        }
+        let type_id = body.exprs[value.as_expr()?].type_id;
+        self.type_table
+            .is_reference_shaped(type_id)
             .then_some(value)
     }
 
