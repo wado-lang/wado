@@ -141,6 +141,13 @@ pub extern "C" fn libm_fmod(x: f64, y: f64) -> f64 {
     libm::fmod(x, y)
 }
 
+// Fused multiply-add (f64)
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_fma(x: f64, y: f64, z: f64) -> f64 {
+    libm::fma(x, y, z)
+}
+
 // Trigonometric functions (f32)
 
 #[unsafe(no_mangle)]
@@ -269,6 +276,13 @@ pub extern "C" fn libm_hypotf(x: f32, y: f32) -> f32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn libm_fmodf(x: f32, y: f32) -> f32 {
     libm::fmodf(x, y)
+}
+
+// Fused multiply-add (f32)
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_fmaf(x: f32, y: f32, z: f32) -> f32 {
+    libm::fmaf(x, y, z)
 }
 
 #[cfg(target_arch = "wasm32")]

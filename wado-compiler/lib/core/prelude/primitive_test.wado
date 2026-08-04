@@ -249,6 +249,24 @@ test "f64 power functions" {
     assert f64::fmod(7.0, 3.0) == 1.0;
 }
 
+test "f64 mul_add" {
+    assert f64::mul_add(2.0, 3.0, 4.0) == 10.0;
+    assert f64::mul_add(-2.0, 3.0, 4.0) == -2.0;
+    assert f64::mul_add(0.0, 0.0, 1.5) == 1.5;
+
+    // A single rounding of x * y + z, unlike the two roundings of `x * y + z`.
+    assert f64::mul_add(0.1, 0.1, -0.01) == 9.020562075079397e-19;
+    assert 0.1 * 0.1 - 0.01 == 1.734723475976807e-18;
+
+    // The naive form cancels to zero; the fused form keeps the product's tail.
+    let x = 1234567890.123;
+    let y = 1.0000000001;
+    assert f64::mul_add(x, y, -(x * y)) == 8.268968492995062e-8;
+
+    assert f64::mul_add(f64::NAN, 1.0, 1.0).is_nan();
+    assert f64::mul_add(f64::INFINITY, 2.0, 1.0) == f64::INFINITY;
+}
+
 test "f32 wasm instruction math" {
     assert f32::abs(-3.5) == 3.5;
     assert f32::abs(2.0) == 2.0;
@@ -300,6 +318,20 @@ test "f32 power functions" {
     assert f32::cbrt(27.0) == 3.0;
     assert f32::hypot(3.0, 4.0) == 5.0;
     assert f32::fmod(7.0, 3.0) == 1.0;
+}
+
+test "f32 mul_add" {
+    assert f32::mul_add(2.0, 3.0, 4.0) == 10.0;
+    assert f32::mul_add(-2.0, 3.0, 4.0) == -2.0;
+
+    // A single rounding of x * y + z, unlike the two roundings of `x * y + z`.
+    assert f32::mul_add(0.1, 0.1, -0.01) == 5.2154064e-10;
+    let tenth: f32 = 0.1;
+    let hundredth: f32 = 0.01;
+    assert tenth * tenth - hundredth == 9.313226e-10;
+
+    assert f32::mul_add(f32::NAN, 1.0, 1.0).is_nan();
+    assert f32::mul_add(f32::INFINITY, 2.0, 1.0) == f32::INFINITY;
 }
 
 test "f64 constants" {
