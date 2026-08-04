@@ -367,35 +367,42 @@ Retired: ≈ 2,560 lines. New: ≈ 900–1,100 for the NIR pass, by analogy with
 case). Net ≈ −1,500 — and the line count is the least interesting number here.
 This design is justified by pass interaction, not by size.
 
-### The candidate sets do not coincide — measured
+### The candidate sets converged — measured
 
-The two analyses look at different programs: the WIR pass sees
+The two analyses look at different programs: the WIR pass saw
 post-`nullable_ref`, post-`propagate_trivial_copies` shapes; the NIR pass sees
-NIR, and sees it _before_ inlining rather than after everything.
+NIR, and sees it _before_ inlining rather than after everything. So they did not
+coincide at first. On `cbor_twitter` the NIR pass took 74 functions and left 87
+to the WIR side — more than it took.
 
-Counted at `-O2` with `WADO_TRACE=sroa_variant_return`. "WIR left over" is what
-`wir_optimize::sroa_variant_returns` still finds with the NIR pass enabled —
-the functions the NIR pass missed:
+Closing those shapes one at a time took the leftovers to zero. Counted at `-O2`
+with `WADO_TRACE=sroa_variant_return`, `widen` is what
+`wir_optimize::sroa_variant_returns` still confirms behind the NIR pass:
 
-| program            | WIR alone | NIR | WIR left | total | wasm size |
-| ------------------ | --------- | --- | -------- | ----- | --------- |
-| `cbor_twitter`     | 150       | 74  | 87       | 161   | +0.80 %   |
-| `json_twitter`     | 81        | 48  | 43       | 91    | +0.23 %   |
-| `json_canada`      | 27        | 25  | 10       | 35    | +0.29 %   |
-| `syntax_highlight` | 2         | 2   | 0        | 2     | 0.00 %    |
-| `sqlite_parse`     | 1         | 1   | 0        | 1     | 0.00 %    |
+| program            | widen | slot-flatten | wasm size |
+| ------------------ | ----- | ------------ | --------- |
+| `cbor_twitter`     | 0     | 0            | 214,015   |
+| `cbor_canada`      | 0     | 0            | 90,333    |
+| `cbor_catalog`     | 0     | 0            | 150,165   |
+| `json_twitter`     | 0     | 0            | 170,246   |
+| `json_canada`      | 0     | 0            | 75,356    |
+| `json_catalog`     | 0     | 0            | 123,850   |
+| `sqlite_parse`     | 0     | 0            | 584,940   |
+| `syntax_highlight` | 0     | 0            | 601,425   |
+| `gale_gen`         | 0     | 1            | 1,310,413 |
+| `fts`              | 0     | 0            | 18,860    |
+| `http_routing`     | 0     | 0            | 58,699    |
 
-The two passes together beat the WIR pass alone on every serde workload. The
-NIR pass takes the functions whose whole call graph it can scalarize, and the
-WIR pass — running behind it, on the shapes NIR declined — finds the rest. On
-the two parser workloads the NIR pass now takes everything, at identical bytes.
+The one slot-flatten on `gale_gen` is by design — that pass stays (step 5).
+`widen` is dead on every workload, which is what makes step 4 reachable.
 
-The size column is the cost of the NIR half, and it is the number to watch. It
-was +2.4 % / +4.4 % / +1.6 % before the tail-call cascade rule below; the
-residual is the padding and `Some(_)` / `None` nodes the NIR pass emits at
-return sites, which the WIR pass does not pay because it works in WIR directly.
+The size cost of the NIR half was +0.80 % / +0.23 % / +0.29 % at the point the
+two passes split the work, and +2.4 % / +4.4 % / +1.6 % before the tail-call
+cascade rule below. The residual is the padding and `Some(_)` / `None` nodes the
+NIR pass emits at return sites, which the WIR pass did not pay because it worked
+in WIR directly.
 
-No rebox fires on any of the five.
+No rebox fires on any workload.
 
 Every count here is a paired run — same build, flag on and off — because a
 widened-function count read once, on one program, is not evidence. An earlier
@@ -484,11 +491,21 @@ which step 3 updates.
 ### A payload binding that is a reference cell
 
 An arm pattern binds one name and the rewrite re-mints it as `let v = t.k`.
-That is wrong when `v`'s address is taken (`Some(v) => sink.put(&v)`): lowering
-gave `v` a reference cell, and the plain `let` stores the bare slot read into a
-struct-typed local. Such a binding refuses the candidate, alongside the
-address-taken check the bound temp already had — the two are the same rule
-applied at two depths.
+When `v`'s address is taken (`Some(v) => sink.put(&v)`), `lower::plan::boxing`
+promoted its slot from `T` to `Box<T>`, so a plain `let` stores a bare slot read
+into a box-typed local. The re-mint boxes it instead, exactly as lowering did.
+Refusing the shape instead cost 39 bindings on `gale_gen` — enough to keep four
+functions boxed there — and recovering them is size-neutral.
+
+The test has to be structural: the declared type is genuinely the `Box<T>`
+struct of what the pattern names. "The declared type differs, so it was boxed"
+is unsound, because local indices are pooled — a declaration matching nothing
+the pattern names belongs to another binding, and boxing against it emits a ref
+where an `i32` is read. A binding the test does not recognise is refused, and
+validation consults the same predicate so the two decline together.
+
+A local a `stores` parameter aliases is refused outright either way: that alias
+is established outside the body, and a `let` does not re-establish it.
 
 ### A rebox is a signal, not a cost to absorb
 
@@ -551,40 +568,46 @@ Each step lands and is measured before the next.
       _declines_ the shape (`slot_flatten_would_split`), which restores the
       WIR splits it had been displacing and is worth -155 / -76 / -48 bytes.
 
-## Why `widen.rs` cannot retire yet
+## How the 87-function gap closed
 
-`widen.rs` is not subsumed. On `cbor_twitter` it still widens 87 functions —
-more than the 74 this pass takes. Every one is a shape this pass declines, and
-they fall into three groups, measured by joining the WIR pass's applied list
-against this pass's decline reasons:
+At step 3 `widen.rs` still widened 87 functions on `cbor_twitter` — more than
+the 74 this pass took — and the retire table was premature. Joining the WIR
+pass's applied list against this pass's decline reasons split them three ways,
+and each turned out to be one shape, not dozens of problems:
 
-| group                          | count | shape                                     |
-| ------------------------------ | ----- | ----------------------------------------- |
-| no layout                      | 30    | all of one type: `Result<Option<i32>, E>` |
-| refuted at a call site         | 32    | the returns are fine; a use is not        |
-| never reached this pass at all | 25    | e.g. `core:json/parse_i64_from`           |
+| group                          | count | what it actually was                                          |
+| ------------------------------ | ----- | ------------------------------------------------------------- |
+| no layout                      | 30    | `Result<Option<i32>, E>` — a payload that is itself a variant |
+| refuted at a call site         | 32    | a `let mut` binding the call, never assigned again            |
+| never reached this pass at all | 25    | nothing — a join artifact                                     |
 
-The 30 are one shape, not thirty problems: `Option<i32>` as a payload trips
-`slot_flatten_would_split`, so this pass hands them to the WIR side by design.
-`slot_flatten` fires only twice on this program, so most of the 30 decline for
-a split that never happens — but that is not obviously a bug to fix. Declining
-them is what restored the WIR splits and paid -155 bytes, so taking them back
-gives those bytes up again, and it is not yet known why the WIR path is better
-here. Nor is the question decidable from NIR: `slot_flatten_candidates` gates on
-`all_returns_decompose` and on how each call site consumes the slot, both
-WIR-shape facts. Its one predictable gate, the arity cap, does not reject this
-shape (3 - 1 + 2 = 4). Understand the -155 bytes before loosening the rule.
+The 25 were not a gap. WIR function names carry their module path and NIR names
+are bare, so the join dropped them; they were candidates all along.
 
-The 32 are the largest genuine gap and the least understood: the returns
-validate, and a call site refutes. Which use kinds those are is the first thing
-to measure.
+The 32 were one rule. A `let mut t = f(x)` that nothing ever assigns is an
+immutable binding, and both this pass and `multi_value_return` were refusing it
+on the `mut` alone. `settled_locals` accepts it, and the two passes share the
+predicate — a site only one of them accepts leaves the tuple boxed, which is
+worse than the variant it replaced. The rule has to count writes _through_ a
+local, not just assignments to it: `h.seen = h.inner.next()` makes `h`'s `mut`
+load-bearing, and treating `h` as settled split a local the field write then had
+nowhere to land in, trapping at `-O0`.
 
-The 25 are not visible to this pass at all — worth finding out whether they are
-minted after it runs, or named differently in the two IRs.
+The 30 were the payload rule. `Option<i32>` as a case payload tripped
+`slot_flatten_would_split`, handing them to the WIR side by design. Giving the
+inner variant its own tag and slots in the outer tuple takes them here instead.
+A nested layout that _reconstructs_ the inner value at the call site was
+implemented and measured first, and discarded: it produced exactly the intended
+signatures and cost +985 bytes to recover +113, because a site binding the whole
+inner value has to rebuild what the callee just took apart. The form that pays
+pushes the destructure into the call site, which is what `slot_flatten` does —
+so a payload the split would still reach is left to it.
 
-Nothing here argues the design is wrong; it argues the retire table is premature.
-`return_temp.rs` is the one file whose shape is genuinely gone (see
-[the return temp](#the-return-temp--resolved-in-field_scalarize)).
+The last four functions on `gale_gen` were the reference-cell refusal above:
+39 arm bindings declined for an address-taken local, none of them nested.
+
+Nothing in that list argued the design was wrong; it argued the measurement had
+to come before the deletion.
 
 ## Open questions
 
