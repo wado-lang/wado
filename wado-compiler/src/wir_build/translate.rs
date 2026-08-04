@@ -2439,9 +2439,10 @@ impl FunctionTranslator<'_, '_> {
                         result_ty: ty.clone(),
                     };
                 }
-                // If the field's result type is unit, emit only the receiver
-                // for side effects and return Nop — unit has no Wasm representation.
-                if expr.type_id == TypeTable::UNIT {
+                // A stackless field leaves nothing on the stack, so the
+                // declaration side dropped it: emit only the receiver for its
+                // side effects. `&()` is as empty as `()` here.
+                if self.is_stackless_type(expr.type_id) {
                     let recv = self.translate_operand(receiver);
                     return WirInstr::Seq(vec![WirInstr::Drop(Box::new(recv))]);
                 }
@@ -2469,8 +2470,8 @@ impl FunctionTranslator<'_, '_> {
                 let val = self.translate_operand(value);
                 match &arena.exprs[target].kind {
                     ExprKind::Local { index, .. } => {
-                        // Unit-type locals have no Wasm representation
-                        if arena.exprs[target].type_id == TypeTable::UNIT {
+                        // A stackless local has no Wasm representation
+                        if self.is_stackless_type(arena.exprs[target].type_id) {
                             return val;
                         }
                         // If the value is a LocalSet from nested chained assignment
@@ -2494,12 +2495,12 @@ impl FunctionTranslator<'_, '_> {
                         }
                     }
                     ExprKind::FieldAccess { expr: receiver, .. }
-                        if arena.exprs[target].type_id == TypeTable::UNIT =>
+                        if self.is_stackless_type(arena.exprs[target].type_id) =>
                     {
-                        // Unit-typed field assignment: the field has no Wasm
+                        // Stackless field assignment: the field has no Wasm
                         // representation. Emit the receiver for side effects (then
                         // drop the ref), and emit val for side effects (it produces
-                        // nothing because unit has no Wasm representation).
+                        // nothing because a stackless type has no representation).
                         let recv = self.translate_operand(*receiver);
                         WirInstr::Seq(vec![val, WirInstr::Drop(Box::new(recv))])
                     }
