@@ -217,9 +217,8 @@ fn load_and_merge(paths: &List<String>) -> Grammar with Stdout, Stderr, Preopens
     };
 }
 
-/// Read one source file to a UTF-8 string from a granted directory. Any failure
-/// prints a message and exits with code 1 (mirrors `load_and_merge`'s per-file
-/// read).
+/// Read one source file to a UTF-8 string. Any failure prints a message and
+/// exits with code 1.
 fn read_source_file(path: &String) -> String with Stderr, Preopens, Exit {
     let file = open_granted(path);
     let bytes = match read_all(&file) {
@@ -241,10 +240,9 @@ fn read_source_file(path: &String) -> String with Stderr, Preopens, Exit {
 /// Open `path` for reading under a granted directory, or report why no grant
 /// reaches it and exit with code 1.
 ///
-/// A path is resolved inside a preopened directory, so what `--dir` grants is
-/// all the program can reach. Reading may search every grant — the file either
-/// sits under one or under none — and a failure distinguishes the reason it
-/// found nothing rather than reading as "no such file".
+/// A path resolves inside a preopened directory, so `--dir` bounds what the
+/// program can reach. Reading searches every grant — the file sits under one or
+/// under none — and names why nothing matched instead of "no such file".
 fn open_granted(path: &String) -> Descriptor with Stderr, Preopens, Exit {
     let dirs = Preopens::get_directories();
     let mut grants: List<String> = [];
@@ -252,9 +250,11 @@ fn open_granted(path: &String) -> Descriptor with Stderr, Preopens, Exit {
     for let mut i = 0; i < dirs.len(); i += 1 {
         let root = dirs[i].0;
         match root.open_at(PathFlags::none(), *path, OpenFlags::none(), DescriptorFlags::Read).wait() {
-            Ok(file) => return file,
+            Ok(file) => {
+                return file;
+            },
             Err(e) => {
-                if !(e matches { NoEntry }) {
+                if !e matches { NoEntry } {
                     denied = true;
                 }
             },
@@ -281,8 +281,7 @@ fn open_granted(path: &String) -> Descriptor with Stderr, Preopens, Exit {
 /// Create `path` for writing under the first granted directory.
 ///
 /// Reading may search every grant, but creating cannot: the file does not exist
-/// yet, so a search would pick the output's directory by grant order. `--output`
-/// resolves inside the first grant and nowhere else.
+/// yet, so a search would let grant order pick the output directory.
 fn create_granted(path: &String) -> Descriptor with Stderr, Preopens, Exit {
     let dirs = Preopens::get_directories();
     if dirs.is_empty() {

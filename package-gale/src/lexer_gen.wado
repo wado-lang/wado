@@ -492,9 +492,6 @@ fn gen_lexer_match_fns(
     check_lexer_calls_resolve(lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
     for let rule of lexer_rules {
         if lexer_rule_has_match_fn(rule, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci) {
-            // `gen_lexer_match_fn` resolves case-insensitivity from
-            // `resolve_ci(grammar_opts, &rule.options)`, so a rule-level
-            // `options { caseInsensitive=... }` overrides the grammar flag.
             gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class, ea, hm, sc_name);
         }
     }
@@ -502,12 +499,11 @@ fn gen_lexer_match_fns(
 
 /// Whether `rule` gets its own `try_` matcher.
 ///
-/// Two independent demands. The dispatch path needs one unless another matcher
-/// already covers the rule's text — a keyword rides its carrier's
-/// reclassification, a fixed literal rides the shared literal matcher — and a
-/// virtual token has no text to match at all. A rule another lexer rule
-/// references is called by name, so it needs one whatever dispatch decided; a
-/// non-recursive fragment is the exception, being inlined at each use site.
+/// Dispatch needs one unless another matcher already covers the rule's text — a
+/// keyword rides its carrier's reclassification, a fixed literal the shared
+/// literal matcher — and a virtual token has no text at all. A rule another
+/// lexer rule references is called by name and needs one whatever dispatch
+/// decided; a non-recursive fragment is inlined at each use site instead.
 fn lexer_rule_has_match_fn(
     rule: &LexerRule,
     lexer_rules: &List<LexerRule>,
@@ -530,11 +526,10 @@ fn lexer_rule_has_match_fn(
 
 /// Every `try_` call the emitter is about to make resolves to a matcher.
 ///
-/// A rule reference lowers to a call by name, while which rules get a matcher
-/// is decided separately (keyword reclassification, literal dedup, virtual
-/// tokens). A mismatch would otherwise reach the user as `unknown function
-/// 'try_X'` against generated source, with no way back to the rule that asked
-/// for it — so it is caught here, where the names are still in hand.
+/// A rule reference lowers to a call by name, while which rules get a matcher is
+/// decided separately. A mismatch would otherwise reach the user as `unknown
+/// function 'try_X'` against generated source, with no way back to the rule that
+/// asked for it — so it is caught here, where the names are still in hand.
 fn check_lexer_calls_resolve(
     lexer_rules: &List<LexerRule>,
     keywords: &List<KeywordInfo>,

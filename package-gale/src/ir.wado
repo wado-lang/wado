@@ -307,11 +307,11 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
                 if r.referenced_name == "EOF" {
                     continue;
                 }
-                // A `tokens { }` entry and an implicit parser token both live in
+                // A `tokens { }` entry and an implicit parser token live in
                 // `lexer_rules` as a bodiless virtual rule. A parser rule may
-                // reference one (that is what declaring a token is for), but a
-                // lexer rule would be asking it to match text it has no
-                // definition for — ANTLR4 rejects it as an undefined rule.
+                // reference one, but a lexer rule would be asking it to match
+                // text it has no definition for — ANTLR4 rejects that as an
+                // undefined rule.
                 let mut found = false;
                 for let lr of &grammar.lexer_rules {
                     if lr.name == r.referenced_name && !lr.is_virtual {
