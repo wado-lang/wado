@@ -360,7 +360,7 @@ what lets this file retire.
 | `sroa_variant_return.rs` | 79    | ~40 retires (the `sroa_variant_returns` entry point)      |
 | `layout.rs`              | 317   | shrinks; the layout decision moves to NIR types           |
 | `access.rs`              | 467   | stays — `slot_flatten` uses its whole API                 |
-| `slot_flatten.rs`        | 788   | stays; see [Staging](#staging) step 5                     |
+| `slot_flatten.rs`        | 788   | stays — this pass declines the shape it handles           |
 
 Retired: ≈ 2,560 lines. New: ≈ 900–1,100 for the NIR pass, by analogy with
 `sroa_param.rs` (950 lines for the strictly simpler single-field parameter
@@ -379,9 +379,9 @@ the functions the NIR pass missed:
 
 | program            | WIR alone | NIR | WIR left | total | wasm size |
 | ------------------ | --------- | --- | -------- | ----- | --------- |
-| `cbor_twitter`     | 150       | 76  | 85       | 161   | +0.92 %   |
-| `json_twitter`     | 81        | 49  | 42       | 91    | +0.27 %   |
-| `json_canada`      | 27        | 26  | 9        | 35    | +0.35 %   |
+| `cbor_twitter`     | 150       | 74  | 87       | 161   | +0.80 %   |
+| `json_twitter`     | 81        | 48  | 43       | 91    | +0.23 %   |
+| `json_canada`      | 27        | 25  | 10       | 35    | +0.29 %   |
 | `syntax_highlight` | 2         | 2   | 0        | 2     | 0.00 %    |
 | `sqlite_parse`     | 1         | 1   | 0        | 1     | 0.00 %    |
 
@@ -540,11 +540,14 @@ Each step lands and is measured before the next.
       throughput not regressed. If the WIR side does not shrink, keep it and
       stop here — a NIR rewrite that duplicates a WIR rediscovery is worse than
       either alone.
-- [ ] Step 5 — `slot_flatten`, measured separately. Its job (splitting a `ref W`
-      result slot whose `W` is itself a small variant) has a NIR analogue:
-      applying the slot rule recursively to a tuple slot. Whether that is worth
-      doing, or whether the WIR pass should keep it, is a question for after
-      step 4's measurements.
+- [x] Step 5 — `slot_flatten` stays in WIR, and the measurement is why. It
+      splits a `ref W` result slot whose `W` is itself a small variant, and it
+      fires 1–2 times per benchmark — once across `gale_gen`, twice on
+      `cbor_twitter`. A NIR analogue means a tree-shaped layout through
+      `compute_layout`, `build_result_tuple`, the call-site reconstruction and
+      the arity cap, for those one or two functions. Instead this pass
+      _declines_ the shape (`slot_flatten_would_split`), which restores the
+      WIR splits it had been displacing and is worth -155 / -76 / -48 bytes.
 
 ## Open questions
 
