@@ -198,6 +198,7 @@ Every `Return` must produce a fresh variant value:
   reason `wir_optimize`'s `return_temp.rs` exists;
 - `Return(Call(g))` where `g` is another candidate returning the same variant —
   the tail-call rule;
+- `Return(null)`, the `Option::None` literal;
 - `Block` / `If` / `Match` / `Switch` whose every leaf is one of the above;
 - a diverging (`Never`-typed) value.
 
@@ -251,6 +252,22 @@ than a missed optimization:
 The same applies to the `let t = Ok(v); … return t` shape: the initializer is
 rewritten in place, so the binding's declared type has to follow it.
 
+#### `return null` is not a node
+
+`null` is Wado's `Option::None` literal, and lowering promotes it to a pure
+value: the `Return` carries an `Operand::Value`, not an `ExprId`. A rewrite that
+only ever overwrites expression nodes cannot touch it, so `rewrite_return_value`
+hands back a replacement operand and each of its three write-back positions —
+the `Return` statement, a block-tail `Expr` statement, a `Match` arm body —
+stores it.
+
+Which case the value denotes comes from the return type, exactly as `wir_build`
+resolves a promoted `Null` (`translate.rs`), so the two agree by construction.
+
+This is not an edge case: it is how every hand-written `Iterator::next` signals
+exhaustion. Rejecting it cost both of `syntax_highlight`'s functions, the only
+one `sqlite_parse` has, and two or three on each serde workload.
+
 #### Constants must carry their type
 
 `ValuePool::intern` is type-erased and records no type; `ValuePool::alloc_unshared`
@@ -267,6 +284,12 @@ type had no WIR registration and codegen panicked. `remove_unreachable_types`
 now keeps the `option` compiler-item declaration unconditionally; that costs
 nothing, since WIR registers instances, not declarations.
 
+Keeping a declaration means keeping its case payload types too:
+`register_mono_variants` substitutes the declaration's payloads against each
+instance's type args, so a surviving declaration whose payload `TypeId` was
+pruned panics just the same. One set therefore gates both the payload walk and
+the retain — two predicates that have to agree, and did not.
+
 ### Required changes to `optimize::multi_value_return`
 
 The tuple classifier becomes the sole owner of the Wasm-level decision, and two
@@ -281,8 +304,8 @@ Confirmed SROA candidates at `-O2` (`WADO_TRACE=sroa_variant_return`):
 | `benchmark/cbor/cbor_twitter` | 150               | 123                    |
 | `benchmark/json_twitter`      | 81                | 66                     |
 | `benchmark/json_canada`       | 27                | 21                     |
-| `benchmark/sqlite_parse`      | 1                 | 1                      |
 | `benchmark/syntax_highlight`  | 2                 | 2                      |
+| `benchmark/sqlite_parse`      | 1                 | 1                      |
 | `benchmark/http_routing`      | 0                 | 0                      |
 | `benchmark/fts`               | 0                 | 0                      |
 
@@ -339,26 +362,28 @@ the functions the NIR pass missed:
 
 | program            | WIR alone | NIR | WIR left | total | wasm size |
 | ------------------ | --------- | --- | -------- | ----- | --------- |
-| `cbor_twitter`     | 150       | 73  | 88       | 161   | +0.91 %   |
-| `json_twitter`     | 81        | 46  | 45       | 91    | +0.26 %   |
-| `json_canada`      | 27        | 24  | 11       | 35    | +0.34 %   |
-| `syntax_highlight` | 2         | 0   | 2        | 2     | 0.00 %    |
-| `sqlite_parse`     | 1         | 0   | 1        | 1     | 0.00 %    |
+| `cbor_twitter`     | 150       | 76  | 85       | 161   | +0.92 %   |
+| `json_twitter`     | 81        | 49  | 42       | 91    | +0.27 %   |
+| `json_canada`      | 27        | 26  | 9        | 35    | +0.35 %   |
+| `syntax_highlight` | 2         | 2   | 0        | 2     | 0.00 %    |
+| `sqlite_parse`     | 1         | 1   | 0        | 1     | 0.00 %    |
 
 The two passes together beat the WIR pass alone on every serde workload. The
 NIR pass takes the functions whose whole call graph it can scalarize, and the
-WIR pass — running behind it, on the shapes NIR declined — finds the rest.
+WIR pass — running behind it, on the shapes NIR declined — finds the rest. On
+the two parser workloads the NIR pass now takes everything, at identical bytes.
 
 The size column is the cost of the NIR half, and it is the number to watch. It
 was +2.4 % / +4.4 % / +1.6 % before the tail-call cascade rule below; the
 residual is the padding and `Some(_)` / `None` nodes the NIR pass emits at
 return sites, which the WIR pass does not pay because it works in WIR directly.
 
-The two parser workloads barely use the shape at all — one and two functions
-respectively, before and after — so they measure nothing here beyond confirming
-the pass is inert where it has no candidates. `syntax_highlight` scalarizing
-zero of its two is a real miss, tracked as an open question below; it costs
-nothing while the WIR pass still runs. Golden fixtures will churn either way.
+No rebox fires on any of the five.
+
+Every count here is a paired run — same build, flag on and off — because a
+widened-function count read once, on one program, is not evidence. An earlier
+draft recorded `sqlite_parse` dropping from 67 to 1 and blamed step 2; a
+merge-base build widens 1 too, and emits the same bytes.
 
 ### Throughput
 
@@ -411,7 +436,7 @@ rebox costs the allocation the scalarization was meant to avoid, so it is a
 backstop `const_fold` and `sroa` are expected to collapse once the tag is
 known — not a target.
 
-Two rules make it work, and both were learned by getting them wrong:
+Three rules make it work, and all three were learned by getting them wrong:
 
 - The call-site rewrite must run over everything scalarized so far, not just
   the round's candidates. Reboxing a site inlining just planted gives up the
@@ -425,11 +450,28 @@ Two rules make it work, and both were learned by getting them wrong:
   wrapped its call in a block. A narrower rule in any one of them makes the
   repair rebox the fast path's own work, which is what produced a tuple-typed
   binding holding a variant.
+- Exiting a labeled block of the callee's tuple type is a handled position too,
+  not just a `let` of that type. Inlining a scalarized callee into a rewritten
+  call site turns its body into a labeled block typed by the tuple, and the
+  callee's own tail calls then exit through `break L: f(x)`. Reboxing one hands
+  a variant to a tuple-typed position — invalid Wasm from the repair itself.
+  The call node's own `type_id` looks like a simpler test, but it is not one:
+  the site rewrite retypes _every_ call to a rewritten callee before deciding
+  which consumers it can rewrite, so that type says nothing about the consumer.
 
 With those in place the E2E suite runs clean with the pass enabled, and emits
 no invalid Wasm anywhere. The failures left are `opt_sroa_variant_*` fixtures
 pinning WIR-pass local names this pass does not produce — expectation churn,
 which step 3 updates.
+
+### A payload binding that is a reference cell
+
+An arm pattern binds one name and the rewrite re-mints it as `let v = t.k`.
+That is wrong when `v`'s address is taken (`Some(v) => sink.put(&v)`): lowering
+gave `v` a reference cell, and the plain `let` stores the bare slot read into a
+struct-typed local. Such a binding refuses the candidate, alongside the
+address-taken check the bound temp already had — the two are the same rule
+applied at two depths.
 
 ### A rebox is a signal, not a cost to absorb
 
@@ -463,11 +505,9 @@ Each step lands and is measured before the next.
       above): the two passes together scalarize more than the WIR pass alone on
       every serde workload, at +0.26 % to +0.91 % of wasm size and about +2 % of
       serialization throughput. With the flag on the suite compiles every
-      program correctly — 4117 passed, 7 failed, no invalid Wasm — and the 7 are
+      program correctly, with no invalid Wasm, and the failures left are
       expectation churn. Still open and carried into step 3: a `LabeledBlock`
-      return value arriving via `break L: v`, rejected outright, and
-      `syntax_highlight` scalarizing nothing where the WIR pass widens two
-      functions.
+      return value arriving via `break L: v`, rejected outright.
 - [x] Step 2 — lift the `is_trait_method` gate and the arity cap in
       `multi_value_return`, on their own. Landed: full E2E green, wasm size
       neutral to -0.06%. `i128^Mul::mul` and its siblings now return
@@ -475,7 +515,11 @@ Each step lands and is measured before the next.
 - [ ] Step 3 — enable the pass, with `wir_optimize::sroa_variant_returns` still
       running behind it. It should find nothing left to do on rewritten
       functions; any function it still widens is one the NIR pass missed, and
-      that list is the worklist.
+      that list is the worklist. The `opt_sroa_variant_*` fixtures pin
+      WIR-pass local names (`__sroa_*_discriminant`) that become the NIR pass's
+      (`*_mv_0`), so their `wir_expect` moves with the flag —
+      `opt_sroa_variant_return_null.wado` gains one at the same time, which is
+      what makes it a test of this pass rather than only of the program.
 - [ ] Step 4 — retire `widen.rs`, `return_temp.rs`, and most of `wrapper.rs`;
       shrink `layout.rs`. Gate: widened-function counts held, size and
       throughput not regressed. If the WIR side does not shrink, keep it and
@@ -489,36 +533,12 @@ Each step lands and is measured before the next.
 
 ## Open questions
 
-### `syntax_highlight` scalarizes nothing where the WIR pass widens two
-
-Undiagnosed. It costs nothing today — the WIR pass still runs and still widens
-both — but it is the one program where the NIR pass covers strictly less, so it
-is the worked example for whatever Phase 1 gate is too strict.
-
 ### A `LabeledBlock` return value arriving via `break L: v`
 
 Rejected outright. The return-value rewrite walks the block tail; a value
 reaching the return through `break L: v` is not in the tail, so the candidate is
 declined rather than mis-rewritten. Sound, but it gives up functions whose
 returns pass through a labeled block.
-
-## Resolved
-
-### `sqlite_parse` was never widening 67 functions
-
-An earlier draft recorded `wir_optimize::sroa_variant_returns` widening 67
-functions on `sqlite_parse` before this branch and 1 after, and blamed step 2.
-Neither half holds. A build at the merge-base widens 1 (candidates 3), and
-emits a module byte-identical to this branch's. Restoring the two step-2 gates
-independently on this branch — `is_trait_method` and the 2..=4 arity cap — also
-leaves the count and the bytes unchanged in all four configurations, at `-O1`,
-`-O2`, and `-Os` alike. The restored gates are not inert: the same build shows
-`coerce_i128_u128` changing when the trait-method gate goes back.
-
-So the 67 was a bad number, not a regression, and step 4 can use widened-function
-counts as a gate. The lesson is about the measurement, not the pass: a count
-read off one trace line, from one program, without a paired control run is worth
-nothing.
 
 ## Alternative considered: `ReturnAbi::Variant`
 

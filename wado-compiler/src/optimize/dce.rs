@@ -1697,6 +1697,54 @@ impl DceAnalysis {
     }
 }
 
+/// Variant declarations that outlive their uses, both for
+/// `optimize::sroa_variant_return`:
+///
+/// - `Option`, because the pass mints `Option<T>` slots *after* the early DCE
+///   run and `wir_build::register_mono_variants` registers the instance off the
+///   declaration.
+/// - Any variant a function was scalarized *from*. Scalarizing every use of a
+///   variant away is exactly what makes its declaration look unreachable, and
+///   the pass re-derives its layout from that declaration to recognise its own
+///   earlier work in a later iteration.
+///
+/// A kept declaration keeps its case payload types too: `register_mono_variants`
+/// substitutes the declaration's payloads against each instance's type args, so
+/// a declaration whose payload `TypeId` was pruned panics in `wir_build`. That
+/// is why the same set gates both the payload walk and the retain.
+///
+/// Keeping a declaration costs nothing: WIR registers instances, not
+/// declarations.
+fn variant_decls_kept_past_use(
+    project: &NirPackage,
+    type_table: &TypeTable,
+) -> crate::hashmap::IndexSet<(String, ModuleSource)> {
+    let mut kept: crate::hashmap::IndexSet<(String, ModuleSource)> = project
+        .functions
+        .iter()
+        .filter_map(|f| f.borrow().scalarized_from)
+        .filter_map(|t| match type_table.get(t) {
+            ResolvedType::Variant {
+                name,
+                module_source,
+            }
+            | ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => Some((name.clone(), module_source.clone())),
+            _ => None,
+        })
+        .collect();
+    if let Some(ms) = type_table
+        .compiler_items()
+        .variant_module(crate::compiler_item::CompilerItem::Option)
+    {
+        kept.insert(("Option".to_string(), ms.clone()));
+    }
+    kept
+}
+
 /// Populate `analysis.types` and the name-keyed type-index views.
 /// A type is reachable if it's used in any reachable function's
 /// signature, locals, or expressions, or in any reachable global's
@@ -1852,9 +1900,11 @@ fn populate_type_reachability(
             }
         }
 
-        // Same predicate as above but for variants: the base type or
-        // any `GenericInstance` of the variant's name keeps payloads
-        // alive.
+        // Same predicate as above but for variants: the base type, any
+        // `GenericInstance` of the variant's name, or a declaration kept past
+        // its last use keeps payloads alive. The same predicate gates the
+        // `project.variants` retain in `remove_unreachable_types`.
+        let kept_past_use = variant_decls_kept_past_use(project, &type_table);
         for variant in &project.variants {
             let base_reachable = analysis
                 .variant_exact
@@ -1863,7 +1913,10 @@ fn populate_type_reachability(
                 .generic_instance_names
                 .contains(variant.name.as_str());
 
-            if base_reachable || instance_reachable {
+            if base_reachable
+                || instance_reachable
+                || kept_past_use.contains(&(variant.name.clone(), variant.module_source.clone()))
+            {
                 for case in &variant.cases {
                     collect_type_transitive(case.payload, &type_table, &mut analysis.types);
                 }
@@ -2010,54 +2063,16 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
                 || reachable_struct_id(&rendered, &s.module_source)
         }
     });
-    // Two variant declarations outlive their uses, both for
-    // `optimize::sroa_variant_return`:
-    //
-    // - `Option`, because the pass mints `Option<T>` slots *after* the early DCE
-    //   run and `wir_build::register_mono_variants` registers the instance off
-    //   the declaration.
-    // - Any variant a function was scalarized *from*. Scalarizing every use of a
-    //   variant away is exactly what makes its declaration look unreachable, and
-    //   the pass re-derives its layout from that declaration to recognise its own
-    //   earlier work in a later iteration.
-    //
-    // Keeping a declaration costs nothing: WIR registers instances, not
-    // declarations.
-    let scalarized_from: crate::hashmap::IndexSet<(String, ModuleSource)> = {
+    let kept_past_use = {
         let type_table = project.type_table.borrow();
-        project
-            .functions
-            .iter()
-            .filter_map(|f| f.borrow().scalarized_from)
-            .filter_map(|t| match type_table.get(t) {
-                ResolvedType::Variant {
-                    name,
-                    module_source,
-                } => Some((name.clone(), module_source.clone())),
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    ..
-                } => Some((name.clone(), module_source.clone())),
-                _ => None,
-            })
-            .collect()
+        variant_decls_kept_past_use(project, &type_table)
     };
-    let option_decl = project
-        .type_table
-        .borrow()
-        .compiler_items()
-        .variant_module(crate::compiler_item::CompilerItem::Option)
-        .cloned();
     project.variants.retain(|v| {
         analysis
             .variant_exact
             .contains(&(v.name.clone(), v.module_source.clone()))
             || analysis.generic_instance_names.contains(v.name.as_str())
-            || option_decl
-                .as_ref()
-                .is_some_and(|ms| v.name == "Option" && v.module_source == *ms)
-            || scalarized_from.contains(&(v.name.clone(), v.module_source.clone()))
+            || kept_past_use.contains(&(v.name.clone(), v.module_source.clone()))
     });
     project.enums.retain(|e| {
         analysis

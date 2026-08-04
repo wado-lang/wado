@@ -153,6 +153,11 @@ struct Layout {
     case_names: Vec<String>,
     /// Payload type per case, for typing a pattern binding.
     case_payloads: Vec<TypeId>,
+    /// The case a promoted `ValueKind::Null` denotes: `Option::None`, and only
+    /// for an `Option` instance. `wir_build` reads a promoted `Null` the same
+    /// way (`translate.rs`, `ValueKind::Null`), so this is the same decision,
+    /// made earlier.
+    null_case: Option<u32>,
 }
 
 impl Layout {
@@ -304,29 +309,70 @@ fn scalarized_returns(project: &NirPackage) -> IndexMap<FuncId, (TypeId, Layout)
     out
 }
 
-/// Call nodes the fast path bound: a `let` whose declared type is already the
-/// callee's tuple.
+/// Call nodes whose consumer already reads a tuple: a `let` whose declared type
+/// is the callee's tuple, or an exit from a labeled block of that type. The
+/// second is what `nir/inline` leaves behind — a scalarized callee inlined into
+/// a rewritten call site becomes a labeled block typed by the tuple, and its
+/// own tail calls now exit through `break L: f(x)`.
 fn handled_call_sites(
     body: &Body,
     scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
 ) -> IndexSet<ExprId> {
     let mut out: IndexSet<ExprId> = IndexSet::default();
-    for stmt in body.stmts.values() {
-        let StmtKind::Let { type_id, value, .. } = &stmt.kind else {
-            continue;
-        };
+    // A label reused at two different result types tells us nothing about which
+    // block a `break` exits, so it is dropped rather than guessed at: guessing
+    // wrong here skips a rebox that was needed.
+    let mut label_types: IndexMap<&str, Option<TypeId>> = IndexMap::default();
+    for expr in body.exprs.values() {
+        if let ExprKind::LabeledBlock {
+            label, result_type, ..
+        } = &expr.kind
+        {
+            label_types
+                .entry(label.as_str())
+                .and_modify(|t| {
+                    if *t != Some(*result_type) {
+                        *t = None;
+                    }
+                })
+                .or_insert(Some(*result_type));
+        }
+    }
+    let accept = |value: Operand, expected: TypeId, out: &mut IndexSet<ExprId>| {
         // Through a block tail as well as bare: by the time a later iteration
         // sees this binding, `let_block_flatten` and friends may have wrapped
         // the call in a block, and a bare-only match would call its own earlier
         // work a straggler and rebox it under a tuple-typed binding.
-        let Some((func_id, call)) = tail_call_site(body, *value) else {
-            continue;
-        };
-        if scalarized
-            .get(&func_id)
-            .is_some_and(|(_, l)| l.tuple_type == *type_id)
+        if let Some((func_id, call)) = tail_call_site(body, value)
+            && scalarized
+                .get(&func_id)
+                .is_some_and(|(_, l)| l.tuple_type == expected)
         {
             out.insert(call);
+        }
+    };
+    for stmt in body.stmts.values() {
+        match &stmt.kind {
+            StmtKind::Let { type_id, value, .. } => accept(*value, *type_id, &mut out),
+            StmtKind::Break {
+                label: Some(label),
+                value: Some(value),
+            } => {
+                if let Some(&Some(expected)) = label_types.get(label.as_str()) {
+                    accept(*value, expected, &mut out);
+                }
+            }
+            _ => {}
+        }
+    }
+    for expr in body.exprs.values() {
+        if let ExprKind::LabeledBlock {
+            block, result_type, ..
+        } = &expr.kind
+            && let Some(&last) = body.blocks[*block].stmts.last()
+            && let StmtKind::Expr(value) = body.stmts[last].kind
+        {
+            accept(value, *result_type, &mut out);
         }
     }
     out
@@ -768,6 +814,12 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
         project.type_table.borrow_mut().make_tuple(elements)
     };
 
+    let null_case = project
+        .type_table
+        .borrow()
+        .as_option(variant_type)
+        .map(|_| OPTION_NONE);
+
     Some(Layout {
         tuple_type,
         slot_types,
@@ -775,6 +827,7 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
         case_slots,
         case_names,
         case_payloads,
+        null_case,
     })
 }
 
@@ -1013,7 +1066,7 @@ fn return_value_scalarizable(
     tail_ok: &IndexMap<FuncId, TypeId>,
 ) -> bool {
     let Some(expr) = op.as_expr() else {
-        return false;
+        return null_return_case(body, op, cand).is_some();
     };
     if body.exprs[expr].type_id == TypeTable::NEVER {
         return true;
@@ -1065,6 +1118,17 @@ fn return_value_scalarizable(
         }
         _ => false,
     }
+}
+
+/// The case index a `return null` in this candidate produces. `null` is
+/// Wado's `Option::None` literal, and it reaches NIR as a promoted pure value
+/// with no `ExprId` — the return type is what pins which variant it means.
+fn null_return_case(body: &Body, op: Operand, cand: &Candidate) -> Option<u32> {
+    let value = op.as_value()?;
+    if !matches!(body.values.kind(value), ValueKind::Null) {
+        return None;
+    }
+    cand.layout.null_case
 }
 
 fn block_tail_scalarizable(
@@ -1205,6 +1269,7 @@ fn invalidate_bad_call_sites(
         NodeRef::Block(body.root),
         candidates,
         &bound,
+        &cell_locals(func),
         caller_ok,
         invalid,
     );
@@ -1215,6 +1280,7 @@ fn check_uses(
     node: NodeRef,
     candidates: &IndexMap<FuncId, Candidate>,
     bound: &IndexMap<u32, FuncId>,
+    cells: &IndexSet<u32>,
     caller_ok: bool,
     invalid: &mut IndexSet<FuncId>,
 ) {
@@ -1263,14 +1329,18 @@ fn check_uses(
                     let via_call = call_callee(body, *scrut).filter(|f| candidates.contains_key(f));
                     if via_temp.is_some() || via_call.is_some() {
                         let arms = arms.clone();
-                        if !arms.iter().all(|a| arm_is_one_level(body, a)) {
+                        if !arms.iter().all(|a| arm_is_one_level(body, a, cells)) {
                             invalid.extend(via_temp.into_iter().chain(via_call));
                         }
                         for a in &arms {
                             if let Some(g) = a.guard {
-                                check_uses_operand(body, g, candidates, bound, caller_ok, invalid);
+                                check_uses_operand(
+                                    body, g, candidates, bound, cells, caller_ok, invalid,
+                                );
                             }
-                            check_uses_operand(body, a.body, candidates, bound, caller_ok, invalid);
+                            check_uses_operand(
+                                body, a.body, candidates, bound, cells, caller_ok, invalid,
+                            );
                         }
                         return;
                     }
@@ -1294,7 +1364,7 @@ fn check_uses(
         NodeRef::Block(_) | NodeRef::Pat(_) => {}
     }
     body.for_each_child(node, |c| {
-        check_uses(body, c, candidates, bound, caller_ok, invalid);
+        check_uses(body, c, candidates, bound, cells, caller_ok, invalid);
     });
 }
 
@@ -1303,6 +1373,7 @@ fn check_uses_operand(
     op: Operand,
     candidates: &IndexMap<FuncId, Candidate>,
     bound: &IndexMap<u32, FuncId>,
+    cells: &IndexSet<u32>,
     caller_ok: bool,
     invalid: &mut IndexSet<FuncId>,
 ) {
@@ -1312,6 +1383,7 @@ fn check_uses_operand(
             NodeRef::Expr(e),
             candidates,
             bound,
+            cells,
             caller_ok,
             invalid,
         );
@@ -1334,18 +1406,29 @@ fn call_callee(body: &Body, op: Operand) -> Option<FuncId> {
     }
 }
 
-/// One level deep over the scrutinee's own variant, binding at most one name.
-/// A nested pattern (`Ok(Some(x))`) is rejected rather than peeled — peeling is
-/// where the WIR pass's complexity lives.
-fn arm_is_one_level(body: &Body, arm: &ArmData) -> bool {
+/// Locals a payload binding cannot be re-minted for. `bind_payload_before`
+/// writes a plain `let`, but a local whose address is taken — or which a
+/// `stores` parameter aliases — is lowered as a reference cell, and storing the
+/// bare slot read into it hands a scalar to a struct-typed local.
+fn cell_locals(func: &NirFunction) -> IndexSet<u32> {
+    let mut out = func.address_taken_locals.clone();
+    out.extend(func.stores_aliased_locals.iter().copied());
+    out
+}
+
+/// One level deep over the scrutinee's own variant, binding at most one name
+/// the rewrite can re-mint. A nested pattern (`Ok(Some(x))`) is rejected rather
+/// than peeled — peeling is where the WIR pass's complexity lives.
+fn arm_is_one_level(body: &Body, arm: &ArmData, cells: &IndexSet<u32>) -> bool {
     match &body.pats[arm.pattern].kind {
         PatKind::Wildcard => true,
         PatKind::Variant { bindings, .. } => match bindings.as_slice() {
             [] => true,
-            [b] => matches!(
-                body.pats[*b].kind,
-                PatKind::Binding { .. } | PatKind::Wildcard
-            ),
+            [b] => match body.pats[*b].kind {
+                PatKind::Binding { local_index, .. } => !cells.contains(&local_index),
+                PatKind::Wildcard => true,
+                _ => false,
+            },
             _ => false,
         },
         PatKind::Binding { .. }
@@ -1403,8 +1486,9 @@ fn rewrite_returns(
 ) {
     if let NodeRef::Stmt(s) = node
         && let StmtKind::Return { value: Some(v) } = body.stmts[s].kind
+        && let Some(new) = rewrite_return_value(body, v, cand, span, retyped)
     {
-        rewrite_return_value(body, v, cand, span, retyped);
+        body.stmts[s].kind = StmtKind::Return { value: Some(new) };
     }
     let mut kids = Vec::new();
     body.for_each_child(node, |c| kids.push(c));
@@ -1413,16 +1497,28 @@ fn rewrite_returns(
     }
 }
 
+/// Rewrites in place where the value is a skeleton node, and returns a
+/// replacement operand where it is not — a promoted `null`, which has no
+/// `ExprId` to overwrite.
+#[must_use]
 fn rewrite_return_value(
     body: &mut Body,
     op: Operand,
     cand: &Candidate,
     span: Span,
     retyped: &mut Vec<u32>,
-) {
-    let Some(expr) = op.as_expr() else { return };
+) -> Option<Operand> {
+    let Some(expr) = op.as_expr() else {
+        let case = null_return_case(body, op, cand)?;
+        let tuple = build_result_tuple(body, cand, case, None, span);
+        return Some(Operand::Expr(body.exprs.push(ExprNode {
+            kind: tuple,
+            type_id: cand.layout.tuple_type,
+            span,
+        })));
+    };
     if body.exprs[expr].type_id == TypeTable::NEVER {
-        return;
+        return None;
     }
     match body.exprs[expr].kind.clone() {
         ExprKind::VariantConstruct {
@@ -1462,8 +1558,17 @@ fn rewrite_return_value(
         }
         ExprKind::Match { arms, .. } => {
             body.exprs[expr].type_id = cand.layout.tuple_type;
-            for a in arms {
-                rewrite_return_value(body, a.body, cand, span, retyped);
+            let replacements: Vec<(usize, Operand)> = arms
+                .iter()
+                .enumerate()
+                .filter_map(|(i, a)| {
+                    rewrite_return_value(body, a.body, cand, span, retyped).map(|new| (i, new))
+                })
+                .collect();
+            if let ExprKind::Match { arms, .. } = &mut body.exprs[expr].kind {
+                for (i, new) in replacements {
+                    arms[i].body = new;
+                }
             }
         }
         ExprKind::Switch { arms, default, .. } => {
@@ -1474,6 +1579,7 @@ fn rewrite_return_value(
         }
         _ => {}
     }
+    None
 }
 
 fn rewrite_block_tail(
@@ -1486,8 +1592,10 @@ fn rewrite_block_tail(
     let Some(&last) = body.blocks[block].stmts.last() else {
         return;
     };
-    if let StmtKind::Expr(e) = body.stmts[last].kind {
-        rewrite_return_value(body, e, cand, span, retyped);
+    if let StmtKind::Expr(e) = body.stmts[last].kind
+        && let Some(new) = rewrite_return_value(body, e, cand, span, retyped)
+    {
+        body.stmts[last].kind = StmtKind::Expr(new);
     }
 }
 
@@ -1614,7 +1722,8 @@ fn rewrite_call_sites(
         // A site validated this round is known handleable; one inherited from an
         // earlier round is not, so each temp is re-checked. A temp that fails is
         // dropped here and reboxed instead of half-rewritten.
-        bound.retain(|&local, _| temp_uses_rewritable(&body, local));
+        let cells = cell_locals(&func);
+        bound.retain(|&local, _| temp_uses_rewritable(&body, local, &cells));
         if !bound.is_empty() {
             for (&local, &f) in &bound {
                 let tuple_type = candidates[&f].layout.tuple_type;
@@ -1704,7 +1813,14 @@ fn hoist_call_scrutinees(
     span: Span,
 ) -> bool {
     let mut targets: Vec<ExprId> = Vec::new();
-    collect_call_scrutinees(body, NodeRef::Block(body.root), candidates, &mut targets);
+    let cells = cell_locals(func);
+    collect_call_scrutinees(
+        body,
+        NodeRef::Block(body.root),
+        candidates,
+        &cells,
+        &mut targets,
+    );
     if targets.is_empty() {
         return false;
     }
@@ -1775,6 +1891,7 @@ fn collect_call_scrutinees(
     body: &Body,
     node: NodeRef,
     candidates: &IndexMap<FuncId, Candidate>,
+    cells: &IndexSet<u32>,
     out: &mut Vec<ExprId>,
 ) {
     // The arms have to be rewritable before a binding is minted for them: a
@@ -1783,11 +1900,13 @@ fn collect_call_scrutinees(
     if let NodeRef::Expr(e) = node
         && let ExprKind::Match { expr: scrut, arms } = &body.exprs[e].kind
         && call_callee(body, *scrut).is_some_and(|f| candidates.contains_key(&f))
-        && arms.iter().all(|a| arm_is_one_level(body, a))
+        && arms.iter().all(|a| arm_is_one_level(body, a, cells))
     {
         out.push(e);
     }
-    body.for_each_child(node, |c| collect_call_scrutinees(body, c, candidates, out));
+    body.for_each_child(node, |c| {
+        collect_call_scrutinees(body, c, candidates, cells, out);
+    });
 }
 
 /// Rewrite every destructuring read of a tuple-bound temp.
@@ -1858,13 +1977,13 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
 /// Whether every mention of `local` is a destructure the rewrite lowers. A bare
 /// read escapes the tuple, and a `Match` arm deeper than one level has no tag
 /// form — either leaves the site to the rebox.
-fn temp_uses_rewritable(body: &Body, local: u32) -> bool {
+fn temp_uses_rewritable(body: &Body, local: u32, cells: &IndexSet<u32>) -> bool {
     let mut ok = true;
-    check_temp_uses(body, NodeRef::Block(body.root), local, &mut ok);
+    check_temp_uses(body, NodeRef::Block(body.root), local, cells, &mut ok);
     ok
 }
 
-fn check_temp_uses(body: &Body, node: NodeRef, local: u32, ok: &mut bool) {
+fn check_temp_uses(body: &Body, node: NodeRef, local: u32, cells: &IndexSet<u32>, ok: &mut bool) {
     if !*ok {
         return;
     }
@@ -1892,7 +2011,7 @@ fn check_temp_uses(body: &Body, node: NodeRef, local: u32, ok: &mut bool) {
             }
             ExprKind::Match { expr: scrut, arms } => {
                 if is_local(body, *scrut, local) {
-                    if !arms.iter().all(|a| arm_is_one_level(body, a)) {
+                    if !arms.iter().all(|a| arm_is_one_level(body, a, cells)) {
                         *ok = false;
                         return;
                     }
@@ -1901,10 +2020,10 @@ fn check_temp_uses(body: &Body, node: NodeRef, local: u32, ok: &mut bool) {
                         if let Some(g) = a.guard
                             && let Some(ge) = g.as_expr()
                         {
-                            check_temp_uses(body, NodeRef::Expr(ge), local, ok);
+                            check_temp_uses(body, NodeRef::Expr(ge), local, cells, ok);
                         }
                         if let Some(be) = a.body.as_expr() {
-                            check_temp_uses(body, NodeRef::Expr(be), local, ok);
+                            check_temp_uses(body, NodeRef::Expr(be), local, cells, ok);
                         }
                     }
                     return;
@@ -1917,7 +2036,7 @@ fn check_temp_uses(body: &Body, node: NodeRef, local: u32, ok: &mut bool) {
             _ => {}
         }
     }
-    body.for_each_child(node, |c| check_temp_uses(body, c, local, ok));
+    body.for_each_child(node, |c| check_temp_uses(body, c, local, cells, ok));
 }
 
 fn is_local(body: &Body, op: Operand, local: u32) -> bool {
