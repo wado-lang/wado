@@ -162,10 +162,14 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
             // A `return g(x)` is only a pass-through when this function has the
             // same N results to pass it through; otherwise the call has no
             // aggregate to bind and stays an escape.
-            let passes_through = func
-                .id
-                .is_some_and(|id| candidate_ids.contains_key(&id))
-                .then_some(func.return_type);
+            //
+            // Read from `tail_ok`, never from this round's candidate set: a
+            // candidate can still be invalidated *later in this same round*, and
+            // sparing `g` on behalf of a caller that then does not take the ABI
+            // leaves the caller pushing N results through a one-ref signature.
+            // At the fixed point `tail_ok` is exactly the surviving set, so the
+            // two sides of the rule agree.
+            let passes_through = func.id.and_then(|id| tail_ok.get(&id)).copied();
             validate_uses_in_block(
                 body,
                 body.root,
@@ -191,18 +195,30 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
             );
         }
 
+        // Intersected with the assumed set, so the chain strictly decreases and
+        // the loop terminates. Both halves of the tail-call rule read `tail_ok`,
+        // so applying exactly it keeps caller and callee decisions in step: a
+        // survivor outside it could hold a `return g(x)` whose `g` this round
+        // withdrew.
         let survivors: IndexMap<FuncId, TypeId> = candidates
             .keys()
             .filter(|&&idx| !invalid.contains(&idx))
             .filter_map(|&idx| {
                 let func = project.functions[idx].borrow();
-                Some((func.id?, func.return_type))
+                let id = func.id?;
+                tail_ok.contains_key(&id).then_some((id, func.return_type))
             })
             .collect();
         if survivors.len() == tail_ok.len() {
             break candidates
                 .into_iter()
-                .filter(|(idx, _)| !invalid.contains(idx))
+                .filter(|(idx, _)| {
+                    !invalid.contains(idx)
+                        && project.functions[*idx]
+                            .borrow()
+                            .id
+                            .is_some_and(|id| tail_ok.contains_key(&id))
+                })
                 .collect::<Vec<_>>();
         }
         tail_ok = survivors;
