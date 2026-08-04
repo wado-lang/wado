@@ -28,13 +28,7 @@ The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that c
 
 Entries state the symptom, how to reproduce it, and anything already measured — not a diagnosis or a proposed fix. A diagnosis written here reads as an instruction later, and two have been wrong: one would have broken compatibility if implemented as written, the other described a difference that did not exist.
 
-- [ ] The opaque-rule expansion path drops at-end alternatives its template keeps: `try_expand_opaque` has none of the at-end handling `build_sll_node` grew, and its coverage check verifies only the opaque alts, so an at-end alt among the non-opaque configs leaves the emitted `Dispatch` with no branch of its own.
-- [ ] A lexer alternation with a suffix keeps the first-match emit when the suffix is not peekable — a `RuleRef`, a `Repeat` (`('a'|'ab') 'bc'?`), or an alternation whose arms are not single elements. `lexer_suffix_is_peekable` is the window; outside it the arm is chosen without consulting what follows, as `('a'|'ab') 'bc'` did before. No corpus grammar is known to hit it.
-- [ ] `\p{...}` covers the general categories only (generated from the UCD by `scripts/regen-unicode-tables.sh`). A script (`\p{Greek}`), block (`\p{InGreek}`) or binary property (`\p{Other_ID_Start}`, `\p{Pattern_Syntax}`) is rejected with "unsupported Unicode property", so a grammar ANTLR4 accepts is refused. No corpus grammar needs one — RustLexer's are in comments. The data for the rest is `Scripts.txt` / `PropList.txt` / `DerivedCoreProperties.txt`.
-
-Not a mis-parse since the tournament backs every incomplete cascade, but the same under-approximation, and what keeps that backstop load-bearing:
-
-- [ ] The SLL walk advances a `Repeat` config past the repeat as if it iterated exactly once, so a decision two tokens of lookahead would settle costs a scan. `a : X+ Y | X Z` on `X X Y`: `gale dump` reports `Dispatch[d=0] [TK_X] → Dispatch[d=1]` with branches `[TK_Y]→alt 0` and `[TK_Z]→alt 1` only, so the second `X` reaches the fallback tournament rather than a branch. `tests/grammars/ll_repeat_alt_gap.g4` is the acceptance half; any repair needs a rejection-case fixture too, and touches the `alt_index` keying `CLAUDE.md`'s first failed approach also names.
+- [ ] `\p{...}` reaches what the UCD names, not the ICU surface ANTLR4 adds on top of it. Rejected with "unsupported Unicode property": the POSIX aliases (`\p{Alnum}`, `\p{Digit}`, `\p{Blank}`, `\p{Graph}`, `\p{Print}`, `\p{XDigit}`), enumerated properties beyond `General_Category=` / `Script=` / `Block=` (`\p{Bidi_Class=L}`), the `LC` / `Cased_Letter` category group (the one group that is not a prefix of its members), and ANTLR4's own `\p{EmojiPresentation=EmojiDefault}`. No corpus grammar needs one — RustLexer's are in comments.
 
 ### Pipeline and tooling correctness
 

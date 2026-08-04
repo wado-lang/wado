@@ -1,7 +1,8 @@
 #!/usr/bin/env wado
 //! Emit `src/g4/unicode_tables.wado` from the Unicode Character Database.
-//! Reads `UnicodeData.txt` on argv, prints the module to stdout;
-//! `scripts/regen-unicode-tables.sh` fetches the UCD and drives it.
+//! Reads the UCD files from the preopened directory and takes the version on
+//! argv, printing the module to stdout; `scripts/regen-unicode-tables.sh`
+//! fetches the UCD and drives it.
 //!
 //! Gale expands `\p{...}` / `\P{...}` in a lexer char set into code-point
 //! ranges at grammar-parse time. `\P` is the complement of `\p`, so an
@@ -68,16 +69,188 @@ struct CategoryRun {
     category: String,
 }
 
+/// One `START[..END] ; VALUE` line of a UCD property file (`Scripts.txt`,
+/// `PropList.txt`, `DerivedCoreProperties.txt`, `Blocks.txt`).
+struct PropRun {
+    start: i32,
+    end: i32,
+    value: String,
+}
+
+/// A property (or property value) and the names that resolve to it: the
+/// canonical one plus every alias `PropertyAliases.txt` /
+/// `PropertyValueAliases.txt` give it.
+struct NamedRanges {
+    names: List<String>,
+    ranges: List<[i32, i32]>,
+}
+
 export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     let arguments = args();
-    if arguments.len() != 2 {
-        eprintln("usage: gen_unicode_tables <UnicodeData.txt> <version>");
+    if arguments.len() != 1 {
+        eprintln("usage: gen_unicode_tables <version>   (UCD files come from the preopened directory)");
         exit(1);
     }
-    let content = read_file(&arguments[0]);
-    let version = arguments[1];
+    let version = arguments[0];
 
-    print(emit_module(&parse_runs(&content), &version));
+    let categories = parse_runs(&read_file(&"UnicodeData.txt"));
+    let scripts = parse_prop_runs(&read_file(&"Scripts.txt"));
+    let blocks = parse_prop_runs(&read_file(&"Blocks.txt"));
+    let mut binary = parse_prop_runs(&read_file(&"PropList.txt"));
+    for let run of parse_prop_runs(&read_file(&"DerivedCoreProperties.txt")) {
+        binary.push(run);
+    }
+    // `Extended_Pictographic` and the `Emoji*` properties live in the emoji
+    // data file, and ANTLR4's documented property surface includes them.
+    for let run of parse_prop_runs(&read_file(&"emoji-data.txt")) {
+        binary.push(run);
+    }
+    let prop_aliases = parse_alias_lines(&read_file(&"PropertyAliases.txt"), &"");
+    let script_aliases = parse_alias_lines(&read_file(&"PropertyValueAliases.txt"), &"sc");
+    let block_aliases = parse_alias_lines(&read_file(&"PropertyValueAliases.txt"), &"blk");
+
+    print(
+        emit_module(
+            &categories,
+            &named_ranges(&scripts, &script_aliases),
+            &named_ranges(&blocks, &block_aliases),
+            &named_ranges(&binary, &prop_aliases),
+            &version,
+        ),
+    );
+}
+
+/// Property matching ignores case, `_`, `-` and spaces (UAX #44 loose
+/// matching), so every table key is emitted folded and the consumer folds the
+/// name it looks up the same way.
+fn normalize_name(name: &String) -> String {
+    let mut out = String::with_capacity(name.len());
+    for let c of name.chars() {
+        if c == '_' || c == '-' || c == ' ' {
+            continue;
+        }
+        out.push(c.to_ascii_lowercase());
+    }
+    return out;
+}
+
+/// `#`-comment stripped, leading / trailing space removed.
+fn strip_comment(line: &String) -> String {
+    let mut out = String::with_capacity(line.len());
+    for let c of line.chars() {
+        if c == '#' {
+            break;
+        }
+        out.push(c);
+    }
+    return out.trim();
+}
+
+fn parse_prop_runs(content: &String) -> List<PropRun> {
+    let mut runs: List<PropRun> = [];
+    for let line of content.lines() {
+        let body = strip_comment(&line);
+        if body.is_empty() {
+            continue;
+        }
+        let mut fields: List<String> = [];
+        for let f of body.split(";") {
+            fields.push(f.trim());
+        }
+        // An enumerated property writes `RANGE ; NAME ; VALUE` (`InCB`); only
+        // the two-field form is a set of code points named by one string.
+        if fields.len() != 2 || fields[1].is_empty() {
+            continue;
+        }
+        let mut bounds = fields[0].split("..");
+        let start = i32::from_str_hex(&bounds.next().unwrap()).unwrap();
+        let end = match bounds.next() {
+            Some(hi) => i32::from_str_hex(&hi).unwrap(),
+            None => start,
+        };
+        runs.push(PropRun { start, end, value: fields[1] });
+    }
+    return runs;
+}
+
+/// Alias lines as `CANONICAL -> [alias, ...]`. `PropertyAliases.txt` is
+/// `SHORT ; LONG [; …]` (pass an empty `prefix`); `PropertyValueAliases.txt`
+/// is `PROPERTY ; SHORT ; LONG [; …]`, read by passing the property (`sc`,
+/// `blk`). Either way the long name is canonical and everything else on the
+/// line resolves to it.
+fn parse_alias_lines(content: &String, prefix: &String) -> List<NamedRanges> {
+    let mut out: List<NamedRanges> = [];
+    for let line of content.lines() {
+        let body = strip_comment(&line);
+        if body.is_empty() {
+            continue;
+        }
+        let mut fields: List<String> = [];
+        for let f of body.split(";") {
+            fields.push(f.trim());
+        }
+        let first = if prefix.is_empty() { 0 } else { 1 };
+        if fields.len() < first + 2 || !prefix.is_empty() && fields[0] != *prefix {
+            continue;
+        }
+        let mut names: List<String> = [fields[first + 1]];
+        for let mut i = first; i < fields.len(); i += 1 {
+            if i == first + 1 || fields[i].is_empty() || fields[i] == "n/a" {
+                continue;
+            }
+            names.push(fields[i]);
+        }
+        out.push(NamedRanges { names, ranges: [] });
+    }
+    return out;
+}
+
+/// Group `runs` by value, in first-seen order, attaching the aliases the
+/// canonical name carries. Ranges are sorted and merged so the emitted table
+/// is one entry per contiguous span.
+fn named_ranges(runs: &List<PropRun>, aliases: &List<NamedRanges>) -> List<NamedRanges> {
+    let mut out: List<NamedRanges> = [];
+    let mut values: List<String> = [];
+    for let run of runs {
+        if !values.contains(&run.value) {
+            values.push(run.value);
+        }
+    }
+    for let value of &values {
+        let mut ranges: List<[i32, i32]> = [];
+        for let run of runs {
+            if run.value == *value {
+                ranges.push([run.start, run.end]);
+            }
+        }
+        ranges.sort_by(|a: &[i32, i32], b: &[i32, i32]| a.0.cmp(&b.0));
+        let mut merged: List<[i32, i32]> = [];
+        for let r of &ranges {
+            if !merged.is_empty() && merged[merged.len() - 1].1 + 1 >= r.0 {
+                merged[merged.len() - 1] = [
+                    merged[merged.len() - 1].0,
+                    i32::max(merged[merged.len() - 1].1, r.1),
+                ];
+            } else {
+                merged.push(*r);
+            }
+        }
+        let mut names: List<String> = [*value];
+        for let alias of aliases {
+            // Blocks.txt spells a block with spaces where the alias file uses
+            // underscores, so canonical names meet as folded keys.
+            if normalize_name(&alias.names[0]) != normalize_name(value) {
+                continue;
+            }
+            for let n of &alias.names {
+                if !names.contains(n) {
+                    names.push(*n);
+                }
+            }
+        }
+        out.push(NamedRanges { names, ranges: merged });
+    }
+    return out;
 }
 
 fn read_file(path: &String) -> String with Stderr, Preopens, Exit {
@@ -197,27 +370,97 @@ fn encode(ranges: &List<[i32, i32]>) -> String {
     return out;
 }
 
-fn emit_module(runs: &List<CategoryRun>, version: &String) -> String {
-    let mut w = CodeWriter::with_capacity(64 * 1024);
+fn emit_module(
+    runs: &List<CategoryRun>,
+    scripts: &List<NamedRanges>,
+    blocks: &List<NamedRanges>,
+    binary: &List<NamedRanges>,
+    version: &String,
+) -> String {
+    let mut w = CodeWriter::with_capacity(1024 * 1024);
     emit_module_doc(&mut w, version);
     GlobalSpec::new(&"UNICODE_VERSION", &"String", &`${str_lit(*version)}`, Vis::Pub).emit(&mut w);
     w.blank();
     emit_category_ranges(&mut w, runs);
     w.blank();
     emit_category_groups(&mut w);
+    w.blank();
+    emit_named_table(
+        &mut w,
+        &"script_ranges",
+        &"/// Ranges of one script (`Greek`, `Grek`, …), or an empty string when the\n/// name is not a script.",
+        scripts,
+    );
+    w.blank();
+    emit_named_table(
+        &mut w,
+        &"block_ranges",
+        &"/// Ranges of one block, addressed without the `In` prefix a grammar writes\n/// (`\\p{InGreek}` → `greekandcoptic`), or an empty string when the name is\n/// not a block.",
+        blocks,
+    );
+    w.blank();
+    emit_named_table(
+        &mut w,
+        &"binary_property_ranges",
+        &"/// Ranges of one binary property (`White_Space`, `Pattern_Syntax`, …), or\n/// an empty string when the name is not one.",
+        binary,
+    );
     return w.to_string();
+}
+
+/// Emit `fn <name>(name: &String) -> String` as a match over folded keys. A
+/// key already claimed by an earlier arm is dropped: match arms must stay
+/// unique, and the first table entry to claim a name owns it.
+fn emit_named_table(w: &mut CodeWriter, name: &String, doc: &String, entries: &List<NamedRanges>) {
+    for let line of doc.lines() {
+        w.line(&line);
+    }
+    let mut spec = FnSpec::new(name, Vis::Pub);
+    spec.add_param(&"name", &"&String").set_return_type(&"String");
+    spec.emit_begin(w);
+    w.begin(&"return match *name");
+    let mut claimed: List<String> = [];
+    for let entry of entries {
+        let mut keys = String::with_capacity(64);
+        let mut first = true;
+        for let n of &entry.names {
+            let key = normalize_name(n);
+            if claimed.contains(&key) {
+                continue;
+            }
+            claimed.push(key);
+            if !first {
+                keys.push_str(&" | ");
+            }
+            first = false;
+            keys.push_str(&`${str_lit(key)}`);
+        }
+        if first {
+            // Every name this entry answers to is already an arm, so the entry
+            // would be unreachable and `\p{...}` would call it unsupported.
+            // The UCD has no such collision today; one appearing needs a
+            // resolution rule, not a silent drop.
+            panic(`unicode table ${*name}: ${entry.names[0]} has no unclaimed key`);
+        }
+        w.line(&`${keys} => ${str_lit(encode(&entry.ranges))},`);
+    }
+    w.line(&`_ => ${str_lit("")},`);
+    w.end_with(&";");
+    w.end();
 }
 
 fn emit_module_doc(w: &mut CodeWriter, version: &String) {
     w.line(&`#![generated(by = ${str_lit("scripts/regen-unicode-tables.sh")}, sources = [])]`);
-    w.line(&"//! Unicode general-category ranges for `\\p{...}` / `\\P{...}` char sets.");
+    w.line(&"//! Unicode property ranges for `\\p{...}` / `\\P{...}` char sets: general");
+    w.line(&"//! categories, scripts, blocks and binary properties.");
     w.line(&"//!");
     w.line(&`//! Do not edit by hand — regenerate from UCD ${*version} with`);
     w.line(&"//! `scripts/regen-unicode-tables.sh`.");
     w.line(&"//!");
-    w.line(&"//! A category's ranges are `START[-END]` in hex, comma separated. `\\P`");
-    w.line(&"//! complements what `\\p` selects, so an approximate table would admit real");
-    w.line(&"//! members of the property, not merely miss some.");
+    w.line(&"//! A property's ranges are `START[-END]` in hex, comma separated, and its");
+    w.line(&"//! keys are folded (lowercase, no `_` / `-` / space) as UAX #44 matches");
+    w.line(&"//! them. `\\P` complements what `\\p` selects, so an approximate table would");
+    w.line(&"//! admit real members of the property, not merely miss some.");
     w.blank();
 }
 
@@ -231,7 +474,9 @@ fn emit_category_ranges(w: &mut CodeWriter, runs: &List<CategoryRun>) {
     w.begin(&"return match *name");
     for let cat of &CATEGORIES {
         let ranges = if cat.0 == "Cn" { unassigned_ranges(runs) } else { ranges_of(runs, &cat.0) };
-        w.line(&`${str_lit(cat.0)} | ${str_lit(cat.1)} => ${str_lit(encode(&ranges))},`);
+        w.line(
+            &`${str_lit(normalize_name(&cat.0))} | ${str_lit(normalize_name(&cat.1))} => ${str_lit(encode(&ranges))},`,
+        );
     }
     w.line(&`_ => ${str_lit("")},`);
     w.end_with(&";");
@@ -256,9 +501,9 @@ fn emit_category_groups(w: &mut CodeWriter) {
                 subs.push_str(&", ");
             }
             first = false;
-            subs.push_str(&`${str_lit(cat.0)}`);
+            subs.push_str(&`${str_lit(normalize_name(&cat.0))}`);
         }
-        w.line(&`${str_lit(group.0)} | ${str_lit(group.1)} => [${subs}],`);
+        w.line(&`${str_lit(normalize_name(&group.0))} | ${str_lit(normalize_name(&group.1))} => [${subs}],`);
     }
     w.line(&"_ => [],");
     w.end_with(&";");

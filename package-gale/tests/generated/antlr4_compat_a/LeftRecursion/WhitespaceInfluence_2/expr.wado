@@ -1885,53 +1885,26 @@ fn try_COMMENTS(chars: &List<char>, start: i32) -> i32 {
         pos += 1;
         if pos >= chars.len() || chars[pos] != '/' { break alts_23_1; }
         pos += 1;
-        let mut accept_25: i32 = -1;
-        let peek_save_26 = pos;
-        let mut peek_ok_26 = false;
-        peek_26: {
-            if pos >= chars.len() || chars[pos] != '\n' { break peek_26; }
-            pos += 1;
-            peek_ok_26 = true;
-        }
-        pos = peek_save_26;
-        if peek_ok_26 {
-            accept_25 = peek_save_26;
-        }
         loop {
-            let la_saved_25 = pos;
-            la_rep_25: {
-                if pos >= chars.len() { break la_rep_25; }
-                let not_saved_27 = pos;
-                let mut not_matched_27 = false;
-                not_27: {
-                    if pos >= chars.len() || chars[pos] != '\n' { break not_27; }
+            let rep_saved_25 = pos;
+            rep_25: {
+                if pos >= chars.len() { break rep_25; }
+                let not_saved_26 = pos;
+                let mut not_matched_26 = false;
+                not_26: {
+                    if pos >= chars.len() || chars[pos] != '\n' { break not_26; }
                     pos += 1;
-                    not_matched_27 = true;
+                    not_matched_26 = true;
                 }
-                pos = not_saved_27;
-                if not_matched_27 { break la_rep_25; }
+                pos = not_saved_26;
+                if not_matched_26 { break rep_25; }
                 pos += 1;
-                let peek_save_28 = pos;
-                let mut peek_ok_28 = false;
-                peek_28: {
-                    if pos >= chars.len() || chars[pos] != '\n' { break peek_28; }
-                    pos += 1;
-                    peek_ok_28 = true;
-                }
-                pos = peek_save_28;
-                if peek_ok_28 {
-                    accept_25 = peek_save_28;
-                }
                 continue;
             }
-            pos = la_saved_25;
+            pos = rep_saved_25;
             break;
         }
-        if accept_25 < 0 {
-            break alts_23_1;
-        }
-        pos = accept_25;
-        if pos >= chars.len() || chars[pos] != '\n' { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
+        if pos >= chars.len() || chars[pos] != '\n' { break alts_23_1; }
         pos += 1;
         if pos > alts_best_23 { alts_best_23 = pos; }
     }
