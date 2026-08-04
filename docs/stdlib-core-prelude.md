@@ -2074,6 +2074,13 @@ Euclidean distance: sqrt(x^2 + y^2)
 
 Floating-point remainder of x/y
 
+#### `pub fn mul_add(x: f32, y: f32, z: f32) -> f32`
+
+x _ y + z, rounded once instead of twice.
+
+Wasm has no scalar FMA instruction, so this is a software
+implementation — slower than `x * y + z`.
+
 #### `pub fn is_nan(&self) -> bool`
 
 #### `pub fn is_finite(&self) -> bool`
@@ -2315,6 +2322,13 @@ Euclidean distance: sqrt(x^2 + y^2)
 #### `pub fn fmod(x: f64, y: f64) -> f64`
 
 Floating-point remainder of x/y
+
+#### `pub fn mul_add(x: f64, y: f64, z: f64) -> f64`
+
+x _ y + z, rounded once instead of twice.
+
+Wasm has no scalar FMA instruction, so this is a software
+implementation — slower than `x * y + z`.
 
 #### `pub fn is_nan(&self) -> bool`
 
