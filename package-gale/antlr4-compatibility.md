@@ -373,10 +373,12 @@ The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
 greedy `+`/`*` inner can eat a char the suffix needs (`'a' ~('b')+ 'c'`),
 the emitter peeks the suffix each iteration and rewinds once to the latest
-legal suffix start. Two suffixes keep the plain greedy loop instead: one
-carrying a semantic predicate, which the peek would evaluate once per
-iteration and again on commit, and one carrying a non-greedy repeat, which
-the peek has no min-match form for.
+legal suffix start. The peek lowers the suffix through the same path the
+commit will run, so what it proves is what then happens — peeking a weaker
+lowering is how a peek comes back "no match" for input the commit would have
+matched. A suffix carrying a semantic predicate keeps the plain greedy loop
+instead: the peek would evaluate the predicate once per iteration and again
+on commit.
 
 The first-character dispatch that picks which rules to try is a filter, not a
 decision: a rule admitted by its first character can still fail on the rest of
@@ -394,7 +396,7 @@ rule's. With a suffix after it neither first-match nor longest-arm is right —
 peeked without consuming, and the arm whose arm-plus-suffix reaches furthest
 wins, ties to the first. Scoring on the suffix rather than the arm is what
 makes `('p' | 'pq') ('qrs' | 'r')` take the short arm on `pqrs`. Same peek and
-the same two limits as the repeat path. Fixtures:
+the same predicate limit as the repeat path. Fixtures:
 `lexer_alt_suffix_longest.g4`, `lexer_alt_suffix_shapes.g4`,
 `lexer_suffix_peek_limits.g4`.
 
