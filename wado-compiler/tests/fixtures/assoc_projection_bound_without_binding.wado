@@ -1,0 +1,24 @@
+// A bound that names no associated type (`I: IntoIterator`, not
+// `I: IntoIterator<Item = u8>`) still has to produce one projection for
+// `I::Iter`, whether it is written in source or instantiated from
+// `IntoIterator::into_iter`'s recorded return type.
+//
+// Resolving the trait's `type Iter: Iterator<Item = Self::Item>` bound in the
+// *use site's* frame gave the projection `owning_trait: None`, while the trait
+// frame recorded `Some("IntoIterator")` — two identical projections interning
+// to different `TypeId`s, and `let it: I::Iter = x.into_iter()` failing with
+// "expected 'I::Iter', found 'I::Iter'".
+
+fn count_of<I: IntoIterator>(x: I) -> u32 {
+    let mut it: I::Iter = x.into_iter();
+    let mut n: u32 = 0;
+    while let Some(_) = it.next() {
+        n += 1;
+    }
+    return n;
+}
+
+test "a projection is one type whether written or instantiated" {
+    let xs: List<u32> = [1, 2, 3];
+    assert count_of(xs) == 3;
+}

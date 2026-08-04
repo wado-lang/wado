@@ -691,35 +691,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// = u8>` answers `u8`, giving `[("Item", u8)]`.
     ///
     /// `Self` inside a bound names the bounded type, so a `Self::X` right-hand
-    /// side is read with `Self := base` rather than against the enclosing
-    /// frame's own `Self`. Where the frame has no answer the binding is
-    /// whatever the right-hand side denotes there, which in a trait's own
-    /// frame is the canonical `Self::X` projection — that is how
-    /// `IntoIterator::Iter` comes to record `[("Item", Self::Item)]` for an
-    /// instantiation to substitute into.
+    /// side asks the frame about `base`, not about the frame's own `Self`.
+    ///
+    /// Only a right-hand side the frame can answer produces a binding. The
+    /// alternative — resolving the right-hand side to whatever it denotes —
+    /// cannot be done here: `Self` would have to be rebound to `base` for the
+    /// duration, and the enclosing frame's `assoc_type_bindings` still shadow
+    /// it, so an unrelated `impl`'s `type Item = …` answers for a type
+    /// parameter's. Recursion through a bound's own right-hand side has no
+    /// fixpoint either (`type A: Iterator<Item = Self::B>` against
+    /// `type B: Iterator<Item = Self::A>`). An unanswered name stays abstract.
     pub(super) fn frame_assoc_bindings(
         &mut self,
         base: TypeId,
         base_name: &str,
         bounds: &[crate::ast::TraitBound],
     ) -> Vec<(String, TypeId)> {
-        let declared: Vec<(String, crate::ast::Type)> = bounds
+        let projections: Vec<(String, String)> = bounds
             .iter()
             .flat_map(|bound| &bound.assoc_types)
-            .map(|binding| (binding.name.clone(), binding.ty.clone()))
-            .collect();
-        let mut bindings = Vec::with_capacity(declared.len());
-        for (name, rhs) in declared {
-            let known = match &rhs {
+            .filter_map(|binding| match &binding.ty {
                 crate::ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => {
-                    self.frame_projection(base, base_name, &ns.name)
+                    Some((binding.name.clone(), ns.name.clone()))
                 }
                 _ => None,
-            };
-            let type_id =
-                known.unwrap_or_else(|| self.with_self_type(base, |s| s.resolve_type(&rhs)));
-            bindings.push((name, type_id));
-        }
-        bindings
+            })
+            .collect();
+        projections
+            .into_iter()
+            .filter_map(|(name, assoc)| {
+                Some((name, self.frame_projection(base, base_name, &assoc)?))
+            })
+            .collect()
     }
 }

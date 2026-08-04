@@ -1565,20 +1565,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // The trait's frame numbers `Self` as slot 0, so instantiating the
         // recorded signature against the receiver is the whole substitution.
-        // What it cannot carry is what `Self::X` means *here*: that is written
-        // in the caller's `where` clause, or held by a projection receiver.
-        // Only the answers go in — a name the frame cannot answer is left for
-        // the substitution to rebuild over the receiver, which reproduces the
-        // recorded projection's owning trait and bounds.
+        // What it cannot carry is what `Self::X` means *here*, which the
+        // declaration cannot know: `I: IntoIterator<Item = u8>` is written at
+        // the caller.
+        //
+        // Every associated type gets an answer, because the projection over
+        // the receiver is itself use-site data — its bindings say what the
+        // caller's `where` clause makes of the projected type
+        // (`I::Iter` knowing `Item = u8`), which no rebuild of the recorded
+        // projection could recover.
         let self_name = match self.tysys.type_table.borrow().get(self_type_id) {
             ResolvedType::TypeParam { name, .. } => name.clone(),
             _ => String::new(),
         };
         let mut answers: Vec<(String, TypeId)> = Vec::new();
         for assoc_decl in &trait_assoc_types {
-            if let Some(known) = self.frame_projection(self_type_id, &self_name, &assoc_decl.name) {
-                answers.push((assoc_decl.name.clone(), known));
-            }
+            let known = self.frame_projection(self_type_id, &self_name, &assoc_decl.name);
+            let answer = known.unwrap_or_else(|| {
+                let bound_names: Vec<String> =
+                    assoc_decl.bounds.iter().map(|b| b.name.clone()).collect();
+                let bindings =
+                    self.frame_assoc_bindings(self_type_id, &self_name, &assoc_decl.bounds);
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_assoc_type_projection_of_trait(
+                        self_type_id,
+                        Some(trait_name.clone()),
+                        assoc_decl.name.clone(),
+                        bound_names,
+                        bindings,
+                    )
+            });
+            answers.push((assoc_decl.name.clone(), answer));
         }
 
         let instantiated = sig.decl.instantiate_slots_with(
