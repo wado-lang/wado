@@ -436,7 +436,11 @@ fn emit_named_table(w: &mut CodeWriter, name: &String, doc: &String, entries: &L
             keys.push_str(&`${str_lit(key)}`);
         }
         if first {
-            continue;
+            // Every name this entry answers to is already an arm, so the entry
+            // would be unreachable and `\p{...}` would call it unsupported.
+            // The UCD has no such collision today; one appearing needs a
+            // resolution rule, not a silent drop.
+            panic(`unicode table ${*name}: ${entry.names[0]} has no unclaimed key`);
         }
         w.line(&`${keys} => ${str_lit(encode(&entry.ranges))},`);
     }
