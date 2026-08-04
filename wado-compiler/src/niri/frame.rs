@@ -725,12 +725,15 @@ impl Interpreter<'_> {
         let run = self.exec_frame(&mut scratch, targets, returns_unit);
         self.swap_frame(caller);
         self.call_stack.pop();
-        run.map(|run| match returns_reference {
-            true => CallRun {
-                result: Lattice::Unevaluated,
-                ..run
-            },
-            false => run,
+        run.map(|run| {
+            if returns_reference {
+                CallRun {
+                    result: Lattice::Unevaluated,
+                    ..run
+                }
+            } else {
+                run
+            }
         })
     }
 

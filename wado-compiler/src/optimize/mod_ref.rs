@@ -765,6 +765,12 @@ pub(super) struct FnEffect {
     /// Does component-model I/O, or contains something the analysis cannot
     /// see through (an indirect call, a bodyless non-builtin).
     pub opaque: bool,
+    /// Some execution may trap. A trap is observable, so a caller that would
+    /// *delete* the call — not merely move it — needs this on top of
+    /// [`Self::is_pure`]. Conservative: every bodyless leaf carries it, and a
+    /// body carries the union of its nodes' own traps
+    /// ([`super::arena_query::expr_node_may_trap`]) and its callees'.
+    pub may_trap: bool,
 }
 
 impl FnEffect {
@@ -777,11 +783,12 @@ impl FnEffect {
         !self.reads_mutable_state && !self.writes_state && !self.opaque
     }
 
-    fn opaque() -> Self {
+    pub(super) fn opaque() -> Self {
         Self {
             reads_mutable_state: true,
             writes_state: true,
             opaque: true,
+            may_trap: true,
         }
     }
 
@@ -789,6 +796,7 @@ impl FnEffect {
         self.reads_mutable_state |= other.reads_mutable_state;
         self.writes_state |= other.writes_state;
         self.opaque |= other.opaque;
+        self.may_trap |= other.may_trap;
     }
 }
 
@@ -829,6 +837,7 @@ fn memory_builtin_effect(name: &str) -> Option<FnEffect> {
         reads_mutable_state: reads || writes,
         writes_state: writes,
         opaque: false,
+        may_trap: true,
     })
 }
 
@@ -857,7 +866,13 @@ fn leaf_effect(
     {
         return FnEffect::opaque();
     }
-    memory_builtin_effect(bare).unwrap_or_default()
+    // No builtin carries a trap taxonomy, so every leaf is assumed to trap.
+    // The bit only gates deletion, so the coarse answer costs optimization
+    // rather than correctness.
+    FnEffect {
+        may_trap: true,
+        ..memory_builtin_effect(bare).unwrap_or_default()
+    }
 }
 
 /// Resolve [`FnEffect`] for every function, indexed by `func_id.index()`.
@@ -890,11 +905,13 @@ pub(super) fn compute_fn_effects(
                     ExprKind::GlobalVarSet { .. } => own.writes_state = true,
                     ExprKind::CmRawCall { .. } | ExprKind::IndirectCall { .. } => {
                         own.opaque = true;
+                        own.may_trap = true;
                     }
+                    // A direct call's trap arrives with its callee's summary.
                     ExprKind::Call { func_id, .. } => {
                         callees[i].insert(func_id.index());
                     }
-                    _ => {}
+                    _ => own.may_trap |= super::arena_query::expr_node_may_trap(body, id),
                 }
             }
             body.for_each_child(node, |c| stack.push(c));

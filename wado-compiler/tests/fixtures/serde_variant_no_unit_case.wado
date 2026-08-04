@@ -1,0 +1,21 @@
+// `VariantCase::make` builds through the unit payload whatever the case's own
+// payload is, so the derived `Deserialize` names the `()` case-construct bridge
+// on every variant. A variant declaring no unit case must still have it: the
+// `is_unit()` branch that guards the call only folds away at `-O1` and up, so
+// without the bridge `-O0` fails to resolve it.
+use { from_string, to_string } from "core:json";
+
+variant NoUnit {
+    A(i32),
+    B(String),
+}
+
+export fn run() {
+    let v = NoUnit::B("x");
+    let s = to_string(&v).unwrap();
+    let back: NoUnit = from_string(s).unwrap();
+    assert back == v;
+}
+
+__DATA__
+{"stdout": ""}

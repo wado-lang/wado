@@ -1557,7 +1557,7 @@ impl FunctionTranslator<'_, '_> {
                         Operand::Value(_) => self.translate_operand(op),
                     };
                     instrs.push(instr);
-                    if self.operand_type_id(op) == TypeTable::UNIT
+                    if self.is_stackless_type(self.operand_type_id(op))
                         && !instrs.last().is_some_and(WirInstr::ends_with_terminator)
                     {
                         instrs.push(WirInstr::Unreachable);
@@ -1648,7 +1648,7 @@ impl FunctionTranslator<'_, '_> {
     pub(super) fn translate_expr_as_value(&mut self, expr_id: ExprId) -> WirInstr {
         let arena = self.body;
         // If the expression already has a non-UNIT type, translate normally
-        if arena.exprs[expr_id].type_id != TypeTable::UNIT {
+        if !self.is_stackless_type(arena.exprs[expr_id].type_id) {
             return self.translate_expr(expr_id);
         }
 
@@ -1975,7 +1975,7 @@ impl FunctionTranslator<'_, '_> {
             .iter()
             .enumerate()
             .filter(|(_, op)| {
-                self.operand_type_id(**op) == TypeTable::UNIT && unit_needs_eval(self, **op)
+                self.is_stackless_type(self.operand_type_id(**op)) && unit_needs_eval(self, **op)
             })
             .map(|(i, _)| i)
             .next_back();
@@ -1983,7 +1983,7 @@ impl FunctionTranslator<'_, '_> {
         let mut prelude = Vec::new();
         let mut call_args = Vec::new();
         for (i, &op) in ordered.iter().enumerate() {
-            if self.operand_type_id(op) == TypeTable::UNIT {
+            if self.is_stackless_type(self.operand_type_id(op)) {
                 if unit_needs_eval(self, op) {
                     // Unit-typed expressions translate to void instructions
                     // (the `StmtKind::Expr` discipline), so they slot straight
@@ -2021,7 +2021,7 @@ impl FunctionTranslator<'_, '_> {
             return call;
         }
         prelude.push(call);
-        if result_type == TypeTable::UNIT || result_type == TypeTable::NEVER {
+        if self.is_stackless_type(result_type) || result_type == TypeTable::NEVER {
             WirInstr::Seq(prelude)
         } else {
             let result_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
@@ -2546,11 +2546,12 @@ impl FunctionTranslator<'_, '_> {
             }
 
             ExprKind::Block(block) => {
-                let body = if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
-                    self.translate_stmts(&arena.blocks[*block].stmts)
-                } else {
-                    self.translate_stmts_as_value(&arena.blocks[*block].stmts)
-                };
+                let body =
+                    if self.is_stackless_type(expr.type_id) || expr.type_id == TypeTable::NEVER {
+                        self.translate_stmts(&arena.blocks[*block].stmts)
+                    } else {
+                        self.translate_stmts_as_value(&arena.blocks[*block].stmts)
+                    };
                 WirInstr::Seq(body)
             }
 
@@ -2560,7 +2561,7 @@ impl FunctionTranslator<'_, '_> {
                 else_branch,
             } => {
                 let cond = self.translate_operand(*condition);
-                let has_result = expr.type_id != TypeTable::UNIT;
+                let has_result = !self.is_stackless_type(expr.type_id);
                 self.label_stack.push(LabelEntry {
                     label: None,
                     is_loop_break: false,
@@ -2753,7 +2754,7 @@ impl FunctionTranslator<'_, '_> {
             ),
 
             ExprKind::LabeledBlock { label, block, .. } => {
-                let has_result = expr.type_id != TypeTable::UNIT;
+                let has_result = !self.is_stackless_type(expr.type_id);
                 self.label_stack.push(LabelEntry {
                     label: Some(label.clone()),
                     is_loop_break: false,
@@ -2765,7 +2766,7 @@ impl FunctionTranslator<'_, '_> {
                     self.translate_stmts(&arena.blocks[*block].stmts)
                 };
                 self.label_stack.pop();
-                let result_type = if expr.type_id == TypeTable::UNIT {
+                let result_type = if self.is_stackless_type(expr.type_id) {
                     None
                 } else {
                     Some(self.ctx.type_id_to_wir_type(self.type_table, expr.type_id))

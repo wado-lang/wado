@@ -2008,21 +2008,6 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
     // This ensures that subsequent phases (WIR type registration, codegen) do not
     // emit types that are no longer referenced by any surviving function.
     project.type_table.borrow_mut().retain(&analysis.types);
-
-    // The struct sweep above ran against the table as it stood, and kept a
-    // monomorphized struct whose stored name still matched — including ones
-    // instantiated for a type nothing reachable names, as a reflect member
-    // struct is for every type of its kind. Those arguments are gone now, and a
-    // struct carries its arguments as field types, so it went unreachable with
-    // them. Left behind it would outlive ids the table no longer has.
-    let type_table = project.type_table.borrow();
-    project.structs.retain(|s| {
-        s.monomorph_info.as_ref().is_none_or(|mono| {
-            mono.impl_type_args
-                .iter()
-                .all(|t| type_table.get_pruned(*t).is_some())
-        })
-    });
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -2084,13 +2069,70 @@ fn global_reads_in(body: &Body, expr: ExprId) -> Vec<(ExprId, (String, String))>
     collect.0
 }
 
-/// The global a lazy-init guard covers: `if is_uninitialized(G) { G = v }`, the
-/// shape const-object globalization mints for an initializer Wasm cannot build
-/// eagerly. `None` for anything else.
+/// Whether the pass may delete `value` outright — no observable effect, and no
+/// trap, since a trap is observable too.
+///
+/// The expression predicate answers first, with its typed refinement, for a
+/// literal aggregate. Failing that the tree is walked: it refuses every call on
+/// sight, while the initializer globalization hoists for a reflect member walk
+/// *is* a call, so each one is answered by its whole-function summary instead.
+fn deletable_value(
+    body: &Body,
+    value: Operand,
+    types: &TypeTable,
+    effects: &[super::mod_ref::FnEffect],
+) -> bool {
+    use cranelift_entity::EntityRef;
+
+    if super::arena_query::is_pure_nontrapping_operand_typed(body, value, Some(types)) {
+        return true;
+    }
+    let Some(root) = value.as_expr() else {
+        return false;
+    };
+    let mut stack = vec![NodeRef::Expr(root)];
+    while let Some(node) = stack.pop() {
+        match node {
+            NodeRef::Expr(id) => match &body.exprs[id].kind {
+                ExprKind::Call { func_id, .. } => {
+                    let effect = effects
+                        .get(func_id.index())
+                        .copied()
+                        .unwrap_or_else(super::mod_ref::FnEffect::opaque);
+                    if !effect.is_pure() || effect.may_trap {
+                        return false;
+                    }
+                }
+                ExprKind::GlobalVarSet { .. }
+                | ExprKind::Assign { .. }
+                | ExprKind::IndirectCall { .. }
+                | ExprKind::CmRawCall { .. } => return false,
+                _ => {
+                    if super::arena_query::expr_node_may_trap(body, id) {
+                        return false;
+                    }
+                }
+            },
+            // A block statement that is not a binding or a discarded value
+            // leaves the region, and deleting it would take the exit with it.
+            NodeRef::Stmt(s) => {
+                if !matches!(body.stmts[s].kind, StmtKind::Let { .. } | StmtKind::Expr(_)) {
+                    return false;
+                }
+            }
+            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    true
+}
+
 fn lazy_guard_global(
     body: &Body,
     stmt: StmtId,
     descriptors: &[FunctionRef],
+    types: &TypeTable,
+    effects: &[super::mod_ref::FnEffect],
 ) -> Option<(ExprId, (String, String), Operand)> {
     let StmtKind::If {
         condition,
@@ -2135,6 +2177,11 @@ fn lazy_guard_global(
     if set_module != module_source || set_name != name {
         return None;
     }
+    // Dropping the guard drops the value it stores, so a value whose trap the
+    // program is entitled to is not a guard this pass may take.
+    if !deletable_value(body, *value, types, effects) {
+        return None;
+    }
     Some((
         read,
         (module_source.to_path().join("::"), name.clone()),
@@ -2142,9 +2189,16 @@ fn lazy_guard_global(
     ))
 }
 
-/// Whether `stmt` binds a local nothing mentions to a side-effect-free value —
-/// a binding that computes something and drops it.
-fn dead_pure_binding(body: &Body, stmt: StmtId, mentioned: &IndexSet<u32>) -> Option<ExprId> {
+/// Whether `stmt` binds a local nothing mentions to a value the pass may
+/// delete — a binding that computes something and drops it. A trap is an
+/// observable effect, so a trapping value keeps the binding alive even though
+/// nobody reads it.
+fn dead_pure_binding(
+    body: &Body,
+    stmt: StmtId,
+    mentioned: &IndexSet<u32>,
+    types: &TypeTable,
+) -> Option<ExprId> {
     let StmtKind::Let {
         local_index, value, ..
     } = &body.stmts[stmt].kind
@@ -2155,7 +2209,7 @@ fn dead_pure_binding(body: &Body, stmt: StmtId, mentioned: &IndexSet<u32>) -> Op
         return None;
     }
     let value = value.as_expr()?;
-    super::arena_query::is_pure_expr(body, value).then_some(value)
+    super::arena_query::is_pure_nontrapping_expr_typed(body, value, Some(types)).then_some(value)
 }
 
 /// Un-hoist a constant globalization hoisted for nobody.
@@ -2178,6 +2232,9 @@ fn dead_pure_binding(body: &Body, stmt: StmtId, mentioned: &IndexSet<u32>) -> Op
 /// already answers, and its initializer goes with it.
 pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
     let descriptors = build_callee_descriptors(project);
+    let effects = super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
+    let type_table = project.type_table.clone();
+    let types = type_table.borrow();
     let mut guarded: IndexSet<(String, String)> = IndexSet::default();
     let mut observed: IndexSet<(String, String)> = IndexSet::default();
     for func_rc in &project.functions {
@@ -2188,11 +2245,13 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
         let mentioned = mentioned_locals(body);
         let mut unobserving: IndexSet<ExprId> = IndexSet::default();
         for stmt in reachable_stmt_ids(body) {
-            if let Some((read, key, _)) = lazy_guard_global(body, stmt, &descriptors) {
+            if let Some((read, key, _)) =
+                lazy_guard_global(body, stmt, &descriptors, &types, &effects)
+            {
                 guarded.insert(key);
                 unobserving.insert(read);
             }
-            if let Some(value) = dead_pure_binding(body, stmt, &mentioned) {
+            if let Some(value) = dead_pure_binding(body, stmt, &mentioned, &types) {
                 unobserving.extend(global_reads_in(body, value).into_iter().map(|(e, _)| e));
             }
         }
@@ -2214,40 +2273,59 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = func.body.as_mut() {
-            let root = body.root;
             let mentioned = mentioned_locals(body);
-            drop_unobserved_block(body, root, &unobserved, &mentioned, &descriptors);
+            for block in reachable_block_ids(body) {
+                drop_unobserved_stmts(
+                    body,
+                    block,
+                    &unobserved,
+                    &mentioned,
+                    &descriptors,
+                    &types,
+                    &effects,
+                );
+            }
         }
     }
 }
 
-fn drop_unobserved_block(
+/// Every block reachable from the body root. The drop below must see the same
+/// statements the census above classified — an expression-position block among
+/// them, which is where inlining leaves a guard — or a read it counted as
+/// non-observing outlives the store it was counted against.
+fn reachable_block_ids(body: &Body) -> Vec<BlockId> {
+    struct Collect(Vec<BlockId>);
+    impl crate::nir_visitor::NirRefVisitor for Collect {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Block(b) = node {
+                self.0.push(b);
+            }
+            self.walk_node(body, node);
+        }
+    }
+    if body.blocks.is_empty() {
+        return Vec::new();
+    }
+    let mut collect = Collect(Vec::new());
+    crate::nir_visitor::NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root));
+    collect.0
+}
+
+fn drop_unobserved_stmts(
     body: &mut Body,
     block: BlockId,
     unobserved: &IndexSet<(String, String)>,
     mentioned: &IndexSet<u32>,
     descriptors: &[FunctionRef],
+    types: &TypeTable,
+    effects: &[super::mod_ref::FnEffect],
 ) {
-    for s in body.blocks[block].stmts.clone() {
-        let nested = match &body.stmts[s].kind {
-            StmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => vec![Some(*then_block), *else_block],
-            StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => vec![Some(*b)],
-            _ => Vec::new(),
-        };
-        for inner in nested.into_iter().flatten() {
-            drop_unobserved_block(body, inner, unobserved, mentioned, descriptors);
-        }
-    }
     let old = std::mem::take(&mut body.blocks[block].stmts);
     let mut kept: Vec<StmtId> = Vec::with_capacity(old.len());
     for s in old {
-        let is_guard = lazy_guard_global(body, s, descriptors)
+        let is_guard = lazy_guard_global(body, s, descriptors, types, effects)
             .is_some_and(|(_, key, _)| unobserved.contains(&key));
-        let is_dead_read = dead_pure_binding(body, s, mentioned).is_some_and(|value| {
+        let is_dead_read = dead_pure_binding(body, s, mentioned, types).is_some_and(|value| {
             global_reads_in(body, value)
                 .iter()
                 .any(|(_, key)| unobserved.contains(key))
