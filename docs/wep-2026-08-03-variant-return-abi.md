@@ -332,6 +332,17 @@ returning tuples — a separate win, to measure on its own.
 the classifier that is supposed to serve this pass rejects every per-case
 variant layout. This also affects source-level tuples; measure the size effect.
 
+#### A tail-call group is decided together
+
+`return g(x)` ties the two signatures together: neither can take the tuple ABI
+unless both do. Candidates come from the gate's dirty set, so a mutually
+tail-recursive pair can arrive one at a time, and each is then refused for the
+other's absence — in every round, forever. The candidate set therefore pulls in
+the tail-call closure of everything the gate offered, so the group is decided as
+the unit it is. A self-recursive function never showed this, its partner being
+itself; the WIR pass never showed it either, running once over the whole module
+with no gating.
+
 #### The tail-call rule, again
 
 The classifier required every return to build a fresh aggregate and every call
@@ -350,30 +361,46 @@ signature — 239 fixtures of invalid Wasm, at `-O0` as well as `-O2`.
 
 ## Consequences
 
-### What retires in WIR
+### What retired in WIR
 
 `widen.rs`'s entire job — rediscovering the pattern from WIR shapes, the two
 fix-points, the return rewriting, the call-site rewriting — is subsumed.
-`return_temp.rs` normalizes temps `field_scalarize` leaves and `wir_build`
-materializes. Those temps are gone at their source rather than recognised
+`return_temp.rs` normalized temps `field_scalarize` left and `wir_build`
+materialized; those temps are gone at their source rather than recognised
 afterwards — see
-[the return temp](#the-return-temp--resolved-in-field_scalarize) — which is
-what lets this file retire.
+[the return temp](#the-return-temp--resolved-in-field_scalarize).
 
-| file                     | lines | fate                                                      |
-| ------------------------ | ----- | --------------------------------------------------------- |
-| `widen.rs`               | 1523  | retires                                                   |
-| `return_temp.rs`         | 784   | retires                                                   |
-| `wrapper.rs`             | 230   | ~215 retires; `slot_flatten` keeps `unwrap_to_inner_call` |
-| `sroa_variant_return.rs` | 79    | ~40 retires (the `sroa_variant_returns` entry point)      |
-| `layout.rs`              | 317   | shrinks; the layout decision moves to NIR types           |
-| `access.rs`              | 467   | stays — `slot_flatten` uses its whole API                 |
-| `slot_flatten.rs`        | 788   | stays — this pass declines the shape it handles           |
+| file                     | lines | now                                                 |
+| ------------------------ | ----- | --------------------------------------------------- |
+| `widen.rs`               | 1523  | deleted                                             |
+| `return_temp.rs`         | 784   | deleted                                             |
+| `wrapper.rs`             | 230   | 129 — only `unwrap_to_inner_call` and what it needs |
+| `sroa_variant_return.rs` | 79    | 49 — the `sroa_variant_returns` entry point is gone |
+| `layout.rs`              | 317   | 302                                                 |
+| `access.rs`              | 467   | unchanged — `slot_flatten` uses its whole API       |
+| `slot_flatten.rs`        | 788   | unchanged — this pass declines the shape it handles |
 
-Retired: ≈ 2,560 lines. New: ≈ 900–1,100 for the NIR pass, by analogy with
-`sroa_param.rs` (950 lines for the strictly simpler single-field parameter
-case). Net ≈ −1,500 — and the line count is the least interesting number here.
-This design is justified by pass interaction, not by size.
+4,188 lines to 1,735. `wrapper.rs` shrank further than planned: `ResultStep`
+recorded the wrapper path only so the call-site rewriter could re-walk what
+validation had already checked, and the one surviving caller discards the path.
+
+The line count is the least interesting number here — this design is justified
+by pass interaction, not by size.
+
+Two things the WIR pass could do that this one cannot, both found by the suite
+after the deletion rather than by the benchmarks before it:
+
+- A `v128` / `i128` / `u128` payload. `default_value_for_type` pads from
+  `WirType`, after lowering; NIR has no `v128` literal to pad with, and the
+  128-bit types occupy two Wasm results the slot count does not model.
+- Nothing else. The mutually tail-recursive pair that also broke is a defect in
+  this pass, not a missing capability — see
+  [the tail-call group](#a-tail-call-group-is-decided-together).
+
+`widen = 0` across every benchmark was not evidence of deadness. Benchmarks
+carry the common shapes; the fixture suite is where the unusual ones live, and
+half its coverage sits behind `WADO_FULL_TEST`. Stub the pass out and run the
+full suite before deleting anything of this size.
 
 ### The candidate sets converged — measured
 
@@ -555,11 +582,11 @@ Each step lands and is measured before the next.
       `wir_optimize::sroa_variant_returns` still running behind it. What it
       still found was the worklist, and
       [closing it](#how-the-87-function-gap-closed) took it to zero.
-- [ ] Step 4 — retire `widen.rs`, `return_temp.rs`, and most of `wrapper.rs`;
-      shrink `layout.rs`. Gate: widened-function counts held, size and
-      throughput not regressed. If the WIR side does not shrink, keep it and
-      stop here — a NIR rewrite that duplicates a WIR rediscovery is worse than
-      either alone.
+- [x] Step 4 — `widen.rs` and `return_temp.rs` are deleted, `wrapper.rs` is
+      down to `unwrap_to_inner_call`, `layout.rs` shrank: 4,188 lines to 1,735.
+      The gate held on counts (`widen = 0` everywhere) and on size — −231 bytes
+      against the pre-deletion baseline, after closing the two shapes the
+      deletion exposed. Throughput is unmeasured; it needs a quiet machine.
 - [x] Step 5 — `slot_flatten` stays in WIR, and the measurement is why. It
       splits a `ref W` result slot whose `W` is itself a small variant, and it
       fires 1–2 times per benchmark — once across `gale_gen`, twice on
