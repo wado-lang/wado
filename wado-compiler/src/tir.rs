@@ -2024,11 +2024,11 @@ impl TypeTable {
     /// spellings answer yes, since after `prepare_types` no signature test
     /// tells a boxed borrow from a by-value parameter of the same shape.
     ///
-    /// A caller that reasons about values — CTFE has no reference values —
-    /// asks this rather than [`RefKind::from_resolved`] alone, which sees only
-    /// the borrows the boxing pass left spelled as borrows.
+    /// [`RefKind::from_resolved`] alone sees only what is still spelled as a
+    /// borrow, so a caller reasoning about values asks this instead.
     pub fn is_reference_shaped(&self, type_id: TypeId) -> bool {
-        RefKind::from_resolved(self.get(type_id)).is_some() || self.box_payload_of(type_id).is_some()
+        RefKind::from_resolved(self.get(type_id)).is_some()
+            || self.box_payload_of(type_id).is_some()
     }
 
     /// Record that `wrapper` was redefined from a shared `&T`, so it cannot be

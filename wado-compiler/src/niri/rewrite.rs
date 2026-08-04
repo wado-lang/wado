@@ -133,20 +133,14 @@ impl Interpreter<'_> {
         committed
     }
 
-    /// A sequence container whose backing is not yet a packed literal.
+    /// A sequence container whose backing is not yet a packed literal. Writing
+    /// the constant over one drops an allocation and a copy the program would
+    /// otherwise make for a value the engine already knows.
     ///
-    /// Writing the constant over one removes what the program would otherwise
-    /// do at run time — allocate a second array and copy into it — for a
-    /// container that derives a value the engine already knows. The
-    /// [`consumes_its_source`] shapes cannot express that: the copy sits under
-    /// a `StructLiteral`, which is also what [`Self::materialize_seq_via`]
-    /// writes.
-    ///
-    /// Which is why the test is for the *un*materialized form rather than for
-    /// the container alone. The literal this admits is refused on the next
-    /// visit, so the rewrite happens once and the fixed-point loop still
-    /// converges — the property [`consumes_its_source`] gets from its shapes
-    /// by accident, stated and checked.
+    /// The test is for the *un*materialized form because
+    /// [`Self::materialize_seq_via`] writes a container literal too: refusing
+    /// what it wrote is what makes the rewrite happen once, which the
+    /// [`consumes_its_source`] shapes get from their kinds for free.
     fn is_unmaterialized_seq_literal(&self, body: &Body, e: ExprId) -> bool {
         let ExprKind::StructLiteral {
             struct_type,
@@ -275,10 +269,10 @@ impl Interpreter<'_> {
         None
     }
 
-    /// The constant a sequence container still computing its own contents
-    /// denotes. The sources above answer for operators, projections and calls;
-    /// a container literal's value comes from the projection alone, and is
-    /// worth asking for only where [`Self::commit_fold`] can write it back.
+    /// The constant a sequence container still computing its contents denotes.
+    /// The sources above answer for operators, projections and calls; a
+    /// container literal's value comes from the projection, and is worth asking
+    /// for only where [`Self::commit_fold`] can write it back.
     fn seq_literal_value(&self, body: &Body, e: ExprId) -> Option<Value> {
         if !self.is_unmaterialized_seq_literal(body, e) {
             return None;

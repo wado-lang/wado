@@ -685,8 +685,7 @@ impl Interpreter<'_> {
         // referent, and a later write through the place — or through the
         // reference — would leave the snapshot standing for a value the program
         // no longer holds. The writes it performs are still applied; only its
-        // result is refused. `Interpreter::commit_fold` refuses a
-        // reference-typed node for the same reason.
+        // result is refused.
         let returns_reference = self.type_table.is_reference_shaped(callee.return_type);
 
         let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());

@@ -576,9 +576,9 @@ impl Serialize for String {
     }
 }
 
-/// A unit variant case carries `()` as its payload, so the derived variant
-/// serialization needs `(): Serialize` to satisfy its payload-pack bound. The
-/// value never reaches the wire — a unit case serializes as a bare tag.
+/// Writes null, which `Deserialize for ()` reads back. A unit variant case
+/// carries `()` and so needs this impl to satisfy its payload-pack bound, but
+/// never reaches it: the derived paths answer `is_unit()` and write a bare tag.
 impl Serialize for () {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         return s.serialize_null();
@@ -1042,10 +1042,9 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Deserialize for L {
     }
 }
 
-/// Reads back the null `Serialize for ()` writes. A unit variant case is a
-/// bare tag and never reaches here — the derived variant paths answer
-/// `is_unit()` before touching the payload — but a `()` elsewhere, as a struct
-/// field or a `Result<(), E>` payload, is on the wire and has to be consumed.
+/// Reads back the null `Serialize for ()` wrote. A `()` anywhere but a unit
+/// variant case — a struct field, a `Result<(), E>` payload — is on the wire,
+/// and leaving it there would fail the next token.
 impl Deserialize for () {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<(), DeserializeError> {
         if d.is_null()? {
@@ -1068,14 +1067,6 @@ impl<..T: Deserialize> Deserialize for [..T] {
 
 // ── Wire naming: the compiler exposes naming facts, casing lives here ──
 
-/// Byte-level word segmentation, matching `heck`'s boundary rules: `_`/`-`/
-/// space delimit (dropped); a lower/digit → upper transition starts a word;
-/// inside an uppercase run, an uppercase directly before a lowercase starts a
-/// word. Digits attach to the current word.
-///
-/// Bytes rather than chars: every rule is ASCII, and a multi-byte sequence's
-/// bytes are all >= 0x80, so they are neither separators nor case transitions
-/// and pass through as part of the word they sit in.
 fn is_separator_byte(b: u8) -> bool {
     return b == 95 || b == 45 || b == 32;
 }
@@ -1110,16 +1101,19 @@ fn case_separator(style: CaseStyle) -> u8 {
 }
 
 /// Apply a `CaseStyle` to an identifier. `Identity` returns `s` unchanged.
-/// Matches Rust's `heck` (the compiler's `apply_name_policy`).
 ///
-/// One pass, writing straight into the result: the word boundaries decide the
-/// separator and the casing as they are found, so no intermediate word list
-/// exists to allocate — which is also what lets a wire name resolve at compile
-/// time rather than on every call.
+/// Word boundaries follow `heck`, so a policy resolves the same name here as
+/// in the compiler's `apply_name_policy`: `_`/`-`/space delimit and are
+/// dropped; a lower/digit → upper transition starts a word; inside an
+/// uppercase run, an uppercase directly before a lowercase starts one. Digits
+/// attach to the current word.
 pub fn apply_case(style: CaseStyle, s: String) -> String {
     if style matches { Identity } {
         return s;
     }
+    // Bytes, not chars: every rule above is ASCII, and a multi-byte sequence's
+    // bytes are all >= 0x80, so they are neither separators nor case
+    // transitions and stay in the word they sit in.
     let separator = case_separator(style);
     let upper_all = style matches { ScreamingSnake | ScreamingKebab };
     let upper_word_head = style matches { Camel | Pascal };

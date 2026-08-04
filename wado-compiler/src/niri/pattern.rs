@@ -39,10 +39,8 @@ impl Interpreter<'_> {
             } => {
                 // A binding whose own type is a reference names the scrutinee's
                 // storage rather than a copy of it, and the engine has no
-                // reference values — handing it the referent's value would let a
-                // later read through the handle see a copy.
-                // `Interpreter::commit_fold` refuses a reference-typed node for
-                // the same reason, and `run_call` a reference-returning callee.
+                // reference values — handing it the referent's value would let
+                // a later read through the handle see a copy.
                 if self.type_table.is_reference_shaped(*type_id) {
                     return PatternMatch::Unknown;
                 }

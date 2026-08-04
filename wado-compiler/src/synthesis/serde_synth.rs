@@ -1,7 +1,9 @@
 //! Serde synthesis phase.
 //!
-//! Generates `Serialize` and `Deserialize` trait implementations for types
-//! that have `impl Trait for Type;` synthesis requests.
+//! Generates struct `Deserialize`, and the `FieldSchema` lookup it reads, for
+//! types with a synthesis request. Every other body is derived in Wado, by the
+//! `Reflect*` blankets in `core:serde` (WEP 2026-06-13); this pass still drains
+//! their requests, which is what makes the bound demand the reflection impls.
 
 use std::cell::RefCell;
 use std::rc::Rc;

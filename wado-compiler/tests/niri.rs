@@ -8054,7 +8054,6 @@ fn a_ref_global_alias_survives_the_body_growing_under_it() {
     );
 }
 
-
 #[test]
 fn a_box_shaped_ref_returning_callee_does_not_fold_through_the_lost_alias() {
     // The scenario `a_ref_returning_callee_does_not_fold_through_the_lost_alias`

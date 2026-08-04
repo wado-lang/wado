@@ -192,18 +192,20 @@ Sequences:
   a derivation walking member handles does at every step. A mutable borrow still
   does, except where the executor performs the write itself (a sequence
   builtin).
-- A byte-sequence container a compile-time call produced is written back as the
-  literal the lower phase emits for a source string — a struct over a packed
+- A byte-sequence container the engine knows the contents of is written back as
+  the literal the lower phase emits for a source string — a struct over a packed
   byte array and its length. The bytes are the container's first `used`, since
   a grown container's capacity outruns what it holds and capacity is not
   observable. A container the frame never filled stays as the source wrote it:
   an empty one is a reservation rather than a result, and a literal cannot
-  carry the capacity it asked for. Only a call or a self-contained region is
-  rewritten
-  this way: the literal
-  denotes the value it replaced, so materializing one again would report a
-  change at every visit and the worklist would never settle — and both rewrites
-  replace the node with a kind neither matches again.
+  carry the capacity it asked for.
+- Written back over a node that consumed its source — a call, a self-contained
+  region — or over a container still computing contents the engine already
+  knows, which is what a value copy of a constant leaves behind and what a
+  derived wire name costs on every call otherwise. The second admits the very
+  kind the rewrite produces, so it asks for the *un*materialized form: refusing
+  what was already written is what keeps the worklist settling, which the first
+  gets from its kinds for free.
 
 Regions:
 
@@ -248,6 +250,11 @@ Regions:
   __r }` is refused on that ground rather than by accident. An ordinary walk
   performs nothing, so outside a frame such a binding still clobbers its
   referent.
+- A reference is recognized by shape, not by spelling. The boxing pass redefines
+  a `&T` into `Box<T>`, so every refusal above — a reference-typed node, a
+  reference-returning callee, a reference-typed binding, region or free read —
+  asks both, and one that asked only the borrow spelling would snapshot an alias
+  a later write invalidates.
 - A cast between the same reference shape denotes its operand;
   monomorphization leaves one over every buffer the formatting path builds. A
   converting cast still folds only through the primitive-cast evaluator. Place

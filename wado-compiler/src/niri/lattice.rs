@@ -388,11 +388,9 @@ impl Interpreter<'_> {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
-                // `&&` and `||` decide on the left alone when it is their
-                // absorbing element. The right operand is not evaluated at run
-                // time either, so what it would have done — including a read
-                // past the end, guarded by the very test that short-circuits —
-                // must not leave the whole test unknown.
+                // The right operand does not run at run time either, so what it
+                // would have done — a read past the end, guarded by the very
+                // test that short-circuits — must not leave the test unknown.
                 if let Some(decided) = short_circuit_result(&l, *op) {
                     return Lattice::Const(Value::Bool(decided));
                 }

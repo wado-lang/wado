@@ -91,7 +91,12 @@ impl Deserialize for Config;
 ### `pub fn apply_case(style: CaseStyle, s: String) -> String`
 
 Apply a `CaseStyle` to an identifier. `Identity` returns `s` unchanged.
-Matches Rust's `heck` (the compiler's `apply_name_policy`).
+
+Word boundaries follow `heck`, so a policy resolves the same name here as
+in the compiler's `apply_name_policy`: `_`/`-`/space delimit and are
+dropped; a lower/digit → upper transition starts a word; inside an
+uppercase run, an uppercase directly before a lowercase starts one. Digits
+attach to the current word.
 
 ### `pub fn wire_name<M: Member>(m: &M, policy: CaseStyle) -> String`
 
