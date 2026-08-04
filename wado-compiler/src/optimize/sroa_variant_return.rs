@@ -1252,7 +1252,7 @@ fn bound_temps(body: &Body, candidates: &IndexMap<FuncId, Candidate>) -> IndexMa
 /// retypes the local and every read of it, is exact on it. A local with a
 /// second definition is not: the pooled `__hfs_call_*` temps take one index for
 /// two live bindings, and retyping the index would retype both.
-fn settled_locals(body: &Body) -> IndexSet<u32> {
+pub(super) fn settled_locals(body: &Body) -> IndexSet<u32> {
     let mut defs: IndexMap<u32, u32> = IndexMap::default();
     let mut reassigned: IndexSet<u32> = IndexSet::default();
     collect_defs(body, NodeRef::Block(body.root), &mut defs, &mut reassigned);
@@ -1275,15 +1275,27 @@ fn collect_defs(
             }
         }
         NodeRef::Expr(e) => {
-            if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
-                && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
-            {
-                reassigned.insert(*index);
+            // Every local the target mentions, not just a bare `Local` root:
+            // `h.seen = v` writes through `h`, so `h`'s `mut` is load-bearing
+            // and the binding is not settled. Marking the whole target
+            // conservatively also covers index and nested projections.
+            if let ExprKind::Assign { target, .. } = &body.exprs[e].kind {
+                mark_locals(body, NodeRef::Expr(*target), reassigned);
             }
         }
         NodeRef::Block(_) | NodeRef::Pat(_) => {}
     }
     body.for_each_child(node, |c| collect_defs(body, c, defs, reassigned));
+}
+
+/// Record every local read anywhere under `node`.
+fn mark_locals(body: &Body, node: NodeRef, out: &mut IndexSet<u32>) {
+    if let NodeRef::Expr(e) = node
+        && let ExprKind::Local { index, .. } = &body.exprs[e].kind
+    {
+        out.insert(*index);
+    }
+    body.for_each_child(node, |c| mark_locals(body, c, out));
 }
 
 fn collect_bound_temps(

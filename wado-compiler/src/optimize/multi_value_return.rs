@@ -572,10 +572,12 @@ fn validate_uses_in_block(
     invalid: &mut IndexSet<usize>,
 ) {
     let mut tracked: IndexMap<u32, usize> = IndexMap::default();
+    let settled = super::sroa_variant_return::settled_locals(body);
     let cx = UseCx {
         candidate_ids,
         candidates,
         passes_through,
+        settled: &settled,
     };
     for &stmt in &body.blocks[block].stmts {
         validate_stmt(body, stmt, &cx, invalid, &mut tracked);
@@ -591,6 +593,9 @@ struct UseCx<'a> {
     /// which a bare `Call` needs no `let` to bind it, because the results go
     /// straight out as our own.
     passes_through: Option<TypeId>,
+    /// Locals bound once and never assigned, so a `let mut` over one of them
+    /// binds a call result as safely as a plain `let`.
+    settled: &'a IndexSet<u32>,
 }
 
 fn validate_stmt(
@@ -608,7 +613,13 @@ fn validate_stmt(
             ..
         } => {
             let (local_index, value, is_mut) = (*local_index, *value, *is_mut);
-            if !is_mut
+            // A `mut` binding nothing ever assigns is an immutable one wearing a
+            // `mut`, and splitting the call's results into it is as sound as for
+            // a plain `let`. `sroa_variant_return` draws the same line, and the
+            // two have to agree: it hands this pass tuple-returning functions,
+            // and a call site only one of them accepts leaves the tuple boxed —
+            // an allocation worse than the variant it replaced.
+            if (!is_mut || cx.settled.contains(&local_index))
                 && let Some(candidate_idx) =
                     candidate_call_idx_operand(body, value, cx.candidate_ids)
             {
