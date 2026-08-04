@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785849859507,
+  "lastUpdate": 1785855119887,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46037,6 +46037,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e0c403f360a4dd642833855c50406c08b0133456"
         },
         "date": 1785849858802,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6034,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16249,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272423,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5df7f8af6b2fe5102044b2064fd4062274ac9a36",
+          "message": "Merge pull request #1757 from wado-lang/claude/fma-wado-check-mnagd6\n\nfeat(stdlib): add f32::mul_add and f64::mul_add",
+          "timestamp": "2026-08-05T00:40:30+10:00",
+          "tree_id": "ffbb3eda67688b8c915e0491de17bdd014e14aa4",
+          "url": "https://github.com/wado-lang/wado/commit/5df7f8af6b2fe5102044b2064fd4062274ac9a36"
+        },
+        "date": 1785855119020,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
