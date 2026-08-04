@@ -103,3 +103,20 @@ test "flags deserialize unknown flag" {
         panic("expected error for unknown flag");
     }
 }
+
+// A naming policy reaches flags members like every other member kind. Pinned
+// because nothing else here would notice it changing.
+#[wire(name_policy = "camelCase")]
+flags Renamed {
+    ReadOnly,
+    WriteAll,
+}
+
+impl Serialize for Renamed;
+impl Deserialize for Renamed;
+
+test "flags apply a naming policy" {
+    assert to_string::<Renamed>(&(Renamed::ReadOnly | Renamed::WriteAll))
+        == Result::Ok(`["readOnly","writeAll"]`);
+    assert from_string::<Renamed>(`["readOnly"]`) == Result::Ok(Renamed::ReadOnly);
+}
