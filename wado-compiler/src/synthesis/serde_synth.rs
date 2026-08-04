@@ -34,7 +34,6 @@ use crate::token::Span;
 /// `&CompilerItems`, never through this snapshot.
 #[derive(Clone, Debug)]
 pub(super) struct SerdeStdlibNames {
-    pub serialize: String,
     pub deserialize: String,
     pub deserializer: String,
     pub deserialize_struct: String,
@@ -71,7 +70,6 @@ impl SerdeStdlibNames {
         let (_, _, deser_err_missing_field_name, deser_err_missing_field_index) =
             items.require_enum_case(CompilerItem::DeserializeErrorKindMissingField);
         Self {
-            serialize: items.trait_name(CompilerItem::Serialize).to_string(),
             deserialize: items.trait_name(CompilerItem::Deserialize).to_string(),
             deserializer: items.trait_name(CompilerItem::Deserializer).to_string(),
             deserialize_struct: items
@@ -185,16 +183,12 @@ pub fn synthesize_serde(project: &mut Package) {
 
         for req in &requests {
             match req.trait_ref {
-                SynthTrait::Serialize => {
-                    let key = MethodName::format_local(
-                        &FqTypeName::declared(&module.module_source, &req.target_type_name),
-                        Some(&names.serialize),
-                        "serialize",
-                    );
-                    if existing.contains(&key) {
-                        continue;
-                    }
-                }
+                // `Serialize` is derived in Wado, by the blanket impls over
+                // `ReflectStruct` / `ReflectVariant` / `ReflectEnum` /
+                // `ReflectFlags` in `core:serde`. The request still arrives —
+                // it is what makes the bound demand the reflection impls — and
+                // there is nothing here left to generate for it.
+                SynthTrait::Serialize => {}
                 SynthTrait::Deserialize => {
                     let key = MethodName::format_local(
                         &FqTypeName::declared(&module.module_source, &req.target_type_name),
