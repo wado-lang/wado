@@ -191,6 +191,35 @@ other eight resolved an impl block's **associated-type bindings**
 declaration facts too, so they became the impl's own digest entry
 ([`ImplSig`], S5c) rather than method signatures, and both helpers are gone.
 
+### A frame is abstract over its projections too, and only a use site can fill them
+
+Slots are not the whole of what a declaration frame leaves open. A signature
+written against `Self::Item` is abstract over what `Self::Item` _means_, and
+that cannot be a declaration fact: `I: IntoIterator<Item = u8>` is written at
+the caller. Filling the slots without it yields a projection the use site
+cannot resolve — which is exactly why the trait-bound path re-resolved its
+callee's AST under a doctored scope instead of instantiating.
+
+So the substitution carries both: `SlotProjections` maps a slot to what the
+projections rooted at it stand for, and `TypeTable::substitute_type_params_with`
+is the one implementation, with the slot-only `substitute_type_params` as its
+empty case. Only the _answers_ go in. A projection the use site cannot answer
+is rebuilt over the substituted base, inheriting the recorded projection's
+owning trait and bounds, so a caller supplies what it knows and nothing more.
+
+A projection's own `assoc_type_bindings` are types resolved in the same frame,
+so they carry its slots and are substituted with everything else — the rule
+every other arm follows.
+
+### Name-keyed facts belong to `TraitEnv`, `TypeId`-level facts to `Signatures`
+
+Both are declaration facts, and the phase that asks decides which structure can
+answer. `TraitEnv::build` runs before any decl pass; `Signatures` is assembled
+after all of them. So a fact the decl pass needs _about itself_ — which trait
+declares `Self::X`, asked while resolving that trait's own method signatures —
+can only live on `TraitEnv`, alongside `assoc_type_bound_index`. Filing it in
+the digest type-checks and silently answers `None`.
+
 ### One place per question
 
 The digest only holds if each question it answers has a single implementation.
@@ -201,6 +230,17 @@ Every convergence below was forced by a defect where two of them disagreed:
   written and the name a declaration calls itself differ exactly when an alias
   is in play, so a lookup keyed by the wrong one answers with another module's
   same-named type.
+- Which declaration a name means _in trait position_ —
+  `trait_decl_key_in_frame`, where only trait declarations are candidates. A
+  same-named non-trait is not a competitor, and the distinction is load-bearing
+  because traits have no symbol-table entry: `canonical_decl_key` answers `Left`
+  with `core:prelude/format`'s enum case, displacing a module's own
+  `trait Left`. A local trait answers unless an import names a trait of that
+  name.
+- What a projection means in a frame — `frame_projection`, answering from the
+  bindings a projection receiver carries and then from the enclosing `where`
+  clause. Three implementations of this question disagreed, and the trait-bound
+  path's copy is what fed the AST re-resolution.
 - Which target arguments are slots — `TypeSystem::is_impl_target_param`.
 - Where a method's own slots start — `MethodSig::method_param_offset`, carried
   on `MethodInfo` rather than recounted from receiver arguments.
@@ -304,39 +344,25 @@ completeness test: the body walk visits every impl block in every module and
 `.expect`s the entry, so the suite already fails deterministically at the
 declaration rather than at whichever use site reaches it first.
 
-### What the remaining `loaded_modules` reads are waiting on
+### How the trait-bound path reads the digest
 
-The trait-bound path (`find_method_in_trait_bounds`) is the one place a
-declaration-keyed digest genuinely cannot answer alone, and it splits three
-ways:
+`find_method_in_trait_bounds` was the last signature re-resolution outside
+reify. It instantiates the recorded `MethodSig` instead, in three parts:
 
 - The trait method's `DeclSig`, with `Self` as slot 0 and the method's own
-  parameters after it. A declaration fact — S6. The decl pass already records
-  it in exactly that frame.
-- The associated-type projections' `assoc_type_bindings`, computed from the
-  _caller's_ where clause (`I: IntoIterator<Item = u8>` gives
-  `[("Item", u8)]`). Use-site data, so it becomes an explicit substitution
-  input, never a re-resolution. Instantiating the recorded signature carries
-  the trait frame's bindings through unchanged, so the caller's have to
-  replace them after the fact — the one piece of machinery S6 still needs.
-- The `ast::TraitBound` lists those projections are built from. Declaration
-  facts, but name-keyed and AST-shaped — `TraitEnv`'s alphabet, where
-  `assoc_type_bound_index` already keeps them.
+  parameters after it. The decl pass records it in exactly that frame, so the
+  receiver fills slot 0 and nothing else is needed from the declaration.
+- What the trait's associated types mean at this use site — from the caller's
+  `where` clause (`I: IntoIterator<Item = u8>` answers `I::Item`) or from a
+  projection receiver's own bindings. Use-site data, so it enters as
+  `SlotProjections`, never as a re-resolution.
+- The `ast::TraitBound` lists behind both. Declaration facts, but name-keyed
+  and AST-shaped, so they stay on `TraitEnv` — `assoc_type_bound_index` and
+  `TraitDeclHeader::assoc_types`.
 
-Reaching the digest by trait _name_ is what blocks the last read. Traits have
-no symbol-table entry, so `canonical_decl_key` answers with the prelude's
-type whenever a module declares a trait sharing one of its names — a local
-`trait Left` against `core:prelude/format`'s `Left`. The AST route survives
-because it falls back to scanning the current module's items. Keying the
-digest by the declaration's `AstId` sidesteps it; removing the read outright
-needs trait-name resolution to become frame-aware, which is its own slice.
+The query stops writing walk state entirely: no scope to enter, no `self_type`
+to set, no `assoc_type_bindings` to seed and restore.
 
-- [ ] S6 `Signatures` stage C — trait decls. `TraitSig` / `TraitMethod` are
-      recorded and reify reads default bodies from them. What remains is
-      `find_method_in_trait_bounds`: its two whole-module scans are gone, but
-      it still re-resolves the method's parameter and return types from AST,
-      which needs the caller's associated-type bindings substituted into the
-      recorded signature.
 - [ ] S7 Query migration: `lookup_method_info` cluster and remaining
       callee-signature queries → `impl TypeSystem (ctx, scope)`; delete
       `suppress_reference_recording` / `with_reference_recording_suppressed`;
@@ -346,14 +372,14 @@ needs trait-name resolution to become frame-aware, which is its own slice.
 - [ ] S9 Rename `Elaborator` → `Annotator`; update `docs/compiler.md` and
       `wado-compiler/AGENTS.md`.
 
-Ordering: S7 requires S6, and converts one query at a time rather than as a
-single cut. S8–S9 are last and depend on neither.
+Ordering: S7 converts one query at a time rather than as a single cut. S8–S9
+are last and depend on neither.
 
 Progress metric:
 
 | Metric                                           | Now | Target |
 | ------------------------------------------------ | --- | ------ |
-| `loaded_modules` reads outside reify / decl pass | 4   | 0      |
+| `loaded_modules` reads outside reify / decl pass | 3   | 0      |
 | Whole-module AST scans                           | 0   | 0      |
 | Name-keyed AST predicates                        | 0   | 0      |
 | AST-level type-param substitution helpers        | 0   | 0      |
@@ -363,8 +389,8 @@ Progress metric:
 | `Elaborator` fields                              | 13  | 6      |
 
 Every surviving `loaded_modules` read is an indexed fetch of one declaration,
-not a scan: three in `method_call.rs` reached through `impl_index` /
-`all_impl_index`, and `find_trait_decl_with`, which S6 is waiting on. S7 owns
+not a scan: all three are in `method_call.rs`, reached through `impl_index` /
+`all_impl_index`. S7 owns them along with
 the two scope-swapping counts; one perspective swap is the walker's own —
 typing an imported global in its declaring module, which is the callee-scope
 use the target of 1 reserves.
