@@ -59,6 +59,7 @@ Allocation and aggregate:
 - `sroa` — decompose non-escaping struct/tuple locals into scalar locals. The highest-impact WasmGC pass.
 - `container_sroa` — turn `List<Struct>` / `List<Tuple>` into parallel per-field lists (array-of-structs → struct-of-arrays).
 - `sroa_param` — replace a single-field-struct reference parameter with its inner scalar, unwrapping the box that `&T` values allocate.
+- `sroa_variant_return` — rewrite a variant return into a `[tag, slots…]` tuple, so a `Result`-returning call stops being one opaque boxed value to every later pass. The return-position dual of `sroa_param`; `multi_value_return` then flattens the tuple to the Wasm multi-value ABI. See [WEP: Variant Return Scalarization at NIR](./wep-2026-08-03-variant-return-abi.md).
 - `elide_box_local` — collapse a box bound once and read once into its inner value.
 - `array_literal` — fold an array-builder window into a single fixed-array literal.
 - `value_copy_demote` — demote a deep list value-copy to a shallow spine copy when its elements are provably never mutated through the binding.
@@ -148,12 +149,6 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
       non-constant field still costs a GC load per read.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
-- [ ] Variant returns scalarized at NIR, inside the optimization loop, so a
-      `Result`-returning call stops being one opaque boxed value to
-      `const_fold` / `dce` / `sroa` / `inline`. Today the scalarization happens
-      in `wir_optimize::sroa_variant_return`, after every NIR pass has run.
-      Design and staging:
-      [WEP: Variant Return Scalarization at NIR](./wep-2026-08-03-variant-return-abi.md).
 - [ ] Folding a `match` whose scrutinee is a syntactically known
       `VariantConstruct`. The constant-scrutinee path runs through
       `const_eval::Value`, which is all-or-nothing constant, so "case known,

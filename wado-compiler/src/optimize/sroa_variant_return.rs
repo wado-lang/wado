@@ -77,19 +77,18 @@
 //!
 //! ## Not yet handled
 //!
-//! The pass is staged off (see [`enabled`]) until these are closed:
+//! The pass is on, with `wir_optimize::sroa_variant_return` still running
+//! behind it on the shapes declined here. What is left:
 //!
 //! - A `LabeledBlock` in return-value position, whose value also arrives via
 //!   `break L: v`. Those exits are rejected outright
 //!   ([`return_value_scalarizable`]), which is sound but gives up the
 //!   `?`-through-`unwrap` shape the WIR pass handles via
 //!   `all_br_variant_values_are_struct_new`.
-//! - The `opt_sroa_variant_*` fixtures still pin WIR-pass local names
-//!   (`__sroa_result_discriminant`) that this pass does not produce. Seven of
-//!   them fail with the pass on; all are expectation churn, not miscompiles —
-//!   the suite reports no invalid Wasm.
-//! - `syntax_highlight` scalarizes nothing here where the WIR pass widens two
-//!   functions.
+//! - Seven `opt_sroa_variant_*` fixtures still pin WIR-pass local names
+//!   (`__sroa_result_discriminant`) this pass does not produce. They are the
+//!   worklist for the shapes it declines, and they are expectation churn, not
+//!   miscompiles — the suite reports no invalid Wasm anywhere.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionKind, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal};
@@ -179,19 +178,7 @@ struct Candidate {
     variant_type: TypeId,
 }
 
-/// Staging switch (WEP step 1): the pass is off unless
-/// `WADO_NIR_VARIANT_RETURN=1`. Two shapes still miscompile — see the module
-/// docs' "Not yet handled" — and until they are closed the WIR
-/// `sroa_variant_return` remains the one that scalarizes variant returns.
-/// Step 3 of the WEP deletes this switch.
-fn enabled() -> bool {
-    std::env::var("WADO_NIR_VARIANT_RETURN").is_ok_and(|v| v == "1")
-}
-
 pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    if !enabled() {
-        return false;
-    }
     let candidates = collect_and_validate(project, gate);
     let mut changed = !candidates.is_empty();
     for &key in candidates.keys() {

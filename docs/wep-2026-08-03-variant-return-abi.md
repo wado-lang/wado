@@ -500,26 +500,24 @@ variant type" is needed — which is what the tail-call rule already requires.
 
 Each step lands and is measured before the next.
 
-- [x] Step 1 — the pass behind a flag, off by default
-      (`WADO_NIR_VARIANT_RETURN=1`). The candidate-set comparison is done (see
-      above): the two passes together scalarize more than the WIR pass alone on
-      every serde workload, at +0.26 % to +0.91 % of wasm size and about +2 % of
-      serialization throughput. With the flag on the suite compiles every
-      program correctly, with no invalid Wasm, and the failures left are
-      expectation churn. Still open and carried into step 3: a `LabeledBlock`
-      return value arriving via `break L: v`, rejected outright.
+- [x] Step 1 — the pass behind a staging flag, off by default. The
+      candidate-set comparison is done (see above): the two passes together
+      scalarize more than the WIR pass alone on every serde workload, at
+      +0.27 % to +0.92 % of wasm size and about +2 % of serialization
+      throughput.
 - [x] Step 2 — lift the `is_trait_method` gate and the arity cap in
       `multi_value_return`, on their own. Landed: full E2E green, wasm size
       neutral to -0.06%. `i128^Mul::mul` and its siblings now return
       `[u64, i64]` instead of allocating an `i128` struct per operation.
-- [ ] Step 3 — enable the pass, with `wir_optimize::sroa_variant_returns` still
-      running behind it. It should find nothing left to do on rewritten
-      functions; any function it still widens is one the NIR pass missed, and
-      that list is the worklist. The `opt_sroa_variant_*` fixtures pin
-      WIR-pass local names (`__sroa_*_discriminant`) that become the NIR pass's
-      (`*_mv_0`), so their `wir_expect` moves with the flag —
-      `opt_sroa_variant_return_null.wado` gains one at the same time, which is
-      what makes it a test of this pass rather than only of the program.
+- [x] Step 3 — the pass is on and the flag is gone, with
+      `wir_optimize::sroa_variant_returns` still running behind it. It finds
+      nothing left on `syntax_highlight` and `sqlite_parse`, and 85 / 42 / 9 on
+      the serde workloads — that list is the worklist. Seven
+      `opt_sroa_variant_*` fixtures stay red and are the same worklist read from
+      the other side: each pins a WIR-pass local name (`__sroa_*_discriminant`)
+      for a shape this pass declines, so each one greens by closing a shape, not
+      by editing an expectation. `opt_sroa_variant_return_null.wado` gets its
+      `wir_expect` when the first of them turns.
 - [ ] Step 4 — retire `widen.rs`, `return_temp.rs`, and most of `wrapper.rs`;
       shrink `layout.rs`. Gate: widened-function counts held, size and
       throughput not regressed. If the WIR side does not shrink, keep it and
