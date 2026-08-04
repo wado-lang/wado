@@ -77,18 +77,21 @@
 //!
 //! ## Not yet handled
 //!
-//! The pass is on, with `wir_optimize::sroa_variant_return` still running
-//! behind it on the shapes declined here. What is left:
+//! The WIR widening pass this replaced is gone; only its `flatten_variant_slots`
+//! half remains, splitting a nested result slot after lowering. What this pass
+//! still declines:
 //!
-//! - A `LabeledBlock` in return-value position, whose value also arrives via
+//! - A `LabeledBlock` in return-value position whose value also arrives via
 //!   `break L: v`. Those exits are rejected outright
-//!   ([`return_value_scalarizable`]), which is sound but gives up the
-//!   `?`-through-`unwrap` shape the WIR pass handles via
-//!   `all_br_variant_values_are_struct_new`.
-//! - A case payload that is itself a boxed variant. `wir_optimize`'s
-//!   `slot_flatten` splits such a slot into the inner variant's own
-//!   `[tag, payload…]`; this pass would give it one boxed slot, so it declines
-//!   ([`slot_flatten_would_split`]) and leaves those functions to the WIR pass.
+//!   ([`return_value_scalarizable`]) rather than half-handled.
+//! - A `v128`, `i128` or `u128` payload ([`slot_shape`]). The pad decides it:
+//!   every slot needs a zero this pass can mint as a promoted value, and
+//!   `ValueKind` has no `v128` literal, while the 128-bit types occupy two Wasm
+//!   results the slot count does not model.
+//!
+//! A case payload that is itself a variant is *not* declined — it takes a
+//! [`SlotShape::Wrapped`] slot, and `flatten_variant_slots` splits that slot
+//! further if the WIR shapes allow.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionKind, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal};
@@ -1180,12 +1183,17 @@ fn stmt_returns_scalarizable(
     match &body.stmts[stmt].kind {
         StmtKind::Return { value: None } => false,
         StmtKind::Return { value: Some(v) } => return_value_scalarizable(body, *v, cand, tail_ok),
+        // The condition too: `if f(x)? > 0` puts a `?`-desugared `return Err(…)`
+        // there, and `rewrite_returns` reaches it through `for_each_child`. Every
+        // other arm validates its operands; skipping this one rewrote a return
+        // nothing had agreed to.
         StmtKind::If {
+            condition,
             then_block,
             else_block,
-            ..
         } => {
-            returns_are_scalarizable(body, *then_block, cand, tail_ok)
+            nested_returns_scalarizable(body, *condition, cand, tail_ok)
+                && returns_are_scalarizable(body, *then_block, cand, tail_ok)
                 && else_block.is_none_or(|b| returns_are_scalarizable(body, b, cand, tail_ok))
         }
         StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {

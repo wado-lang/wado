@@ -301,6 +301,7 @@ fn candidate_info(
         },
         return_type,
         tail_ok,
+        tail_call_lowerable: true,
     };
     if !all_returns_match_shape(body, body.root, &expected) {
         return None;
@@ -381,6 +382,24 @@ struct ExpectedShape<'a> {
     /// `g` is one of them leaves its N results on the stack for us, so the
     /// caller never builds the aggregate either.
     tail_ok: &'a IndexMap<FuncId, TypeId>,
+    /// Whether a tail call is lowerable *in this position*. `wir_build` turns a
+    /// labeled-block exit into a `Return` only for a `StructNew`
+    /// (`rewrite_struct_new_br_to_return`), so `break L: g(x)` would clear the
+    /// block's result type and then leave `g`'s N results stranded on the stack.
+    /// Accepting the shape somewhere the lowering cannot follow is the one way
+    /// this pass can produce invalid Wasm, so break positions clear it.
+    tail_call_lowerable: bool,
+}
+
+impl ExpectedShape<'_> {
+    /// The same shape as seen from a `break` value, where a tail call is not
+    /// lowerable.
+    fn in_break_position(&self) -> Self {
+        Self {
+            tail_call_lowerable: false,
+            ..*self
+        }
+    }
 }
 
 // -----------------------------------------------------------------------
@@ -406,12 +425,16 @@ fn stmt_returns_match(body: &Body, stmt: StmtId, expected: &ExpectedShape<'_>) -
     match &body.stmts[stmt].kind {
         StmtKind::Return { value: None } => false,
         StmtKind::Return { value: Some(v) } => expr_returns_match_operand(body, *v, expected),
+        // The condition too — a `?` in it desugars to a `return`, and the shape
+        // check has to see it like any other. Same gap as
+        // `sroa_variant_return::stmt_returns_scalarizable` had.
         StmtKind::If {
+            condition,
             then_block,
             else_block,
-            ..
         } => {
-            all_returns_match_shape(body, *then_block, expected)
+            nested_returns_in_expr_match_operand(body, *condition, expected)
+                && all_returns_match_shape(body, *then_block, expected)
                 && else_block.is_none_or(|b| all_returns_match_shape(body, b, expected))
         }
         StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
@@ -462,7 +485,8 @@ fn expr_returns_match(body: &Body, expr: ExprId, expected: &ExpectedShape<'_>) -
         // `return g(x)` where `g` returns this same aggregate under this same
         // ABI: its results are already on the stack in our result order.
         ExprKind::Call { func_id, .. } => {
-            expected.tail_ok.get(func_id) == Some(&expected.return_type)
+            expected.tail_call_lowerable
+                && expected.tail_ok.get(func_id) == Some(&expected.return_type)
         }
         ExprKind::StructLiteral {
             struct_type,
@@ -527,6 +551,7 @@ fn stmt_break_values_match(body: &Body, stmt: StmtId, expected: &ExpectedShape<'
     match &body.stmts[stmt].kind {
         StmtKind::Break { value: Some(v), .. } => {
             let v = *v;
+            let expected = &expected.in_break_position();
             expr_returns_match_operand(body, v, expected)
                 && expr_break_values_match_operand(body, v, expected)
         }
@@ -567,7 +592,9 @@ fn block_tail_returns_match(body: &Body, block: BlockId, expected: &ExpectedShap
     };
     match &body.stmts[last].kind {
         StmtKind::Expr(e) => expr_returns_match_operand(body, *e, expected),
-        StmtKind::Break { value: Some(v), .. } => expr_returns_match_operand(body, *v, expected),
+        StmtKind::Break { value: Some(v), .. } => {
+            expr_returns_match_operand(body, *v, &expected.in_break_position())
+        }
         StmtKind::Return { .. } => true,
         _ => false,
     }

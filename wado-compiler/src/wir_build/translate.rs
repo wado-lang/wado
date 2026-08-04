@@ -2919,7 +2919,11 @@ fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
         // this same ABI (`multi_value_return`'s tail-call rule). The branch it
         // sits in has had its result type cleared, so without a `Return` its
         // results are left on the stack at the end of the block.
-        other if wrap_in_return => {
+        //
+        // One that already terminates needs no wrapper, and wrapping it would
+        // build `Return { value: Unreachable }` — a `Return` whose operand
+        // leaves nothing on the stack.
+        other if wrap_in_return && !other.ends_with_terminator() => {
             let value = std::mem::replace(other, WirInstr::Nop);
             *other = WirInstr::Return {
                 value: Some(Box::new(value)),
