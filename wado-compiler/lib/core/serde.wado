@@ -1042,12 +1042,16 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Deserialize for L {
     }
 }
 
-/// A unit variant case carries `()`, so the derived variant deserialization
-/// needs `(): Deserialize` to satisfy its payload-pack bound. Nothing is read
-/// from the wire — a unit case is a bare tag.
+/// Reads back the null `Serialize for ()` writes. A unit variant case is a
+/// bare tag and never reaches here — the derived variant paths answer
+/// `is_unit()` before touching the payload — but a `()` elsewhere, as a struct
+/// field or a `Result<(), E>` payload, is on the wire and has to be consumed.
 impl Deserialize for () {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<(), DeserializeError> {
-        return Result::Ok(());
+        if d.is_null()? {
+            return Result::Ok(());
+        }
+        return Result::Err(DeserializeError::unexpected_type("null", -1));
     }
 }
 

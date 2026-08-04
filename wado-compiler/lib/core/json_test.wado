@@ -683,3 +683,27 @@ test "to_bytes_canonical trailing_char appends" {
     let b = to_bytes_canonical(&u, Option::Some('\n')).unwrap();
     assert_bytes_eq_string(&b, &"{\"age\":30,\"firstName\":\"Ann\"}\n");
 }
+
+struct Ack {
+    id: i32,
+    ok: (),
+}
+
+test "a unit payload round-trips through the null it wrote" {
+    let value: Result<(), DeserializeErrorKind> = Result::Ok(());
+    let text = to_string(&value).unwrap();
+    assert text == `\{"Ok":null\}`;
+    let back: Result<Result<(), DeserializeErrorKind>, DeserializeError> = from_string(text);
+    assert back matches { Ok(Ok(_)) };
+}
+
+test "a unit struct field round-trips" {
+    let a = Ack { id: 7, ok: () };
+    let text = to_string(&a).unwrap();
+    assert text == `\{"id":7,"ok":null\}`;
+    let back: Result<Ack, DeserializeError> = from_string(text);
+    assert back matches { Ok(_) };
+    if let Ok(v) = back {
+        assert v.id == 7;
+    }
+}
