@@ -2026,6 +2026,21 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
     // This ensures that subsequent phases (WIR type registration, codegen) do not
     // emit types that are no longer referenced by any surviving function.
     project.type_table.borrow_mut().retain(&analysis.types);
+
+    // The struct sweep above ran against the table as it stood, and kept a
+    // monomorphized struct whose stored name still matched — including ones
+    // instantiated for a type nothing reachable names, as a reflect member
+    // struct is for every type of its kind. Those arguments are gone now, and a
+    // struct carries its arguments as field types, so it went unreachable with
+    // them. Left behind it would outlive ids the table no longer has.
+    let type_table = project.type_table.borrow();
+    project.structs.retain(|s| {
+        s.monomorph_info.as_ref().is_none_or(|mono| {
+            mono.impl_type_args
+                .iter()
+                .all(|t| type_table.get_pruned(*t).is_some())
+        })
+    });
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
