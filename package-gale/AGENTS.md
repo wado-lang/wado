@@ -52,6 +52,8 @@ ANTLR4 is BSD-3; copying or paraphrasing its implementation risks making Gale a 
 wado run package-gale dump path/to/Grammar.g4
 ```
 
+For a grammar outside the repo, `wado run --dir <dir> package-gale dump Grammar.g4` — see `--dir` in the root [`AGENTS.md`](../AGENTS.md).
+
 The `trace` generator option logs a runtime event stream to stderr (enter / ok / FAIL per rule, per-alt scan lengths, the committed `pick`); its `alt#N` indices match `gale dump`. Strictly opt-in — off is byte-identical output.
 
 ```sh

@@ -173,6 +173,12 @@ wado compile --allocator debug file.wado     # debug allocator
 wado run file.wado  # run a CLI program with wasmtime
 ```
 
+A program reaches only the directories granted to it: the current one, or exactly the `--dir` grants once any is given. Paths open relative to a grant, so an absolute path never opens — reach a file outside the tree by granting its directory and naming it relative to that.
+
+```sh
+wado run --dir /tmp/scratch prog.wado Foo.g4  # Foo.g4 resolves inside /tmp/scratch
+```
+
 ### Test Command
 
 `wado test` discovers and runs `test` blocks (compiled against the `test` world, see Target World above).
