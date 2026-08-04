@@ -23,24 +23,16 @@
 //! falls back to a fresh [`wado_compiler::compile_with_options`] run on miss,
 //! always rewriting the cache so a subsequent run sees a warm tree.
 //!
-//! That cache is two halves. A generator's identity is the hash of the sources
-//! it is built from, and its component is stored under that hash — so a changed
-//! generator writes a new name instead of overwriting one whose name no longer
-//! describes it, and a hit needs no validation *of those sources*. What the
-//! project last built is recorded in [`INDEX_FILE`][`GeneratorIndex`], which is
-//! how a later run finds the component without recompiling to learn its hash.
+//! A generator's identity is the hash of its source closure, and its component
+//! is stored under that hash, so a changed generator writes a new name rather
+//! than overwriting one that no longer describes it. [`INDEX_FILE`] records
+//! what the project last built, which is how a later run finds the component
+//! without recompiling to learn its hash.
 //!
-//! The compiler that produced the component is not in the key. An upgraded
-//! toolchain therefore reuses a component the previous one built, until the
-//! project's `build/` is cleared — which is why this cache lives there and not
-//! somewhere more permanent. Folding a toolchain fingerprint into the identity
-//! is not an option: the same hash is a generator's identity in every
-//! consumer's committed `<primary>.kiln.json`, and would churn all of them on
-//! every rebuild of the compiler.
-//!
-//! The old scheme keyed the component on *where* the generator lived, plus its
-//! entry file only — so the cached file was rewritten in place whenever a
-//! transitive source changed, and its name promised nothing about its content.
+//! The toolchain is not in that hash, so an upgraded compiler reuses what the
+//! previous one built until `build/` is cleared. Adding it is not available:
+//! the same hash is the generator's identity in every consumer's committed
+//! `<primary>.kiln.json`.
 //!
 //! The driver is responsible for not calling `resolve` more than once
 //! per unique module per pipeline run — this provider holds no
@@ -65,41 +57,26 @@ use crate::compiler_host::FilesystemCompilerHost;
 use crate::kiln_driver::{GeneratorProvider, ProviderError, ResolvedGenerator};
 use crate::oci;
 
-/// Directory under the project root holding compiled generator components, each
-/// named by the hash of the sources it was built from: `build/kiln/generators/`,
-/// and therefore gitignored. A registry (`Spec`) generator is a prebuilt,
-/// immutable artifact and caches in the shared `~/wado/` tree (see
-/// [`crate::cache`]) instead.
+/// Compiled generator components, each named by the hash of its sources.
+/// Gitignored. A registry (`Spec`) generator is prebuilt and caches in the
+/// shared `~/wado/` tree (see [`crate::cache`]) instead.
 pub const CACHE_DIR: &str = "build/kiln/generators";
 
-/// Where a project records what it knows about the generators it builds, so it
-/// can find their components again without recompiling. Beside them under
-/// `build/kiln/`, and therefore gitignored. See [`GeneratorIndex`].
+/// See [`GeneratorIndex`]. Gitignored.
 pub const INDEX_FILE: &str = "build/kiln/generators.json";
 
-/// One in-flight build per generator, keyed by project index path and module
-/// path.
+/// One in-flight build per generator. A process global because `wado test`
+/// builds a provider per fixture, so the lock must outlive any one of them;
+/// async because it is held across the build.
 ///
-/// `wado test` builds a fresh [`CliGeneratorProvider`] per fixture and compiles
-/// fixtures in parallel, so there is no provider-level state that could hold
-/// this — the lock has to outlive any one provider, hence a process global.
-/// Async, because it is held across the build: a fixture waiting on someone
-/// else's build yields its thread instead of pinning one.
-///
-/// Deliberately not a file lock. The component is content-addressed, so two
-/// racing `wado` processes write identical bytes to the same name; the
-/// duplication is wasted work, not a hazard, and guarding it across processes
-/// would cost a lock file, `libc`, and a non-unix fallback.
+/// Not a file lock: the component is content-addressed, so racing processes
+/// write identical bytes and only duplicate work.
 static BUILDS: LazyLock<Mutex<IndexMap<(PathBuf, String), Arc<tokio::sync::Mutex<()>>>>> =
     LazyLock::new(|| Mutex::new(IndexMap::new()));
 
-/// Serializes read-modify-write of any project index. Held only across a small
-/// JSON round-trip, never across a build, so one global costs nothing.
-///
-/// Process-local, so two `wado` processes writing different generators of one
-/// project can still drop each other's entry. The cost is a rebuild — the
-/// component is content-addressed and stays valid, and the next run rewrites
-/// the entry — which is not worth a lock file to avoid.
+/// Serializes read-modify-write of a project index; held only across the JSON
+/// round-trip. Process-local, so racing processes can still drop an entry —
+/// costing a rebuild, not correctness.
 static INDEX_WRITES: Mutex<()> = Mutex::new(());
 
 /// The build lock for one generator. The map guard is released before the
@@ -195,23 +172,20 @@ impl CliGeneratorProvider {
         self.manifest_root.join(INDEX_FILE)
     }
 
-    /// Where the component built from `source_hash` is cached. Named after what
-    /// it was built from, so the file is immutable: a changed generator writes
-    /// a new name instead of overwriting, which is what lets a hit skip
-    /// validation entirely.
+    /// Where the component built from `source_hash` is cached.
     fn component_path(&self, source_hash: &str) -> PathBuf {
         self.manifest_root
             .join(CACHE_DIR)
             .join(format!("{source_hash}.wasm"))
     }
 
-    /// The indexed identity of the generator at `module_path`, but only while
-    /// the sources it records still hash to what they did when it was written.
-    /// `None` on a missing or stale index — the caller rebuilds and rewrites.
+    /// The indexed identity of the generator at `module_path`, while the
+    /// sources it records still hash the same. `None` otherwise — the caller
+    /// rebuilds and rewrites.
     ///
-    /// The source hash is recomputed from the validated entries rather than
-    /// read back, so a hand-edited index cannot pin an identity that disagrees
-    /// with its own source list.
+    /// The hash is recomputed from the validated entries rather than read back,
+    /// so a hand-edited index cannot pin an identity its own source list
+    /// contradicts.
     fn indexed_identity(&self, module_path: &str, base: &Path) -> Option<IndexedGenerator> {
         let index = GeneratorIndex::load(&self.index_path())?;
         let recorded = index.generators.get(module_path)?;
@@ -227,13 +201,9 @@ impl CliGeneratorProvider {
         (combined_sources_hash(&validated) == recorded.source_hash).then(|| recorded.clone())
     }
 
-    /// Record `identity` for `module_path`, merging with whatever the index
-    /// already holds for the project's other generators. Best-effort: a refusal
-    /// only costs the next run a rebuild.
+    /// Record `identity` for `module_path`, merging with the project's other
+    /// generators. Best-effort: a refusal costs the next run a rebuild.
     fn write_index(&self, module_path: &str, identity: &IndexedGenerator) {
-        // The build lock is per generator, so two generators in one project can
-        // reach this together; read-modify-write under a lock keyed on the file
-        // keeps one from dropping the other's entry.
         let path = self.index_path();
         let _writing = INDEX_WRITES
             .lock()
@@ -249,11 +219,9 @@ impl CliGeneratorProvider {
             bytes.push(b'\n');
             let _ = crate::cache::write_atomic(&path, &bytes);
         }
-        // Content-addressed names are never reused, so without this every edit
-        // to any of the generator's sources would leave another component
-        // behind for good — the scheme it replaced at least overwrote in place.
-        // Only drop one nothing still points at: two modules with identical
-        // sources legitimately share a component.
+        // Content-addressed names are never reused, so nothing else would ever
+        // reclaim this. Two modules with identical sources share a component,
+        // hence the reference check.
         if let Some(orphan) = superseded.filter(|hash| {
             hash != &identity.source_hash
                 && !index.generators.values().any(|g| &g.source_hash == hash)
@@ -311,9 +279,8 @@ impl CliGeneratorProvider {
         Ok((abs, source, source_str))
     }
 
-    /// Run the inner wado-compiler pipeline on the given source, publish the
-    /// component to the shared cache under its source hash, and record that
-    /// identity in the project index for later runs.
+    /// Compile the generator, publish the component under its source hash, and
+    /// record that identity in the project index.
     async fn compile_local(
         &self,
         path_str: String,
@@ -324,14 +291,10 @@ impl CliGeneratorProvider {
 
         let base_path = abs.parent().map(Path::to_path_buf).unwrap_or_default();
         let abs_str = abs.to_string_lossy().to_string();
-        // The compiler embeds this in the component, and the cache names that
-        // component after the generator's sources — where the entry is recorded
-        // by its bare name, relative to its own directory. Handing over an
-        // absolute path instead would make two copies of one generator, at
-        // different paths, compile to different bytes under a single name; the
-        // second build would overwrite the first with something the name no
-        // longer describes. Imports still resolve: the host is based at the
-        // generator's directory, not at this string.
+        // The compiler embeds this, and the source closure records the entry
+        // by its bare name — so anything else would let two copies of one
+        // generator compile to different bytes under a single name. Imports
+        // resolve against the host's base, not this string.
         let embedded_name = abs
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -411,20 +374,16 @@ impl CliGeneratorProvider {
             .lock()
             .map(|mut g| std::mem::take(&mut *g))
             .unwrap_or_default();
-        // The entry file is handed to the compiler as a string rather than
-        // fetched through `CompilerHost::load_source`, so the recording host
-        // never sees it. The source list is the generator's whole identity now,
-        // so seed it — without this an edit to the entry file would not change
-        // the hash and the stale component would be reused.
+        // The entry never goes through `load_source`, so the recording host
+        // never sees it; without seeding it, editing it would not move the
+        // hash.
         recorded.push((entry_name.clone(), hash_source(&entry_name, &entry_bytes)));
         let sources = dedup_sort_sources(make_relative_sources(&recording_base, recorded));
         let combined_hash = combined_sources_hash(&sources);
         artifacts.source_hash.clone_from(&combined_hash);
 
-        // The component is addressed by the hash of what it was built from, so
-        // its name changes with its content and the file is never overwritten
-        // in place. Writes are best-effort: the caller holds the fresh bytes,
-        // so a filesystem refusal only costs the next run a rebuild.
+        // Best-effort: the caller holds the fresh bytes, so a refusal costs
+        // the next run a rebuild.
         let _ = crate::cache::write_atomic(&self.component_path(&combined_hash), &artifacts.wasm);
         self.write_index(
             &path_str_for_index,
@@ -445,29 +404,21 @@ impl CliGeneratorProvider {
     }
 }
 
-/// Convert the paths the recording host captured into paths relative to
-/// `base`, walking up with `..` for anything outside it (e.g.
-/// `../shared/foo.wado` when the project layout puts the generator under a
-/// sibling directory). Stdlib modules (`core:*`, `wasi:*`) never reach
-/// `CompilerHost::load_source`, so the only paths here are filesystem sources
-/// the inner compiler asked for.
+/// Re-anchor the recorded paths at `base`, walking up with `..` for anything
+/// outside it.
 ///
-/// A recorded path has to resolve back to the file it names — it is re-hashed
-/// on every read — and it feeds the identity hash, so it must carry nothing
-/// machine-specific. A path that cannot be expressed relative to `base` (a
-/// different drive, a remote URL the host happens to fetch) is kept verbatim:
-/// its hash still pins content, so invalidation stays correct where it was
-/// written and simply misses elsewhere.
+/// Each has to resolve back to the file it names, since it is re-hashed on
+/// every read, and it feeds the identity hash, so it must carry nothing
+/// machine-specific. One that cannot be expressed relative to `base` is kept
+/// verbatim: its hash still pins content, so it simply misses elsewhere.
 fn make_relative_sources(base: &Path, raw: Vec<(String, [u8; 32])>) -> Vec<(String, [u8; 32])> {
     let base = normalize_path(base);
     raw.into_iter()
         .map(|(path, hash)| {
-            // The host resolves a relative request against `base`, and `join`
-            // with an absolute path just replaces — so this lands both kinds on
-            // the same footing. Both sides are normalized first: diffing
-            // components of paths that still carry `.`/`..` produces nonsense
-            // like `.././foo.wado`, which resolves to nothing and quietly turns
-            // every later run into a miss.
+            // `join` replaces on an absolute path, so this lands both kinds
+            // on the same footing. Normalized first: diffing components that
+            // still carry `.`/`..` yields nonsense like `.././foo.wado`, which
+            // resolves to nothing and quietly makes every later run a miss.
             let target = normalize_path(&base.join(&path));
             (relative_to(&base, &target).unwrap_or(path), hash)
         })
@@ -484,10 +435,8 @@ fn normalize_path(path: &Path) -> PathBuf {
         match component {
             Component::CurDir => {}
             Component::ParentDir => {
-                // Only a real directory name can be popped. `PathBuf::pop`
-                // would happily remove a `..` this loop just pushed, turning
-                // `../../pkg` into `pkg` — a different directory entirely.
-                // Above the root there is nowhere to go, so `/..` is just `/`.
+                // `PathBuf::pop` would remove a `..` this loop just pushed,
+                // turning `../../pkg` into `pkg`. Above the root, `/..` is `/`.
                 match out.components().next_back() {
                     Some(Component::Normal(_)) => {
                         out.pop();
@@ -525,8 +474,7 @@ fn relative_to(base: &Path, target: &Path) -> Option<String> {
     for _ in base_parts.filter(|c| !matches!(c, Component::CurDir)) {
         out.push_str("../");
     }
-    // Always `/`-separated: the path is part of a hash, so its spelling must
-    // not depend on the platform that wrote it.
+    // Always `/`-separated: the spelling feeds a hash.
     let mut rest = target_parts.peekable();
     while let Some(part) = rest.next() {
         out.push_str(&part.as_os_str().to_string_lossy());
@@ -602,11 +550,9 @@ impl CompilerHost for SilentHost {
         }
     }
 
-    // This host decorates two methods; everything else has to reach the inner
-    // one. Falling through to the trait defaults instead would hand the
-    // generator an empty `[dependencies]` index and no environment — so a
-    // generator package that declares dependencies fails to resolve them,
-    // behind the opaque "failed to compile generator" this provider reports.
+    // Everything this host does not decorate must reach the inner one: the
+    // trait defaults would hand the generator an empty `[dependencies]` index
+    // and no environment.
     fn dependency_index(&self) -> wado_compiler::DependencyIndex {
         self.inner.dependency_index()
     }
@@ -691,15 +637,12 @@ fn hash_source(path: &str, bytes: &[u8]) -> [u8; 32] {
     sha256_of(&buf)
 }
 
-/// What a project knows about the generators it has built: for each, the
-/// identity of the last build, the options shape extracted from it, and the
-/// sources that say whether that identity is still current.
+/// What a project knows about the generators it has built, so it can find
+/// their components again without recompiling to learn their hashes.
 ///
-/// Purely a lookup aid for the content-addressed component cache — it lives
-/// under `build/` and is gitignored, so deleting it costs a rebuild and nothing
-/// else. It deliberately carries no claim about the *generated outputs*; that
-/// is `<primary>.kiln.json`'s job, per invocation, and keeping the two apart is
-/// what keeps this file free of correctness weight.
+/// A lookup aid, nothing more: gitignored, and deleting it costs a rebuild. It
+/// makes no claim about the *generated outputs* — that is
+/// `<primary>.kiln.json`'s job, per invocation.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct GeneratorIndex {
     /// Schema version. A mismatch is a cache miss, so a bump needs no
@@ -721,18 +664,15 @@ impl GeneratorIndex {
 /// One generator's last known build.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct IndexedGenerator {
-    /// Hash of `sources`, and the name the component is cached under. Also the
-    /// identity the driver records in `Metadata::generator_source_hash`.
+    /// Hash of `sources`; names the component, and is the identity the driver
+    /// records in `Metadata::generator_source_hash`.
     source_hash: String,
-    /// The options shape extracted from the generator's `pub struct Options`,
-    /// `null` for a generator that declares none.
+    /// `null` for a generator with no `pub struct Options`.
     descriptor: Option<OptionsDescriptor>,
-    /// Every file the inner compiler loaded while building the component —
-    /// `.wado` modules and binary assets routed through
-    /// `CompilerHost::load_source` (e.g. `#include_bytes` payloads). Stdlib
-    /// modules (`core:*`, `wasi:*`) bypass the host and never appear. Re-hashed
-    /// on read, so an edit to a transitive import (e.g. `parser_gen.wado`
-    /// behind a `generator.wado` entry) invalidates the entry.
+    /// Every file the compile loaded — `.wado` modules and assets routed
+    /// through `CompilerHost::load_source`; stdlib bypasses the host and never
+    /// appears. Re-hashed on read, so an edit to a transitive import
+    /// invalidates the entry.
     sources: Vec<SourceEntry>,
 }
 
@@ -743,9 +683,8 @@ struct SourceEntry {
     hash: String,
 }
 
-/// Bumped together with the `combined_sources_hash` magic below whenever the
-/// source-hash inputs change, so a downgrade or a rebuild against an older
-/// compiler is a miss rather than a silent mix.
+/// Moves with the `combined_sources_hash` magic, so a downgrade is a miss
+/// rather than a silent mix of hash generations.
 const INDEX_VERSION: u32 = 3;
 
 fn dedup_sort_sources(mut sources: Vec<(String, [u8; 32])>) -> Vec<(String, [u8; 32])> {
@@ -756,11 +695,9 @@ fn dedup_sort_sources(mut sources: Vec<(String, [u8; 32])>) -> Vec<(String, [u8;
 
 fn combined_sources_hash(sources: &[(String, [u8; 32])]) -> String {
     let mut hasher = Sha256::new();
-    // v3: per-file hashes for `.wado` sources are token-stream hashes (see
-    // `hash_source`), and the generator ABI generation folds in here — this is
-    // the only identity a generator has now, so an ABI bump has to move it.
-    // The magic tracks `INDEX_VERSION` so a downgrade or a rebuild against an
-    // older compiler is a miss rather than a silent mix.
+    // v3: `.wado` sources hash as token streams (see `hash_source`), and the
+    // ABI generation folds in here because this is a generator's only
+    // identity. The magic tracks `INDEX_VERSION`.
     hasher.update(b"kiln-generator-sources-v3\n");
     hasher.update(KILN_GENERATOR_ABI_TAG);
     for (path, hash) in sources {
@@ -992,15 +929,10 @@ impl CliGeneratorProvider {
         {
             return Ok(resolved);
         }
-        // Single-flight the build. A parallel `wado test` resolves the same
-        // generator once per fixture, so on a cold cache every in-flight
-        // fixture used to run its own full O2 build of one component — N times
-        // the cpu for no extra progress. The winner builds and publishes; the
-        // rest re-check behind the lock and hit.
-        //
-        // `--no-cache` stays unlocked: it exists to force a rebuild, so
-        // serializing rebuilds that each discard the previous result would only
-        // add wall time.
+        // Single-flight: a parallel `wado test` resolves this generator once
+        // per fixture, and every cold-cache miss would build it. `--no-cache`
+        // stays unlocked — serializing rebuilds that discard each other's
+        // result only adds wall time.
         let entry_lock = (!self.no_cache).then(|| build_lock(&self.index_path(), path.as_str()));
         let _building = match entry_lock.as_ref() {
             Some(lock) => Some(lock.lock().await),
@@ -1035,14 +967,9 @@ impl GeneratorProvider for CliGeneratorProvider {
 }
 
 impl CliGeneratorProvider {
-    /// Returns `None` on any cache miss or staleness — the caller recompiles.
-    ///
-    /// Two steps, both required: the index says which generator this project
-    /// last built (and is only believed while its recorded sources still hash
-    /// the same), and the shared cache holds that generator's component under
-    /// its source hash. The component is content-addressed, so its presence
-    /// alone makes it the right bytes — nothing further to validate, and no
-    /// state that could be a stale hit.
+    /// `None` on a miss or staleness — the caller recompiles. The component is
+    /// content-addressed, so once [`Self::indexed_identity`] vouches for the
+    /// hash there is nothing further to validate.
     fn try_read_cache(&self, module_path: &str, base: &Path) -> Option<ResolvedGenerator> {
         let identity = self.indexed_identity(module_path, base)?;
         Some(ResolvedGenerator {
@@ -1083,11 +1010,10 @@ mod tests {
         }
     }
 
-    /// A recorded source path has to resolve back to the file it names — it is
-    /// re-hashed on every read. A relative manifest root used to produce
-    /// entries like `.././atn.wado`, which resolved to nothing, so validation
-    /// failed and *every* run rebuilt the generator: a total cache miss that
-    /// still looked like a hit.
+    /// A recorded path has to resolve back to the file it names, since it is
+    /// re-hashed on every read. Entries like `.././atn.wado` resolve to
+    /// nothing, so validation fails and every run rebuilds — a total cache miss
+    /// that still looks like a hit.
     #[test]
     fn recorded_sources_round_trip_from_a_relative_base() {
         let cases = [

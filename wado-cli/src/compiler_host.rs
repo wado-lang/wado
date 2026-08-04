@@ -15,10 +15,9 @@ use wado_compiler::{
 use crate::kiln_runtime::{self, KilnRunPolicy};
 use crate::runtime::create_kiln_engine;
 
-/// Poisoning here carries no information: the guarded values are a slot list
-/// and an optional component, both structurally valid whatever a panicking
-/// holder was doing, so recovering the guard is the correct reading rather than
-/// a fallback.
+/// A slot list and an optional component are structurally valid whatever a
+/// panicking holder was doing, so recovering the guard is correct, not a
+/// fallback.
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex
         .lock()
@@ -37,11 +36,10 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 #[derive(Default)]
 pub struct KilnComponentCache {
     engine: OnceLock<wasmtime::Engine>,
-    /// One slot per generator wasm. A slot's mutex is held across that
-    /// component's AOT compile so concurrent callers wanting the same component
-    /// wait for one compile instead of each running their own; the slot list is
-    /// only locked long enough to hand a slot out, so distinct components never
-    /// serialize against each other.
+    /// One slot per generator wasm, its mutex held across that component's AOT
+    /// compile so concurrent callers wait rather than each compiling. The list
+    /// is locked only to hand a slot out, so distinct components never
+    /// serialize.
     slots: Mutex<Vec<([u8; 32], Arc<Mutex<Option<wasmtime::component::Component>>>)>>,
     /// AOT count (misses); asserted by tests instead of wall-clock timing.
     compile_count: AtomicUsize,
@@ -73,9 +71,7 @@ impl KilnComponentCache {
 
     /// AOT-compiled component for `wasm` (plus its engine), compiling on a
     /// miss. Single-flighted per component: `wado test` compiles fixtures in
-    /// parallel, so the hosts reach a cold cache together and a
-    /// lookup-then-compile-then-insert sequence made every one of them pay the
-    /// full Cranelift AOT for the same bytes.
+    /// parallel, so the hosts reach a cold cache together.
     fn get_or_compile(
         &self,
         wasm: &[u8],

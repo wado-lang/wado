@@ -128,10 +128,8 @@ fn first_run_compiles_second_run_hits_cache() {
         index.contains(&first.source_hash),
         "the index must record the generator identity: {index}"
     );
-    // Every recorded source has to resolve back to the file it names. A path
-    // that resolves to nothing makes the freshness check fail forever, which
-    // reads as a permanent cache miss and is otherwise invisible — the build
-    // just silently stops caching.
+    // A recorded path that resolves to nothing fails the freshness check
+    // forever — a permanent cache miss that is otherwise invisible.
     for path in recorded_source_paths(&index) {
         assert!(
             tmp.join(&path).is_file(),
@@ -275,12 +273,10 @@ fn no_options_generator_compiles_and_runs() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// One generator has one identity however the project that uses it spells the
-/// path to it. Five projects in this workspace take `package-gale`'s generator
-/// as a path build-dependency, each reaching it by a different relative path,
-/// and the old key hashed that path — so the same generator had as many
-/// identities as it had consumers, and each consumer's `<primary>.kiln.json`
-/// recorded a different one for the same build.
+/// One generator has one identity however a project spells the path to it.
+/// Five projects here reach `package-gale`'s generator by different relative
+/// paths, and the old key hashed that path, so one generator had as many
+/// identities as consumers.
 #[test]
 fn one_generator_has_one_identity_however_it_is_addressed() {
     let tmp = unique_tmp("kiln-compile-identity-across-projects");
@@ -309,18 +305,15 @@ fn one_generator_has_one_identity_however_it_is_addressed() {
         a.source_hash, b.source_hash,
         "one generator has one identity regardless of who addresses it"
     );
-    // And one set of bytes: the compiler embeds the path it is given, so the
-    // identity would name two different components if that path varied with
-    // the consumer.
+    // And one set of bytes: the compiler embeds the path it is given.
     assert_eq!(a.wasm, b.wasm, "and one component under that identity");
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// Two copies of one generator, sitting at different paths, hash the same —
-/// the identity is the source closure, and the entry is recorded by its bare
-/// name. They must therefore also *build* the same, or the name would describe
-/// two different components and whichever built last would win.
+/// Two copies of one generator at different paths hash the same, so they must
+/// also build the same — otherwise one name describes two components and the
+/// last build wins.
 #[test]
 fn copies_of_one_generator_at_different_paths_build_identically() {
     let tmp = unique_tmp("kiln-compile-identical-sources");
@@ -352,9 +345,9 @@ fn copies_of_one_generator_at_different_paths_build_identically() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// Concurrent resolves of the same generator must build it once. `wado test`
-/// builds a fresh provider per fixture and compiles fixtures in parallel, so
-/// on a cold cache every in-flight fixture ran its own full O2 build.
+/// Concurrent resolves of one generator must build it once: `wado test` builds
+/// a provider per fixture and compiles fixtures in parallel, so on a cold cache
+/// every in-flight fixture ran its own full O2 build.
 #[test]
 fn concurrent_resolves_build_the_generator_once() {
     const RESOLVERS: usize = 4;
@@ -364,9 +357,9 @@ fn concurrent_resolves_build_the_generator_once() {
     std::fs::create_dir_all(&tmp).unwrap();
     std::fs::write(tmp.join("my_generator.wado"), MINIMAL_GENERATOR).unwrap();
 
-    // One provider per resolver, as the per-fixture pipeline builds them: the
-    // compile counter is shared only across `Clone`s, so the total across
-    // independent providers is the true number of inner-compiler runs.
+    // One provider per resolver, as the per-fixture pipeline builds them; the
+    // counter is shared only across `Clone`s, so the total is the true number
+    // of inner-compiler runs.
     let providers: Vec<CliGeneratorProvider> = (0..RESOLVERS)
         .map(|_| CliGeneratorProvider::new(tmp.clone()))
         .collect();
@@ -908,10 +901,8 @@ fn shared_kiln_cache_compiles_generator_once_across_hosts() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// The shared cache must also collapse *concurrent* first runs. `wado test`
-/// compiles fixtures in parallel, so the hosts reach a cold cache together and
-/// a lookup-then-compile-then-insert sequence lets every one of them pay the
-/// full Cranelift AOT for the same component.
+/// The shared cache must also collapse *concurrent* first runs, or every host
+/// pays the full Cranelift AOT for the same component.
 #[test]
 fn shared_kiln_cache_compiles_generator_once_under_concurrency() {
     const HOSTS: usize = 4;
