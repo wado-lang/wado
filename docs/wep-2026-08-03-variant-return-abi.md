@@ -347,10 +347,10 @@ signature — 239 fixtures of invalid Wasm, at `-O0` as well as `-O2`.
 `widen.rs`'s entire job — rediscovering the pattern from WIR shapes, the two
 fix-points, the return rewriting, the call-site rewriting — is subsumed.
 `return_temp.rs` normalizes temps `field_scalarize` leaves and `wir_build`
-materializes. Phase 2's `Return(Local(t))` rule covers the single-def /
-single-use case; it does **not** cover the one `field_scalarize` actually
-produces — see [the open question](#the-return-temp-is-not-this-passs-to-sink)
-— so this file retires only once that is closed.
+materializes. Those temps are gone at their source rather than recognised
+afterwards — see
+[the return temp](#the-return-temp--resolved-in-field_scalarize) — which is
+what lets this file retire.
 
 | file                     | lines | fate                                                      |
 | ------------------------ | ----- | --------------------------------------------------------- |
@@ -548,34 +548,36 @@ Each step lands and is measured before the next.
 
 ## Open questions
 
-### The return temp is not this pass's to sink
+### The return temp — resolved in `field_scalarize`
 
-`return_temp.rs`'s job was supposed to be covered here by a `Return(Local(t))`
-rule over single-def / single-use temps. It is not, and the reason is ordering:
-the temp does not exist when this pass runs. `field_scalarize` hoists a field
-store _after_ the returns are already tuple literals, leaving
+Recorded here because the answer is not where this WEP first looked. The temp is
+not this pass's to sink: `field_scalarize` hoists the field write-back _after_
+the returns are already tuple literals, one `let` per branch, so the local
+carries two defs and two reads and no single-def rule in this pass reaches it.
+Sinking the `VariantConstruct` wrapper at this pass's own rewrite site was tried
+and is inert — the shape does not exist yet at that point.
 
-```text
-let t: [i32, i32, Option<Fail>] = [1, 0, Some(fail_at(pos))];
-self.pos = pos;
-return t;
-```
+The constraint that creates the temp is "the write-back must run between the
+value's evaluation and the return jump". That applies to the value's
+_components_, not to the aggregate: an aggregate literal is a pure construction
+over its operands, so binding the operands and rebuilding the literal after the
+sync evaluates the same effects in the same order and leaves no aggregate local.
+`field_scalarize::capture_for_sync` states that once for the three sites that
+used to hand-roll it. Two details it has to get right:
 
-one such `let` per branch, so the local carries two defs and two reads and no
-single-def rule reaches it. `multi_value_return` then declines — its returns
-build no fresh aggregate — and the tuple stays boxed
-(`opt_sroa_variant_return_hfs_call`, and `CborDeserializer::is_null`, the one
-boxed tuple this pass leaves on `cbor_twitter`).
+- Only a literal constant is re-emitted after the sync without a binding. A
+  promoted `ValueKind::FieldAccess` is re-emitted at its use, and the sync may
+  have written the field it reads.
+- Each operand holds its pooled temp until the whole literal is built, or
+  `alloc_temp`'s free list hands one index to two live slots.
 
-Sinking only the `VariantConstruct` wrapper at this pass's own rewrite site —
-binding the payload where it was and building the tuple at the `return` — was
-tried and is inert: byte-identical on every benchmark, because the shape it
-targets does not exist yet at that point.
+`Cursor::scan` goes from a boxed `ref tuple` to `-> [i32, i32, ref null Fail]`,
+and `CborDeserializer::is_null` — the last boxed tuple this pass left on
+`cbor_twitter` — flattens with it, for -94 bytes.
 
-Closing it needs the per-def dominance reasoning `return_temp.rs` does with a
-WIR scan and a relocation budget, plus `multi_value_return` accepting
-`Return(Local(t))` and `wir_build` emitting the fields from it. That is the
-work step 4 gates on, not a rule this pass can carry.
+The generalisation for step 4: `return_temp.rs` covers this shape in WIR with a
+scan and a relocation budget. Removing the shape at its source is cheaper than
+recognising it afterwards, and it is what lets that file retire.
 
 ### A `LabeledBlock` return value arriving via `break L: v`
 
