@@ -544,21 +544,14 @@ Each step lands and is measured before the next.
       neutral to -0.06%. `i128^Mul::mul` and its siblings now return
       `[u64, i64]` instead of allocating an `i128` struct per operation.
 - [x] Step 3 — the pass is on and the flag is gone, with
-      `wir_optimize::sroa_variant_returns` still running behind it. It finds
-      nothing left on `syntax_highlight` and `sqlite_parse`, and 85 / 42 / 9 on
-      the serde workloads — that list is the worklist. Seven
-      `opt_sroa_variant_*` fixtures stay red and are the same worklist read from
-      the other side: each pins a WIR-pass local name (`__sroa_*_discriminant`)
-      for a shape this pass declines, so each one greens by closing a shape, not
-      by editing an expectation. `opt_sroa_variant_return_null.wado` gets its
-      `wir_expect` when the first of them turns.
+      `wir_optimize::sroa_variant_returns` still running behind it. What it
+      still found was the worklist, and
+      [closing it](#how-the-87-function-gap-closed) took it to zero.
 - [ ] Step 4 — retire `widen.rs`, `return_temp.rs`, and most of `wrapper.rs`;
       shrink `layout.rs`. Gate: widened-function counts held, size and
       throughput not regressed. If the WIR side does not shrink, keep it and
       stop here — a NIR rewrite that duplicates a WIR rediscovery is worse than
-      either alone. **Not reachable yet**, and
-      [the worklist](#why-widenrs-cannot-retire-yet) says why: the WIR pass
-      still widens 87 functions on `cbor_twitter`, more than this pass takes.
+      either alone.
 - [x] Step 5 — `slot_flatten` stays in WIR, and the measurement is why. It
       splits a `ref W` result slot whose `W` is itself a small variant, and it
       fires 1–2 times per benchmark — once across `gale_gen`, twice on
