@@ -93,8 +93,8 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionKind, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal};
 use crate::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatKind,
-    PatNode, StmtId, StmtKind, StmtNode,
+    ArenaStructField, ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef,
+    Operand, PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
@@ -109,6 +109,10 @@ use super::gate::{FunctionGate, GatedPass};
 /// `super::multi_value_return`'s own cap, so the classifier that turns this
 /// tuple into a Wasm multi-value signature never rejects it on arity.
 const MAX_TUPLE_ARITY: usize = 8;
+
+/// The sole field of the `Box<T>` `lower::plan::boxing` promotes an
+/// address-taken local into.
+const BOX_FIELD: &str = "value";
 
 /// `Option`'s case indices, as declared in `lib/core/prelude/types.wado`.
 const OPTION_SOME: u32 = 0;
@@ -961,7 +965,15 @@ fn collect_and_validate(
                 let caller_ok = func
                     .id
                     .is_some_and(|id| candidates.contains_key(&id) || already.contains_key(&id));
-                invalidate_bad_call_sites(body, &func, &candidates, caller_ok, &mut invalid);
+                let rebind = Rebind::new(&func, &project.type_table.borrow());
+                invalidate_bad_call_sites(
+                    body,
+                    &func,
+                    &rebind,
+                    &candidates,
+                    caller_ok,
+                    &mut invalid,
+                );
             }
         }
         if invalid.is_empty() {
@@ -1319,6 +1331,7 @@ fn collect_bound_temps(
 fn invalidate_bad_call_sites(
     body: &Body,
     func: &NirFunction,
+    rebind: &Rebind,
     candidates: &IndexMap<FuncId, Candidate>,
     caller_ok: bool,
     invalid: &mut IndexSet<FuncId>,
@@ -1337,7 +1350,7 @@ fn invalidate_bad_call_sites(
         NodeRef::Block(body.root),
         candidates,
         &bound,
-        &cell_locals(func),
+        rebind,
         &settled_locals(body),
         caller_ok,
         invalid,
@@ -1349,7 +1362,7 @@ fn check_uses(
     node: NodeRef,
     candidates: &IndexMap<FuncId, Candidate>,
     bound: &IndexMap<u32, FuncId>,
-    cells: &IndexSet<u32>,
+    rebind: &Rebind,
     settled: &IndexSet<u32>,
     caller_ok: bool,
     invalid: &mut IndexSet<FuncId>,
@@ -1407,17 +1420,18 @@ fn check_uses(
                     let via_call = call_callee(body, *scrut).filter(|f| candidates.contains_key(f));
                     if via_temp.is_some() || via_call.is_some() {
                         let arms = arms.clone();
-                        if !arms.iter().all(|a| arm_is_one_level(body, a, cells)) {
+                        if !arms.iter().all(|a| arm_is_one_level(body, a, rebind)) {
                             invalid.extend(via_temp.into_iter().chain(via_call));
                         }
                         for a in &arms {
                             if let Some(g) = a.guard {
                                 check_uses_operand(
-                                    body, g, candidates, bound, cells, settled, caller_ok, invalid,
+                                    body, g, candidates, bound, rebind, settled, caller_ok, invalid,
                                 );
                             }
                             check_uses_operand(
-                                body, a.body, candidates, bound, cells, settled, caller_ok, invalid,
+                                body, a.body, candidates, bound, rebind, settled, caller_ok,
+                                invalid,
                             );
                         }
                         return;
@@ -1443,7 +1457,7 @@ fn check_uses(
     }
     body.for_each_child(node, |c| {
         check_uses(
-            body, c, candidates, bound, cells, settled, caller_ok, invalid,
+            body, c, candidates, bound, rebind, settled, caller_ok, invalid,
         );
     });
 }
@@ -1453,7 +1467,7 @@ fn check_uses_operand(
     op: Operand,
     candidates: &IndexMap<FuncId, Candidate>,
     bound: &IndexMap<u32, FuncId>,
-    cells: &IndexSet<u32>,
+    rebind: &Rebind,
     settled: &IndexSet<u32>,
     caller_ok: bool,
     invalid: &mut IndexSet<FuncId>,
@@ -1464,7 +1478,7 @@ fn check_uses_operand(
             NodeRef::Expr(e),
             candidates,
             bound,
-            cells,
+            rebind,
             settled,
             caller_ok,
             invalid,
@@ -1488,26 +1502,91 @@ fn call_callee(body: &Body, op: Operand) -> Option<FuncId> {
     }
 }
 
-/// Locals a payload binding cannot be re-minted for. `bind_payload_before`
-/// writes a plain `let`, but a local whose address is taken — or which a
-/// `stores` parameter aliases — is lowered as a reference cell, and storing the
-/// bare slot read into it hands a scalar to a struct-typed local.
-fn cell_locals(func: &NirFunction) -> IndexSet<u32> {
-    let mut out = func.address_taken_locals.clone();
-    out.extend(func.stores_aliased_locals.iter().copied());
-    out
+/// How a payload binding is re-minted as a `let` at the call site.
+enum Rebound<'a> {
+    /// The local holds the payload as the pattern spells it.
+    Direct,
+    /// The local's address is taken, so `lower::plan::boxing` promoted its slot
+    /// to `Box<T>`; the re-minted binding boxes the slot read as lowering did.
+    Boxed { box_type: TypeId, name: &'a str },
+}
+
+/// Per-function facts deciding whether a payload binding can be re-minted, and
+/// in what form. A local a `stores` parameter aliases cannot: the alias is
+/// established outside this body, and the `let` would not re-establish it.
+/// Neither can one whose declared type is neither the pattern's own type nor a
+/// `Box` of it — local indices are pooled, so a declaration that matches
+/// nothing the pattern names belongs to another binding.
+struct Rebind {
+    aliased: IndexSet<u32>,
+    local_types: Vec<TypeId>,
+    /// Declared `Box<T>` local type → (`T`, the struct's rendered name).
+    boxes: IndexMap<TypeId, (TypeId, String)>,
+}
+
+impl Rebind {
+    fn new(func: &NirFunction, type_table: &TypeTable) -> Self {
+        let box_name = type_table
+            .compiler_items()
+            .struct_name(crate::compiler_item::CompilerItem::Box)
+            .to_string();
+        let local_types: Vec<TypeId> = func.locals.iter().map(|l| l.type_id).collect();
+        let boxes = local_types
+            .iter()
+            .filter_map(|&declared| match type_table.get(declared) {
+                ResolvedType::Struct {
+                    decl_name,
+                    type_args,
+                    ..
+                } if *decl_name == box_name && type_args.len() == 1 => Some((
+                    declared,
+                    (
+                        type_args[0],
+                        type_table.struct_rendered_name(decl_name, type_args),
+                    ),
+                )),
+                _ => None,
+            })
+            .collect();
+        Self {
+            aliased: func.stores_aliased_locals.clone(),
+            local_types,
+            boxes,
+        }
+    }
+
+    fn rebound(&self, local: u32, binding_type: TypeId) -> Option<Rebound<'_>> {
+        if self.aliased.contains(&local) {
+            return None;
+        }
+        let declared = self.local_types[local as usize];
+        if declared == binding_type {
+            return Some(Rebound::Direct);
+        }
+        match self.boxes.get(&declared) {
+            Some((inner, name)) if *inner == binding_type => Some(Rebound::Boxed {
+                box_type: declared,
+                name,
+            }),
+            _ => None,
+        }
+    }
 }
 
 /// One level deep over the scrutinee's own variant, binding at most one name
 /// the rewrite can re-mint. A nested pattern (`Ok(Some(x))`) is rejected rather
 /// than peeled — peeling is where the WIR pass's complexity lives.
-fn arm_is_one_level(body: &Body, arm: &ArmData, cells: &IndexSet<u32>) -> bool {
+fn arm_is_one_level(body: &Body, arm: &ArmData, rebind: &Rebind) -> bool {
     match &body.pats[arm.pattern].kind {
         PatKind::Wildcard => true,
         PatKind::Variant { bindings, .. } => match bindings.as_slice() {
             [] => true,
             [b] => match body.pats[*b].kind {
-                PatKind::Binding { local_index, .. } => !cells.contains(&local_index),
+                PatKind::Binding {
+                    local_index,
+                    type_id,
+                    ..
+                } => rebind.rebound(local_index, type_id).is_some(),
                 PatKind::Wildcard => true,
                 _ => false,
             },
@@ -1799,13 +1878,15 @@ fn rewrite_call_sites(
         // sits — a `let` initializer, a tail `return`, or the scrutinee about
         // to be hoisted into a `let`.
         let mut changed = retype_candidate_calls(&mut body, candidates);
-        changed |= hoist_call_scrutinees(&mut body, &mut func, candidates, span);
+        // Hoisting appends the tuple temps; it never renumbers an existing
+        // local, so a `Rebind` taken here still describes every payload binding.
+        let rebind = Rebind::new(&func, &project.type_table.borrow());
+        changed |= hoist_call_scrutinees(&mut body, &mut func, candidates, &rebind, span);
         let mut bound = bound_temps(&body, candidates);
         // A site validated this round is known handleable; one inherited from an
         // earlier round is not, so each temp is re-checked. A temp that fails is
         // dropped here and reboxed instead of half-rewritten.
-        let cells = cell_locals(&func);
-        bound.retain(|&local, _| temp_uses_rewritable(&body, local, &cells));
+        bound.retain(|&local, _| temp_uses_rewritable(&body, local, &rebind));
         if !bound.is_empty() {
             for (&local, &f) in &bound {
                 let tuple_type = candidates[&f].layout.tuple_type;
@@ -1818,6 +1899,7 @@ fn rewrite_call_sites(
                 bound: &bound,
                 candidates,
                 names: &names,
+                rebind: &rebind,
                 span,
             };
             rewrite_temp_uses(&mut body, NodeRef::Block(root), &mut cx);
@@ -1876,6 +1958,8 @@ struct SiteCx<'a> {
     candidates: &'a IndexMap<FuncId, Candidate>,
     /// Local names, so a rebuilt `Local` node keeps the binding's own name.
     names: &'a [String],
+    /// How each payload binding is re-minted — directly or boxed.
+    rebind: &'a Rebind,
     span: Span,
 }
 
@@ -1892,15 +1976,15 @@ fn hoist_call_scrutinees(
     body: &mut Body,
     func: &mut NirFunction,
     candidates: &IndexMap<FuncId, Candidate>,
+    rebind: &Rebind,
     span: Span,
 ) -> bool {
     let mut targets: Vec<ExprId> = Vec::new();
-    let cells = cell_locals(func);
     collect_call_scrutinees(
         body,
         NodeRef::Block(body.root),
         candidates,
-        &cells,
+        rebind,
         &mut targets,
     );
     if targets.is_empty() {
@@ -1973,7 +2057,7 @@ fn collect_call_scrutinees(
     body: &Body,
     node: NodeRef,
     candidates: &IndexMap<FuncId, Candidate>,
-    cells: &IndexSet<u32>,
+    rebind: &Rebind,
     out: &mut Vec<ExprId>,
 ) {
     // The arms have to be rewritable before a binding is minted for them: a
@@ -1982,12 +2066,12 @@ fn collect_call_scrutinees(
     if let NodeRef::Expr(e) = node
         && let ExprKind::Match { expr: scrut, arms } = &body.exprs[e].kind
         && call_callee(body, *scrut).is_some_and(|f| candidates.contains_key(&f))
-        && arms.iter().all(|a| arm_is_one_level(body, a, cells))
+        && arms.iter().all(|a| arm_is_one_level(body, a, rebind))
     {
         out.push(e);
     }
     body.for_each_child(node, |c| {
-        collect_call_scrutinees(body, c, candidates, cells, out);
+        collect_call_scrutinees(body, c, candidates, rebind, out);
     });
 }
 
@@ -2059,13 +2143,13 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
 /// Whether every mention of `local` is a destructure the rewrite lowers. A bare
 /// read escapes the tuple, and a `Match` arm deeper than one level has no tag
 /// form — either leaves the site to the rebox.
-fn temp_uses_rewritable(body: &Body, local: u32, cells: &IndexSet<u32>) -> bool {
+fn temp_uses_rewritable(body: &Body, local: u32, rebind: &Rebind) -> bool {
     let mut ok = true;
-    check_temp_uses(body, NodeRef::Block(body.root), local, cells, &mut ok);
+    check_temp_uses(body, NodeRef::Block(body.root), local, rebind, &mut ok);
     ok
 }
 
-fn check_temp_uses(body: &Body, node: NodeRef, local: u32, cells: &IndexSet<u32>, ok: &mut bool) {
+fn check_temp_uses(body: &Body, node: NodeRef, local: u32, rebind: &Rebind, ok: &mut bool) {
     if !*ok {
         return;
     }
@@ -2093,7 +2177,7 @@ fn check_temp_uses(body: &Body, node: NodeRef, local: u32, cells: &IndexSet<u32>
             }
             ExprKind::Match { expr: scrut, arms } => {
                 if is_local(body, *scrut, local) {
-                    if !arms.iter().all(|a| arm_is_one_level(body, a, cells)) {
+                    if !arms.iter().all(|a| arm_is_one_level(body, a, rebind)) {
                         *ok = false;
                         return;
                     }
@@ -2102,10 +2186,10 @@ fn check_temp_uses(body: &Body, node: NodeRef, local: u32, cells: &IndexSet<u32>
                         if let Some(g) = a.guard
                             && let Some(ge) = g.as_expr()
                         {
-                            check_temp_uses(body, NodeRef::Expr(ge), local, cells, ok);
+                            check_temp_uses(body, NodeRef::Expr(ge), local, rebind, ok);
                         }
                         if let Some(be) = a.body.as_expr() {
-                            check_temp_uses(body, NodeRef::Expr(be), local, cells, ok);
+                            check_temp_uses(body, NodeRef::Expr(be), local, rebind, ok);
                         }
                     }
                     return;
@@ -2118,7 +2202,7 @@ fn check_temp_uses(body: &Body, node: NodeRef, local: u32, cells: &IndexSet<u32>
             _ => {}
         }
     }
-    body.for_each_child(node, |c| check_temp_uses(body, c, local, cells, ok));
+    body.for_each_child(node, |c| check_temp_uses(body, c, local, rebind, ok));
 }
 
 fn is_local(body: &Body, op: Operand, local: u32) -> bool {
@@ -2287,14 +2371,37 @@ fn bind_payload_before(
 ) -> Operand {
     let (binding_local, binding_type) = binding;
     let read = slot_read(body, local, layout, case_index, cx);
+    let (init, init_type) = match cx
+        .rebind
+        .rebound(binding_local, binding_type)
+        .expect("variant-return SROA: arm_is_one_level accepted an unbindable local")
+    {
+        Rebound::Direct => (Operand::Expr(read), binding_type),
+        Rebound::Boxed { box_type, name } => (
+            Operand::Expr(body.exprs.push(ExprNode {
+                kind: ExprKind::StructLiteral {
+                    struct_type: box_type,
+                    struct_name: name.to_string(),
+                    fields: vec![ArenaStructField {
+                        name: BOX_FIELD.to_string(),
+                        value: Operand::Expr(read),
+                        field_index: 0,
+                    }],
+                },
+                type_id: box_type,
+                span: cx.span,
+            })),
+            box_type,
+        ),
+    };
     let let_stmt = body.stmts.push(StmtNode {
         kind: StmtKind::Let {
             name: cx.names[binding_local as usize].clone(),
             local_index: binding_local,
             is_mut: false,
             is_reactive: false,
-            type_id: binding_type,
-            value: Operand::Expr(read),
+            type_id: init_type,
+            value: init,
             // The payload already went through whatever value copy `lower`
             // decided when it was a variant payload; this read introduces none.
             skip_value_copy: true,
