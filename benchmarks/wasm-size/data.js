@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785846158413,
+  "lastUpdate": 1785849859507,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45993,6 +45993,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5ba6365d73ce09a3482fe54ed32c812ff880ba5c"
         },
         "date": 1785846157659,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6034,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16249,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272423,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e0c403f360a4dd642833855c50406c08b0133456",
+          "message": "Merge pull request #1755 from wado-lang/claude/kiln-cache-lock-sauahl\n\nperf(kiln): name a generator component after what it was built from",
+          "timestamp": "2026-08-04T23:14:29+10:00",
+          "tree_id": "fd4dd0e72590f9d1364ea29f304bf9d61f8d858b",
+          "url": "https://github.com/wado-lang/wado/commit/e0c403f360a4dd642833855c50406c08b0133456"
+        },
+        "date": 1785849858802,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
