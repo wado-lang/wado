@@ -5,7 +5,6 @@
 //! binds nothing knowable, and the implicit no-match trap has to survive.
 
 use crate::const_eval::{Value, is_int_prim, is_signed_int};
-use crate::name::RefKind;
 use crate::nir::NirLiteralPattern;
 use crate::nir_arena::{Body, PatId, PatKind};
 use crate::tir::PrimitiveType;
@@ -43,12 +42,8 @@ impl Interpreter<'_> {
                 // reference values — handing it the referent's value would let a
                 // later read through the handle see a copy.
                 // `Interpreter::commit_fold` refuses a reference-typed node for
-                // the same reason. `&i32` reaches here as `Box<i32>`, the
-                // boxing pass's shape for a reference to a replace-on-assign
-                // value, so both spellings are refused.
-                if RefKind::from_resolved(self.type_table.get(*type_id)).is_some()
-                    || self.type_table.box_payload_of(*type_id).is_some()
-                {
+                // the same reason, and `run_call` a reference-returning callee.
+                if self.type_table.is_reference_shaped(*type_id) {
                     return PatternMatch::Unknown;
                 }
                 binds.push((*local_index, value.clone()));

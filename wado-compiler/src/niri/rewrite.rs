@@ -12,7 +12,6 @@
 
 use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
-use crate::name::RefKind;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArenaStructField, ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind,
@@ -113,7 +112,7 @@ impl Interpreter<'_> {
     /// left in its place.
     fn commit_fold<S: EditSink>(&mut self, sink: &mut S, e: ExprId, value: Value) -> bool {
         let node_type = sink.body().exprs[e].type_id;
-        if RefKind::from_resolved(self.type_table.get(node_type)).is_some() {
+        if self.type_table.is_reference_shaped(node_type) {
             return false;
         }
         if value.is_scalar() {

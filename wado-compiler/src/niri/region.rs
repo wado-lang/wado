@@ -13,7 +13,6 @@
 //! — by abandoning the evaluation, which forfeits the fold rather than
 //! dropping a write.
 
-use crate::name::RefKind;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatKind, StmtKind,
@@ -176,7 +175,7 @@ pub(super) fn region_free_reads(
         if declared.contains(index) {
             continue;
         }
-        if written.contains(index) || RefKind::from_resolved(type_table.get(ty)).is_some() {
+        if written.contains(index) || type_table.is_reference_shaped(ty) {
             return None;
         }
         out.push(index);

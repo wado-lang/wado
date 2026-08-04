@@ -11,7 +11,6 @@
 //! program never produced.
 
 use crate::const_eval::Value;
-use crate::name::RefKind;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
@@ -688,8 +687,7 @@ impl Interpreter<'_> {
         // no longer holds. The writes it performs are still applied; only its
         // result is refused. `Interpreter::commit_fold` refuses a
         // reference-typed node for the same reason.
-        let returns_reference =
-            RefKind::from_resolved(self.type_table.get(callee.return_type)).is_some();
+        let returns_reference = self.type_table.is_reference_shaped(callee.return_type);
 
         let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());
         let mut targets: Vec<(u32, u32, Vec<u32>)> = Vec::new();
@@ -796,7 +794,7 @@ impl Interpreter<'_> {
         if let Some(value) = self.frame.scratch_folds.get(&e) {
             return Some(value.clone());
         }
-        if RefKind::from_resolved(self.type_table.get(body.exprs[e].type_id)).is_some() {
+        if self.type_table.is_reference_shaped(body.exprs[e].type_id) {
             return None;
         }
         if self.frame.region_misses.contains(&e) {
