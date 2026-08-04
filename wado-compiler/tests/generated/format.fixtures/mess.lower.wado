@@ -3176,6 +3176,10 @@ pub fn libm_coshf(arg0: f32) -> f32;
 
 pub fn libm_exp(arg0: f64) -> f64;
 
+pub fn libm_exp10(arg0: f64) -> f64;
+
+pub fn libm_exp10f(arg0: f32) -> f32;
+
 pub fn libm_exp2(arg0: f64) -> f64;
 
 pub fn libm_exp2f(arg0: f32) -> f32;
@@ -3217,6 +3221,10 @@ pub fn libm_logf(arg0: f32) -> f32;
 pub fn libm_pow(arg0: f64, arg1: f64) -> f64;
 
 pub fn libm_powf(arg0: f32, arg1: f32) -> f32;
+
+pub fn libm_round(arg0: f64) -> f64;
+
+pub fn libm_roundf(arg0: f32) -> f32;
 
 pub fn libm_sin(arg0: f64) -> f64;
 
@@ -7664,6 +7672,10 @@ pub fn f32::trunc(x: f32) -> f32 {
 }
 
 pub fn f32::round(x: f32) -> f32 {
+    return "core:libm.wat::libm_roundf"(x);
+}
+
+pub fn f32::round_ties_even(x: f32) -> f32 {
     return core::builtin::f32_nearest(x);
 }
 
@@ -7741,6 +7753,10 @@ pub fn f32::exp(x: f32) -> f32 {
 
 pub fn f32::exp2(x: f32) -> f32 {
     return "core:libm.wat::libm_exp2f"(x);
+}
+
+pub fn f32::exp10(x: f32) -> f32 {
+    return "core:libm.wat::libm_exp10f"(x);
 }
 
 pub fn f32::expm1(x: f32) -> f32 {
@@ -8019,6 +8035,10 @@ pub fn f64::trunc(x: f64) -> f64 {
 }
 
 pub fn f64::round(x: f64) -> f64 {
+    return "core:libm.wat::libm_round"(x);
+}
+
+pub fn f64::round_ties_even(x: f64) -> f64 {
     return core::builtin::f64_nearest(x);
 }
 
@@ -8096,6 +8116,10 @@ pub fn f64::exp(x: f64) -> f64 {
 
 pub fn f64::exp2(x: f64) -> f64 {
     return "core:libm.wat::libm_exp2"(x);
+}
+
+pub fn f64::exp10(x: f64) -> f64 {
+    return "core:libm.wat::libm_exp10"(x);
 }
 
 pub fn f64::expm1(x: f64) -> f64 {

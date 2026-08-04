@@ -1960,7 +1960,14 @@ Truncate toward zero
 
 #### `pub fn round(x: f32) -> f32`
 
-Round to nearest even
+Round to nearest, breaking ties away from zero
+
+Wasm rounds the other way, so this is a software implementation —
+slower than `round_ties_even`.
+
+#### `pub fn round_ties_even(x: f32) -> f32`
+
+Round to nearest, breaking ties toward the even neighbour
 
 #### `pub fn sqrt(x: f32) -> f32`
 
@@ -2037,6 +2044,10 @@ e raised to the power x
 #### `pub fn exp2(x: f32) -> f32`
 
 2 raised to the power x
+
+#### `pub fn exp10(x: f32) -> f32`
+
+10 raised to the power x
 
 #### `pub fn expm1(x: f32) -> f32`
 
@@ -2209,7 +2220,14 @@ Truncate toward zero
 
 #### `pub fn round(x: f64) -> f64`
 
-Round to nearest even
+Round to nearest, breaking ties away from zero
+
+Wasm rounds the other way, so this is a software implementation —
+slower than `round_ties_even`.
+
+#### `pub fn round_ties_even(x: f64) -> f64`
+
+Round to nearest, breaking ties toward the even neighbour
 
 #### `pub fn sqrt(x: f64) -> f64`
 
@@ -2286,6 +2304,10 @@ e raised to the power x
 #### `pub fn exp2(x: f64) -> f64`
 
 2 raised to the power x
+
+#### `pub fn exp10(x: f64) -> f64`
+
+10 raised to the power x
 
 #### `pub fn expm1(x: f64) -> f64`
 
