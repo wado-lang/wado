@@ -517,8 +517,7 @@ description = "Rebuild bundled libm Wasm module"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# STRIP=none overrides the workspace release profile so the wat keeps the
-# name section, which the generated Wasm carries into debug builds.
+# STRIP=none keeps the name section the workspace release profile strips.
 cd wado-bundled-libm && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_STRIP=none cargo build --release && cd ..
 WAT_FILE="wado-compiler/lib/core/libm.wat"
 WAT_TMP="${WAT_FILE}.tmp"

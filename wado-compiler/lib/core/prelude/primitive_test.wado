@@ -254,7 +254,7 @@ test "f64 mul_add" {
     assert f64::mul_add(-2.0, 3.0, 4.0) == -2.0;
     assert f64::mul_add(0.0, 0.0, 1.5) == 1.5;
 
-    // A single rounding of x * y + z, unlike the two roundings of `x * y + z`.
+    // One rounding, not two: the naive form lands elsewhere.
     assert f64::mul_add(0.1, 0.1, -0.01) == 9.020562075079397e-19;
     assert 0.1 * 0.1 - 0.01 == 1.734723475976807e-18;
 
@@ -324,7 +324,7 @@ test "f32 mul_add" {
     assert f32::mul_add(2.0, 3.0, 4.0) == 10.0;
     assert f32::mul_add(-2.0, 3.0, 4.0) == -2.0;
 
-    // A single rounding of x * y + z, unlike the two roundings of `x * y + z`.
+    // One rounding, not two: the naive form lands elsewhere.
     assert f32::mul_add(0.1, 0.1, -0.01) == 5.2154064e-10;
     let tenth: f32 = 0.1;
     let hundredth: f32 = 0.01;
