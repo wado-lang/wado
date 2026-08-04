@@ -227,6 +227,12 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
         });
     }
     rewrite_call_sites(project, &all, &mut touched);
+    // A round with no new candidates still does work: `nir/inline` plants call
+    // sites on callees scalarized earlier, and rewriting one is a change the
+    // fixed-point loop has to see. Reporting only the candidate set let the
+    // loop stop with a fresh tag no `const_fold` or `match_to_switch` ever read,
+    // and made the `mark_changed` calls below dead.
+    changed |= !touched.is_empty();
     for idx in touched {
         gate.mark_changed(FuncId::new(idx));
     }
@@ -368,8 +374,10 @@ fn handled_call_sites(
             StmtKind::Let { type_id, value, .. } => accept(*value, *type_id, &mut out),
             // The tail-call rule: `return g(x)` passes the callee's tuple
             // straight through, but only from a function that returns that
-            // tuple, and only from the tail position itself.
-            StmtKind::Return { value: Some(value) } => accept(*value, own_return, &mut out),
+            // tuple, and only from a tail position.
+            StmtKind::Return { value: Some(value) } => {
+                collect_return_tail_calls(body, *value, own_return, scalarized, &mut out);
+            }
             StmtKind::Break {
                 label: Some(label),
                 value: Some(value),
@@ -411,6 +419,62 @@ fn collect_straggler_calls(
     body.for_each_child(node, |c| {
         collect_straggler_calls(body, c, scalarized, handled, out);
     });
+}
+
+/// Every call a `return`'s value reaches in tail position: bare, through a block
+/// tail, an `If` branch, or a `Match` / `Switch` arm.
+///
+/// This mirrors [`return_value_scalarizable`], which accepts all of those and
+/// which [`rewrite_return_value`] then rewrites in place. A narrower rule here
+/// makes the repair wrap the pass's own work back into the variant, handing a
+/// `ref Variant` to a position the tuple is required in.
+fn collect_return_tail_calls(
+    body: &Body,
+    op: Operand,
+    expected: TypeId,
+    scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
+    out: &mut IndexSet<ExprId>,
+) {
+    let Some(e) = op.as_expr() else { return };
+    let tail_of = |block: BlockId, out: &mut IndexSet<ExprId>| {
+        if let Some(&last) = body.blocks[block].stmts.last()
+            && let StmtKind::Expr(inner) = body.stmts[last].kind
+        {
+            collect_return_tail_calls(body, inner, expected, scalarized, out);
+        }
+    };
+    match &body.exprs[e].kind {
+        ExprKind::Call { func_id, .. } => {
+            if scalarized
+                .get(func_id)
+                .is_some_and(|(_, l)| l.tuple_type == expected)
+            {
+                out.insert(e);
+            }
+        }
+        ExprKind::Block(b) => tail_of(*b, out),
+        ExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            tail_of(*then_branch, out);
+            if let Some(b) = *else_branch {
+                tail_of(b, out);
+            }
+        }
+        ExprKind::Match { arms, .. } => {
+            for arm in arms.clone() {
+                collect_return_tail_calls(body, arm.body, expected, scalarized, out);
+            }
+        }
+        ExprKind::Switch { arms, default, .. } => {
+            for b in arms.clone().into_iter().chain(std::iter::once(*default)) {
+                tail_of(b, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Wrap `call` into `{ let __t = call; match __t.0 { k => Case(__t.slot) … } }`,
@@ -1974,7 +2038,18 @@ fn rewrite_call_sites(
         // A site validated this round is known handleable; one inherited from an
         // earlier round is not, so each temp is re-checked. A temp that fails is
         // dropped here and reboxed instead of half-rewritten.
-        bound.retain(|&local, _| temp_uses_rewritable(&body, local, &rebind));
+        //
+        // The aliasing refusal has to be repeated here, not left to validation:
+        // this runs over everything scalarized so far, and an inline-planted
+        // site on an earlier round's callee never passed validation at all. A
+        // temp whose address is taken, or which a `stores` parameter aliases, is
+        // not a pure destructure target — retyping it to the tuple would hand a
+        // tuple to a reference cell the rebox can no longer repair, because
+        // `handled_call_sites` then reads the binding as already handled.
+        let aliased = |local: &u32| {
+            func.address_taken_locals.contains(local) || func.stores_aliased_locals.contains(local)
+        };
+        bound.retain(|&local, _| !aliased(&local) && temp_uses_rewritable(&body, local, &rebind));
         if !bound.is_empty() {
             for (&local, &f) in &bound {
                 let tuple_type = candidates[&f].layout.tuple_type;

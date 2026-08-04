@@ -628,11 +628,15 @@ fn validate_stmt(
             // nothing ever assigns qualifies — it is an immutable binding
             // wearing a `mut` — and a non-`mut` one does not automatically,
             // because `alloc_temp` pools local indices and the split rewrites
-            // every read of the index. `sroa_variant_return` draws the same
-            // line, and the two have to agree: it hands this pass
-            // tuple-returning functions, and a call site only one of them
-            // accepts leaves the tuple boxed — an allocation worse than the
-            // variant it replaced.
+            // every read of the index. `sroa_variant_return` draws that line the
+            // same way, and the two have to agree on it.
+            //
+            // They deliberately differ on one point: that pass binds a call
+            // through a block tail, and this one takes a bare `Call` only,
+            // because `wir_build::try_emit_multi_value_let` splits nothing else
+            // — a wrapped call would bind N results into one local. Accepting
+            // the wider shape here costs a boxed tuple at that site; emitting it
+            // would cost invalid Wasm.
             if cx.settled.contains(&local_index)
                 && let Some(candidate_idx) =
                     candidate_call_idx_operand(body, value, cx.candidate_ids)
