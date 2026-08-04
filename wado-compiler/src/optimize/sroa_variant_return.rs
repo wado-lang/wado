@@ -573,6 +573,34 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let Some(body) = &func.body else { continue };
+
+        // Nothing calls a scalarized function from a position no consumer
+        // reads a tuple in. `rebox_stragglers` has run, so every such call is
+        // either handled or wrapped back into its variant — and a call that is
+        // neither is the shape that reaches codegen typed as a tuple where a
+        // variant is expected. Asserting the invariant beats a fixture: the
+        // hole it guards opens when `nir/inline` plants a call site after
+        // validation, which no hand-written source can force, and this runs
+        // over every fixture in the suite.
+        let handled = handled_call_sites(body, &scalarized, func.return_type);
+        let mut stragglers = Vec::new();
+        collect_straggler_calls(
+            body,
+            NodeRef::Block(body.root),
+            &scalarized,
+            &handled,
+            &mut stragglers,
+        );
+        // `collect_straggler_calls` descends from the root, so it never sees
+        // the nodes a rewrite orphaned — the arena is not compacted, and
+        // reporting those would flag code that no longer runs.
+        assert!(
+            stragglers.is_empty(),
+            "variant-return SROA left {} unreboxed call(s) to a scalarized \
+             function in `{}`",
+            stragglers.len(),
+            func.name
+        );
         // Reachable statements only. The arena is never compacted, so a rewrite
         // that replaces a node leaves the old one behind; checking those would
         // report a violation in code that no longer runs.
