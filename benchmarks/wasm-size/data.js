@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785813258893,
+  "lastUpdate": 1785832695659,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -45905,6 +45905,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/45852a8a96b32ed7132ab31fe4b72e52ed164d03"
         },
         "date": 1785813258031,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6034,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16249,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272423,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5b38e3d57db1dbf4c05921862cbc246ab0c5130a",
+          "message": "Merge pull request #1751 from wado-lang/claude/elaborator-refactoring-continue-1w8rjs\n\nrefactor(elaborator): read trait-method signatures from the decl-pass digest",
+          "timestamp": "2026-08-04T18:26:53+10:00",
+          "tree_id": "4c44e95e3f57487bea33db1a8c2a15d4766f48e2",
+          "url": "https://github.com/wado-lang/wado/commit/5b38e3d57db1dbf4c05921862cbc246ab0c5130a"
+        },
+        "date": 1785832695247,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
