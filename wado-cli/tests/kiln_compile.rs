@@ -317,6 +317,41 @@ fn one_generator_has_one_identity_however_it_is_addressed() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// Two copies of one generator, sitting at different paths, hash the same —
+/// the identity is the source closure, and the entry is recorded by its bare
+/// name. They must therefore also *build* the same, or the name would describe
+/// two different components and whichever built last would win.
+#[test]
+fn copies_of_one_generator_at_different_paths_build_identically() {
+    let tmp = unique_tmp("kiln-compile-identical-sources");
+    let _ = std::fs::remove_dir_all(&tmp);
+
+    let build_at = |dir: &str| {
+        let root = tmp.join(dir);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("my_generator.wado"), MINIMAL_GENERATOR).unwrap();
+        let provider = CliGeneratorProvider::new(root);
+        let module = GeneratorModule::LocalPath(InvocationPath::normalize("./my_generator.wado"));
+        runtime()
+            .block_on(async { provider.resolve(&module).await })
+            .expect("resolve should succeed")
+    };
+
+    let here = build_at("here");
+    let elsewhere = build_at("somewhere/deeper");
+
+    assert_eq!(
+        here.source_hash, elsewhere.source_hash,
+        "identical sources are one generator, wherever they sit"
+    );
+    assert_eq!(
+        here.wasm, elsewhere.wasm,
+        "and must compile to the bytes their shared name promises"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// Concurrent resolves of the same generator must build it once. `wado test`
 /// builds a fresh provider per fixture and compiles fixtures in parallel, so
 /// on a cold cache every in-flight fixture ran its own full O2 build.

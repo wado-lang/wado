@@ -24,12 +24,19 @@
 //! always rewriting the cache so a subsequent run sees a warm tree.
 //!
 //! That cache is two halves. A generator's identity is the hash of the sources
-//! it is built from, and its component is stored under that hash — so the file
-//! is immutable, a hit needs no validation, and a changed generator writes a
-//! new name instead of overwriting one whose name no longer describes it. What
-//! the project last built is recorded in [`INDEX_FILE`][`GeneratorIndex`],
-//! which is how a later run finds the component without recompiling to learn
-//! its hash.
+//! it is built from, and its component is stored under that hash — so a changed
+//! generator writes a new name instead of overwriting one whose name no longer
+//! describes it, and a hit needs no validation *of those sources*. What the
+//! project last built is recorded in [`INDEX_FILE`][`GeneratorIndex`], which is
+//! how a later run finds the component without recompiling to learn its hash.
+//!
+//! The compiler that produced the component is not in the key. An upgraded
+//! toolchain therefore reuses a component the previous one built, until the
+//! project's `build/` is cleared — which is why this cache lives there and not
+//! somewhere more permanent. Folding a toolchain fingerprint into the identity
+//! is not an option: the same hash is a generator's identity in every
+//! consumer's committed `<primary>.kiln.json`, and would churn all of them on
+//! every rebuild of the compiler.
 //!
 //! The old scheme keyed the component on *where* the generator lived, plus its
 //! entry file only — so the cached file was rewritten in place whenever a
@@ -317,13 +324,20 @@ impl CliGeneratorProvider {
 
         let base_path = abs.parent().map(Path::to_path_buf).unwrap_or_default();
         let abs_str = abs.to_string_lossy().to_string();
-        let path_str_for_index = path_str.clone();
-        // Relative to `recording_base`, which is this file's own directory, the
-        // entry is just its name.
-        let entry_name = abs
+        // The compiler embeds this in the component, and the cache names that
+        // component after the generator's sources — where the entry is recorded
+        // by its bare name, relative to its own directory. Handing over an
+        // absolute path instead would make two copies of one generator, at
+        // different paths, compile to different bytes under a single name; the
+        // second build would overwrite the first with something the name no
+        // longer describes. Imports still resolve: the host is based at the
+        // generator's directory, not at this string.
+        let embedded_name = abs
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| abs_str.clone());
+        let path_str_for_index = path_str.clone();
+        let entry_name = embedded_name.clone();
         let entry_bytes = source_str.clone().into_bytes();
         let recording_base = base_path.clone();
         let loaded = Arc::new(Mutex::new(Vec::<(String, [u8; 32])>::new()));
@@ -360,8 +374,13 @@ impl CliGeneratorProvider {
                         ),
                     })?;
                 let result = rt.block_on(async {
-                    wado_compiler::compile_with_options(&source_str, &host, Some(&abs_str), options)
-                        .await
+                    wado_compiler::compile_with_options(
+                        &source_str,
+                        &host,
+                        Some(&embedded_name),
+                        options,
+                    )
+                    .await
                 });
                 match result {
                     Ok(r) => Ok(CompileArtifacts {
@@ -581,6 +600,19 @@ impl CompilerHost for SilentHost {
             let mut stderr = io::stderr().lock();
             let _ = writeln!(stderr, "  [kiln generator compile] {diagnostic}");
         }
+    }
+
+    // This host decorates two methods; everything else has to reach the inner
+    // one. Falling through to the trait defaults instead would hand the
+    // generator an empty `[dependencies]` index and no environment — so a
+    // generator package that declares dependencies fails to resolve them,
+    // behind the opaque "failed to compile generator" this provider reports.
+    fn dependency_index(&self) -> wado_compiler::DependencyIndex {
+        self.inner.dependency_index()
+    }
+
+    fn env_var(&self, name: &str) -> Option<String> {
+        self.inner.env_var(name)
     }
 }
 
