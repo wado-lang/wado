@@ -65,7 +65,7 @@ use elide_struct::{elide_adjacent_box_locals, flatten_seq_assignments};
 use nullable_ref::lower_nullable_refs;
 use peephole::run_peephole;
 use prune_dead_data::prune_dead_data;
-use sroa_variant_return::{flatten_variant_slots, sroa_variant_returns};
+use sroa_variant_return::flatten_variant_slots;
 
 /// What a pass run's passes are called: `wir/<pass>` for the main package,
 /// `wir/<module>:<pass>` for a `#![wasm_module]` package's.
@@ -157,9 +157,6 @@ fn optimize_scoped(
     // Inline trivial `alias = source` copies so SROA sees RefTest/RefCast on source.
     wir_pass(scope, "propagate_trivial_copies", module, profiler, |m| {
         peephole::propagate_trivial_copies(m);
-    });
-    wir_pass(scope, "sroa_variant_returns", module, profiler, |m| {
-        sroa_variant_returns(m);
     });
     profiler.span_end(&scope.name("phase1_type_repr"));
 
