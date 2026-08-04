@@ -707,3 +707,14 @@ test "a unit struct field round-trips" {
         assert v.id == 7;
     }
 }
+
+test "Option<()> collapses, as it does in Rust serde" {
+    // `()` and `None` are both null on the wire, so the pair carries nothing.
+    let some_unit = to_string(&Option::Some(())).unwrap();
+    let none_unit: Option<()> = Option::None;
+    assert some_unit == `null`;
+    assert to_string(&none_unit).unwrap() == `null`;
+
+    let back: Result<Option<()>, DeserializeError> = from_string(some_unit);
+    assert back matches { Ok(None) };
+}
