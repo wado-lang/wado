@@ -354,12 +354,10 @@ fn "serde_synth_propagates_begin_struct_error.wado/__test_1_auto_derived_deseria
     let __cond: bool;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let input: ref "core:prelude/string.wado//String";
-    input = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 112, 101), used: 4 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "serde_synth_propagates_begin_struct_error.wado//Foo";
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_synth_propagates_begin_struct_error.wado/Foo,core:prelude/string.wado/String>"(input);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_synth_propagates_begin_struct_error.wado/Foo,core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 112, 101), used: 4 });
     if @likely(__sroa_r_discriminant == 1) {
         e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
@@ -382,7 +380,6 @@ fn "serde_synth_propagates_begin_struct_error.wado/__cm_export____test_0_auto_de
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
-    let input: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:serde_synth_propagates_begin_struct_error.wado::__modules_initialized);
         cold_path;
@@ -390,11 +387,10 @@ fn "serde_synth_propagates_begin_struct_error.wado/__cm_export____test_0_auto_de
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:serde_synth_propagates_begin_struct_error.wado::__modules_initialized = 1;
     };
-    input = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 112, 101), used: 4 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "serde_synth_propagates_begin_struct_error.wado//Foo";
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_synth_propagates_begin_struct_error.wado/Foo,core:prelude/string.wado/String>"(input);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_synth_propagates_begin_struct_error.wado/Foo,core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 112, 101), used: 4 });
     __cond = (if __sroa_r_discriminant == 1 -> bool {
         e = ref.as_non_null(__sroa_r_case1_payload_0);
         e.kind == 6;
@@ -2422,7 +2418,6 @@ fn "core:json/core:json/JsonDeserializer::skip_string"(self) {
 }
 
 fn "core:json/core:json/JsonDeserializer::expect_true"(self) {
-    let msg: ref "core:prelude/string.wado//String";
     if (if (if (if (self.pos + 4) <= (self.input.end - self.input.start) -> i32 {
         builtin::array_get<u8>(self.input.repr, self.input.start + (self.pos + 1)) == 114;
     } else {
@@ -2439,11 +2434,10 @@ fn "core:json/core:json/JsonDeserializer::expect_true"(self) {
         self.pos = self.pos + 4;
         return ref.null none;
     }
-    return ref.as_non_null(msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'true'"), used: 15 }; struct.new "core:serde//DeserializeError" { kind: 6, message: msg, offset: builtin::i64_extend_i32_s(self.pos) });
+    return struct.new "core:serde//DeserializeError" { kind: 6, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'true'"), used: 15 }, offset: builtin::i64_extend_i32_s(self.pos) };
 }
 
 fn "core:json/core:json/JsonDeserializer::expect_false"(self) {
-    let msg: ref "core:prelude/string.wado//String";
     if (if (if (if (if (self.pos + 5) <= (self.input.end - self.input.start) -> i32 {
         builtin::array_get<u8>(self.input.repr, self.input.start + (self.pos + 1)) == 97;
     } else {
@@ -2464,11 +2458,10 @@ fn "core:json/core:json/JsonDeserializer::expect_false"(self) {
         self.pos = self.pos + 5;
         return ref.null none;
     }
-    return ref.as_non_null(msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'false'"), used: 16 }; struct.new "core:serde//DeserializeError" { kind: 6, message: msg, offset: builtin::i64_extend_i32_s(self.pos) });
+    return struct.new "core:serde//DeserializeError" { kind: 6, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'false'"), used: 16 }, offset: builtin::i64_extend_i32_s(self.pos) };
 }
 
 fn "core:json/core:json/JsonDeserializer::expect_null"(self) {
-    let msg: ref "core:prelude/string.wado//String";
     if (if (if (if (self.pos + 4) <= (self.input.end - self.input.start) -> i32 {
         builtin::array_get<u8>(self.input.repr, self.input.start + (self.pos + 1)) == 117;
     } else {
@@ -2485,7 +2478,7 @@ fn "core:json/core:json/JsonDeserializer::expect_null"(self) {
         self.pos = self.pos + 4;
         return ref.null none;
     }
-    return ref.as_non_null(msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'null'"), used: 15 }; struct.new "core:serde//DeserializeError" { kind: 6, message: msg, offset: builtin::i64_extend_i32_s(self.pos) });
+    return struct.new "core:serde//DeserializeError" { kind: 6, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'null'"), used: 15 }, offset: builtin::i64_extend_i32_s(self.pos) };
 }
 
 fn "core:json/core:json/JsonDeserializer::skip_value"(self) {

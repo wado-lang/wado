@@ -384,12 +384,10 @@ fn "default_field_serde_default.wado/__test_0_missing_fields_fall_back_to_declar
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
-    let input: ref "core:prelude/string.wado//String";
-    input = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"host\":\"localhost\"}"), used: 20 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "default_field_serde_default.wado//Config";
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<default_field_serde_default.wado/Config,core:prelude/string.wado/String>"(input);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<default_field_serde_default.wado/Config,core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"host\":\"localhost\"}"), used: 20 });
     if @likely(__sroa_r_discriminant == 0) {
         c = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0_2 = c.host;
@@ -429,12 +427,10 @@ fn "default_field_serde_default.wado/__test_1_provided_fields_override_declared_
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
-    let input: ref "core:prelude/string.wado//String";
-    input = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"host\":\"example.com\",\"port\":9090,\"verbose\":false}"), used: 50 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "default_field_serde_default.wado//Config";
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<default_field_serde_default.wado/Config,core:prelude/string.wado/String>"(input);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<default_field_serde_default.wado/Config,core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"host\":\"example.com\",\"port\":9090,\"verbose\":false}"), used: 50 });
     if @likely(__sroa_r_discriminant == 0) {
         c = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0_2 = c.host;
@@ -2549,7 +2545,6 @@ fn "core:json/core:json/JsonDeserializer::skip_string"(self) {
 }
 
 fn "core:json/core:json/JsonDeserializer::expect_true"(self) {
-    let msg: ref "core:prelude/string.wado//String";
     if (if (if (if (self.pos + 4) <= (self.input.end - self.input.start) -> i32 {
         builtin::array_get<u8>(self.input.repr, self.input.start + (self.pos + 1)) == 114;
     } else {
@@ -2566,11 +2561,10 @@ fn "core:json/core:json/JsonDeserializer::expect_true"(self) {
         self.pos = self.pos + 4;
         return ref.null none;
     }
-    return ref.as_non_null(msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'true'"), used: 15 }; struct.new "core:serde//DeserializeError" { kind: 6, message: msg, offset: builtin::i64_extend_i32_s(self.pos) });
+    return struct.new "core:serde//DeserializeError" { kind: 6, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'true'"), used: 15 }, offset: builtin::i64_extend_i32_s(self.pos) };
 }
 
 fn "core:json/core:json/JsonDeserializer::expect_false"(self) {
-    let msg: ref "core:prelude/string.wado//String";
     if (if (if (if (if (self.pos + 5) <= (self.input.end - self.input.start) -> i32 {
         builtin::array_get<u8>(self.input.repr, self.input.start + (self.pos + 1)) == 97;
     } else {
@@ -2591,11 +2585,10 @@ fn "core:json/core:json/JsonDeserializer::expect_false"(self) {
         self.pos = self.pos + 5;
         return ref.null none;
     }
-    return ref.as_non_null(msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'false'"), used: 16 }; struct.new "core:serde//DeserializeError" { kind: 6, message: msg, offset: builtin::i64_extend_i32_s(self.pos) });
+    return struct.new "core:serde//DeserializeError" { kind: 6, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'false'"), used: 16 }, offset: builtin::i64_extend_i32_s(self.pos) };
 }
 
 fn "core:json/core:json/JsonDeserializer::expect_null"(self) {
-    let msg: ref "core:prelude/string.wado//String";
     if (if (if (if (self.pos + 4) <= (self.input.end - self.input.start) -> i32 {
         builtin::array_get<u8>(self.input.repr, self.input.start + (self.pos + 1)) == 117;
     } else {
@@ -2612,7 +2605,7 @@ fn "core:json/core:json/JsonDeserializer::expect_null"(self) {
         self.pos = self.pos + 4;
         return ref.null none;
     }
-    return ref.as_non_null(msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'null'"), used: 15 }; struct.new "core:serde//DeserializeError" { kind: 6, message: msg, offset: builtin::i64_extend_i32_s(self.pos) });
+    return struct.new "core:serde//DeserializeError" { kind: 6, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'null'"), used: 15 }, offset: builtin::i64_extend_i32_s(self.pos) };
 }
 
 fn "core:json/core:json/JsonDeserializer::skip_value"(self) {

@@ -69,7 +69,6 @@ fn "pub_use.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
 }
 
 fn "pub_use.wado/__cm_export__run"() {
-    let msg: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:pub_use.wado::__modules_initialized);
         cold_path;
@@ -83,8 +82,7 @@ fn "pub_use.wado/__cm_export__run"() {
         global:pub_use.wado::__modules_initialized = 1;
     };
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("multiply ok"), used: 11 });
-    msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello from lib"), used: 14 };
-    "core:cli/println"(msg);
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello from lib"), used: 14 });
     "wasi/task-return"(0);
 }
 

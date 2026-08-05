@@ -429,10 +429,10 @@ global global:http_drop_value_block.wado::__const_obj_2: ref null "core:prelude/
 global global:http_drop_value_block.wado::__const_obj_3: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 27 };
 global global:http_drop_value_block.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 116, 116, 112, 95, 100, 114, 111, 112, 95, 118, 97, 108, 117, 101, 95, 98, 108, 111, 99, 107, 46, 119, 97, 100, 111), used: 26 };
 global global:http_drop_value_block.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
+global global:http_drop_value_block.wado::__const_obj_6: ref null "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(118), used: 1 };
 
 fn "http_drop_value_block.wado/handle"(request) {
     let probe: i32;
-    let bytes: ref "core:prelude//List<u8>";
     let probe_count: i32;
     let headers: i32;
     let response: i32;
@@ -585,8 +585,7 @@ fn "http_drop_value_block.wado/handle"(request) {
     __match_scrut_0 = "http_drop_value_block.wado/__cm_binding__Request_get_method"(request);
     probe_count = (if __match_scrut_0.discriminant == 0 -> i32 {
         probe = "http_drop_value_block.wado/__cm_binding__Fields_new"();
-        bytes = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(118), used: 1 };
-        drop("http_drop_value_block.wado/__cm_binding__Fields_append"(probe, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-probe"), used: 7 }, bytes));
+        drop("http_drop_value_block.wado/__cm_binding__Fields_append"(probe, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-probe"), used: 7 }, global:http_drop_value_block.wado::__const_obj_6));
         __block_v_14 = select i32("http_drop_value_block.wado/__cm_binding__Fields_has"(probe, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-probe"), used: 7 }), 7, 0);
         "wasi/resource-drop:fields"(probe);
         __block_v_14;

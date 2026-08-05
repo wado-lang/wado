@@ -378,12 +378,10 @@ fn "serde_json_duplicate_fields.wado/__test_0_duplicate_field_last_value_wins"()
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    let input: ref "core:prelude/string.wado//String";
-    input = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"x\":1.0,\"y\":2.0,\"x\":99.0}"), used: 26 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "serde_json_duplicate_fields.wado//Point";
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_json_duplicate_fields.wado/Point,core:prelude/string.wado/String>"(input);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_json_duplicate_fields.wado/Point,core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"x\":1.0,\"y\":2.0,\"x\":99.0}"), used: 26 });
     if @likely(__sroa_r_discriminant == 0) {
         p = ref.as_non_null(__sroa_r_case0_payload_0);
         __v0_2 = p.x;
@@ -2847,7 +2845,6 @@ fn "core:json/core:json/JsonDeserializer::skip_string"(self) {
 }
 
 fn "core:json/core:json/JsonDeserializer::expect_true"(self) {
-    let msg: ref "core:prelude/string.wado//String";
     if (if (if (if (self.pos + 4) <= (self.input.end - self.input.start) -> i32 {
         builtin::array_get<u8>(self.input.repr, self.input.start + (self.pos + 1)) == 114;
     } else {
@@ -2864,11 +2861,10 @@ fn "core:json/core:json/JsonDeserializer::expect_true"(self) {
         self.pos = self.pos + 4;
         return ref.null none;
     }
-    return ref.as_non_null(msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'true'"), used: 15 }; struct.new "core:serde//DeserializeError" { kind: 6, message: msg, offset: builtin::i64_extend_i32_s(self.pos) });
+    return struct.new "core:serde//DeserializeError" { kind: 6, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'true'"), used: 15 }, offset: builtin::i64_extend_i32_s(self.pos) };
 }
 
 fn "core:json/core:json/JsonDeserializer::expect_false"(self) {
-    let msg: ref "core:prelude/string.wado//String";
     if (if (if (if (if (self.pos + 5) <= (self.input.end - self.input.start) -> i32 {
         builtin::array_get<u8>(self.input.repr, self.input.start + (self.pos + 1)) == 97;
     } else {
@@ -2889,11 +2885,10 @@ fn "core:json/core:json/JsonDeserializer::expect_false"(self) {
         self.pos = self.pos + 5;
         return ref.null none;
     }
-    return ref.as_non_null(msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'false'"), used: 16 }; struct.new "core:serde//DeserializeError" { kind: 6, message: msg, offset: builtin::i64_extend_i32_s(self.pos) });
+    return struct.new "core:serde//DeserializeError" { kind: 6, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'false'"), used: 16 }, offset: builtin::i64_extend_i32_s(self.pos) };
 }
 
 fn "core:json/core:json/JsonDeserializer::expect_null"(self) {
-    let msg: ref "core:prelude/string.wado//String";
     if (if (if (if (self.pos + 4) <= (self.input.end - self.input.start) -> i32 {
         builtin::array_get<u8>(self.input.repr, self.input.start + (self.pos + 1)) == 117;
     } else {
@@ -2910,7 +2905,7 @@ fn "core:json/core:json/JsonDeserializer::expect_null"(self) {
         self.pos = self.pos + 4;
         return ref.null none;
     }
-    return ref.as_non_null(msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'null'"), used: 15 }; struct.new "core:serde//DeserializeError" { kind: 6, message: msg, offset: builtin::i64_extend_i32_s(self.pos) });
+    return struct.new "core:serde//DeserializeError" { kind: 6, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 'null'"), used: 15 }, offset: builtin::i64_extend_i32_s(self.pos) };
 }
 
 fn "core:json/core:json/JsonDeserializer::skip_value"(self) {

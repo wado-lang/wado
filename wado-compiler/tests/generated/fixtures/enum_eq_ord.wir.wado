@@ -73,34 +73,14 @@ fn "enum_eq_ord.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:enum_eq_ord.wado::__modules_initialized = 1;
     };
-    block {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low == low"), used: 10 });
-    };
-    block {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low != medium"), used: 13 });
-    };
-    block {
-    };
-    block {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low < medium"), used: 12 });
-    };
-    block {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("medium > low"), used: 12 });
-    };
-    block {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low <= low"), used: 10 });
-    };
-    block {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low >= low"), used: 10 });
-    };
-    block {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("high < critical"), used: 15 });
-    };
-    if block -> i32 {
-        1;
-    } {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low < medium < high"), used: 19 });
-    }
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low == low"), used: 10 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low != medium"), used: 13 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low < medium"), used: 12 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("medium > low"), used: 12 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low <= low"), used: 10 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low >= low"), used: 10 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("high < critical"), used: 15 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low < medium < high"), used: 19 });
 }
 
 fn "enum_eq_ord.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -164,12 +144,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b11: block {
-        l12: loop {
-            break_if b11 i >= len;
+    b1: block {
+        l2: loop {
+            break_if b1 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l12;
+            continue l2;
         };
     };
 }
@@ -200,20 +180,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b13: block {
-        l14: loop {
-            break_if b13 offset >= count;
+    b3: block {
+        l4: loop {
+            break_if b3 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b13 (if (result >> 4) == 0 -> i32 {
+            break_if b3 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l14;
+            continue l4;
         };
     };
 }
