@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785881901705,
+  "lastUpdate": 1785897789554,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46145,6 +46145,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 272423,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2abd01d715ee859eaeeafb4741973d4f161bd3b4",
+          "message": "Merge pull request #1759 from wado-lang/claude/reflection-api-serde-wado-2xysn4\n\nrefactor(serde): derive serde in Wado over the reflection API",
+          "timestamp": "2026-08-05T12:31:45+10:00",
+          "tree_id": "f55deed631aa2b2de1af52a7acf546c70e077285",
+          "url": "https://github.com/wado-lang/wado/commit/2abd01d715ee859eaeeafb4741973d4f161bd3b4"
+        },
+        "date": 1785897788740,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6034,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16221,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271639,
             "unit": "bytes"
           }
         ]
