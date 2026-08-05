@@ -1744,56 +1744,35 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             })?
     };
 
-    // Wrap the loader's interner for sharing across analyze + resolve.
-    let interner = std::rc::Rc::new(std::cell::RefCell::new(load_result.interner));
+    // Everything the back end needs past `semantics_with_logger`, which
+    // consumes `load_result` — the same partial-clone `compile_with_options`
+    // does before handing it over.
+    let wasm_assets = load_result.wasm_assets.clone();
+    let implicit_modules = load_result.implicit_modules.clone();
+    let loaded_module_sources: Vec<ModuleSource> = load_result.modules.keys().cloned().collect();
 
-    // === Phase 6: Analyze all modules ===
-    let symbols = {
-        let _span = logger.span("analyze");
-        let mut analyzer = Analyzer::new(&logger)
-            .with_invocations(load_result.invocations.clone())
-            .with_interner(interner.clone());
-        analyzer.analyze_loaded_modules(
-            &load_result.modules,
-            &load_result.entry_module_source,
-            load_result.implicit_modules.clone(),
-        )?;
-        analyzer.into_symbols()
-    };
-
-    // === Phase 7: Resolve all modules to TIR ===
-    // Hand `load_result.included_files` to the elaborator via partial
-    // move + `Rc::new`, matching the `semantics_with_logger` pattern.
-    // The map can be megabytes for projects that bundle binary assets
-    // via `#include_bytes`, and nothing below this line reads
-    // `load_result.included_files` again.
-    let included_files = std::rc::Rc::new(load_result.included_files);
-    let resolve_output = {
-        let _span = logger.span("elaborate");
-        Elaborator::elaborate_all_modules(
-            &symbols,
-            &load_result.modules,
-            load_result.entry_module_source.clone(),
-            &logger,
-            included_files,
-            load_result.invocations.clone(),
-            interner.clone(),
-        )
-        .ok()
-    };
-    // Destructure rather than clone the `Arc<TraitEnv>`: keeping a stray
-    // reference alive forces `synthesize`'s `Arc::try_unwrap` into the
-    // deep-clone fallback. The resolved modules are kept as-is for the
-    // `--tir-resolved` dump view; the pipeline runs on its own snapshot
-    // (below), so these stay frozen at the resolved stage.
-    let (tir_modules_by_source, trait_env, moved_local_spans): (
-        Option<IndexMap<ModuleSource, tir::TirModule>>,
-        Option<std::sync::Arc<crate::elaborator::trait_env::TraitEnv>>,
-        IndexMap<ModuleSource, crate::hashmap::IndexSet<token::Span>>,
-    ) = match resolve_output {
-        Some((modules, env, moved)) => (Some(modules), Some(env), moved),
-        None => (None, None, IndexMap::default()),
-    };
+    // === Phases 5-7: ast index, analyze, elaborate ===
+    //
+    // Through the entry point `compile_with_options` uses, not a private
+    // re-implementation of it. The re-implementation called
+    // `Elaborator::elaborate_all_modules`, which hands `annotate_modules` a
+    // `None` snapshot — so `dump` skipped the per-thread stdlib `Semantics`
+    // that seeds the shared `TypeTable`, re-elaborated the stdlib into
+    // different `TypeId`s than the cached `TirModule`s carry, and left an
+    // `Iterator::Item` projection that monomorphization resolves under
+    // `compile` to reach WIR build and panic. It also rebuilt the CM interface
+    // registry from the stdlib and built the builtin registry against a
+    // throwaway `TypeTable`, where `compile` uses the ones elaboration
+    // produced.
+    let sem = semantics::semantics_with_logger(load_result, &logger, true);
+    let symbols = sem.symbols.clone();
+    let interner = sem.interner.clone();
+    let entry_module_source_out = sem.entry_module_source.clone();
+    let moved_local_spans = sem.liveness.moved_spans.clone();
+    // The resolved modules are kept as-is for the `--tir-resolved` view; the
+    // pipeline below runs on its own snapshot, so these stay frozen here.
+    let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
+        sem.is_complete().then(|| sem.tir_modules.clone());
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
     // Create Package early so CM binding synthesis runs before monomorphize,
@@ -1807,38 +1786,24 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         {
             let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
-            let (mut cm_interface_registry, world_registry) =
-                component_model::CmInterfaceRegistry::build_from_stdlib();
-            // Mirror elaboration's fold so CM imports resolve during WIR build
-            // (the dump path rebuilds the registry from the stdlib snapshot).
-            // Stdlib modules are never `Wasm`, so an empty stdlib set suffices.
-            crate::elaborator::orchestration::fold_component_interfaces(
-                &mut cm_interface_registry,
-                &load_result.modules,
-                &crate::hashmap::IndexSet::default(),
-            );
-
-            let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
-            let mut builtin_registry =
-                builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
-            // Fold in `#[canonical(...)]` declarations from
-            // loader-synthesized wasm-asset modules so calls into a
-            // wat/wasm asset's exports lower through the same TirImport
-            // path as `core:builtin` declarations.
-            for (ms, module) in &load_result.modules {
-                if matches!(ms, ModuleSource::Wasm { .. }) {
-                    builtin_registry.register_wasm_module(module, &temp_type_table);
-                }
-            }
+            // The registries elaboration produced, not rebuilt ones. `state` is
+            // populated whenever `is_complete()` holds, which guards this block.
+            let state = sem
+                .state
+                .expect("elaborator state present when is_complete");
+            let world_registry = state.world_registry;
+            let tysys = state.tysys;
+            let builtin_registry = std::rc::Rc::try_unwrap(tysys.builtin_registry)
+                .unwrap_or_else(|rc| (*rc).clone());
 
             let package = Package::new(
-                load_result.entry_module_source.clone(),
+                entry_module_source_out.clone(),
                 resolved_modules,
                 symbols.clone(),
-                trait_env.expect("trait_env is set when resolve succeeded"),
-                load_result.implicit_modules.clone(),
+                tysys.trait_env,
+                implicit_modules.clone(),
                 module_name,
-                cm_interface_registry,
+                tysys.cm_interface_registry,
                 world_registry,
                 builtin_registry,
                 interner,
@@ -1850,7 +1815,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             if let Some(world) = target_world {
                 package.target_world = world.to_string();
             }
-            package.wasm_assets.clone_from(&load_result.wasm_assets);
+            package.wasm_assets.clone_from(&wasm_assets);
             package.codegen_flags =
                 match codegen_flags::CodegenFlags::parse(codegen_flags, opt_level) {
                     Ok(flags) => flags,
@@ -1975,9 +1940,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         tokens: tokens_for_dump,
         ast,
         symbols,
-        loaded_modules: load_result.modules.keys().cloned().collect(),
-        implicit_modules: load_result.implicit_modules.into_iter().collect(),
-        entry_module_source: load_result.entry_module_source,
+        loaded_modules: loaded_module_sources,
+        implicit_modules: implicit_modules.into_iter().collect(),
+        entry_module_source: entry_module_source_out,
         tir_modules: tir_modules_by_source,
         monomorphized_tir_text,
         lowered_nir_text,
