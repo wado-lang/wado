@@ -586,9 +586,9 @@ Each step lands and is measured before the next.
       down to `unwrap_to_inner_call`, `layout.rs` shrank: 4,188 lines to 1,735.
       The count gate held (`widen = 0` everywhere). Size did not, quite: +67
       bytes over 3.55 MB against the pre-deletion baseline (+0.0019 %), having
-      been −251 before the last round of correctness fixes. See
+      been −251 before the last round of correctness fixes — and it buys
+      ~5.6 % of `gale_gen` throughput, the one workload whose code changed. See
       [what the size number is and is not](#what-the-size-number-is-and-is-not).
-      Throughput is unmeasured; it needs a quiet machine.
 - [x] Step 5 — `slot_flatten` stays in WIR, and the measurement is why. It
       splits a `ref W` result slot whose `W` is itself a small variant, and it
       fires 1–2 times per benchmark — once across `gale_gen`, twice on
@@ -623,15 +623,29 @@ mean.
 `gale_gen` is the one program whose behaviour moved: 75 scalarized functions
 before the last round, 85 after, +119 bytes, and no rebox in either. Ten more
 functions stopped boxing their return. Its static `struct.new` count went
-9945 → 9949, which measures instructions and not executions — the removed
-allocations are in the returns, the added ones are `Some(_)` wrappers. Whether
-that trade is worth +119 bytes is a throughput question, and this container
-cannot answer it: the number has to come from `mise run benchmark-all` on a
-quiet machine.
+9945 → 9949, which counts instructions and not executions — the removed
+allocations are in the returns, the added ones are `Some(_)` wrappers.
 
-So the honest reading of +67 is "no measured mechanism change on the workloads
-that matter, one program scalarized further at unknown runtime benefit" — not
-"the branch made the output worse".
+That trade pays. Eight counterbalanced pairs against the pre-deletion binary,
+alternating which ran first:
+
+| order            | before | now    | delta   |
+| ---------------- | ------ | ------ | ------- |
+| before first (4) | 136.88 | 142.46 | +4.07 % |
+| now first (4)    | 138.59 | 146.82 | +5.95 % |
+| all (8)          | 137.89 | 145.66 | +5.63 % |
+
+KB/s, medians. `now` is faster in 8 of 8, in both orders, so the result
+survives the ordering bias.
+
+Counterbalancing is not optional here, and neither is running enough pairs.
+Three pairs in fixed order read −2.4 %; nine read +5.07 % with the same binary
+spanning 97.99–154.03 KB/s; only alternating the order and looking at the
+spread settled it. A couple of pairs on this container measure the container.
+
+So +67 bytes of wasm buys ~5.6 % on the one workload whose code actually
+changed, and costs nothing on the two that carry a serde harness, where the
+mechanism is identical. Bytes were the wrong headline.
 
 ## How the 87-function gap closed
 
