@@ -716,6 +716,14 @@ impl Interpreter<'_> {
         if aliased_write_targets(&targets, &places) {
             return None;
         }
+        // A callee that writes through a `&mut` parameter may hand the
+        // parameter's storage back inside its result — `Formatter::new(&mut
+        // buf)` returns a `Formatter` holding that borrow. The engine has no
+        // reference values, so the result would stand as a snapshot of the
+        // referent and every later write through it would land in the copy
+        // while the referent went stale. A scalar embeds nothing, so only an
+        // aggregate result is refused.
+        let may_embed_a_write_target = !targets.is_empty();
 
         self.charge(1)?;
         self.call_stack.push(key);
@@ -726,7 +734,9 @@ impl Interpreter<'_> {
         self.swap_frame(caller);
         self.call_stack.pop();
         run.map(|run| {
-            if returns_reference {
+            let embeds_storage = may_embed_a_write_target
+                && !matches!(&run.result, Lattice::Const(v) if v.is_scalar());
+            if returns_reference || embeds_storage {
                 CallRun {
                     result: Lattice::Unevaluated,
                     ..run
