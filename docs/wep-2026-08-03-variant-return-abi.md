@@ -411,8 +411,8 @@ coincide at first. On `cbor_twitter` the NIR pass took 74 functions and left 87
 to the WIR side — more than it took.
 
 Closing those shapes one at a time took the leftovers to zero. Counted at `-O2`
-with `WADO_TRACE=sroa_variant_return`, `widen` is what
-`wir_optimize::sroa_variant_returns` still confirms behind the NIR pass:
+with `WADO_TRACE=sroa_variant_return`, `widen` is what the WIR pass still
+confirmed behind the NIR one on the run that cleared step 4 for deletion:
 
 | program            | widen | slot-flatten | wasm size |
 | ------------------ | ----- | ------------ | --------- |
@@ -462,8 +462,56 @@ medians sit within 1 %.
 
 Read that as a floor, not a verdict. A first ad-hoc pair on this same container
 read +6.2 % and the next read −2.7 %, so a single run here is worthless and even
-four pairs only resolve a couple of percent. The number that decides step 4 has
-to come from `mise run benchmark-all` on a quiet machine.
+four pairs only resolve a couple of percent.
+
+### What the bytes measure
+
+Wasm size is the cheap metric, not the goal. This pass exists to remove
+allocations from function returns; bytes are a proxy that stops tracking the
+goal as soon as a change trades code size for allocation count — which is
+exactly what scalarizing more functions does, since each return site pays
+padding and `Some(_)` / `None` nodes.
+
+What the branch actually did to the generated code, measured against the
+pre-deletion binary:
+
+| program        | struct.new  | multivalue_bind | multi-value sigs |
+| -------------- | ----------- | --------------- | ---------------- |
+| `cbor_twitter` | 1281 → 1281 | 497 → 497       | 158 → 158        |
+| `json_twitter` | 903 → 903   | 194 → 194       | 90 → 90          |
+
+Identical. On the two workloads that carry a throughput harness, the retirement
+and every fix after it are a wash in mechanism — the NIR pass reaches exactly
+what the WIR pass reached, and the ±60-byte deltas are codegen noise. No speed
+change is available there in either direction, which is what "subsumed" should
+mean.
+
+`gale_gen` is the one program whose behaviour moved: 75 scalarized functions
+before the last round, 85 after, +119 bytes, and no rebox in either. Ten more
+functions stopped boxing their return. Its static `struct.new` count went
+9945 → 9949, which counts instructions and not executions — the removed
+allocations are in the returns, the added ones are `Some(_)` wrappers.
+
+That trade pays. Eight counterbalanced pairs against the pre-deletion binary,
+alternating which ran first:
+
+| order            | before | now    | delta   |
+| ---------------- | ------ | ------ | ------- |
+| before first (4) | 136.88 | 142.46 | +4.07 % |
+| now first (4)    | 138.59 | 146.82 | +5.95 % |
+| all (8)          | 137.89 | 145.66 | +5.63 % |
+
+KB/s, medians. `now` is faster in 8 of 8, in both orders, so the result
+survives the ordering bias.
+
+Counterbalancing is not optional here, and neither is running enough pairs.
+Three pairs in fixed order read −2.4 %; nine read +5.07 % with the same binary
+spanning 97.99–154.03 KB/s; only alternating the order and looking at the
+spread settled it. A couple of pairs on this container measure the container.
+
+So +67 bytes of wasm buys ~5.6 % on the one workload whose code actually
+changed, and costs nothing on the two that carry a serde harness, where the
+mechanism is identical. Bytes were the wrong headline.
 
 ### Termination and monotonicity
 
@@ -588,7 +636,7 @@ Each step lands and is measured before the next.
       bytes over 3.55 MB against the pre-deletion baseline (+0.0019 %), having
       been −251 before the last round of correctness fixes — and it buys
       ~5.6 % of `gale_gen` throughput, the one workload whose code changed. See
-      [what the size number is and is not](#what-the-size-number-is-and-is-not).
+      [what the bytes measure](#what-the-bytes-measure).
 - [x] Step 5 — `slot_flatten` stays in WIR, and the measurement is why. It
       splits a `ref W` result slot whose `W` is itself a small variant, and it
       fires 1–2 times per benchmark — once across `gale_gen`, twice on
@@ -597,55 +645,6 @@ Each step lands and is measured before the next.
       the arity cap, for those one or two functions. Instead this pass
       _declines_ the shape, which restores the WIR splits it had been
       displacing and is worth -155 / -76 / -48 bytes.
-
-## What the size number is and is not
-
-Wasm size is the cheap metric, not the goal. This pass exists to remove
-allocations from function returns; bytes are a proxy that stops tracking the
-goal as soon as a change trades code size for allocation count — which is
-exactly what scalarizing more functions does, since each return site pays
-padding and `Some(_)` / `None` nodes.
-
-What the branch actually did to the generated code, measured against the
-pre-deletion binary:
-
-| program        | struct.new  | multivalue_bind | multi-value sigs |
-| -------------- | ----------- | --------------- | ---------------- |
-| `cbor_twitter` | 1281 → 1281 | 497 → 497       | 158 → 158        |
-| `json_twitter` | 903 → 903   | 194 → 194       | 90 → 90          |
-
-Identical. On the two workloads that carry a throughput harness, the retirement
-and every fix after it are a wash in mechanism — the NIR pass reaches exactly
-what the WIR pass reached, and the ±60-byte deltas are codegen noise. No speed
-change is available there in either direction, which is what "subsumed" should
-mean.
-
-`gale_gen` is the one program whose behaviour moved: 75 scalarized functions
-before the last round, 85 after, +119 bytes, and no rebox in either. Ten more
-functions stopped boxing their return. Its static `struct.new` count went
-9945 → 9949, which counts instructions and not executions — the removed
-allocations are in the returns, the added ones are `Some(_)` wrappers.
-
-That trade pays. Eight counterbalanced pairs against the pre-deletion binary,
-alternating which ran first:
-
-| order            | before | now    | delta   |
-| ---------------- | ------ | ------ | ------- |
-| before first (4) | 136.88 | 142.46 | +4.07 % |
-| now first (4)    | 138.59 | 146.82 | +5.95 % |
-| all (8)          | 137.89 | 145.66 | +5.63 % |
-
-KB/s, medians. `now` is faster in 8 of 8, in both orders, so the result
-survives the ordering bias.
-
-Counterbalancing is not optional here, and neither is running enough pairs.
-Three pairs in fixed order read −2.4 %; nine read +5.07 % with the same binary
-spanning 97.99–154.03 KB/s; only alternating the order and looking at the
-spread settled it. A couple of pairs on this container measure the container.
-
-So +67 bytes of wasm buys ~5.6 % on the one workload whose code actually
-changed, and costs nothing on the two that carry a serde harness, where the
-mechanism is identical. Bytes were the wrong headline.
 
 ## How the 87-function gap closed
 
@@ -672,8 +671,8 @@ local, not just assignments to it: `h.seen = h.inner.next()` makes `h`'s `mut`
 load-bearing, and treating `h` as settled split a local the field write then had
 nowhere to land in, trapping at `-O0`.
 
-The 30 were the payload rule. `Option<i32>` as a case payload tripped
-`slot_flatten_would_split`, handing them to the WIR side by design. Giving the
+The 30 were the payload rule. `Option<i32>` as a case payload was declined and
+handed to the WIR side by design. Giving the
 inner variant its own tag and slots in the outer tuple takes them here instead.
 A nested layout that _reconstructs_ the inner value at the call site was
 implemented and measured first, and discarded: it produced exactly the intended

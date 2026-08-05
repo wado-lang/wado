@@ -651,12 +651,9 @@ fn validate_stmt(
             local_index, value, ..
         } => {
             let (local_index, value) = (*local_index, *value);
-            // The binding must be the local's sole definition. A `mut` one that
-            // nothing ever assigns qualifies — it is an immutable binding
-            // wearing a `mut` — and a non-`mut` one does not automatically,
-            // because `alloc_temp` pools local indices and the split rewrites
-            // every read of the index. `sroa_variant_return` draws that line the
-            // same way, and the two have to agree on it.
+            // The binding must be the local's sole definition, `mut` or not —
+            // see `sroa_variant_return::settled_locals`, whose rule this shares
+            // because that pass hands this one its tuple-returning functions.
             //
             // They deliberately differ on one point: that pass binds a call
             // through a block tail, and this one takes a bare `Call` only,

@@ -2,9 +2,9 @@
 //
 // A `v128` is a scalar at Wasm level, so the layout rule would give it a direct
 // result slot — but padding that slot for the `None` case needs a zero constant,
-// and `ValueKind` has no `v128` literal to promote. `compute_layout` declines
-// the payload rather than emit a wrong-typed pad: `i32.const 0` in a `v128`
-// slot compiled to invalid Wasm ("type mismatch: expected v128, found i32").
+// and `ValueKind` has no `v128` literal to promote. `slot_shape` declines the
+// payload rather than emit a wrong-typed pad: `i32.const 0` in a `v128` slot
+// compiled to invalid Wasm ("type mismatch: expected v128, found i32").
 //
 // The WIR pass this replaced could pad it — `default_value_for_type` works on
 // `WirType`, after lowering — so retiring that pass gave up the shape. No

@@ -35,10 +35,9 @@
 //! | `Unit`                                        | (no slot)   | —         | —       |
 //!
 //! `wir_optimize::nullable_ref` lowers `Option<T>` for a non-nullable ref `T`
-//! to a bare `ref null T`, so row 3's wrapper is free and the emitted signature
-//! matches what `wir_optimize::sroa_variant_return` produces today. Row 2 is
-//! what stops the wrapper from ever costing a box: `Option<Option<String>>`
-//! holds a *nullable* ref, which that lowering refuses to erase.
+//! to a bare `ref null T`, so row 3's wrapper is free. Row 2 is what stops the
+//! wrapper from ever costing a box: `Option<Option<String>>` holds a *nullable*
+//! ref, which that lowering refuses to erase.
 //!
 //! A pad is never read — every reader tests the tag first.
 //!
@@ -68,12 +67,17 @@
 //! in [`check_uses`] is what keeps the count at zero: a `return g(x)` is only a
 //! reason to keep `g` when the caller has a tuple to pass it through.
 //!
-//! Three places have to agree on what "a binding fed by a call" means — the
-//! fast path, the repair, and the invariant check. They all go through
-//! [`tail_call_site`], which looks through a block tail, because by the time a
-//! later iteration sees a binding, `let_block_flatten` and friends may have
-//! wrapped its call in a block. A narrower rule in any one of them makes the
-//! repair rebox the fast path's own work.
+//! ## Where a call's result is read
+//!
+//! [`call_sites`] is the only answer. Validation, the call-site rewrite, the
+//! repair and the invariant check all read it, so they differ in what they do
+//! with a site and never in which sites exist. Add a consumer by reading it,
+//! never by writing a fifth traversal.
+//!
+//! Each of the four used to decide for itself, and every gap between them was a
+//! defect: a binding the rewrite bound and validation refused, a call the
+//! rewrite retyped and the repair wrapped back into a variant, a `let` the
+//! assertion never looked at.
 //!
 //! ## Not yet handled
 //!
@@ -92,19 +96,6 @@
 //! A case payload that is itself a variant is *not* declined — it takes a
 //! [`SlotShape::Wrapped`] slot, and `flatten_variant_slots` splits that slot
 //! further if the WIR shapes allow.
-//!
-//! # Where a call's result is read
-//!
-//! [`call_sites`] is the only answer. Validation, the call-site rewrite, the
-//! repair and the invariant check all read it, so they differ in what they do
-//! with a site and never in which sites exist.
-//!
-//! That is not a tidiness rule. Each of the four used to derive the answer for
-//! itself, and every gap between them was a defect — a binding the rewrite bound
-//! and validation refused; a call the rewrite retyped and the repair wrapped
-//! back into a variant; a `let` the assertion never looked at; a position one
-//! reached through a block tail and another only bare. Add a consumer by reading
-//! [`call_sites`], never by writing a fifth traversal.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionKind, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal};
@@ -360,22 +351,14 @@ struct CallSite {
     bound_local: Option<u32>,
 }
 
-/// Every call site in `body` — the single definition of where this pass
-/// considers a call's result to be read.
-///
-/// Validation ([`invalidate_bad_call_sites`]), the call-site rewrite
-/// ([`bound_temps`]), the repair ([`handled_call_sites`]) and the invariant
-/// check ([`debug_assert_call_sites_rewritten`]) all read this and nothing
-/// else, so they differ in what they do with a site and never in which sites
-/// exist. Four subtly different rules used to live in those four places, and
-/// every gap between them was a defect: a binding the rewrite bound and
-/// validation refused, a call the rewrite retyped and the repair wrapped back
-/// into a variant, a `let` the assertion never looked at.
+/// Every position in `body` where a consumer reads a call's result at a type it
+/// declares: a `let` initializer, a `return`, a labeled-block exit, and such a
+/// block's own tail. The module doc's [where a call's result is
+/// read](self#where-a-calls-result-is-read) is why this is the only enumeration.
 ///
 /// A `return` reaches further than the others on purpose — through an `If`
 /// branch or a `Match` / `Switch` arm, because [`rewrite_return_value`] rewrites
-/// those in place. That asymmetry is deliberate and now visible in one place
-/// instead of implied by four traversals.
+/// those in place.
 fn call_sites(body: &Body, own_return: TypeId) -> Vec<CallSite> {
     // A label reused at two different result types tells us nothing about which
     // block a `break` exits, so it is dropped rather than guessed at: guessing
@@ -1462,10 +1445,7 @@ fn bound_temps(
         .into_iter()
         .filter_map(|site| {
             let local = site.bound_local?;
-            // `settled` is required whatever `is_mut` says: `alloc_temp` pools
-            // local indices, so two bindings can share one — and `retype_let`
-            // retypes every `Let` and every read carrying that index, which
-            // would retype the other binding too.
+            // Required whatever `is_mut` says — see [`settled_locals`].
             (settled.contains(&local) && candidates.contains_key(&site.callee))
                 .then_some((local, site.callee))
         })
@@ -1552,17 +1532,14 @@ fn invalidate_bad_call_sites(
             invalid.insert(f);
         }
     }
-    // Call nodes the rewrite handles where they stand, so the node itself is
-    // not an escape. Derived from the same site list the rewrite and the repair
-    // read — the four used to decide this independently.
+    // Call nodes the rewrite handles where they stand, so the node itself is not
+    // an escape.
     //
     // Signatures are still un-rewritten here, so a `return g(x)` site reads its
-    // result at *this* function's variant, never at `g`'s tuple. What makes it
-    // a pass-through is `caller_ok`: the enclosing function is itself becoming a
-    // tuple-returning one. When it is not, the site would need a rebox — the
-    // allocation this pass exists to remove — so the callee is refused instead
-    // and the fix-point propagates it. A `break` or labeled-block exit is not
-    // accepted at all: only the repair handles those.
+    // result at *this* function's variant, never at `g`'s tuple — `caller_ok`,
+    // not the type, is what marks it a pass-through. Without it the site would
+    // need a rebox, so the callee is refused and the fix-point propagates that.
+    // A `break` or labeled-block exit is left to the repair.
     let mut accepted: IndexSet<ExprId> = IndexSet::default();
     for site in &sites {
         if !candidates.contains_key(&site.callee) {

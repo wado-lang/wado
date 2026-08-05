@@ -1753,17 +1753,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
 
     // === Phases 5-7: ast index, analyze, elaborate ===
     //
-    // Through the entry point `compile_with_options` uses, not a private
-    // re-implementation of it. The re-implementation called
-    // `Elaborator::elaborate_all_modules`, which hands `annotate_modules` a
-    // `None` snapshot — so `dump` skipped the per-thread stdlib `Semantics`
-    // that seeds the shared `TypeTable`, re-elaborated the stdlib into
-    // different `TypeId`s than the cached `TirModule`s carry, and left an
-    // `Iterator::Item` projection that monomorphization resolves under
-    // `compile` to reach WIR build and panic. It also rebuilt the CM interface
-    // registry from the stdlib and built the builtin registry against a
-    // throwaway `TypeTable`, where `compile` uses the ones elaboration
-    // produced.
+    // The same entry point `compile_with_options` uses. Dump must not grow its
+    // own: a private front end here once skipped the per-thread stdlib
+    // `Semantics` that seeds the shared `TypeTable`, re-elaborated the stdlib
+    // into `TypeId`s the cached `TirModule`s do not carry, and left an
+    // `Iterator::Item` projection to reach WIR build and panic on programs
+    // `compile` handled fine.
     let sem = semantics::semantics_with_logger(load_result, &logger, true);
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();

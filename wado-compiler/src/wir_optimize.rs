@@ -9,7 +9,7 @@
 //! | Module            | Pass                                       |
 //! |-------------------|--------------------------------------------|
 //! | `nullable_ref`        | Null-niche variant representation (mandatory) |
-//! | `sroa_variant_return` | Multi-value return SROA (variants)          |
+//! | `sroa_variant_return` | Nested result-slot flattening               |
 //! | `elide_struct`        | Box local elimination + seq-assign flattening |
 //! | `array`               | Data promotion / splitting / zero-fill elision |
 //! | `const_forward`       | Struct field constant forwarding            |
@@ -22,9 +22,11 @@
 //!
 //! Related passes live elsewhere: dead-arg/-return elim and single-field param
 //! SROA moved to NIR (`optimize::{dae,drve,sroa_param,elide_box_local}`) to join
-//! its fixed-point loop. Write-only-local elim is split — `optimize::elide_local`
-//! for TIR locals, `elide_local` here for `wir_build`-synthesised locals TIR
-//! can't see.
+//! its fixed-point loop, and variant-return widening followed them
+//! (`optimize::sroa_variant_return`), leaving only the slot flattening that
+//! needs post-lowering shapes. Write-only-local elim is split —
+//! `optimize::elide_local` for TIR locals, `elide_local` here for
+//! `wir_build`-synthesised locals TIR can't see.
 //!
 //! A `#![wasm_module(...)]` core module — the allocator — runs this same list as
 //! a package of its own ([`optimize_wasm_modules`]), under its own pass names.
