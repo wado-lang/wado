@@ -69,7 +69,6 @@ fn "effect_benign_suppresses.wado/__cm_binding__Stdout_write_via_stream"(data) w
 }
 
 fn "effect_benign_suppresses.wado/__cm_export__run"() {
-    let msg: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:effect_benign_suppresses.wado::__modules_initialized);
         cold_path;
@@ -82,8 +81,7 @@ fn "effect_benign_suppresses.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:effect_benign_suppresses.wado::__modules_initialized = 1;
     };
-    msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("benign effect works"), used: 19 };
-    "core:cli/println"(msg);
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("benign effect works"), used: 19 });
     "wasi/task-return"(0);
 }
 

@@ -840,7 +840,7 @@ fn translate_global_init(
                 _ => WirInstr::F64Const(value),
             };
         }
-        Value::Aggregate { .. } | Value::Seq { .. } => return ref_null(),
+        Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => return ref_null(),
     };
     match type_table.get(type_id) {
         ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {

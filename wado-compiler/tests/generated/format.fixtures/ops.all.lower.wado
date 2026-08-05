@@ -5094,8 +5094,8 @@ pub fn "core:prelude/int128.wado/i128::div_rem"(self: &i128, divisor: &i128) -> 
     let abs_dividend: u128 = self."core:prelude/int128.wado/i128::abs_u128"();
     let abs_divisor: u128 = divisor."core:prelude/int128.wado/i128::abs_u128"();
     let result: [u128, u128] = abs_dividend."core:prelude/int128.wado/u128::div_rem"(&abs_divisor);
-    let abs_quotient: u128 = "ops.all_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(result.0);
-    let abs_remainder: u128 = "ops.all_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(result.1);
+    let abs_quotient: u128 = result.0;
+    let abs_remainder: u128 = result.1;
     let mut quotient: i128 = "core::prelude/int128.wado::core:prelude/int128.wado/i128::from_u128"(abs_quotient);
     if (dividend_neg != divisor_neg) {
         quotient = quotient."core:prelude/int128.wado/i128^Neg::neg"();
@@ -5753,7 +5753,7 @@ fn parse_u128_digits(s: &String, start: i32, end: i32, radix: u32) -> Result<u12
     let max128: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_pair"(18446744073709551615, 18446744073709551615);
     let divmod: [u128, u128] = max128."core:prelude/int128.wado/u128::div_rem"(&r);
     let max_before_mul: u128 = divmod.0;
-    let max_digit_for_overflow: u128 = "ops.all_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(divmod.1);
+    let max_digit_for_overflow: u128 = divmod.1;
     let bytes: &Array<u8> = s."core:prelude/string.wado/String::internal_raw_bytes"();
     let mut acc: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(0);
     let mut i: i32 = start;
@@ -15971,6 +15971,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/int128.wado/
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/intparse.wado/ParseIntError>$()"(payload: (), index: i32) -> Result<u128, ParseIntError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/intparse.wado/ParseIntError>"(self: Box<core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/intparse.wado/ParseIntError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -16005,6 +16011,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<core:prelude/int128.wado/u1
 pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/traits.wado/LenientParseError>$core:prelude/traits.wado/LenientParseError"(payload: LenientParseError, index: i32) -> Result<u128, LenientParseError> {
     return match index {
         1 => Result<u128, LenientParseError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<u128, LenientParseError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -16047,6 +16059,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/int128.wado/
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/int128.wado/i128,core:prelude/intparse.wado/ParseIntError>$()"(payload: (), index: i32) -> Result<i128, ParseIntError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<core:prelude/int128.wado/i128,core:prelude/intparse.wado/ParseIntError>"(self: Box<core:prelude/types.wado/Result<core:prelude/int128.wado/i128,core:prelude/intparse.wado/ParseIntError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -16081,6 +16099,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<core:prelude/int128.wado/i1
 pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/int128.wado/i128,core:prelude/traits.wado/LenientParseError>$core:prelude/traits.wado/LenientParseError"(payload: LenientParseError, index: i32) -> Result<i128, LenientParseError> {
     return match index {
         1 => Result<i128, LenientParseError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/int128.wado/i128,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<i128, LenientParseError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -16123,6 +16147,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<u64,core:prelude/traits.w
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<u64,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<u64, ConvertError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<u64,core:prelude/traits.wado/ConvertError>"(self: Box<core:prelude/types.wado/Result<u64,core:prelude/traits.wado/ConvertError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -16157,6 +16187,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<i64,core:prelude/traits.wad
 pub fn "$case_construct$core:prelude/types.wado/Result<i64,core:prelude/traits.wado/ConvertError>$core:prelude/traits.wado/ConvertError"(payload: ConvertError, index: i32) -> Result<i64, ConvertError> {
     return match index {
         1 => Result<i64, ConvertError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<i64,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<i64, ConvertError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -16199,6 +16235,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/int128.wado/
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/int128.wado/i128,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<i128, ConvertError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<core:prelude/int128.wado/i128,core:prelude/traits.wado/ConvertError>"(self: Box<core:prelude/types.wado/Result<core:prelude/int128.wado/i128,core:prelude/traits.wado/ConvertError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -16233,6 +16275,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<core:prelude/int128.wado/u1
 pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/traits.wado/ConvertError>$core:prelude/traits.wado/ConvertError"(payload: ConvertError, index: i32) -> Result<u128, ConvertError> {
     return match index {
         1 => Result<u128, ConvertError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<u128, ConvertError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -16275,6 +16323,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<f64,core:prelude/traits.w
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<f64,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<f64, ConvertError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<f64,core:prelude/traits.wado/ConvertError>"(self: Box<core:prelude/types.wado/Result<f64,core:prelude/traits.wado/ConvertError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -16309,6 +16363,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<f32,core:prelude/traits.wad
 pub fn "$case_construct$core:prelude/types.wado/Result<f32,core:prelude/traits.wado/ConvertError>$core:prelude/traits.wado/ConvertError"(payload: ConvertError, index: i32) -> Result<f32, ConvertError> {
     return match index {
         1 => Result<f32, ConvertError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f32,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<f32, ConvertError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -16427,6 +16487,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<[core:prelude/string.wado
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<[core:prelude/string.wado/String,u32],core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<[String, u32], LenientParseError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<[core:prelude/string.wado/String,u32],core:prelude/traits.wado/LenientParseError>"(self: Box<core:prelude/types.wado/Result<[core:prelude/string.wado/String,u32],core:prelude/traits.wado/LenientParseError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -16461,6 +16527,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<u64,core:prelude/intparse.w
 pub fn "$case_construct$core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/IntErrorKind>$core:prelude/intparse.wado/IntErrorKind"(payload: IntErrorKind, index: i32) -> Result<u64, IntErrorKind> {
     return match index {
         1 => Result<u64, IntErrorKind>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/IntErrorKind>$()"(payload: (), index: i32) -> Result<u64, IntErrorKind> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -16503,6 +16575,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/int128.wado/
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/intparse.wado/IntErrorKind>$()"(payload: (), index: i32) -> Result<u128, IntErrorKind> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/intparse.wado/IntErrorKind>"(self: Box<core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/intparse.wado/IntErrorKind>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -16537,6 +16615,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<[bool,i32],core:prelude/int
 pub fn "$case_construct$core:prelude/types.wado/Result<[bool,i32],core:prelude/intparse.wado/IntErrorKind>$core:prelude/intparse.wado/IntErrorKind"(payload: IntErrorKind, index: i32) -> Result<[bool, i32], IntErrorKind> {
     return match index {
         1 => Result<[bool, i32], IntErrorKind>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<[bool,i32],core:prelude/intparse.wado/IntErrorKind>$()"(payload: (), index: i32) -> Result<[bool, i32], IntErrorKind> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -16579,6 +16663,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<i32,core:prelude/intparse
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>$()"(payload: (), index: i32) -> Result<i32, IntErrorKind> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>"(self: Box<core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -16613,6 +16703,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<i64,core:prelude/intparse.w
 pub fn "$case_construct$core:prelude/types.wado/Result<i64,core:prelude/intparse.wado/ParseIntError>$core:prelude/intparse.wado/ParseIntError"(payload: ParseIntError, index: i32) -> Result<i64, ParseIntError> {
     return match index {
         1 => Result<i64, ParseIntError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<i64,core:prelude/intparse.wado/ParseIntError>$()"(payload: (), index: i32) -> Result<i64, ParseIntError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -16655,6 +16751,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<u64,core:prelude/intparse
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseIntError>$()"(payload: (), index: i32) -> Result<u64, ParseIntError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseIntError>"(self: Box<core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseIntError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -16693,6 +16795,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<f64,core:prelude/intparse
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>$()"(payload: (), index: i32) -> Result<f64, ParseFloatError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>"(self: Box<core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -16727,6 +16835,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<bool,core:prelude/traits.wa
 pub fn "$case_construct$core:prelude/types.wado/Result<bool,core:prelude/traits.wado/LenientParseError>$core:prelude/traits.wado/LenientParseError"(payload: LenientParseError, index: i32) -> Result<bool, LenientParseError> {
     return match index {
         1 => Result<bool, LenientParseError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<bool,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<bool, LenientParseError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -16807,6 +16921,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<char,core:prelude/traits.
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<char,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<char, LenientParseError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<char,core:prelude/traits.wado/LenientParseError>"(self: Box<core:prelude/types.wado/Result<char,core:prelude/traits.wado/LenientParseError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -16841,6 +16961,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<i8,core:prelude/intparse.wa
 pub fn "$case_construct$core:prelude/types.wado/Result<i8,core:prelude/intparse.wado/ParseIntError>$core:prelude/intparse.wado/ParseIntError"(payload: ParseIntError, index: i32) -> Result<i8, ParseIntError> {
     return match index {
         1 => Result<i8, ParseIntError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<i8,core:prelude/intparse.wado/ParseIntError>$()"(payload: (), index: i32) -> Result<i8, ParseIntError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -16883,6 +17009,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<i8,core:prelude/traits.wa
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<i8,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<i8, LenientParseError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<i8,core:prelude/traits.wado/LenientParseError>"(self: Box<core:prelude/types.wado/Result<i8,core:prelude/traits.wado/LenientParseError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -16917,6 +17049,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<u8,core:prelude/intparse.wa
 pub fn "$case_construct$core:prelude/types.wado/Result<u8,core:prelude/intparse.wado/ParseIntError>$core:prelude/intparse.wado/ParseIntError"(payload: ParseIntError, index: i32) -> Result<u8, ParseIntError> {
     return match index {
         1 => Result<u8, ParseIntError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<u8,core:prelude/intparse.wado/ParseIntError>$()"(payload: (), index: i32) -> Result<u8, ParseIntError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -16959,6 +17097,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<u8,core:prelude/traits.wa
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<u8,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<u8, LenientParseError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<u8,core:prelude/traits.wado/LenientParseError>"(self: Box<core:prelude/types.wado/Result<u8,core:prelude/traits.wado/LenientParseError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -16993,6 +17137,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<i16,core:prelude/intparse.w
 pub fn "$case_construct$core:prelude/types.wado/Result<i16,core:prelude/intparse.wado/ParseIntError>$core:prelude/intparse.wado/ParseIntError"(payload: ParseIntError, index: i32) -> Result<i16, ParseIntError> {
     return match index {
         1 => Result<i16, ParseIntError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<i16,core:prelude/intparse.wado/ParseIntError>$()"(payload: (), index: i32) -> Result<i16, ParseIntError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -17035,6 +17185,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<i16,core:prelude/traits.w
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<i16,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<i16, LenientParseError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<i16,core:prelude/traits.wado/LenientParseError>"(self: Box<core:prelude/types.wado/Result<i16,core:prelude/traits.wado/LenientParseError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -17069,6 +17225,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<u16,core:prelude/intparse.w
 pub fn "$case_construct$core:prelude/types.wado/Result<u16,core:prelude/intparse.wado/ParseIntError>$core:prelude/intparse.wado/ParseIntError"(payload: ParseIntError, index: i32) -> Result<u16, ParseIntError> {
     return match index {
         1 => Result<u16, ParseIntError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<u16,core:prelude/intparse.wado/ParseIntError>$()"(payload: (), index: i32) -> Result<u16, ParseIntError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -17111,6 +17273,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<u16,core:prelude/traits.w
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<u16,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<u16, LenientParseError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<u16,core:prelude/traits.wado/LenientParseError>"(self: Box<core:prelude/types.wado/Result<u16,core:prelude/traits.wado/LenientParseError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -17145,6 +17313,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<i32,core:prelude/intparse.w
 pub fn "$case_construct$core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/ParseIntError>$core:prelude/intparse.wado/ParseIntError"(payload: ParseIntError, index: i32) -> Result<i32, ParseIntError> {
     return match index {
         1 => Result<i32, ParseIntError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/ParseIntError>$()"(payload: (), index: i32) -> Result<i32, ParseIntError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -17187,6 +17361,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<i32,core:prelude/traits.w
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<i32,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<i32, LenientParseError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<i32,core:prelude/traits.wado/LenientParseError>"(self: Box<core:prelude/types.wado/Result<i32,core:prelude/traits.wado/LenientParseError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -17221,6 +17401,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<u32,core:prelude/intparse.w
 pub fn "$case_construct$core:prelude/types.wado/Result<u32,core:prelude/intparse.wado/ParseIntError>$core:prelude/intparse.wado/ParseIntError"(payload: ParseIntError, index: i32) -> Result<u32, ParseIntError> {
     return match index {
         1 => Result<u32, ParseIntError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<u32,core:prelude/intparse.wado/ParseIntError>$()"(payload: (), index: i32) -> Result<u32, ParseIntError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -17263,6 +17449,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<u32,core:prelude/traits.w
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<u32,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<u32, LenientParseError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<u32,core:prelude/traits.wado/LenientParseError>"(self: Box<core:prelude/types.wado/Result<u32,core:prelude/traits.wado/LenientParseError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -17297,6 +17489,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<i64,core:prelude/traits.wad
 pub fn "$case_construct$core:prelude/types.wado/Result<i64,core:prelude/traits.wado/LenientParseError>$core:prelude/traits.wado/LenientParseError"(payload: LenientParseError, index: i32) -> Result<i64, LenientParseError> {
     return match index {
         1 => Result<i64, LenientParseError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<i64,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<i64, LenientParseError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -17339,6 +17537,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<u64,core:prelude/traits.w
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<u64,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<u64, LenientParseError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<u64,core:prelude/traits.wado/LenientParseError>"(self: Box<core:prelude/types.wado/Result<u64,core:prelude/traits.wado/LenientParseError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -17373,6 +17577,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<f32,core:prelude/intparse.w
 pub fn "$case_construct$core:prelude/types.wado/Result<f32,core:prelude/intparse.wado/ParseFloatError>$core:prelude/intparse.wado/ParseFloatError"(payload: ParseFloatError, index: i32) -> Result<f32, ParseFloatError> {
     return match index {
         1 => Result<f32, ParseFloatError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f32,core:prelude/intparse.wado/ParseFloatError>$()"(payload: (), index: i32) -> Result<f32, ParseFloatError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -17415,6 +17625,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<f32,core:prelude/traits.w
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<f32,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<f32, LenientParseError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<f32,core:prelude/traits.wado/LenientParseError>"(self: Box<core:prelude/types.wado/Result<f32,core:prelude/traits.wado/LenientParseError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -17449,6 +17665,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<f64,core:prelude/traits.wad
 pub fn "$case_construct$core:prelude/types.wado/Result<f64,core:prelude/traits.wado/LenientParseError>$core:prelude/traits.wado/LenientParseError"(payload: LenientParseError, index: i32) -> Result<f64, LenientParseError> {
     return match index {
         1 => Result<f64, LenientParseError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f64,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<f64, LenientParseError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -17491,6 +17713,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<i32,core:prelude/traits.w
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<i32,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<i32, ConvertError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<i32,core:prelude/traits.wado/ConvertError>"(self: Box<core:prelude/types.wado/Result<i32,core:prelude/traits.wado/ConvertError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -17525,6 +17753,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<i16,core:prelude/traits.wad
 pub fn "$case_construct$core:prelude/types.wado/Result<i16,core:prelude/traits.wado/ConvertError>$core:prelude/traits.wado/ConvertError"(payload: ConvertError, index: i32) -> Result<i16, ConvertError> {
     return match index {
         1 => Result<i16, ConvertError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<i16,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<i16, ConvertError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -17567,6 +17801,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<i8,core:prelude/traits.wa
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<i8,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<i8, ConvertError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<i8,core:prelude/traits.wado/ConvertError>"(self: Box<core:prelude/types.wado/Result<i8,core:prelude/traits.wado/ConvertError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -17601,6 +17841,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<u32,core:prelude/traits.wad
 pub fn "$case_construct$core:prelude/types.wado/Result<u32,core:prelude/traits.wado/ConvertError>$core:prelude/traits.wado/ConvertError"(payload: ConvertError, index: i32) -> Result<u32, ConvertError> {
     return match index {
         1 => Result<u32, ConvertError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<u32,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<u32, ConvertError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -17643,6 +17889,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<u16,core:prelude/traits.w
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<u16,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<u16, ConvertError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<u16,core:prelude/traits.wado/ConvertError>"(self: Box<core:prelude/types.wado/Result<u16,core:prelude/traits.wado/ConvertError>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -17677,6 +17929,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<u8,core:prelude/traits.wado
 pub fn "$case_construct$core:prelude/types.wado/Result<u8,core:prelude/traits.wado/ConvertError>$core:prelude/traits.wado/ConvertError"(payload: ConvertError, index: i32) -> Result<u8, ConvertError> {
     return match index {
         1 => Result<u8, ConvertError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<u8,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<u8, ConvertError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }
@@ -18046,6 +18304,12 @@ pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/string.wado/
     };
 }
 
+pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>$()"(payload: (), index: i32) -> Result<String, String> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$variant_tag$core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>"(self: Box<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>>) -> i32 {
     return __variant_tag(self.value);
 }
@@ -18080,6 +18344,12 @@ pub fn "$case_extract$core:prelude/types.wado/Result<core:prelude/string.wado/St
 pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/traits.wado/LenientParseError>$core:prelude/traits.wado/LenientParseError"(payload: LenientParseError, index: i32) -> Result<String, LenientParseError> {
     return match index {
         1 => Result<String, LenientParseError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<String, LenientParseError> {
+    return match index {
         _ => core::builtin::unreachable(),
     };
 }

@@ -3003,7 +3003,9 @@ impl Monomorphizer {
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
             // then fall back to the base type name (e.g., "f64") if no direct impl exists.
             let candidate = info.with_substituted_struct_name(&type_table.fq_type_name(inner));
-            if self.functions.has_impl(&candidate) {
+            if self.functions.has_impl(&candidate)
+                || self.reflect_blanket_claims(&info, inner, type_table)
+            {
                 candidate
             } else {
                 // Newtypes must inherit the underlying head, else the trait_env
@@ -3061,6 +3063,41 @@ impl Monomorphizer {
                 call,
             );
         }
+    }
+
+    /// Whether `receiver` derives `info`'s trait through a `Reflect*` blanket.
+    ///
+    /// A `flags` type erases to `u32` and an erased base carries no reflect
+    /// kind, so peeling the receiver before the blanket lookup drops the
+    /// derivation its declaration owns. A newtype over a non-reflect base keeps
+    /// inheriting the base's impl.
+    fn reflect_blanket_claims(
+        &self,
+        info: &LocalMethodName,
+        receiver: TypeId,
+        type_table: &TypeTable,
+    ) -> bool {
+        let Some(trait_name) = info
+            .base_trait_name
+            .as_deref()
+            .or(info.trait_name.as_deref())
+        else {
+            return false;
+        };
+        if !crate::synthesis::template::has_reflect_kind(receiver, type_table) {
+            return false;
+        }
+        let receiver_module = module_source_for_trait_impl(type_table, receiver);
+        self.functions
+            .trait_env
+            .value_blanket_for_receiver(trait_name, receiver_module.as_ref(), &|bounds| {
+                crate::synthesis::template::receiver_satisfies_blanket_bounds(
+                    receiver,
+                    bounds.to_vec(),
+                    type_table,
+                )
+            })
+            .is_some()
     }
 
     /// Route a type-param receiver (`T^Trait::method`, resolved to a concrete

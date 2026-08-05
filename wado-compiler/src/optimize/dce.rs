@@ -96,6 +96,36 @@ pub struct DceAnalysis {
     pub enum_exact: IndexSet<(String, ModuleSource)>,
 }
 
+impl DceAnalysis {
+    /// Whether `s` survives the sweep.
+    ///
+    /// The one predicate: the closure that pulls a struct's field types into
+    /// the reachable set reads it, and so does the retain that drops the rest.
+    /// Two spellings would let a struct be kept whose fields were never
+    /// walked, and it would outlive the ids its own fields name.
+    ///
+    /// A struct's stored `name` predates newtype / flags erasure while the
+    /// reachable set renders after it, so one type spells two ways
+    /// (`FlagsBit<Perms>` against `FlagsBit<u32>`). Both spellings count.
+    fn keeps_struct(&self, s: &crate::nir::NirStruct, type_table: &TypeTable) -> bool {
+        let Some(mono) = &s.monomorph_info else {
+            return self
+                .struct_exact
+                .contains(&(s.name.clone(), s.module_source.clone()))
+                || self.generic_instance_names.contains(s.name.as_str())
+                || self.struct_monomorph_bases.contains(s.name.as_str());
+        };
+        if self.struct_monomorph_names.contains(s.name.as_str()) {
+            return true;
+        }
+        let rendered = type_table.struct_rendered_name(&mono.generic_name, &mono.impl_type_args);
+        self.struct_monomorph_names.contains(rendered.as_str())
+            || type_table
+                .find_struct_by_name(&rendered, &s.module_source)
+                .is_some_and(|id| self.types.contains(&id))
+    }
+}
+
 /// Compute every DCE input from the unpruned `project` in dependency
 /// order: function reachability → global reachability → type
 /// reachability. Each downstream step (`remove_unreachable_functions`,
@@ -1816,27 +1846,9 @@ fn populate_type_reachability(
         // Gale-generated parser, dominating the whole DCE pass.
         analysis.refresh_indexes(&type_table);
 
-        // A struct's fields are kept iff its Struct type, any
-        // `GenericInstance` of its name, or any monomorphized variant
-        // sharing its base name is reachable.
+        // A struct that survives the sweep keeps its field types.
         for tir_struct in &project.structs {
-            let struct_reachable = if tir_struct.monomorph_info.is_none() {
-                analysis
-                    .struct_exact
-                    .contains(&(tir_struct.name.clone(), tir_struct.module_source.clone()))
-                    || analysis
-                        .generic_instance_names
-                        .contains(tir_struct.name.as_str())
-                    || analysis
-                        .struct_monomorph_bases
-                        .contains(tir_struct.name.as_str())
-            } else {
-                analysis
-                    .struct_monomorph_names
-                    .contains(tir_struct.name.as_str())
-            };
-
-            if struct_reachable {
+            if analysis.keeps_struct(tir_struct, &type_table) {
                 for field in &tir_struct.fields {
                     collect_type_transitive(field.type_id, &type_table, &mut analysis.types);
                 }
@@ -1974,42 +1986,12 @@ fn collect_type_dependencies(
 /// `analysis` is precomputed by [`analyze_dce`] — this function only
 /// retains entries matching its precomputed indexes.
 pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis) {
-    // A struct is kept if:
-    // 1. Its Struct type is reachable, OR
-    // 2. Any GenericInstance with its base name is reachable (e.g., Box<i32> for Box)
-    // 3. Any monomorphized Struct with its base name is reachable
-    // A struct's stored `name` predates newtype / flags erasure while the
-    // reachability set renders after it, so one type spells two ways
-    // (`FlagsBit<Perms>` against `FlagsBit<u32>`). Render both the same way.
-    let monomorph_render = |s: &crate::nir::NirStruct| {
-        let mono = s.monomorph_info.as_ref()?;
-        Some(
-            project
-                .type_table
-                .borrow()
-                .struct_rendered_name(&mono.generic_name, &mono.impl_type_args),
-        )
-    };
-    let reachable_struct_id = |rendered: &str, module_source: &ModuleSource| {
+    {
         let type_table = project.type_table.borrow();
-        type_table
-            .find_struct_by_name(rendered, module_source)
-            .is_some_and(|id| analysis.types.contains(&id))
-    };
-    project.structs.retain(|s| {
-        if s.monomorph_info.is_none() {
-            analysis
-                .struct_exact
-                .contains(&(s.name.clone(), s.module_source.clone()))
-                || analysis.generic_instance_names.contains(s.name.as_str())
-                || analysis.struct_monomorph_bases.contains(s.name.as_str())
-        } else {
-            let rendered = monomorph_render(s).unwrap_or_else(|| s.name.clone());
-            analysis.struct_monomorph_names.contains(s.name.as_str())
-                || analysis.struct_monomorph_names.contains(rendered.as_str())
-                || reachable_struct_id(&rendered, &s.module_source)
-        }
-    });
+        project
+            .structs
+            .retain(|s| analysis.keeps_struct(s, &type_table));
+    }
     project.variants.retain(|v| {
         analysis
             .variant_exact
@@ -2031,6 +2013,332 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
 // ──────────────────────────────────────────────────────────────────────────────
 // Global variable DCE
 // ──────────────────────────────────────────────────────────────────────────────
+
+/// Every statement id reachable from the body root. The arena keeps the nodes an
+/// in-place rewrite displaced, and one nothing refers to never runs.
+fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
+    struct Collect(Vec<StmtId>);
+    impl crate::nir_visitor::NirRefVisitor for Collect {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Stmt(s) = node {
+                self.0.push(s);
+            }
+            self.walk_node(body, node);
+        }
+    }
+    if body.blocks.is_empty() {
+        return Vec::new();
+    }
+    let mut collect = Collect(Vec::new());
+    crate::nir_visitor::NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root));
+    collect.0
+}
+
+/// Locals some reachable expression mentions. A binding absent here is never
+/// read: an assignment target, a borrow and a capture all mention their local,
+/// so the census over-approximates and only ever keeps a statement alive.
+fn mentioned_locals(body: &Body) -> IndexSet<u32> {
+    let mut out = IndexSet::default();
+    for e in crate::nir_visitor::reachable_exprs(body) {
+        if let ExprKind::Local { index, .. } = &body.exprs[e].kind {
+            out.insert(*index);
+        }
+    }
+    out
+}
+
+/// The `GlobalVarGet`s in `expr`'s subtree, and the ids that read them.
+fn global_reads_in(body: &Body, expr: ExprId) -> Vec<(ExprId, (String, String))> {
+    struct Collect(Vec<(ExprId, (String, String))>);
+    impl crate::nir_visitor::NirRefVisitor for Collect {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Expr(e) = node
+                && let ExprKind::GlobalVarGet {
+                    module_source,
+                    name,
+                } = &body.exprs[e].kind
+            {
+                self.0
+                    .push((e, (module_source.to_path().join("::"), name.clone())));
+            }
+            self.walk_node(body, node);
+        }
+    }
+    let mut collect = Collect(Vec::new());
+    crate::nir_visitor::NirRefVisitor::visit_node(&mut collect, body, NodeRef::Expr(expr));
+    collect.0
+}
+
+/// Whether the pass may delete `value` outright — no observable effect, and no
+/// trap, since a trap is observable too.
+///
+/// The expression predicate answers first, with its typed refinement, for a
+/// literal aggregate. Failing that the tree is walked: it refuses every call on
+/// sight, while the initializer globalization hoists for a reflect member walk
+/// *is* a call, so each one is answered by its whole-function summary instead.
+fn deletable_value(
+    body: &Body,
+    value: Operand,
+    types: &TypeTable,
+    effects: &[super::mod_ref::FnEffect],
+) -> bool {
+    use cranelift_entity::EntityRef;
+
+    if super::arena_query::is_pure_nontrapping_operand_typed(body, value, Some(types)) {
+        return true;
+    }
+    let Some(root) = value.as_expr() else {
+        return false;
+    };
+    let mut stack = vec![NodeRef::Expr(root)];
+    while let Some(node) = stack.pop() {
+        match node {
+            NodeRef::Expr(id) => match &body.exprs[id].kind {
+                ExprKind::Call { func_id, .. } => {
+                    let effect = effects
+                        .get(func_id.index())
+                        .copied()
+                        .unwrap_or_else(super::mod_ref::FnEffect::opaque);
+                    if !effect.is_pure() || effect.may_trap {
+                        return false;
+                    }
+                }
+                ExprKind::GlobalVarSet { .. }
+                | ExprKind::Assign { .. }
+                | ExprKind::IndirectCall { .. }
+                | ExprKind::CmRawCall { .. } => return false,
+                _ => {
+                    if super::arena_query::expr_node_may_trap(body, id) {
+                        return false;
+                    }
+                }
+            },
+            // A block statement that is not a binding or a discarded value
+            // leaves the region, and deleting it would take the exit with it.
+            NodeRef::Stmt(s) => {
+                if !matches!(body.stmts[s].kind, StmtKind::Let { .. } | StmtKind::Expr(_)) {
+                    return false;
+                }
+            }
+            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    true
+}
+
+fn lazy_guard_global(
+    body: &Body,
+    stmt: StmtId,
+    descriptors: &[FunctionRef],
+    types: &TypeTable,
+    effects: &[super::mod_ref::FnEffect],
+) -> Option<(ExprId, (String, String), Operand)> {
+    let StmtKind::If {
+        condition,
+        then_block,
+        else_block: None,
+    } = &body.stmts[stmt].kind
+    else {
+        return None;
+    };
+    let ExprKind::Call { func_id, args, .. } = &body.exprs[condition.as_expr()?].kind else {
+        return None;
+    };
+    let callee = callee_descriptor(descriptors, *func_id);
+    if !(callee.module_source.is_core_builtin() && callee.name == "is_uninitialized") {
+        return None;
+    }
+    let [arg] = args.as_slice() else {
+        return None;
+    };
+    let read = arg.expr.as_expr()?;
+    let ExprKind::GlobalVarGet {
+        module_source,
+        name,
+    } = &body.exprs[read].kind
+    else {
+        return None;
+    };
+    let [only] = body.blocks[*then_block].stmts.as_slice() else {
+        return None;
+    };
+    let StmtKind::Expr(Operand::Expr(set)) = &body.stmts[*only].kind else {
+        return None;
+    };
+    let ExprKind::GlobalVarSet {
+        module_source: set_module,
+        name: set_name,
+        value,
+    } = &body.exprs[*set].kind
+    else {
+        return None;
+    };
+    if set_module != module_source || set_name != name {
+        return None;
+    }
+    // Dropping the guard drops the value it stores, so a value whose trap the
+    // program is entitled to is not a guard this pass may take.
+    if !deletable_value(body, *value, types, effects) {
+        return None;
+    }
+    Some((
+        read,
+        (module_source.to_path().join("::"), name.clone()),
+        *value,
+    ))
+}
+
+/// Whether `stmt` binds a local nothing mentions to a value the pass may
+/// delete — a binding that computes something and drops it. A trap is an
+/// observable effect, so a trapping value keeps the binding alive even though
+/// nobody reads it.
+fn dead_pure_binding(
+    body: &Body,
+    stmt: StmtId,
+    mentioned: &IndexSet<u32>,
+    types: &TypeTable,
+) -> Option<ExprId> {
+    let StmtKind::Let {
+        local_index, value, ..
+    } = &body.stmts[stmt].kind
+    else {
+        return None;
+    };
+    if mentioned.contains(local_index) {
+        return None;
+    }
+    let value = value.as_expr()?;
+    super::arena_query::is_pure_nontrapping_expr_typed(body, value, Some(types)).then_some(value)
+}
+
+/// Un-hoist a constant globalization hoisted for nobody.
+///
+/// Globalization moves a constant aggregate into a shared slot and guards the
+/// store; the folds that run after it can take every reader with them. What is
+/// left computes a value nothing observes, and holds whatever the initializer
+/// builds — a reflect member walk and the strings it names — in the binary to
+/// do it.
+///
+/// Two reads do not count as observing the value:
+///
+/// - the global's own `is_uninitialized` guard, which exists to decide the
+///   store rather than to use what it holds;
+/// - a read bound to a local nothing mentions, which is what folding a member's
+///   facts out of the walk leaves behind.
+///
+/// Both are conditional on the value being one this pass may delete
+/// ([`deletable_value`]) — a trap is observed like any other effect.
+///
+/// A global with no observation left loses its guard, its store, and those
+/// bindings. It then has no reads at all, which the reachability census below
+/// already answers, and its initializer goes with it.
+pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
+    let descriptors = build_callee_descriptors(project);
+    let effects = super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
+    let type_table = project.type_table.clone();
+    let types = type_table.borrow();
+    let mut guarded: IndexSet<(String, String)> = IndexSet::default();
+    let mut observed: IndexSet<(String, String)> = IndexSet::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        let Some(body) = func.body.as_ref() else {
+            continue;
+        };
+        let mentioned = mentioned_locals(body);
+        let mut unobserving: IndexSet<ExprId> = IndexSet::default();
+        for stmt in reachable_stmt_ids(body) {
+            if let Some((read, key, _)) =
+                lazy_guard_global(body, stmt, &descriptors, &types, &effects)
+            {
+                guarded.insert(key);
+                unobserving.insert(read);
+            }
+            if let Some(value) = dead_pure_binding(body, stmt, &mentioned, &types) {
+                unobserving.extend(global_reads_in(body, value).into_iter().map(|(e, _)| e));
+            }
+        }
+        for e in crate::nir_visitor::reachable_exprs(body) {
+            if let ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } = &body.exprs[e].kind
+                && !unobserving.contains(&e)
+            {
+                observed.insert((module_source.to_path().join("::"), name.clone()));
+            }
+        }
+    }
+    let unobserved: IndexSet<(String, String)> = guarded.difference(&observed).cloned().collect();
+    if unobserved.is_empty() {
+        return;
+    }
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        if let Some(body) = func.body.as_mut() {
+            let mentioned = mentioned_locals(body);
+            for block in reachable_block_ids(body) {
+                drop_unobserved_stmts(
+                    body,
+                    block,
+                    &unobserved,
+                    &mentioned,
+                    &descriptors,
+                    &types,
+                    &effects,
+                );
+            }
+        }
+    }
+}
+
+/// Every block reachable from the body root. The drop below must see the same
+/// statements the census above classified — an expression-position block among
+/// them, which is where inlining leaves a guard — or a read it counted as
+/// non-observing outlives the store it was counted against.
+fn reachable_block_ids(body: &Body) -> Vec<BlockId> {
+    struct Collect(Vec<BlockId>);
+    impl crate::nir_visitor::NirRefVisitor for Collect {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Block(b) = node {
+                self.0.push(b);
+            }
+            self.walk_node(body, node);
+        }
+    }
+    if body.blocks.is_empty() {
+        return Vec::new();
+    }
+    let mut collect = Collect(Vec::new());
+    crate::nir_visitor::NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root));
+    collect.0
+}
+
+fn drop_unobserved_stmts(
+    body: &mut Body,
+    block: BlockId,
+    unobserved: &IndexSet<(String, String)>,
+    mentioned: &IndexSet<u32>,
+    descriptors: &[FunctionRef],
+    types: &TypeTable,
+    effects: &[super::mod_ref::FnEffect],
+) {
+    let old = std::mem::take(&mut body.blocks[block].stmts);
+    let mut kept: Vec<StmtId> = Vec::with_capacity(old.len());
+    for s in old {
+        let is_guard = lazy_guard_global(body, s, descriptors, types, effects)
+            .is_some_and(|(_, key, _)| unobserved.contains(&key));
+        let is_dead_read = dead_pure_binding(body, s, mentioned, types).is_some_and(|value| {
+            global_reads_in(body, value)
+                .iter()
+                .any(|(_, key)| unobserved.contains(key))
+        });
+        if !is_guard && !is_dead_read {
+            kept.push(s);
+        }
+    }
+    body.blocks[block].stmts = kept;
+}
 
 /// Union every `(module_key, global_name)` pair read by some reachable
 /// function. Reads come from the per-function index built once by
@@ -2174,59 +2482,28 @@ fn remove_dead_global_sets_stmt(
 }
 
 /// Recursively remove dead `GlobalVarSet` from expressions that contain blocks.
+/// Strip dead-global stores from `e`'s subtree.
+///
+/// Every child, not a hand-listed few. A dead store can sit under any
+/// operand-carrying kind — globalization's inline-reference shape puts one
+/// under a borrow, `&{ GLOBAL = v; GLOBAL }` — and a kind missing from such a
+/// list keeps the store while the global itself goes, leaving an access to a
+/// slot that no longer exists.
 fn remove_dead_global_sets_expr(
     body: &mut Body,
     e: ExprId,
     used: &IndexSet<(String, String)>,
     type_table: &TypeTable,
 ) {
-    enum W {
-        Block(BlockId),
-        If(Option<ExprId>, BlockId, Option<BlockId>),
-        Match(Option<ExprId>, Vec<ExprId>),
-        Switch(Vec<BlockId>, BlockId),
-        None,
-    }
-    let w = match &body.exprs[e].kind {
-        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => W::Block(*block),
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => W::If(condition.as_expr(), *then_branch, *else_branch),
-        ExprKind::Match { expr, arms } => W::Match(
-            expr.as_expr(),
-            arms.iter().filter_map(|a| a.body.as_expr()).collect(),
-        ),
-        ExprKind::Switch { arms, default, .. } => W::Switch(arms.clone(), *default),
-        _ => W::None,
-    };
-    match w {
-        W::Block(b) => remove_dead_global_sets_block(body, b, used, type_table),
-        W::If(cond, then_b, else_b) => {
-            if let Some(cond) = cond {
-                remove_dead_global_sets_expr(body, cond, used, type_table);
-            }
-            remove_dead_global_sets_block(body, then_b, used, type_table);
-            if let Some(eb) = else_b {
-                remove_dead_global_sets_block(body, eb, used, type_table);
-            }
+    let mut children: Vec<NodeRef> = Vec::new();
+    body.for_each_child(NodeRef::Expr(e), |c| children.push(c));
+    for child in children {
+        match child {
+            NodeRef::Block(b) => remove_dead_global_sets_block(body, b, used, type_table),
+            NodeRef::Stmt(s) => remove_dead_global_sets_stmt(body, s, used, type_table),
+            NodeRef::Expr(x) => remove_dead_global_sets_expr(body, x, used, type_table),
+            NodeRef::Pat(_) => {}
         }
-        W::Match(scrutinee, bodies) => {
-            if let Some(scrutinee) = scrutinee {
-                remove_dead_global_sets_expr(body, scrutinee, used, type_table);
-            }
-            for b in bodies {
-                remove_dead_global_sets_expr(body, b, used, type_table);
-            }
-        }
-        W::Switch(arms, default) => {
-            for a in arms {
-                remove_dead_global_sets_block(body, a, used, type_table);
-            }
-            remove_dead_global_sets_block(body, default, used, type_table);
-        }
-        W::None => {}
     }
 }
 

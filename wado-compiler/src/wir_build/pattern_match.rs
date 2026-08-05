@@ -66,7 +66,7 @@ impl FunctionTranslator<'_, '_> {
         result_type: TypeId,
     ) -> WirInstr {
         let arena = self.body;
-        let has_result = result_type != TypeTable::UNIT && result_type != TypeTable::NEVER;
+        let has_result = !self.is_stackless_type(result_type) && result_type != TypeTable::NEVER;
         let result_wir_type = if has_result {
             Some(self.ctx.type_id_to_wir_type(self.type_table, result_type))
         } else {
@@ -328,7 +328,7 @@ impl FunctionTranslator<'_, '_> {
         arms: &[ArmData],
         result_type: TypeId,
     ) -> WirInstr {
-        let has_result = result_type != TypeTable::UNIT && result_type != TypeTable::NEVER;
+        let has_result = !self.is_stackless_type(result_type) && result_type != TypeTable::NEVER;
         let result_wir_type = if has_result {
             Some(self.ctx.type_id_to_wir_type(self.type_table, result_type))
         } else {
@@ -416,7 +416,7 @@ impl FunctionTranslator<'_, '_> {
                     // values on the Wasm stack. Guard with `produces_stack_value()` to
                     // avoid emitting `drop` after instructions that produce no value
                     // (e.g. `Block{result: None}` from LabeledBlock fusion).
-                    if self.operand_type_id(arm.body) != TypeTable::UNIT
+                    if !self.is_stackless_type(self.operand_type_id(arm.body))
                         && self.operand_type_id(arm.body) != TypeTable::NEVER
                         && instr.produces_stack_value()
                     {

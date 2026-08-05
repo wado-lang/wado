@@ -1201,6 +1201,12 @@ fn reflect_kind_of(type_id: TypeId, tt: &TypeTable) -> Option<CompilerItem> {
     }
 }
 
+/// Whether `type_id` is one of the four reflection kinds, i.e. whether a
+/// `Reflect*`-bounded blanket can claim it.
+pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
+    reflect_kind_of(type_id, tt).is_some()
+}
+
 /// Whether `type_id` satisfies a blanket impl's receiver-param `bounds`. A
 /// `Reflect*` bound holds exactly when the receiver is that kind; any other
 /// bound is treated as satisfiable, preserving existing blanket dispatch

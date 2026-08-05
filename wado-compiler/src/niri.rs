@@ -93,6 +93,7 @@ pub enum CtfeBuiltin {
     ArrayNew,
     ArraySet,
     ArrayCopy,
+    ArrayClonePrefix,
     ColdPath,
     Select,
     I32AsChar,
@@ -108,6 +109,7 @@ impl CtfeBuiltin {
             Self::ArrayGet
             | Self::ArrayLen
             | Self::ArrayNew
+            | Self::ArrayClonePrefix
             | Self::ColdPath
             | Self::Select
             | Self::I32AsChar => false,

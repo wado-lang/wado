@@ -683,3 +683,38 @@ test "to_bytes_canonical trailing_char appends" {
     let b = to_bytes_canonical(&u, Option::Some('\n')).unwrap();
     assert_bytes_eq_string(&b, &"{\"age\":30,\"firstName\":\"Ann\"}\n");
 }
+
+struct Ack {
+    id: i32,
+    ok: (),
+}
+
+test "a unit payload round-trips through the null it wrote" {
+    let value: Result<(), DeserializeErrorKind> = Result::Ok(());
+    let text = to_string(&value).unwrap();
+    assert text == `\{"Ok":null\}`;
+    let back: Result<Result<(), DeserializeErrorKind>, DeserializeError> = from_string(text);
+    assert back matches { Ok(Ok(_)) };
+}
+
+test "a unit struct field round-trips" {
+    let a = Ack { id: 7, ok: () };
+    let text = to_string(&a).unwrap();
+    assert text == `\{"id":7,"ok":null\}`;
+    let back: Result<Ack, DeserializeError> = from_string(text);
+    assert back matches { Ok(_) };
+    if let Ok(v) = back {
+        assert v.id == 7;
+    }
+}
+
+test "Option<()> collapses, as it does in Rust serde" {
+    // `()` and `None` are both null on the wire, so the pair carries nothing.
+    let some_unit = to_string(&Option::Some(())).unwrap();
+    let none_unit: Option<()> = Option::None;
+    assert some_unit == `null`;
+    assert to_string(&none_unit).unwrap() == `null`;
+
+    let back: Result<Option<()>, DeserializeError> = from_string(some_unit);
+    assert back matches { Ok(None) };
+}

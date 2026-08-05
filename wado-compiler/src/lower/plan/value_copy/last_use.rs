@@ -1722,6 +1722,26 @@ impl TirRefVisitor for MovedRoots<'_> {
         {
             self.roots.insert(path.root);
         }
-        self.walk_expr(expr);
+        // A local reached only as a projection's base is not a site of its own:
+        // the fold decides on the projection above it, where the `Local` arm of
+        // `is_last_use_move` never runs. Counting it moves nothing and costs
+        // the binding its read-only share — which is why a one-element tuple,
+        // whose single read makes the local move-eligible, used to copy where a
+        // two-element one shared.
+        match &stripped.kind {
+            TirExprKind::FieldAccess { expr: base, .. }
+            | TirExprKind::VariantPayload { expr: base, .. }
+                if is_local_place(base) => {}
+            TirExprKind::Index { expr: base, index } if is_local_place(base) => {
+                self.visit_expr(index);
+            }
+            _ => self.walk_expr(expr),
+        }
     }
+}
+
+/// Whether `expr` is a bare local read, through the casts monomorphization
+/// leaves.
+fn is_local_place(expr: &TirExpr) -> bool {
+    matches!(strip_casts(expr).kind, TirExprKind::Local { .. })
 }

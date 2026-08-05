@@ -149,24 +149,15 @@ fn "opt_ref_elim_rebound_local.wado/run"() with Stdout {
     let alts_44: ref null "core:prelude//List<i32>";
     let alts_45: ref "core:prelude//List<i32>";
     let self_46: i32;
-    let elem_52: ref "opt_ref_elim_rebound_local.wado//Element";
-    let alts_53: ref null "core:prelude//List<i32>";
     let alts_54: ref "core:prelude//List<i32>";
     let self_55: i32;
     let __sroa_e2_value: ref "opt_ref_elim_rebound_local.wado//Element";
     let __sroa_e1_value: ref "opt_ref_elim_rebound_local.wado//Element";
     let g_60: ref "opt_ref_elim_rebound_local.wado//GroupElement";
-    let rep_61: ref "opt_ref_elim_rebound_local.wado//RepeatElement";
-    let g_62: ref "opt_ref_elim_rebound_local.wado//GroupElement";
-    let __sroa___match_4_value_64: ref "opt_ref_elim_rebound_local.wado//Element";
     let g_67: ref "opt_ref_elim_rebound_local.wado//GroupElement";
     let rep_68: ref "opt_ref_elim_rebound_local.wado//RepeatElement";
     let g_69: ref "opt_ref_elim_rebound_local.wado//GroupElement";
     let __sroa___match_4_value_71: ref "opt_ref_elim_rebound_local.wado//Element";
-    let g_74: ref "opt_ref_elim_rebound_local.wado//GroupElement";
-    let rep_75: ref "opt_ref_elim_rebound_local.wado//RepeatElement";
-    let g_76: ref "opt_ref_elim_rebound_local.wado//GroupElement";
-    let __sroa___match_4_value_78: ref "opt_ref_elim_rebound_local.wado//Element";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:opt_ref_elim_rebound_local.wado::__modules_initialized);
         cold_path;
@@ -179,16 +170,6 @@ fn "opt_ref_elim_rebound_local.wado/run"() with Stdout {
             if ref.test "opt_ref_elim_rebound_local.wado//Element::Group"(__sroa_e1_value) {
                 g_60 = ref.cast "opt_ref_elim_rebound_local.wado//Element::Group"(__sroa_e1_value).payload_0;
                 break __inline_extract_0: g_60.alternatives;
-            } else {
-            }
-            if ref.test "opt_ref_elim_rebound_local.wado//Element::Repeat"(__sroa_e1_value) {
-                rep_61 = ref.cast "opt_ref_elim_rebound_local.wado//Element::Repeat"(__sroa_e1_value).payload_0;
-                __sroa___match_4_value_64 = rep_61.element;
-                if ref.test "opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_64) {
-                    g_62 = ref.cast "opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_64).payload_0;
-                    break __inline_extract_0: g_62.alternatives;
-                } else {
-                }
             } else {
             }
             break __inline_extract_0: ref.null none;
@@ -230,27 +211,10 @@ fn "opt_ref_elim_rebound_local.wado/run"() with Stdout {
         break __inline_process_23: -1;
     }), __local_8); __local_7);
     "core:cli/println"(__local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_55(__inline_process_28: block -> i32 {
-        elem_52 = struct.new "opt_ref_elim_rebound_local.wado//Element::Leaf" { discriminant: 0, payload_0: 0 };
-        alts_53 = __inline_extract_4: block -> ref null "core:prelude//List<i32>" {
-            if ref.test "opt_ref_elim_rebound_local.wado//Element::Group"(elem_52) {
-                g_74 = ref.cast "opt_ref_elim_rebound_local.wado//Element::Group"(elem_52).payload_0;
-                break __inline_extract_4: g_74.alternatives;
-            } else {
-            }
-            if ref.test "opt_ref_elim_rebound_local.wado//Element::Repeat"(elem_52) {
-                rep_75 = ref.cast "opt_ref_elim_rebound_local.wado//Element::Repeat"(elem_52).payload_0;
-                __sroa___match_4_value_78 = rep_75.element;
-                if ref.test "opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_78) {
-                    g_76 = ref.cast "opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_78).payload_0;
-                    break __inline_extract_4: g_76.alternatives;
-                } else {
-                }
-            } else {
-            }
-            break __inline_extract_4: ref.null none;
-        };
-        if ref.is_null(alts_53) == 0 {
-            alts_54 = ref.as_non_null(alts_53);
+        let __match_scrut_6: ref null "core:prelude//List<i32>";
+        __match_scrut_6 = ref.null none;
+        if ref.is_null(__match_scrut_6) == 0 {
+            alts_54 = ref.as_non_null(__match_scrut_6);
             break __inline_process_28: (alts_54.used * 10) + 1;
         } else {
         }
@@ -324,12 +288,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b14: block {
-        l15: loop {
-            break_if b14 t <= 0_i64;
+    b9: block {
+        l10: loop {
+            break_if b9 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l15;
+            continue l10;
         };
     };
     return n;
@@ -343,13 +307,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b17: block {
-            l18: loop {
-                break_if b17 temp <= 0_i64;
+        b12: block {
+            l13: loop {
+                break_if b12 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l18;
+                continue l13;
             };
         };
     }
@@ -358,12 +322,12 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b19: block {
-        l20: loop {
-            break_if b19 i >= len;
+    b14: block {
+        l15: loop {
+            break_if b14 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l20;
+            continue l15;
         };
     };
 }
@@ -394,20 +358,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b21: block {
-        l22: loop {
-            break_if b21 offset >= count;
+    b16: block {
+        l17: loop {
+            break_if b16 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b21 (if (result >> 4) == 0 -> i32 {
+            break_if b16 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l22;
+            continue l17;
         };
     };
 }

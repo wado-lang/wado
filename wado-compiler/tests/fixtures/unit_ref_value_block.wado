@@ -1,0 +1,35 @@
+// `&()` leaves nothing on the Wasm stack, so a block that yields one yields no
+// value. The value-block sites — `if`/`match`/labeled block result types, the
+// argument-spill census, `translate_expr_as_value` — must ask
+// `is_stackless_type` rather than compare against `()`, or the block declares
+// an `i32` result its arms never push.
+
+fn unit_of() {
+    return ();
+}
+
+export fn run() {
+    let u = unit_of();
+    let c = builtin::black_box(true);
+
+    let from_if: &() = if c { &u } else { &u };
+    let from_match: &() = match c {
+        true => &u,
+        false => &u,
+    };
+    let from_block: &() = scope: {
+        break scope: &u;
+    };
+
+    take(from_if, 1);
+    take(from_match, 2);
+    take(from_block, 3);
+}
+
+#[inline(never)]
+fn take(_u: &(), tag: i32) {
+    assert tag > 0;
+}
+
+__DATA__
+{"stdout": ""}

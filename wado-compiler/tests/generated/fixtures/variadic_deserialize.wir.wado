@@ -352,14 +352,10 @@ fn "variadic_deserialize.wado/__test_0_tuple_deserialize_via_variadic_impl"() {
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/format.wado//Formatter";
-    let input: ref "core:prelude/string.wado//String";
-    let __sroa_json_repr: ref Array<u8>;
-    __sroa_json_repr = array.new_data<u8>("[42,\"hello\"]");
-    input = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_dst_11: ref Array<u8>; __array_clone_dst_11 = builtin::array_new<u8>(12); builtin::array_copy<u8>(__array_clone_dst_11, 0, __sroa_json_repr, 0, 12); __array_clone_dst_11), used: 12 };
     let __sroa_parsed_discriminant: i32;
     let __sroa_parsed_case0_payload_0: ref null "tuple//[i32, core:prelude/string.wado/String]";
     let __sroa_parsed_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa_parsed_discriminant, __sroa_parsed_case0_payload_0, __sroa_parsed_case1_payload_0] = "core:json/core/json/from_bytes<[i32,core:prelude/string.wado/String],core:prelude/string.wado/String>"(input);
+    multivalue_bind [__sroa_parsed_discriminant, __sroa_parsed_case0_payload_0, __sroa_parsed_case1_payload_0] = "core:json/core/json/from_bytes<[i32,core:prelude/string.wado/String],core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("[42,\"hello\"]"), used: 12 });
     if @likely(__sroa_parsed_discriminant == 0) {
         t = ref.as_non_null(__sroa_parsed_case0_payload_0);
         __v0_3 = t.0;

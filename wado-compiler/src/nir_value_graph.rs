@@ -667,8 +667,14 @@ impl ValuePool {
             crate::const_eval::Value::Float { value, .. } => self.float(value, ty),
             crate::const_eval::Value::Bool(b) => self.bool(b),
             crate::const_eval::Value::Char(c) => self.char(c),
-            crate::const_eval::Value::Aggregate { .. } | crate::const_eval::Value::Seq { .. } => {
-                panic!("an aggregate or sequence constant cannot be interned as a pure value")
+            // The pool models pure scalars; the arithmetic folds feeding this
+            // never produce an aggregate, a sequence, or a variant.
+            crate::const_eval::Value::Aggregate { .. }
+            | crate::const_eval::Value::Seq { .. }
+            | crate::const_eval::Value::Variant { .. } => {
+                panic!(
+                    "an aggregate, sequence, or variant constant cannot be interned as a pure value"
+                )
             }
         }
     }

@@ -119,7 +119,7 @@ use dae::eliminate_dead_arguments;
 use dce::{
     analyze_dce, filter_bytes_literals, filter_string_literals,
     remove_unreachable_closure_functors, remove_unreachable_functions, remove_unreachable_globals,
-    remove_unreachable_types,
+    remove_unreachable_types, unhoist_unobserved_globals,
 };
 use drve::eliminate_dead_return_values;
 use field_scalarize::scalarize_hot_fields;
@@ -391,6 +391,10 @@ fn run_dce(project: &mut NirPackage, profiler: &dyn SpanEmitter) {
     // calls inside dropped initializers; the *final* `run_dce` after
     // the optimization loop cleans those up — the savings of an extra
     // mid-loop call-graph rebuild aren't worth its cost.
+    // Before the census: a global whose value nothing observes still counts as
+    // read — by its own guard, and by the bindings folding left behind — so it
+    // has to lose those first to fall out below.
+    unhoist_unobserved_globals(project);
     let analysis = analyze_dce(project);
     remove_unreachable_functions(project, &analysis.functions);
     remove_unreachable_globals(project, &analysis.globals);

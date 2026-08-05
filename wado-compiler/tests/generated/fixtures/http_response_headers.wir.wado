@@ -320,10 +320,10 @@ import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/future-write from "wasi/future-write";
 
 global mut global:http_response_headers.wado::__modules_initialized: bool = 0;
+global global:http_response_headers.wado::__const_obj_0: ref null "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
 
 fn "http_response_headers.wado/handle"(request) {
     let headers: i32;
-    let value_5: ref "core:prelude//List<u8>";
     let response: i32;
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_0: i32;
@@ -470,8 +470,7 @@ fn "http_response_headers.wado/handle"(request) {
     rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     tx = builtin::i32_wrap_i64(packed >> 32_i64);
     headers = "http_response_headers.wado/__cm_binding__Fields_new"();
-    value_5 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
-    drop("http_response_headers.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-wado"), used: 6 }, value_5));
+    drop("http_response_headers.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-wado"), used: 6 }, global:http_response_headers.wado::__const_obj_0));
     __pattern_temp_1 = "http_response_headers.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx);
     response = __pattern_temp_1.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };

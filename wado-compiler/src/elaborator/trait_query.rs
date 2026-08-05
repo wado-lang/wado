@@ -57,6 +57,13 @@ impl OnBoundTrait {
             Self::Eq | Self::Ord | Self::Serialize | Self::Deserialize
         )
     }
+
+    pub(super) fn is_reflect(self) -> bool {
+        matches!(
+            self,
+            Self::ReflectStruct | Self::ReflectVariant | Self::ReflectEnum | Self::ReflectFlags
+        )
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -1254,6 +1261,9 @@ impl TypeSystem {
                 let base_id = *base_type;
                 return self.type_implements_trait(ctx, scope, base_id, trait_name);
             }
+            // `()` names no declaring module, so an `impl Trait for ()` is
+            // indexed under the builtin spelling the unit type mangles as.
+            ResolvedType::Unit => (FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME), None),
             ResolvedType::Flags {
                 name,
                 module_source,
@@ -1357,6 +1367,17 @@ impl TypeSystem {
         type_key: &Receiver,
         trait_name: &str,
     ) -> bool {
+        // A structural obligation is the member walk's to answer, so a
+        // `Reflect*`-bounded blanket does not get to answer it: its bound holds
+        // for every type of that kind, while the bound that decides eligibility
+        // is the pack's (`..F: Serialize`), which this index does not carry.
+        // Letting it answer would admit a type whose own members refuse the
+        // trait being asked for, and lose the reason chain that says which one.
+        // Only that shape is skipped — a user-written blanket over the same
+        // trait still answers for itself.
+        let structural = self
+            .classify_on_bound_trait(scope, trait_name)
+            .is_some_and(OnBoundTrait::is_field_recursive);
         let trait_env = self.trait_env.clone();
         for blanket in trait_env
             .blanket_impls
@@ -1364,6 +1385,7 @@ impl TypeSystem {
             .into_iter()
             .flatten()
             .filter(|b| b.receiver == super::trait_env::BlanketReceiver::Value)
+            .filter(|b| !(structural && self.is_reflect_bounded(scope, b)))
         {
             let bounds_satisfied = blanket.bounds.iter().all(|bound| {
                 self.synthesized_reflect_bound_holds(scope, &type_key.decl_key(), bound)
@@ -1375,6 +1397,19 @@ impl TypeSystem {
         }
 
         false
+    }
+
+    /// Whether `blanket`'s receiver bound is a reflection trait — the shape the
+    /// stdlib derives structural traits through.
+    fn is_reflect_bounded(
+        &self,
+        scope: &TypeLookup,
+        blanket: &super::trait_env::BlanketImpl,
+    ) -> bool {
+        blanket.bounds.iter().any(|bound| {
+            self.classify_on_bound_trait(scope, bound)
+                .is_some_and(OnBoundTrait::is_reflect)
+        })
     }
 
     /// Whether `bound_name` is a synthesized reflection trait the subject type

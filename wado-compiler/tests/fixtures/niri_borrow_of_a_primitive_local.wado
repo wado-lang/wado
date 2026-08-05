@@ -1,0 +1,38 @@
+// A borrow of a primitive local names its storage, so a write through either
+// handle is visible through the other. The boxing pass rewrites such a borrow
+// into a `Box<T>` handle the frame must alias rather than snapshot — reading
+// `&x` as a value would freeze the local at the value it held when borrowed.
+use { println } from "core:cli";
+
+fn shared() -> i32 {
+    let mut x = 1;
+    let r = &x;
+    x = 5;
+    return *r;
+}
+
+fn through_mut() -> i32 {
+    let mut y = 1;
+    let m = &mut y;
+    *m = 7;
+    return y;
+}
+
+// The copy beside the borrow: `a` takes the value, `p` keeps naming the local,
+// so the write after both reaches only `p`.
+fn copy_beside_borrow() -> i32 {
+    let mut x = 1;
+    let p = &x;
+    let a = x;
+    x = 5;
+    return a * 100 + *p;
+}
+
+export fn run() with Stdout {
+    println(`${shared()} ${through_mut()} ${copy_beside_borrow()}`);
+}
+
+__DATA__
+{
+    "stdout": "5 7 105\n"
+}

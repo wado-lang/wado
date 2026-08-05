@@ -1697,6 +1697,21 @@ pub(super) fn generate_case_bridge_helpers(
             span,
         ));
     }
+
+    // `VariantCase::make` builds through the unit payload whatever the case's
+    // own payload is, so any instantiation can call this bridge. A variant with
+    // no unit case gets the all-`unreachable` body `make`'s "traps unless
+    // `is_unit()`" already promises.
+    let unit_payload = type_table.borrow().mangle_type_arg_erased(TypeTable::UNIT);
+    if !by_payload.contains_key(&unit_payload) {
+        helpers.push(generate_case_construct_helper(
+            crate::name::case_construct_helper_name(&mangled_variant, &unit_payload),
+            variant_type,
+            TypeTable::UNIT,
+            &[],
+            span,
+        ));
+    }
     helpers
 }
 

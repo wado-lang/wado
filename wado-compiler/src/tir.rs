@@ -15,7 +15,7 @@ use std::rc::Rc;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, TypeNameInfo, format_type_name};
+use crate::name::{LocalMethodName, RefKind, TypeNameInfo, format_type_name};
 use crate::token::Span;
 
 /// Identifies the scope where a type parameter is defined
@@ -2017,6 +2017,18 @@ impl TypeTable {
     /// `None` if the given `TypeId` is not a registered wrapper.
     pub fn box_payload_of(&self, wrapper: TypeId) -> Option<TypeId> {
         self.box_payload_types.get(wrapper).copied()
+    }
+
+    /// Whether `type_id` may name storage rather than hold a value: a `&T` /
+    /// `&mut T`, or the `Box<T>` the boxing pass redefines one into. Both
+    /// spellings answer yes, since after `prepare_types` no signature test
+    /// tells a boxed borrow from a by-value parameter of the same shape.
+    ///
+    /// [`RefKind::from_resolved`] alone sees only what is still spelled as a
+    /// borrow, so a caller reasoning about values asks this instead.
+    pub fn is_reference_shaped(&self, type_id: TypeId) -> bool {
+        RefKind::from_resolved(self.get(type_id)).is_some()
+            || self.box_payload_of(type_id).is_some()
     }
 
     /// Record that `wrapper` was redefined from a shared `&T`, so it cannot be

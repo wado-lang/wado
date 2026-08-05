@@ -1,0 +1,23 @@
+// `Formatter::new(&mut buf)` hands back an aggregate holding the borrow it was
+// given. The engine has no reference values, so binding that result would make
+// the `Formatter`'s field a *snapshot* of `buf` — and the writes a later
+// `fmt` performs through it would land in the copy while `buf` went stale,
+// dropping the interpolated text from the string the region folds to.
+//
+// A `bool` interpolation is the shape that reaches it: `Display::fmt` inlines
+// to a statement-position block holding the `Formatter::new` and the write
+// through it, which the frame runs for the writes it performs.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let t = true;
+    let f = false;
+    println(`true: ${t}`);
+    println(`false: ${f}`);
+    println(`both: ${t}/${f}`);
+}
+
+__DATA__
+{
+    "stdout": "true: true\nfalse: false\nboth: true/false\n"
+}

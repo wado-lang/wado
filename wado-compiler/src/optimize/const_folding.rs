@@ -313,6 +313,7 @@ pub(super) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             "builtin::array_new" => CtfeBuiltin::ArrayNew,
             "builtin::array_set" | "builtin::array_set_u8" => CtfeBuiltin::ArraySet,
             "builtin::array_copy" => CtfeBuiltin::ArrayCopy,
+            "builtin::array_clone_prefix" => CtfeBuiltin::ArrayClonePrefix,
             "builtin::cold_path" => CtfeBuiltin::ColdPath,
             "builtin::select" => CtfeBuiltin::Select,
             "builtin::i32_as_char" => CtfeBuiltin::I32AsChar,

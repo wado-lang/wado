@@ -81,19 +81,9 @@ fn "enum_match_basic.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:enum_match_basic.wado::__modules_initialized = 1;
     };
-    "core:cli/println"(block -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 100), used: 3 };
-    });
-    "core:cli/println"(block -> ref "core:prelude/string.wado//String" {
-        block -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 };
-        };
-    });
-    "core:cli/println"(block -> ref "core:prelude/string.wado//String" {
-        block -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 108, 117, 101), used: 4 };
-        };
-    });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 100), used: 3 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 108, 117, 101), used: 4 });
     "wasi/task-return"(0);
 }
 
@@ -143,12 +133,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b6: block {
-        l7: loop {
-            break_if b6 i >= len;
+    b1: block {
+        l2: loop {
+            break_if b1 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l7;
+            continue l2;
         };
     };
 }
@@ -179,20 +169,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b8: block {
-        l9: loop {
-            break_if b8 offset >= count;
+    b3: block {
+        l4: loop {
+            break_if b3 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b8 (if (result >> 4) == 0 -> i32 {
+            break_if b3 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l9;
+            continue l4;
         };
     };
 }

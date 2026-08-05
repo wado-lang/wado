@@ -15,12 +15,14 @@ fn check_char(arr: List<char>, pos: i32, ch: char) -> bool {
     return true;
 }
 
+// `black_box` keeps the position out of CTFE's reach, so the call survives to
+// the WIR with the bounds check under test still in it.
 export fn run() with Stdout {
     let a: List<char> = ['h', 'e', 'l', 'l', 'o'];
-    println(`${check_char(a, 0, 'h')}`);
-    println(`${check_char(a, 4, 'o')}`);
-    println(`${check_char(a, 5, 'x')}`);
-    println(`${check_char(a, 2, 'x')}`);
+    println(`${check_char(a, builtin::black_box(0), 'h')}`);
+    println(`${check_char(a, builtin::black_box(4), 'o')}`);
+    println(`${check_char(a, builtin::black_box(5), 'x')}`);
+    println(`${check_char(a, builtin::black_box(2), 'x')}`);
 }
 
 __DATA__

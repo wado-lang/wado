@@ -1,0 +1,35 @@
+// `&()` is stackless, so a field holding one is dropped from the struct the
+// same way a `()` field is. Every side of that rule must agree: reading or
+// assigning such a field used to emit a `StructGet` / `StructSet` for a field
+// the declaration side had already dropped.
+struct Holder<T> {
+    v: T,
+    tag: i32,
+}
+
+fn read_field<T>(h: &Holder<T>) -> i32 {
+    let taken = h.v;
+    return h.tag;
+}
+
+fn write_field<T>(h: &mut Holder<T>, v: T) -> i32 {
+    h.v = v;
+    return h.tag;
+}
+
+export fn run() {
+    let u = ();
+    let mut h: Holder<&()> = Holder { v: &u, tag: 7 };
+    assert read_field(&h) == 7;
+    assert write_field(&mut h, &u) == 7;
+
+    // The plain `()` field goes down the same path.
+    let mut p: Holder<()> = Holder { v: (), tag: 9 };
+    assert read_field(&p) == 9;
+    assert write_field(&mut p, ()) == 9;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

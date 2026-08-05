@@ -456,10 +456,10 @@ global global:http_fields_get_and_delete.wado::__const_obj_7: ref null "core:pre
 global global:http_fields_get_and_delete.wado::__const_obj_8: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 16 };
 global global:http_fields_get_and_delete.wado::__const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 102, 105, 101, 108, 100, 115, 46, 104, 97, 115, 40, 34, 120, 45, 116, 101, 109, 112, 34, 32, 97, 115, 32, 70, 105, 101, 108, 100, 78, 97, 109, 101, 41, 10), used: 46 };
 global global:http_fields_get_and_delete.wado::__const_obj_13: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 11 };
+global global:http_fields_get_and_delete.wado::__const_obj_16: ref null "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(120), used: 1 };
 
 fn "http_fields_get_and_delete.wado/handle"(request) {
     let fields: i32;
-    let v_3: ref "core:prelude//List<u8>";
     let __v0_4: bool;
     let result: ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>,wasi:http/types.wado/HeaderError>";
     let values: ref "core:prelude//List<core:prelude/list.wado/List<u8>>";
@@ -616,8 +616,7 @@ fn "http_fields_get_and_delete.wado/handle"(request) {
         global:http_fields_get_and_delete.wado::__modules_initialized = 1;
     };
     fields = "http_fields_get_and_delete.wado/__cm_binding__Fields_new"();
-    v_3 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(120), used: 1 };
-    drop("http_fields_get_and_delete.wado/__cm_binding__Fields_append"(fields, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-temp"), used: 6 }, v_3));
+    drop("http_fields_get_and_delete.wado/__cm_binding__Fields_append"(fields, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-temp"), used: 6 }, global:http_fields_get_and_delete.wado::__const_obj_16));
     __v0_4 = "http_fields_get_and_delete.wado/__cm_binding__Fields_has"(fields, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-temp"), used: 6 });
     if @unlikely(__v0_4 == 0) {
         cold_path;

@@ -73,15 +73,9 @@ fn "variant_cross_module_pattern.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:variant_cross_module_pattern.wado::__modules_initialized = 1;
     };
-    block {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("1 < 2"), used: 5 });
-    };
-    block {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("3 == 3"), used: 6 });
-    };
-    block {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("5 > 1"), used: 5 });
-    };
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("1 < 2"), used: 5 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("3 == 3"), used: 6 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("5 > 1"), used: 5 });
 }
 
 fn "variant_cross_module_pattern.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -145,12 +139,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b4: block {
-        l5: loop {
-            break_if b4 i >= len;
+    b1: block {
+        l2: loop {
+            break_if b1 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l5;
+            continue l2;
         };
     };
 }
@@ -181,20 +175,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b6: block {
-        l7: loop {
-            break_if b6 offset >= count;
+    b3: block {
+        l4: loop {
+            break_if b3 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b6 (if (result >> 4) == 0 -> i32 {
+            break_if b3 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l7;
+            continue l4;
         };
     };
 }
