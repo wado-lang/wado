@@ -584,18 +584,54 @@ Each step lands and is measured before the next.
       [closing it](#how-the-87-function-gap-closed) took it to zero.
 - [x] Step 4 — `widen.rs` and `return_temp.rs` are deleted, `wrapper.rs` is
       down to `unwrap_to_inner_call`, `layout.rs` shrank: 4,188 lines to 1,735.
-      The gate held on counts (`widen = 0` everywhere) and on size — −251 bytes
-      against the pre-deletion baseline, with every benchmark at or below it,
-      after closing the four shapes the deletion exposed. Throughput is
-      unmeasured; it needs a quiet machine.
+      The count gate held (`widen = 0` everywhere). Size did not, quite: +67
+      bytes over 3.55 MB against the pre-deletion baseline (+0.0019 %), having
+      been −251 before the last round of correctness fixes. See
+      [what the size number is and is not](#what-the-size-number-is-and-is-not).
+      Throughput is unmeasured; it needs a quiet machine.
 - [x] Step 5 — `slot_flatten` stays in WIR, and the measurement is why. It
       splits a `ref W` result slot whose `W` is itself a small variant, and it
       fires 1–2 times per benchmark — once across `gale_gen`, twice on
       `cbor_twitter`. A NIR analogue means a tree-shaped layout through
       `compute_layout`, `build_result_tuple`, the call-site reconstruction and
       the arity cap, for those one or two functions. Instead this pass
-      _declines_ the shape (`slot_flatten_would_split`), which restores the
-      WIR splits it had been displacing and is worth -155 / -76 / -48 bytes.
+      _declines_ the shape, which restores the WIR splits it had been
+      displacing and is worth -155 / -76 / -48 bytes.
+
+## What the size number is and is not
+
+Wasm size is the cheap metric, not the goal. This pass exists to remove
+allocations from function returns; bytes are a proxy that stops tracking the
+goal as soon as a change trades code size for allocation count — which is
+exactly what scalarizing more functions does, since each return site pays
+padding and `Some(_)` / `None` nodes.
+
+What the branch actually did to the generated code, measured against the
+pre-deletion binary:
+
+| program        | struct.new  | multivalue_bind | multi-value sigs |
+| -------------- | ----------- | --------------- | ---------------- |
+| `cbor_twitter` | 1281 → 1281 | 497 → 497       | 158 → 158        |
+| `json_twitter` | 903 → 903   | 194 → 194       | 90 → 90          |
+
+Identical. On the two workloads that carry a throughput harness, the retirement
+and every fix after it are a wash in mechanism — the NIR pass reaches exactly
+what the WIR pass reached, and the ±60-byte deltas are codegen noise. No speed
+change is available there in either direction, which is what "subsumed" should
+mean.
+
+`gale_gen` is the one program whose behaviour moved: 75 scalarized functions
+before the last round, 85 after, +119 bytes, and no rebox in either. Ten more
+functions stopped boxing their return. Its static `struct.new` count went
+9945 → 9949, which measures instructions and not executions — the removed
+allocations are in the returns, the added ones are `Some(_)` wrappers. Whether
+that trade is worth +119 bytes is a throughput question, and this container
+cannot answer it: the number has to come from `mise run benchmark-all` on a
+quiet machine.
+
+So the honest reading of +67 is "no measured mechanism change on the workloads
+that matter, one program scalarized further at unknown runtime benefit" — not
+"the branch made the output worse".
 
 ## How the 87-function gap closed
 
