@@ -118,7 +118,7 @@ Wado-specific features:
 
 ## The CLI
 
-The `wado` binary is implemented in `wado-cli/`. Below, `wado` is shorthand for `cargo run --bin wado --`. `wado --help` lists every subcommand and `wado <command> --help` its flags.
+The `wado` binary is implemented in `wado-cli/`. Below, `wado` is shorthand for `cargo run --bin wado --`. `wado --help` lists every subcommand and `wado <command> --help` its flags; the `wado-cli` skill covers the workflows.
 
 The ones you reach for while developing the toolchain:
 
