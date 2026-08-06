@@ -402,7 +402,7 @@ carry the common shapes; the fixture suite is where the unusual ones live, and
 half its coverage sits behind `WADO_FULL_TEST`. Stub the pass out and run the
 full suite before deleting anything of this size.
 
-### The candidate sets converged — measured
+### The candidate sets converged
 
 The two analyses look at different programs: the WIR pass saw
 post-`nullable_ref`, post-`propagate_trivial_copies` shapes; the NIR pass sees
@@ -414,104 +414,30 @@ Closing those shapes one at a time took the leftovers to zero. Counted at `-O2`
 with `WADO_TRACE=sroa_variant_return`, `widen` is what the WIR pass still
 confirmed behind the NIR one on the run that cleared step 4 for deletion:
 
-| program            | widen | slot-flatten | wasm size |
-| ------------------ | ----- | ------------ | --------- |
-| `cbor_twitter`     | 0     | 0            | 214,015   |
-| `cbor_canada`      | 0     | 0            | 90,333    |
-| `cbor_catalog`     | 0     | 0            | 150,165   |
-| `json_twitter`     | 0     | 0            | 170,246   |
-| `json_canada`      | 0     | 0            | 75,356    |
-| `json_catalog`     | 0     | 0            | 123,850   |
-| `sqlite_parse`     | 0     | 0            | 584,940   |
-| `syntax_highlight` | 0     | 0            | 601,425   |
-| `gale_gen`         | 0     | 1            | 1,310,413 |
-| `fts`              | 0     | 0            | 18,860    |
-| `http_routing`     | 0     | 0            | 58,699    |
+| program            | widen | slot-flatten |
+| ------------------ | ----- | ------------ |
+| `cbor_twitter`     | 0     | 0            |
+| `cbor_canada`      | 0     | 0            |
+| `cbor_catalog`     | 0     | 0            |
+| `json_twitter`     | 0     | 0            |
+| `json_canada`      | 0     | 0            |
+| `json_catalog`     | 0     | 0            |
+| `sqlite_parse`     | 0     | 0            |
+| `syntax_highlight` | 0     | 0            |
+| `gale_gen`         | 0     | 1            |
+| `fts`              | 0     | 0            |
+| `http_routing`     | 0     | 0            |
 
 The one slot-flatten on `gale_gen` is by design — that pass stays (step 5).
 `widen` is dead on every workload, which is what makes step 4 reachable.
 
-The size cost of the NIR half was +0.80 % / +0.23 % / +0.29 % at the point the
-two passes split the work, and +2.4 % / +4.4 % / +1.6 % before the tail-call
-cascade rule below. The residual is the padding and `Some(_)` / `None` nodes the
-NIR pass emits at return sites, which the WIR pass did not pay because it worked
-in WIR directly.
+The NIR pass pays for padding and `Some(_)` / `None` nodes at return sites that
+the WIR pass did not, because it worked in WIR directly. No rebox fires on any
+workload.
 
-No rebox fires on any workload.
-
-Every count here is a paired run — same build, flag on and off — because a
-widened-function count read once, on one program, is not evidence. An earlier
-draft recorded `sqlite_parse` dropping from 67 to 1 and blamed step 2; a
-merge-base build widens 1 too, and emits the same bytes.
-
-### Throughput
-
-`json_twitter`, four interleaved pairs on one machine (MB/s):
-
-| run | off ser | on ser | off de | on de  |
-| --- | ------- | ------ | ------ | ------ |
-| 1   | 271.35  | 287.02 | 109.16 | 112.58 |
-| 2   | 288.12  | 291.65 | 114.00 | 111.29 |
-| 3   | 284.09  | 294.94 | 110.61 | 137.40 |
-| 4   | 288.49  | 290.32 | 112.06 | 114.46 |
-
-Serialization is faster in all four pairs, by about 2 % on the medians, and the
-slowest `on` run still beats the median `off` run. Deserialization is not
-distinguishable from noise: the 137.40 is an outlier, and without it the two
-medians sit within 1 %.
-
-Read that as a floor, not a verdict. A first ad-hoc pair on this same container
-read +6.2 % and the next read −2.7 %, so a single run here is worthless and even
-four pairs only resolve a couple of percent.
-
-### What the bytes measure
-
-Wasm size is the cheap metric, not the goal. This pass exists to remove
-allocations from function returns; bytes are a proxy that stops tracking the
-goal as soon as a change trades code size for allocation count — which is
-exactly what scalarizing more functions does, since each return site pays
-padding and `Some(_)` / `None` nodes.
-
-What the branch actually did to the generated code, measured against the
-pre-deletion binary:
-
-| program        | struct.new  | multivalue_bind | multi-value sigs |
-| -------------- | ----------- | --------------- | ---------------- |
-| `cbor_twitter` | 1281 → 1281 | 497 → 497       | 158 → 158        |
-| `json_twitter` | 903 → 903   | 194 → 194       | 90 → 90          |
-
-Identical. On the two workloads that carry a throughput harness, the retirement
-and every fix after it are a wash in mechanism — the NIR pass reaches exactly
-what the WIR pass reached, and the ±60-byte deltas are codegen noise. No speed
-change is available there in either direction, which is what "subsumed" should
-mean.
-
-`gale_gen` is the one program whose behaviour moved: 75 scalarized functions
-before the last round, 85 after, +119 bytes, and no rebox in either. Ten more
-functions stopped boxing their return. Its static `struct.new` count went
-9945 → 9949, which counts instructions and not executions — the removed
-allocations are in the returns, the added ones are `Some(_)` wrappers.
-
-That trade pays. Eight counterbalanced pairs against the pre-deletion binary,
-alternating which ran first:
-
-| order            | before | now    | delta   |
-| ---------------- | ------ | ------ | ------- |
-| before first (4) | 136.88 | 142.46 | +4.07 % |
-| now first (4)    | 138.59 | 146.82 | +5.95 % |
-| all (8)          | 137.89 | 145.66 | +5.63 % |
-
-KB/s, medians. `now` is faster in 8 of 8, in both orders, so the result
-survives the ordering bias.
-
-Counterbalancing is not optional here, and neither is running enough pairs.
-Three pairs in fixed order read −2.4 %; nine read +5.07 % with the same binary
-spanning 97.99–154.03 KB/s; only alternating the order and looking at the
-spread settled it. A couple of pairs on this container measure the container.
-
-So +67 bytes of wasm buys ~5.6 % on the one workload whose code actually
-changed, and costs nothing on the two that carry a serde harness, where the
-mechanism is identical. Bytes were the wrong headline.
+Read a widened-function count only from a paired run — same build, flag on and
+off. An earlier draft recorded `sqlite_parse` dropping from 67 to 1 and blamed
+step 2; a merge-base build widens 1 too.
 
 ### Termination and monotonicity
 
@@ -598,8 +524,8 @@ rebox firing in steady state means the candidate should not have been taken. On
 still returned the variant: `invalidate_bad_call_sites` accepted a
 tail-position call without checking that the _caller_ had a tuple to pass it
 through. Refusing the callee in that case — and letting the fix-point propagate
-the refusal, which is what `widen.rs`'s cascade does — took the reboxes to zero
-and the size cost from +4.4 % to +0.91 %.
+the refusal, which is what `widen.rs`'s cascade did — took the reboxes to
+zero.
 
 The rule that follows: the repair exists for sites that appear after the fact,
 not for sites validation could have refused. A non-zero steady-state rebox
@@ -619,24 +545,19 @@ Each step lands and is measured before the next.
 
 - [x] Step 1 — the pass behind a staging flag, off by default. The
       candidate-set comparison is done (see above): the two passes together
-      scalarize more than the WIR pass alone on every serde workload, at
-      +0.27 % to +0.92 % of wasm size and about +2 % of serialization
-      throughput.
+      scalarize more than the WIR pass alone on every serde workload.
 - [x] Step 2 — lift the `is_trait_method` gate and the arity cap in
-      `multi_value_return`, on their own. Landed: full E2E green, wasm size
-      neutral to -0.06%. `i128^Mul::mul` and its siblings now return
-      `[u64, i64]` instead of allocating an `i128` struct per operation.
+      `multi_value_return`, on their own. Landed: full E2E green.
+      `i128^Mul::mul` and its siblings now return `[u64, i64]` instead of
+      allocating an `i128` struct per operation.
 - [x] Step 3 — the pass is on and the flag is gone, with
       `wir_optimize::sroa_variant_returns` still running behind it. What it
       still found was the worklist, and
       [closing it](#how-the-87-function-gap-closed) took it to zero.
 - [x] Step 4 — `widen.rs` and `return_temp.rs` are deleted, `wrapper.rs` is
       down to `unwrap_to_inner_call`, `layout.rs` shrank: 4,188 lines to 1,735.
-      The count gate held (`widen = 0` everywhere). Size did not, quite: +67
-      bytes over 3.55 MB against the pre-deletion baseline (+0.0019 %), having
-      been −251 before the last round of correctness fixes — and it buys
-      ~5.6 % of `gale_gen` throughput, the one workload whose code changed. See
-      [what the bytes measure](#what-the-bytes-measure).
+      The count gate held — `widen = 0` everywhere. Size and throughput are
+      unmeasured; both need `mise run benchmark-all` on a quiet machine.
 - [x] Step 5 — `slot_flatten` stays in WIR, and the measurement is why. It
       splits a `ref W` result slot whose `W` is itself a small variant, and it
       fires 1–2 times per benchmark — once across `gale_gen`, twice on
@@ -644,7 +565,7 @@ Each step lands and is measured before the next.
       `compute_layout`, `build_result_tuple`, the call-site reconstruction and
       the arity cap, for those one or two functions. Instead this pass
       _declines_ the shape, which restores the WIR splits it had been
-      displacing and is worth -155 / -76 / -48 bytes.
+      displacing.
 
 ## How the 87-function gap closed
 
@@ -675,9 +596,9 @@ The 30 were the payload rule. `Option<i32>` as a case payload was declined and
 handed to the WIR side by design. Giving the
 inner variant its own tag and slots in the outer tuple takes them here instead.
 A nested layout that _reconstructs_ the inner value at the call site was
-implemented and measured first, and discarded: it produced exactly the intended
-signatures and cost +985 bytes to recover +113, because a site binding the whole
-inner value has to rebuild what the callee just took apart. The form that pays
+implemented first and discarded: it produced exactly the intended signatures and
+cost more than it recovered, because a site binding the whole inner value has to
+rebuild what the callee just took apart. The form that pays
 pushes the destructure into the call site, which is what `slot_flatten` does —
 so a payload the split would still reach is left to it.
 
@@ -719,16 +640,15 @@ used to hand-roll it. Two details it has to get right:
 
 `Cursor::scan` goes from a boxed `ref tuple` to `-> [i32, i32, ref null Fail]`,
 and `CborDeserializer::is_null` — the last boxed tuple this pass left on
-`cbor_twitter` — flattens with it, for -94 bytes.
+`cbor_twitter` — flattens with it.
 
 The aggregate rule alone was not enough to retire `return_temp.rs`. It removed
 the shape for a literal, and left it for a bare local — `__hfs_call_N = hit;
 self.pos = __hfs_pos; return __hfs_call_N` survived on `sqlite_parse` and
-`syntax_highlight`, which the WIR pass had been cleaning up unnoticed. That is
-what the deletion's +4 bytes on each were, and the local rule above is what
-closed them. Removing a shape at its source is still cheaper than recognising it
-afterwards; the caution is that "removed" has to be measured, not assumed from
-the case that motivated the rule.
+`syntax_highlight`, which the WIR pass had been cleaning up unnoticed. The local
+rule above is what closed it. Removing a shape at its source is still cheaper
+than recognising it afterwards; the caution is that "removed" has to be checked,
+not assumed from the case that motivated the rule.
 
 ### A `LabeledBlock` return value arriving via `break L: v`
 

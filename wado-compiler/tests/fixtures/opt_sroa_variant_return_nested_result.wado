@@ -8,11 +8,11 @@
 //
 // Splitting that slot into `[inner_disc, i64, i32]` is what `wir_optimize`'s
 // `slot_flatten` used to do, and it is deliberately not done here. Doing it in
-// NIR was implemented and measured: the callee stops allocating, but a call
+// NIR was implemented and discarded: the callee stops allocating, but a call
 // site that binds the whole inner value has to rebuild it, and the rebuild cost
-// nine times what the allocation did (+985 bytes against +113 on cbor_twitter).
-// Recovering it needs the destructure pushed down into the call site, not the
-// inner value reconstructed — see the WEP.
+// more than the allocation it removed. Recovering it needs the destructure
+// pushed down into the call site, not the inner value reconstructed — see the
+// WEP.
 //
 // `#[inline("never")]` keeps `step` a real SROA'd call site.
 variant OuterErr {
