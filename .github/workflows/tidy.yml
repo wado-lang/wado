@@ -35,12 +35,19 @@ jobs:
 
       # Skip the heavy steps when the latest commit is tidy's own output, so we
       # don't re-tidy idempotent output or spin up a push loop.
-      - name: Precheck — short-circuit on a tidy bot commit
+      #
+      # Skip tagpr release branches too: tagpr replays every non-tagpr commit
+      # onto the branch it recreates, so a pushed `chore: tidy` never leaves it.
+      - name: Precheck — short-circuit on a tidy bot commit or a tagpr branch
         id: precheck
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           msg=$(git log -1 --pretty=%s)
           email=$(git log -1 --pretty=%ae)
           if [ "$msg" = "chore: tidy" ] && [[ "$email" == *"[bot]"* ]]; then
+            echo "should-run=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$HEAD_REF" == tagpr-from-* ]]; then
             echo "should-run=false" >> "$GITHUB_OUTPUT"
           else
             echo "should-run=true" >> "$GITHUB_OUTPUT"
