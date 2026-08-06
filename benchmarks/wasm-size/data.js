@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786017476893,
+  "lastUpdate": 1786025729548,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46257,6 +46257,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/99c050da1667d6547bc60a67a0ef6ccdec8faccb"
         },
         "date": 1786017476048,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6034,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16221,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271639,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d13be150250d4e6f80db098225efc01f98c4b530",
+          "message": "Merge pull request #1761 from wado-lang/chore/tidy-skip-tagpr-branch\n\nchore(ci): skip Tidy on tagpr release branches",
+          "timestamp": "2026-08-07T00:03:27+10:00",
+          "tree_id": "d553d7c7aaa9ba7783515f05e529a1eed0b7f59c",
+          "url": "https://github.com/wado-lang/wado/commit/d13be150250d4e6f80db098225efc01f98c4b530"
+        },
+        "date": 1786025728733,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
