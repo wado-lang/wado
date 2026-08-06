@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786025729548,
+  "lastUpdate": 1786029544574,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46301,6 +46301,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d13be150250d4e6f80db098225efc01f98c4b530"
         },
         "date": 1786025728733,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6034,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16221,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271639,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a142607ea3bbbcedaf76dcfbf3bdfd37103605c1",
+          "message": "Merge pull request #1762 from wado-lang/docs/agents-md-delegation\n\ndocs: reorganize AGENTS.md, split out a wado-cli skill, and fix two CLI help gaps",
+          "timestamp": "2026-08-07T01:07:47+10:00",
+          "tree_id": "caa06218bd4bb69c1ab2a05f6ec4160b207665bc",
+          "url": "https://github.com/wado-lang/wado/commit/a142607ea3bbbcedaf76dcfbf3bdfd37103605c1"
+        },
+        "date": 1786029544216,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
