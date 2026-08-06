@@ -103,7 +103,7 @@ impl Cmd {
             Self::Clean => "Evict derived cache state (git worktrees)",
             Self::Build => "Build the project's worlds from wado.toml",
             Self::Compile => "Compile a single Wado source file",
-            Self::Check => "Verify Kiln generators match committed source (CI)",
+            Self::Check => "Verify a source file and its Kiln generators",
             Self::Run => "Compile and run a Wado CLI program",
             Self::Serve => "Compile and serve a Wado HTTP service",
             Self::Test => "Run tests in Wado source files",
@@ -278,7 +278,10 @@ async fn dispatch() -> Result<(), CliExit> {
                     let opts = wado_cli::syntax::parse_args(parser)?;
                     wado_cli::syntax::run(opts)
                 }
-                Cmd::Lsp => Box::pin(wado_cli::lsp::run()).await,
+                Cmd::Lsp => {
+                    let opts = wado_cli::lsp::parse_args(parser)?;
+                    Box::pin(wado_cli::lsp::run(opts)).await
+                }
                 Cmd::Query => {
                     let opts = wado_cli::query::parse_args(parser)?;
                     Box::pin(wado_cli::query::run(opts)).await
