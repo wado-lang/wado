@@ -25,7 +25,7 @@ Commands:
   clean [options]                     Evict derived cache state (git worktrees)
   build [options]                     Build the project's worlds from wado.toml
   compile [options] <file.wado>       Compile a single Wado source file
-  check [options] [file.wado]         Verify Kiln generators match committed source (CI)
+  check [options] [file.wado]         Verify a source file and its Kiln generators
   run [options] [file.wado]           Compile and run a Wado CLI program
   serve [options] [file.wado]         Compile and serve a Wado HTTP service
   test [options] [files or dirs...]   Run tests in Wado source files
