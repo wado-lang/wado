@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786062455506,
+  "lastUpdate": 1786064750817,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46389,6 +46389,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/73a59526723074bf49f19ebca1cbf7b2233fa74f"
         },
         "date": 1786062455195,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6034,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16221,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271639,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e99ac23b604f23faa41c33c88029bfe902327c5b",
+          "message": "Merge pull request #1677 from wado-lang/tagpr-from-v0.0.23\n\nRelease for v0.0.24",
+          "timestamp": "2026-08-07T09:53:55+09:00",
+          "tree_id": "a23141f58ba9d94dfaeeb83d735fdbc3c3b5a6a1",
+          "url": "https://github.com/wado-lang/wado/commit/e99ac23b604f23faa41c33c88029bfe902327c5b"
+        },
+        "date": 1786064749946,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
