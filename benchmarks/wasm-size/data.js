@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786029544574,
+  "lastUpdate": 1786062455506,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46345,6 +46345,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a142607ea3bbbcedaf76dcfbf3bdfd37103605c1"
         },
         "date": 1786029544216,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6034,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16221,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271639,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "73a59526723074bf49f19ebca1cbf7b2233fa74f",
+          "message": "Merge pull request #1763 from wado-lang/deps/wasmtime-47.0.3\n\nbuild(deps): upgrade wasmtime to 47.0.3",
+          "timestamp": "2026-08-07T09:14:23+09:00",
+          "tree_id": "4ccbcaebe925c6ef385c9c0dbeefb2fde1d7a83b",
+          "url": "https://github.com/wado-lang/wado/commit/73a59526723074bf49f19ebca1cbf7b2233fa74f"
+        },
+        "date": 1786062455195,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
