@@ -299,14 +299,14 @@ struct LocalIndexRewriter {
     new_idx: u32,
 }
 
-/// Retypes every use of one unrolled binding to its concrete element type, and
-/// re-points a method call whose receiver is that binding at the impl the
-/// concrete type selects. Closures keep their own local namespace, so their
+/// Retypes every use of one unrolled binding to its concrete element type,
+/// including the `&`/`&mut` wrapper a method receiver takes — dispatch resolves
+/// off the receiver's type, so pinning it is what keeps a nested unroll from
+/// retargeting the call. Closures keep their own local namespace, so their
 /// bodies are left alone.
 struct BindingTypePinner<'a> {
     binding_local: u32,
     elem_type: TypeId,
-    functions: &'a super::state::FuncInstState,
     type_table: &'a mut TypeTable,
 }
 
@@ -321,10 +321,6 @@ impl TirMutVisitor for BindingTypePinner<'_> {
         }
         self.walk_expr(expr);
 
-        // A `&`/`&mut` wrapper's type is derived from what it wraps, so pinning
-        // the binding without it leaves `&T` for the enclosing substitution to
-        // re-map — which is how a nested unroll retargeted a method call at its
-        // own element's impl.
         if let TirExprKind::Unary { op, expr: inner } = &expr.kind
             && matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
             && Monomorphizer::expr_uses_local(inner, self.binding_local)
@@ -333,39 +329,6 @@ impl TirMutVisitor for BindingTypePinner<'_> {
                 TirUnaryOp::MutRef => self.type_table.make_mut_ref(self.elem_type),
                 _ => self.type_table.make_ref(self.elem_type),
             };
-        }
-
-        let TirExprKind::Call {
-            func,
-            args,
-            has_receiver: true,
-            ..
-        } = &mut expr.kind
-        else {
-            return;
-        };
-        let Some((receiver, _)) = args.split_first() else {
-            return;
-        };
-        if !Monomorphizer::expr_uses_local(&receiver.expr, self.binding_local) {
-            return;
-        }
-        let Some(info) = &mut func.method_info else {
-            return;
-        };
-        *info = info.with_substituted_struct_name(&self.type_table.fq_type_name(self.elem_type));
-        func.name = info.to_mangled_name();
-        // The impl that defines the method owns the call, not the receiver
-        // type's own module: `impl Display for String` lives in `format.wado`,
-        // so keying on `String` alone would mint an extern stub for a name the
-        // package defines.
-        let receiver_module = module_source_for_trait_impl(self.type_table, self.elem_type);
-        if let Some(ms) = self
-            .functions
-            .impl_module(info, receiver_module.as_ref())
-            .or(receiver_module)
-        {
-            func.module_source = ms;
         }
     }
 }
@@ -4445,7 +4408,6 @@ impl Monomorphizer {
         BindingTypePinner {
             binding_local,
             elem_type,
-            functions: &self.functions,
             type_table,
         }
         .visit_block(block);
