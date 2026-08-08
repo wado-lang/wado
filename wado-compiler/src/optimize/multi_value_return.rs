@@ -742,7 +742,7 @@ fn validate_tail_return(
             for arm in arms {
                 let mut inner = tracked.clone();
                 if let Some(guard) = arm.guard {
-                    walk_expr_for_uses_operand(body, guard, cx, invalid, &mut inner);
+                    walk_expr_for_uses_operand(body, guard, cx, invalid, &inner);
                 }
                 validate_tail_return(body, arm.body, ours, cx, invalid, &mut inner);
             }
