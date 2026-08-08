@@ -152,24 +152,24 @@ struct tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Res
     mut 1: i32,
 }
 
-variant core:prelude/types.wado//Option<u16> {  // TypeId(23)
-    Some(u16),
-    None,
-}
-
-struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(24)
-    discriminant: i32,
-    payload_0: u16,
-}
-
-variant core:prelude/types.wado//Option<u8> {  // TypeId(25)
+variant core:prelude/types.wado//Option<u8> {  // TypeId(23)
     Some(u8),
     None,
 }
 
-struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(26)
+struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(24)
     discriminant: i32,
     payload_0: u8,
+}
+
+variant core:prelude/types.wado//Option<u16> {  // TypeId(25)
+    Some(u16),
+    None,
+}
+
+struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(26)
+    discriminant: i32,
+    payload_0: u16,
 }
 
 variant core:prelude/types.wado//Option<u32> {  // TypeId(27)
@@ -1418,21 +1418,21 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(iter) {
     let result: ref "core:prelude//List<u8>";
     let byte: u8;
-    let _licm_used_12: i32;
-    let _licm_repr_13: ref Array<u8>;
-    let __hfs_index_14: i32;
+    let _licm_used_13: i32;
+    let _licm_repr_14: ref Array<u8>;
+    let __hfs_index_15: i32;
     result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-    _licm_used_12 = iter.used;
-    _licm_repr_13 = iter.repr;
-    __hfs_index_14 = iter.index;
+    _licm_used_13 = iter.used;
+    _licm_repr_14 = iter.repr;
+    __hfs_index_15 = iter.index;
     b172: block {
         l173: loop {
-            if __hfs_index_14 >= _licm_used_12 {
-                iter.index = __hfs_index_14;
+            if __hfs_index_15 >= _licm_used_13 {
+                iter.index = __hfs_index_15;
                 break b172;
             }
-            byte = builtin::array_get<u8>(_licm_repr_13, __hfs_index_14);
-            __hfs_index_14 = __hfs_index_14 + 1;
+            byte = builtin::array_get<u8>(_licm_repr_14, __hfs_index_15);
+            __hfs_index_15 = __hfs_index_15 + 1;
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, byte);
             continue l173;
         };

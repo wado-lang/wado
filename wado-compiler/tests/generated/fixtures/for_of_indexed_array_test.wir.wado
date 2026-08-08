@@ -128,17 +128,17 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(50)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::len" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(51)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(51)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(52)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::len" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(52)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(53)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(53)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(54)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(54)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(55)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(55)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(56)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(56)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -217,12 +217,12 @@ fn "for_of_indexed_array_test.wado/for_of_with_continue"(data) {
             __iter_4 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: self_11.repr, index: 0, end: self_11.used };
             b2: block {
                 l3: loop {
-                    let __sroa___match_6_discriminant: i32;
-                    let __sroa___match_6_payload_0: i32;
-                    multivalue_bind [__sroa___match_6_discriminant, __sroa___match_6_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_4);
-                    if __sroa___match_6_discriminant == 0 {
-                        continue_if l3 (__sroa___match_6_payload_0 % 2) == 0;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(result, __sroa___match_6_payload_0);
+                    let __match_6_mv_0: i32;
+                    let __match_6_mv_1: i32;
+                    multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_4);
+                    if __match_6_mv_0 == 0 {
+                        continue_if l3 (__match_6_mv_1 % 2) == 0;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(result, __match_6_mv_1);
                     } else {
                         break b2;
                     }
@@ -254,12 +254,12 @@ fn "for_of_indexed_array_test.wado/for_of_with_break"(data) {
             __iter_4 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: self_11.repr, index: 0, end: self_11.used };
             b7: block {
                 l8: loop {
-                    let __sroa___match_6_discriminant: i32;
-                    let __sroa___match_6_payload_0: i32;
-                    multivalue_bind [__sroa___match_6_discriminant, __sroa___match_6_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_4);
-                    if __sroa___match_6_discriminant == 0 {
-                        break_if b7 __sroa___match_6_payload_0 > 2;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(result, __sroa___match_6_payload_0);
+                    let __match_6_mv_0: i32;
+                    let __match_6_mv_1: i32;
+                    multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_4);
+                    if __match_6_mv_0 == 0 {
+                        break_if b7 __match_6_mv_1 > 2;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(result, __match_6_mv_1);
                     } else {
                         break b7;
                     }
@@ -445,12 +445,12 @@ fn "for_of_indexed_array_test.wado/__test_2_continue_with_double_indexed_access"
             __iter_9 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: self_66.repr, index: 0, end: self_66.used };
             b25: block {
                 l26: loop {
-                    let __sroa___match_29_discriminant: i32;
-                    let __sroa___match_29_payload_0: i32;
-                    multivalue_bind [__sroa___match_29_discriminant, __sroa___match_29_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_9);
-                    if __sroa___match_29_discriminant == 0 {
-                        continue_if l26 (__sroa___match_29_payload_0 % 20) == 0;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(result, __sroa___match_29_payload_0);
+                    let __match_29_mv_0: i32;
+                    let __match_29_mv_1: i32;
+                    multivalue_bind [__match_29_mv_0, __match_29_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_9);
+                    if __match_29_mv_0 == 0 {
+                        continue_if l26 (__match_29_mv_1 % 20) == 0;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(result, __match_29_mv_1);
                     } else {
                         break b25;
                     }

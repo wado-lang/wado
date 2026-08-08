@@ -1,0 +1,52 @@
+// A return whose value is a local the field write-back does not touch.
+//
+// `field_scalarize` hoists `self.pos` into `__hfs_pos`, so a `return` inside the
+// loop has to write it back before the jump. The returned value is captured
+// first so the write-back cannot run before it is evaluated — but `hit` is a
+// local the write-back only reads past, never assigns, so reading it after the
+// sync yields exactly what reading it before would.
+//
+// Capturing it anyway left `__hfs_call_N = hit; self.pos = __hfs_pos; return
+// __hfs_call_N`, a temp the retired `wir_optimize` return-temp pass used to
+// clean up afterwards.
+internal struct Cursor {
+    pos: i32,
+    limit: i32,
+    seen: i32,
+}
+
+impl Cursor {
+    #[inline("never")]
+    fn scan(&mut self, k: i32) -> i32 {
+        let mut hit = -1;
+        while self.pos < self.limit {
+            if self.pos == k {
+                hit = self.pos;
+                self.pos = self.pos + 1;
+                return hit;
+            }
+            self.pos = self.pos + 1;
+            self.seen = self.seen + 1;
+        }
+        return hit;
+    }
+}
+
+export fn run() {
+    let mut found = Cursor { pos: 0, limit: 6, seen: 0 };
+    assert found.scan(3) == 3;
+    assert found.pos == 4;
+    assert found.seen == 3;
+
+    let mut missed = Cursor { pos: 0, limit: 4, seen: 0 };
+    assert missed.scan(9) == -1;
+    assert missed.pos == 4;
+    assert missed.seen == 4;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["return hit;"],
+    "wir_not_expect:O2": ["__hfs_call"]
+}

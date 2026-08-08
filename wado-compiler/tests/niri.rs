@@ -5221,6 +5221,7 @@ fn make_pure_fn_stmts(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
+        scalarized_from: None,
         return_abi: ReturnAbi::Single,
     };
     set_arena_body(&mut f, body_stmts);

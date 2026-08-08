@@ -1,20 +1,16 @@
-//! Variant return SROA (Scalar Replacement of Aggregates) for WIR.
+//! Nested result-slot flattening for variant returns.
 //!
-//! Rewrites internal functions that return a variant lowered as
-//! `(i32 disc, payload_0, payload_1, ...)` into Wasm multi-value returns,
-//! eliminating GC struct allocation at function boundaries for the
-//! variant-case ref.
+//! Widening a variant return into `[i32 disc, payload…]` happens at NIR
+//! (`optimize::sroa_variant_return`, feeding `optimize::multi_value_return`).
+//! What stays here is the one step that needs WIR shapes: splitting a `ref W`
+//! *result slot* whose `W` is itself a small variant — the `Ok(ref Option<T>)`
+//! a widening leaves boxed.
 //!
-//! Tuple and user-struct return ABIs are classified at TIR
-//! (`optimize::multi_value_return`); the variant case lives here because its
-//! layout — shared versus per-case payload offsets — is WIR-specific.
-//!
-//! Two entry points over one layout engine ([`layout`]):
-//!
-//! - [`sroa_variant_returns`] widens a function whose sole result is a boxed
-//!   `ref Variant`.
-//! - [`flatten_variant_slots`] splits a `ref W` *result slot* whose `W` is
-//!   itself a small variant — the `Ok(ref Option<T>)` a widening leaves boxed.
+//! The split is decidable only after lowering. Its gates read how each call
+//! site consumes the slot and whether every return decomposes, neither of which
+//! NIR can see; a NIR analogue was measured and cost more than it recovered
+//! (`docs/wep-2026-08-03-variant-return-abi.md`). So the NIR pass declines the
+//! shape and this reaches it instead.
 
 use crate::compiler_trace;
 use crate::wir::WirPackage;
@@ -23,36 +19,10 @@ use super::util::collect_pinned_func_ids;
 
 mod access;
 mod layout;
-mod return_temp;
 mod slot_flatten;
-mod widen;
 mod wrapper;
 
-use return_temp::{elide_return_only_temps, scalarize_return_only_temps};
 use slot_flatten::{apply_slot_flatten, slot_flatten_candidates, validate_slot_sites};
-use widen::{apply_sroa, find_sroa_candidates, validate_call_sites};
-
-/// Widen every eligible variant-returning function, and every call site of one,
-/// to the multi-value ABI.
-pub(super) fn sroa_variant_returns(module: &mut WirPackage) {
-    let pinned = collect_pinned_func_ids(module);
-    elide_return_only_temps(module, &pinned);
-    scalarize_return_only_temps(module, &pinned);
-
-    let candidates = find_sroa_candidates(module, &pinned);
-    compiler_trace!("sroa_variant_return", "candidates = {}", candidates.len());
-    if candidates.is_empty() {
-        return;
-    }
-
-    let confirmed = validate_call_sites(module, &candidates);
-    compiler_trace!("sroa_variant_return", "confirmed = {}", confirmed.len());
-    if confirmed.is_empty() {
-        return;
-    }
-
-    apply_sroa(module, &confirmed);
-}
 
 /// Split every eligible nested `ref W` result slot, to a fix-point: a round
 /// flattens at most one slot per function, exposing the next level for the round

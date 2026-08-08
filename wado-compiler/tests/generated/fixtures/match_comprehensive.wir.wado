@@ -147,7 +147,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::wri
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(49)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>") -> ref null "core:prelude/types.wado//Option<i32>";  // TypeId(50)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>") -> [i32, ref null "core:prelude/types.wado//Option<i32>"];  // TypeId(50)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(51)
 
@@ -341,7 +341,6 @@ fn "match_comprehensive.wado/match_in_loop"() with Stdout {
     let n: i32;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
-    let __match_8: ref null "core:prelude/types.wado//Option<i32>";
     let start_29: i32;
     let start_38: i32;
     let start_47: i32;
@@ -351,9 +350,11 @@ fn "match_comprehensive.wado/match_in_loop"() with Stdout {
     __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>" { repr: items.repr, index: 0, end: 5 };
     b9: block {
         l10: loop {
-            __match_8 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^Iterator::next"(__iter_3);
-            if ref.is_null(__match_8) == 0 {
-                item = ref.as_non_null(__match_8);
+            let __match_8_mv_0: i32;
+            let __match_8_mv_1: ref null "core:prelude/types.wado//Option<i32>";
+            multivalue_bind [__match_8_mv_0, __match_8_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^Iterator::next"(__iter_3);
+            if __match_8_mv_0 == 0 {
+                item = ref.as_non_null(__match_8_mv_1);
                 if ref.test "core:prelude/types.wado//Option<i32>::Some"(item) {
                     n = ref.cast "core:prelude/types.wado//Option<i32>::Some"(item).payload_0;
                     sum = sum + n;
@@ -491,7 +492,6 @@ fn "match_comprehensive.wado/if_let_with_else"() with Stdout {
     let n: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    let __match_7: ref null "core:prelude/types.wado//Option<i32>";
     let start_24: i32;
     let start_33: i32;
     let start_42: i32;
@@ -500,9 +500,11 @@ fn "match_comprehensive.wado/if_let_with_else"() with Stdout {
     __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>" { repr: values.repr, index: 0, end: 3 };
     b13: block {
         l14: loop {
-            __match_7 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^Iterator::next"(__iter_2);
-            if ref.is_null(__match_7) == 0 {
-                v = ref.as_non_null(__match_7);
+            let __match_7_mv_0: i32;
+            let __match_7_mv_1: ref null "core:prelude/types.wado//Option<i32>";
+            multivalue_bind [__match_7_mv_0, __match_7_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^Iterator::next"(__iter_2);
+            if __match_7_mv_0 == 0 {
+                v = ref.as_non_null(__match_7_mv_1);
                 if ref.test "core:prelude/types.wado//Option<i32>::Some"(v) {
                     n = ref.cast "core:prelude/types.wado//Option<i32>::Some"(v).payload_0;
                     "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }; start_24 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_5, 1); builtin::array_set_u8(__local_5.repr, start_24, 103); start_33 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_5, 1); builtin::array_set_u8(__local_5.repr, start_33, 111); start_42 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_5, 1); builtin::array_set_u8(__local_5.repr, start_42, 116); start_51 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_5, 1); builtin::array_set_u8(__local_5.repr, start_51, 32); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(n, __local_6); __local_5);
@@ -876,11 +878,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^Iterator::next"(self) {
     let item: ref "core:prelude/types.wado//Option<i32>";
     if self.index >= self.end {
-        return ref.null none;
+        return 1, ref.null none;
     }
     item = builtin::array_get<ref "core:prelude/types.wado//Option<i32>">(self.repr, self.index);
     self.index = self.index + 1;
-    return item;
+    return 0, item;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {

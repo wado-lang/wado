@@ -59,6 +59,7 @@ Allocation and aggregate:
 - `sroa` — decompose non-escaping struct/tuple locals into scalar locals. The highest-impact WasmGC pass.
 - `container_sroa` — turn `List<Struct>` / `List<Tuple>` into parallel per-field lists (array-of-structs → struct-of-arrays).
 - `sroa_param` — replace a single-field-struct reference parameter with its inner scalar, unwrapping the box that `&T` values allocate.
+- `sroa_variant_return` — rewrite a variant return into a `[tag, slots…]` tuple, so a `Result`-returning call stops being one opaque boxed value to every later pass. The return-position dual of `sroa_param`; `multi_value_return` then flattens the tuple to the Wasm multi-value ABI. See [WEP: Variant Return Scalarization at NIR](./wep-2026-08-03-variant-return-abi.md).
 - `elide_box_local` — collapse a box bound once and read once into its inner value.
 - `array_literal` — fold an array-builder window into a single fixed-array literal.
 - `value_copy_demote` — demote a deep list value-copy to a shallow spine copy when its elements are provably never mutated through the binding.
@@ -67,7 +68,7 @@ There is no value-copy _elision_ pass: defensive copies are chosen at the lower 
 
 Variant and reference:
 
-- `labeled_block_fusion` — delete the intermediate `Option`/`Result` an inlined `?` helper leaves at its consumer, threading each producer directly to the value it yields.
+- `labeled_block_fusion` — delete the intermediate an inlined `?` helper leaves at its consumer, threading each producer directly to the value it yields. Recognises the `Option`/`Result` and the `[tag, slots…]` `sroa_variant_return` leaves in its place.
 - `ref_elim` — drop reference bindings read only via field access, rewriting each read to the source; a shared borrow of a pure aggregate substitutes the aggregate so its projections fold.
 
 Scalar and dataflow:
@@ -158,10 +159,6 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
       elimination, which promotion alone would not recover.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
-- [ ] Variant return ABI decided at NIR, the way `multi_value_return` already
-      decides the tuple and struct case. Until then every NIR pass sees a
-      `Result`-returning call as one opaque boxed value: the scalarization
-      happens in `wir_optimize::sroa_variant_return`, after they have all run.
 - [ ] Folding a `match` whose scrutinee is a syntactically known
       `VariantConstruct`. The constant-scrutinee path runs through
       `const_eval::Value`, which is all-or-nothing constant, so "case known,

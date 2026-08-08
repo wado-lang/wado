@@ -1701,13 +1701,173 @@ fn insert_convergence_at_block_end(
     append_sync_preserving_block_value(body, block, sync_stmts, ctx);
 }
 
+/// Bind `value` so a sync sequence can run after it and still yield the same
+/// value: returns the bindings to emit before the sync, and the operand to
+/// place after it.
+///
+/// An aggregate literal binds its *operands* rather than itself. The literal is
+/// a pure construction over them, so rebuilding it after the sync evaluates
+/// exactly the same effects in exactly the same order — and it leaves no
+/// aggregate local behind. That matters downstream:
+/// [`super::multi_value_return`] flattens a return only when the return builds
+/// a fresh aggregate, so capturing the whole aggregate here costs the
+/// allocation the multi-value ABI exists to avoid.
+///
+/// Two things are re-emitted after the sync without a binding: a literal
+/// constant, and a local `assigned` says the sync leaves alone. A promoted heap
+/// read (`ValueKind::FieldAccess`) is neither — it is re-emitted at its use, and
+/// the sync may have written the field it reads.
+fn capture_for_sync(
+    body: &mut Body,
+    ctx: &mut WalkCtx,
+    value: Operand,
+    assigned: &IndexSet<u32>,
+    span: crate::token::Span,
+) -> (Vec<StmtId>, Operand, Vec<(u32, TypeId)>) {
+    if let Some(e) = value.as_expr() {
+        let rebuildable = match &body.exprs[e].kind {
+            ExprKind::TupleLiteral { elements } => Some(elements.clone()),
+            ExprKind::StructLiteral { fields, .. } => {
+                Some(fields.iter().map(|f| f.value).collect())
+            }
+            _ => None,
+        };
+        if let Some(operands) = rebuildable {
+            let mut stmts = Vec::new();
+            let mut temps = Vec::new();
+            let mut rebuilt = Vec::with_capacity(operands.len());
+            for op in operands {
+                // Each operand holds its temp until the whole literal is built,
+                // so the pool cannot hand the same index to two live slots.
+                let (mut s, o, mut t) = bind_for_sync(body, ctx, op, assigned, span);
+                stmts.append(&mut s);
+                temps.append(&mut t);
+                rebuilt.push(o);
+            }
+            match &mut body.exprs[e].kind {
+                ExprKind::TupleLiteral { elements } => *elements = rebuilt,
+                ExprKind::StructLiteral { fields, .. } => {
+                    for (f, o) in fields.iter_mut().zip(rebuilt) {
+                        f.value = o;
+                    }
+                }
+                _ => unreachable!("kind checked above"),
+            }
+            return (stmts, Operand::Expr(e), temps);
+        }
+    }
+    bind_for_sync(body, ctx, value, assigned, span)
+}
+
+/// Locals the sync sequence assigns. A re-read (`__hfs_F = local.F`) refreshes
+/// its scalar local, so an operand naming that local must be captured before the
+/// sync; a write-back (`local.F = __hfs_F`) only reads one.
+///
+/// Read off the statements rather than assumed from the emitter, and read from
+/// the whole subtree rather than the top of each one: a statement is not
+/// required to be a bare `Expr(Assign(Local, …))`, and missing an assignment
+/// buried in one would leave [`bind_for_sync`] re-emitting that local after the
+/// sync had overwritten it.
+fn sync_assigned_locals(body: &Body, sync_stmts: &[StmtId]) -> IndexSet<u32> {
+    let mut v = AssignedLocals {
+        out: IndexSet::default(),
+    };
+    for &s in sync_stmts {
+        v.visit_node(body, NodeRef::Stmt(s));
+    }
+    v.out
+}
+
+struct AssignedLocals {
+    out: IndexSet<u32>,
+}
+
+impl NirRefVisitor for AssignedLocals {
+    fn visit_node(&mut self, body: &Body, node: NodeRef) {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::Assign { target, .. } = &body.exprs[e].kind
+            && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+        {
+            self.out.insert(*index);
+        }
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+        {
+            self.out.insert(*local_index);
+        }
+        self.walk_node(body, node);
+    }
+}
+
+/// One operand of [`capture_for_sync`]: a literal constant and a local the sync
+/// leaves alone need no binding, anything else gets a pooled temp.
+fn bind_for_sync(
+    body: &mut Body,
+    ctx: &mut WalkCtx,
+    value: Operand,
+    assigned: &IndexSet<u32>,
+    span: crate::token::Span,
+) -> (Vec<StmtId>, Operand, Vec<(u32, TypeId)>) {
+    use crate::nir_value_graph::ValueKind;
+    if let Some(v) = value.as_value()
+        && matches!(
+            body.values.kind(v),
+            ValueKind::Int(..)
+                | ValueKind::Float(..)
+                | ValueKind::Bool(_)
+                | ValueKind::Char(_)
+                | ValueKind::Null
+                | ValueKind::Unit
+        )
+    {
+        return (Vec::new(), value, Vec::new());
+    }
+    // Reading the local after the sync yields what reading it before would.
+    // Binding it anyway left the `__hfs_call_N = hit; self.pos = __hfs_pos_M;
+    // return __hfs_call_N` the retired WIR pass had to clean up. Sound for a
+    // ref-typed local too: the binding copies the reference, not the pointee, so
+    // a field the sync writes is visible either way.
+    if let Some(e) = value.as_expr()
+        && let ExprKind::Local { index, .. } = &body.exprs[e].kind
+        && !assigned.contains(index)
+    {
+        return (Vec::new(), value, Vec::new());
+    }
+    let type_id = body.operand_type(value);
+    let tmp_idx = ctx.alloc_temp(type_id);
+    let tmp_name = ctx.temp_name(tmp_idx);
+    let let_sid = push_stmt(
+        body,
+        StmtKind::Let {
+            name: tmp_name.clone(),
+            local_index: tmp_idx,
+            is_mut: false,
+            is_reactive: false,
+            type_id,
+            value,
+            // The temp captures a fresh r-value, so no deep value-copy applies.
+            skip_value_copy: true,
+        },
+        span,
+    );
+    let read = push_expr(
+        body,
+        ExprKind::Local {
+            index: tmp_idx,
+            name: tmp_name,
+        },
+        type_id,
+        span,
+    );
+    (vec![let_sid], read.into(), vec![(tmp_idx, type_id)])
+}
+
 /// Append `sync_stmts` to `block`, preserving the block's trailing value
 /// if it has one. If the block's last stmt is a non-unit value-producing
-/// `Expr(e)`, the trailing expr is captured into a pooled temp before
-/// the sync stmts run, and a final `Local(temp)` stmt restores the
-/// block's value contract. Otherwise (empty block, non-Expr trailing
-/// stmt, or unit-typed trailing Expr) the sync stmts are simply
-/// appended.
+/// `Expr(e)`, the trailing value is bound before the sync stmts run and a
+/// final stmt restores the block's value contract. Otherwise (empty block,
+/// non-Expr trailing stmt, or unit-typed trailing Expr) the sync stmts are
+/// simply appended.
 fn append_sync_preserving_block_value(
     body: &mut Body,
     block: BlockId,
@@ -1733,36 +1893,16 @@ fn append_sync_preserving_block_value(
     let StmtKind::Expr(value_op) = body.stmts[last_sid].kind else {
         unreachable!("checked Expr above")
     };
-    let body_type = body.operand_type(value_op);
-    let tmp_idx = ctx.alloc_temp(body_type);
-    let tmp_name = ctx.temp_name(tmp_idx);
-    let let_sid = push_stmt(
-        body,
-        StmtKind::Let {
-            name: tmp_name.clone(),
-            local_index: tmp_idx,
-            is_mut: false,
-            is_reactive: false,
-            type_id: body_type,
-            value: value_op,
-            skip_value_copy: true,
-        },
-        last_span,
-    );
-    body.blocks[block].stmts.push(let_sid);
+    let assigned = sync_assigned_locals(body, &sync_stmts);
+    let (bindings, value_after, temps) =
+        capture_for_sync(body, ctx, value_op, &assigned, last_span);
+    body.blocks[block].stmts.extend(bindings);
     body.blocks[block].stmts.extend(sync_stmts);
-    let local_e = push_expr(
-        body,
-        ExprKind::Local {
-            index: tmp_idx,
-            name: tmp_name,
-        },
-        body_type,
-        last_span,
-    );
-    let trailing_sid = push_stmt(body, StmtKind::Expr(local_e.into()), last_span);
+    let trailing_sid = push_stmt(body, StmtKind::Expr(value_after), last_span);
     body.blocks[block].stmts.push(trailing_sid);
-    ctx.free_temp(tmp_idx, body_type);
+    for (idx, ty) in temps {
+        ctx.free_temp(idx, ty);
+    }
 }
 
 /// Build a fresh block holding only the convergence stmts from `from`
@@ -1875,14 +2015,24 @@ fn walk_stmt(
             // value into a temp local so the writeback can run between
             // the expression's evaluation and the return jump.
             if let Some(return_value) = value.filter(|_| states.contains(&CanonState::ScalarOnly)) {
-                let (new_value, tmp_idx, tmp_type) =
-                    hoist_operand_to_temp(body, return_value, out, ctx, span);
-                commit_scalar_for_escape(body, states, out, ctx, span);
+                // Build the sync first so what it assigns is read off the
+                // statements themselves, as at the other two capture sites,
+                // rather than assumed from what `commit_scalar_for_escape`
+                // happens to emit today.
+                let mut sync = Vec::new();
+                commit_scalar_for_escape(body, states, &mut sync, ctx, span);
+                let assigned = sync_assigned_locals(body, &sync);
+                let (bindings, new_value, temps) =
+                    capture_for_sync(body, ctx, return_value, &assigned, span);
+                out.extend(bindings);
+                out.extend(sync);
                 body.stmts[sid].kind = StmtKind::Return {
                     value: Some(new_value),
                 };
                 out.push(sid);
-                ctx.free_temp(tmp_idx, tmp_type);
+                for (idx, ty) in temps {
+                    ctx.free_temp(idx, ty);
+                }
             } else {
                 commit_scalar_for_escape(body, states, out, ctx, span);
                 out.push(sid);
@@ -3044,47 +3194,23 @@ fn emit_convergence_at_expr_end(
         body.exprs[arm_e].kind = ExprKind::Block(blk);
         return;
     }
-    // Non-unit body: capture into a pooled temp so the Block evaluates
-    // to the original body's value after sync.
-    let tmp_idx = ctx.alloc_temp(body_type);
-    let tmp_name = ctx.temp_name(tmp_idx);
     let original_kind = std::mem::replace(&mut body.exprs[arm_e].kind, ExprKind::Dead);
     let original = push_expr(body, original_kind, body_type, body_span);
-    let let_stmt = push_stmt(
-        body,
-        StmtKind::Let {
-            name: tmp_name.clone(),
-            local_index: tmp_idx,
-            is_mut: false,
-            is_reactive: false,
-            type_id: body_type,
-            value: original.into(),
-            // The temp captures a fresh r-value; no deep value-copy is
-            // appropriate (we just bind whatever the arm body produced).
-            skip_value_copy: true,
-        },
-        body_span,
-    );
-    let mut stmts = Vec::with_capacity(2 + sync_stmts.len());
-    stmts.push(let_stmt);
+    let assigned = sync_assigned_locals(body, &sync_stmts);
+    let (bindings, value_after, temps) =
+        capture_for_sync(body, ctx, original.into(), &assigned, body_span);
+    let mut stmts = Vec::with_capacity(1 + bindings.len() + sync_stmts.len());
+    stmts.extend(bindings);
     stmts.extend(sync_stmts);
-    let local_e = push_expr(
-        body,
-        ExprKind::Local {
-            index: tmp_idx,
-            name: tmp_name,
-        },
-        body_type,
-        body_span,
-    );
-    let trailing_stmt = push_stmt(body, StmtKind::Expr(local_e.into()), body_span);
-    stmts.push(trailing_stmt);
+    stmts.push(push_stmt(body, StmtKind::Expr(value_after), body_span));
     let blk = body.blocks.push(crate::nir_arena::BlockNode {
         stmts,
         span: body_span,
     });
     body.exprs[arm_e].kind = ExprKind::Block(blk);
-    ctx.free_temp(tmp_idx, body_type);
+    for (idx, ty) in temps {
+        ctx.free_temp(idx, ty);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

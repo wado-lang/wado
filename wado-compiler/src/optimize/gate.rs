@@ -68,13 +68,14 @@ pub enum GatedPass {
     Dae,
     Drve,
     SroaParam,
+    SroaVariantReturn,
     ValueCopyDemote,
     ScalarForward,
     LetBlockFlatten,
 }
 
 impl GatedPass {
-    const COUNT: usize = 15;
+    const COUNT: usize = 16;
 }
 
 /// Static call graph over [`FuncId`]s, built once at loop start.
@@ -262,6 +263,7 @@ mod tests {
             GatedPass::Dae,
             GatedPass::Drve,
             GatedPass::SroaParam,
+            GatedPass::SroaVariantReturn,
             GatedPass::ValueCopyDemote,
             GatedPass::ScalarForward,
             GatedPass::LetBlockFlatten,
@@ -280,6 +282,7 @@ mod tests {
                 | GatedPass::Dae
                 | GatedPass::Drve
                 | GatedPass::SroaParam
+                | GatedPass::SroaVariantReturn
                 | GatedPass::ValueCopyDemote
                 | GatedPass::ScalarForward
                 | GatedPass::LetBlockFlatten => {}

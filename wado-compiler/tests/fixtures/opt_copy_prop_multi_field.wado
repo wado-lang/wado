@@ -1,12 +1,8 @@
-// Test: copy propagation + variant SROA with multi-field payload access
+// Test: variant-return scalarization with multi-field payload access
 //
-// Exercises patterns where multiple StructGet operations read different fields
-// from the same RefCast alias. After copy propagation inlines __match_scrut,
-// the ref.cast result is stored to __cast_N, and multiple subsequent StructGet
-// instructions read from __cast_N. All must be rewritten through the alias.
-//
-// Also tests ValueCopy wrapping the separated pattern, and Err branch payload
-// access through the same alias mechanism.
+// Exercises call sites that read several fields of the same payload, and an
+// Err branch that reads its own — each read has to land on the right result
+// slot.
 
 struct Point {
     x: i32,
@@ -129,6 +125,6 @@ __DATA__
 {
     "stdout": "",
     "wir_expect:O1": [
-        "multivalue_bind [__sroa_result_discriminant"
+        "multivalue_bind [result_mv_0, result_mv_1, result_mv_2] = \"opt_copy_prop_multi_field.wado/make_point\"("
     ]
 }

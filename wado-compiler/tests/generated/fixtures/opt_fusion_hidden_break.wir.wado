@@ -131,17 +131,17 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::wri
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(49)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(50)
+type "functype//core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(50)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(51)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(51)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(52)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(52)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(53)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(53)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(54)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(54)
 
-type "functype//core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(55)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(55)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -193,12 +193,12 @@ fn "opt_fusion_hidden_break.wado/run"() with Stdout {
     __iter_1 = struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 6, end: 8 };
     b1: block {
         l2: loop {
-            let __sroa___match_11_discriminant: i32;
-            let __sroa___match_11_payload_0: i32;
-            multivalue_bind [__sroa___match_11_discriminant, __sroa___match_11_payload_0] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0"(__iter_1);
-            if __sroa___match_11_discriminant == 0 {
+            let __match_11_mv_0: i32;
+            let __match_11_mv_1: i32;
+            multivalue_bind [__match_11_mv_0, __match_11_mv_1] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0"(__iter_1);
+            if __match_11_mv_0 == 0 {
                 x = __inline_g_3: block -> ref "core:prelude/types.wado//Option<i32>" {
-                    s = struct.new "opt_fusion_hidden_break.wado//Sig::A" { discriminant: 0, payload_0: __sroa___match_11_payload_0 };
+                    s = struct.new "opt_fusion_hidden_break.wado//Sig::A" { discriminant: 0, payload_0: __match_11_mv_1 };
                     if ref.test "opt_fusion_hidden_break.wado//Sig::A"(s) {
                         n = ref.cast "opt_fusion_hidden_break.wado//Sig::A"(s).payload_0;
                         r = "opt_fusion_hidden_break.wado/h"(n);
@@ -644,13 +644,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 
 fn "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0"(self) {
     let current: i32;
-    let __sroa_self_value_8: i32;
+    let __sroa_self_value_9: i32;
     if __inline_i32_Ord__cmp_0: block -> "core:prelude/traits.wado//enum:Ordering" {
-        __sroa_self_value_8 = self.start;
-        if __sroa_self_value_8 < 8 {
+        __sroa_self_value_9 = self.start;
+        if __sroa_self_value_9 < 8 {
             break __inline_i32_Ord__cmp_0: 0;
         }
-        if __sroa_self_value_8 > 8 {
+        if __sroa_self_value_9 > 8 {
             break __inline_i32_Ord__cmp_0: 2;
         }
         break __inline_i32_Ord__cmp_0: 1;

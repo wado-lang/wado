@@ -152,24 +152,24 @@ struct tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Res
     mut 1: i32,
 }
 
-variant core:prelude/types.wado//Option<u16> {  // TypeId(23)
-    Some(u16),
-    None,
-}
-
-struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(24)
-    discriminant: i32,
-    payload_0: u16,
-}
-
-variant core:prelude/types.wado//Option<u8> {  // TypeId(25)
+variant core:prelude/types.wado//Option<u8> {  // TypeId(23)
     Some(u8),
     None,
 }
 
-struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(26)
+struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(24)
     discriminant: i32,
     payload_0: u8,
+}
+
+variant core:prelude/types.wado//Option<u16> {  // TypeId(25)
+    Some(u16),
+    None,
+}
+
+struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(26)
+    discriminant: i32,
+    payload_0: u16,
 }
 
 variant core:prelude/types.wado//Option<u32> {  // TypeId(27)
@@ -293,23 +293,23 @@ type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // Typ
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(64)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(65)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(65)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(66)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(66)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(67)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(67)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(68)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(68)
 
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(69)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(69)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(70)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(70)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(71)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(71)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(72)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(72)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(73)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(73)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -339,11 +339,11 @@ fn "stream_http_response_body_string.wado/string_to_bytes"(s) {
     __iter_3 = struct.new "core:prelude/string.wado//StrCharIter" { repr: __sroa_v_repr, used: s.used, byte_index: 0 };
     b0: block {
         l1: loop {
-            let __sroa___match_5_discriminant: i32;
-            let __sroa___match_5_payload_0: char;
-            multivalue_bind [__sroa___match_5_discriminant, __sroa___match_5_payload_0] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_3);
-            if __sroa___match_5_discriminant == 0 {
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(bytes, __sroa___match_5_payload_0 & 255);
+            let __match_5_mv_0: i32;
+            let __match_5_mv_1: char;
+            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_3);
+            if __match_5_mv_0 == 0 {
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(bytes, __match_5_mv_1 & 255);
             } else {
                 break b0;
             }
