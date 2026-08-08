@@ -26,10 +26,8 @@ mise run on-task-started
 ## Procedure
 
 1. Run `mise run benchmark-all` **three times**; per implementation keep the
-   fastest value (throttling only ever slows things down). It runs 12
-   benchmarks serially, in `benchmark/mise.toml`'s `all` order: count-prime,
-   mandelbrot, sieve, fts, json-twitter, cbor, json-canada, json-catalog, zlib,
-   sqlite-parse, syntax-highlight, gale-gen.
+   fastest value (throttling only ever slows things down). Which benchmarks run,
+   and in what order, is `benchmark/mise.toml`'s `all` task.
 2. Run http-routing separately (needs `oha` + pinned cores):
    `SLICE=4 ROUNDS=5 CONNECTIONS=50 mise run benchmark-http-routing`. It keeps
    the per-(server, request) max internally, so one invocation suffices.
@@ -45,31 +43,21 @@ mise run on-task-started
 Each program prints a throughput line — `<rate> <unit>/s   (<ms> ms/iter,
 <n> iter)` — per phase (zlib prints two phases, `Compress:`/`Decompress:`).
 Read the rate and the ms/iter straight off; the iteration count auto-calibrates
-to ~1s, so there is no total to report. Units: numbers/s (count-prime, sieve),
-px/s (mandelbrot), conversions/s (fts), MB/s (zlib, json-\*, sqlite-parse,
-syntax-highlight, gale-gen), req/s (http-routing). `vs best` = fastest rate /
-this rate. Implementations per benchmark:
+to ~1s, so there is no total to report. The unit is the benchmark's own
+(numbers/s, px/s, conversions/s, MB/s, req/s); `vs best` = fastest rate / this
+rate.
 
-- count-prime / mandelbrot / sieve: C, JavaScript, Wado
-- fts: Rust, C, Wado
-- zlib: zlib-rs, Wado
-- json-\*: serde_json, JSON.parse, Wado (catalog also Wado v2)
-- cbor: serde_cbor, Wado (twitter / canada / catalog payloads)
-- sqlite-parse: sqlparser-rs, ANTLR4 Java (needs `java`/`javac`; generated from
-  the same SQLite.g4; skipped if absent), Wado
-- syntax-highlight: Prism, Lezer, tree-sitter, Shiki, Wado
-- gale-gen: Wado (Gale) vs ANTLR4 over the same `.g4` (needs `java`; the ANTLR4
-  row is skipped if java is absent)
-- http-routing: wado serve, Hono (Node/Bun), Axum
+Each benchmark prints the implementations it compared, so read them off the run
+rather than from a list here. Two are conditional: the ANTLR4 rows for
+`sqlite-parse` and `gale-gen` are skipped when `java` is absent, and the run
+says `SKIP:` when it drops one.
 
 ## Workload sizing
 
 Benchmarks auto-calibrate their iteration count to run ~1s, so no manual
-denomination is needed. Keep each single iteration well under 1s: count-prime
-(limit) and fts (conversion count) are sized so one run is ~100ms, giving ~10
-calibrated iterations. If a workload's one-shot cost exceeds ~1s it will report
-a single iteration — shrink its problem size across every language
-implementation of that benchmark to fix it.
+denomination is needed. A workload whose single iteration approaches that
+reports one iteration and stops averaging — shrink its problem size, across
+every language implementation of that benchmark, until it calibrates again.
 
 ## Notes
 
