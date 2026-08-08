@@ -26,9 +26,10 @@ mise run on-task-started
 ## Procedure
 
 1. Run `mise run benchmark-all` **three times**; per implementation keep the
-   fastest value (throttling only ever slows things down). It runs 11
-   benchmarks serially: count-prime, mandelbrot, sieve, zlib, fts,
-   json-{twitter,canada,catalog}, sqlite-parse, syntax-highlight, gale-gen.
+   fastest value (throttling only ever slows things down). It runs 12
+   benchmarks serially, in `benchmark/mise.toml`'s `all` order: count-prime,
+   mandelbrot, sieve, fts, json-twitter, cbor, json-canada, json-catalog, zlib,
+   sqlite-parse, syntax-highlight, gale-gen.
 2. Run http-routing separately (needs `oha` + pinned cores):
    `SLICE=4 ROUNDS=5 CONNECTIONS=50 mise run benchmark-http-routing`. It keeps
    the per-(server, request) max internally, so one invocation suffices.
@@ -37,8 +38,7 @@ mise run on-task-started
    (wasmtime version is the vendored `vendor/wasmtime` workspace version).
 4. Update the tables, following README.md's existing layout. http-routing is
    req/s (higher is better) and lists a curated subset of the measured requests.
-5. wasm-size, when asked: `mise run report-wasm-size`, then update
-   `wasm-size/README.md`.
+5. wasm-size: `mise run report-wasm-size`, then update `wasm-size/README.md`.
 
 ## Reading output
 
@@ -54,6 +54,7 @@ this rate. Implementations per benchmark:
 - fts: Rust, C, Wado
 - zlib: zlib-rs, Wado
 - json-\*: serde_json, JSON.parse, Wado (catalog also Wado v2)
+- cbor: serde_cbor, Wado (twitter / canada / catalog payloads)
 - sqlite-parse: sqlparser-rs, ANTLR4 Java (needs `java`/`javac`; generated from
   the same SQLite.g4; skipped if absent), Wado
 - syntax-highlight: Prism, Lezer, tree-sitter, Shiki, Wado
